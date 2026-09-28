@@ -40,6 +40,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from api.ws_security import enforce_ws_origin
+from autobot_shared.auth.permissions import is_admin_role
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from events.bus import get_event_bus
@@ -51,6 +52,30 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 _PING_INTERVAL = 30  # seconds between server-side pings
+
+
+def _is_admin(user_payload: dict) -> bool:
+    """Whether this connection is an administrator.
+
+    #17359: the four call sites below each read `user_payload.get("roles", [])`
+    and tested for the literal string `"admin"`. Authentication does not produce
+    a `roles` list -- `auth_middleware.authenticate_websocket` builds
+    `{"username": ..., "role": ...}`, singular -- so the bypass was inert on
+    every real connection, and the authz tests passed because they construct
+    payloads carrying `roles` themselves. A green test over a branch production
+    cannot reach.
+
+    It also refused a `superadmin` even where the key existed, which is why
+    `is_admin_role` exists rather than a literal comparison (#12786, #14944).
+
+    One helper rather than a fifth spelling: four copies of one rule is how they
+    drift apart. `roles` is still honoured so a caller that supplies it -- the
+    tests, and any future payload shape -- keeps working.
+    """
+    if is_admin_role(user_payload.get("role")):
+        return True
+    roles = user_payload.get("roles") or []
+    return any(is_admin_role(role) for role in roles)
 
 
 def _auth_required() -> bool:
@@ -87,7 +112,7 @@ async def _authorize_conversation_channel(channel: str, user_payload: dict) -> b
     resolved through the chat history manager, which is the store that knows
     which user a session belongs to.
     """
-    if "admin" in user_payload.get("roles", []):
+    if _is_admin(user_payload):
         return True
     # ``get_session_owner`` returns the *username* it stored in session
     # metadata, but a JWT may identify the caller by either field — compare
@@ -132,7 +157,7 @@ async def _authorize_llc_channel(channel: str, user_payload: dict) -> bool:
     client may only subscribe to a company it belongs to. Admins bypass. Fails
     closed on any error (#11386 security review).
     """
-    if "admin" in user_payload.get("roles", []):
+    if _is_admin(user_payload):
         return True
     user_id = str(user_payload.get("user_id") or user_payload.get("username") or "")
     if not user_id:
@@ -173,7 +198,7 @@ async def _authorize_resource_channel(channel: str, user_payload: dict) -> bool:
     - ``task:{id}`` — no ownership store exists for task ids (and no publisher
       or frontend consumer today), so non-admins are DENIED until one does.
     """
-    if "admin" in user_payload.get("roles", []):
+    if _is_admin(user_payload):
         return True
     user_id = str(user_payload.get("user_id") or user_payload.get("username") or "")
     if not user_id:
@@ -209,6 +234,42 @@ async def _authorize_resource_channel(channel: str, user_payload: dict) -> bool:
     return False
 
 
+async def _authorize_canvas_channel(channel: str, user_payload: dict) -> bool:
+    """Authorize a ``canvas:{id}`` subscription against the canvas's owner (#17020).
+
+    The same rule ``api/canvas.py`` applies to every REST route on the resource:
+    ``canvas.user_id == caller``. Asked here rather than re-derived, so the
+    socket and the REST surface cannot drift into disagreeing about who may see
+    a canvas.
+
+    Fails closed, per the doctrine's channel-authorization rule: an unknown
+    canvas id, an unreadable store, or a raising lookup is a denial and not an
+    absence of restriction. Admins bypass, as they do on the other prefixes.
+    """
+    if _is_admin(user_payload):
+        return True
+    user_id = str(user_payload.get("user_id") or user_payload.get("username") or "")
+    if not user_id:
+        return False
+    _, _, ident = channel.partition(":")
+    if not ident:
+        return False
+    try:
+        from sqlalchemy import select
+
+        from canvas.models import Canvas
+        from user_management.database import get_async_session_factory
+
+        async with get_async_session_factory()() as session:
+            canvas = (await session.execute(select(Canvas).where(Canvas.id == ident))).scalar_one_or_none()
+            if canvas is None:
+                return False
+            return str(canvas.user_id) == user_id
+    except Exception:
+        logger.exception("Canvas channel authorization failed for %s", channel)
+        return False
+
+
 async def _authorize_channel(channel: str, user_payload: dict | None) -> bool:
     """Single authorization rule for a channel, shared by subscribe and command.
 
@@ -223,7 +284,7 @@ async def _authorize_channel(channel: str, user_payload: dict | None) -> bool:
         claimed_id = channel.split(":", 1)[1]
         user_id = str(user_payload.get("user_id", ""))
         username = user_payload.get("username", "")
-        is_admin = "admin" in user_payload.get("roles", [])
+        is_admin = _is_admin(user_payload)
         return is_admin or claimed_id in (user_id, username)
     if channel.startswith("company:") or channel.startswith("board:"):
         return await _authorize_llc_channel(channel, user_payload)
@@ -231,8 +292,30 @@ async def _authorize_channel(channel: str, user_payload: dict | None) -> bool:
         return await _authorize_conversation_channel(channel, user_payload)
     if channel.startswith("workflow:") or channel.startswith("heartbeat:") or channel.startswith("task:"):
         return await _authorize_resource_channel(channel, user_payload)
+    if channel.startswith("canvas:"):
+        return await _authorize_canvas_channel(channel, user_payload)
     # ``global`` is the shared broadcast channel: every authenticated client is
-    # meant to see it, and it carries no per-tenant payload of its own.
+    # meant to see it, so nothing tenant-scoped may be published to it.
+    #
+    # #17354: that used to read "and it carries no per-tenant payload of its
+    # own", asserted as a property. It was not one -- ``api/workflow.py`` put
+    # seven publishes here carrying an operator's ``user_input``, a workflow's
+    # ``user_message``, step descriptions and error text, so every signed-in
+    # client received them. Those are now on ``workflow:{id}``, which the
+    # resolver below gates on ``view`` permission. The sentence is a REQUIREMENT
+    # on publishers, partly enforced by
+    # ``repo_tests/global_channel_carries_no_tenant_payload_17354_test.py`` --
+    # a comment cannot hold an invariant that seven call sites can break.
+    #
+    # "Partly" is the honest word and #17363 is why it is here: the guard reads
+    # LITERAL payloads only, so seven publishes that pass a variable are counted
+    # and not inspected; eleven pre-existing sites carrying a ``task_id`` or
+    # ``workflow_id`` are baselined rather than fixed; and the requirement holds
+    # for the SEVEN keys in its ``_TENANT_KEYS``, not for everything private.
+    # So this channel is best read as: a new publisher must not put tenant
+    # content here, and what is already here is a recorded debt (#17373), not a
+    # clean bill. Anything owner-specific belongs on ``chat:``/``session:``
+    # (owner-checked) or ``agent:``/``task:`` (self- or admin-checked) instead.
     if channel == "global":
         return True
     # Everything else is DENIED.  This used to `return True`, which was

@@ -21,15 +21,27 @@ that satisfies the declared set without touching anything outside its venv;
 
 from __future__ import annotations
 
+import sys as _sys
+from pathlib import Path as _Path
+
+# The report half lives beside this file. `sys.path` is amended from __file__
+# rather than relying on the caller's cwd, because repo_tests/dependency_floor_
+# banner.py loads this module with spec_from_file_location, where the script's
+# directory is NOT on sys.path.
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
 import argparse
+import json
 import os
 import platform
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
+
+from dependency_floor_report import MAX_REPORTED, FloorAudit, render  # noqa: E402,F401
 
 #: Entry points of the requirement graph describing the environment local
 #: verification is meant to reproduce. Each is expanded through its ``-r``
@@ -59,12 +71,21 @@ DECLARATION_ROOTS: tuple[str, ...] = (
 #: not a new entry here. check_dependency_floors_test.py pins this empty.
 KNOWN_CROSS_VENV_EXEMPTIONS: Mapping[tuple[str, str], str] = {}
 
-MAX_REPORTED = 10
 
 #: Stands in for a version in a :class:`Shortfall` raised for a distribution
 #: that is not installed at all. Only reachable when a caller asks for it --
 #: see ``require_present`` on :func:`shortfalls`.
 ABSENT = "(absent)"
+
+#: Installed, but the check could NOT determine its version -- duplicate
+#: dist-info directories from an in-place upgrade that never removed the old
+#: metadata (#15063: the deployed venv is append-only), or metadata with no
+#: Version field. Unlike ABSENT this is ALWAYS reported: "not installed" is
+#: an answer, "could not read it" is the absence of one, and #17449 found a
+#: deployed venv where the two were indistinguishable -- a package carrying
+#: two dist-info directories was silently skipped and the environment read
+#: as fully satisfied.
+UNREADABLE = "(version unreadable)"
 
 _REQUIREMENT = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(==|>=|~=|>)\s*([0-9][A-Za-z0-9.]*)")
 _INCLUDE = re.compile(r"^\s*(?:-r|--requirement)[\s=]+(\S+)")
@@ -101,6 +122,12 @@ class Shortfall:
         declared = f"{self.declaration.operator}{self.declaration.required}"
         if self.installed == ABSENT:
             return f"{self.declaration.name}: NOT INSTALLED, declared {declared} ({self.declaration.source})"
+        if self.installed == UNREADABLE:
+            return (
+                f"{self.declaration.name}: INSTALLED BUT VERSION UNREADABLE, declared {declared} "
+                f"({self.declaration.source}) -- usually duplicate *.dist-info from an in-place "
+                "upgrade; this floor was NOT checked"
+            )
         return (
             f"{self.declaration.name}: installed {self.installed}, " f"declared {declared} ({self.declaration.source})"
         )
@@ -200,15 +227,145 @@ def parse_declarations(files: Iterable[Path], root: Path) -> list[Declaration]:
     return out
 
 
-def installed_versions(names: Iterable[str]) -> dict[str, str]:
-    """Version of each named distribution that is importable in this interpreter."""
-    found: dict[str, str] = {}
-    for name in set(names):
+#: Seconds the probe may take before the target counts as unreadable.
+_PROBE_TIMEOUT = 120
+
+
+class InterpreterUnreadable(RuntimeError):
+    """A named interpreter could not be queried. NOT the same as 'nothing installed'."""
+
+
+def _probe_source() -> str:
+    """The script run inside the target interpreter. Imports nothing from this repo."""
+    return (
+        "import json,sys,collections\n"
+        "from importlib.metadata import version,distributions,PackageNotFoundError\n"
+        "def c(n): return n.lower().replace('_','-').replace('.','-')\n"
+        "seen=collections.Counter()\n"
+        "for d in distributions():\n"
+        "    try: nm=d.metadata['Name']\n"
+        "    except Exception: nm=None\n"
+        "    if nm: seen[c(nm)]+=1\n"
+        "dup=sorted(k for k,v in seen.items() if v>1)\n"
+        "out={}\n"
+        "for n in json.load(sys.stdin):\n"
+        "    try: out[n]=version(n) or ''\n"
+        "    except PackageNotFoundError: continue\n"
+        "    except Exception: out[n]=''\n"
+        "json.dump({'v':'%d.%d.%d'%sys.version_info[:3],'p':out,'dup':dup},sys.stdout)\n"
+    )
+
+
+def duplicate_metadata_names() -> frozenset[str]:
+    """Canonical names with MORE THAN ONE dist-info in this interpreter.
+
+    An in-place upgrade that leaves the previous ``*.dist-info`` behind gives
+    one distribution two metadata directories. `importlib.metadata.version()`
+    then has two answers and returns neither usefully, so the package reads as
+    "not installed" and its floor is never checked. That is #15063's
+    append-only venv showing up as a hole in the instrument rather than as a
+    stale package.
+    """
+    seen: dict[str, int] = {}
+    try:
+        from importlib.metadata import distributions
+    except ImportError:  # pragma: no cover
+        return frozenset()
+    for dist in distributions():
         try:
-            found[name] = version(name)
-        except PackageNotFoundError:
+            name = dist.metadata["Name"]
+        except Exception:  # noqa: BLE001 - malformed metadata raises many types
             continue
-    return found
+        if name:
+            key = canonical(name)
+            seen[key] = seen.get(key, 0) + 1
+    return frozenset(k for k, n in seen.items() if n > 1)
+
+
+def installed_versions(names: Iterable[str], python: Path | None = None) -> dict[str, str]:
+    """Version of each named distribution installed in the target environment.
+
+    Without *python* this reads the interpreter running the check, which is the
+    only thing it could do before #17449 -- and is why no DEPLOYED service venv
+    had ever been checked, despite that being the only environment serving
+    traffic. One was found below its own declared floor the first time anyone
+    looked.
+
+    With *python* it asks that interpreter instead, over a script that imports
+    nothing from this repository, so a deployed venv can be audited without the
+    repo being present or importable there. Every comparison downstream is
+    unchanged: this function is the whole seam.
+    """
+    wanted = sorted(set(names))
+    if python is None:
+        found: dict[str, str] = {}
+        for name in wanted:
+            try:
+                found[name] = version(name) or UNREADABLE
+            except PackageNotFoundError:
+                continue
+            except Exception:  # noqa: BLE001 - malformed metadata raises many types
+                found[name] = UNREADABLE
+        # Hoisted: each call scans EVERY installed distribution, so calling it
+        # per name made one audit do N+1 full metadata scans (#17502 review).
+        duplicates = duplicate_metadata_names()
+        if duplicates:
+            for name in wanted:
+                if canonical(name) in duplicates:
+                    found[name] = UNREADABLE
+        return found
+    _, versions, duplicates = _remote_versions(wanted, python)
+    return {name: (UNREADABLE if (not raw or canonical(name) in duplicates) else raw) for name, raw in versions.items()}
+
+
+def _remote_versions(names: Sequence[str], python: Path) -> tuple[str, dict[str, str], frozenset[str]]:
+    """``(interpreter version, {name: version})`` from *python*.
+
+    Raises rather than returning empty: an interpreter that could not be read
+    and one with nothing installed are the same value to every caller
+    downstream, and reporting the first as a clean environment is the exact
+    failure this module exists to prevent.
+    """
+    if not python.is_file():
+        raise InterpreterUnreadable(f"{python} is not a file")
+    try:
+        completed = subprocess.run(
+            [str(python), "-c", _probe_source()],
+            input=json.dumps(list(names)),
+            capture_output=True,
+            text=True,
+            timeout=_PROBE_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # Not an OSError, so the clause below never caught it: a hung target
+        # ended the run with a traceback instead of the documented FATAL + exit
+        # 2. This is the same third-state argument one layer out -- a probe that
+        # did not finish is "could not look", never "nothing is installed".
+        raise InterpreterUnreadable(f"{python} did not answer within {_PROBE_TIMEOUT}s") from exc
+    except OSError as exc:
+        raise InterpreterUnreadable(f"could not run {python}: {exc}") from exc
+    if completed.returncode != 0:
+        raise InterpreterUnreadable(f"{python} exited {completed.returncode}: {completed.stderr.strip()[:200]}")
+    try:
+        payload = json.loads(completed.stdout)
+    except ValueError as exc:
+        raise InterpreterUnreadable(f"{python} returned unparseable output: {exc}") from exc
+    try:
+        return payload["v"], payload["p"], frozenset(payload.get("dup", ()))
+    except (KeyError, TypeError) as exc:
+        # Valid JSON of the wrong shape is still an unread environment.
+        raise InterpreterUnreadable(f"{python} returned JSON without the expected keys: {exc}") from exc
+
+
+def resolve_interpreter(target: Path) -> Path:
+    """Accept a venv directory or an interpreter path; return the interpreter."""
+    if target.is_dir():
+        for candidate in (target / "bin" / "python", target / "Scripts" / "python.exe"):
+            if candidate.is_file():
+                return candidate
+        raise InterpreterUnreadable(f"{target} is a directory with no bin/python")
+    return target
 
 
 def shortfalls(
@@ -238,13 +395,25 @@ def shortfalls(
             if require_present:
                 out.append(Shortfall(declaration, ABSENT))
             continue
+        if have == UNREADABLE:
+            # Never gated on require_present: this is not "absent", it is "the
+            # check could not answer", and reporting that as satisfied is the
+            # failure this module exists to prevent.
+            out.append(Shortfall(declaration, UNREADABLE))
+            continue
         if not satisfies(have, declaration.operator, declaration.required):
             out.append(Shortfall(declaration, have))
     return out
 
 
-def audit(root: Path, roots: Sequence[str] | None = None, require_present: bool = False) -> tuple[list[Shortfall], int]:
-    """Shortfalls in *root*'s declared set, plus how many declarations were read.
+def audit(
+    root: Path,
+    roots: Sequence[str] | None = None,
+    require_present: bool = False,
+    python: Path | None = None,
+    environment: str | None = None,
+) -> FloorAudit:
+    """Everything the sweep established, as a :class:`FloorAudit`.
 
     *roots* narrows the sweep to a subset of the entry points. A caller that
     installs only part of the graph -- ``scripts/setup-ci-parity-env.sh``
@@ -255,7 +424,7 @@ def audit(root: Path, roots: Sequence[str] | None = None, require_present: bool 
     Raises :class:`EmptyEnumerationError` when the sweep reads nothing, so an
     empty enumeration can never be reported as a clean environment.
     """
-    swept = DECLARATION_ROOTS if roots is None else roots
+    swept = tuple(DECLARATION_ROOTS if roots is None else roots)
     files = declaration_files(root, swept)
     declarations = parse_declarations(files, root)
     if not declarations:
@@ -263,44 +432,77 @@ def audit(root: Path, roots: Sequence[str] | None = None, require_present: bool 
             f"no version declarations found under {root}: "
             f"{len(files)} requirement file(s) reachable from {list(swept)}"
         )
-    installed = installed_versions(declaration.name for declaration in declarations)
-    return shortfalls(declarations, installed, require_present), len(declarations)
+    names = [d.name for d in declarations]
+    # Called with ONE argument on the local path, deliberately: existing callers
+    # and test stubs bind `installed_versions(names)`, and #17449 is an added
+    # capability rather than a changed contract. Only the --venv path passes a
+    # second argument, and only that path is new.
+    installed = installed_versions(names) if python is None else installed_versions(names, python)
+    absent = tuple(sorted({d.name for d in declarations if d.name not in installed}))
+    unreadable = tuple(sorted({d.name for d in declarations if installed.get(d.name) == UNREADABLE}))
+    # #17610 review, twice over. Counted per DECLARATION, not per unique name:
+    # one package can be declared several times -- across service files, or
+    # through `-r` includes -- and `absent` is de-duplicated, so
+    # `len(declarations) - len(absent)` credited the extra declarations of an
+    # uninstalled package as compared.
+    #
+    # And a declaration is only compared when its installed version is
+    # READABLE. `UNREADABLE` is a value in `installed`, not an absence, so
+    # `name in installed` counted an unreadable package as compared when
+    # nothing was compared at all -- *did not measure* reported as *measured*,
+    # which is the defect this whole change exists to remove.
+    comparable = {
+        declaration.name
+        for declaration in declarations
+        if declaration.name in installed and installed[declaration.name] != UNREADABLE
+    }
+    compared = sum(1 for declaration in declarations if declaration.name in comparable)
+    # Declarations, not names: the complement of `compared` has to be countable
+    # in the same unit, or the two numbers cannot be read together.
+    not_compared_declarations = len(declarations) - compared
+    return FloorAudit(
+        shortfalls=tuple(shortfalls(declarations, installed, require_present)),
+        declared=len(declarations),
+        compared=compared,
+        not_installed=absent,
+        unreadable=unreadable,
+        not_compared_declarations=not_compared_declarations,
+        roots=swept,
+        environment=environment or f"the interpreter running this check (python {platform.python_version()})",
+        roots_are_the_union=set(swept) == set(DECLARATION_ROOTS),
+    )
 
 
-def render(found: Sequence[Shortfall], examined: int, limit: int = MAX_REPORTED, *, in_ci: bool = False) -> list[str]:
-    """The report, one line per element; *limit* caps the per-package detail.
+def _print_report(
+    result: FloorAudit,
+    *,
+    show_all: bool,
+    gating: bool,
+    in_ci: bool,
+    deployed: bool,
+    already_reported: bool = False,
+) -> None:
+    """Print :func:`render`'s lines, plus the not-compared names under ``--all``.
 
-    *in_ci* names the reference correctly for where this prints (#16264). Off a
-    developer's box, the interpreter making the report is some OTHER
-    environment than the one CI installs, so the second line points there. A
-    caller that IS CI -- the ``python-shard`` ``--strict`` step, or this
-    plugin's own ``pytest_terminal_summary`` when ``CI`` is set -- passes
-    ``in_ci=True`` instead, because the interpreter making the report there
-    already IS the declared set: saying a pass "carries no information about
-    CI" would be false when the box printing it is CI's own.
+    Extracted from :func:`main` for the #620 length gate. ``--all`` lists what
+    was NOT compared as well as the shortfalls: a flag promising "every
+    shortfall" while hiding the packages no shortfall could be computed for is
+    the same omission this issue exists to fix, one level down.
     """
-    if not found:
-        return [f"dependency floors: {examined} declarations checked, all satisfied"]
-    lines = [
-        f"{len(found)} of {examined} declared versions are NOT satisfied by the "
-        f"interpreter running this check (python {platform.python_version()})."
-    ]
-    if in_ci:
-        lines.append(
-            "This IS the CI job's own environment -- these are the packages CI itself "
-            "installed, below the floor it declares, not a stand-in for it."
-        )
-    else:
-        lines.append("A pass here therefore carries no information about CI, which installs " "the declared set.")
-    lines.extend(f"  {shortfall.describe()}" for shortfall in found[:limit])
-    if len(found) > limit:
-        remaining = len(found) - limit
-        lines.append(
-            f"  ... and {remaining} more; " "run pipeline-scripts/check_dependency_floors.py --all to list them"
-        )
-    lines.append("Reproduce the declared environment: scripts/setup-ci-parity-env.sh")
-    lines.append("Otherwise push and read CI. Known divergence: #15093 (include_router defers).")
-    return lines
+    for line in render(
+        result,
+        len(result.shortfalls) if show_all else MAX_REPORTED,
+        in_ci=in_ci,
+        gating=gating,
+        deployed=deployed,
+    ):
+        print(line)  # noqa: print
+    if show_all and result.not_installed and not already_reported:
+        # `--require-present` already turns every absent declaration into a
+        # shortfall, so listing them again below would print each one twice.
+        print(f"Declared but not installed, therefore not compared ({len(result.not_installed)}):")  # noqa: print
+        for name in result.not_installed:
+            print(f"  {name}")  # noqa: print
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -314,6 +516,16 @@ def main(argv: list[str] | None = None) -> int:
         help="also report declarations with nothing installed against them",
     )
     parser.add_argument(
+        "--venv",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "audit this virtualenv or interpreter instead of the one running this check "
+            "(#17449) -- a venv directory or a path to a python binary"
+        ),
+    )
+    parser.add_argument(
         "--roots",
         nargs="*",
         metavar="FILE",
@@ -325,9 +537,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.roots is not None and not args.roots:
         print("FATAL: --roots was given no files, so there is nothing to check", file=sys.stderr)  # noqa: print
         return 2
+    interpreter: Path | None = None
+    environment: str | None = None
+    if args.venv is not None:
+        try:
+            interpreter = resolve_interpreter(args.venv.resolve())
+            environment = f"{interpreter} (python {_remote_versions((), interpreter)[0]})"
+        except InterpreterUnreadable as exc:
+            # Never fall back to this interpreter: answering for the wrong
+            # environment is worse than not answering (#17449).
+            print(f"FATAL: {exc}", file=sys.stderr)  # noqa: print
+            return 2
+
     try:
-        found, examined = audit(
-            root, None if args.roots is None else tuple(args.roots), require_present=args.require_present
+        result = audit(
+            root,
+            None if args.roots is None else tuple(args.roots),
+            require_present=args.require_present,
+            python=interpreter,
+            environment=environment,
         )
     except EmptyEnumerationError as exc:
         print(f"FATAL: {exc}", file=sys.stderr)  # noqa: print
@@ -336,13 +564,19 @@ def main(argv: list[str] | None = None) -> int:
     # the same signal autobot-backend/tests/test_ocr_fallback_13896.py already
     # keys on for the same distinction.
     in_ci = bool(os.environ.get("CI"))
-    for line in render(found, examined, len(found) if args.all else MAX_REPORTED, in_ci=in_ci):
-        print(line)  # noqa: print
+    _print_report(
+        result,
+        show_all=args.all,
+        gating=args.strict,
+        in_ci=in_ci,
+        deployed=environment is not None,
+        already_reported=args.require_present,
+    )
     # #16264: a shortfall matching KNOWN_CROSS_VENV_EXEMPTIONS is still printed
     # above (it is real, in this interpreter) but never fails --strict -- it is
     # a documented cross-venv mismatch, not drift this run should gate on.
-    gating = [shortfall for shortfall in found if not is_exempt(shortfall)]
-    return 1 if gating and args.strict else 0
+    blocking = [shortfall for shortfall in result.shortfalls if not is_exempt(shortfall)]
+    return 1 if blocking and args.strict else 0
 
 
 if __name__ == "__main__":

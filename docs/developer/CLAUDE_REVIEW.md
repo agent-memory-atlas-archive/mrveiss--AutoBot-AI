@@ -28,6 +28,22 @@ catching," not "what breaks CI." Run through before pushing:
    `CLAUDE.md`. (#16927)
 8. **Wrong issue/branch reference in a comment or doc** — citing the wrong number, costing a
    dedicated fix PR later. (#16881, #16860)
+9. **A new gate makes existing tests exercise a different path — and they fail like a stale
+   expectation.** When a change adds an authorization gate, guard or middleware upstream, every
+   test whose fixture predates it now short-circuits before reaching its own subject. The failure
+   reads as `assert <new> == <old>` with a plausible new value, so the obvious repair is to update
+   the assertion — which goes green while **deleting the coverage**. Ask instead: *did the observed
+   value come from the subject, or from something that now precedes it?* The docstring usually
+   names the subject. Fix the **fixture**, not the expectation.
+   Three files in one PR (#17054): two VNC handshake tests whose fake user carried no `role` began
+   asserting the gate's `close(1008)` instead of the handshake's `1011`, and a third whose
+   `role: "user"` stopped reaching `accept()` at all. Re-pinning those expectations would have
+   removed the only coverage of the handshake-failure path and of the accept path, and left the
+   gate's own headline case — a signed-in account *without* the permission — tested by nothing.
+   The tell that it is this pattern rather than drift: **the "corrected" expectation duplicates
+   what the new gate's own suite already asserts.** If updating a test makes it a second copy of a
+   neighbour, it has stopped testing its own subject. Fixture fixes preserve coverage; expectation
+   fixes spend it.
 
 ## Code Review Agent Requirements (MANDATORY)
 
@@ -142,6 +158,31 @@ post the findings on the issue and move on.
 red means the tick moves to the next non-colliding issue, never to a workaround.
 
 ---
+
+## Review threads are cleared before CI, not during it
+
+**A PR does not get a CI run while it has unresolved review comments** (owner rule 2026-09-25).
+Resolving a thread costs **no CI**; a CI cycle costs ~35 minutes on a serialized shard queue. A
+reviewer who has already named what will break is evidence that has been paid for, and spending a
+run ahead of reading it buys a second opinion while ignoring the first.
+
+Measured: one PR spent **four cycles** discovering guards one at a time while fourteen review
+comments sat unread behind them.
+
+**A resolution needs an argument, not a click.** The count of unresolved threads is the gate, and
+the count is satisfiable without the substance — so the gate measures the wrong thing unless
+resolutions carry replies. Two shapes both count as resolved and only one is:
+
+    replied with what changed, or why it does not apply   -> resolved
+    clicked resolve, nothing on the record                -> the finding is gone, not answered
+
+When sweeping a PR for eligibility, **read the resolutions, not just the number.** A thread
+resolved silently on a PR that then fails on the thing the reviewer named is the gate defeating
+itself, and it will look like a passing check.
+
+**Reply before the fix is pushed, and say so.** A resolved thread whose fix is still local reads to
+the next person as *already fixed on this branch*. State that the change is committed and not yet
+pushed, so nobody infers it from the diff.
 
 ## Merge-Blocking Findings Gate (#10024)
 

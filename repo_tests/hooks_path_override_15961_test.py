@@ -264,7 +264,71 @@ REACH = declare(
     # keeps being set wrong: it is a growth allowance that does not describe how
     # fast this tree adds files. #17142 has the standing argument; this is its
     # fifth data point in 48 hours.
-    floor=6531,
+    # Re-pinned 6531 -> 6536 (#16415 batch): measured 6936. FIFTEENTH re-pin,
+    # SIXTH in two days. This branch's own contribution is 4 counting files
+    # (path_http.py + its test, the durations guard, the route guard) against
+    # 401 of allowance that main had already spent 397 of. Same shape as the
+    # previous five and the reason #17142 exists: 400 is 5.8% of a ~6900-file
+    # tree and this tree spends it in under a week.
+    # Re-pinned 6536 -> 6736 (#17317): SEVENTEENTH re-pin, and deliberately NOT
+    # `population - growth` like the sixteen before it. #17142 blames `growth=400`
+    # for the treadmill; the measurement says otherwise, and the difference is
+    # what stops this recurring.
+    #
+    # There are two bounds, not one. `verify_floor` needs
+    # `population - floor <= skips + growth` (401), so floor >= 6535. `completed()`
+    # needs `floor <= what the guard finishes`, and since `skips=1` is this file
+    # alone, that is `population - 1` = 6935. The floor may legally sit ANYWHERE
+    # in 6535..6935 -- a window 400 wide.
+    #
+    # `floor = population - growth` pins it at the very BOTTOM of that window, so
+    # slack is always exactly `growth` (400) against an allowance of 401. That
+    # leaves ONE file of headroom by construction, whatever `growth` is set to --
+    # raising `growth` to 800 would re-pin the floor 400 lower and leave the same
+    # one file. That is why sixteen re-pins did not help, and why the fix is not a
+    # bigger allowance.
+    #
+    # 6736 is `population - 200`, mid-window: 201 files of headroom before the
+    # allowance is breached, and 199 files of shrink before `completed()` is. It is
+    # also a STRICTER guard than 6538, not a looser one -- the floor asserts how
+    # much of the tree was actually reached, so raising it within the window
+    # demands more, and only the allowance check cares about the gap.
+    #
+    # Measured: main is 6936 (6905 tracked .py/.sh/.yml/.yaml plus extensionless
+    # shell), confirmed by two independent branches -- #17323 adds 3 counted files
+    # and CI read 6939, #17330 adds 2 and read 6938. Counted additions in flight
+    # total +22 (#17327 +14, #17323 +3, #17330 +2, this +2, #17335 +1, #17341 +0);
+    # 6538 had 3 files of headroom and #17327 alone would have breached it four
+    # times over. Credit to autobot-ai-87 for the in-flight arithmetic.
+    #
+    # Held at 6736 for #17305/#17306 (+7 counted files -> population 6943, slack
+    # 207 of 401, and 206 files below `completed()`'s 6942). Re-measured on the
+    # rebased tree rather than assumed: the mid-window pin absorbs this branch,
+    # so the 6543 this branch carried before the rebase is superseded, not
+    # lowered -- 6736 is the stricter of the two.
+    #
+    # Held at 6736 for #17307/#17308 too (+14 counted files over main ->
+    # population 6952, slack 216 of 401, and 215 below `completed()`'s 6951).
+    # Re-measured on this rebased tree, not inherited: the mid-window pin
+    # absorbs the largest branch in tonight's queue, which is the property
+    # `population - growth` never had.
+    floor=6736,
+    # #13049 note: this branch proposed 6800 and ADOPTS main's 6736. #17318
+    # landed first, and the rule the sessions agreed is first-to-land wins, so
+    # one measurement does not produce four numbers. 6736 is comfortably valid
+    # here -- unlike prompt-injection's pin, it is not at the bottom of its
+    # window, so the files this branch adds do not exhaust it.
+    #
+    # NO MEASURED NUMBERS, deliberately: an earlier version of this note cited a
+    # slack figure and was stale one rebase later. Four orphaned narratives
+    # accumulated across these floor files tonight for exactly that reason --
+    # the rebase resolves the value and nothing resolves the sentence. The
+    # arithmetic is in the commit message, which cannot drift from its tree.
+    #
+    # #14881/#14631 reached the same conclusion independently on its own branch
+    # and also adopts 6736. Two branches, one measurement, one number -- which
+    # is what first-to-land is for. Its wording carried a slack figure; that is
+    # dropped here rather than merged, for the reason the paragraph above gives.
     growth=400,
     skips=1,
     what="tracked shell, python and YAML files, plus extensionless shell scripts",

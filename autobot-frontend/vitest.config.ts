@@ -32,7 +32,17 @@ export default mergeConfig(
       setupFiles: ['src/test/vitest-setup.ts'],
 
       // File patterns
-      include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+      // #17571: `src/**` alone left `scripts/canonical/__tests__/runner.test.mjs`
+      // uncollected. It imports from vitest and asserts on the canonical harness,
+      // and nothing ever ran it -- a suite that exists, looks like coverage in a
+      // diff, and is executed by no job. That is the same "clean result from an
+      // inspection that never happened" the harness under it exists to catch.
+      // One file matches the added pattern today; the point is that the next one
+      // is collected rather than silently ignored.
+      include: [
+        'src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
+        'scripts/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
+      ],
       exclude: [
         ...configDefaults.exclude,
         'e2e/**',
@@ -57,13 +67,34 @@ export default mergeConfig(
           '**/*.spec.ts',
           '**/*.test.ts',
         ],
+        // #17324: the valid key shape. These four numbers used to sit under a
+        // `global` key, which is not a threshold key at all -- vitest treats an
+        // unrecognised key under `thresholds` as a GLOB pattern for per-file
+        // thresholds, so "global" matched no file and the gate enforced
+        // nothing. Confirmed two ways: the shipped `interface Thresholds`
+        // accepts only 100 / perFile / autoUpdate / statements / functions /
+        // branches / lines, and CI passed this job on main at ~50% coverage
+        // against a declared 70%.
+        //
+        // These are FLOORS, not targets. The target is still 70% on every
+        // metric. The floors are what CI measured on main at f72de7ea1b
+        // (statements 49.91, branches 34.98, functions 38.45, lines 51.01),
+        // each pinned to the greatest integer at least 0.4 points below the
+        // measurement so that run-to-run jitter -- observed at roughly +/-0.2
+        // points across repeated runs of the same tree -- cannot red a PR that
+        // changed nothing. Re-measure from a CI run, not a developer machine:
+        // a local install below the declared vitest floor reports different
+        // numbers and a different exit code.
+        //
+        // The pin only ever ratchets UP. A PR that raises coverage raises the
+        // floor in the same PR -- the rule MAX_DUP_LINES and the reach floors
+        // follow. Never lower a floor to clear a red: that is precisely how
+        // those two accumulated their slack.
         thresholds: {
-          global: {
-            branches: 70,
-            functions: 70,
-            lines: 70,
-            statements: 70,
-          },
+          statements: 49,
+          branches: 34,
+          functions: 38,
+          lines: 50,
         },
       },
 

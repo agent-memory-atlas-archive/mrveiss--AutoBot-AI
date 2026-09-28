@@ -320,6 +320,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/orphan-storage/deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Orphan Storage Deletion
+         * @description Propose deleting one orphan-storage candidate -- a request, not a deletion.
+         *
+         *     Creates a PENDING approval whose context names the registered action and
+         *     the candidate. Nothing is deleted here and nothing can be: the only caller
+         *     of ``delete_candidate`` is the post-approval executor, which runs after a
+         *     human approves (#17038). Whether the candidate is still an orphan, and
+         *     still past its grace period, is re-checked THEN rather than now, so a
+         *     record that reappears between proposal and approval is refused instead of
+         *     deleted.
+         *
+         *     An unregistered provider is refused here rather than accepted and failed
+         *     after approval -- a reviewer should never be asked to decide on a proposal
+         *     that could not execute.
+         */
+        post: operations["propose_orphan_storage_deletion_api_admin_orphan_storage_deletion_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/retention-policies": {
         parameters: {
             query?: never;
@@ -6662,6 +6694,55 @@ export interface paths {
         get: operations["get_compliance_summary_api_knowledge_audit_compliance_summary_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/source-liveness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Source Liveness Census
+         * @description Per-ingest-class counts of every source state.
+         *
+         *     ``never_checked`` and ``no_locator`` are their own buckets: *did not look*
+         *     and *nothing to look at* are both different from *looked and found nothing*,
+         *     and a retention decision made on a number that merged them would be acting
+         *     on facts nobody has examined.
+         */
+        get: operations["get_source_liveness_census_api_knowledge_source_liveness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/source-liveness/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Source Liveness Sweep
+         * @description Probe the least-recently-checked page of filesystem locators.
+         *
+         *     Records an observation per fact. Deletes nothing and marks nothing gone --
+         *     a witnessed deletion is the only thing that sets ``source_gone_at`` (#17546),
+         *     and acting on a vanished source at all is an approval-gated decision (#17038).
+         */
+        post: operations["post_source_liveness_sweep_api_knowledge_source_liveness_sweep_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -31733,8 +31814,10 @@ export interface paths {
          *
          *     Issue #390: Process plan approval before execution.
          *
-         *     Note: Authorization is validated by checking session_id matches the workflow.
-         *     The client must provide the correct session_id that owns the workflow.
+         *     #17014: authorization is the workflow's recorded owner or an admin. It was
+         *     previously described as "session_id matches the workflow", which the client
+         *     supplies -- so it authorised whoever asked, and deferred the real check to an
+         *     API gateway that does not perform it.
          */
         post: operations["approve_plan_api_workflow_automation_approve_plan_post"];
         delete?: never;
@@ -86475,6 +86558,43 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * OrphanStorageDeletionRequest
+         * @description Propose deleting one candidate. Names the candidate, never a host path.
+         */
+        OrphanStorageDeletionRequest: {
+            /** Provider */
+            provider: string;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Reason */
+            reason?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * OrphanStorageDeletionRequestResponse
+         * @description The PENDING approval a proposal created -- nothing was deleted (#17315).
+         *
+         *     ``status`` is the approval's own status, so a caller reading this response
+         *     can never mistake "queued for a human" for "done": the deletion happens
+         *     only if someone approves it, and only then does the registered executor
+         *     run.
+         */
+        OrphanStorageDeletionRequestResponse: {
+            /** Approval Id */
+            approval_id: string;
+            /** Status */
+            status: string;
+            /** Action */
+            action: string;
+            /** Provider */
+            provider: string;
+            /** Candidate Id */
+            candidate_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * OrphanStorageListResponse
          * @description Every candidate across every registered detector, plus totals.
          *
@@ -90211,6 +90331,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RedisDatabase
+         * @description Type-safe database enumeration aligned with redis-databases.yaml (#2670).
+         *
+         *     Each value corresponds to a Redis database number (0-15).
+         * @enum {integer}
+         */
+        RedisDatabase: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 14 | 15 | 8 | 0;
         /**
          * RedisFileScanRequest
          * @description Request for scanning a single file for Redis optimizations.
@@ -104922,6 +105050,39 @@ export interface operations {
             };
         };
     };
+    propose_orphan_storage_deletion_api_admin_orphan_storage_deletion_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrphanStorageDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrphanStorageDeletionRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_retention_policies_api_admin_retention_policies_get: {
         parameters: {
             query?: {
@@ -113434,6 +113595,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeComplianceReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_liveness_census_api_knowledge_source_liveness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    post_source_liveness_sweep_api_knowledge_source_liveness_sweep_post: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -139777,7 +139993,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path?: never;
@@ -139935,7 +140151,7 @@ export interface operations {
                 agent_id?: string | null;
                 conversation_id?: string | null;
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path?: never;
@@ -139967,7 +140183,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path?: never;
@@ -140003,7 +140219,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path: {
@@ -140037,7 +140253,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path: {
@@ -140072,7 +140288,7 @@ export interface operations {
             query: {
                 session_id: string;
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path?: never;
@@ -140108,7 +140324,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path: {
@@ -140255,7 +140471,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path: {
@@ -140293,7 +140509,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path: {
@@ -140327,7 +140543,7 @@ export interface operations {
         parameters: {
             query?: {
                 async_client?: boolean;
-                database?: string;
+                database?: components["schemas"]["RedisDatabase"] | string;
             };
             header?: never;
             path: {

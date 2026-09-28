@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "تعذّر إرسال الرسالة بعد {attempts} محاولات: {error}. يُرجى التحقق من اتصالك والمحاولة مرة أخرى.",
       "invalidFormatDetail": "تنسيق الرسالة غير صالح: {error}. يُرجى التحقق من إدخالك والمحاولة مرة أخرى.",
       "networkFailedRetry": "فشل الاتصال بالشبكة. يُرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى."
+    },
+    "tabs": {
+      "chat": "محادثة",
+      "files": "الملفات",
+      "terminal": "الطرفية",
+      "browser": "المتصفح",
+      "novnc": "سطح المكتب البعيد"
     }
   },
   "settings": {
@@ -2615,7 +2622,7 @@
       "visibility": "Visibility",
       "visibilityHint": "Visibility hint",
       "errorAddText": "Failed to add text to knowledge base",
-      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit ({max} MB)",
       "errorImportUrl": "Failed to import URL content",
       "errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
       "errorUploadFiles": "Failed to upload files",
@@ -3150,7 +3157,17 @@
       "noEntities3D": "لا توجد كيانات للعرض",
       "loading3dVisualization": "Loading3d visualization",
       "loadingVisualization": "Loading visualization library...",
-      "retry": "Retry"
+      "retry": "Retry",
+      "sourcesUnreadable": "تعذّرت قراءة رسم المعرفة البياني",
+      "sourcesUnreadableHint": "لا يُعرض شيء لأن المخازن أدناه لم تستجب، وليس لأن الرسم البياني فارغ.",
+      "sourceHeld": "{source}: {held} كيانات",
+      "sourceFailed": "{source}: تعذّرت القراءة — {reason}",
+      "partialGraph": "هذا الرسم البياني غير مكتمل: تعذّرت قراءة {sources}.",
+      "source": {
+        "unified": "رسم قاعدة المعرفة البياني",
+        "memory": "كيانات الذاكرة"
+      },
+      "reasonUnknown": "لم يُبلَّغ عن سبب"
     },
     "connectors": {
       "title": "Source Connectors",
@@ -5644,7 +5661,7 @@
   "knowledge.upload.errorAddText": "Failed to add text to knowledge base",
   "knowledge.upload.successUrlImported": "URL content imported successfully",
   "knowledge.upload.errorImportUrl": "Failed to import URL content",
-  "knowledge.upload.errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+  "knowledge.upload.errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit ({max} MB)",
   "knowledge.upload.errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
   "knowledge.upload.errorUploadFiles": "Failed to upload files",
   "knowledge.verification.title": "Verification Queue",
@@ -6750,8 +6767,6 @@
       "expiresIn": "Expires {time}",
       "view": "View",
       "makeGeneral": "Make General",
-      "scopeUser": "User",
-      "scopeSession": "Session",
       "scopeHint": "Original scope field (maintained for backward compatibility)",
       "organizationId": "Organization ID",
       "orgIdPlaceholder": "org-uuid-here",
@@ -7751,6 +7766,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "سطح المكتب البعيد غير متاح لدورك",
+      "description": "يتطلب عرض سطح المكتب المُدار والتحكم فيه إذن desktop-control. اطلب من المسؤول منحه لدورك."
     }
   },
   "serviceMessages": {
@@ -8268,6 +8287,7 @@
       "allTypes": "All Types",
       "allStatuses": "All Statuses",
       "allPriorities": "All Priorities",
+      "allProjects": "جميع المشاريع",
       "statusBacklog": "Backlog",
       "statusReady": "Ready",
       "searchPlaceholder": "Search work items...",
@@ -8948,7 +8968,25 @@
       "confirmDelete": "حذف هذا المشروع المؤرشف وسباقاته؟ لا يمكن التراجع عن هذا.",
       "archiveError": "فشل أرشفة المشروع.",
       "restoreError": "فشل استعادة المشروع.",
-      "deleteError": "فشل حذف المشروع."
+      "deleteError": "فشل حذف المشروع.",
+      "archiveToDeleteHint": "قم بالأرشفة لتمكين الحذف",
+      "deleteNeedsArchive": "قم بأرشفة المشروع قبل حذفه.",
+      "deleteForbidden": "ليس لديك إذن لحذف هذا المشروع.",
+      "edit": "تعديل",
+      "editTitle": "تعديل المشروع",
+      "saveAction": "حفظ التغييرات",
+      "statusLabel": "الحالة",
+      "targetDateLabel": "التاريخ المستهدف",
+      "autoRolloverLabel": "نقل العمل غير المكتمل إلى السبرنت التالي",
+      "editError": "لم نتمكن من حفظ المشروع. يُرجى المحاولة مرة أخرى.",
+      "editNotFound": "هذا المشروع لم يعد متاحًا.",
+      "status": {
+        "backlog": "قائمة الانتظار",
+        "planned": "مُخطَّط",
+        "in_progress": "قيد التنفيذ",
+        "completed": "مكتمل",
+        "cancelled": "ملغى"
+      }
     },
     "approvals": {
       "decideError": "Failed to record your decision. Please try again."
@@ -9010,7 +9048,9 @@
       "verdictRationale": "المبرر",
       "disabled": "البحث عن النتائج معطّل.",
       "actionError": "فشل الإجراء، يرجى المحاولة مجدداً.",
-      "severity": "الخطورة"
+      "severity": "الخطورة",
+      "unavailable": "سياسة النتائج غير متاحة — لا يمكن تقديم الفحص.",
+      "forbidden": "ليس لديك إذن لفحص هذا المشروع."
     }
   },
   "admin": {
@@ -9467,6 +9507,15 @@
       "settingsButton": "الإعدادات",
       "hideSettingsButton": "إخفاء الإعدادات",
       "settingsHeading": "إعدادات الناسخ"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "في قاعدة المعرفة",
+      "reindex": "إعادة الفهرسة",
+      "push": "إرسال إلى قاعدة المعرفة",
+      "collectionIdPlaceholder": "معرّف المجموعة",
+      "pushing": "جارٍ الإرسال…",
+      "confirm": "تأكيد",
+      "pushFailed": "لم نتمكن من إضافة هذا التسجيل إلى قاعدة المعرفة. يُرجى المحاولة مرة أخرى."
     }
   }
 }

@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "Não foi possível enviar a mensagem após {attempts} tentativas: {error}. Verifique sua conexão e tente novamente.",
       "invalidFormatDetail": "Formato de mensagem inválido: {error}. Verifique sua entrada e tente novamente.",
       "networkFailedRetry": "Falha na conexão de rede. Verifique sua conexão com a internet e tente novamente."
+    },
+    "tabs": {
+      "chat": "Conversa",
+      "files": "Arquivos",
+      "terminal": "Terminal",
+      "browser": "Navegador",
+      "novnc": "Área de trabalho remota"
     }
   },
   "settings": {
@@ -2615,7 +2622,7 @@
       "visibility": "Visibility",
       "visibilityHint": "Visibility hint",
       "errorAddText": "Failed to add text to knowledge base",
-      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+      "errorFileTooLarge": "O arquivo \"{name}\" excede o limite máximo de tamanho ({max} MB)",
       "errorImportUrl": "Failed to import URL content",
       "errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
       "errorUploadFiles": "Failed to upload files",
@@ -3150,7 +3157,17 @@
       "noEntities3D": "Nenhuma entidade para exibir",
       "loading3dVisualization": "Loading3d visualization",
       "loadingVisualization": "Loading visualization library...",
-      "retry": "Retry"
+      "retry": "Retry",
+      "sourcesUnreadable": "Não foi possível ler o grafo de conhecimento",
+      "sourcesUnreadableHint": "Nada é exibido porque os repositórios abaixo não responderam — não porque o grafo esteja vazio.",
+      "sourceHeld": "{source}: {held} entidades",
+      "sourceFailed": "{source}: não foi possível ler — {reason}",
+      "partialGraph": "Este grafo está incompleto: não foi possível ler {sources}.",
+      "source": {
+        "unified": "Grafo da base de conhecimento",
+        "memory": "Entidades de memória"
+      },
+      "reasonUnknown": "motivo não informado"
     },
     "connectors": {
       "title": "Conectores de fontes",
@@ -5644,7 +5661,7 @@
   "knowledge.upload.errorAddText": "Falha ao adicionar texto à base de conhecimento",
   "knowledge.upload.successUrlImported": "Conteúdo da URL importado com sucesso",
   "knowledge.upload.errorImportUrl": "Falha ao importar conteúdo da URL",
-  "knowledge.upload.errorFileTooLarge": "O arquivo \"{name}\" excede o limite máximo de tamanho",
+  "knowledge.upload.errorFileTooLarge": "O arquivo \"{name}\" excede o limite máximo de tamanho ({max} MB)",
   "knowledge.upload.errorUnsupportedFormat": "O arquivo \"{name}\" tem um formato não suportado",
   "knowledge.upload.errorUploadFiles": "Falha ao fazer upload dos arquivos",
   "knowledge.verification.title": "Fila de Verificação",
@@ -6750,8 +6767,6 @@
       "expiresIn": "Expires {time}",
       "view": "View",
       "makeGeneral": "Make General",
-      "scopeUser": "User",
-      "scopeSession": "Session",
       "scopeHint": "Original scope field (maintained for backward compatibility)",
       "organizationId": "Organization ID",
       "orgIdPlaceholder": "org-uuid-here",
@@ -7751,6 +7766,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "A área de trabalho remota não está disponível para a sua função",
+      "description": "Ver e controlar a área de trabalho gerida requer a permissão desktop-control. Peça a um administrador para a conceder à sua função."
     }
   },
   "serviceMessages": {
@@ -8268,6 +8287,7 @@
       "allTypes": "Todos os tipos",
       "allStatuses": "Todos os estados",
       "allPriorities": "Todas as prioridades",
+      "allProjects": "Todos os projetos",
       "statusBacklog": "Backlog",
       "statusReady": "Pronto",
       "searchPlaceholder": "Pesquisar itens de trabalho...",
@@ -8948,7 +8968,25 @@
       "confirmDelete": "Excluir este projeto arquivado e seus sprints? Esta ação não pode ser desfeita.",
       "archiveError": "Falha ao arquivar o projeto.",
       "restoreError": "Falha ao restaurar o projeto.",
-      "deleteError": "Falha ao excluir o projeto."
+      "deleteError": "Falha ao excluir o projeto.",
+      "archiveToDeleteHint": "Arquive para permitir a exclusão",
+      "deleteNeedsArchive": "Arquive o projeto antes de excluí-lo.",
+      "deleteForbidden": "Você não tem permissão para excluir este projeto.",
+      "edit": "Editar",
+      "editTitle": "Editar projeto",
+      "saveAction": "Salvar alterações",
+      "statusLabel": "Estado",
+      "targetDateLabel": "Data alvo",
+      "autoRolloverLabel": "Transferir o trabalho não concluído para o próximo sprint",
+      "editError": "Não foi possível salvar o projeto. Tente novamente.",
+      "editNotFound": "Este projeto já não está disponível.",
+      "status": {
+        "backlog": "Backlog",
+        "planned": "Planejado",
+        "in_progress": "Em andamento",
+        "completed": "Concluído",
+        "cancelled": "Cancelado"
+      }
     },
     "approvals": {
       "decideError": "Falha ao registrar sua decisão. Tente novamente."
@@ -9010,7 +9048,9 @@
       "verdictRationale": "Justificativa",
       "disabled": "A verificação de resultados está desativada.",
       "actionError": "Ação falhou, por favor tente novamente.",
-      "severity": "Severidade"
+      "severity": "Severidade",
+      "unavailable": "Política de constatações indisponível — a verificação não pode ser oferecida.",
+      "forbidden": "Você não tem permissão para verificar este projeto."
     }
   },
   "admin": {
@@ -9467,6 +9507,15 @@
       "settingsButton": "Configurações",
       "hideSettingsButton": "Ocultar configurações",
       "settingsHeading": "Configurações do transcritor"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "Na base de conhecimento",
+      "reindex": "Reindexar",
+      "push": "Enviar para a base de conhecimento",
+      "collectionIdPlaceholder": "ID da coleção",
+      "pushing": "Enviando…",
+      "confirm": "Confirmar",
+      "pushFailed": "Não foi possível adicionar esta gravação à base de conhecimento. Tente novamente."
     }
   }
 }

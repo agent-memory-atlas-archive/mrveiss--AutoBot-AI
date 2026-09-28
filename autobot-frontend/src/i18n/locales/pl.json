@@ -1,6 +1,6 @@
 {
   "common": {
-    "submit": "Składać",
+    "submit": "Złóż",
     "cancel": "Anulować",
     "save": "Ratować",
     "delete": "Usuwać",
@@ -26,7 +26,7 @@
     "ok": "OK",
     "none": "Nic",
     "all": "Wszystko",
-    "select": "Wybierać",
+    "select": "Wybierz",
     "noResults": "Nie znaleziono żadnych wyników",
     "actions": "Działania",
     "create": "Tworzyć",
@@ -164,7 +164,7 @@
       "noFiles": "Nie ma jeszcze plików",
       "loadingFiles": "Ładowanie plików...",
       "aiGenerated": "Wygenerowano sztuczną inteligencję",
-      "preview": "Zapowiedź",
+      "preview": "Podgląd",
       "download": "Pobierać",
       "rename": "Przemianować",
       "duplicate": "Duplikat",
@@ -361,7 +361,7 @@
       "inputRequired": "Dane wejściowe wymagane dla",
       "commentPlaceholder": "Dodaj komentarz lub powód tej decyzji...",
       "cancelComment": "Anuluj komentarz",
-      "submit": "Składać",
+      "submit": "Złóż",
       "approval": "Aprobata",
       "denial": "Odmowa",
       "submitWithComment": "Prześlij {action} z komentarzem",
@@ -590,7 +590,7 @@
       "hideRawJson": "Ukryj surowy JSON",
       "exportJson": "Eksportuj JSON",
       "sendToChat": "Wyślij do czatu",
-      "preview": "Zapowiedź"
+      "preview": "Podgląd"
     },
     "visualBrowser": {
       "checking": "Kontrola...",
@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "Nie udało się wysłać wiadomości po {attempts} próbach: {error}. Sprawdź połączenie i spróbuj ponownie.",
       "invalidFormatDetail": "Nieprawidłowy format wiadomości: {error}. Sprawdź swoje dane i spróbuj ponownie.",
       "networkFailedRetry": "Połączenie sieciowe nie powiodło się. Sprawdź połączenie z internetem i spróbuj ponownie."
+    },
+    "tabs": {
+      "chat": "Czat",
+      "files": "Pliki",
+      "terminal": "Terminal",
+      "browser": "Przeglądarka",
+      "novnc": "Pulpit zdalny"
     }
   },
   "settings": {
@@ -2615,7 +2622,7 @@
       "visibility": "Visibility",
       "visibilityHint": "Visibility hint",
       "errorAddText": "Failed to add text to knowledge base",
-      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+      "errorFileTooLarge": "Plik \"{name}\" przekracza maksymalny limit rozmiaru ({max} MB)",
       "errorImportUrl": "Failed to import URL content",
       "errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
       "errorUploadFiles": "Failed to upload files",
@@ -3150,7 +3157,17 @@
       "noEntities3D": "Brak encji do wyświetlenia",
       "loading3dVisualization": "Loading3d visualization",
       "loadingVisualization": "Loading visualization library...",
-      "retry": "Retry"
+      "retry": "Retry",
+      "sourcesUnreadable": "Nie można odczytać grafu wiedzy",
+      "sourcesUnreadableHint": "Nic nie jest wyświetlane, ponieważ poniższe magazyny nie odpowiedziały — a nie dlatego, że graf jest pusty.",
+      "sourceHeld": "{source}: {held} encji",
+      "sourceFailed": "{source}: nie udało się odczytać — {reason}",
+      "partialGraph": "Ten graf jest niekompletny: nie udało się odczytać {sources}.",
+      "source": {
+        "unified": "Graf bazy wiedzy",
+        "memory": "Encje pamięci"
+      },
+      "reasonUnknown": "nie podano przyczyny"
     },
     "connectors": {
       "title": "Konektory źródeł",
@@ -5644,7 +5661,7 @@
   "knowledge.upload.errorAddText": "Nie udało się dodać tekstu do bazy wiedzy",
   "knowledge.upload.successUrlImported": "Zawartość URL pomyślnie zaimportowana",
   "knowledge.upload.errorImportUrl": "Nie udało się zaimportować zawartości URL",
-  "knowledge.upload.errorFileTooLarge": "Plik \"{name}\" przekracza maksymalny limit rozmiaru",
+  "knowledge.upload.errorFileTooLarge": "Plik \"{name}\" przekracza maksymalny limit rozmiaru ({max} MB)",
   "knowledge.upload.errorUnsupportedFormat": "Plik \"{name}\" ma nieobsługiwany format",
   "knowledge.upload.errorUploadFiles": "Nie udało się przesłać plików",
   "knowledge.verification.title": "Kolejka Weryfikacji",
@@ -6750,8 +6767,6 @@
       "expiresIn": "Expires {time}",
       "view": "View",
       "makeGeneral": "Make General",
-      "scopeUser": "User",
-      "scopeSession": "Session",
       "scopeHint": "Original scope field (maintained for backward compatibility)",
       "organizationId": "Organization ID",
       "orgIdPlaceholder": "org-uuid-here",
@@ -7751,6 +7766,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "Pulpit zdalny nie jest dostępny dla Twojej roli",
+      "description": "Podglądanie i sterowanie zarządzanym pulpitem wymaga uprawnienia desktop-control. Poproś administratora o nadanie go Twojej roli."
     }
   },
   "serviceMessages": {
@@ -8268,6 +8287,7 @@
       "allTypes": "All Types",
       "allStatuses": "All Statuses",
       "allPriorities": "All Priorities",
+      "allProjects": "Wszystkie projekty",
       "statusBacklog": "Backlog",
       "statusReady": "Ready",
       "searchPlaceholder": "Search work items...",
@@ -8948,7 +8968,25 @@
       "confirmDelete": "Usunąć ten zarchiwizowany projekt i jego sprinty? Tej operacji nie można cofnąć.",
       "archiveError": "Nie udało się zarchiwizować projektu.",
       "restoreError": "Nie udało się przywrócić projektu.",
-      "deleteError": "Nie udało się usunąć projektu."
+      "deleteError": "Nie udało się usunąć projektu.",
+      "archiveToDeleteHint": "Zarchiwizuj, aby umożliwić usunięcie",
+      "deleteNeedsArchive": "Zarchiwizuj projekt przed jego usunięciem.",
+      "deleteForbidden": "Nie masz uprawnień do usunięcia tego projektu.",
+      "edit": "Edytuj",
+      "editTitle": "Edytuj projekt",
+      "saveAction": "Zapisz zmiany",
+      "statusLabel": "Status",
+      "targetDateLabel": "Data docelowa",
+      "autoRolloverLabel": "Przenieś niezakończoną pracę do następnego sprintu",
+      "editError": "Nie udało się zapisać projektu. Spróbuj ponownie.",
+      "editNotFound": "Ten projekt nie jest już dostępny.",
+      "status": {
+        "backlog": "Backlog",
+        "planned": "Zaplanowany",
+        "in_progress": "W toku",
+        "completed": "Zakończony",
+        "cancelled": "Anulowany"
+      }
     },
     "approvals": {
       "decideError": "Nie udało się zapisać Twojej decyzji. Spróbuj ponownie."
@@ -9010,7 +9048,9 @@
       "verdictRationale": "Uzasadnienie",
       "disabled": "Skanowanie wyników jest wyłączone.",
       "actionError": "Akcja nie powiodła się, spróbuj ponownie.",
-      "severity": "Powaga"
+      "severity": "Powaga",
+      "unavailable": "Zasady ustaleń niedostępne — skanowanie nie może zostać udostępnione.",
+      "forbidden": "Nie masz uprawnień do skanowania tego projektu."
     }
   },
   "admin": {
@@ -9467,6 +9507,15 @@
       "settingsButton": "Ustawienia",
       "hideSettingsButton": "Ukryj ustawienia",
       "settingsHeading": "Ustawienia transkrybera"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "W bazie wiedzy",
+      "reindex": "Zindeksuj ponownie",
+      "push": "Wyślij do bazy wiedzy",
+      "collectionIdPlaceholder": "Identyfikator kolekcji",
+      "pushing": "Wysyłanie…",
+      "confirm": "Potwierdź",
+      "pushFailed": "Nie udało się dodać tego nagrania do bazy wiedzy. Spróbuj ponownie."
     }
   }
 }

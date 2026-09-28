@@ -97,9 +97,10 @@ This runbook provides operational procedures for managing the Redis service with
 │  ┌─────────────────────────────────────────────────┐  │
 │  │  Redis Server Process                           │  │
 │  │  • Port: 6379                                   │  │
-│  │  • Config: /etc/redis/redis.conf               │  │
-│  │  • Data: /var/lib/redis/                       │  │
-│  │  • Logs: /var/log/redis/redis-server.log       │  │
+│  │  • Config: /etc/redis-stack.conf                │  │
+│  │  • Data: /var/lib/redis-stack/                  │  │
+│  │  • Logs: /var/log/redis-stack/                  │  │
+│  │            redis-stack-server.log               │  │
 │  └─────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -578,19 +579,34 @@ Before performing manual operations:
 1. **Backup current configuration:**
    ```bash
    ssh -i ~/.ssh/autobot_key autobot@<database-ip> \
-     "sudo cp /etc/redis/redis.conf /etc/redis/redis.conf.backup.$(date +%Y%m%d_%H%M%S)"
+     "sudo cp /etc/redis-stack.conf /etc/redis-stack.conf.backup.$(date +%Y%m%d_%H%M%S)"
    ```
 
 2. **Edit configuration:**
    ```bash
    ssh -i ~/.ssh/autobot_key autobot@<database-ip>
-   sudo vim /etc/redis/redis.conf
+   sudo vim /etc/redis-stack.conf
    ```
 
 3. **Validate configuration:**
+   Redis has no offline config-syntax validator. **If you take Option B below**,
+   the restart is the effective validation — the service will fail to start and
+   its journal will show the parse error. **Option A does not restart**, so it
+   gets no syntax check at all: `CONFIG SET` validates only the one parameter it
+   sets, and `CONFIG REWRITE` can still write a file that fails to parse on the
+   *next* restart, whenever that happens. Treat Option A's config file as
+   unvalidated until the service is next restarted deliberately.
+
+   Either way, capture the pre-change baseline first, so step 6 can compare:
    ```bash
-   redis-stack-server /etc/redis/redis.conf --test-memory 1
+   redis-cli CONFIG GET '*' | paste - - | sort -k1,1 > /tmp/redis-config.pre-change.txt
    ```
+   `CONFIG GET` emits keys and values as *alternating* lines. Piping that
+   straight into `sort` orders every line independently and breaks the
+   key-to-value association — two configs in which a pair of settings swapped
+   values produce byte-identical snapshots, so the comparison in step 6 reports
+   no change. `paste - -` joins each key to its own value first, and
+   `sort -k1,1` then orders whole pairs by key.
 
 4. **Apply changes** (choose one):
 
@@ -611,6 +627,15 @@ Before performing manual operations:
    ```
 
 6. **Monitor for issues:**
+   - Compare the running config against the baseline captured in step 3 — this
+     is what that snapshot is for, and without this line it had no consumer:
+     ```bash
+     redis-cli CONFIG GET '*' | paste - - | sort -k1,1 > /tmp/redis-config.post-change.txt
+     diff /tmp/redis-config.pre-change.txt /tmp/redis-config.post-change.txt
+     ```
+     Expect exactly the settings you intended to change, and nothing else. A
+     parameter you did not touch appearing here means `CONFIG REWRITE` rewrote
+     more than the change, or the restart picked up an edit made out of band.
    - Watch logs for 10 minutes
    - Verify all health checks passing
    - Test dependent services
@@ -1192,7 +1217,7 @@ scp -i ~/.ssh/autobot_key \
 
    # Config backup
    ssh autobot@<database-ip> \
-     "sudo cp /etc/redis/redis.conf /etc/redis/redis.conf.pre-upgrade"
+     "sudo cp /etc/redis-stack.conf /etc/redis-stack.conf.pre-upgrade"
    ```
 
 2. **Update Redis:**
@@ -1242,7 +1267,7 @@ ssh autobot@<database-ip> << 'EOF'
   sudo apt install redis-stack-server=<previous_version>
 
   # Restore config
-  sudo cp /etc/redis/redis.conf.pre-upgrade /etc/redis/redis.conf
+  sudo cp /etc/redis-stack.conf.pre-upgrade /etc/redis-stack.conf
 
   # Restore data (if needed)
   sudo cp /var/lib/redis/dump.rdb.pre-upgrade /var/lib/redis/dump.rdb
@@ -1661,7 +1686,7 @@ redis-cli -h <database-ip> --bigkeys
 
 ### Redis Configuration
 
-**Location:** `/etc/redis/redis.conf` (on Redis VM)
+**Location:** `/etc/redis-stack.conf` (on Redis VM)
 
 **Key Settings:**
 ```ini

@@ -103,7 +103,48 @@ HOOK_PATH = Path(__file__).resolve().parent / "pre-commit-no-print-console"
 # generate_report.py/generate_env_docs.py/check_env_var_registry.py (it only
 # appeared to in a base-drift diff, not a real edit), so 310 - 2 = 308 combines
 # cleanly with the chain above. Computed at 2d-vehicle assembly.
-_KNOWN_REPO_VIOLATIONS = 308
+# 301 since #17395: the seven print() calls in
+# `autobot-frontend/scripts/check-locale-completeness.py` now carry
+# `# noqa: print -- a checker's report IS its stdout`. They are not fixed and
+# not lost -- they are annotated. That script is a CI checker whose entire
+# output IS its report ("lv.json: OK", "All locale files complete."), so print
+# is the correct call there and the hook's documented noqa is the right
+# mechanism.
+#
+# WHY THEY SURFACED AT ALL, since it explains why an i18n PR moved a print
+# count: the hook scopes to CHANGED files. Those seven predate #17395 and sat
+# unannotated because nothing had touched the file; parameterising it with
+# `--locales` pulled the whole file into scope and every one of them became a
+# reported violation at once.
+#
+# ATTRIBUTED BEFORE LOWERING, because a shrink this constant did not authorise
+# is the scan losing a detection -- the opposite outcome with the same one-line
+# fix. Measured by running the hook over both trees and diffing the sets:
+#
+#     merge-base 4333c47fb0   308 violations
+#     this branch             301 violations
+#     present at base, absent here    7  (all in check-locale-completeness.py)
+#     present here, absent at base    0  (no new violations, nothing displaced)
+#
+# The mine-only count of 0 is the load-bearing half: had these been line-number
+# shifts rather than suppressions, the same seven would have reappeared at new
+# lines and the total would not have moved.
+# #17623 re-measure: 300, after data/ left the scanned domain. The arithmetic
+# does NOT close, and that is the finding rather than a rounding note:
+#
+#     declared before            301
+#     minus the two data/ fixtures that left the domain    -2
+#     expected                   299
+#     MEASURED                   300
+#
+# The extra one is not from this branch -- no file it touches violates, and the
+# 32 files it restores are yaml/json/config that this scan never reads. So the
+# non-data population was already 300 while 301 was declared, i.e. base has been
+# one violation short of its own pin. Nothing reported it because `python-suite`
+# is SKIPPED on any PR that touches no python path, and reports `success` when it
+# does (#16087) -- the same bypass that let a fixture path become a real file on
+# `bf6ee5583`. Pinned to the measured number, not to the arithmetic.
+_KNOWN_REPO_VIOLATIONS = 300
 
 
 def _test_git_env() -> dict[str, str]:

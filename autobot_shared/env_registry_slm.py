@@ -10,11 +10,7 @@ moved here with the new one so the component lives in a single place rather
 than straddling two modules -- the same relocation ``env_registry_testing.py``
 made for the same reason.
 
-Importing this module registers every variable below into
-``autobot_shared.env_registry.REGISTRY`` as a side effect, exactly like the
-``register_env_var(...)`` calls in ``env_registry.py`` itself. It is imported
-from there, after ``EnvVarSpec``/``register_env_var``/``REGISTRY`` are
-defined, so nothing ever observes a partially-populated registry.
+Registration contract (import side effect, ordering): see ``env_registry`` (#16415).
 
 Closes GH#7081.
 """
@@ -22,6 +18,24 @@ Closes GH#7081.
 from __future__ import annotations
 
 from autobot_shared.env_registry import EnvVarSpec, register_env_var
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_PLAYBOOK_PIPE_LINE_LIMIT",
+        type=int,
+        default=10 * 1024 * 1024,
+        description=(
+            "Bytes of one playbook output line the executor will read. asyncio's "
+            "StreamReader defaults to 64 KiB, and a single ansible `fatal:` line "
+            "carries the whole task result as JSON -- for a pip task that embeds "
+            "pip's entire stderr and goes past 64 KiB routinely. Exceeding it used "
+            "to kill the reader with a bare ValueError, which then stood in for the "
+            "failure it had swallowed. Raise it only if a real line is larger; the "
+            "reader truncates and says so rather than dying either way."
+        ),
+        component="slm",
+    )
+)
 
 register_env_var(
     EnvVarSpec(

@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "Nachricht konnte nach {attempts} Versuchen nicht gesendet werden: {error}. Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
       "invalidFormatDetail": "Ungültiges Nachrichtenformat: {error}. Bitte überprüfen Sie Ihre Eingabe und versuchen Sie es erneut.",
       "networkFailedRetry": "Netzwerkverbindung fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut."
+    },
+    "tabs": {
+      "chat": "Chat",
+      "files": "Dateien",
+      "terminal": "Terminal",
+      "browser": "Browser",
+      "novnc": "Remotedesktop"
     }
   },
   "settings": {
@@ -2615,7 +2622,7 @@
       "visibility": "Visibility",
       "visibilityHint": "Visibility hint",
       "errorAddText": "Failed to add text to knowledge base",
-      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+      "errorFileTooLarge": "Datei \"{name}\" überschreitet die maximale Dateigröße ({max} MB)",
       "errorImportUrl": "Failed to import URL content",
       "errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
       "errorUploadFiles": "Failed to upload files",
@@ -3150,7 +3157,17 @@
       "noEntities3D": "Keine Entitäten zum Anzeigen",
       "loading3dVisualization": "Loading3d visualization",
       "loadingVisualization": "Loading visualization library...",
-      "retry": "Retry"
+      "retry": "Retry",
+      "sourcesUnreadable": "Wissensgraph konnte nicht gelesen werden",
+      "sourcesUnreadableHint": "Es wird nichts angezeigt, weil die unten aufgeführten Speicher nicht geantwortet haben – nicht, weil der Graph leer ist.",
+      "sourceHeld": "{source}: {held} Entitäten",
+      "sourceFailed": "{source}: konnte nicht gelesen werden – {reason}",
+      "partialGraph": "Dieser Graph ist unvollständig: {sources} konnte nicht gelesen werden.",
+      "source": {
+        "unified": "Wissensdatenbank-Graph",
+        "memory": "Speicher-Entitäten"
+      },
+      "reasonUnknown": "kein Grund gemeldet"
     },
     "connectors": {
       "title": "Quell-Konnektoren",
@@ -5644,7 +5661,7 @@
   "knowledge.upload.errorAddText": "Text konnte nicht zur Wissensdatenbank hinzugefügt werden",
   "knowledge.upload.successUrlImported": "URL-Inhalt erfolgreich importiert",
   "knowledge.upload.errorImportUrl": "URL-Inhalt konnte nicht importiert werden",
-  "knowledge.upload.errorFileTooLarge": "Datei \"{name}\" überschreitet die maximale Dateigröße",
+  "knowledge.upload.errorFileTooLarge": "Datei \"{name}\" überschreitet die maximale Dateigröße ({max} MB)",
   "knowledge.upload.errorUnsupportedFormat": "Datei \"{name}\" hat ein nicht unterstütztes Format",
   "knowledge.upload.errorUploadFiles": "Dateien konnten nicht hochgeladen werden",
   "knowledge.verification.title": "Verifizierungswarteschlange",
@@ -6750,8 +6767,6 @@
       "expiresIn": "Expires {time}",
       "view": "View",
       "makeGeneral": "Make General",
-      "scopeUser": "User",
-      "scopeSession": "Session",
       "scopeHint": "Original scope field (maintained for backward compatibility)",
       "organizationId": "Organization ID",
       "orgIdPlaceholder": "org-uuid-here",
@@ -7751,6 +7766,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "Der Remotedesktop ist für Ihre Rolle nicht verfügbar",
+      "description": "Das Ansehen und Steuern des verwalteten Desktops erfordert die Berechtigung „desktop-control“. Bitten Sie einen Administrator, sie Ihrer Rolle zu erteilen."
     }
   },
   "serviceMessages": {
@@ -8268,6 +8287,7 @@
       "allTypes": "Alle Typen",
       "allStatuses": "Alle Status",
       "allPriorities": "Alle Prioritäten",
+      "allProjects": "Alle Projekte",
       "statusBacklog": "Backlog",
       "statusReady": "Bereit",
       "searchPlaceholder": "Arbeitselemente suchen...",
@@ -8948,7 +8968,25 @@
       "confirmDelete": "Dieses archivierte Projekt und seine Sprints löschen? Dies kann nicht rückgängig gemacht werden.",
       "archiveError": "Projekt konnte nicht archiviert werden.",
       "restoreError": "Projekt konnte nicht wiederhergestellt werden.",
-      "deleteError": "Projekt konnte nicht gelöscht werden."
+      "deleteError": "Projekt konnte nicht gelöscht werden.",
+      "archiveToDeleteHint": "Archivieren, um das Löschen zu ermöglichen",
+      "deleteNeedsArchive": "Archivieren Sie das Projekt, bevor Sie es löschen.",
+      "deleteForbidden": "Sie haben keine Berechtigung, dieses Projekt zu löschen.",
+      "edit": "Bearbeiten",
+      "editTitle": "Projekt bearbeiten",
+      "saveAction": "Änderungen speichern",
+      "statusLabel": "Status",
+      "targetDateLabel": "Zieldatum",
+      "autoRolloverLabel": "Unerledigte Arbeit in den nächsten Sprint übernehmen",
+      "editError": "Das Projekt konnte nicht gespeichert werden. Bitte erneut versuchen.",
+      "editNotFound": "Dieses Projekt ist nicht mehr verfügbar.",
+      "status": {
+        "backlog": "Backlog",
+        "planned": "Geplant",
+        "in_progress": "In Arbeit",
+        "completed": "Abgeschlossen",
+        "cancelled": "Abgebrochen"
+      }
     },
     "approvals": {
       "decideError": "Ihre Entscheidung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut."
@@ -9010,7 +9048,9 @@
       "verdictRationale": "Begründung",
       "disabled": "Befundsuche ist deaktiviert.",
       "actionError": "Aktion fehlgeschlagen, bitte erneut versuchen.",
-      "severity": "Schweregrad"
+      "severity": "Schweregrad",
+      "unavailable": "Findings-Richtlinie nicht verfügbar — Scannen kann nicht angeboten werden.",
+      "forbidden": "Sie haben keine Berechtigung, dieses Projekt zu scannen."
     }
   },
   "admin": {
@@ -9467,6 +9507,15 @@
       "settingsButton": "Einstellungen",
       "hideSettingsButton": "Einstellungen ausblenden",
       "settingsHeading": "Transkriptionseinstellungen"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "In der Wissensdatenbank",
+      "reindex": "Neu indexieren",
+      "push": "An Wissensdatenbank senden",
+      "collectionIdPlaceholder": "Sammlungs-ID",
+      "pushing": "Wird gesendet…",
+      "confirm": "Bestätigen",
+      "pushFailed": "Diese Aufnahme konnte nicht zur Wissensdatenbank hinzugefügt werden. Bitte erneut versuchen."
     }
   }
 }

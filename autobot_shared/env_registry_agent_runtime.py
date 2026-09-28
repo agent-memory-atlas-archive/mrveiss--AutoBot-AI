@@ -16,11 +16,7 @@ set from ``os.getenv`` and the ``env_utils`` helper names, and had never
 seen ``os.environ.get`` either. Converting made them visible to that
 checker for the first time; this module is what answers it.
 
-Importing this module registers every variable below into
-``autobot_shared.env_registry.REGISTRY`` as a side effect, exactly like the
-``register_env_var(...)`` calls in ``env_registry.py`` itself. It is imported
-from there, after ``EnvVarSpec``/``register_env_var``/``REGISTRY`` are
-defined, so nothing ever observes a partially-populated registry.
+Registration contract (import side effect, ordering): see ``env_registry`` (#16415).
 
 Closes GH#7081.
 """
@@ -304,6 +300,37 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_DEV_LOOP_ACTION_LOG_TTL_S",
+        type=int,
+        default=604800,
+        description=(
+            "How long one issue's dev-loop action history survives in the claim registry "
+            "(#17091). Long enough to answer 'why did the loop stop on this issue' after a "
+            "weekend; the floor keeps an hour of history at minimum, the ceiling bounds an "
+            "abandoned issue's entries at a month."
+        ),
+        component="orchestration",
+        range=(3600, 2592000),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_DEV_LOOP_ACTION_LOG_MAX",
+        type=int,
+        default=200,
+        description=(
+            "Dev-loop action entries kept per issue (#17091). The list is trimmed to the most "
+            "recent, so an issue the loop retries many times cannot crowd every other issue's "
+            "history out of Redis memory."
+        ),
+        component="orchestration",
+        range=(10, 5000),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_WORK_CLAIM_TTL_S",
         type=int,
         default=300,
@@ -504,5 +531,19 @@ register_env_var(
             " agent's own request is never held behind them (protocols/agent_communication.py, #16986)."
         ),
         component="agents",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_JUDGE_FAIL_CLOSED",
+        type=bool,
+        default=False,
+        description=(
+            "When true, a workflow step whose LLM judgment could not be read is HELD instead of approved. Default"
+            " false keeps #1464's fail-open posture; either way the evaluation result carries judge_available and"
+            " a degradation code, and the outcome is counted (judges/__init__.py, #17307)."
+        ),
+        component="judges",
     )
 )

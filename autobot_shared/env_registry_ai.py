@@ -23,11 +23,7 @@ outright. Leaving them in place sidesteps a real gap in that guard rather than
 working around it. See #13131 for the same shape in a different tool
 (Semgrep).
 
-Importing this module registers every variable below into
-``autobot_shared.env_registry.REGISTRY`` as a side effect, exactly like the
-``register_env_var(...)`` calls in ``env_registry.py`` itself. It is imported
-from there, after ``EnvVarSpec``/``register_env_var``/``REGISTRY`` are
-defined, so nothing ever observes a partially-populated registry.
+Registration contract (import side effect, ordering): see ``env_registry`` (#16415).
 
 Closes GH#7081.
 """
@@ -35,6 +31,7 @@ Closes GH#7081.
 from __future__ import annotations
 
 from autobot_shared.env_registry import EnvVarSpec, register_env_var
+from autobot_shared.llm_provider_order import DEFAULT_ORDER
 
 register_env_var(
     EnvVarSpec(
@@ -152,6 +149,46 @@ register_env_var(
         description=(
             "Seconds a run's cumulative token counter survives in Redis, bounding memory "
             "for abandoned sessions. Refreshed on every increment."
+        ),
+        component="ai",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_DEV_LOOP_TOKEN_BUDGET",
+        type=int,
+        default=0,
+        description=(
+            "Cumulative token ceiling for AutoBot's own dev-loop participation (#17091). "
+            "Zero disables the spend gate, which is the shipped default; the rate ceiling "
+            "below is independent of it."
+        ),
+        component="ai",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_DEV_LOOP_BUDGET_TTL_SECONDS",
+        type=int,
+        default=86400,
+        description=(
+            "Seconds the dev loop's cumulative token counter survives in Redis. Refreshed "
+            "on every recorded action, so it is a floor on how long spend is remembered."
+        ),
+        component="ai",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_DEV_LOOP_RATE_PER_HOUR",
+        type=int,
+        default=0,
+        description=(
+            "Dev-loop actions allowed per fixed UTC hour window (#17091). Zero disables the "
+            "rate gate. Checked before every action, never after."
         ),
         component="ai",
     )
@@ -422,5 +459,24 @@ register_env_var(
             "AUTOBOT_PRICING_LOCAL_CACHE_REFRESH_INTERVAL_S by enough to survive a few failed ticks."
         ),
         component="pricing",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_LLM_PROVIDER_ORDER",
+        type=str,
+        default=DEFAULT_ORDER,
+        description=(
+            "Comma-separated provider preference order for the registry's fallback chain, in which "
+            "`*` means 'then every other registered provider, in registration order' (#15500). Before "
+            "this existed the order was statement order in _populate_default_providers, so Ollama was "
+            "always primary and an operator's paid provider was reached only once Ollama failed. A list "
+            "without `*` is exhaustive: unnamed providers stay registered and reachable by explicit "
+            "request but are absent from the fallback chain, which is how a provider is held out of the "
+            "generation path rather than merely demoted. The default reproduces the previous order. "
+            "Parsed by autobot_shared/llm_provider_order.py, which owns the default this entry shows."
+        ),
+        component="ai",
     )
 )

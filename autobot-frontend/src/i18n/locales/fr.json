@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "Impossible d'envoyer le message après {attempts} tentatives : {error}. Veuillez vérifier votre connexion et réessayer.",
       "invalidFormatDetail": "Format de message invalide : {error}. Veuillez vérifier votre saisie et réessayer.",
       "networkFailedRetry": "Échec de la connexion réseau. Veuillez vérifier votre connexion Internet et réessayer."
+    },
+    "tabs": {
+      "chat": "Discussion",
+      "files": "Fichiers",
+      "terminal": "Terminal",
+      "browser": "Navigateur",
+      "novnc": "Bureau à distance"
     }
   },
   "settings": {
@@ -2615,7 +2622,7 @@
       "visibility": "Visibility",
       "visibilityHint": "Visibility hint",
       "errorAddText": "Failed to add text to knowledge base",
-      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+      "errorFileTooLarge": "Le fichier \"{name}\" dépasse la limite de taille maximale ({max} MB)",
       "errorImportUrl": "Failed to import URL content",
       "errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
       "errorUploadFiles": "Failed to upload files",
@@ -3150,7 +3157,17 @@
       "noEntities3D": "Aucune entité à afficher",
       "loading3dVisualization": "Loading3d visualization",
       "loadingVisualization": "Loading visualization library...",
-      "retry": "Retry"
+      "retry": "Retry",
+      "sourcesUnreadable": "Impossible de lire le graphe de connaissances",
+      "sourcesUnreadableHint": "Rien n'est affiché parce que les magasins ci-dessous n'ont pas répondu, et non parce que le graphe est vide.",
+      "sourceHeld": "{source} : {held} entités",
+      "sourceFailed": "{source} : lecture impossible — {reason}",
+      "partialGraph": "Ce graphe est incomplet : impossible de lire {sources}.",
+      "source": {
+        "unified": "Graphe de la base de connaissances",
+        "memory": "Entités mémoire"
+      },
+      "reasonUnknown": "raison non communiquée"
     },
     "connectors": {
       "title": "Connecteurs source",
@@ -5644,7 +5661,7 @@
   "knowledge.upload.errorAddText": "Échec de l'ajout du texte à la base de connaissances",
   "knowledge.upload.successUrlImported": "Contenu de l'URL importé avec succès",
   "knowledge.upload.errorImportUrl": "Échec de l'importation du contenu de l'URL",
-  "knowledge.upload.errorFileTooLarge": "Le fichier \"{name}\" dépasse la limite de taille maximale",
+  "knowledge.upload.errorFileTooLarge": "Le fichier \"{name}\" dépasse la limite de taille maximale ({max} MB)",
   "knowledge.upload.errorUnsupportedFormat": "Le fichier \"{name}\" a un format non pris en charge",
   "knowledge.upload.errorUploadFiles": "Échec du téléchargement des fichiers",
   "knowledge.verification.title": "File de Vérification",
@@ -6750,8 +6767,6 @@
       "expiresIn": "Expires {time}",
       "view": "View",
       "makeGeneral": "Make General",
-      "scopeUser": "User",
-      "scopeSession": "Session",
       "scopeHint": "Original scope field (maintained for backward compatibility)",
       "organizationId": "Organization ID",
       "orgIdPlaceholder": "org-uuid-here",
@@ -7751,6 +7766,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "Le bureau à distance n'est pas disponible pour votre rôle",
+      "description": "Afficher et contrôler le bureau géré nécessite l'autorisation desktop-control. Demandez à un administrateur de l'accorder à votre rôle."
     }
   },
   "serviceMessages": {
@@ -8268,6 +8287,7 @@
       "allTypes": "Tous les types",
       "allStatuses": "Tous les statuts",
       "allPriorities": "Toutes les priorités",
+      "allProjects": "Tous les projets",
       "statusBacklog": "Backlog",
       "statusReady": "Prêt",
       "searchPlaceholder": "Rechercher des éléments de travail...",
@@ -8948,7 +8968,25 @@
       "confirmDelete": "Supprimer ce projet archivé et ses sprints ? Cette action est irréversible.",
       "archiveError": "Échec de l'archivage du projet.",
       "restoreError": "Échec de la restauration du projet.",
-      "deleteError": "Échec de la suppression du projet."
+      "deleteError": "Échec de la suppression du projet.",
+      "archiveToDeleteHint": "Archiver pour permettre la suppression",
+      "deleteNeedsArchive": "Archivez le projet avant de le supprimer.",
+      "deleteForbidden": "Vous n'avez pas l'autorisation de supprimer ce projet.",
+      "edit": "Modifier",
+      "editTitle": "Modifier le projet",
+      "saveAction": "Enregistrer",
+      "statusLabel": "Statut",
+      "targetDateLabel": "Date cible",
+      "autoRolloverLabel": "Reporter le travail inachevé au sprint suivant",
+      "editError": "Impossible d’enregistrer le projet. Veuillez réessayer.",
+      "editNotFound": "Ce projet n’est plus disponible.",
+      "status": {
+        "backlog": "Backlog",
+        "planned": "Planifié",
+        "in_progress": "En cours",
+        "completed": "Terminé",
+        "cancelled": "Annulé"
+      }
     },
     "approvals": {
       "decideError": "Échec de l'enregistrement de votre décision. Veuillez réessayer."
@@ -9010,7 +9048,9 @@
       "verdictRationale": "Justification",
       "disabled": "La recherche de résultats est désactivée.",
       "actionError": "Échec de l'action, veuillez réessayer.",
-      "severity": "Sévérité"
+      "severity": "Sévérité",
+      "unavailable": "Politique de constats indisponible — l'analyse ne peut être proposée.",
+      "forbidden": "Vous n'avez pas l'autorisation d'analyser ce projet."
     }
   },
   "admin": {
@@ -9467,6 +9507,15 @@
       "settingsButton": "Paramètres",
       "hideSettingsButton": "Masquer les paramètres",
       "settingsHeading": "Paramètres du transcripteur"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "Dans la base de connaissances",
+      "reindex": "Réindexer",
+      "push": "Envoyer à la base de connaissances",
+      "collectionIdPlaceholder": "ID de collection",
+      "pushing": "Envoi…",
+      "confirm": "Confirmer",
+      "pushFailed": "Impossible d'ajouter cet enregistrement à la base de connaissances. Veuillez réessayer."
     }
   }
 }

@@ -2034,7 +2034,17 @@
       "create": "Create",
       "loading3dVisualization": "Loading3d visualization",
       "loadingVisualization": "Loading visualization library...",
-      "retry": "Retry"
+      "retry": "Retry",
+      "sourcesUnreadable": "خواندن گراف دانش ممکن نشد",
+      "sourcesUnreadableHint": "چیزی نمایش داده نمی‌شود چون مخازن زیر پاسخ ندادند — نه به این دلیل که گراف خالی است.",
+      "sourceHeld": "{source}: {held} موجودیت",
+      "sourceFailed": "{source}: خوانده نشد — {reason}",
+      "partialGraph": "این گراف ناقص است: {sources} خوانده نشد.",
+      "source": {
+        "unified": "گراف پایگاه دانش",
+        "memory": "موجودیت‌های حافظه"
+      },
+      "reasonUnknown": "دلیلی گزارش نشد"
     },
     "vectorization": {
       "actionVectorize": "Vectorize",
@@ -2998,7 +3008,7 @@
       "previewContentTitle": "Preview content title",
       "titlePlaceholder": "Title placeholder",
       "errorAddText": "Failed to add text to knowledge base",
-      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+      "errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit ({max} MB)",
       "errorImportUrl": "Failed to import URL content",
       "errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
       "errorUploadFiles": "Failed to upload files",
@@ -4529,6 +4539,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "میزکار راه دور برای نقش شما در دسترس نیست",
+      "description": "مشاهده و کنترل میزکار مدیریت‌شده به مجوز desktop-control نیاز دارد. از مدیر بخواهید آن را به نقش شما بدهد."
     }
   },
   "charts": {
@@ -5741,6 +5755,13 @@
       "sendFailedAfterRetries": "ارسال پیام پس از {attempts} تلاش ممکن نشد: {error}. لطفاً اتصال خود را بررسی کرده و دوباره تلاش کنید.",
       "invalidFormatDetail": "قالب پیام نامعتبر است: {error}. لطفاً ورودی خود را بررسی کرده و دوباره تلاش کنید.",
       "networkFailedRetry": "اتصال شبکه ناموفق بود. لطفاً اتصال اینترنت خود را بررسی کرده و دوباره تلاش کنید."
+    },
+    "tabs": {
+      "chat": "گفتگو",
+      "files": "پرونده‌ها",
+      "terminal": "پایانه",
+      "browser": "مرورگر",
+      "novnc": "میزکار راه دور"
     }
   },
   "serviceMessages": {
@@ -5770,7 +5791,6 @@
       "osWindows": "Windows",
       "newCredential": "New Credential",
       "showKey": "Show key",
-      "scopeSession": "Session",
       "quickAddTemplatesHint": "Choose a template to quickly add common credentials",
       "visibilityPublic": "Public",
       "typeSSH": "SSH Credential",
@@ -5832,7 +5852,6 @@
       "lastUsed": "Last used",
       "osOther": "Other",
       "apiKeyPlaceholder": "Enter API key",
-      "scopeUser": "User",
       "transferTo": "Transfer to",
       "host": "Host / IP Address",
       "allCredentials": "All Credentials",
@@ -7911,7 +7930,7 @@
   "knowledge.upload.errorAddText": "Failed to add text to knowledge base",
   "knowledge.upload.successUrlImported": "URL content imported successfully",
   "knowledge.upload.errorImportUrl": "Failed to import URL content",
-  "knowledge.upload.errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit",
+  "knowledge.upload.errorFileTooLarge": "File \"{name}\" exceeds the maximum size limit ({max} MB)",
   "knowledge.upload.errorUnsupportedFormat": "File \"{name}\" has an unsupported format",
   "knowledge.upload.errorUploadFiles": "Failed to upload files",
   "knowledge.verification.title": "Verification Queue",
@@ -8268,6 +8287,7 @@
       "allTypes": "All Types",
       "allStatuses": "All Statuses",
       "allPriorities": "All Priorities",
+      "allProjects": "همه پروژه‌ها",
       "statusBacklog": "Backlog",
       "statusReady": "Ready",
       "searchPlaceholder": "Search work items...",
@@ -8948,7 +8968,25 @@
       "confirmDelete": "این پروژه بایگانی‌شده و اسپرینت‌های آن حذف شوند؟ این عمل قابل بازگشت نیست.",
       "archiveError": "بایگانی پروژه ناموفق بود.",
       "restoreError": "بازیابی پروژه ناموفق بود.",
-      "deleteError": "حذف پروژه ناموفق بود."
+      "deleteError": "حذف پروژه ناموفق بود.",
+      "archiveToDeleteHint": "برای فعال‌سازی حذف، بایگانی کنید",
+      "deleteNeedsArchive": "پیش از حذف، پروژه را بایگانی کنید.",
+      "deleteForbidden": "شما اجازه حذف این پروژه را ندارید.",
+      "edit": "ویرایش",
+      "editTitle": "ویرایش پروژه",
+      "saveAction": "ذخیره تغییرات",
+      "statusLabel": "وضعیت",
+      "targetDateLabel": "تاریخ هدف",
+      "autoRolloverLabel": "انتقال کارهای ناتمام به اسپرینت بعدی",
+      "editError": "ذخیره پروژه ممکن نشد. لطفاً دوباره تلاش کنید.",
+      "editNotFound": "این پروژه دیگر در دسترس نیست.",
+      "status": {
+        "backlog": "فهرست کارها",
+        "planned": "برنامه‌ریزی‌شده",
+        "in_progress": "در حال انجام",
+        "completed": "تکمیل‌شده",
+        "cancelled": "لغوشده"
+      }
     },
     "approvals": {
       "decideError": "Failed to record your decision. Please try again."
@@ -9010,7 +9048,9 @@
       "verdictRationale": "استدلال",
       "disabled": "جستجوی یافته‌ها غیرفعال است.",
       "actionError": "عملیات ناموفق بود، لطفاً دوباره تلاش کنید.",
-      "severity": "شدت"
+      "severity": "شدت",
+      "unavailable": "سیاست یافته‌ها در دسترس نیست — پویش قابل ارائه نیست.",
+      "forbidden": "شما اجازه پویش این پروژه را ندارید."
     }
   },
   "admin": {
@@ -9467,6 +9507,15 @@
       "settingsButton": "تنظیمات",
       "hideSettingsButton": "پنهان کردن تنظیمات",
       "settingsHeading": "تنظیمات رونویس‌گر"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "در پایگاه دانش",
+      "reindex": "نمایه‌سازی مجدد",
+      "push": "ارسال به پایگاه دانش",
+      "collectionIdPlaceholder": "شناسه مجموعه",
+      "pushing": "در حال ارسال…",
+      "confirm": "تأیید",
+      "pushFailed": "افزودن این ضبط به پایگاه دانش ممکن نشد. لطفاً دوباره تلاش کنید."
     }
   }
 }
