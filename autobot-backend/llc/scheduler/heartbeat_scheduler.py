@@ -69,6 +69,8 @@ from ..services.work_item_queue import has_pending_work
 # site would put that unrelated 82-line function in scope for the function-length
 # guard, and refactoring it is not this change.
 from .replay_recording import record_run_for_replay as _record_run_for_replay
+from .run_context import enrich_run_context
+from .run_workspace import acquire_run_workspace, release_run_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +278,15 @@ class HeartbeatScheduler:
                 retry_ts = datetime.now(tz=timezone.utc).timestamp() + _POLL_INTERVAL
                 await redis.zadd(_SCHEDULE_KEY, {agent_id: retry_ts})
 
+    async def _requeue(self, redis: Any, agent_id: str, cycles: int = 6) -> None:
+        """Put *agent_id* back on the schedule a few poll cycles from now.
+
+        One place decides how long a deferred wake waits; three copies of a backoff
+        is how two of them end up disagreeing.
+        """
+        retry_ts = datetime.now(tz=timezone.utc).timestamp() + _POLL_INTERVAL * cycles
+        await redis.zadd(_SCHEDULE_KEY, {agent_id: retry_ts})
+
     async def _handle_due_agent(self, agent_id: str, redis: Any) -> None:
         """Create (or resume) a run record, dispatch adapter, advance sorted-set score.
 
@@ -336,26 +347,15 @@ class HeartbeatScheduler:
                     )
                 except ValueError as exc:
                     logger.warning("Skipping heartbeat for agent %s (no organization): %s", agent_id, exc)
-                    retry_ts = datetime.now(tz=timezone.utc).timestamp() + _POLL_INTERVAL * 6
-                    await redis.zadd(_SCHEDULE_KEY, {agent_id: retry_ts})
+                    await self._requeue(redis, agent_id)
                     return
 
-                # Enrich context with recent decisions when context_mode=fat (GH#8243)
-                context_mode = agent.get("context_mode") or "slim"
-                if context_mode == "fat":
-                    company_id_val = agent.get("company_id")
-                    if company_id_val:
-                        context["recent_decisions"] = await _fetch_recent_decisions(str(company_id_val))
+                await enrich_run_context(agent, context, run)
 
-                # GH#8499: write context_snapshot so the field is never NULL.
-                # For fat context include a generated_at timestamp; for slim/other
-                # modes write the mode so diagnostics can confirm what was used.
-                utc_now_iso = datetime.now(tz=timezone.utc).isoformat()
-                if context_mode == "fat":
-                    run.context_snapshot = {"mode": "fat", "generated_at": utc_now_iso}
-                else:
-                    run.context_snapshot = {"mode": context_mode}
-
+            # #16818: the run leases its workspace, or defers rather than sharing it.
+            if not await acquire_run_workspace(session, agent, agent_id, run.id, context):
+                await self._requeue(redis, agent_id)
+                return
             await session.commit()
 
         t = asyncio.create_task(
@@ -612,6 +612,28 @@ class HeartbeatScheduler:
             await self._handle_quota_exhausted(agent, run_id, quota_exc)
             return
 
+        await self._finish_run(factory, agent, run_id, final_status, error_msg)
+
+        # GH#9034: fire-and-forget replay recording — must never affect run status.
+        # Pass external_run_id so the recording locates the exact output file (H1).
+        # GH#9951: a SKIPPED run never dispatched, so there is nothing to record.
+        if final_status != LLCRunStatus.SKIPPED.value:
+            _record_task = asyncio.create_task(
+                _record_run_for_replay(agent, run_id, context, final_status, external_run_id=external_run_id),
+                name=f"replay-record-{run_id}",
+            )
+            self._tasks.add(_record_task)
+            _record_task.add_done_callback(self._tasks.discard)
+
+    async def _finish_run(
+        self, factory: Any, agent: Dict[str, Any], run_id: uuid.UUID, final_status: str, error_msg: Optional[str]
+    ) -> None:
+        """Close the run out and hand its workspace back, in one transaction.
+
+        Every normal ending passes through here -- completed, failed and skipped
+        alike -- so releasing here cannot miss the failure paths, where a run holding
+        its workspace until the deadline is the slow version of this issue's bug.
+        """
         try:
             async with factory() as session:
                 await session.execute(
@@ -628,20 +650,11 @@ class HeartbeatScheduler:
                         text("UPDATE agent_org_nodes SET last_heartbeat_at = now()" " WHERE agent_id = :aid"),
                         {"aid": agent["agent_id"]},
                     )
+                # #16818 AC2: a workspace must not outlive the run that took it.
+                await release_run_workspace(session, run_id, final_status)
                 await session.commit()
         except Exception:
             logger.exception("Could not write final status for run %s", run_id)
-
-        # GH#9034: fire-and-forget replay recording — must never affect run status.
-        # Pass external_run_id so the recording locates the exact output file (H1).
-        # GH#9951: a SKIPPED run never dispatched, so there is nothing to record.
-        if final_status != LLCRunStatus.SKIPPED.value:
-            _record_task = asyncio.create_task(
-                _record_run_for_replay(agent, run_id, context, final_status, external_run_id=external_run_id),
-                name=f"replay-record-{run_id}",
-            )
-            self._tasks.add(_record_task)
-            _record_task.add_done_callback(self._tasks.discard)
 
     async def _handle_rate_limited(
         self,
@@ -1035,19 +1048,3 @@ async def _await_adapter_completion(adapter: Any, agent_config: Dict[str, Any], 
     logger.warning("Adapter run %s exceeded max wait — cancelling", run_id)
     await adapter.cancel(agent_config, run_id)
     return AdapterRunStatus(status=LLCRunStatus.TIMEOUT)
-
-
-async def _fetch_recent_decisions(company_id: str, n: int = 5) -> list[Dict[str, Any]]:
-    """Query the decisions KB for the most recent decisions (GH#8243).
-
-    Used by heartbeat context building when context_mode=fat.  Best-effort —
-    returns an empty list on any failure rather than blocking the heartbeat.
-    """
-    try:
-        from ..kb.decision_log import DecisionLogReader
-
-        reader = DecisionLogReader()
-        return await reader.list_decisions(company_id=company_id, limit=n)
-    except Exception as exc:
-        logger.warning("Failed to fetch recent decisions for company %s: %s", company_id, exc)
-        return []
