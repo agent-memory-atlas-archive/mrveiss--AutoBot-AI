@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "Neizdevās nosūtīt ziņojumu pēc {attempts} mēģinājumiem: {error}. Lūdzu, pārbaudiet savienojumu un mēģiniet vēlreiz.",
       "invalidFormatDetail": "Nederīgs ziņojuma formāts: {error}. Lūdzu, pārbaudiet ievadi un mēģiniet vēlreiz.",
       "networkFailedRetry": "Neizdevās tīkla savienojums. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz."
+    },
+    "tabs": {
+      "chat": "Tērzēšana",
+      "files": "Faili",
+      "terminal": "Terminālis",
+      "browser": "Pārlūks",
+      "novnc": "Attālā darbvirsma"
     }
   },
   "settings": {
@@ -7759,6 +7766,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "Attālā darbvirsma jūsu lomai nav pieejama",
+      "description": "Pārvaldītās darbvirsmas skatīšanai un vadīšanai nepieciešama atļauja desktop-control. Lūdziet administratoram to piešķirt jūsu lomai."
     }
   },
   "serviceMessages": {
@@ -8276,6 +8287,7 @@
       "allTypes": "All Types",
       "allStatuses": "All Statuses",
       "allPriorities": "All Priorities",
+      "allProjects": "Visi projekti",
       "statusBacklog": "Backlog",
       "statusReady": "Ready",
       "searchPlaceholder": "Search work items...",
@@ -8956,7 +8968,25 @@
       "confirmDelete": "Dzēst šo arhivēto projektu un tā sprintus? Šo darbību nevar atcelt.",
       "archiveError": "Neizdevās arhivēt projektu.",
       "restoreError": "Neizdevās atjaunot projektu.",
-      "deleteError": "Neizdevās dzēst projektu."
+      "deleteError": "Neizdevās dzēst projektu.",
+      "archiveToDeleteHint": "Arhivējiet, lai varētu dzēst",
+      "deleteNeedsArchive": "Arhivējiet projektu pirms tā dzēšanas.",
+      "deleteForbidden": "Jums nav atļaujas dzēst šo projektu.",
+      "edit": "Rediģēt",
+      "editTitle": "Rediģēt projektu",
+      "saveAction": "Saglabāt izmaiņas",
+      "statusLabel": "Statuss",
+      "targetDateLabel": "Mērķa datums",
+      "autoRolloverLabel": "Pārnest nepabeigto darbu uz nākamo sprintu",
+      "editError": "Projektu nevarēja saglabāt. Lūdzu, mēģiniet vēlreiz.",
+      "editNotFound": "Šis projekts vairs nav pieejams.",
+      "status": {
+        "backlog": "Uzdevumu saraksts",
+        "planned": "Plānots",
+        "in_progress": "Norit",
+        "completed": "Pabeigts",
+        "cancelled": "Atcelts"
+      }
     },
     "approvals": {
       "decideError": "Neizdevās saglabāt jūsu lēmumu. Lūdzu, mēģiniet vēlreiz."
@@ -9018,7 +9048,9 @@
       "verdictRationale": "Pamatojums",
       "disabled": "Atklājumu meklēšana ir atspējota.",
       "actionError": "Darbība neizdevās, lūdzu mēģiniet vēlreiz.",
-      "severity": "Nopietnība"
+      "severity": "Nopietnība",
+      "unavailable": "Atklājumu politika nav pieejama — skenēšanu nevar piedāvāt.",
+      "forbidden": "Jums nav atļaujas skenēt šo projektu."
     }
   },
   "admin": {
@@ -9475,6 +9507,15 @@
       "settingsButton": "Iestatījumi",
       "hideSettingsButton": "Slēpt iestatījumus",
       "settingsHeading": "Transkribētāja iestatījumi"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "Zināšanu bāzē",
+      "reindex": "Pārindeksēt",
+      "push": "Nosūtīt uz zināšanu bāzi",
+      "collectionIdPlaceholder": "Kolekcijas ID",
+      "pushing": "Nosūta…",
+      "confirm": "Apstiprināt",
+      "pushFailed": "Neizdevās pievienot šo ierakstu zināšanu bāzei. Lūdzu, mēģiniet vēlreiz."
     }
   }
 }

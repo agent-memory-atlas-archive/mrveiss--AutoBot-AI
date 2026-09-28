@@ -127,6 +127,18 @@
 
         <!-- GH#11129 P2: lifecycle actions -->
         <div class="card-lifecycle-actions">
+          <!-- #17681: PATCH /api/llc/projects/{id} has always worked and
+               nothing called it, so projects were write-once at creation.
+               Not gated on lifecycle_state: renaming a project is not a
+               lifecycle operation, and an archived project with a wrong name
+               is exactly the one you need to fix. -->
+          <BaseButton
+            variant="secondary"
+            size="sm"
+            @click="openEdit(p)"
+          >
+            {{ t('llcBrowser.projects.edit') }}
+          </BaseButton>
           <BaseButton
             v-if="p.lifecycle_state === 'active' || !p.lifecycle_state"
             variant="secondary"
@@ -137,6 +149,13 @@
           >
             {{ t('llcBrowser.projects.archive') }}
           </BaseButton>
+          <!-- #17683: the archive-before-delete rule was expressed only by the
+               Delete button's absence, which reads as a broken page rather
+               than as a precondition. -->
+          <span
+            v-if="p.lifecycle_state === 'active' || !p.lifecycle_state"
+            class="lifecycle-hint"
+          >{{ t('llcBrowser.projects.archiveToDeleteHint') }}</span>
           <template v-if="p.lifecycle_state === 'archived' || p.lifecycle_state === 'pending_disposal'">
             <BaseButton
               variant="secondary"
@@ -179,7 +198,12 @@
             >
               {{ scanningProject === p.id ? t('llcBrowser.findings.scanning') : t('llcBrowser.findings.scan') }}
             </BaseButton>
-            <span v-else class="findings-disabled-note">{{ t('llcBrowser.findings.disabled') }}</span>
+            <span v-else-if="findingsPolicy === 'disabled'" class="findings-disabled-note">
+              {{ t('llcBrowser.findings.disabled') }}
+            </span>
+            <span v-else-if="findingsPolicy === 'unavailable'" class="findings-disabled-note">
+              {{ t('llcBrowser.findings.unavailable') }}
+            </span>
           </div>
           <ErrorBanner v-if="findingsError[p.id]" :message="findingsError[p.id]" class="browser-error" />
           <div v-if="proposals[p.id] && proposals[p.id].length === 0" class="findings-empty">
@@ -266,6 +290,78 @@
           @click="createProject"
         >
           {{ t('llcBrowser.createAction') }}
+        </BaseButton>
+      </template>
+    </BaseModal>
+
+    <!-- #17681: edit modal. Mirrors the create modal's structure. -->
+    <BaseModal
+      :close-label="t('ui.modal.closeDialog')"
+      v-model="showEdit"
+      :title="t('llcBrowser.projects.editTitle')"
+      size="sm"
+    >
+      <ErrorBanner v-if="editError" :message="editError" class="browser-error" />
+      <div class="create-form">
+        <BaseInput
+          v-model="editForm.name"
+          :label="t('llcBrowser.nameLabel')"
+          :placeholder="t('llcBrowser.namePlaceholder')"
+          required
+        />
+        <div class="create-field">
+          <label class="create-label" for="edit-project-description">
+            {{ t('llcBrowser.descriptionLabel') }}
+          </label>
+          <textarea
+            id="edit-project-description"
+            v-model="editForm.description"
+            class="create-textarea"
+            rows="3"
+            :placeholder="t('llcBrowser.descriptionPlaceholder')"
+          />
+        </div>
+        <div class="create-field">
+          <label class="create-label" for="edit-project-status">
+            {{ t('llcBrowser.projects.statusLabel') }}
+          </label>
+          <!-- A select, not a text field: `ProjectUpdate.status` is an
+               unvalidated `str` on the API while the column is a DB enum, so a
+               free-text value is refused by Postgres rather than by a 422
+               (#17694). -->
+          <select id="edit-project-status" v-model="editForm.status" class="create-textarea">
+            <option v-for="value in PROJECT_STATUSES" :key="value" :value="value">
+              {{ t(`llcBrowser.projects.status.${value}`) }}
+            </option>
+          </select>
+        </div>
+        <div class="create-field">
+          <label class="create-label" for="edit-project-target-date">
+            {{ t('llcBrowser.projects.targetDateLabel') }}
+          </label>
+          <input
+            id="edit-project-target-date"
+            v-model="editForm.target_date"
+            type="date"
+            class="create-textarea"
+          />
+        </div>
+        <label class="create-checkbox">
+          <input v-model="editForm.auto_rollover" type="checkbox" />
+          {{ t('llcBrowser.projects.autoRolloverLabel') }}
+        </label>
+      </div>
+      <template #actions>
+        <BaseButton variant="secondary" :disabled="saving" @click="showEdit = false">
+          {{ t('llcBrowser.cancel') }}
+        </BaseButton>
+        <BaseButton
+          variant="primary"
+          :loading="saving"
+          :disabled="!editForm.name.trim() || saving"
+          @click="saveProject"
+        >
+          {{ t('llcBrowser.projects.saveAction') }}
         </BaseButton>
       </template>
     </BaseModal>
@@ -429,6 +525,40 @@ const creating = ref(false)
 const createError = ref('')
 const form = ref({ name: '', description: '' })
 
+// #17681: edit state. The field set is read off `ProjectUpdate`
+// (`llc/api/sprints.py:151-159`) rather than off `ProjectResponse`, which
+// returns more than the route accepts.
+//
+// Five of its eight fields are here. The three left out, each for a reason:
+//   `lead_agent_id` / `lead_user_id`  a person-picker here would settle
+//                                    #17682's open ruling on how people
+//                                    attach to a project, one field at a time
+//   `env`                            free-form JSONB; a textarea of raw JSON
+//                                    is a worse editor than none
+const showEdit = ref(false)
+const saving = ref(false)
+const editError = ref('')
+const editTarget = ref<ProjectResponse | null>(null)
+
+/** The `projectstatus` DB enum (`llc/models/sprint.py:118-131`), in order. */
+const PROJECT_STATUSES = ['backlog', 'planned', 'in_progress', 'completed', 'cancelled'] as const
+
+interface EditForm {
+  name: string
+  description: string
+  status: string
+  target_date: string
+  auto_rollover: boolean
+}
+
+const editForm = ref<EditForm>({
+  name: '',
+  description: '',
+  status: 'backlog',
+  target_date: '',
+  auto_rollover: false,
+})
+
 // GH#11129: repo attach/detach/sync state
 // Backend requires the repo in `owner/repo` form (AttachRepoRequest pattern);
 // we normalize pasted GitHub URLs to that shape before POSTing (#11129 repo-link bug 1).
@@ -469,7 +599,14 @@ const scanningProject = ref<string | null>(null)
 // GH#12734: the scan action is gated on the server-side findings policy, which
 // defaults to OFF. Assume disabled until the policy says otherwise so the
 // button never appears during load and then vanishes.
-const findingsEnabled = ref(false)
+//
+// #17684: four states, not two. Failing closed stays correct -- an action that
+// could only 403 must not be offered -- but "disabled by policy" and "the
+// policy could not be read" are different facts, and reporting a server fault
+// as a deliberate setting is why nobody investigates it. `loading` renders
+// nothing, so the note does not flash "unavailable" on the way in.
+const findingsPolicy = ref<'loading' | 'enabled' | 'disabled' | 'unavailable'>('loading')
+const findingsEnabled = computed(() => findingsPolicy.value === 'enabled')
 const findingsError = ref<Record<string, string>>({})
 
 function velocityFor(projectId: string): number[] {
@@ -570,6 +707,80 @@ async function createProject(): Promise<void> {
     createError.value = t('llcBrowser.projects.createError')
   } finally {
     creating.value = false
+  }
+}
+
+function openEdit(project: ProjectResponse): void {
+  editTarget.value = project
+  editError.value = ''
+  editForm.value = {
+    name: project.name,
+    description: project.description ?? '',
+    status: project.status,
+    // The column is a DATE; a response carrying a timestamp is trimmed so the
+    // native date input accepts it.
+    target_date: project.target_date ? project.target_date.slice(0, 10) : '',
+    auto_rollover: Boolean(project.auto_rollover),
+  }
+  showEdit.value = true
+}
+
+/**
+ * Only the fields the user actually changed (#17681).
+ *
+ * `update_project` applies `body.model_dump(exclude_none=True)`, so sending an
+ * unchanged value is a no-op write and sending `null` does nothing at all --
+ * a field cannot be cleared back to empty through this route, which is a
+ * backend limitation filed as #17694 rather than worked around here. Sending a
+ * real diff keeps this honest: the request says what the user changed.
+ */
+function editedFields(project: ProjectResponse): Record<string, unknown> {
+  const next = editForm.value
+  const changed: Record<string, unknown> = {}
+  if (next.name.trim() !== project.name) changed.name = next.name.trim()
+  if (next.description.trim() !== (project.description ?? '')) {
+    changed.description = next.description.trim()
+  }
+  if (next.status !== project.status) changed.status = next.status
+  const currentDate = project.target_date ? project.target_date.slice(0, 10) : ''
+  if (next.target_date !== currentDate) changed.target_date = next.target_date
+  if (next.auto_rollover !== Boolean(project.auto_rollover)) {
+    changed.auto_rollover = next.auto_rollover
+  }
+  return changed
+}
+
+async function saveProject(): Promise<void> {
+  const project = editTarget.value
+  if (!project || !editForm.value.name.trim()) return
+  const changed = editedFields(project)
+  if (Object.keys(changed).length === 0) {
+    showEdit.value = false
+    return
+  }
+  saving.value = true
+  editError.value = ''
+  try {
+    const updated = await api.patch<ProjectResponse>(
+      `/api/llc/projects/${project.id}`,
+      changed,
+    )
+    const index = projects.value.findIndex((candidate) => candidate.id === project.id)
+    if (index !== -1) projects.value[index] = updated
+    showEdit.value = false
+  } catch (err) {
+    logger.error('Failed to update project', err)
+    // The route's IDOR guard answers 404 for a project outside the caller's
+    // org as well as for one that does not exist (`sprints.py:697`), so the
+    // message says "not found" rather than implying a permission verdict it
+    // cannot distinguish.
+    const status = (err as { status?: number })?.status
+    editError.value =
+      status === 404
+        ? t('llcBrowser.projects.editNotFound')
+        : t('llcBrowser.projects.editError')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -723,7 +934,16 @@ async function deleteProject(project: ProjectResponse): Promise<void> {
     await loadProjects()
   } catch (err) {
     logger.error('Failed to delete project', err)
-    lifecycleError.value = { ...lifecycleError.value, [project.id]: t('llcBrowser.projects.deleteError') }
+    // #17683: the backend refuses a non-archived project with a 409 carrying
+    // an actionable reason, and every failure used to collapse to one string,
+    // so a lifecycle violation, a permission refusal and a network fault read
+    // identically. Mapped to localised messages rather than echoing the
+    // backend's own text, which is not translated.
+    const status = (err as { status?: number })?.status
+    let msg = t('llcBrowser.projects.deleteError')
+    if (status === 409) msg = t('llcBrowser.projects.deleteNeedsArchive')
+    else if (status === 403) msg = t('llcBrowser.projects.deleteForbidden')
+    lifecycleError.value = { ...lifecycleError.value, [project.id]: msg }
   } finally {
     deletingProject.value = null
   }
@@ -753,7 +973,10 @@ async function scanFindings(project: ProjectResponse): Promise<void> {
   } catch (err) {
     logger.error('Failed to scan findings', err)
     const status = (err as { status?: number })?.status
-    const msg = status === 403 ? t('llcBrowser.findings.disabled') : t('llcBrowser.findings.actionError')
+    // #17684: a 403 here means this caller may not scan. It is not evidence
+    // that the policy is off -- the policy was read separately and said
+    // otherwise, or the button would not have been rendered.
+    const msg = status === 403 ? t('llcBrowser.findings.forbidden') : t('llcBrowser.findings.actionError')
     findingsError.value = { ...findingsError.value, [project.id]: msg }
   } finally {
     scanningProject.value = null
@@ -785,12 +1008,13 @@ async function dismissProposal(project: ProjectResponse, proposal: FindingPropos
 async function loadFindingsPolicy(): Promise<void> {
   try {
     const policy = await api.get<{ enabled: boolean }>('/api/llc/findings/policy')
-    findingsEnabled.value = Boolean(policy?.enabled)
+    findingsPolicy.value = policy?.enabled ? 'enabled' : 'disabled'
   } catch (err) {
-    // A policy we cannot read is treated as disabled: showing an action that
-    // cannot work is worse than hiding one that might (GH#12734).
+    // A policy we cannot read still gates the action shut -- showing an action
+    // that cannot work is worse than hiding one that might (GH#12734). Only
+    // the message differs, so a fault is not mistaken for configuration.
     logger.error('Failed to load findings policy', err)
-    findingsEnabled.value = false
+    findingsPolicy.value = 'unavailable'
   }
 }
 
@@ -800,6 +1024,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.create-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.lifecycle-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  align-self: center;
+}
+
 .findings-disabled-note {
   font-size: var(--text-xs);
   color: var(--text-muted);

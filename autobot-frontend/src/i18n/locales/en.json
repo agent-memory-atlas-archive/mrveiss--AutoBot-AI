@@ -757,6 +757,13 @@
       "sendFailedAfterRetries": "Failed to send message after {attempts} attempts: {error}. Please check your connection and try again.",
       "invalidFormatDetail": "Invalid message format: {error}. Please check your input and try again.",
       "networkFailedRetry": "Network connection failed. Please check your internet connection and try again."
+    },
+    "tabs": {
+      "chat": "Chat",
+      "files": "Files",
+      "terminal": "Terminal",
+      "browser": "Browser",
+      "novnc": "Remote Desktop"
     }
   },
   "settings": {
@@ -7808,6 +7815,10 @@
       "unknown": "Control status unknown",
       "acquireFailed": "Failed to take control: {error}",
       "releaseFailed": "Failed to release control: {error}"
+    },
+    "accessDenied": {
+      "title": "Remote desktop is not available for your role",
+      "description": "Viewing and controlling the managed desktop requires the desktop-control permission. Ask an administrator to grant it to your role."
     }
   },
   "serviceMessages": {
@@ -8264,6 +8275,7 @@
       "allTypes": "All Types",
       "allStatuses": "All Statuses",
       "allPriorities": "All Priorities",
+      "allProjects": "All Projects",
       "statusBacklog": "Backlog",
       "statusReady": "Ready",
       "searchPlaceholder": "Search work items...",
@@ -8956,7 +8968,25 @@
       "confirmDelete": "Delete this archived project and its sprints? This cannot be undone.",
       "archiveError": "Failed to archive project.",
       "restoreError": "Failed to restore project.",
-      "deleteError": "Failed to delete project."
+      "deleteError": "Failed to delete project.",
+      "archiveToDeleteHint": "Archive to enable deletion",
+      "deleteNeedsArchive": "Archive the project before deleting it.",
+      "deleteForbidden": "You do not have permission to delete this project.",
+      "edit": "Edit",
+      "editTitle": "Edit project",
+      "saveAction": "Save changes",
+      "statusLabel": "Status",
+      "targetDateLabel": "Target date",
+      "autoRolloverLabel": "Roll unfinished work into the next sprint",
+      "editError": "Could not save the project. Please try again.",
+      "editNotFound": "This project is no longer available.",
+      "status": {
+        "backlog": "Backlog",
+        "planned": "Planned",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+      }
     },
     "approvals": {
       "decideError": "Failed to record your decision. Please try again."
@@ -9018,7 +9048,9 @@
       "verdictRationale": "Rationale",
       "disabled": "Findings scanning is disabled.",
       "actionError": "Action failed, please try again.",
-      "severity": "Severity"
+      "severity": "Severity",
+      "unavailable": "Findings policy unavailable — scanning cannot be offered.",
+      "forbidden": "You do not have permission to scan this project."
     }
   },
   "admin": {
@@ -9475,6 +9507,15 @@
       "settingsButton": "Settings",
       "hideSettingsButton": "Hide settings",
       "settingsHeading": "Transcriber settings"
+    },
+    "kbPush": {
+      "inKnowledgeBase": "In Knowledge Base",
+      "reindex": "Re-index",
+      "push": "Push to KB",
+      "collectionIdPlaceholder": "Collection ID",
+      "pushing": "Pushing…",
+      "confirm": "Confirm",
+      "pushFailed": "Could not add this recording to the knowledge base. Please try again."
     }
   }
 }
