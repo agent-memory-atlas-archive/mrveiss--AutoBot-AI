@@ -341,3 +341,48 @@ async def test_nothing_is_removed_when_the_check_refuses(monkeypatch, tmp_path):
 
     assert check.may_dispose is False
     assert not any(a[0] == "worktree" for a in calls), "a refused disposal must not touch the directory"
+
+
+# ---------------------------------------------------------------------------
+# The model and the migration must agree (87's finding on #17725)
+# ---------------------------------------------------------------------------
+
+
+def test_the_model_declares_no_table_wide_unique_on_path():
+    """The disagreement that survived its own fix.
+
+    097 drops `uq_llc_workspace_leases_path`, but the model kept `unique=True` on the
+    column — so a database built from the models (a fixture's create_all, a fresh dev
+    box) would carry the constraint the migration removes and reproduce the bug, with
+    nothing in the tree comparing the two.
+    """
+    column = LLCWorkspaceLease.__table__.c.path
+    assert column.unique is not True, "a table-wide UNIQUE burns the path on its first release"
+
+
+def test_the_model_declares_the_same_partial_index_the_migration_creates():
+    """Name and predicate both, because either one differing is a silent divergence."""
+    indexes = {index.name: index for index in LLCWorkspaceLease.__table__.indexes}
+    index = indexes.get("uq_llc_workspace_leases_live_path")
+
+    assert index is not None, "the model must declare 097's partial index"
+    assert index.unique is True
+    assert [c.name for c in index.columns] == ["path"]
+    predicate = str(index.dialect_options["postgresql"]["where"])
+    assert "released_at IS NULL" in predicate
+
+
+def test_the_partial_predicate_is_weaker_than_is_live_and_the_gap_is_the_reclaim():
+    """The invariant the index rests on, asserted rather than assumed.
+
+    `is_live` is `released_at IS NULL AND expires_at > now`; the index can only express
+    the first half, since a partial predicate cannot call now(). So an expired-but-
+    unreleased lease is invisible to the constraint, and only `acquire_lease` reclaiming
+    first keeps the two in step. This pins that a lease in exactly that state is one the
+    index would permit a duplicate of — so if anyone later removes the reclaim, the
+    reason this test exists is in front of them.
+    """
+    expired_unreleased = _lease(expires_at=NOW - timedelta(hours=1), released_at=None)
+
+    assert expired_unreleased.is_live(NOW) is False, "is_live says not live"
+    assert expired_unreleased.released_at is None, "but the index predicate still counts it as present"

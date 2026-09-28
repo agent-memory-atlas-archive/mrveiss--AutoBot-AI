@@ -17,8 +17,25 @@ integrity error. Since workspace paths are derived from issue numbers and are re
 constantly, that is every path, on its second use.
 
 Nothing depended on the stricter reading: at 093 nothing acquired a lease at all, so
-no deployment can hold a released row whose path is wanted again. The replacement is
-a partial unique index carrying the intent the comment always stated.
+no deployment can hold a released row whose path is wanted again.
+
+THE REPLACEMENT IS NOT EXACTLY ``is_live()``, AND CANNOT BE
+------------------------------------------------------------
+``LLCWorkspaceLease.is_live`` is ``released_at IS NULL AND expires_at > now``. This
+index can only express the first half: a partial index predicate cannot call ``now()``,
+because the index would have to be rebuilt continuously as rows aged across the
+boundary. So the index permits a second live lease on a path whose existing lease has
+**expired but not yet been released**.
+
+That gap is closed by a convention, not by the schema: **every writer reclaims expired
+leases before it inserts.** ``workspace_lease.acquire_lease`` does this as its first
+statement, before it checks the path or counts capacity, and a test pins that ordering.
+The index is exact only while that holds.
+
+Stated here rather than only in the service because this file is what the next person
+writing an insert path will read when they wonder what the constraint guarantees. It
+guarantees less than it looks like it does, and an insert that skips the reclaim can
+collide with an expired row without the database objecting.
 
 ``NO DATA LOSS``: this drops a UNIQUE **constraint** and creates a weaker partial
 unique index in its place. No column, table or row is touched -- every existing lease
