@@ -39,8 +39,18 @@ class _Session:
     async def __aexit__(self, *_exc):
         return False
 
-    async def execute(self, _statement):
+    async def execute(self, statement):
+        # The fake HONOURS a SQL LIMIT. Without this it silently ignores one, and a test
+        # asserting "the backlog does not hide the unexecuted proposal" passes whether or
+        # not the LIMIT is there -- a test that cannot fail, which is the exact defect
+        # this suite exists to catch one level up.
         rows = self._approvals
+        limit = getattr(statement, "_limit", None)
+        if limit is None:
+            limit_clause = getattr(statement, "_limit_clause", None)
+            limit = getattr(limit_clause, "value", None)
+        if limit is not None:
+            rows = rows[:limit]
 
         class _R:
             def scalars(self):
@@ -253,3 +263,51 @@ def test_a_mixed_batch_is_filed_with_no_company_rather_than_a_guessed_one(sweep)
 async def test_a_sweep_that_found_nothing_still_reports_zeros(sweep, monkeypatch):
     _install(sweep, monkeypatch)
     assert (await sweep._async_sweep()) == {"reclaimed": 0, "disposed": 0, "refused": 0, "proposed": 0}
+
+
+# ---------------------------------------------------------------------------
+# The bound must cap git operations, not rows (87's finding on #17725)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_backlog_of_executed_proposals_does_not_hide_the_unexecuted_one(sweep, monkeypatch):
+    """The failure that arrives after twenty disposals and arrives silently.
+
+    An executed proposal keeps `status = APPROVED` — execution lives in
+    `context["executed_at"]`, because the approval vocabulary is six values shared by
+    every gate. So executed rows go on matching the query for ever. With a SQL LIMIT
+    ahead of the Python filter, once MAX_EXECUTIONS_PER_SWEEP executed proposals exist
+    the limit fills entirely with them, the filter drops all of them, and no approved
+    disposal is ever executed again — while reporting `disposed 0, refused 0`, which is
+    exactly what a sweep with nothing to do reports.
+
+    Twenty executed and one not. The one must be acted on.
+    """
+    backlog = [_approval([f"/w/done-{i}"], executed=True) for i in range(sweep.MAX_EXECUTIONS_PER_SWEEP)]
+    live = _approval(["/w/waiting"])
+    disposed_paths = []
+
+    async def _dispose(path, branch):
+        disposed_paths.append(path)
+        return DisposalCheck(DisposalVerdict.LANDED, "on a remote")
+
+    _install(sweep, monkeypatch, approvals=[*backlog, live])
+    monkeypatch.setattr(sweep, "dispose_workspace", _dispose)
+
+    result = await sweep._async_sweep()
+
+    assert disposed_paths == ["/w/waiting"], "the unexecuted proposal must be reached past the backlog"
+    assert result["disposed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_the_bound_still_caps_git_operations_per_tick(sweep, monkeypatch):
+    """The cap's actual job, kept: unexecuted proposals beyond the bound wait for the
+    next tick rather than turning one beat into an unbounded run of git operations."""
+    pending = [_approval([f"/w/p-{i}"]) for i in range(sweep.MAX_EXECUTIONS_PER_SWEEP + 5)]
+    _install(sweep, monkeypatch, approvals=pending)
+
+    result = await sweep._async_sweep()
+
+    assert result["disposed"] == sweep.MAX_EXECUTIONS_PER_SWEEP

@@ -66,7 +66,8 @@ PROPOSAL_KIND = "workspace_disposal"
 SWEEP_REQUESTER = "llc-workspace-lease-sweep"
 
 #: How many approved proposals one sweep will act on. Bounded so a backlog of approvals
-#: cannot turn one beat tick into an unbounded run of git operations.
+#: cannot turn one beat tick into an unbounded run of git operations -- applied AFTER the
+#: executed ones are filtered out, never as a SQL LIMIT. See :func:`_approved_proposals`.
 MAX_EXECUTIONS_PER_SWEEP = 20
 
 
@@ -91,7 +92,27 @@ def _is_sweep_proposal(approval: Any) -> bool:
 
 
 async def _approved_proposals(session) -> list[Approval]:
-    """Approved disposal proposals this sweep raised and has not yet acted on."""
+    """Approved disposal proposals this sweep raised and has not yet acted on.
+
+    **There is deliberately no LIMIT on this query.** An executed proposal keeps
+    ``status = APPROVED`` -- execution is recorded in ``context["executed_at"]``, because
+    the approval vocabulary is six values shared by every gate and inventing a seventh to
+    fix a query would change all of them. So executed rows go on matching every SQL
+    predicate here for ever.
+
+    A ``LIMIT`` ahead of the Python filter is therefore the one thing this must not do:
+    once ``MAX_EXECUTIONS_PER_SWEEP`` executed proposals exist, the limit fills entirely
+    with them, the filter drops all of them, and no approved disposal is ever executed
+    again -- reporting ``disposed 0, refused 0``, which is what a sweep with nothing to do
+    reports. *Cannot see the work* and *there is no work* would be identical, in the sweep
+    written to stop exactly that.
+
+    The bound belongs after the filter, where ``MAX_EXECUTIONS_PER_SWEEP`` does the job its
+    own comment describes: capping git operations per tick, not rows per query. The set
+    fetched is narrow -- approved proposals raised by this sweep -- and ordering by
+    ``decided_at`` makes which ones get acted on deterministic rather than whatever the
+    planner returned first.
+    """
     result = await session.execute(
         select(Approval)
         .where(
@@ -99,9 +120,10 @@ async def _approved_proposals(session) -> list[Approval]:
             Approval.status == ApprovalStatus.APPROVED.value,
             Approval.requested_by_agent == SWEEP_REQUESTER,
         )
-        .limit(MAX_EXECUTIONS_PER_SWEEP)
+        .order_by(Approval.decided_at)
     )
-    return [a for a in result.scalars().all() if _is_sweep_proposal(a)]
+    pending = [a for a in result.scalars().all() if _is_sweep_proposal(a)]
+    return pending[:MAX_EXECUTIONS_PER_SWEEP]
 
 
 async def _execute_approved(session) -> tuple[int, int]:

@@ -360,27 +360,19 @@ def test_the_model_declares_no_table_wide_unique_on_path():
     assert column.unique is not True, "a table-wide UNIQUE burns the path on its first release"
 
 
-def test_the_model_declares_the_same_partial_index_the_migration_creates():
-    """Name and predicate both, because either one differing is a silent divergence."""
-    indexes = {index.name: index for index in LLCWorkspaceLease.__table__.indexes}
-    index = indexes.get("uq_llc_workspace_leases_live_path")
-
-    assert index is not None, "the model must declare 097's partial index"
-    assert index.unique is True
-    assert [c.name for c in index.columns] == ["path"]
-    predicate = str(index.dialect_options["postgresql"]["where"])
-    assert "released_at IS NULL" in predicate
-
-
 def test_the_partial_predicate_is_weaker_than_is_live_and_the_gap_is_the_reclaim():
-    """The invariant the index rests on, asserted rather than assumed.
+    """Documents the state the index cannot see. **This does not pin the invariant.**
 
-    `is_live` is `released_at IS NULL AND expires_at > now`; the index can only express
-    the first half, since a partial predicate cannot call now(). So an expired-but-
-    unreleased lease is invisible to the constraint, and only `acquire_lease` reclaiming
-    first keeps the two in step. This pins that a lease in exactly that state is one the
-    index would permit a duplicate of — so if anyone later removes the reclaim, the
-    reason this test exists is in front of them.
+    Both assertions below are true by construction — there is no index here and no
+    database — so this is a worked example, not a guard, and saying otherwise would be
+    the more dangerous error: a test that reads as protection and provides none.
+
+    What actually fails if the reclaim is removed is
+    `test_acquire_reclaims_expired_leases_before_counting_capacity`. What fails if the
+    model and migration drift apart is
+    `repo_tests/workspace_lease_index_matches_migration_16818_test.py`. This one exists
+    so the next reader can see, concretely, which lease state falls in the gap between
+    `is_live()` and a predicate that cannot call `now()`.
     """
     expired_unreleased = _lease(expires_at=NOW - timedelta(hours=1), released_at=None)
 
