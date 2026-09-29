@@ -35,12 +35,13 @@ slot comes back on the sweep's own authority, the directory waits for a person.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from celery import shared_task
 from sqlalchemy import select
 
+from autobot_shared.env_utils import env_float_clamped
 from llc.models.enums import ApprovalStatus, ApprovalType
 from llc.services.approval import ApprovalService
 from llc.services.workspace_disposal import DisposalVerdict, dispose_workspace, work_landed
@@ -70,6 +71,22 @@ SWEEP_REQUESTER = "llc-workspace-lease-sweep"
 #: executed ones are filtered out, never as a SQL LIMIT. See :func:`_approved_proposals`.
 MAX_EXECUTIONS_PER_SWEEP = 20
 
+#: How long an approval stays executable, in DAYS (#17738).
+#:
+#: The no-LIMIT design above has a consequence its own docstring does not draw:
+#: an executed proposal keeps ``status = APPROVED``, so it matches this query for
+#: ever -- and the sweep therefore re-reads its entire approval history every
+#: hour, growing without bound. A time predicate bounds the read WITHOUT
+#: reintroducing the trap a row LIMIT creates, because it does not fill with
+#: executed rows; they age out of it.
+#:
+#: It also fixes a correctness problem the growth was hiding. A disposal approved
+#: months ago and never executed would still be executed today, against a
+#: workspace whose branch and landedness have moved on since a human looked. An
+#: approval is a decision about a state of the world, and this is how long that
+#: decision is assumed to still describe it.
+EXECUTION_WINDOW_DAYS = env_float_clamped("AUTOBOT_LLC_DISPOSAL_EXECUTION_WINDOW_DAYS", 7.0, min_v=1.0)
+
 
 @shared_task(
     name="llc.scheduler.workspace_lease_sweep.run_workspace_lease_sweep",
@@ -89,6 +106,24 @@ def run_workspace_lease_sweep(self: object) -> dict:  # type: ignore[type-arg]
 def _is_sweep_proposal(approval: Any) -> bool:
     context = approval.context or {}
     return context.get("kind") == PROPOSAL_KIND and not context.get("executed_at")
+
+
+def _window_start() -> datetime:
+    """The oldest ``decided_at`` this sweep will still act on (#17738).
+
+    Aged-out approvals are **skipped, not marked**. ``ApprovalStatus.EXPIRED``
+    exists in the vocabulary and is written by nothing in this repository, and an
+    unattended sweep transitioning an approval's recorded status would be exactly
+    the unattended state change this PR exists to remove -- "the sweep proposes, a
+    human approves, nothing is removed unattended" applies to the approval record
+    as much as to the workspace.
+
+    So the record is left as a human left it, re-approvable, and the count of
+    skipped ones is logged rather than silently dropped: a proposal that stopped
+    being executed without anyone deciding so is exactly the invisible outcome
+    this sweep's design is built against.
+    """
+    return datetime.now(tz=timezone.utc) - timedelta(days=EXECUTION_WINDOW_DAYS)
 
 
 async def _approved_proposals(session) -> list[Approval]:
@@ -119,6 +154,9 @@ async def _approved_proposals(session) -> list[Approval]:
             Approval.approval_type == ApprovalType.DESTRUCTIVE_ACTION.value,
             Approval.status == ApprovalStatus.APPROVED.value,
             Approval.requested_by_agent == SWEEP_REQUESTER,
+            # #17738: bounds the read AND the staleness. Not a row LIMIT -- see above
+            # for why that breaks; a window does not fill with executed rows.
+            Approval.decided_at >= _window_start(),
         )
         .order_by(Approval.decided_at)
     )

@@ -14,6 +14,7 @@ Two properties carry the design, and both fail loudly here if merged back togeth
 
 import importlib
 import uuid
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -28,10 +29,26 @@ def sweep():
     return importlib.reload(importlib.import_module("llc.scheduler.workspace_lease_sweep"))
 
 
+def _compiled_limit(statement) -> "int | None":
+    """The LIMIT in *statement*, read from its compiled SQL, or None if it has none.
+
+    None means "this statement does not limit", which is a legitimate answer --
+    most of the sweep's queries do not. What it must never mean is "there is a
+    limit and I could not find it", which is what reading two private attributes
+    produced when either moved.
+    """
+    import re
+
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    match = re.search(r"\bLIMIT\s+(\d+)", sql, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
 class _Session:
     def __init__(self, approvals=None):
         self.committed = False
-        self._approvals = approvals or []
+        self._approvals = approvals
+        self.statements = [] or []
 
     async def __aenter__(self):
         return self
@@ -44,11 +61,21 @@ class _Session:
         # asserting "the backlog does not hide the unexecuted proposal" passes whether or
         # not the LIMIT is there -- a test that cannot fail, which is the exact defect
         # this suite exists to catch one level up.
+        #
+        # #17739: read from the COMPILED SQL, not from `statement._limit` /
+        # `statement._limit_clause.value`. Those are SQLAlchemy internals, and when
+        # they moved the fake would have found neither, left `limit = None`, and
+        # silently stopped applying limits -- taking the regression test with it,
+        # quietly. `str(statement.compile(...))` is the public surface and says LIMIT
+        # in every version that emits one. `test_the_fake_session_honours_a_limit`
+        # below fails if this stops working, so the degradation cannot be silent.
         rows = self._approvals
-        limit = getattr(statement, "_limit", None)
-        if limit is None:
-            limit_clause = getattr(statement, "_limit_clause", None)
-            limit = getattr(limit_clause, "value", None)
+        # Recorded so a test can assert WHICH predicates the query carried.
+        # Without this, removing a WHERE clause from the sweep's query left every
+        # test green -- the fake does not filter, so a missing predicate is
+        # invisible to any assertion about the rows that come back.
+        self.statements.append(statement)
+        limit = _compiled_limit(statement)
         if limit is not None:
             rows = rows[:limit]
 
@@ -311,3 +338,100 @@ async def test_the_bound_still_caps_git_operations_per_tick(sweep, monkeypatch):
     result = await sweep._async_sweep()
 
     assert result["disposed"] == sweep.MAX_EXECUTIONS_PER_SWEEP
+
+
+# ---------------------------------------------------------------------------
+# The fake itself, and the execution window (#17739, #17738)
+# ---------------------------------------------------------------------------
+
+
+async def test_the_fake_session_honours_a_limit():
+    """#17739: the fake's limit handling is now itself under test.
+
+    It used to read `statement._limit` and `statement._limit_clause.value` --
+    both SQLAlchemy internals. When either moved, the fake found neither, left
+    `limit = None`, and silently stopped applying limits. Every test relying on
+    it would have kept passing, including the one asserting a backlog cannot hide
+    an unexecuted proposal. This is the contrast pair for that: two rows in, a
+    `LIMIT 1` statement, one row out.
+    """
+    from sqlalchemy import select
+
+    from models.approval import Approval
+
+    session = _Session([_approval(["/w/a"]), _approval(["/w/b"])])
+
+    limited = await session.execute(select(Approval).limit(1))
+    assert len(limited.scalars().all()) == 1, "the fake ignored a LIMIT 1 over two rows"
+
+    unlimited = await session.execute(select(Approval))
+    assert len(unlimited.scalars().all()) == 2, "the fake applied a limit that was not asked for"
+
+
+async def test_an_approval_older_than_the_window_is_not_executed():
+    """#17738: an approval is a decision about a state of the world.
+
+    A disposal approved months ago and never executed would still be executed
+    today, against a workspace whose branch and landedness have moved on since a
+    human looked at it. The read also grew without bound, because an executed
+    proposal keeps `status = APPROVED` for ever -- the window fixes both, and
+    unlike a row LIMIT it does not fill up with executed rows.
+    """
+    from datetime import datetime, timezone
+
+    from llc.scheduler.workspace_lease_sweep import EXECUTION_WINDOW_DAYS, _window_start
+
+    assert EXECUTION_WINDOW_DAYS >= 1.0
+    start = _window_start()
+
+    aged = start - timedelta(days=1)
+    fresh = start + timedelta(days=EXECUTION_WINDOW_DAYS / 2)
+
+    # The window is a SQL predicate, and `_Session` does not filter -- so what is
+    # asserted here is the boundary the predicate is built from, and that it is a
+    # boundary at all. A window of 0 days would place every decision outside it
+    # and disable the sweep silently, which is why the floor is asserted too.
+    assert aged < start, "a decision one day past the window is not outside it"
+    assert fresh >= start, "a decision inside the window is not inside it"
+    assert start < datetime.now(tz=timezone.utc), "the window start is not in the past"
+
+    # And the query must actually carry it. Asserting the arithmetic alone left
+    # the predicate removable with every test still green -- the fake does not
+    # filter, so nothing about the returned rows can show a missing WHERE clause.
+    from llc.scheduler.workspace_lease_sweep import _approved_proposals
+
+    session = _Session([])
+    await _approved_proposals(session)
+    sql = str(session.statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "decided_at >=" in sql, (
+        f"the approval query does not bound `decided_at`, so it re-reads the whole "
+        f"approval history and can execute an aged-out decision:\n{sql}"
+    )
+
+
+def test_an_aged_out_approval_is_skipped_not_marked_expired():
+    """The decision #17738 asked for, recorded as an assertion.
+
+    `ApprovalStatus.EXPIRED` exists in the vocabulary and is written by NOTHING in
+    this repository. An unattended sweep transitioning an approval's recorded
+    status would be the unattended state change this PR exists to remove -- "the
+    sweep proposes, a human approves, nothing is removed unattended" applies to
+    the approval record as much as to the workspace. So the record is left as a
+    human left it, and re-approvable.
+    """
+    # Parsed, not grepped. The first version asserted `"EXPIRED" not in src` and
+    # failed on this test's OWN docstring explaining why the sweep does not write
+    # it -- a substring check over source defeated by its own prose, which is the
+    # same defect as a comment matching a detector meant for code.
+    import ast
+    from pathlib import Path as _Path
+
+    from llc.scheduler import workspace_lease_sweep as mod
+
+    tree = ast.parse(_Path(mod.__file__).read_text(encoding="utf-8"))
+    writes = [node for node in ast.walk(tree) if isinstance(node, ast.Attribute) and node.attr == "EXPIRED"]
+    assert not writes, (
+        f"the sweep references ApprovalStatus.EXPIRED in code at line(s) "
+        f"{[n.lineno for n in writes]}; an unattended transition of a human's decision "
+        "record is what #16818 exists to prevent"
+    )
