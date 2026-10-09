@@ -2228,9 +2228,9 @@ async def generate_analysis_report(
     """
     # Default to most recent source to prevent cross-project data mixing (#2653)
     if not source_id:
-        from api.codebase_analytics.source_storage import get_default_source_id
+        from api.codebase_analytics.endpoints.shared import default_source_id
 
-        source_id = await get_default_source_id()
+        source_id = await default_source_id()
 
     # Issue #2724 / #2760: Resolve source root via shared helper so _fetch_problems_from_chromadb
     # (which runs in a thread) can validate file paths without blocking the event loop.
