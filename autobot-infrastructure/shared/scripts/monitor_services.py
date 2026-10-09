@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.service_registry import ServiceStatus, get_service_registry
+from utils.service_registry import RegistryServiceStatus, get_service_registry
 
 # Optional web dependencies
 try:
@@ -84,7 +84,7 @@ class ServiceMonitor:
 
             # Calculate overall health statistics
             total_services = len(health_results)
-            healthy_services = sum(1 for h in health_results.values() if h.status == ServiceStatus.HEALTHY)
+            healthy_services = sum(1 for h in health_results.values() if h.status == RegistryServiceStatus.HEALTHY)
 
             overall_status = {
                 "timestamp": timestamp.isoformat(),
