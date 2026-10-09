@@ -38,6 +38,7 @@ __all__ = [
     "ImportContext",
     "is_external_module",
     "authorize_source_access",
+    "default_source_id",
     "filter_problems_by_file_existence",
     "get_project_root",
     "require_source_access",
@@ -223,6 +224,27 @@ def _caller_owner_id(user: "dict | None") -> "str | None":
     return _NO_OWNER_ID
 
 
+def _registry_unavailable_503() -> HTTPException:
+    """The one response for an unreadable source registry; the cause is already logged."""
+    return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Code source registry unavailable")
+
+
+async def default_source_id() -> "str | None":
+    """The default source id for an HTTP handler; an unreadable registry is a 503 (#17982).
+
+    Handlers fell back to ``None`` (and so to a cross-project or AutoBot-root
+    answer) when this raised nothing but returned ``None`` for a fault. Tasks
+    call ``get_default_source_id`` directly and let ``RegistryUnavailable`` fail them.
+    """
+    from api.codebase_analytics.source_storage import RegistryUnavailable, get_default_source_id
+
+    try:
+        return await get_default_source_id()
+    except RegistryUnavailable:
+        logger.error("default source lookup failed: the registry is unavailable")
+        raise _registry_unavailable_503() from None
+
+
 async def authorize_source_access(source_id: "str | None", user: "dict | None") -> None:
     """Enforce that ``user`` may access the code source ``source_id`` (#12358).
 
@@ -239,9 +261,14 @@ async def authorize_source_access(source_id: "str | None", user: "dict | None") 
     """
     if not source_id:
         return
-    from api.codebase_analytics.source_storage import _is_visible, get_source
+    from api.codebase_analytics.source_storage import RegistryUnavailable, _is_visible, get_source
 
-    source = await get_source(source_id)
+    try:
+        source = await get_source(source_id)
+    except RegistryUnavailable:
+        # A fault is not "no such source": answering 404 here told the caller the
+        # id was unknown when the registry could not be read (#17982).
+        raise _registry_unavailable_503() from None
     if source is None or not _is_visible(source, _caller_owner_id(user)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

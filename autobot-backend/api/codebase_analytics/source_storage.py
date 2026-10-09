@@ -71,6 +71,20 @@ async def get_source(source_id: str) -> CodeSource | None:
     return CodeSource.model_validate_json(data.decode("utf-8") if isinstance(data, bytes) else data)
 
 
+async def get_source_or_none_if_unreadable(source_id: str) -> CodeSource | None:
+    """``get_source`` for DECORATION only: an unreadable registry yields None, logged.
+
+    For callers that can render without the source (a project list's summary
+    card). Anything that acts on the source must call ``get_source`` and let
+    ``RegistryUnavailable`` propagate (#17982).
+    """
+    try:
+        return await get_source(source_id)
+    except RegistryUnavailable:
+        logger.warning("source %s omitted: the source registry is unavailable", source_id)
+        return None
+
+
 def _is_visible(source: CodeSource, owner_id: str | None) -> bool:
     """Return True if the source should appear in the list for owner_id."""
     if owner_id is None:
