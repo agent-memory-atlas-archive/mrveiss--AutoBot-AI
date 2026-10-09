@@ -73,12 +73,10 @@ class TimingConstants:
 # copied class, each copy trimmed to what its script used. The union now lives in
 # deployment_registry.py beside this file.
 from deployment_registry import (  # noqa: E402
+    SERVICE_DEFINITIONS,
     DeploymentMode,
     ServiceRegistry,
 )
-
-
-
 
 _registry: Optional[ServiceRegistry] = None
 
@@ -177,25 +175,25 @@ class ZeroDowntimeDeployer:
             "traffic_switch_timeout": 60,
             "services": {
                 "backend": {
-                    "port": 8001,
+                    "port": SERVICE_DEFINITIONS["backend"].port,
                     "health_endpoint": "/api/system/health",
                     "startup_time": 30,
                     "dependencies": ["redis", "ai-stack"],
                 },
                 "frontend": {
-                    "port": 5173,
+                    "port": SERVICE_DEFINITIONS["frontend"].port,
                     "health_endpoint": "/",
                     "startup_time": 20,
                     "dependencies": ["backend"],
                 },
                 "ai-stack": {
-                    "port": 8080,
+                    "port": SERVICE_DEFINITIONS["ai-stack"].port,
                     "health_endpoint": "/health",
                     "startup_time": 45,
                     "dependencies": ["redis"],
                 },
                 "npu-worker": {
-                    "port": 8081,
+                    "port": SERVICE_DEFINITIONS["npu-worker"].port,
                     "health_endpoint": "/health",
                     "startup_time": 25,
                     "dependencies": ["redis"],
