@@ -417,6 +417,16 @@ async def detect_config_duplicates_endpoint(
     if result is None:
         result = await _run_standard_config_detection(project_root)
 
+    if result.get("files_scanned", 0) == 0:
+        # #18067: "scanned nothing" is not "found nothing". This answered a
+        # clean 200 "No configuration duplicates found!" in 0.7s for a tree it
+        # had not read a single file of.
+        logger.warning("config-duplicates scanned 0 files under %s", project_root)
+        return JSONResponse(
+            status_code=422,
+            content={"status": "error", "message": "no Python files were scanned; nothing to report"},
+        )
+
     # Issue #620: Use helper for array conversion
     duplicates_array = _convert_config_duplicates_to_array(result["duplicates"])
 
@@ -426,6 +436,9 @@ async def detect_config_duplicates_endpoint(
             "duplicates_found": result["duplicates_found"],
             "duplicates": duplicates_array,
             "report": result["report"],
+            "files_scanned": result["files_scanned"],
+            "files_failed": result.get("files_failed", 0),
+            "scope": result.get("scope", ""),
         }
     )
 

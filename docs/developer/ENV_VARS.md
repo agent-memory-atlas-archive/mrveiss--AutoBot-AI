@@ -103,6 +103,7 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S` | security | int | `5` | Seconds one internal-origin provider may run before it is abandoned for this refresh (#17576). A provider that times out or raises is logged and skipped; the static SSOT origins still apply. |
 =======
 | `AUTOBOT_DUPLICATE_BACKGROUND_TIMEOUT_SECONDS` | backend | float | `3600.0` | Upper bound for a duplicate scan run by the background (Celery) task. Not the request deadline: the queued path exists to escape it (#18067). |
+| `AUTOBOT_DUPLICATE_MAX_RETURNED` | backend | int | `5000` | Maximum duplicate pairs a scan RETURNS (0 = unlimited). The count and the statistics always describe every pair found; the analysis reports `truncated` when the list is shorter (#18067). |
 | `AUTOBOT_DUPLICATE_ORPHAN_LEASE_SECONDS` | backend | float | `300.0` | How long an abandoned duplicate scan may keep the single-flight lock after it was told to stop. Past this the lock is treated as leaked and replaced, so a scan thread that never exits cannot decline every later call (#18013). |
 >>>>>>> 9ae9d27b03 (fix(codebase-analytics): split the busy and timeout scan responses, bound the orphan lock, lift the request cap off the background scan (#18013))
 | `AUTOBOT_ENV` | system | str | `'production'` | Short environment label used in logs and traces (e.g. 'development', 'production'). |
