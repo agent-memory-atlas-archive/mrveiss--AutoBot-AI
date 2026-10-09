@@ -198,6 +198,9 @@ def run_duplicate_analysis(self, source_id: "str | None" = None) -> dict:
         # deadline. ScanBusy / ScanTimedOut propagate, so Celery records FAILURE
         # instead of a "completed" task carrying a partial result (#18067).
         analysis = await _run_duplicate_analysis(project_root, 0.5, False, background=True)
+        if analysis.files_analyzed == 0:
+            # "Examined nothing" is not "found nothing" (#17982).
+            return {"status": "error", "message": "no source files found under the scan root; nothing scanned"}
         _progress(self, "Processing results", 80.0, started)
         return _process_and_cache_analysis(analysis, project_root, source_id=source_id)
 
