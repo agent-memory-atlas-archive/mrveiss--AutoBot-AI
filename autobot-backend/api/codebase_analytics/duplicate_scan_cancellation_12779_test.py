@@ -206,7 +206,7 @@ class TestCancellationReachesTheExpensivePhases:
                 normalized_content=f"def f{i} pass",
                 content_hash=f"h{i}",
                 line_count=5,
-                token_set={f"tok{i}", "def", "pass"},
+                token_set={f"tok{i}", "def", "pass"} | {f"w{k}" for k in range(25)},  # >= MIN_TOKENS_FOR_SIMILARITY
             )
             for i in range(count)
         ]
@@ -242,21 +242,24 @@ class TestCancellationReachesTheExpensivePhases:
         import api.codebase_analytics.duplicate_detector as det
 
         pytest.importorskip("datasketch")
+        from api.codebase_analytics.duplicate_lsh import build_signatures
+
         blocks = self._blocks(det.CANCEL_CHECK_INTERVAL * 3)
 
-        signatures = det._build_minhash_signatures(blocks, num_perm=16, cancelled=lambda: True)
+        signatures = build_signatures(blocks, range(len(blocks)), num_perm=16, cancelled=lambda: True)
 
         assert len(signatures) < len(blocks), "signature build processed every block despite cancellation"
 
     def test_minhash_build_completes_when_not_cancelled(self):
         """The case that must stay working — a cancellation check that always
         fires would pass the test above while breaking every real scan."""
-        import api.codebase_analytics.duplicate_detector as det
 
         pytest.importorskip("datasketch")
+        from api.codebase_analytics.duplicate_lsh import build_signatures
+
         blocks = self._blocks(10)
 
-        signatures = det._build_minhash_signatures(blocks, num_perm=16, cancelled=lambda: False)
+        signatures = build_signatures(blocks, range(len(blocks)), num_perm=16, cancelled=lambda: False)
 
         assert len(signatures) == len(blocks)
 
@@ -267,11 +270,11 @@ class TestCancellationReachesTheExpensivePhases:
 
         seen: dict[str, object] = {}
 
-        def _spy(blocks, threshold=0.5, num_perm=128, cancelled=None):
+        def _spy(blocks, similarity, min_similarity, num_perm=128, cancelled=None):
             seen["cancelled"] = cancelled
             return []
 
-        monkeypatch.setattr(det, "_find_lsh_candidates", _spy)
+        monkeypatch.setattr(det, "find_lsh_candidates", _spy)
         monkeypatch.setattr(det, "LSH_AVAILABLE", True)
         detector = det.DuplicateCodeDetector(project_root=str(tmp_path), cancel_token=threading.Event())
         detector._find_similar_duplicates(self._blocks(20), set())

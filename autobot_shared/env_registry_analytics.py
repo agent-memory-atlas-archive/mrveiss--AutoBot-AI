@@ -38,3 +38,17 @@ register_env_var(
         component="backend",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_DUPLICATE_MAX_RETURNED",
+        type=int,
+        default=5000,
+        description=(
+            "Maximum duplicate pairs a scan RETURNS (0 = unlimited). The count and the "
+            "statistics always describe every pair found; the analysis reports "
+            "`truncated` when the list is shorter (#18067)."
+        ),
+        component="backend",
+    )
+)

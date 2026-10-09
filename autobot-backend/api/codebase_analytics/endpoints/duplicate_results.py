@@ -51,6 +51,8 @@ def _convert_analysis_to_result(analysis, project_root: str) -> dict:
         "status": "success",
         "duplicates": duplicates_for_frontend,
         "total_count": analysis.total_duplicates,
+        "returned_count": len(duplicates_for_frontend),
+        "truncated": analysis.truncated,
         "high_similarity_count": analysis.high_similarity_count,
         "medium_similarity_count": analysis.medium_similarity_count,
         "low_similarity_count": analysis.low_similarity_count,
@@ -162,6 +164,8 @@ async def _run_semantic_config_detection(project_root: Path) -> dict | None:
             "duplicates_found": 0,
             "duplicates": await detector.find_duplicates_async(),
             "report": await asyncio.to_thread(detector.generate_report),
+            "files_scanned": detector.files_scanned,
+            "files_failed": detector.files_failed,
         }
         result["duplicates_found"] = len(result["duplicates"])
         logger.info("Semantic config duplicate analysis complete")
