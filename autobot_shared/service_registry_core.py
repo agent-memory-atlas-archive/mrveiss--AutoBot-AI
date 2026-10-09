@@ -58,7 +58,7 @@ def parse_deployment_mode(raw: str, log: logging.Logger, source: str) -> Optiona
 
 
 @dataclass(frozen=True)
-class ServiceDefinition:
+class ServiceEndpointSpec:
     """One registered service: static facts here, port and host read from ssot_config."""
 
     name: str
@@ -82,16 +82,16 @@ class ServiceDefinition:
         return build_base_url(self.scheme, self.host, self.port)
 
 
-SERVICE_DEFINITIONS: Dict[str, ServiceDefinition] = {
+SERVICE_DEFINITIONS: Dict[str, ServiceEndpointSpec] = {
     d.name: d
     for d in (
-        ServiceDefinition("redis", "redis", "redis", _ROOT_PATH, scheme="redis"),
-        ServiceDefinition("ai-stack", "aistack", "aistack", PATH_HEALTH),
-        ServiceDefinition("npu-worker", "npu", "npu", PATH_HEALTH),
-        ServiceDefinition("backend", "backend", "main", PATH_API_HEALTH),
-        ServiceDefinition("frontend", "frontend", "frontend", _ROOT_PATH),
-        ServiceDefinition("playwright-vnc", "browser", "browser", PATH_HEALTH),
-        ServiceDefinition("ollama", "ollama", "ollama", PATH_OLLAMA_TAGS),
+        ServiceEndpointSpec("redis", "redis", "redis", _ROOT_PATH, scheme="redis"),
+        ServiceEndpointSpec("ai-stack", "aistack", "aistack", PATH_HEALTH),
+        ServiceEndpointSpec("npu-worker", "npu", "npu", PATH_HEALTH),
+        ServiceEndpointSpec("backend", "backend", "main", PATH_API_HEALTH),
+        ServiceEndpointSpec("frontend", "frontend", "frontend", _ROOT_PATH),
+        ServiceEndpointSpec("playwright-vnc", "browser", "browser", PATH_HEALTH),
+        ServiceEndpointSpec("ollama", "ollama", "ollama", PATH_OLLAMA_TAGS),
     )
 }
 
