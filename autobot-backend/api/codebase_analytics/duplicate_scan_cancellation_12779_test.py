@@ -19,6 +19,7 @@ fully walked and then discarded, N times over.
 
 from __future__ import annotations
 
+import asyncio
 import threading
 from pathlib import Path
 
@@ -130,8 +131,8 @@ class TestSingleFlight:
         try:
             # Lock already held => a second caller must bail out rather than
             # start another walk. This is the accumulation the issue reported.
-            result = await ep._run_duplicate_analysis("/tmp", 0.5, False)
-            assert result is None
+            with pytest.raises(ep.ScanBusy):
+                await ep._run_duplicate_analysis("/tmp", 0.5, False)
         finally:
             ep._duplicate_scan_lock.release()
 
@@ -310,7 +311,7 @@ class TestCancellationReachesTheExpensivePhases:
         leave the semantic-analysis path running abandoned scans to completion."""
         import api.codebase_analytics.duplicate_detector as det
 
-        (tmp_path / "a.py").write_text("def a(): pass\n", encoding="utf-8")
+        await asyncio.to_thread((tmp_path / "a.py").write_text, "def a(): pass\n", encoding="utf-8")
         token = threading.Event()
         detector = det.DuplicateCodeDetector(project_root=str(tmp_path), cancel_token=token)
 

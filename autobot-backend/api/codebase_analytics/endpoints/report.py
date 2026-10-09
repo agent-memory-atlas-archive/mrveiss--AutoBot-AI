@@ -59,6 +59,7 @@ from ..duplicate_detector import (  # noqa: F401
 from ..models import APIEndpointAnalysis
 from ..storage import get_code_collection
 from .duplicates import _run_standard_analysis
+from .scan_responses import ScanUnavailable
 from .shared import (
     filter_problems_by_file_existence,
     resolve_project_root,
@@ -1682,15 +1683,6 @@ async def _get_duplicate_analysis(
         # LOW_SIMILARITY_THRESHOLD is the detector's own default, which is what
         # this call site relied on implicitly — behaviour unchanged.
         analysis = await _run_standard_analysis(scan_target, LOW_SIMILARITY_THRESHOLD)
-        if analysis is None:
-            # #13602: say so. The GUI polls /duplicates while loading /report and
-            # they now share one lock, so this is the common case — and a report
-            # that omits the section without comment reads as "no duplicates".
-            logger.warning(
-                "Duplicate section omitted from the report: the scan was "
-                "unavailable (already in flight, or it exceeded its deadline)"
-            )
-            return None
 
         logger.info(
             "Duplicate analysis: %d duplicates (%d high, %d medium, %d low)",
@@ -1700,6 +1692,13 @@ async def _get_duplicate_analysis(
             analysis.low_similarity_count,
         )
         return analysis
+    except ScanUnavailable as exc:
+        # #13602/#18013: say so, and say which. The GUI polls /duplicates while
+        # loading /report and they share one lock, so busy is the common case --
+        # and a report that omits the section without comment reads as "no
+        # duplicates".
+        logger.warning("Duplicate section omitted from the report: %s", exc)
+        return None
     except asyncio.TimeoutError:
         logger.warning("Duplicate analysis timed out")
         return None
