@@ -19,9 +19,10 @@ This is that union: the richest copy's nine methods plus `update_service_url`, w
 existed only in `zero_downtime_deploy.py`.
 
 It lives beside the scripts rather than in `autobot_shared/` because these are
-standalone scripts: only one of the six can import `autobot_shared` at all, and the
-others reach siblings through the `_SCRIPTS_DIR`-on-sys.path pattern they already use
-for `backup_manager` (#14518). The port/health table still MIRRORS
+standalone scripts that reach siblings through the `_SCRIPTS_DIR`-on-sys.path pattern
+they already use for `backup_manager` (#14518). This module reaches `autobot_shared`
+for the status alias only through the repo-root bootstrap `deployment_rollback.py`
+uses (#11761). The port/health table still MIRRORS
 `autobot_shared/ssot_config.py` by hand, as the originals' comments record -- that
 mirror is a separate fork and is not resolved here.
 
