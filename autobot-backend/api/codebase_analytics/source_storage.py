@@ -14,6 +14,7 @@ from typing import List
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
+from utils.error_boundaries.types import PassThroughError
 
 from .source_models import CodeSource, SourceAccess
 
@@ -23,13 +24,16 @@ _SOURCES_KEY_PREFIX = "code_source:"
 _SOURCES_INDEX_KEY = "code_sources:index"
 
 
-class RegistryUnavailable(RuntimeError):
+class RegistryUnavailable(PassThroughError, RuntimeError):
     """The source registry (Redis) could not be reached.
 
     Never raised to mean "no such source" -- that is a legitimate empty
     result. Raised only when the store itself failed, so a caller (an
     orphan detector, in particular) cannot mistake a fault for "this id
     genuinely has no record" (#17039 review, #17050).
+
+    A ``PassThroughError``: ``with_error_handling`` lets it reach the app-level
+    503 handler instead of converting it into a generic 500 (#17982).
     """
 
 
