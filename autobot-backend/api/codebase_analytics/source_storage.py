@@ -54,10 +54,16 @@ update_source = save_source
 
 
 async def get_source(source_id: str) -> CodeSource | None:
-    """Retrieve a CodeSource by ID. Returns None if not found."""
+    """Retrieve a CodeSource by ID. Returns None only if there is no such source.
+
+    Raises ``RegistryUnavailable`` when the registry itself cannot be reached
+    (#17982). It used to return None there, which a caller reads as "no such
+    source" -- so a worker that could not build its Redis client refused every
+    scan with a message asserting the id was unknown.
+    """
     redis = await get_async_redis_client(database="analytics")
     if redis is None:
-        return None
+        raise RegistryUnavailable("source registry (Redis) is unavailable")
     key = f"{_SOURCES_KEY_PREFIX}{source_id}"
     data = await redis.get(key)
     if data is None:
@@ -115,7 +121,13 @@ async def registered_source_ids() -> set[str]:
 
 
 async def get_default_source_id() -> str | None:
-    """Return the ID of the most recently indexed source, or None (#2653)."""
+    """Return the ID of the most recently indexed source, or None (#2653).
+
+    None means the registry holds no source. An unreachable registry raises
+    ``RegistryUnavailable`` instead (#17982): ``list_sources`` returns ``[]`` for
+    it, and a caller cannot tell "no sources" from "could not look".
+    """
+    await registered_source_ids()
     sources = await list_sources()
     if not sources:
         return None
