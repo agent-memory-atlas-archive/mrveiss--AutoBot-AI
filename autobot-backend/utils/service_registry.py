@@ -28,7 +28,6 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Dict, List
 
 import aiohttp
@@ -49,16 +48,11 @@ from config.manager import get_config_manager
 
 config = get_config_manager()
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.status_enums import HealthStatus
 from constants.api_constants import PATH_HEALTH
 
-
-class RegistryServiceStatus(Enum):
-    """Service health status"""
-
-    HEALTHY = "healthy"
-    UNHEALTHY = "unhealthy"
-    UNKNOWN = "unknown"
-    CIRCUIT_OPEN = "circuit_open"
+# Alias of the canonical enum (#12771): same members, same identity.
+RegistryServiceStatus = HealthStatus
 
 
 @dataclass
