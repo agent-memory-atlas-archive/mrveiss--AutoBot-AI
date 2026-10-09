@@ -19,7 +19,7 @@ Never hard-code hex color values or numeric pixels for spacing in scoped styles.
 
 ## CSS Token Vocabulary
 
-All tokens are defined in `src/assets/styles/theme.css` and `src/assets/tokens.css`.
+All base tokens are defined once, in `src/assets/css/design-tokens.css`; per-theme overrides live in `src/assets/css/themes/`. Precedence is written down in `src/assets/css/index.css`.
 
 ### Color — Status / Semantic
 

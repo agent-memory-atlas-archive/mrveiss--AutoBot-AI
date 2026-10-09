@@ -128,7 +128,7 @@
   --bg-input: #1e293b;
   --bg-hover: rgba(255, 255, 255, 0.05);
   --bg-active: rgba(255, 255, 255, 0.1);
-  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
   /* Alias for the dark scrim used by dialog/modal backdrops. Several
      components referenced --bg-overlay-dark, which was never defined
      (backdrops rendered transparent); define it as the standard dark
@@ -160,8 +160,8 @@
   --text-tertiary: #8a98ad;
   --text-muted: #8593a8;
   --text-inverse: #0f172a;
-  --text-link: #3b82f6;
-  --text-link-hover: #60a5fa;
+  --text-link: #60a5fa;
+  --text-link-hover: #93c5fd;
 
   /* ============================================
    * BORDER COLORS
@@ -226,7 +226,7 @@
   /* Chart backgrounds */
   --chart-bg: var(--bg-card);
   --chart-grid: rgba(148, 163, 184, 0.1);
-  --chart-axis: var(--text-muted);
+  --chart-axis: var(--text-tertiary);
   --chart-tooltip-bg: var(--bg-elevated);
 
   /* ============================================
@@ -382,12 +382,12 @@
    * Elevation and depth
    * ============================================ */
 
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
   --shadow-none: none;
 
@@ -473,9 +473,9 @@
    * ============================================ */
 
   --scrollbar-width: 8px;
-  --scrollbar-track: var(--bg-secondary);
-  --scrollbar-thumb: var(--border-default);
-  --scrollbar-thumb-hover: var(--text-tertiary);
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #475569;
+  --scrollbar-thumb-hover: #64748b;
   --scrollbar-radius: var(--radius-full);
 
   /* ============================================
@@ -484,8 +484,8 @@
    * ============================================ */
 
   /* Cards */
-  --card-bg: var(--bg-card);
-  --card-border: var(--border-subtle);
+  --card-bg: #1e293b;
+  --card-border: rgba(71, 85, 105, 0.5);
   --card-shadow: var(--shadow-md);
   --card-radius: var(--radius-lg);
   --card-padding: var(--spacing-4);
@@ -508,15 +508,15 @@
   --input-height-lg: 48px;
   --input-padding-x: var(--spacing-3);
   --input-radius: var(--radius-md);
-  --input-border: var(--border-default);
+  --input-border: #475569;
   --input-border-focus: var(--color-primary);
-  --input-bg: var(--bg-input);
+  --input-bg: #1e293b;
 
   /* Tables */
-  --table-header-bg: var(--bg-secondary);
-  --table-row-bg: var(--bg-card);
-  --table-row-hover: var(--bg-hover);
-  --table-border: var(--border-subtle);
+  --table-header-bg: #1e293b;
+  --table-row-bg: #1e293b;
+  --table-row-hover: rgba(255, 255, 255, 0.05);
+  --table-border: rgba(71, 85, 105, 0.5);
 
   /* Badges */
   --badge-padding-x: var(--spacing-2);
@@ -567,9 +567,9 @@
   --chart-purple-dark: #6d28d9;
 
   /* Canvas — agent draft cell ownership tokens (MVA-360) */
-  --color-agent-draft-border: #3B82F6;
-  --color-agent-draft-bg: #EFF6FF;
-  --color-user-edit-cursor: #059669;
+  --color-agent-draft-border: #60A5FA;
+  --color-agent-draft-bg: #1E3A5F;
+  --color-user-edit-cursor: #34D399;
 
   /* ============================================
    * TERMINAL COMPONENT TOKENS
@@ -1196,6 +1196,98 @@
   --opdetail-resume-bg: #dcfce7;           /* resume-button fill */
   --opdetail-resume-text: #166534;         /* resume-button text */
   --opdetail-success-soft: #bbf7d0;        /* resume-button border and hover fill */
+
+  /* Base values moved here from styles/theme.css, themes/dark.css and themes/accents.css (#14785): one base declaration site per token name. */
+  --content-padding-x: 1rem;
+  --content-padding-y: 1.5rem;
+  --scrollbar-thumb-radius: 4px;
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+  --font-family-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: 'Fira Code', 'JetBrains Mono', Menlo, Monaco, Consolas, 'Courier New', monospace;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  --badge-type-epic-bg: #362b6b;
+  --badge-type-epic-fg: #d6ccff;
+  --badge-type-feature-bg: #1e365f;
+  --badge-type-feature-fg: #bfd7ff;
+  --badge-type-pbi-bg: #123b2c;
+  --badge-type-pbi-fg: #a7ecc9;
+  --badge-type-task-bg: #0e3a52;
+  --badge-type-task-fg: #b3e2f7;
+  --badge-type-bug-bg: #4a1d1d;
+  --badge-type-bug-fg: #ffc4c4;
+  --badge-type-spike-bg: #4a3411;
+  --badge-type-spike-fg: #fbdf9b;
+  --badge-type-subtask-bg: #2f3742;
+  --badge-type-subtask-fg: #cdd6e2;
+  --badge-type-risk-bg: #4a1f38;
+  --badge-type-risk-fg: #f9c0dd;
+  --badge-status-backlog-bg: #2f3742;
+  --badge-status-backlog-fg: #cdd6e2;
+  --badge-status-ready-bg: #0e3a52;
+  --badge-status-ready-fg: #b3e2f7;
+  --badge-status-in_progress-bg: #362b6b;
+  --badge-status-in_progress-fg: #d6ccff;
+  --badge-status-in_review-bg: #4a3d11;
+  --badge-status-in_review-fg: #f5e39b;
+  --badge-status-done-bg: #123b2c;
+  --badge-status-done-fg: #a7ecc9;
+  --badge-status-blocked-bg: #4a1d1d;
+  --badge-status-blocked-fg: #ffc4c4;
+  --badge-status-cancelled-bg: #2f3742;
+  --badge-status-cancelled-fg: #9aa5b3;
+  --badge-priority-critical-bg: #4a1d1d;
+  --badge-priority-critical-fg: #ffc4c4;
+  --badge-priority-high-bg: #4a2c11;
+  --badge-priority-high-fg: #ffcea1;
+  --badge-priority-medium-bg: #4a3d11;
+  --badge-priority-medium-fg: #f5e39b;
+  --badge-priority-low-bg: #163a1f;
+  --badge-priority-low-fg: #aeeabb;
+  --badge-dot-critical: #f87171;
+  --badge-dot-high: #fb923c;
+  --badge-dot-medium: #facc15;
+  --badge-dot-low: #4ade80;
+  --badge-approval-budget_increase-bg: #4a3411;
+  --badge-approval-budget_increase-fg: #fbdf9b;
+  --badge-approval-agent_spawn-bg: #362b6b;
+  --badge-approval-agent_spawn-fg: #d6ccff;
+  --badge-approval-external_api-bg: #1e365f;
+  --badge-approval-external_api-fg: #bfd7ff;
+  --badge-approval-code_deploy-bg: #4a1d1d;
+  --badge-approval-code_deploy-fg: #ffc4c4;
+  --badge-approval-data_access-bg: #123b2c;
+  --badge-approval-data_access-fg: #a7ecc9;
+  --badge-approval-policy_change-bg: #4a1f38;
+  --badge-approval-policy_change-fg: #f9c0dd;
+  --badge-approval-contract_sign-bg: #4a2c11;
+  --badge-approval-contract_sign-fg: #ffcea1;
+  --badge-approval-hiring-bg: #0e3a52;
+  --badge-approval-hiring-fg: #b3e2f7;
+  --badge-approval-approved-bg: #123b2c;
+  --badge-approval-approved-fg: #a7ecc9;
+  --badge-approval-rejected-bg: #4a1d1d;
+  --badge-approval-rejected-fg: #ffc4c4;
+  --badge-approval-changes_requested-bg: #4a3411;
+  --badge-approval-changes_requested-fg: #fbdf9b;
+  --badge-sprint-planning-bg: #4a3d11;
+  --badge-sprint-planning-fg: #f5e39b;
+  --badge-sprint-active-bg: #123b2c;
+  --badge-sprint-active-fg: #a7ecc9;
+  --badge-sprint-review-bg: #362b6b;
+  --badge-sprint-review-fg: #d6ccff;
+  --badge-sprint-closed-bg: #2f3742;
+  --badge-sprint-closed-fg: #cdd6e2;
 }
 
 /* ============================================
@@ -1318,16 +1410,6 @@
     --color-error-alpha-10: oklch(63.7% 0.208 25.3 / 0.1);
 
     /* Background Colors */
-    --bg-primary: oklch(20.8% 0.040 265.8);
-    --bg-secondary: oklch(27.9% 0.037 260.0);
-    --bg-tertiary: oklch(37.2% 0.039 257.3);
-    --bg-elevated: oklch(27.9% 0.037 260.0);
-    --bg-surface: oklch(22.8% 0.038 282.9);
-    --bg-card: oklch(27.9% 0.037 260.0);
-    --bg-input: oklch(27.9% 0.037 260.0);
-    --bg-hover: oklch(100% 0 0 / 0.05);
-    --bg-active: oklch(100% 0 0 / 0.1);
-    --bg-overlay: oklch(0% 0 0 / 0.5);
     --overlay-backdrop: oklch(0% 0 0 / 0.8);
 
     /* Semi-transparent backgrounds */
@@ -1344,18 +1426,8 @@
 
     /* Text Colors — TASK 15: tertiary/muted lightened to meet WCAG AA (4.5:1)
        for small metadata labels on dark backgrounds */
-    --text-primary: oklch(92.9% 0.013 255.5);
-    --text-secondary: oklch(71.1% 0.035 256.8);
-    --text-tertiary: oklch(67.5% 0.035 257.0);
-    --text-muted: oklch(65.0% 0.034 257.0);
-    --text-inverse: oklch(20.8% 0.040 265.8);
-    --text-link: oklch(62.3% 0.188 259.8);
-    --text-link-hover: oklch(71.4% 0.143 254.6);
 
     /* Border tokens */
-    --border-default: oklch(44.6% 0.037 257.3);
-    --border-subtle: oklch(44.6% 0.037 257.3 / 0.5);
-    --border-strong: oklch(55.4% 0.041 257.4);
     --border-emphasis: oklch(71.1% 0.035 256.8);
 
     /* Chart - Primary palette */
@@ -1389,21 +1461,8 @@
     --chart-yellow-bg: oklch(79.5% 0.162 86.0 / 0.2);
 
     /* Chart grid and misc */
-    --chart-grid: oklch(71.1% 0.035 256.8 / 0.1);
 
     /* Code Syntax Highlighting */
-    --code-bg: oklch(17.6% 0.014 258.4);
-    --code-text: oklch(85.7% 0.014 248.0);
-    --code-keyword: oklch(73.4% 0.163 25.8);
-    --code-string: oklch(85.6% 0.077 244.1);
-    --code-number: oklch(78.6% 0.115 246.7);
-    --code-comment: oklch(66.2% 0.018 250.9);
-    --code-function: oklch(80.1% 0.128 305.9);
-    --code-variable: oklch(79.9% 0.141 60.1);
-    --code-operator: oklch(73.4% 0.163 25.8);
-    --code-class: oklch(84.2% 0.164 145.8);
-    --code-tag: oklch(84.2% 0.164 145.8);
-    --code-attribute: oklch(78.6% 0.115 246.7);
 
     /* Colored shadows */
     --shadow-primary: 0 4px 14px 0 oklch(58.5% 0.204 277.1 / 0.3);
@@ -1432,8 +1491,5 @@
     --bg-tertiary-transparent: oklch(37.2% 0.039 257.3 / 0.7);
 
     /* Canvas — agent draft cell ownership tokens */
-    --color-agent-draft-border: oklch(62.3% 0.188 259.8);
-    --color-agent-draft-bg: oklch(97.0% 0.014 254.6);
-    --color-user-edit-cursor: oklch(59.6% 0.127 163.2);
   }
 }

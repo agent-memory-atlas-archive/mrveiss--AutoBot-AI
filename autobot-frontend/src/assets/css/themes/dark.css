@@ -11,8 +11,7 @@
  * Activated via [data-theme="dark"] on document root.
  */
 
-[data-theme="dark"],
-:root {
+[data-theme="dark"] {
   /* ============================================
    * BACKGROUND COLORS - Dark Theme
    * ============================================ */
@@ -206,5 +205,11 @@
     --scrollbar-track: #1e293b;
     --scrollbar-thumb: #475569;
     --scrollbar-thumb-hover: #64748b;
+
+    /* Border aliases: not derived from --border-default under OS-dark (kept from
+       the retired styles/theme.css so rendering is unchanged, #14785). */
+    --border-color: #334155;
+    --border-color-light: #475569;
+    --border-color-dark: #1e293b;
   }
 }

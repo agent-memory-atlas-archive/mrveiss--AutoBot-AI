@@ -11,6 +11,18 @@
  * 1. Design tokens (base variables)
  * 2. Theme files (variable overrides)
  * 3. Utility classes
+ *
+ * Token precedence (#14785), lowest to highest; verified by resolving every
+ * custom property under every theme/accent/variant/media combination:
+ *   1. tailwind.css @theme          aliases only: var(--x) onto the tokens below
+ *   2. vue-notus.css :root          legacy palette primitives (--red-500, ...)
+ *   3. css/design-tokens.css :root  the ONE base declaration of every token
+ *      (plus its @supports oklch restatement of the same token)
+ *   4. css/themes/*.css, preferences.css   overrides behind [data-*] selectors
+ *      or prefers-color-scheme; same specificity as :root, later file wins
+ *   5. aui-theme.css                AUI-scoped tokens
+ * A token declared as a base value in two files is a violation, enforced by
+ * scripts/canonical/rules/ds_duplicate_base_declaration.mjs.
  */
 
 /* Design tokens - SSOT for all design values */
@@ -25,6 +37,9 @@
 
 /* Ember theme variant - Warm palette (Issue #9274 / MVA-3096) */
 @import './themes/ember.css';
+
+/* User-preference overrides: font size, layout density (#14785) */
+@import './themes/preferences.css';
 
 /* Global component patterns — shared UI classes for all views (Issue #901) */
 @import './components.css';

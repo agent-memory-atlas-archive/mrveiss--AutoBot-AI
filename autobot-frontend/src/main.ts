@@ -20,8 +20,7 @@ import '@fontsource/inter/latin-500.css'
 import '@fontsource/inter/latin-600.css'
 import '@fontsource/inter/latin-700.css'
 
-// Import legacy theme system (Issue #548) - loaded BEFORE design system so tokens win
-import './assets/styles/theme.css'
+// Legacy view styles - loaded BEFORE the design system so its tokens win (theme.css retired into design-tokens.css, #14785)
 import './assets/styles/view.css'
 
 // Import CSS Design System (Issue #704/#901) - SSOT - must come AFTER legacy to override

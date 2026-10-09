@@ -1,0 +1,48 @@
+/* Copyright 2025-2026 mrveiss
+   SPDX-License-Identifier: Apache-2.0 */
+/**
+ * AutoBot - AI-Powered Automation Platform
+ * Author: mrveiss
+ *
+ * preferences.css - User-preference overrides (#14785)
+ *
+ * Attribute-keyed overrides only; every base value lives in design-tokens.css.
+ * Replaces the override half of the retired styles/theme.css.
+ *
+ * [data-font-size]       -- the type scale, set by usePreferences
+ * [data-layout-density]  -- content padding. The --spacing-xs..2xl overrides
+ *   that theme.css also carried never applied (design-tokens.css, loaded
+ *   later at the same specificity, always won), so they are not carried over;
+ *   rendering is unchanged. Making density scale those tokens is a visible
+ *   change and is tracked separately.
+ */
+
+[data-font-size="small"] {
+  --font-size-xs: 0.6875rem;   /* 11px */
+  --font-size-sm: 0.8125rem;   /* 13px */
+  --font-size-base: 0.9375rem; /* 15px */
+  --font-size-lg: 1.0625rem;   /* 17px */
+  --font-size-xl: 1.1875rem;   /* 19px */
+  --font-size-2xl: 1.375rem;   /* 22px */
+  --font-size-3xl: 1.75rem;    /* 28px */
+}
+
+[data-font-size="large"] {
+  --font-size-xs: 0.8125rem;   /* 13px */
+  --font-size-sm: 0.9375rem;   /* 15px */
+  --font-size-base: 1.0625rem; /* 17px */
+  --font-size-lg: 1.1875rem;   /* 19px */
+  --font-size-xl: 1.3125rem;   /* 21px */
+  --font-size-2xl: 1.625rem;   /* 26px */
+  --font-size-3xl: 2rem;       /* 32px */
+}
+
+[data-layout-density="compact"] {
+  --content-padding-x: 0.75rem;
+  --content-padding-y: 1rem;
+}
+
+[data-layout-density="spacious"] {
+  --content-padding-x: 1.5rem;
+  --content-padding-y: 2rem;
+}

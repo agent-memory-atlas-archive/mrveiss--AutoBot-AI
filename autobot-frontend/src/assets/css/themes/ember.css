@@ -23,7 +23,6 @@
   --orange-200: #f1bb83;
   --orange-300: #e99e55;
   --orange-400: #e2842e;
-  --orange-500: #d6731f;
   --orange-600: #c4651a;
   --orange-700: #a35214;
   --orange-800: #824010;
@@ -70,7 +69,8 @@
 
   /* Functional */
   --green-500:#2f8a5f; --green-300:#5fb78f; --green-bg:#e3f1e9; --green-bg-dk:#12281e;
-  --red-500:#cb3326;   --red-300:#ff6f5e;   --red-bg:#fae5e1;   --red-bg-dk:#311410;
+  /* --red-500 and --orange-500 are declared once, in vue-notus.css (#14785). */
+  --red-300:#ff6f5e;   --red-bg:#fae5e1;   --red-bg-dk:#311410;
 }
 
 /* ----------------------------------------------------------------------------
