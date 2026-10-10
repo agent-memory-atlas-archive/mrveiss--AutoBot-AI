@@ -5,11 +5,12 @@
 """
 Equivalence of the two meta-device eviction paths on a real torch module.
 
-Issue #13404: ``meta_eviction.evict_layer_to_meta`` (``layer.to("meta")``) and
-``layer_inference._move_to_meta`` (re-register every alias) must leave a layer in
-the same state: same tensors on meta, same memory released (including for tied
-weights), and a reload that restores identical weights. This is the evidence the
-issue asked for before ``_move_to_meta`` is routed through the canonical path.
+Issue #13404: ``LayerInferenceEngine.evict_layer`` now delegates to
+``meta_eviction.evict_layer_to_meta`` (``layer.to("meta")``). The removed
+hand-rolled ``_move_to_meta`` (re-register every alias) is kept below as a
+reference oracle: the canonical path must leave a layer in the same state, with
+the same memory released (including tied weights) and a reload that restores
+identical weights.
 """
 
 import gc
@@ -22,7 +23,7 @@ import torch
 _TORCH_IS_STUB = not isinstance(torch, types.ModuleType)
 pytestmark = pytest.mark.skipif(_TORCH_IS_STUB, reason="requires real PyTorch")
 
-from llm_shared.optimization.layer_inference import _move_to_meta  # noqa: E402
+from llm_shared.optimization.layer_inference import LayerInferenceConfig, LayerInferenceEngine  # noqa: E402
 from llm_shared.optimization.meta_eviction import evict_layer_to_meta  # noqa: E402
 
 
@@ -43,10 +44,34 @@ def _canonical(module):
 
 
 def _hand_rolled(module):
-    _move_to_meta(torch, module)
+    """Reference copy of the removed ``_move_to_meta`` (oracle only)."""
+    meta = torch.device("meta")
+    for name, p in list(module.named_parameters(remove_duplicate=False)):
+        parts = name.split(".")
+        owner = module
+        for part in parts[:-1]:
+            owner = getattr(owner, part)
+        owner.register_parameter(
+            parts[-1],
+            torch.nn.Parameter(torch.empty(p.shape, dtype=p.dtype, device=meta), requires_grad=p.requires_grad),
+        )
+    for name, b in list(module.named_buffers()):
+        parts = name.split(".")
+        owner = module
+        for part in parts[:-1]:
+            owner = getattr(owner, part)
+        owner.register_buffer(parts[-1], torch.empty(b.shape, dtype=b.dtype, device=meta))
 
 
-PATHS = [pytest.param(_canonical, id="to_meta"), pytest.param(_hand_rolled, id="move_to_meta")]
+def _engine(module):
+    LayerInferenceEngine(LayerInferenceConfig(model_name="m")).evict_layer(module)
+
+
+PATHS = [
+    pytest.param(_canonical, id="to_meta"),
+    pytest.param(_hand_rolled, id="move_to_meta"),
+    pytest.param(_engine, id="engine_evict_layer"),
+]
 
 
 def _state(module):
@@ -63,9 +88,12 @@ def test_both_paths_leave_identical_meta_state():
     torch.manual_seed(0)
     a, b = _Block(), _Block()
     b.load_state_dict(a.state_dict())
+    c = _Block()
+    c.load_state_dict(a.state_dict())
     _canonical(a)
     _hand_rolled(b)
-    assert _state(a) == _state(b)
+    _engine(c)
+    assert _state(a) == _state(b) == _state(c)
     assert all(v[3] == "meta" for v in _state(a)["params"].values())
     assert all(v[2] == "meta" for v in _state(a)["buffers"].values())
     assert set(_state(a)["params"]) == {"up.weight", "up.bias", "down.weight", "down.bias"}
