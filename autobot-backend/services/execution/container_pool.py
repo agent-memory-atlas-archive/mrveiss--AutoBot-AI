@@ -84,6 +84,9 @@ class WarmContainerPool:
             return_exceptions=True,
         )
         for result in results:
+            if isinstance(result, ValueError):
+                self._running = False
+                raise result  # a refused run kwarg is configuration, never "pool is empty"
             if isinstance(result, Exception):
                 logger.warning("Failed to pre-warm container for %s: %s", self._image, result)
             elif result is not None:
@@ -224,6 +227,9 @@ class WarmContainerPool:
         Returns:
             Running container, or ``None`` on failure.
         """
+        # Outside the try: a refused kwarg (ValueError) is a configuration error and must
+        # propagate, not read as an empty pool.
+        run_kwargs = self._run_kwargs()
         try:
             container = await asyncio.to_thread(
                 self._client.containers.run,
@@ -231,7 +237,7 @@ class WarmContainerPool:
                 ["sleep", "infinity"],
                 detach=True,
                 remove=False,
-                **self._run_kwargs(),
+                **run_kwargs,
             )
             logger.debug("Created warm container %s for %s", container.short_id, self._image)
             return container

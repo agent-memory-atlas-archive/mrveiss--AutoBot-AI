@@ -137,12 +137,13 @@ def test_a_nameless_opt_in_fails_before_any_container_is_started() -> None:
 
 
 @pytest.mark.asyncio
-async def test_warm_pool_refuses_a_privileged_caller_kwarg_and_starts_nothing() -> None:
+async def test_warm_pool_refuses_a_privileged_caller_kwarg_and_the_error_propagates() -> None:
     client = _client()
     pool = WarmContainerPool(docker_client=client, image="i", pool_size=1, container_kwargs={"privileged": True})
     with pytest.raises(ValueError, match="not allowed"):
         pool._run_kwargs()
-    assert await pool._create_warm_container() is None
+    with pytest.raises(ValueError, match="not allowed"):
+        await pool._create_warm_container()
     client.containers.run.assert_not_called()
 
 
@@ -180,3 +181,12 @@ async def test_cold_start_cpu_limit_is_nano_cpus_not_cpus() -> None:
     await _backend(client)._execute_cold(task, "i")
     kwargs = client.containers.run.call_args.kwargs
     assert kwargs["nano_cpus"] == 500_000_000 and "cpus" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_warm_pool_start_raises_on_a_refused_kwarg_instead_of_warming_nothing() -> None:
+    client = _client()
+    pool = WarmContainerPool(docker_client=client, image="i", pool_size=2, container_kwargs={"cap_add": ["SYS_ADMIN"]})
+    with pytest.raises(ValueError, match="not allowed"):
+        await pool.start()
+    client.containers.run.assert_not_called()
