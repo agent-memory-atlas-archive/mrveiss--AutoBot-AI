@@ -6,6 +6,11 @@
 """
 AutoBot Performance Monitoring Startup Script
 Comprehensive performance monitoring system initialization and management.
+
+One launcher for both monitoring backends (#17906). ``--backend performance`` (the default) drives
+``utils.performance_monitor``; ``--backend hardware`` drives ``utils.hardware_metrics`` and keeps the
+hardware launcher's log file and benchmark location. ``start_hardware_monitoring.py`` is a thin
+entry point that selects the hardware backend and runs this module.
 """
 
 import argparse
@@ -14,9 +19,12 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Awaitable, Callable, Optional
 
 from autobot_shared.async_compat import fire_and_forget
 
@@ -25,8 +33,8 @@ from autobot_shared.async_compat import fire_and_forget
 # `Path(__file__).parent.parent.parent` landed on autobot-infrastructure/shared/,
 # which has neither a `constants` nor a `utils` package, so every import below
 # raised at module import time and this script could not start at all (#15643).
-# Same fix as the sibling start_hardware_monitoring.py got in #14129; this twin
-# was never carried along.
+# The same fix start_hardware_monitoring.py got in #14129; one launcher now means
+# it is fixed once (#17906).
 backend_root = Path(__file__).resolve().parents[4] / "autobot-backend"
 sys.path.insert(0, str(backend_root))
 
@@ -47,29 +55,106 @@ from utils.gpu_acceleration_optimizer import (
     optimize_gpu_for_multimodal,
 )
 
-# Import performance monitoring components
-from utils.performance_monitor import (
-    add_alert_callback,
-    collect_metrics,
-    get_performance_dashboard,
-    performance_monitor,
-    start_monitoring,
-    stop_monitoring,
-)
+BACKEND_PERFORMANCE = "performance"
+BACKEND_HARDWARE = "hardware"
+BACKENDS = (BACKEND_PERFORMANCE, BACKEND_HARDWARE)
 
-# Configure logging to proper directory
-logs_dir = project_root / "logs" / "monitoring"
-logs_dir.mkdir(parents=True, exist_ok=True)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(logs_dir / "monitoring.log"),
-    ],
-)
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MonitoringBackend:
+    """The monitor a launcher drives, behind one async surface.
+
+    The two backends differ in what they call, not in what the launcher does: the hardware
+    functions are partly synchronous, so they are wrapped here and the manager awaits one shape.
+    """
+
+    name: str
+    monitor: Any
+    start: Callable[[], Awaitable[Any]]
+    stop: Callable[[], Awaitable[Any]]
+    collect: Callable[[], Awaitable[dict]]
+    dashboard: Callable[[], Awaitable[dict]]
+    add_alert_callback: Callable[[Callable], Awaitable[Any]]
+    log_file: Path
+    report_dir: Path
+    report_prefix: str
+    task_prefix: str
+
+
+def _performance_backend() -> MonitoringBackend:
+    from utils.performance_monitor import (
+        add_alert_callback,
+        collect_metrics,
+        get_performance_dashboard,
+        performance_monitor,
+        start_monitoring,
+        stop_monitoring,
+    )
+
+    return MonitoringBackend(
+        name=BACKEND_PERFORMANCE,
+        monitor=performance_monitor,
+        start=start_monitoring,
+        stop=stop_monitoring,
+        collect=collect_metrics,
+        dashboard=get_performance_dashboard,
+        add_alert_callback=add_alert_callback,
+        log_file=project_root / "logs" / "monitoring" / "monitoring.log",
+        report_dir=project_root / "reports" / "performance",
+        report_prefix="performance_benchmark",
+        task_prefix="monitor",
+    )
+
+
+def _hardware_backend() -> MonitoringBackend:
+    from utils import hardware_metrics as hw
+
+    async def dashboard() -> dict:
+        return hw.get_phase9_performance_dashboard()
+
+    async def add_alert_callback(callback: Callable) -> None:
+        hw.add_phase9_alert_callback(callback)
+
+    # The hardware launcher has always written to the system temp dir, not the repository's
+    # logs/ and reports/ trees; kept so existing readers of those files still find them.
+    tmp = Path(tempfile.gettempdir())
+    return MonitoringBackend(
+        name=BACKEND_HARDWARE,
+        monitor=hw.hardware_monitor,
+        start=hw.start_hardware_monitoring,
+        stop=hw.stop_hardware_monitoring,
+        collect=hw.collect_phase9_metrics,
+        dashboard=dashboard,
+        add_alert_callback=add_alert_callback,
+        log_file=tmp / "hardware_monitoring.log",
+        report_dir=tmp,
+        report_prefix="hardware_benchmark",
+        task_prefix="hw-monitor",
+    )
+
+
+_BACKEND_FACTORIES = {BACKEND_PERFORMANCE: _performance_backend, BACKEND_HARDWARE: _hardware_backend}
+
+
+def load_backend(name: str) -> MonitoringBackend:
+    """Resolve *name* to its backend, importing only that backend's modules."""
+    try:
+        factory = _BACKEND_FACTORIES[name]
+    except KeyError:
+        raise ValueError(f"unknown monitoring backend {name!r}; expected one of {BACKENDS}") from None
+    return factory()
+
+
+def configure_logging(backend: MonitoringBackend) -> None:
+    """Send logs to the console and to the backend's log file."""
+    backend.log_file.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(), logging.FileHandler(backend.log_file)],
+    )
 
 
 class PerformanceMonitoringManager:
@@ -78,8 +163,9 @@ class PerformanceMonitoringManager:
     Coordinates GPU optimization, NPU acceleration, and system monitoring.
     """
 
-    def __init__(self):
+    def __init__(self, backend: Optional[MonitoringBackend] = None):
         """Initialize performance monitoring manager with default configuration."""
+        self.backend = backend or load_backend(BACKEND_PERFORMANCE)
         self.monitoring_active = False
         self.optimization_active = False
         self.alerts_enabled = True
@@ -110,16 +196,16 @@ class PerformanceMonitoringManager:
             # Check hardware availability
             gpu_capabilities = get_gpu_capabilities()
             logger.info("GPU Available: %s", gpu_capabilities["gpu_available"])
-            logger.info("NPU Available: %s", performance_monitor.npu_available)
+            logger.info("NPU Available: %s", self.backend.monitor.npu_available)
 
             # Setup alert callbacks
             if self.alerts_enabled:
-                await add_alert_callback(self._handle_performance_alert)
+                await self.backend.add_alert_callback(self._handle_performance_alert)
                 logger.info("Performance alert callbacks configured")
 
             # Initialize baseline metrics
             logger.info("Collecting baseline performance metrics...")
-            baseline_metrics = await collect_metrics()
+            baseline_metrics = await self.backend.collect()
             if baseline_metrics.get("collection_successful", False):
                 logger.info("Baseline metrics collected successfully")
             else:
@@ -155,15 +241,17 @@ class PerformanceMonitoringManager:
             logger.info("Starting comprehensive performance monitoring...")
 
             # Start core monitoring
-            await start_monitoring()
+            await self.backend.start()
+
+            prefix = self.backend.task_prefix
 
             # Start periodic optimization if enabled
             if self.config["gpu_optimization_enabled"]:
-                fire_and_forget(self._periodic_optimization_loop(), name="monitor-optimization-loop")
+                fire_and_forget(self._periodic_optimization_loop(), name=f"{prefix}-optimization-loop")
 
             # Start monitoring dashboard updates
             if self.config["realtime_dashboard_enabled"]:
-                fire_and_forget(self._dashboard_update_loop(), name="monitor-dashboard-loop")
+                fire_and_forget(self._dashboard_update_loop(), name=f"{prefix}-dashboard-loop")
 
             self.monitoring_active = True
             self.start_time = time.time()
@@ -185,7 +273,7 @@ class PerformanceMonitoringManager:
             logger.info("Stopping performance monitoring...")
 
             # Stop core monitoring
-            await stop_monitoring()
+            await self.backend.stop()
 
             self.monitoring_active = False
 
@@ -252,7 +340,7 @@ class PerformanceMonitoringManager:
                     break
 
                 # Collect current metrics
-                dashboard_data = await get_performance_dashboard()
+                dashboard_data = await self.backend.dashboard()
 
                 if dashboard_data.get("monitoring_active", False):
                     self.metrics_collected += 1
@@ -367,7 +455,7 @@ class PerformanceMonitoringManager:
 
             # Current performance metrics
             logger.info("Collecting performance metrics...")
-            results["performance_metrics"] = await collect_metrics()
+            results["performance_metrics"] = await self.backend.collect()
 
             # GPU optimization test
             if self.config["gpu_optimization_enabled"]:
@@ -375,10 +463,10 @@ class PerformanceMonitoringManager:
                 results["optimization_results"] = await optimize_gpu_for_multimodal()
 
             # Save results to proper directory
-            reports_dir = project_root / "reports" / "performance"
+            reports_dir = self.backend.report_dir
             reports_dir.mkdir(parents=True, exist_ok=True)
 
-            benchmark_file = reports_dir / f"performance_benchmark_{int(time.time())}.json"
+            benchmark_file = reports_dir / f"{self.backend.report_prefix}_{int(time.time())}.json"
             with open(benchmark_file, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, default=str)
 
@@ -403,7 +491,7 @@ class PerformanceMonitoringManager:
             "configuration": self.config,
             "hardware_status": {
                 "gpu_available": gpu_optimizer.gpu_available,
-                "npu_available": performance_monitor.npu_available,
+                "npu_available": self.backend.monitor.npu_available,
             },
         }
 
@@ -446,7 +534,7 @@ async def _handle_test_command(manager: PerformanceMonitoringManager) -> None:
     logger.info("Running quick test of monitoring components...")
     await manager.initialize()
 
-    metrics = await collect_metrics()
+    metrics = await manager.backend.collect()
     logger.info(
         "Metrics collection test: %s",
         "✓" if metrics.get("collection_successful") else "✗",
@@ -464,9 +552,15 @@ async def _handle_test_command(manager: PerformanceMonitoringManager) -> None:
     logger.info("Component tests completed")
 
 
-async def main():
+async def main(default_backend: str = BACKEND_PERFORMANCE):
     """Main function for performance monitoring management (Issue #315: refactored)."""
     parser = argparse.ArgumentParser(description="AutoBot Performance Monitoring")
+    parser.add_argument(
+        "--backend",
+        choices=BACKENDS,
+        default=default_backend,
+        help="Monitor to drive: performance (default) or hardware (GPU/NPU metrics)",
+    )
     parser.add_argument(
         "command",
         choices=["start", "stop", "status", "benchmark", "test"],
@@ -481,7 +575,9 @@ async def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    manager = PerformanceMonitoringManager()
+    backend = load_backend(args.backend)
+    configure_logging(backend)
+    manager = PerformanceMonitoringManager(backend)
 
     # Load configuration if provided
     if args.config and os.path.exists(args.config):
