@@ -35,6 +35,7 @@
  * Author: mrveiss
  */
 
+import { LLM_DEFAULTS } from './llm-defaults';
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -439,8 +440,8 @@ function buildConfig(): AutoBotConfig {
 
   // LLM configuration
   const llm: LLMConfig = {
-    defaultModel: getEnv('VITE_LLM_DEFAULT_MODEL', 'qwen3.5:9b'),  // Quality tier (#2553)
-    embeddingModel: getEnv('VITE_LLM_EMBEDDING_MODEL', 'nomic-embed-text:latest'),
+    defaultModel: getEnv('VITE_LLM_DEFAULT_MODEL', LLM_DEFAULTS.defaultModel),
+    embeddingModel: getEnv('VITE_LLM_EMBEDDING_MODEL', LLM_DEFAULTS.embeddingModel),
     provider: getEnv('VITE_LLM_PROVIDER', 'ollama'),
     timeout: getEnvNumber('VITE_LLM_TIMEOUT', 30000),
   };
@@ -718,7 +719,6 @@ export function getBackendUrl(): string {
   // VITE_BACKEND_HOST/VITE_BACKEND_PORT is deliberately ignored here (#12339).
   return '';
 }
-
 
 /**
  * Get the API base path for the autobot backend.
