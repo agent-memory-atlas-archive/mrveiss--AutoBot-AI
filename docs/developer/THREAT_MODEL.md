@@ -44,8 +44,10 @@ not an auth boundary — the caller is logged in — so a missing check reads as
 endpoint.
 
 **Canonical enforcement:** [`autobot-backend/security/session_ownership.py`](../../autobot-backend/security/session_ownership.py)
-— `build_owner_metadata` (:34) the one owner stamper · `validate_session_ownership` (:775)
-the one read-side gate · `validate_ownership` (:613).
+— `build_owner_metadata` (:36) the one owner stamper · `validate_session_ownership` (:752)
+the one read-side gate · `validate_ownership` (:590). There is no second validator: the
+conversation-file routes call the same function with `SessionPosture.STRICT`
+([`security/session_posture.py`](../../autobot-backend/security/session_posture.py)).
 
 **Invariants**
 - Redis keys are `chat:session:{session_id}` — **not** namespaced by user. Key
@@ -53,7 +55,16 @@ the one read-side gate · `validate_ownership` (:613).
 - Owner identity is `metadata.owner` = **username**, never a user id. A diff comparing
   against `user_id` is comparing the wrong field.
 - Redis is a TTL cache; the session file's `metadata.owner` is the record of truth. An absent Redis record means
-  "not cached", never "unowned" — `_owner_when_cache_is_empty` (:539) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
+  "not cached", never "unowned" — `_owner_when_cache_is_empty` (:516) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
+- One validator, two named postures (#14016). `DEFAULT` is the flag-aware chat posture (fast paths,
+  `log_only` rollout, org-admin and shared-session grants, legacy claim of an unowned session).
+  `STRICT` is the conversation-file posture: no flag or fast path, a role is required, a global
+  admin is allowed, everyone else must be the recorded owner, no shared or org grants, and an
+  unowned session is allowed but not claimed. `posture` is hidden from FastAPI, so a client can
+  never choose it. A new private ownership validator beside it is a finding.
+- Any failure to look the owner up denies with 403 under **both** postures, and nothing is
+  claimed (#14033): `SessionOwnerUnreadable` and every other lookup exception alike. "Unknown"
+  is never "unowned"; an `except` that returns `None` from the owner lookup is a fail-open.
 - Undetermined enforcement policy degrades, in
   [`security/enforcement_mode.py`](../../autobot-backend/security/enforcement_mode.py), to
   `DEGRADED_ENFORCEMENT_MODE` (:53) and never to `disabled`: checks still run and violations
