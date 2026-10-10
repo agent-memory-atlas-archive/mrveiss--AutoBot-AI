@@ -246,6 +246,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "conftest.py files are a proper subset of tracked files under the pytest roots; no reference co-moves.",
     ),
+    "root-resolver-depth-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked Python under seven roots, against all tracked Python in the repository.",
+    ),
     "post-commit-seed-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

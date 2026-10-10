@@ -57,6 +57,7 @@ import repo_tests.one_semantic_chunker_14485_test as _semantic_chunker_guard  # 
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_ssh_restart_executor_18186_test as _ssh_restart_guard
+import repo_tests.root_resolver_single_source_18101_test as _root_resolver_guard  # noqa: F401 -- registers its scope
 from repo_tests._paths import repo_root
 from repo_tests._reach import Reach, ReachScopeError, declare
 from repo_tests._reach_scope import relative_paths, scope_complaint
@@ -237,6 +238,15 @@ _DECLARED_SCOPES = {
         "autobot-tts-worker",
         "autobot_shared",
         "repo_tests",
+    ),
+    "root-resolver-depth-scan": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "pipeline-scripts",
+        "repo_tests",
+        "scripts",
+        "tools",
     ),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
