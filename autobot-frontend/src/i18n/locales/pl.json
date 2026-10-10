@@ -1288,7 +1288,8 @@
         "noHardcodedValues": "Nie znaleziono zakodowanych na stałe wartości środowiska. Twoja konfiguracja wygląda na czystą!",
         "noData": "Brak dostępnych danych z analizy środowiska.",
         "modelHint": "Model filtrujący: {model}",
-        "modelLoading": "ładowanie…"
+        "modelLoading": "ładowanie…",
+        "modelServerDefault": "domyślny serwera"
       },
       "ownership": {
         "title": "Analiza własności kodu",

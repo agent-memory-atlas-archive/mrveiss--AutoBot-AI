@@ -66,4 +66,25 @@ describe('useEnvironmentAnalysis AI filter model (#15502)', () => {
     expect(analysisUrl()).toContain('use_llm_filter=true')
     expect(analysisUrl()).not.toContain('llm_model')
   })
+  it('marks the model unavailable when the default-model fetch fails, instead of loading forever', async () => {
+    answer(() => ({ ok: false, status: 500, json: async () => ({}) }))
+    const a = useEnvironmentAnalysis(deps())
+    expect(a.aiFilteringModelUnavailable.value).toBe(false)
+    await vi.waitFor(() => expect(a.aiFilteringModelUnavailable.value).toBe(true))
+    expect(a.aiFilteringModel.value).toBeNull()
+  })
+
+  it('marks the model unavailable when the backend answers with no model', async () => {
+    answer(() => ok({ model: '' }))
+    const a = useEnvironmentAnalysis(deps())
+    await vi.waitFor(() => expect(a.aiFilteringModelUnavailable.value).toBe(true))
+    expect(a.aiFilteringModel.value).toBeNull()
+  })
+
+  it('stays available once the backend names the model', async () => {
+    answer(() => ok({ model: SERVED }))
+    const a = useEnvironmentAnalysis(deps())
+    await vi.waitFor(() => expect(a.aiFilteringModel.value).toBe(SERVED))
+    expect(a.aiFilteringModelUnavailable.value).toBe(false)
+  })
 })

@@ -1298,7 +1298,8 @@
         "noHardcodedValues": "No hardcoded environment values found. Your configuration looks clean!",
         "noData": "No environment analysis data available.",
         "modelHint": "Model: {model}",
-        "modelLoading": "loading…"
+        "modelLoading": "loading…",
+        "modelServerDefault": "server default"
       },
       "ownership": {
         "title": "Code Ownership Analysis",

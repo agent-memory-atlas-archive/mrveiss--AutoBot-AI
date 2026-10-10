@@ -13,10 +13,11 @@
  * AbortController, race protection, and consistent error handling.
  */
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useFetchEndpoint } from '@/composables/api/useFetchEndpoint'
 import { createLogger } from '@/utils/debugUtils'
 import type {
+  AiFilteringModelState,
   UseCodeIntelAnalysisDeps,
   EnvironmentAnalysisResult,
 } from './codeIntelTypes'
@@ -50,6 +51,13 @@ export function useEnvironmentAnalysis(
   const useAiFiltering = ref(false)
   // #15502: the frontend holds no model literal; the backend names the filter model.
   const aiFilteringModel = ref<string | null>(null)
+  // True once the default-model fetch failed or returned none, so the hint
+  // stops saying "loading" and names the server default instead (#15502).
+  const aiFilteringModelUnavailable = ref(false)
+  const aiFilteringModelState = computed<AiFilteringModelState>(() => ({
+    model: aiFilteringModel.value,
+    unavailable: aiFilteringModelUnavailable.value,
+  }))
   const aiFilteringPriority = ref('high')
   const llmFilteringResult = ref<{
     enabled: boolean
@@ -103,7 +111,11 @@ export function useEnvironmentAnalysis(
     onSuccess: (model) => {
       aiFilteringModel.value = model
     },
+    onNoData: () => {
+      aiFilteringModelUnavailable.value = true
+    },
     onError: (_message, err) => {
+      aiFilteringModelUnavailable.value = true
       logger.error('Failed to load the AI filtering default model:', err)
     },
     label: 'Environment analysis default model',
@@ -134,6 +146,8 @@ export function useEnvironmentAnalysis(
     envAnalysisError: endpoint.error,
     useAiFiltering,
     aiFilteringModel,
+    aiFilteringModelUnavailable,
+    aiFilteringModelState,
     aiFilteringPriority,
     llmFilteringResult,
     loadEnvironmentAnalysis,

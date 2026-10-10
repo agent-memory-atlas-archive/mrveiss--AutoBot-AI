@@ -1288,7 +1288,8 @@
         "noHardcodedValues": "Nav atrastas cietkodētas vides vērtības. Jūsu konfigurācija izskatās tīra!",
         "noData": "Nav pieejami vides analīzes dati.",
         "modelHint": "Modelis: {model}",
-        "modelLoading": "notiek ielāde…"
+        "modelLoading": "notiek ielāde…",
+        "modelServerDefault": "servera noklusējums"
       },
       "ownership": {
         "title": "Koda īpašumtiesību analīze",

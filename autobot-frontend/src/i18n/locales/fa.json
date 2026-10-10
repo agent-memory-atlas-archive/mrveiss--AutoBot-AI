@@ -670,7 +670,8 @@
         "noHardcodedValues": "No hardcoded environment values found. Your configuration looks clean!",
         "noData": "No environment analysis data available.",
         "modelHint": "مدل: {model}",
-        "modelLoading": "در حال بارگذاری…"
+        "modelLoading": "در حال بارگذاری…",
+        "modelServerDefault": "پیش‌فرض سرور"
       },
       "ownership": {
         "title": "Code Ownership Analysis",

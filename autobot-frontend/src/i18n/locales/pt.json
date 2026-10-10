@@ -1288,7 +1288,8 @@
         "noHardcodedValues": "Nenhum valor de ambiente codificado encontrado. Sua configuração parece limpa!",
         "noData": "Não há dados de análise ambiental disponíveis.",
         "modelHint": "Modelo: {model}",
-        "modelLoading": "a carregar…"
+        "modelLoading": "a carregar…",
+        "modelServerDefault": "predefinição do servidor"
       },
       "ownership": {
         "title": "Análise de propriedade de código",

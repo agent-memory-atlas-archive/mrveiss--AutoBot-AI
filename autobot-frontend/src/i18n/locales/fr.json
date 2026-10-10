@@ -1288,7 +1288,8 @@
         "noHardcodedValues": "Aucune valeur d'environnement codée en dur trouvée. Votre configuration a l'air propre !",
         "noData": "Aucune donnée d’analyse environnementale disponible.",
         "modelHint": "Modèle : {model}",
-        "modelLoading": "chargement…"
+        "modelLoading": "chargement…",
+        "modelServerDefault": "valeur par défaut du serveur"
       },
       "ownership": {
         "title": "Analyse de la propriété du code",

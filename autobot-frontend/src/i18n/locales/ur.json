@@ -670,7 +670,8 @@
         "noHardcodedValues": "No hardcoded environment values found. Your configuration looks clean!",
         "noData": "No environment analysis data available.",
         "modelHint": "ماڈل: {model}",
-        "modelLoading": "لوڈ ہو رہا ہے…"
+        "modelLoading": "لوڈ ہو رہا ہے…",
+        "modelServerDefault": "سرور کا طے شدہ"
       },
       "ownership": {
         "title": "Code Ownership Analysis",
