@@ -29,6 +29,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
@@ -178,6 +179,7 @@ _DECLARED_SCOPES = {
         "autobot-browser-worker",
         "libs",
     ),
+    "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),

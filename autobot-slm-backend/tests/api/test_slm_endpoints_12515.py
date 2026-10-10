@@ -25,9 +25,8 @@ already-authenticated principal.
 
 Gaps (documented, not force-tested):
 - ``verify_replication_sync`` happy path and ``verify_data`` redis path
-  reach ``replication_service``/SSH subprocess infra that cannot be
-  unit-tested without a live Redis + SSH target; only their 404 / non-redis
-  branches are covered here.
+  reach ``replication_service``/SSH subprocess infra that cannot be unit-tested
+  without a live Redis + SSH target; only their 404 / non-redis branches are covered.
 """
 
 from __future__ import annotations
@@ -129,6 +128,7 @@ def _load_api_module(dotted: str):
     """Import a real ``api.*`` router module under the real-module swap."""
     with _real_modules_swapped():
         sys.modules.pop(dotted, None)
+        sys.modules.pop("services.node_events", None)  # re-bind to the real models (#17856)
         return importlib.import_module(dotted)
 
 
@@ -188,10 +188,10 @@ async def _close_session_and_engine(session, engine) -> None:
 async def db():
     """A fresh real in-memory SQLite AsyncSession per test."""
     with _real_modules_swapped():
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")  # canonical: ignore py-adhoc-db-engine
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    session = async_sessionmaker(engine, expire_on_commit=False)()
+    session = async_sessionmaker(engine, expire_on_commit=False)()  # canonical: ignore py-adhoc-db-engine
     try:
         yield session
     finally:
