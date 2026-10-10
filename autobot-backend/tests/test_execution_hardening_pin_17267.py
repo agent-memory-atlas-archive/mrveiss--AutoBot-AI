@@ -5,8 +5,8 @@
 """Every ``containers.run`` in the execution backends: full kwargs per site (#17267).
 
 Option (b): each site carries the whole shared execution hardening (memory cap with equal
-swap cap, no network, read-only root with a noexec tmpfs, privilege floor). The autospec'd
-collection rejects any kwarg ``containers.run`` does not accept.
+swap cap, no network, read-only root with a noexec tmpfs, privilege floor). The mock
+collection only records the call; ``run`` takes ``**kwargs``, so the pins assert exact dicts.
 """
 
 from __future__ import annotations
