@@ -33,6 +33,7 @@ import repo_tests.credential_field_name_only_17336_test as _credential_field_gua
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
 import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_parse_guard  # noqa: F401 -- registers its scope
+import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_fact_read_authorization_18184_test as _fact_read_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
 from repo_tests._paths import repo_root
@@ -191,6 +192,7 @@ _DECLARED_SCOPES = {
         "autobot-infrastructure/shared/mcp/",
     ),
     "model-revision-pinning-sweep": ("autobot-backend", "autobot_shared", "autobot-slm-backend"),
+    "oauth-bundle-app-secret-scan": ("autobot-backend", "autobot_shared"),
     "one-claim-registry": (
         "autobot-backend",
         "autobot_shared",

@@ -365,18 +365,17 @@ class ConnectorCredentialStore:
         owner_id: str,
         provider: str,
         token_response: dict,
-        client_id: str,
-        client_secret: str,
         token_url: str,
         scopes: list,
     ) -> str:
         """Persist a token set obtained via the OAuth auth-code flow.
 
-        Stores a self-contained credential bundle (access + refresh token,
-        client app creds, token endpoint) so :meth:`get_access_token` can
-        refresh later without re-reading provider config.  Returns the secret id.
+        Stores the user's credential bundle (access + refresh token, provider,
+        token endpoint).  The OAuth *application* credentials are operator-owned
+        and are NOT copied in: :meth:`get_access_token` resolves them from
+        provider config at refresh time (#13630).  Returns the secret id.
         """
-        creds = self._oauth_bundle(token_response, client_id, client_secret, token_url, scopes, provider)
+        creds = self._oauth_bundle(token_response, token_url, scopes, provider)
         name = f"connector:{connector_id}:auth"
         value = json.dumps(creds, ensure_ascii=False)
         result = await asyncio.get_running_loop().run_in_executor(
@@ -617,8 +616,6 @@ class ConnectorCredentialStore:
     def _oauth_bundle(
         cls,
         token_response: dict,
-        client_id: str,
-        client_secret: str,
         token_url: str,
         scopes: list,
         provider: str,
@@ -634,8 +631,6 @@ class ConnectorCredentialStore:
             "access_token_lifetime_seconds": cls._lifetime_seconds(token_response.get("expires_in")),
             "token_type": token_response.get("token_type", "Bearer"),
             "scope": token_response.get("scope", " ".join(scopes)),
-            "client_id": client_id,
-            "client_secret": client_secret,
             "token_url": token_url,
         }
 
@@ -667,39 +662,40 @@ class ConnectorCredentialStore:
     def _resolve_app_credentials(creds: dict) -> tuple[str, str, str]:
         """Return (token_url, client_id, client_secret) for a refresh (#13630).
 
-        Prefers the operator's *current* OAuth app config over the copy embedded in
-        this user's credential bundle. That copy is a snapshot taken when the user
-        connected, so rotating the app secret would otherwise strand every existing
-        connection — refresh keeps presenting the old secret and starts failing,
-        and no code path anywhere rewrites those stored copies.
+        The OAuth app credentials are operator-owned, so they are resolved from
+        provider config at use time; a rotated app secret takes effect on the next
+        refresh with no rewrite of any user's bundle.
 
-        Falls back to the stored copy when the provider is unknown or unconfigured,
-        so this needs no migration and cannot make a working credential worse: a
-        bundle whose provider was since removed from config keeps refreshing
-        exactly as it does today.
+        Bundles written before #13630 still carry a snapshot copy. It is used only
+        when the provider config yields nothing (unknown or unconfigured provider),
+        and that is logged at WARNING -- never with a value -- so no stored
+        connection breaks and the remaining legacy bundles stay discoverable.
+        Raises ValueError when neither source has the credentials.
         """
         stored = (
             creds.get("token_url", ""),
             creds.get("client_id", ""),
             creds.get("client_secret", ""),
         )
-        provider_name = creds.get("provider")
-        if not provider_name:
-            return stored
-        try:
+        provider = None
+        resolved = None
+        if creds.get("provider"):
             from knowledge.connectors import oauth_flow
 
-            provider = oauth_flow.get_provider(provider_name)
-            client_id, client_secret = oauth_flow.resolve_client_credentials(provider)
-        except Exception:
-            # Unknown or unconfigured provider — the stored snapshot is all we have.
-            return stored
-        if (client_id, client_secret) != (stored[1], stored[2]):
-            logger.info(
-                "Refreshing with the operator's current OAuth app credentials; "
-                "the copy stored in this credential is stale (#13630)."
-            )
-        return (getattr(provider, "token_url", "") or stored[0], client_id, client_secret)
+            try:
+                provider = oauth_flow.get_provider(creds["provider"])
+                resolved = oauth_flow.resolve_client_credentials(provider)
+            except (KeyError, ValueError):
+                resolved = None  # unknown or unconfigured: try the legacy copy
+        if resolved is not None:
+            return (getattr(provider, "token_url", "") or stored[0], resolved[0], resolved[1])
+        if not (stored[1] and stored[2]):
+            raise ValueError("OAuth app credentials are not configured for this credential's provider")
+        logger.warning(
+            "OAuth refresh used the app credentials copied into a legacy credential bundle because "
+            "provider config yields none; configure the provider's OAuth app (#13630)."
+        )
+        return stored
 
     @staticmethod
     def _lifetime_seconds(expires_in) -> int | None:
