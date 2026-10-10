@@ -192,6 +192,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Tracked .py under thirteen declared trees; Python elsewhere (hidden dirs, root files) drifts alone.",
     ),
+    "paths-filter-workflow-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow files are a subset of tracked YAML; compose, ansible and filter files grow at "
+        "their own rate, so a share of all YAML would sink with nothing wrong.",
+    ),
     "post-commit-seed-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

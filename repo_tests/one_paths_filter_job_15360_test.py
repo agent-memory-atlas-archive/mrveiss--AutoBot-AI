@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 import yaml
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
@@ -66,6 +67,17 @@ def _workflow_population(root: Path) -> list[str]:
     return [rel for rel in tracked if rel.endswith((".yml", ".yaml"))]
 
 
+REACH = declare(
+    "paths-filter-workflow-sweep",
+    discover=_workflow_population,
+    # Mid-window, from REACH.window(); the arithmetic is on the PR, not here.
+    floor=63,
+    what="tracked workflow files",
+    roots=(_WORKFLOWS,),
+    growth=10,
+)
+
+
 def _dorny_steps(parsed: object) -> int:
     """How many steps of a parsed workflow run dorny/paths-filter."""
     jobs = parsed.get("jobs") if isinstance(parsed, dict) else None
@@ -93,7 +105,7 @@ def offenders(texts: dict[str, str], allowed: dict[str, str] = _ALLOWED) -> list
 @functools.lru_cache(maxsize=1)
 def _texts() -> dict[str, str]:
     root = repo_root()
-    return {Path(rel).name: (root / rel).read_text(encoding="utf-8") for rel in _workflow_population(root)}
+    return {Path(rel).name: (root / rel).read_text(encoding="utf-8") for rel in REACH.examined(root)}
 
 
 _INLINE = (
