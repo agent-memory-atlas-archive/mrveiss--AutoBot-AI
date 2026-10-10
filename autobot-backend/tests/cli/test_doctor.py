@@ -164,3 +164,37 @@ def test_check_redis_schemas_import_error(monkeypatch):
     result = check_redis_schemas()
     assert not result.ok
     assert "Redis unreachable" in result.message
+
+
+def _captured_npu_url(monkeypatch):
+    """Run check_npu_worker_registry with urlopen stubbed; return the URL it probed."""
+    import urllib.request
+
+    from cli.doctor import check_npu_worker_registry
+
+    seen = []
+
+    def _fake_urlopen(url, timeout=None):
+        seen.append(url)
+        raise OSError("stubbed")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    check_npu_worker_registry()
+    return seen[0]
+
+
+def test_npu_doctor_default_port_is_the_ssot_value(monkeypatch):
+    """#18094: the default was a literal 8080 while the worker serves the ssot port."""
+    from autobot_shared.ssot_config import config as ssot_config
+
+    monkeypatch.delenv("NPU_WORKER_PORT", raising=False)
+    monkeypatch.delenv("AUTOBOT_NPU_WORKER_PORT", raising=False)
+
+    assert _captured_npu_url(monkeypatch).endswith(f":{ssot_config.port.npu}/health")
+
+
+def test_npu_doctor_still_honours_legacy_port_env(monkeypatch):
+    monkeypatch.delenv("AUTOBOT_NPU_WORKER_PORT", raising=False)
+    monkeypatch.setenv("NPU_WORKER_PORT", "9123")
+
+    assert _captured_npu_url(monkeypatch).endswith(":9123/health")
