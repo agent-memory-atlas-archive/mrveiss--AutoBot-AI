@@ -68,13 +68,12 @@ _CREATING_METHODS = frozenset({"run", "create"})
 #: Files whose run/create sites build their config elsewhere (a ``**cfg`` the builder produced);
 #: each is separately pinned to call the builder (`_CONSUMERS`, `_POOL_FILE` test).
 #: sandbox: containers.create at :373 and :576; workspace: containers.run at :415 and :429.
-_ALLOWED_CFG_SITES = frozenset(
-    {
-        "autobot-backend/secure_sandbox_executor.py",
-        "autobot-backend/services/docker_task_workspace.py",
-        _POOL_FILE,
-    }
-)
+_ALLOWED_SITE_COUNTS = {
+    "autobot-backend/secure_sandbox_executor.py": 2,
+    "autobot-backend/services/docker_task_workspace.py": 2,
+    _POOL_FILE: 1,
+}
+_ALLOWED_CFG_SITES = frozenset(_ALLOWED_SITE_COUNTS)
 
 
 def _is_containers_run(node: ast.AST) -> bool:
@@ -216,12 +215,15 @@ def test_every_run_and_create_site_in_the_tree_takes_the_builder_or_is_allowlist
     assert not offenders, f"#17267: containers.run/create without the shared hardening builder: {offenders}"
 
 
-def test_the_allowlisted_files_still_have_their_run_or_create_sites() -> None:
+def test_each_allowlisted_file_has_exactly_its_pinned_run_or_create_sites() -> None:
     root = repo_root()
-    for rel in _ALLOWED_CFG_SITES:
-        assert any(
-            _is_run_site(n) for n in ast.walk(ast.parse((root / rel).read_text(encoding="utf-8")))
-        ), f"{rel} has no run/create site; drop it from _ALLOWED_CFG_SITES"
+    for rel, expected in _ALLOWED_SITE_COUNTS.items():
+        tree = ast.parse((root / rel).read_text(encoding="utf-8"))
+        found = sum(1 for n in ast.walk(tree) if _is_run_site(n))
+        assert found == expected, (
+            f"#17267: {rel} has {found} containers.run/create sites, pinned at {expected}; a new site must "
+            "take the builder directly or be reviewed into _ALLOWED_SITE_COUNTS"
+        )
 
 
 def test_the_warm_pool_run_kwargs_come_from_the_full_builder() -> None:
