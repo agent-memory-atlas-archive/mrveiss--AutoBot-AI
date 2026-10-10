@@ -12,6 +12,14 @@ so a change to ``AUTOBOT_EMBEDDING_MODEL`` moves them together.
 from __future__ import annotations
 
 
+class EmbeddingUnavailableError(RuntimeError):
+    """The active embedding model could not produce a vector.
+
+    Raised instead of embedding with a different model: vectors from another model are not
+    comparable with the stored ones (#18185).
+    """
+
+
 def active_embedding_model() -> str:
     """Return the configured embedding model, read at call time (never cached)."""
     from autobot_shared.ssot_config import config

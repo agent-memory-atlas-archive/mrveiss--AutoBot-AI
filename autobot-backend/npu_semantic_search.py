@@ -26,7 +26,7 @@ from ai_hardware_accelerator import (
     accelerated_embedding_generation,
     get_ai_accelerator,
 )
-from autobot_shared.embedding_model import active_embedding_model
+from autobot_shared.embedding_model import EmbeddingUnavailableError, active_embedding_model
 from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_llm_logger
 from autobot_shared.redis_client import get_async_redis_client
@@ -38,6 +38,7 @@ from constants.threshold_constants import TimingConstants
 from knowledge.backends import get_default_client
 from knowledge.embedding_cache import get_embedding_cache
 from knowledge_base import KnowledgeBase
+from services.npu_client import generate_embedding_with_fallback
 
 # Issue #387: GPU-accelerated vector search
 from utils.gpu_vector_search import (
@@ -120,6 +121,7 @@ class SearchMetrics:
     total_search_time_ms: float
     device_used: str
     hardware_utilization: Dict[str, float]
+    error: str | None = None  # set when the search failed; the reason, never secrets
 
 
 @dataclass
@@ -487,22 +489,19 @@ class NPUSemanticSearch:
                 start_time,
                 cache_key,
             )
+        except EmbeddingUnavailableError as e:
+            return [], self._failed_metrics(str(e), start_time)
         except Exception as e:
             return await self._handle_search_error(e, query, similarity_top_k, filters, start_time)
+
+    def _failed_metrics(self, reason: str, start_time: float) -> SearchMetrics:
+        """Metrics of a search that failed with a reason, not an empty result set. #18185."""
+        return SearchMetrics(0, 0, 0, (time.time() - start_time) * 1000, "embedding_unavailable", {}, error=reason)
 
     async def _generate_embedding_with_device(
         self, text: str, enable_npu: bool, force_device: HardwareDevice | None
     ) -> Tuple[np.ndarray, str]:
-        """Generate embedding using specified device configuration. Issue #620.
-
-        Args:
-            text: Text to generate embedding for
-            enable_npu: Whether NPU acceleration is enabled
-            force_device: Specific device to force (overrides auto-selection)
-
-        Returns:
-            Tuple of (embedding array, device name used)
-        """
+        """Generate embedding on the requested device; else the canonical fallback. Issue #620."""
         if force_device:
             embedding = await accelerated_embedding_generation(text, force_device)
             return embedding, force_device.value
@@ -511,27 +510,22 @@ class NPUSemanticSearch:
             embedding = await accelerated_embedding_generation(text)
             return embedding, "auto_selected"
 
-        from utils.semantic_chunker import get_semantic_chunker
+        return await self._generate_fallback_embedding(text, "gpu_fallback")
 
-        chunker = get_semantic_chunker()
-        await chunker.load_embedding_model()
-        embeddings = await chunker.embed_sentences([text])
-        return embeddings[0], "gpu_fallback"
-
-    async def _generate_fallback_embedding(self, text: str) -> Tuple[np.ndarray, str]:
-        """Generate embedding using CPU fallback method. Issue #620.
-
-        Args:
-            text: Text to generate embedding for
-
-        Returns:
-            Tuple of (embedding array, device name)
-        """
-        from utils.semantic_chunker import get_semantic_chunker
-
-        chunker = get_semantic_chunker()
-        embeddings = chunker.embed_sentences_sync([text])
-        return embeddings[0], "cpu_final_fallback"
+    async def _generate_fallback_embedding(
+        self, text: str, label: str = "cpu_final_fallback"
+    ) -> Tuple[np.ndarray, str]:
+        """Embed via the canonical accessor (the model behind the stored vectors) or refuse. #18185."""
+        model = active_embedding_model()
+        try:
+            vector = await generate_embedding_with_fallback(text, model)
+            reason = "no vector returned"
+        except Exception as exc:
+            vector, reason = None, type(exc).__name__
+        if not vector:
+            logger.error("Embedding fallback refused: model=%s reason=%s", model, reason)
+            raise EmbeddingUnavailableError(f"embedding model {model!r} unavailable: {reason}")
+        return np.asarray(vector, dtype=np.float32), label
 
     async def _l2_cache_get(self, text: str) -> "np.ndarray | None":
         """Check Redis L2 embedding cache. Issue #8159."""
@@ -585,6 +579,8 @@ class NPUSemanticSearch:
         self._cache_misses += 1
         try:
             embedding, device_name = await self._generate_embedding_with_device(text, enable_npu, force_device)
+        except EmbeddingUnavailableError:
+            raise  # refused: nothing is cached under the active model's key
         except Exception as e:
             logger.warning("Optimized embedding generation failed: %s, using fallback", e)
             embedding, device_name = await self._generate_fallback_embedding(text)
@@ -596,16 +592,7 @@ class NPUSemanticSearch:
     def _convert_hybrid_results(
         self, hybrid_results: List[Any], hybrid_metrics: Any, device_used: str
     ) -> List[NpuSearchResult]:
-        """Convert hybrid search results to NpuSearchResult format. Issue #620.
-
-        Args:
-            hybrid_results: Results from hybrid vector search
-            hybrid_metrics: Performance metrics from hybrid search
-            device_used: Fallback device identifier
-
-        Returns:
-            List of NpuSearchResult objects
-        """
+        """Convert hybrid search results to NpuSearchResult format. Issue #620."""
         results = []
         for hr in hybrid_results:
             result = NpuSearchResult(
