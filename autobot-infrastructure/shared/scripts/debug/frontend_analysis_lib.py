@@ -19,16 +19,15 @@ from typing import Any, Dict, List, Optional
 
 from playwright.sync_api import Page, sync_playwright
 
+from autobot_shared.status_enums import Severity
+
 logger = logging.getLogger(__name__)
 
 
-class IssueSeverity(Enum):
-    """Severity levels for frontend issues."""
-
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
+# #18098: this was a four-rung fork of the canonical ladder with identical values.
+# Only identity comparisons and the four members are used here -- the enum is never
+# iterated, serialized by member, or rendered by name -- so the alias is wire-neutral.
+IssueSeverity = Severity
 
 
 class IssueType(Enum):
