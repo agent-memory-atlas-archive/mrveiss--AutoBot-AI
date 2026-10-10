@@ -342,6 +342,13 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     "response-model-secret-scan": (ABSOLUTE, "SUBSET_DRIFTS", "Backend Python modules, against all tracked Python."),
     "router-auth-coverage": (ABSOLUTE, "NOT_PATHS", "Routers registered in `core_routers.py`, not files."),
     "slm-frontend-components": (ABSOLUTE, "SUBSET_DRIFTS", "One frontend's components, against all tracked `.vue`."),
+    "severity-enum-fork-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked Python under three roots against all tracked Python: the other roots (frontend "
+        "tooling, SLM, tests, docs scripts) grow independently, so a share of the whole sinks "
+        "with nothing wrong. The guard needs the roots reached, not a share of the repository.",
+    ),
     "slm-frontend-locale-keys": (
         ABSOLUTE,
         "NOT_PATHS",

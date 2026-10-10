@@ -34,12 +34,14 @@ from __future__ import annotations
 import ast
 import functools
 from collections.abc import Iterable
+from pathlib import Path
 from typing import NamedTuple
 
 import pytest
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 #: The five rungs every exact-subset fork carried.
 SEVERITY_SUBSET_PROBE = frozenset({"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"})
@@ -149,13 +151,30 @@ CANONICAL = "autobot_shared/status_enums.py::Severity"
 _CANONICAL_PROBE_VALUES = frozenset({"info", "low", "medium", "high", "critical", "warning", "error"})
 
 
-@functools.lru_cache(maxsize=1)
-def _tracked_python_files() -> tuple[str, ...]:
-    # #15926: `tracked_paths` is the one git enumerator -- it builds the pathspec and
-    # raises on an empty result, so a guard cannot report clean having enumerated
-    # nothing. Three new guards of mine each re-ran `git ls-files` directly, which is
-    # what `one_git_enumeration_15926_test` counts and refuses to let grow.
-    return tuple(tracked_paths(repo_root(), "*.py"))
+def _discover(root: Path) -> list[str]:
+    """Tracked Python under `SCANNED_ROOTS`: the population this guard must reach.
+
+    #15926: `tracked_paths` is the one git enumerator. It raises on an empty result; a
+    reach declaration needs an empty RESULT instead, so the floor can be the one to refuse.
+    """
+    try:
+        every = tracked_paths(root, "*.py")
+    except EmptyEnumeration:
+        return []
+    prefixes = tuple(f"{r}/" for r in SCANNED_ROOTS)
+    return [rel for rel in every if rel.startswith(prefixes)]
+
+
+#: Population 5,068 on 7139a853ce; `REACH.window()` = (4568, 5068, 4818), so the floor is pinned
+#: mid-window at 4,818 with 500 files of growth. Absolute, not relative: see ALLOWANCE_VERDICTS.
+REACH = declare(
+    "severity-enum-fork-scan",
+    discover=_discover,
+    floor=4_818,
+    growth=500,
+    roots=SCANNED_ROOTS,
+    what="tracked Python files scanned for a re-declared severity ladder",
+)
 
 
 #: Every base in the stdlib `enum` module that makes a class an enumeration.
@@ -291,9 +310,7 @@ def _scan() -> _Scan:
     valued: list[tuple[str, str, frozenset[str]]] = []
     unparsable: list[str] = []
     parsed = classes = 0
-    for rel in _tracked_python_files():
-        if not rel.startswith(tuple(f"{r}/" for r in SCANNED_ROOTS)):
-            continue
+    for rel in REACH.examined(root):
         try:
             tree = ast.parse((root / rel).read_text(encoding="utf-8"))
         except (OSError, SyntaxError):
@@ -315,15 +332,15 @@ def _declared_enums() -> tuple[tuple[str, str, frozenset[str]], ...]:
 def test_the_scan_is_not_vacuous() -> None:
     """An empty sweep satisfies every assertion below by looking at nothing.
 
-    The floors bind to the sweep's REACH -- files parsed, class nodes visited -- never
-    to the number of enums found. A detector that stopped recognising declarations
-    would keep a findings-based floor satisfied while covering less and less.
+    The floor binds to the sweep's REACH -- files discovered, then files actually parsed --
+    never to the number of enums found, which a detector that stopped recognising
+    declarations would keep satisfied while covering less and less.
     """
     scan = _scan()
-    assert len(_tracked_python_files()) > 3000, "git ls-files returned almost nothing"
-    assert scan.files_parsed > 1000, f"only {scan.files_parsed} files parsed — the roots are wrong"
-    assert scan.classes_visited > 2000, f"only {scan.classes_visited} class nodes visited"
+    REACH.verify_floor(repo_root())
+    REACH.completed(scan.files_parsed)
     assert not scan.files_unparsable, f"lost reach: {len(scan.files_unparsable)} file(s) failed to parse"
+    assert scan.classes_visited > 0
     assert CANONICAL in {f"{rel}::{name}" for rel, name, _ in scan.declared}
 
 
