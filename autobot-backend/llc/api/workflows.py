@@ -51,7 +51,8 @@ from ..services.company_os.errors import CompanyOsError
 from ..services.company_os.loaders import is_company_os_row
 from ..services.company_os.workflows import CompanyOsWorkflowService
 from ..services.workflow import WorkflowConflictError, WorkflowService
-from .company_os import http_error  # noqa: E402
+from ._common import actor_id
+from .company_os import http_error
 
 router = APIRouter(prefix="/workflows", tags=["llc-workflows"])
 
@@ -67,14 +68,6 @@ _get_company_os = lazy_singleton(CompanyOsWorkflowService)
 
 def _company_os() -> CompanyOsWorkflowService:
     return _get_company_os()
-
-
-def _actor_id(current_user: dict) -> uuid.UUID:
-    """Derive the acting user's id from the authenticated session, never the
-    client-supplied body (mirrors ``llc/api/contacts.py``'s ``_actor_id``,
-    #13969 review M1)."""
-    raw = current_user.get("id") or current_user.get("user_id")
-    return uuid.UUID(str(raw))
 
 
 # ------------------------------------------------------------------ Schemas
@@ -139,7 +132,7 @@ async def create_workflow(
             name=body.name,
             status=body.status,
             definition=body.definition,
-            actor=_actor_id(_current_user),
+            actor=actor_id(_current_user),
         )
     except WorkflowConflictError:
         # The pre-check above is TOCTOU under concurrency (#14271): a
@@ -182,13 +175,13 @@ async def update_workflow_status(
         # one code path, so the admin gate cannot be bypassed through this older route.
         try:
             workflow = await _company_os().update_status(
-                session, company_id, workflow_id, body.status, actor=_actor_id(_current_user)
+                session, company_id, workflow_id, body.status, actor=actor_id(_current_user)
             )
         except (CompanyOsError, NotAuthorisedError) as exc:
             raise http_error(exc) from exc
         await session.commit()
         return WorkflowResponse.model_validate(workflow)
-    workflow = await _svc().update_status(session, company_id, workflow_id, body.status, actor=_actor_id(_current_user))
+    workflow = await _svc().update_status(session, company_id, workflow_id, body.status, actor=actor_id(_current_user))
     if workflow is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
     await session.commit()
@@ -207,12 +200,12 @@ async def delete_workflow(
     existing = await _svc().get(session, company_id, workflow_id)
     if existing is not None and is_company_os_row(existing):
         try:
-            await _company_os().delete(session, company_id, workflow_id, actor=_actor_id(_current_user))
+            await _company_os().delete(session, company_id, workflow_id, actor=actor_id(_current_user))
         except (CompanyOsError, NotAuthorisedError) as exc:
             raise http_error(exc) from exc
         await session.commit()
         return
-    deleted = await _svc().delete(session, company_id, workflow_id, actor=_actor_id(_current_user))
+    deleted = await _svc().delete(session, company_id, workflow_id, actor=actor_id(_current_user))
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
     await session.commit()
