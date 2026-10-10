@@ -163,13 +163,11 @@ import subprocess
 from typing import Any, Dict, List, Union
 import logging
 
+# Issue #18093: the canonical stripper, not a private copy (the copy this replaced
+# double-escaped its pattern and matched the literal text, never the ESC byte).
+from utils.encoding_utils import strip_ansi_codes
+
 logger = get_logger(__name__)
-
-
-def strip_ansi_codes(text: str) -> str:
-    """Remove ANSI escape codes from terminal output."""
-    ansi_escape = re.compile(r'\\x1B(?:[@-Z\\\\-_]|\\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
 
 
 async def execute_shell_command(
