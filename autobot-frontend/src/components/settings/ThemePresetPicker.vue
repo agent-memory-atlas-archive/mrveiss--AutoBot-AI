@@ -103,9 +103,10 @@
 </template>
 
 <script setup lang="ts">
+import { getThemeIcon } from '@/composables/themeIcons'
 import { ref } from 'vue'
 import { useTheme, type Theme, type ThemePreset, type AccentColor } from '@/composables/useTheme'
-import Icon, { type IconName } from '@/components/ui/Icon.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { createLogger } from '@/utils/debugUtils'
 
 const logger = createLogger('ThemePresetPicker')
@@ -167,17 +168,6 @@ function handleSetAccent(colorOption: AccentColor): void {
   logger.debug(`Accent color changed to: ${colorOption}`)
 }
 
-/**
- * Get icon name for theme option
- */
-function getThemeIcon(themeOption: Theme): IconName {
-  const icons: Record<Theme, IconName> = {
-    dark: 'moon',
-    light: 'sun',
-    system: 'desktop',
-  }
-  return icons[themeOption]
-}
 </script>
 
 <style scoped>

@@ -67,6 +67,7 @@
 </template>
 
 <script setup lang="ts">
+import { getThemeIcon } from '@/composables/themeIcons'
 /**
  * ThemeToggle Component
  *
@@ -84,7 +85,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTheme, type Theme } from '@/composables/useTheme'
-import Icon, { type IconName } from '@/components/ui/Icon.vue'
+import Icon from '@/components/ui/Icon.vue'
 
 interface Props {
   mode?: 'dropdown' | 'buttons' | 'toggle'
@@ -116,17 +117,6 @@ function handleThemeChange(): void {
   setTheme(selectedTheme.value)
 }
 
-/**
- * Get icon name for theme option
- */
-function getThemeIcon(themeOption: Theme): IconName {
-  const icons: Record<Theme, IconName> = {
-    dark: 'moon',
-    light: 'sun',
-    system: 'desktop'
-  }
-  return icons[themeOption]
-}
 </script>
 
 <style scoped>

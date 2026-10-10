@@ -150,21 +150,22 @@ export const REFINED_COLOR_TOKENS: readonly string[] = [
 
 /** Refined UI theme-independent size tokens (grid, table, form, tooltip). */
 export const REFINED_SIZE_TOKENS: readonly string[] = [
-  '--bp-sm', '--bp-md', '--bp-lg', '--bp-xl', '--bp-2xl', '--grid-cols', '--grid-gutter', '--
-  page-margin', '--topbar-h', '--subnav-w', '--subnav-rail', '--panel-w', '--content-max', '--
-  reading-max', '--space-section', '--stack', '--widget-s', '--widget-m', '--widget-l', '--
-  widget-full', '--kpi-span', '--tbl-font-size', '--tbl-row-h', '--tbl-cell-px', '--tbl-cell-
-  py', '--tbl-head-h', '--tbl-head-bg', '--tbl-head-fg', '--tbl-head-font', '--tbl-head-case', '
-  --tbl-head-ls', '--tbl-head-border', '--tbl-border', '--tbl-row-hover', '--tbl-row-selected',
-  '--tbl-selected-edge', '--tbl-zebra', '--tbl-zebra-bg', '--tbl-check-col-w', '--tbl-actions-
-  col-w', '--tbl-min-col', '--tbl-cell-max', '--tbl-num', '--tbl-sticky-top', '--field-h-sm', '
-  --field-h-md', '--field-h-lg', '--field-px', '--field-radius', '--field-font-size', '--field-
-  border', '--field-border-hover', '--field-bg', '--field-bg-disabled', '--field-fg', '--field-
-  focus-ring', '--field-focus-offset', '--label-size', '--label-weight', '--label-gap', '--help-
-  size', '--help-fg', '--error-fg', '--error-border', '--error-bw', '--field-gap', '--inline-
-  gap', '--form-section-gap', '--form-label-col', '--form-max', '--action-gap', '--check-gap', '
-  --control-size', '--switch-w', '--switch-h', '--switch-knob', '--tooltip-delay', '--tooltip-
-  hide-delay', '--tooltip-offset', '--tooltip-max'
+  '--bp-sm', '--bp-md', '--bp-lg', '--bp-xl', '--bp-2xl', '--grid-cols', '--grid-gutter',
+  '--page-margin', '--topbar-h', '--subnav-w', '--subnav-rail', '--panel-w', '--content-max',
+  '--reading-max', '--space-section', '--stack', '--widget-s', '--widget-m', '--widget-l',
+  '--widget-full', '--kpi-span', '--tbl-font-size', '--tbl-row-h', '--tbl-cell-px',
+  '--tbl-cell-py', '--tbl-head-h', '--tbl-head-bg', '--tbl-head-fg', '--tbl-head-font',
+  '--tbl-head-case', '--tbl-head-ls', '--tbl-head-border', '--tbl-border', '--tbl-row-hover',
+  '--tbl-row-selected', '--tbl-selected-edge', '--tbl-zebra', '--tbl-zebra-bg',
+  '--tbl-check-col-w', '--tbl-actions-col-w', '--tbl-min-col', '--tbl-cell-max', '--tbl-num',
+  '--tbl-sticky-top', '--field-h-sm', '--field-h-md', '--field-h-lg', '--field-px',
+  '--field-radius', '--field-font-size', '--field-border', '--field-border-hover', '--field-bg',
+  '--field-bg-disabled', '--field-fg', '--field-focus-ring', '--field-focus-offset',
+  '--label-size', '--label-weight', '--label-gap', '--help-size', '--help-fg', '--error-fg',
+  '--error-border', '--error-bw', '--field-gap', '--inline-gap', '--form-section-gap',
+  '--form-label-col', '--form-max', '--action-gap', '--check-gap', '--control-size',
+  '--switch-w', '--switch-h', '--switch-knob', '--tooltip-delay', '--tooltip-hide-delay',
+  '--tooltip-offset', '--tooltip-max',
 ] as const
 
 /** Built-in themes, as the `data-theme` attribute values useTheme.ts applies. */

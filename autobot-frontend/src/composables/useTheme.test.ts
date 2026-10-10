@@ -56,6 +56,32 @@ describe('useTheme', () => {
       expect(document.documentElement.style.colorScheme).toBe('light')
     })
 
+    it.each(['contrast', 'mono'] as const)('should apply the %s theme to document', (name) => {
+      const { setTheme, effectiveTheme, isDark, isLight } = useTheme()
+      setTheme(name)
+      expect(document.documentElement.getAttribute('data-theme')).toBe(name)
+      // Both are light-based: native controls render light.
+      expect(document.documentElement.style.colorScheme).toBe('light')
+      expect(effectiveTheme.value).toBe(name)
+      expect(isDark.value).toBe(false)
+      expect(isLight.value).toBe(false)
+    })
+
+    it.each(['contrast', 'mono'] as const)('should restore the saved %s theme on init', async (name) => {
+      localStorage.setItem('autobot-theme', name)
+      vi.resetModules()
+      const module = await import('./useTheme')
+      module.initializeTheme()
+      expect(document.documentElement.getAttribute('data-theme')).toBe(name)
+    })
+
+    it('should ignore an unknown saved theme', async () => {
+      localStorage.setItem('autobot-theme', 'sepia')
+      vi.resetModules()
+      const module = await import('./useTheme')
+      expect(module.useTheme().theme.value).toBe('dark')
+    })
+
     it('should persist theme to localStorage', () => {
       const { setTheme } = useTheme()
       setTheme('light')
@@ -127,7 +153,7 @@ describe('useTheme', () => {
   describe('available options', () => {
     it('should provide available theme options', () => {
       const { availableThemes } = useTheme()
-      expect(availableThemes).toEqual(['dark', 'light', 'system'])
+      expect(availableThemes).toEqual(['dark', 'light', 'contrast', 'mono', 'system'])
     })
 
     it('should provide available accent options', () => {
@@ -149,6 +175,8 @@ describe('useTheme', () => {
       expect(themeLabels.dark).toBe('Dark')
       expect(themeLabels.light).toBe('Light')
       expect(themeLabels.system).toBe('System')
+      expect(themeLabels.contrast).toBe('High contrast')
+      expect(themeLabels.mono).toBe('Monochrome')
     })
 
     it('should provide accent labels', () => {

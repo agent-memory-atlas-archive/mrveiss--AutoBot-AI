@@ -9,7 +9,7 @@
  * Issue #8988: User-Selectable Theme System - Custom Theme Presets
  *
  * Provides reactive theme switching capabilities with:
- * - Dark/Light/System theme modes
+ * - Dark/Light/High-contrast/Monochrome/System theme modes (#18223)
  * - Named theme presets (Catppuccin, Solarized, High Contrast, etc.)
  * - Custom accent color presets
  * - LocalStorage persistence
@@ -22,9 +22,23 @@
  */
 
 import { ref, computed, onMounted, getCurrentInstance } from 'vue'
+import { THEME_PRESETS, type ThemePreset } from './themePresets'
 
-/** Available theme options */
-export type Theme = 'dark' | 'light' | 'system'
+/** The built-in themes a `data-theme` attribute can carry (#18223). `contrast`
+ * (high contrast) and `mono` (monochrome) are light-based accessibility and
+ * corporate themes; css/themes/{contrast,mono}.css style them. */
+export const EFFECTIVE_THEMES = ['dark', 'light', 'contrast', 'mono'] as const
+export type EffectiveTheme = (typeof EFFECTIVE_THEMES)[number]
+
+/** Available theme options: the built-ins plus `system`, which follows the OS
+ * between `light` and `dark`. */
+export const THEMES = [...EFFECTIVE_THEMES, 'system'] as const
+export type Theme = (typeof THEMES)[number]
+
+/** The `color-scheme` a theme renders with (native controls, scrollbars). */
+export function colorSchemeFor(theme: EffectiveTheme): 'dark' | 'light' {
+  return theme === 'dark' ? 'dark' : 'light'
+}
 
 /** Available accent color options */
 export type AccentColor = 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'teal' | 'indigo' | 'red'
@@ -34,114 +48,8 @@ export type AccentColor = 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'tea
  * to be added in two places or picker and validator would disagree. */
 export const ACCENT_COLORS: readonly AccentColor[] = ['blue', 'green', 'purple', 'orange', 'pink', 'teal', 'indigo', 'red'] as const
 
-/** Theme preset options - named combinations of theme + accent + optional density */
-export type ThemePreset =
-  | 'auto' // System preference
-  | 'catppuccin-mocha' // Dark + Purple
-  | 'catppuccin-latte' // Light + Purple
-  | 'solarized-dark' // Dark + Teal
-  | 'solarized-light' // Light + Teal
-  | 'high-contrast-dark' // Dark + Blue (high contrast)
-  | 'high-contrast-light' // Light + Blue (high contrast)
-  | 'brand-dark' // Dark + AutoBot brand color (teal)
-  | 'brand-light' // Light + AutoBot brand color (teal)
-  | 'midnight' // Dark + Indigo
-  | 'sunset' // Light + Orange
-  | 'forest' // Dark + Green
-  | 'rose' // Light + Pink
-
-/** Configuration for each theme preset */
-export interface ThemePresetConfig {
-  name: string
-  description: string
-  theme: Theme
-  accentColor: AccentColor
-  highContrast?: boolean
-}
-
-/** Preset configurations */
-export const THEME_PRESETS: Record<ThemePreset, ThemePresetConfig> = {
-  auto: {
-    name: 'Auto',
-    description: 'Follows system preference',
-    theme: 'system',
-    accentColor: 'blue',
-  },
-  'catppuccin-mocha': {
-    name: 'Catppuccin Mocha',
-    description: 'Warm dark theme with purple accents',
-    theme: 'dark',
-    accentColor: 'purple',
-  },
-  'catppuccin-latte': {
-    name: 'Catppuccin Latte',
-    description: 'Soft light theme with purple accents',
-    theme: 'light',
-    accentColor: 'purple',
-  },
-  'solarized-dark': {
-    name: 'Solarized Dark',
-    description: 'Classic dark theme with cyan accents',
-    theme: 'dark',
-    accentColor: 'teal',
-  },
-  'solarized-light': {
-    name: 'Solarized Light',
-    description: 'Classic light theme with cyan accents',
-    theme: 'light',
-    accentColor: 'teal',
-  },
-  'high-contrast-dark': {
-    name: 'High Contrast Dark',
-    description: 'Maximum readability dark theme',
-    theme: 'dark',
-    accentColor: 'blue',
-    highContrast: true,
-  },
-  'high-contrast-light': {
-    name: 'High Contrast Light',
-    description: 'Maximum readability light theme',
-    theme: 'light',
-    accentColor: 'blue',
-    highContrast: true,
-  },
-  'brand-dark': {
-    name: 'AutoBot Dark',
-    description: 'Official AutoBot dark theme',
-    theme: 'dark',
-    accentColor: 'teal',
-  },
-  'brand-light': {
-    name: 'AutoBot Light',
-    description: 'Official AutoBot light theme',
-    theme: 'light',
-    accentColor: 'teal',
-  },
-  midnight: {
-    name: 'Midnight',
-    description: 'Deep blue night theme',
-    theme: 'dark',
-    accentColor: 'indigo',
-  },
-  sunset: {
-    name: 'Sunset',
-    description: 'Warm orange light theme',
-    theme: 'light',
-    accentColor: 'orange',
-  },
-  forest: {
-    name: 'Forest',
-    description: 'Natural green dark theme',
-    theme: 'dark',
-    accentColor: 'green',
-  },
-  rose: {
-    name: 'Rose',
-    description: 'Elegant pink light theme',
-    theme: 'light',
-    accentColor: 'pink',
-  },
-}
+export type { ThemePreset, ThemePresetConfig } from './themePresets'
+export { THEME_PRESETS } from './themePresets'
 
 /** Storage keys for persisting preferences */
 const THEME_STORAGE_KEY = 'autobot-theme'
@@ -164,7 +72,7 @@ let isInitialized = false
 /**
  * Determines the effective theme based on current setting and system preference
  */
-function getEffectiveTheme(theme: Theme): 'dark' | 'light' {
+function getEffectiveTheme(theme: Theme): EffectiveTheme {
   if (theme === 'system') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
@@ -179,7 +87,7 @@ function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute('data-theme', effectiveTheme)
 
   // Also update color-scheme for native elements (scrollbars, form controls)
-  document.documentElement.style.colorScheme = effectiveTheme
+  document.documentElement.style.colorScheme = colorSchemeFor(effectiveTheme)
 }
 
 /**
@@ -228,7 +136,7 @@ function savePreset(preset: ThemePreset): void {
 function loadTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null
-    if (stored && ['dark', 'light', 'system'].includes(stored)) {
+    if (stored && (THEMES as readonly string[]).includes(stored)) {
       return stored
     }
   } catch {
@@ -420,7 +328,8 @@ export function useTheme() {
   })
 
   /**
-   * Computed: Whether the effective theme is light
+   * Computed: Whether the effective theme is the plain light theme
+   * (contrast and mono are light-based but are not this theme)
    */
   const isLight = computed(() => {
     return getEffectiveTheme(currentTheme.value) === 'light'
@@ -436,7 +345,7 @@ export function useTheme() {
   /**
    * Available theme options for UI dropdowns
    */
-  const availableThemes: Theme[] = ['dark', 'light', 'system']
+  const availableThemes: readonly Theme[] = THEMES
 
   /**
    * Available accent color options for UI dropdowns
@@ -468,6 +377,8 @@ export function useTheme() {
   const themeLabels: Record<Theme, string> = {
     dark: 'Dark',
     light: 'Light',
+    contrast: 'High contrast',
+    mono: 'Monochrome',
     system: 'System',
   }
 
