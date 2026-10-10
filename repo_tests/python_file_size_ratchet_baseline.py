@@ -154,7 +154,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/auth_middleware.py": 1088,  # #16457: bearer parsing moved to websocket_subprotocol.py
     "autobot-backend/autobot_memory_graph/property_graph.py": 630,
     "autobot-backend/autobot_memory_graph/relations.py": 641,
-    "autobot-backend/autobot_memory_graph/semantic_search.py": 717,
+    "autobot-backend/autobot_memory_graph/semantic_search.py": 716,
     "autobot-backend/benchmarks/benchmark_belief_state.py": 742,
     "autobot-backend/chat_history/context_overflow.py": 845,
     "autobot-backend/chat_history/session.py": 939,
@@ -287,7 +287,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/monitoring/alertmanager_webhook_test.py": 782,
     "autobot-backend/multimodal_processor/multimodal_integration_test.py": 633,
     "autobot-backend/multimodal_processor/processor.py": 774,
-    "autobot-backend/npu_semantic_search.py": 1647,
+    "autobot-backend/npu_semantic_search.py": 1645,
     # 984 -> 978 (#14039): the single-use _build_slm_ssl_context wrapper was
     # inlined onto autobot_shared.tls.get_internal_tls_context, its only body.
     "autobot-backend/orchestration/dag_executor.py": 978,
