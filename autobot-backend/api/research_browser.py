@@ -347,12 +347,12 @@ async def _get_docker_browser_info(session) -> dict:
     try:
         from autobot_shared.ssot_config import config as ssot_config
 
-        PLAYWRIGHT_VNC_URL = ssot_config.browser_vnc_url
+        vnc_url = ssot_config.browser_vnc_url
 
         return {
             "available": True,
-            "vnc_url": PLAYWRIGHT_VNC_URL.replace("vnc.html", ""),
-            "direct_url": PLAYWRIGHT_VNC_URL,
+            "vnc_url": vnc_url.replace("vnc.html", ""),
+            "direct_url": vnc_url,
             "session_active": session.status == "active",
             "environment": ("container" if await asyncio.to_thread(os.path.exists, "/.dockerenv") else "host"),
         }
@@ -478,12 +478,12 @@ async def get_chat_browser_session(conversation_id: str):
     try:
         from autobot_shared.ssot_config import config as ssot_config
 
-        PLAYWRIGHT_VNC_URL = ssot_config.browser_vnc_url
+        vnc_url = ssot_config.browser_vnc_url
 
         docker_browser_info = {
             "available": True,
-            "vnc_url": PLAYWRIGHT_VNC_URL.replace("vnc.html", ""),
-            "direct_url": PLAYWRIGHT_VNC_URL,
+            "vnc_url": vnc_url.replace("vnc.html", ""),
+            "direct_url": vnc_url,
             "session_active": session.status == "active",
         }
     except Exception:

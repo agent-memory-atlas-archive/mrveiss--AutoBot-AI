@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 from repo_tests._paths import repo_root
 
+from autobot_shared.network_constants import NetworkConstants
+
 _ROOT = repo_root()
 _DOCKER = _ROOT / "autobot-infrastructure" / "autobot-npu-worker" / "docker"
 _WORKER_FILES = ("npu_inference_server.py", "npu_worker_main.py")
@@ -30,16 +32,23 @@ _NEW_NAMES = (
 )
 
 
-def _host_expression(path: Path):
+def _host_chain(path: Path) -> list[tuple[str, str | None]]:
+    """(env name, default) pairs of the worker's `host = os.getenv(..) or os.getenv(..)`."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "host":
-            return compile(ast.Expression(node.value), str(path), "eval")
+            calls = node.value.values if isinstance(node.value, ast.BoolOp) else [node.value]
+            return [(c.args[0].value, ast.literal_eval(c.args[1]) if len(c.args) > 1 else None) for c in calls]
     raise AssertionError(f"no `host = ...` assignment in {path}")
 
 
-def _bind_host(path: Path) -> str:
-    return eval(_host_expression(path), {"os": os}, {})  # noqa: S307 - our own source; env patched by the caller
+def _bind_host(path: Path) -> str | None:
+    """Resolve the chain against the current environment, first non-empty value wins."""
+    for name, default in _host_chain(path):
+        value = os.environ.get(name, default)
+        if value:
+            return value
+    return None
 
 
 @pytest.mark.parametrize("name", _WORKER_FILES)
@@ -47,7 +56,8 @@ def test_worker_bind_host_precedence(name, monkeypatch):
     path = _DOCKER / name
     monkeypatch.delenv("NPU_WORKER_BIND_HOST", raising=False)
     monkeypatch.delenv("NPU_WORKER_HOST", raising=False)
-    assert _bind_host(path) == "0.0.0.0"  # nosec B104
+    assert [name for name, _ in _host_chain(path)] == ["NPU_WORKER_BIND_HOST", "NPU_WORKER_HOST"]
+    assert _bind_host(path) == NetworkConstants.BIND_ALL_INTERFACES
 
     monkeypatch.setenv("NPU_WORKER_HOST", "legacy-bind")
     assert _bind_host(path) == "legacy-bind"  # legacy deployments keep working

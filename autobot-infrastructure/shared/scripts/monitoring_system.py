@@ -13,13 +13,22 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 
 # Import configuration from centralized source
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# `autobot_shared` lives at the repository root, which is not on the path when this
+# script is run standalone (#18094; same bootstrap as deployment_rollback.py).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+# `constants` is an autobot-backend package (same bootstrap as the other operator scripts, #14129).
+_BACKEND_DIR = _REPO_ROOT / "autobot-backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
 import sqlite3
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict
 
 import psutil

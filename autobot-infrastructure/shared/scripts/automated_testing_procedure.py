@@ -24,6 +24,11 @@ import aiohttp
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# `autobot_shared` lives at the repository root, which is not on the path when this
+# script is run standalone (#18094; same bootstrap as deployment_rollback.py).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # #14518: the first-party imports below carried a stale ``backend.`` package
 # prefix -- no ``backend`` package exists -- and autobot-backend was never on

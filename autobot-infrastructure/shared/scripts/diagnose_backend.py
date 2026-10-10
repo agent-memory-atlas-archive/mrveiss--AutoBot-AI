@@ -8,6 +8,7 @@
 import logging
 import os
 import sys
+from pathlib import Path
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -20,6 +21,11 @@ import requests
 
 # Import configuration from centralized source
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# `autobot_shared` lives at the repository root, which is not on the path when this
+# script is run standalone (#18094; same bootstrap as deployment_rollback.py).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from autobot_shared.ssot_config import config as ssot_config
 
 

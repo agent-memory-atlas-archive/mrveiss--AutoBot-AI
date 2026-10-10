@@ -15,6 +15,7 @@ Registration contract (import side effect, ordering): see ``env_registry``.
 from __future__ import annotations
 
 from autobot_shared.env_registry import EnvVarSpec, register_env_var
+from autobot_shared.network_constants import NetworkConstants
 
 
 def _register(name: str, type_: type, default, description: str, component: str) -> None:
@@ -35,7 +36,7 @@ _register(
 _register(
     "NPU_WORKER_BIND_HOST",
     str,
-    "0.0.0.0",  # nosec B104  # worker bind default, documented here
+    NetworkConstants.BIND_ALL_INTERFACES,
     "Address the NPU worker binds its listener to. Read first by the worker; "
     "falls back to the legacy NPU_WORKER_HOST. Never used to CONNECT to a worker.",
     "npu",
@@ -43,7 +44,7 @@ _register(
 _register(
     "NPU_WORKER_HOST",
     str,
-    "0.0.0.0",  # nosec B104  # legacy worker bind default
+    NetworkConstants.BIND_ALL_INTERFACES,
     "Legacy, ambiguous name. In the worker it is the BIND address, used only when "
     "NPU_WORKER_BIND_HOST is unset. Connect-side readers use AUTOBOT_NPU_WORKER_HOST "
     "(ssot); `autobot doctor` still honours this name as a connect host when that is "
@@ -58,7 +59,8 @@ _register(
     str,
     "00-SLM-Manager",
     "Node id. The SLM backend uses it as the manager's own registry id (default shown). "
-    "An agent REQUIRES it (or --node-id) and refuses to start without one.",
+    "slm/agent/agent.py accepts --node-id; slm-agent-standalone.py reads only SLM_NODE_ID. "
+    "Both refuse to start without one.",
     "slm",
 )
 _register(

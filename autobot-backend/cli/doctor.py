@@ -167,9 +167,6 @@ def check_env_file(env_path: str | None = None) -> CheckResult:
         )
 
 
-_WILDCARD_BIND_HOSTS = ("0.0.0.0", "::", "")  # nosec B104  # compared against, never bound
-
-
 def _npu_worker_port() -> str:
     """Port the NPU worker serves on: prefixed/ssot value, then legacy env, then ssot default.
 
@@ -195,11 +192,13 @@ def _npu_worker_host() -> str:
     """
     import os
 
+    from autobot_shared.network_constants import NetworkConstants
     from autobot_shared.ssot_config import config as ssot_config
 
     legacy = os.environ.get("NPU_WORKER_HOST")
     if legacy and not os.environ.get("AUTOBOT_NPU_WORKER_HOST"):
-        return "127.0.0.1" if legacy in _WILDCARD_BIND_HOSTS else legacy
+        wildcards = (NetworkConstants.BIND_ALL_INTERFACES, "::")
+        return "127.0.0.1" if legacy in wildcards else legacy
     return str(ssot_config.vm.npu)
 
 

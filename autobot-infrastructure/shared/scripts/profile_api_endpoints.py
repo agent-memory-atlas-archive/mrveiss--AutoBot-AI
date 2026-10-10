@@ -12,6 +12,7 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 import time
 
 import requests
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# `autobot_shared` lives at the repository root, which is not on the path when this
+# script is run standalone (#18094; same bootstrap as deployment_rollback.py).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def test_endpoint_performance(url, description, params=None):
