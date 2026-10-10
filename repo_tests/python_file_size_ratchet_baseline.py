@@ -95,7 +95,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 827,
     "autobot-backend/api/codebase_analytics/endpoints/report.py": 2267,
     "autobot-backend/api/codebase_analytics/endpoints/stats.py": 663,
-    "autobot-backend/api/conversation_files.py": 1192,
+    "autobot-backend/api/conversation_files.py": 1078,
     "autobot-backend/api/database_mcp.py": 1076,
     "autobot-backend/api/development_speedup.py": 668,
     "autobot-backend/api/enterprise_features.py": 700,
@@ -316,7 +316,7 @@ RATCHET_BASELINE: dict[str, int] = {
     # #16354: invisible-char table moved to security/unicode_normalization.py
     "autobot-backend/security/prompt_injection_detector.py": 703,
     "autobot-backend/security/security_edge_cases_test.py": 638,
-    "autobot-backend/security/session_ownership.py": 833,
+    "autobot-backend/security/session_ownership.py": 829,
     "autobot-backend/security/threat_detection_refactor_test.py": 880,
     "autobot-backend/security/threat_intelligence.py": 763,
     "autobot-backend/security_layer.py": 767,

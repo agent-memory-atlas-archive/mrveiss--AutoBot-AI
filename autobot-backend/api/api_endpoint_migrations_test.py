@@ -19095,7 +19095,7 @@ class TestBatch110TerminalCOMPLETE(unittest.TestCase):
         # Check upload preserves file validation
         source_upload = inspect.getsource(conversation_files.upload_conversation_file)
         self.assertIn("is_safe_file", source_upload)
-        self.assertIn("_authorize_session_for_user", source_upload)
+        self.assertIn("validate_session_ownership", source_upload)
         self.assertIn("file_manager", source_upload)
 
         # Check download preserves FileResponse
@@ -19127,7 +19127,7 @@ class TestBatch110TerminalCOMPLETE(unittest.TestCase):
             # Should have permission check
             self.assertIn("check_file_permissions", source)
             # Should have session ownership validation
-            self.assertIn("_authorize_", source)
+            self.assertIn("validate_session_ownership", source)
 
         # Only write/sensitive operations should have audit logging
         audit_logged_endpoints = [

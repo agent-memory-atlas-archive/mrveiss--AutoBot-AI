@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""One public `validate_session_ownership` (#14016).
+"""One `validate_session_ownership`, with named postures (#14016).
 
-Two functions shared the name with different arity, parameter order and return type. Called
-positionally with the canonical order, the other swapped `request` and `session_id`: a check that
-runs, passes and guards nothing. The stricter, always-enforcing helper in `conversation_files` is
-now private (`_authorize_session_for_user`); the dependency lives once in
-`autobot-backend/security/session_ownership.py`. The detector reads the syntax tree, so prose
-or a string naming the function is not a definition.
+The conversation-file routes used to carry a second validator of the same name with another arity,
+parameter order and return type: called positionally with the canonical order it swapped `request`
+and `session_id`, a check that runs, passes and guards nothing. There is now ONE definition, in
+`autobot-backend/security/session_ownership.py`, taking a `SessionPosture`; the file routes call it
+with `SessionPosture.STRICT`. The detector reads the syntax tree, so prose or a string naming the
+function is not a definition.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ def _definers() -> tuple[str, ...]:
         ("an import", "from security.session_ownership import validate_session_ownership\n", False),
         ("a call", "async def f():\n    await validate_session_ownership('s', r)\n", False),
         ("a string and a comment", "# def validate_session_ownership\nx = 'def validate_session_ownership'\n", False),
-        ("the private helper", "async def _authorize_session_for_user(r, s, u):\n    pass\n", False),
+        ("a differently named fork", "async def _authorize_session_for_user(r, s, u):\n    pass\n", False),
     ],
 )
 def test_the_matcher_tells_a_definition_from_a_use(label: str, source: str, expected: bool) -> None:
@@ -90,3 +90,37 @@ def test_exactly_one_definition_and_it_is_the_canonical_module() -> None:
         f"#14016: {list(_definers())} define `{_NAME}`; it lives once in {_CANONICAL}. "
         "Import it, or give a differently-shaped helper its own private name."
     )
+
+
+_FILE_ROUTES = "autobot-backend/api/conversation_files.py"
+
+
+def _calls_without_strict(source: str) -> list[int]:
+    """Lines of `validate_session_ownership(...)` calls that do not pass `posture=SessionPosture.STRICT`."""
+    bad = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == _NAME:
+            strict = any(
+                kw.arg == "posture" and ast.unparse(kw.value) == "SessionPosture.STRICT" for kw in node.keywords
+            )
+            if not strict:
+                bad.append(node.lineno)
+    return bad
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "expected"),
+    [
+        ("strict", "validate_session_ownership(s, r, posture=SessionPosture.STRICT)\n", []),
+        ("default", "validate_session_ownership(s, r)\n", [1]),
+        ("another posture", "validate_session_ownership(s, r, posture=SessionPosture.DEFAULT)\n", [1]),
+    ],
+)
+def test_the_strict_call_matcher_tells_strict_from_not(label: str, source: str, expected: list[int]) -> None:
+    assert _calls_without_strict(source) == expected, label
+
+
+def test_every_file_route_check_runs_under_the_strict_posture() -> None:
+    source = (repo_root() / _FILE_ROUTES).read_text(encoding="utf-8")
+    assert _NAME in source, "the file routes no longer reach the validator at all"
+    assert _calls_without_strict(source) == []
