@@ -64,6 +64,25 @@ ON_ADDED_EVENTS = {
     "migration-gate": ("push",),
     "ai-security-review": ("pull_request",),
 }
+#: #17822 widens the Migration Gate on purpose: its filter listed where its tests live, not the code
+#: they import, so #17772 changed `secrets_coordinator.py`, the gate skipped, and it merged green.
+#: These eleven entries are the ONLY content change in this refactor, pinned by name. They land in the
+#: caller's inline `migrations` filter AND its `on.push.paths` (the two lists must agree), and nowhere
+#: else. Re-derived from commit 3006cacbb8 of the preserved branch `wip-17822-filter-guard`.
+ISSUE_17822_ENTRIES = (
+    "autobot-backend/services/*secret*.py",
+    "autobot-backend/services/credential_*.py",
+    "autobot-backend/services/orphan_repair*.py",
+    "autobot-backend/services/provider_key_vault.py",
+    "autobot-backend/api/**",
+    "autobot_shared/secrets_envelope.py",
+    "autobot_shared/status_enums.py",
+    "autobot_shared/time_utils.py",
+    "autobot_shared/auth/device_capabilities.py",
+    "autobot_shared/secrets_vault.py",
+    "autobot_shared/legacy_secret_keys.py",
+)
+ISSUE_17822_WORKFLOW = "migration-gate"
 EVENTS = ("push", "pull_request", "merge_group", "schedule", "workflow_dispatch")
 MG_SHA = "merge-group-base-sha"  # a stand-in value; only its presence or absence is compared
 PRE_BASE = "${{ github.event.merge_group.base_sha || '' }}"
@@ -127,15 +146,19 @@ def filter_source(raw: str, read: ReadFile) -> dict:
 #: requires the python-suite filter to cover every file a guard reads, and these guards read
 #: `_changes.yml`; so editing it now runs the suite. Nothing else about any path set moves.
 ALLOWED_ADDITIONS = {
-    ".github/filters/python-paths.yml": {"python": [f"{WORKFLOWS}/_changes.yml"]},
+    #  + #17822: the migration-gate guard reads migration-gate.yml, so editing it must run the suite.
+    ".github/filters/python-paths.yml": {"python": [f"{WORKFLOWS}/_changes.yml", f"{WORKFLOWS}/migration-gate.yml"]},
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
     # `_changes.yml` entry the workflow gained has to be here too.
     ".github/filters/frontend-paths.yml": {"frontend": [f"{WORKFLOWS}/_changes.yml"]},
 }
 
 
-def without_allowed_additions(src: dict) -> dict:
+def without_allowed_additions(src: dict, name: str | None = None) -> dict:
     """`src` with the declared additions removed and, where any applied, the hash dropped."""
+    if name == ISSUE_17822_WORKFLOW and "inline" in src:
+        inline = {k: [e for e in v if e not in ISSUE_17822_ENTRIES] for k, v in src["inline"].items()}
+        return {"inline": inline}
     extra = ALLOWED_ADDITIONS.get(src.get("file"))
     if not extra:
         return src
@@ -152,15 +175,23 @@ def strip_added_on_entries(head: str, doc_on: dict, name: str | None) -> tuple[s
     Asserts the additions are exactly where ON_ADDED_EVENTS says, and nowhere else.
     """
     events = ON_ADDED_EVENTS.get(name, ()) if name else ()
+    extra = ISSUE_17822_ENTRIES if name == ISSUE_17822_WORKFLOW else ()
     lines = head.split("\n")
-    marked = [i for i, ln in enumerate(lines) if ln.strip() in (f"- '{ADDED_ENTRY}'", f'- "{ADDED_ENTRY}"')]
-    assert len(marked) == len(events), f"{name}: {len(marked)} added entries, pinned {len(events)}"
+    quoted = {f"- '{e}'" for e in (ADDED_ENTRY, *extra)} | {f'- "{ADDED_ENTRY}"'}
+    marked = [i for i, ln in enumerate(lines) if ln.strip() in quoted]
+    assert len(marked) == len(events) + len(
+        extra
+    ), f"{name}: {len(marked)} added entries, pinned {len(events) + len(extra)}"
     kept = "\n".join(ln for i, ln in enumerate(lines) if i not in marked)
     parsed = {e: dict(v) if isinstance(v, dict) else v for e, v in doc_on.items()}
     for event in events:
         paths = list(parsed[event]["paths"])
         assert paths.count(ADDED_ENTRY) == 1, f"{name}: on.{event}.paths lacks the pinned entry"
         parsed[event]["paths"] = [p for p in paths if p != ADDED_ENTRY]
+    for entry in extra:
+        paths = list(parsed["push"]["paths"])
+        assert paths.count(entry) == 1, f"{name}: on.push.paths lacks the pinned #17822 entry {entry}"
+        parsed["push"]["paths"] = [p for p in paths if p != entry]
     return kept, parsed
 
 
@@ -310,7 +341,7 @@ def test_the_fixture_covers_every_caller_and_is_not_vacuous():
 def test_each_resolved_field_equals_the_pre_conversion_value(name, field):
     post, pre = _post(name)[field], _load_pre()[name][field]
     if field == "filters":
-        post, pre = without_allowed_additions(post), without_allowed_additions(pre)
+        post, pre = without_allowed_additions(post, name), without_allowed_additions(pre, name)
     assert post == pre
 
 
@@ -323,11 +354,29 @@ def test_the_only_widenings_are_the_declared_entries_in_two_filter_files():
             assert pre.get("sha256") == post.get("sha256") or "inline" in pre
             continue
         widened += 1
-        entry = f"{WORKFLOWS}/_changes.yml"
         key = next(iter(ALLOWED_ADDITIONS[pre["file"]]))
-        assert entry not in pre["content"][key] and post["content"][key].count(entry) == 1
-        assert len(post["content"][key]) == len(pre["content"][key]) + 1
+        for entry in ALLOWED_ADDITIONS[pre["file"]][key]:
+            assert entry not in pre["content"][key] and post["content"][key].count(entry) == 1
+        assert len(post["content"][key]) == len(pre["content"][key]) + len(ALLOWED_ADDITIONS[pre["file"]][key])
     assert widened >= 2, "no caller reads the widened filter; the allowance is dead"
+
+
+def test_the_only_inline_widening_is_the_pinned_17822_set_on_the_migration_gate():
+    """The one inline filter that grew: exactly the pinned entries, in the `migrations` key, no other."""
+    for name in CALLERS:
+        pre, post = _load_pre()[name]["filters"], _post(name)["filters"]
+        if "inline" not in pre:
+            continue
+        added = {k: [e for e in post["inline"][k] if e not in pre["inline"][k]] for k in post["inline"]}
+        assert set(post["inline"]) == set(pre["inline"]), name
+        if name == ISSUE_17822_WORKFLOW:
+            assert added == {"migrations": list(ISSUE_17822_ENTRIES)}, added
+            assert all(
+                pre["inline"][k] == [e for e in post["inline"][k] if e not in ISSUE_17822_ENTRIES]
+                for k in pre["inline"]
+            )
+        else:
+            assert not any(added.values()), f"{name} widened outside the pinned #17822 set: {added}"
 
 
 @pytest.mark.parametrize("name", CALLERS)

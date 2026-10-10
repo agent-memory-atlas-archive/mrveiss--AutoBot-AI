@@ -192,6 +192,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Tracked .py under thirteen declared trees; Python elsewhere (hidden dirs, root files) drifts alone.",
     ),
+    "migration-gate-test-import-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "One test directory's Python, against all tracked Python; the rest of the suite grows at its own rate.",
+    ),
     "paths-filter-workflow-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
