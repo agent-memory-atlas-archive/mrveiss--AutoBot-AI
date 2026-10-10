@@ -167,6 +167,9 @@ def check_env_file(env_path: str | None = None) -> CheckResult:
         )
 
 
+_WILDCARD_BIND_HOSTS = ("0.0.0.0", "::", "")  # nosec B104  # compared against, never bound
+
+
 def _npu_worker_port() -> str:
     """Port the NPU worker serves on: prefixed/ssot value, then legacy env, then ssot default.
 
@@ -183,13 +186,29 @@ def _npu_worker_port() -> str:
     return str(ssot_config.port.npu)
 
 
+def _npu_worker_host() -> str:
+    """Address to CONNECT to the NPU worker: ssot host, then legacy env, then ssot default.
+
+    ``AUTOBOT_NPU_WORKER_HOST`` (ssot) wins. A bare legacy ``NPU_WORKER_HOST`` is
+    still honoured, but it also carried the worker's bind address, so a wildcard
+    value (``0.0.0.0``) is not dialable and maps to loopback.
+    """
+    import os
+
+    from autobot_shared.ssot_config import config as ssot_config
+
+    legacy = os.environ.get("NPU_WORKER_HOST")
+    if legacy and not os.environ.get("AUTOBOT_NPU_WORKER_HOST"):
+        return "127.0.0.1" if legacy in _WILDCARD_BIND_HOSTS else legacy
+    return str(ssot_config.vm.npu)
+
+
 def check_npu_worker_registry() -> CheckResult:
     """Verify NPU workers are registered and responsive."""
     try:
-        import os
         import urllib.request
 
-        npu_host = os.environ.get("NPU_WORKER_HOST", "localhost")
+        npu_host = _npu_worker_host()
         npu_port = _npu_worker_port()
         url = f"http://{npu_host}:{npu_port}/health"
         with urllib.request.urlopen(url, timeout=2) as resp:  # nosec B310

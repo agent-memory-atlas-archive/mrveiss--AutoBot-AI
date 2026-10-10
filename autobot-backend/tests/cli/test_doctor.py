@@ -198,3 +198,36 @@ def test_npu_doctor_still_honours_legacy_port_env(monkeypatch):
     monkeypatch.setenv("NPU_WORKER_PORT", "9123")
 
     assert _captured_npu_url(monkeypatch).endswith(":9123/health")
+
+
+def test_npu_doctor_maps_a_wildcard_legacy_host_to_loopback(monkeypatch):
+    """#18094: NPU_WORKER_HOST=0.0.0.0 is the worker's bind address, not dialable."""
+    monkeypatch.delenv("AUTOBOT_NPU_WORKER_HOST", raising=False)
+    monkeypatch.setenv("NPU_WORKER_HOST", "0.0.0.0")
+
+    assert _captured_npu_url(monkeypatch).startswith("http://127.0.0.1:")
+
+
+def test_npu_doctor_still_honours_a_legacy_connect_host(monkeypatch):
+    monkeypatch.delenv("AUTOBOT_NPU_WORKER_HOST", raising=False)
+    monkeypatch.setenv("NPU_WORKER_HOST", "npu-box.internal")
+
+    assert _captured_npu_url(monkeypatch).startswith("http://npu-box.internal:")
+
+
+def test_npu_doctor_ssot_host_wins_over_the_legacy_name(monkeypatch):
+    from autobot_shared.ssot_config import config as ssot_config
+
+    monkeypatch.setenv("AUTOBOT_NPU_WORKER_HOST", "ignored-by-the-cached-singleton")
+    monkeypatch.setenv("NPU_WORKER_HOST", "npu-box.internal")
+
+    assert _captured_npu_url(monkeypatch).startswith(f"http://{ssot_config.vm.npu}:")
+
+
+def test_npu_doctor_default_host_is_the_ssot_value(monkeypatch):
+    from autobot_shared.ssot_config import config as ssot_config
+
+    monkeypatch.delenv("AUTOBOT_NPU_WORKER_HOST", raising=False)
+    monkeypatch.delenv("NPU_WORKER_HOST", raising=False)
+
+    assert _captured_npu_url(monkeypatch).startswith(f"http://{ssot_config.vm.npu}:")
