@@ -19,6 +19,7 @@ import pytest
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
+from autobot_shared.container_hardening import DENIED_RUN_KWARGS
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _CANONICAL = "autobot_shared/container_hardening.py"
@@ -105,9 +106,19 @@ def _spreads_builder(call: ast.Call, builders: frozenset[str] = _BUILDERS) -> bo
     )
 
 
+def _names_denied_keyword(call: ast.Call) -> bool:
+    """An explicit ``privileged=True``-style keyword defeats a builder spread in the same call."""
+    return any(kw.arg in DENIED_RUN_KWARGS for kw in call.keywords)
+
+
 def unhardened_run_sites(source: str, builders: frozenset[str] = _BUILDERS) -> list[int]:
-    """Line numbers of ``containers.run`` calls that do not spread the builder output."""
-    return [n.lineno for n in ast.walk(ast.parse(source)) if _is_run_site(n) and not _spreads_builder(n, builders)]
+    """Line numbers of ``containers.run``/``create`` calls without the builder spread, or that
+    also pass a keyword in ``DENIED_RUN_KWARGS``."""
+    return [
+        n.lineno
+        for n in ast.walk(ast.parse(source))
+        if _is_run_site(n) and (not _spreads_builder(n, builders) or _names_denied_keyword(n))
+    ]
 
 
 @pytest.mark.parametrize(
@@ -163,6 +174,16 @@ def test_every_execution_backend_run_site_takes_the_builder() -> None:
         ("execution builder", "c.containers.run(i, **execution_hardening_kwargs())\n", []),
         ("floor only is not enough", "c.containers.run(i, **baseline_hardening_kwargs())\n", [1]),
         ("sandbox builder is not enough", "c.containers.run(i, **hardening_kwargs(a=1))\n", [1]),
+        (
+            "builder spread plus privileged",
+            "c.containers.run(i, **execution_hardening_kwargs(), privileged=True)\n",
+            [1],
+        ),
+        (
+            "builder spread plus devices",
+            "c.containers.create(i, devices=['/dev/x'], **execution_hardening_kwargs())\n",
+            [1],
+        ),
         ("dropping network_mode by hand", 'c.containers.run(i, network_mode="bridge")\n', [1]),
     ],
 )
