@@ -299,7 +299,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/performance_benchmarks_test.py": 661,
     "autobot-backend/phase_progression_manager.py": 850,  # #17089: dedup threshold
     "autobot-backend/planner/planner.py": 877,
-    "autobot-backend/plugin_manager.py": 702,
+    "autobot-backend/plugin_manager.py": 700,
     "autobot-backend/project_state_manager.py": 998,
     "autobot-backend/prompt_manager.py": 1481,
     "autobot-backend/protocols/agent_communication.py": 654,
@@ -491,7 +491,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 616,
     "autobot_shared/npu/integration.py": 929,
-    "autobot_shared/plugin_sdk/loader.py": 692,
+    "autobot_shared/plugin_sdk/loader.py": 690,
     "autobot_shared/plugin_sdk/plugin_load_visibility_test.py": 750,
     "autobot_shared/plugin_sdk/plugin_sdk_test.py": 941,
     "autobot_shared/rate_limiter_test.py": 618,

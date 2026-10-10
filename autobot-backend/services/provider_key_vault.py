@@ -180,8 +180,13 @@ def resolve_image_provider_key(name: str) -> str:
     for anything else, so the plugin cannot read an arbitrary secret through
     it. Precedence is :func:`resolve_provider_key`'s: env first, then vault.
     Returns ``""`` when unset, as ``os.environ.get(name, "")`` did.
+
+    Not a sandbox: plugins run in-process (``exec_module``), so a loaded plugin
+    can read ``os.environ`` and this module's cache directly. The resolver
+    narrows what the *sanctioned* path exposes and the loader hands it only to
+    built-in plugins (origin-bound); it does not isolate a hostile plugin.
     """
-    if name not in IMAGE_PROVIDER_KEY_NAMES:
+    if type(name) is not str or name not in IMAGE_PROVIDER_KEY_NAMES:
         raise ValueError("not an image-provider credential name")
     return resolve_provider_key(name, os.environ.get(name, ""))
 
@@ -239,7 +244,18 @@ async def capture_provider_key(
             plaintext=plaintext.encode("utf-8"),
             created_by=created_by,
         )
+    _refresh_hydrated_key(name, plaintext)
     return True
+
+
+def _refresh_hydrated_key(name: str, plaintext: str) -> None:
+    """Keep the process cache in step with a successful vault write (never logs the value).
+
+    Env stays authoritative, so the cache is touched only when the env var is
+    unset; it was only ever consulted in that case anyway.
+    """
+    if name in VAULT_RESOLVED_CREDENTIAL_NAMES and not os.environ.get(name):
+        _hydrated_keys[name] = plaintext
 
 
 async def mirror_provider_key_best_effort(name: str, value: str, created_by: uuid.UUID) -> bool:

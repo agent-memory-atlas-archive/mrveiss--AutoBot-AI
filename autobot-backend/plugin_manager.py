@@ -54,14 +54,12 @@ def get_plugin_loader() -> PluginLoader:
             if _plugin_loader is None:
                 # Define plugin directories using SSOT config (#3397)
                 plugins_root = config.path.plugins_path
-                plugin_dirs = [
-                    plugins_root / "core-plugins",
-                    plugins_root / "community-plugins",
-                    # Development fallback
-                    Path("plugins/core-plugins"),
-                    Path("plugins/community-plugins"),
-                ]
-                _plugin_loader = PluginLoader(plugin_dirs, plugin_credential_resolvers())
+                core_dirs = [plugins_root / "core-plugins", Path("plugins/core-plugins")]
+                community_dirs = [plugins_root / "community-plugins", Path("plugins/community-plugins")]
+                # Deployed core, deployed community, then the development fallback.
+                plugin_dirs = [core_dirs[0], community_dirs[0], core_dirs[1], community_dirs[1]]
+                # Only the built-in core dirs are trusted for credential injection (#18094).
+                _plugin_loader = PluginLoader(plugin_dirs, plugin_credential_resolvers(), core_dirs)
     return _plugin_loader
 
 

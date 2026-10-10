@@ -133,3 +133,46 @@ async def test_list_providers_env_still_wins(monkeypatch) -> None:
         response = await api.list_providers.__wrapped__(current_user=None)
     assert {p.name: p.available for p in response.providers}["dalle"] is True
     assert spy.call_count == 3
+
+
+class _SpoofStr(str):
+    """A str whose hash and equality claim membership in any set."""
+
+    def __hash__(self) -> int:
+        return hash("FLUX_API_KEY")
+
+    def __eq__(self, other) -> bool:
+        return True
+
+
+def test_a_str_subclass_cannot_spoof_membership() -> None:
+    pkv._hydrated_keys["FLUX_API_KEY"] = _VAULT_VALUE
+    with pytest.raises(ValueError):
+        pkv.resolve_image_provider_key(_SpoofStr("SLACK_BOT_TOKEN"))
+
+
+@pytest.mark.asyncio
+async def test_a_capture_refreshes_the_cache_when_env_is_unset(caplog) -> None:
+    pkv._hydrated_keys["FLUX_API_KEY"] = "old-value"  # pragma: allowlist secret
+    service = MagicMock(rotate_value=AsyncMock())
+    with (
+        patch.object(pkv, "_find_system_secret_id", AsyncMock(return_value="sid")),
+        patch("services.envelope_secrets_service.EnvelopeSecretsService", return_value=service),
+        caplog.at_level(logging.DEBUG),
+    ):
+        assert await pkv.capture_provider_key(MagicMock(), name="FLUX_API_KEY", plaintext=_VAULT_VALUE, created_by=None)
+    assert pkv.resolve_image_provider_key("FLUX_API_KEY") == _VAULT_VALUE
+    assert _VAULT_VALUE not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_capture_leaves_the_cache_alone_when_env_holds_the_name(monkeypatch) -> None:
+    monkeypatch.setenv("FLUX_API_KEY", _ENV_VALUE)
+    service = MagicMock(rotate_value=AsyncMock())
+    with (
+        patch.object(pkv, "_find_system_secret_id", AsyncMock(return_value="sid")),
+        patch("services.envelope_secrets_service.EnvelopeSecretsService", return_value=service),
+    ):
+        await pkv.capture_provider_key(MagicMock(), name="FLUX_API_KEY", plaintext=_VAULT_VALUE, created_by=None)
+    assert "FLUX_API_KEY" not in pkv._hydrated_keys or pkv._hydrated_keys["FLUX_API_KEY"] != _VAULT_VALUE
+    assert pkv.resolve_image_provider_key("FLUX_API_KEY") == _ENV_VALUE

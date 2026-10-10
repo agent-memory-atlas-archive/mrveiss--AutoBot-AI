@@ -37,7 +37,7 @@ async def test_the_named_plugin_gets_its_resolver_before_initialize() -> None:
     def resolver(name: str) -> str:
         return "sentinel-via-resolver"
 
-    loader = PluginLoader([_PLUGINS], {_NAME: resolver})
+    loader = PluginLoader([_PLUGINS], {_NAME: resolver}, [_PLUGINS])
     plugin = await _load(loader, _NAME)
     try:
         assert plugin is not None and plugin.credential_resolver is resolver
@@ -52,7 +52,7 @@ async def test_the_named_plugin_gets_its_resolver_before_initialize() -> None:
 
 @pytest.mark.asyncio
 async def test_a_plugin_without_a_mapping_gets_none() -> None:
-    loader = PluginLoader([_PLUGINS], {"some-other-plugin": lambda name: "x"})
+    loader = PluginLoader([_PLUGINS], {"some-other-plugin": lambda name: "x"}, [_PLUGINS])
     plugin = await _load(loader, _NAME)
     try:
         assert plugin is not None and plugin.credential_resolver is None
@@ -63,5 +63,7 @@ async def test_a_plugin_without_a_mapping_gets_none() -> None:
 
 def test_the_manager_forwards_the_mapping_to_its_loader() -> None:
     mapping = {_NAME: lambda name: ""}
-    assert PluginManager([_PLUGINS], mapping)._loader.credential_resolvers is mapping
+    manager = PluginManager([_PLUGINS], mapping, [_PLUGINS])
+    assert manager._loader.credential_resolvers is mapping
+    assert manager._loader.trusted_roots == [_PLUGINS]
     assert PluginManager([_PLUGINS])._loader.credential_resolvers == {}
