@@ -130,15 +130,17 @@ CONCEPTS = (
     Concept(
         "word-tokenizer",
         # A bare `\\W` / `[\\W_]` run: the separator pattern of "lowercase and split into words".
-        r"^(?:\\W|\[\\W_\])\+$",
+        r"^(?:\\W|\[\\W_\])\+$|^\\b\\w\+\\b$",
         canonical={
             "autobot_shared/text_tokens.py": "the one tokenizer; replaced identical copies in prepared_facts and skill_router"
         },
         allowed={},
-        matches=(r"[\W_]+", r"\W+"),
+        matches=(r"[\W_]+", r"\W+", r"\b\w+\b"),
         # Near neighbours: a different separator class, a positive word class, and the
         # sanitiser shape that the other concept owns.
-        rejects=(r"\s+", r"\w+", r"[\w_]+", r"[^a-z0-9]+", r"[\W_]", r"[\W_]+x"),
+        # `\b\w+\b|[^\w\s]` is `training/data_loader.Tokenizer` -- a case-preserving code
+        # tokenizer that also emits punctuation tokens to build a vocabulary; not word extraction.
+        rejects=(r"\s+", r"\w+", r"[\w_]+", r"[^a-z0-9]+", r"[\W_]", r"[\W_]+x", r"\b\w+\b|[^\w\s]", r"\bword\b"),
     ),
     Concept(
         "char-sanitizer-class",
