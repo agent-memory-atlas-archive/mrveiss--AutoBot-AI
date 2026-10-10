@@ -340,7 +340,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/config_service.py": 605,
     "autobot-backend/services/docker_task_workspace.py": 673,
     "autobot-backend/services/execution/claude_code_backend.py": 661,
-    "autobot-backend/services/execution/docker_backend.py": 605,
+    "autobot-backend/services/execution/docker_backend.py": 604,
     "autobot-backend/services/fact_extraction_service.py": 870,
     "autobot-backend/services/fast_document_scanner.py": 653,
     "autobot-backend/services/graph_rag_service.py": 741,

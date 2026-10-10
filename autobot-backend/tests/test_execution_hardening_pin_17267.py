@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""Every ``containers.run`` in the execution backends: full kwargs, before vs after (#17267).
+"""Every ``containers.run`` in the execution backends: full kwargs per site (#17267).
 
-Decision (c): the three keys of the non-behavioural subset are added and NOTHING else
-changes. The expected dicts below are the literals the sites passed before the change;
-the autospec'd collection rejects any kwarg ``containers.run`` does not accept.
+Option (b): each site carries the whole shared execution hardening (memory cap with equal
+swap cap, no network, read-only root with a noexec tmpfs, privilege floor). The autospec'd
+collection rejects any kwarg ``containers.run`` does not accept.
 """
 
 from __future__ import annotations
@@ -18,21 +18,24 @@ import pytest
 from docker.models.containers import ContainerCollection
 
 import services.execution.docker_backend as db
-from services.execution.base_backend import ExecutionTask
+from services.execution.base_backend import ExecutionTask, ResourceLimits
 from services.execution.container_pool import WarmContainerPool
-
-#: True once the backends take the (c) subset; the pre-change tree runs this file with False.
-_HARDENED = True
 
 _FLOOR = {"security_opt": ["no-new-privileges"], "cap_drop": ["ALL"]}
 
 
-def _added() -> dict:
-    if not _HARDENED:
-        return {}
-    from autobot_shared.container_hardening import CONTAINER_PIDS_LIMIT
+def _hardened(memory: str = "512m", *, network: str = "none", read_only: bool = True) -> dict:
+    from autobot_shared.container_hardening import CONTAINER_PIDS_LIMIT, EXECUTION_TMPFS_SIZE
 
-    return {**_FLOOR, "pids_limit": CONTAINER_PIDS_LIMIT}
+    return {
+        **_FLOOR,
+        "pids_limit": CONTAINER_PIDS_LIMIT,
+        "network_mode": network,
+        "read_only": read_only,
+        "tmpfs": {"/tmp": f"rw,noexec,nosuid,size={EXECUTION_TMPFS_SIZE}"},  # nosec B108
+        "mem_limit": memory,
+        "memswap_limit": memory,
+    }
 
 
 def _client():
@@ -61,15 +64,14 @@ async def test_cold_start_run_kwargs() -> None:
     assert args[0] == "python:3.10-slim"
     assert kwargs == {
         "detach": True,
-        "mem_limit": "512m",
         "cpus": 1.0,
         "environment": kwargs["environment"],
         "stdout": True,
         "stderr": True,
         "remove": False,
-        **_added(),
+        **_hardened("512m"),
     }
-    assert "network_mode" not in kwargs and "read_only" not in kwargs and "volumes" not in kwargs
+    assert "volumes" not in kwargs
 
 
 @pytest.mark.asyncio
@@ -80,7 +82,7 @@ async def test_snapshot_restore_run_kwargs() -> None:
     await backend.restore("snap-id", "anyone")
     args, kwargs = client.containers.run.call_args
     assert args == ("snap:1", "sleep infinity")
-    assert kwargs == {"detach": True, "remove": False, **_added()}
+    assert kwargs == {"detach": True, "remove": False, **_hardened()}
 
 
 @pytest.mark.asyncio
@@ -90,17 +92,47 @@ async def test_warm_pool_run_kwargs() -> None:
     await pool._create_warm_container()
     args, kwargs = client.containers.run.call_args
     assert args == ("python:3.10-slim", ["sleep", "infinity"])
-    assert kwargs == {"detach": True, "remove": False, **_added()}
+    assert kwargs == {"detach": True, "remove": False, **_hardened()}
 
 
 @pytest.mark.asyncio
-async def test_warm_pool_caller_kwargs_survive_and_cannot_weaken_the_floor() -> None:
-    if not _HARDENED:
-        pytest.skip("floor not applied before the change")
+async def test_cold_start_memory_follows_the_task_and_swap_matches() -> None:
     client = _client()
-    caller = {"network_mode": "none", "cap_drop": [], "security_opt": []}
+    task = ExecutionTask(task_id="t2", code="x", resource_limits=ResourceLimits(memory_mb=128))
+    await _backend(client)._execute_cold(task, "i")
+    kwargs = client.containers.run.call_args.kwargs
+    assert kwargs["mem_limit"] == kwargs["memswap_limit"] == "128m"
+
+
+@pytest.mark.asyncio
+async def test_warm_pool_caller_kwargs_survive_but_cannot_weaken_the_hardening() -> None:
+    client = _client()
+    caller = {"working_dir": "/w", "network_mode": "bridge", "read_only": False, "cap_drop": [], "mem_limit": "9g"}
     pool = WarmContainerPool(docker_client=client, image="i", pool_size=1, container_kwargs=caller)
     await pool._create_warm_container()
     kwargs = client.containers.run.call_args.kwargs
-    assert kwargs["network_mode"] == "none"
-    assert kwargs["cap_drop"] == ["ALL"] and kwargs["security_opt"] == ["no-new-privileges"]
+    assert kwargs["working_dir"] == "/w"
+    assert kwargs == {"detach": True, "remove": False, "working_dir": "/w", **_hardened()}
+
+
+@pytest.mark.asyncio
+async def test_warm_pool_named_opt_ins_are_the_only_way_to_drop_a_default() -> None:
+    client = _client()
+    pool = WarmContainerPool(
+        docker_client=client,
+        image="i",
+        pool_size=1,
+        network_reason="pip-install",
+        writable_root_reason="code-workspace",
+    )
+    await pool._create_warm_container()
+    kwargs = client.containers.run.call_args.kwargs
+    assert kwargs == {"detach": True, "remove": False, **_hardened(network="bridge", read_only=False)}
+
+
+def test_a_nameless_opt_in_fails_before_any_container_is_started() -> None:
+    client = _client()
+    pool = WarmContainerPool(docker_client=client, image="i", pool_size=1, network_reason="")
+    with pytest.raises(ValueError, match="named reason"):
+        pool._run_kwargs()
+    client.containers.run.assert_not_called()

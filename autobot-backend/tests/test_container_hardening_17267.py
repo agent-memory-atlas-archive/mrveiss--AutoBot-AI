@@ -95,3 +95,45 @@ def test_builder_pids_limit_is_omitted_unless_given() -> None:
     base = {"network_mode": "none", "read_only": True, "memory_limit": "1m", "cpu_quota": 1}
     assert "pids_limit" not in hardening_kwargs(**base)
     assert hardening_kwargs(**base, pids_limit=7)["pids_limit"] == 7
+
+
+def test_execution_builder_defaults_are_fully_hardened() -> None:
+    from autobot_shared.container_hardening import (
+        CONTAINER_PIDS_LIMIT,
+        EXECUTION_MEMORY_LIMIT,
+        EXECUTION_TMPFS_SIZE,
+        execution_hardening_kwargs,
+    )
+
+    assert execution_hardening_kwargs() == {
+        "network_mode": "none",
+        "read_only": True,
+        "tmpfs": {"/tmp": f"rw,noexec,nosuid,size={EXECUTION_TMPFS_SIZE}"},  # nosec B108
+        "mem_limit": EXECUTION_MEMORY_LIMIT,
+        "memswap_limit": EXECUTION_MEMORY_LIMIT,
+        "security_opt": ["no-new-privileges"],
+        "cap_drop": ["ALL"],
+        "pids_limit": CONTAINER_PIDS_LIMIT,
+    }
+
+
+def test_execution_builder_opt_ins_are_named_and_logged(caplog: pytest.LogCaptureFixture) -> None:
+    from autobot_shared.container_hardening import execution_hardening_kwargs
+
+    with caplog.at_level("WARNING"):
+        net = execution_hardening_kwargs(memory_limit="64m", network_reason="pip-install")
+        rw = execution_hardening_kwargs(writable_root_reason="code-workspace")
+    assert net["network_mode"] == "bridge" and net["read_only"] is True
+    assert net["mem_limit"] == net["memswap_limit"] == "64m"
+    assert rw["network_mode"] == "none" and rw["read_only"] is False
+    assert "reason=pip-install" in caplog.text and "reason=code-workspace" in caplog.text
+
+
+@pytest.mark.parametrize("reason", ["", "  ", "x", "Has Spaces", 5])
+def test_execution_builder_rejects_a_nameless_opt_out(reason: object) -> None:
+    from autobot_shared.container_hardening import execution_hardening_kwargs
+
+    with pytest.raises(ValueError, match="named reason"):
+        execution_hardening_kwargs(network_reason=reason)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="named reason"):
+        execution_hardening_kwargs(writable_root_reason=reason)  # type: ignore[arg-type]

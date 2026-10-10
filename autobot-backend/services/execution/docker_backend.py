@@ -24,7 +24,7 @@ import asyncio
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from autobot_shared.container_hardening import baseline_hardening_kwargs
+from autobot_shared.container_hardening import execution_hardening_kwargs
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import now_utc
 
@@ -273,13 +273,12 @@ class DockerBackend(ExecutionBackend):
                     image,
                     cmd,
                     detach=True,
-                    mem_limit=f"{task.resource_limits.memory_mb}m",
                     cpus=task.resource_limits.cpu_cores,
                     environment=safe_task_env({}, task.env_vars),
                     stdout=True,
                     stderr=True,
                     remove=False,
-                    **baseline_hardening_kwargs(),
+                    **execution_hardening_kwargs(memory_limit=f"{task.resource_limits.memory_mb}m"),
                 )
 
                 self._container_map[task.task_id] = container.id
@@ -489,7 +488,7 @@ class DockerBackend(ExecutionBackend):
                 "sleep infinity",
                 detach=True,
                 remove=False,
-                **baseline_hardening_kwargs(),
+                **execution_hardening_kwargs(),
             )
         except Exception as exc:
             raise RuntimeError(

@@ -31,9 +31,12 @@ _CONSUMERS = (
     "autobot-backend/services/execution/docker_backend.py",
     "autobot-backend/services/execution/container_pool.py",
 )
-_BUILDERS = frozenset({"hardening_kwargs", "baseline_hardening_kwargs"})
-#: Every ``containers.run`` here must itself carry the builder output (decision (c) on #17267).
+_BUILDERS = frozenset({"hardening_kwargs", "baseline_hardening_kwargs", "execution_hardening_kwargs"})
+#: Execution containers take the FULL builder (decision (b) on #17267), not just the privilege floor.
+_EXECUTION_BUILDER = frozenset({"execution_hardening_kwargs"})
+#: Every ``containers.run`` here must itself carry the execution builder output.
 _RUN_SITES_FILE = "autobot-backend/services/execution/docker_backend.py"
+_POOL_FILE = "autobot-backend/services/execution/container_pool.py"
 
 
 def _is_key(node: ast.AST | None) -> bool:
@@ -78,19 +81,19 @@ def _is_run_site(node: ast.AST) -> bool:
     return name == "to_thread" and bool(node.args) and _is_containers_run(node.args[0])
 
 
-def _spreads_builder(call: ast.Call) -> bool:
+def _spreads_builder(call: ast.Call, builders: frozenset[str] = _BUILDERS) -> bool:
     return any(
         kw.arg is None
         and isinstance(kw.value, ast.Call)
         and isinstance(kw.value.func, ast.Name)
-        and kw.value.func.id in _BUILDERS
+        and kw.value.func.id in builders
         for kw in call.keywords
     )
 
 
-def unhardened_run_sites(source: str) -> list[int]:
+def unhardened_run_sites(source: str, builders: frozenset[str] = _BUILDERS) -> list[int]:
     """Line numbers of ``containers.run`` calls that do not spread the builder output."""
-    return [n.lineno for n in ast.walk(ast.parse(source)) if _is_run_site(n) and not _spreads_builder(n)]
+    return [n.lineno for n in ast.walk(ast.parse(source)) if _is_run_site(n) and not _spreads_builder(n, builders)]
 
 
 @pytest.mark.parametrize(
@@ -123,6 +126,7 @@ def test_the_matcher_tells_an_inline_build_from_a_use(label: str, source: str, e
         ("to_thread run, no hardening", "await asyncio.to_thread(c.containers.run, i, detach=True)\n", [1]),
         ("literal keyword is not the builder", 'c.containers.run(i, cap_drop=["ALL"])\n', [1]),
         ("unrelated run", "proc.run(i)\n", []),
+        ("hand-written network_mode, no builder", 'c.containers.run(i, network_mode="none")\n', [1]),
     ],
 )
 def test_the_run_site_matcher_tells_hardened_from_bare(label: str, source: str, expected: list[int]) -> None:
@@ -133,10 +137,32 @@ def test_every_execution_backend_run_site_takes_the_builder() -> None:
     source = (repo_root() / _RUN_SITES_FILE).read_text(encoding="utf-8")
     sites = [n for n in ast.walk(ast.parse(source)) if _is_run_site(n)]
     assert len(sites) == 2, f"#17267: expected the cold-start and snapshot-restore run sites, found {len(sites)}"
-    assert not unhardened_run_sites(source), (
-        f"#17267: {_RUN_SITES_FILE} containers.run at lines {unhardened_run_sites(source)} "
-        "does not take `**baseline_hardening_kwargs()` / `**hardening_kwargs(...)`."
+    assert not unhardened_run_sites(source, _EXECUTION_BUILDER), (
+        f"#17267: {_RUN_SITES_FILE} containers.run at lines {unhardened_run_sites(source, _EXECUTION_BUILDER)} "
+        "does not take `**execution_hardening_kwargs(...)`."
     )
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "expected"),
+    [
+        ("execution builder", "c.containers.run(i, **execution_hardening_kwargs())\n", []),
+        ("floor only is not enough", "c.containers.run(i, **baseline_hardening_kwargs())\n", [1]),
+        ("sandbox builder is not enough", "c.containers.run(i, **hardening_kwargs(a=1))\n", [1]),
+        ("dropping network_mode by hand", 'c.containers.run(i, network_mode="bridge")\n', [1]),
+    ],
+)
+def test_the_execution_matcher_demands_the_full_builder(label: str, source: str, expected: list[int]) -> None:
+    assert unhardened_run_sites(source, _EXECUTION_BUILDER) == expected, label
+
+
+def test_the_warm_pool_run_kwargs_come_from_the_full_builder() -> None:
+    source = (repo_root() / _POOL_FILE).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    run_kwargs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_run_kwargs"]
+    assert len(run_kwargs) == 1
+    called = {c.func.id for c in ast.walk(run_kwargs[0]) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+    assert called & _EXECUTION_BUILDER, f"#17267: {_POOL_FILE}._run_kwargs does not call execution_hardening_kwargs"
 
 
 def _is_source_python(rel: str) -> bool:

@@ -15,7 +15,7 @@ import asyncio
 from typing import Any, Dict
 
 from autobot_shared.async_compat import fire_and_forget
-from autobot_shared.container_hardening import baseline_hardening_kwargs
+from autobot_shared.container_hardening import execution_hardening_kwargs
 from autobot_shared.logging_manager import get_logger
 
 try:
@@ -46,6 +46,8 @@ class WarmContainerPool:
         image: str,
         pool_size: int = _DEFAULT_POOL_SIZE,
         container_kwargs: Dict[str, Any] | None = None,
+        network_reason: str | None = None,
+        writable_root_reason: str | None = None,
     ) -> None:
         """
         Args:
@@ -53,7 +55,11 @@ class WarmContainerPool:
             image: Image to pre-start (e.g. ``"python:3.10-slim"``).
             pool_size: Number of warm containers to maintain.
             container_kwargs: Extra kwargs forwarded to ``containers.run()``.
+            network_reason: Named opt-in slug that enables network (default: none).
+            writable_root_reason: Named opt-in slug that enables a writable root.
         """
+        self._network_reason = network_reason
+        self._writable_root_reason = writable_root_reason
         self._client = docker_client
         self._image = image
         self._pool_size = pool_size
@@ -195,15 +201,17 @@ class WarmContainerPool:
         return await self._pool.get()
 
     def _run_kwargs(self) -> Dict[str, Any]:
-        """Caller kwargs with the privilege floor applied on top (#17267).
+        """Caller kwargs with the full execution hardening applied on top (#17267).
 
-        The floor (cap_drop, no-new-privileges, pids cap) wins on conflict, so a caller's
-        ``container_kwargs`` cannot weaken it; no current caller passes any of those keys.
-        Why here: the only caller, DockerBackend (docker_backend.py, ``ContainerPoolRegistry(``),
-        passes no ``default_container_kwargs``, so pooled containers were unhardened before.
-        Network, filesystem, mounts, memory and user are untouched.
+        The hardening wins on conflict, so a caller's ``container_kwargs`` cannot drop
+        network isolation, the read-only root, the memory cap or the privilege floor; the
+        only way out is a named, logged reason (``network_reason`` / ``writable_root_reason``).
         """
-        return {**self._container_kwargs, **baseline_hardening_kwargs()}
+        hardened = execution_hardening_kwargs(
+            network_reason=self._network_reason,
+            writable_root_reason=self._writable_root_reason,
+        )
+        return {**self._container_kwargs, **hardened}
 
     async def _create_warm_container(self) -> "docker.models.containers.Container | None":
         """Start a new idle container and return it.
@@ -278,7 +286,11 @@ class ContainerPoolRegistry:
         docker_client: "docker.DockerClient",
         pool_size: int = _DEFAULT_POOL_SIZE,
         default_container_kwargs: Dict[str, Any] | None = None,
+        network_reason: str | None = None,
+        writable_root_reason: str | None = None,
     ) -> None:
+        self._network_reason = network_reason
+        self._writable_root_reason = writable_root_reason
         self._client = docker_client
         self._pool_size = pool_size
         self._default_kwargs = default_container_kwargs or {}
@@ -297,6 +309,8 @@ class ContainerPoolRegistry:
                 image=image,
                 pool_size=self._pool_size,
                 container_kwargs=self._default_kwargs.copy(),
+                network_reason=self._network_reason,
+                writable_root_reason=self._writable_root_reason,
             )
             self._pools[image] = pool
 

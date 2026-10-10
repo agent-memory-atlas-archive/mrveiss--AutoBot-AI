@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autobot_shared.container_hardening import baseline_hardening_kwargs
+from autobot_shared.container_hardening import execution_hardening_kwargs
 from services.execution.base_backend import (
     BackendType,
     ExecutionResult,
@@ -908,7 +908,7 @@ class TestDockerBackendSnapshot:
             "sleep infinity",
             detach=True,
             remove=False,
-            **baseline_hardening_kwargs(),
+            **execution_hardening_kwargs(),
         )
 
     @pytest.mark.asyncio

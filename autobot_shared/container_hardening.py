@@ -12,13 +12,26 @@ client may legitimately vary is an explicit named parameter; everything else
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from autobot_shared.env_utils import env_int
+from autobot_shared.env_utils import env_int, env_str
+from autobot_shared.logging_manager import get_logger
+
+logger = get_logger(__name__)
 
 #: Process cap for hardened containers (Linux pids cgroup), so a fork-bomb cannot
 #: exhaust host PIDs (GH#11059). One env-backed value shared by every client.
 CONTAINER_PIDS_LIMIT: int = env_int("AUTOBOT_WORKSPACE_PIDS_LIMIT", 512)
+
+#: Memory (and, equal to it, swap) cap for execution/pool containers that do not size their own.
+EXECUTION_MEMORY_LIMIT: str = env_str("AUTOBOT_EXECUTION_MEMORY_LIMIT", "512m")
+
+#: Size of the scratch tmpfs a read-only execution container writes to.
+EXECUTION_TMPFS_SIZE: str = env_str("AUTOBOT_EXECUTION_TMPFS_SIZE", "64m")
+
+#: Where the scratch tmpfs is mounted inside an execution container.
+EXECUTION_SCRATCH_PATH = "/tmp"  # nosec B108  # container-internal mount point, not a host path
 
 #: CFS period paired with every ``cpu_quota`` (microseconds).
 CPU_PERIOD_US = 100000
@@ -67,3 +80,50 @@ def hardening_kwargs(
     if pids_limit is not None:
         kwargs["pids_limit"] = pids_limit
     return kwargs
+
+
+_REASON_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{2,63}$")
+
+
+def _audited_reason(flag: str, reason: str | None) -> str | None:
+    """Return a validated opt-in reason (logged), or None when the flag is not opted out.
+
+    A reason is a short lowercase slug naming the workload (e.g. ``pip-install-backend``).
+    Passing a blank or non-slug reason raises, so a default cannot be dropped anonymously.
+    """
+    if reason is None:
+        return None
+    if not isinstance(reason, str) or not _REASON_RE.match(reason):
+        raise ValueError(f"container hardening opt-out '{flag}' needs a named reason slug, got {reason!r}")
+    logger.warning("container hardening default dropped: %s (reason=%s)", flag, reason)
+    return reason
+
+
+def execution_hardening_kwargs(
+    *,
+    memory_limit: str | None = None,
+    network_reason: str | None = None,
+    writable_root_reason: str | None = None,
+) -> dict[str, Any]:
+    """Full hardening for pooled and execution containers (#17267, option b).
+
+    Defaults: ``network_mode="none"``, read-only root with a size-limited
+    ``noexec,nosuid`` tmpfs scratch, ``mem_limit`` with ``memswap_limit`` equal to it
+    (no swap), plus the privilege floor (``cap_drop=ALL``, ``no-new-privileges``, pids cap).
+
+    Args:
+        memory_limit: Docker memory string; default ``AUTOBOT_EXECUTION_MEMORY_LIMIT``.
+        network_reason: slug naming the workload that needs network; enables ``bridge``.
+        writable_root_reason: slug naming the workload that needs a writable root.
+    """
+    memory = memory_limit or EXECUTION_MEMORY_LIMIT
+    networked = _audited_reason("network", network_reason) is not None
+    writable = _audited_reason("writable_root", writable_root_reason) is not None
+    return {
+        "network_mode": "bridge" if networked else "none",
+        "read_only": not writable,
+        "tmpfs": {EXECUTION_SCRATCH_PATH: f"rw,noexec,nosuid,size={EXECUTION_TMPFS_SIZE}"},
+        "mem_limit": memory,
+        "memswap_limit": memory,
+        **baseline_hardening_kwargs(),
+    }
