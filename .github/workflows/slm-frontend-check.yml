@@ -19,6 +19,7 @@ on:
     paths:
       - 'autobot-slm-frontend/**'
       - '.github/workflows/slm-frontend-check.yml'
+      - '.github/workflows/_changes.yml'
       - 'autobot-frontend/scripts/check-i18n-keys.mjs'
       # The lifting rule's INPUTS, not just its output (review finding on
       # #17395). `lift_locale_translations.py --check` regenerates the SLM
@@ -42,6 +43,7 @@ on:
     paths:
       - 'autobot-slm-frontend/**'
       - '.github/workflows/slm-frontend-check.yml'
+      - '.github/workflows/_changes.yml'
       - 'autobot-frontend/scripts/check-i18n-keys.mjs'
       # The lifting rule's INPUTS, not just its output (review finding on
       # #17395). `lift_locale_translations.py --check` regenerates the SLM

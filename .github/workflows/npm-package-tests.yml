@@ -26,6 +26,7 @@ on:
       - 'libs/autobot-sdk-ts/**'
       - 'autobot-infrastructure/shared/mcp/tools/mcp-structured-thinking/**'
       - '.github/workflows/npm-package-tests.yml'
+      - '.github/workflows/_changes.yml'
   pull_request:
     # ready_for_review is REQUIRED here: the jobs below are gated on
     # draft == false, and marking a PR ready fires ONLY this event. Without
@@ -42,6 +43,7 @@ on:
       - 'libs/autobot-sdk-ts/**'
       - 'autobot-infrastructure/shared/mcp/tools/mcp-structured-thinking/**'
       - '.github/workflows/npm-package-tests.yml'
+      - '.github/workflows/_changes.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

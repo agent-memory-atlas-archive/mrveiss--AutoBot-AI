@@ -41,6 +41,7 @@ on:
       - '.github/filters/backend-python-paths.yml'
       - 'ansible/**'
       - '.github/workflows/ai-security-review.yml'
+      - '.github/workflows/_changes.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -58,16 +59,10 @@ jobs:
     # Gating it makes those read `skipped` and exit 1, so a REQUIRED
     # context would report FAILED on every draft -- worse than no gate.
     # Gate the expensive jobs, never the cheap thing others read.
-    runs-on: ubuntu-latest
-    outputs:
-      reviewable: ${{ steps.filter.outputs.reviewable }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
-        id: filter
-        with:
-          # #12986: `reviewable` is defined in the canonical filter file.
-          filters: .github/filters/backend-python-paths.yml
+    uses: ./.github/workflows/_changes.yml
+    with:
+      # #12986: `reviewable` is defined in the canonical filter file.
+      filters: .github/filters/backend-python-paths.yml
 
   review:
     name: Security Review

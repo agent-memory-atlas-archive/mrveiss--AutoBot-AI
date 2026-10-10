@@ -31,6 +31,7 @@ on:
       - '**/requirements*.txt'
       - 'requirements-ci/**'
       - '.github/workflows/startup-import-smoke.yml'
+      - '.github/workflows/_changes.yml'
       - '.github/workflows/backend-required-context.yml'
   # NOTE: no pull_request.paths filter — this workflow ALWAYS runs on PRs so its
   # required-check context ("startup-import-smoke") always reports a conclusion.

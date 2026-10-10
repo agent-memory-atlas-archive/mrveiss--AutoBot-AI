@@ -4,7 +4,7 @@
 # Author: mrveiss
 """The reusable `changes` job is a zero-behaviour-change refactor (#15360).
 
-Sixteen workflows each carried (fourteen are converted here, see DEFERRED) their own `changes` job (checkout + dorny/paths-filter).
+Sixteen workflows each carried  their own `changes` job (checkout + dorny/paths-filter).
 They now call `.github/workflows/_changes.yml`. "Zero change" is a claim about sixteen
 things at once, so it is frozen as data: `fixtures/pre_15360_changes_jobs.json` was
 generated from `origin/main` BEFORE the conversion (`python -m
@@ -47,12 +47,23 @@ CALLERS = (
     "api-wiring security startup-import-smoke backend-required-context code-quality "
     "code-quality-required-context frontend-test frontend-required-context python-required-context "
     "docker-smoke-required-context docker-smoke-test npm-package-tests slm-frontend-check "
-    "verify-generated-types"
+    "verify-generated-types migration-gate ai-security-review"
 ).split()
-#: Left per-job on purpose: another unmerged branch owns the file today (migration-gate.yml:
-#: issue-18160-ghcr-ci-*, ai-security-review.yml: issue-12984-pr-comment-upsert). They convert
-#: after those land; `_changes.yml` already declares their `migrations` / `reviewable` outputs.
-DEFERRED = ("migration-gate", "ai-security-review")
+#: The ONLY `on:` delta allowed: callers whose `paths:` list their own workflow file gained
+#: `_changes.yml` beside it, because that is where their change-detection logic now lives.
+#: workflow -> the events whose `paths:` carry the new entry. Pinned, not derived.
+ON_ADDED_EVENTS = {
+    "api-wiring": ("push",),
+    "security": ("pull_request",),
+    "startup-import-smoke": ("push",),
+    "code-quality": ("push",),
+    "frontend-test": ("push",),
+    "npm-package-tests": ("push", "pull_request"),
+    "slm-frontend-check": ("push", "pull_request"),
+    "verify-generated-types": ("push",),
+    "migration-gate": ("push",),
+    "ai-security-review": ("pull_request",),
+}
 EVENTS = ("push", "pull_request", "merge_group", "schedule", "workflow_dispatch")
 MG_SHA = "merge-group-base-sha"  # a stand-in value; only its presence or absence is compared
 PRE_BASE = "${{ github.event.merge_group.base_sha || '' }}"
@@ -112,10 +123,15 @@ def filter_source(raw: str, read: ReadFile) -> dict:
     return {"file": raw.strip(), "sha256": digest(data), "content": yaml.safe_load(data)}
 
 
-#: The one deliberate widening, per filter file and key. `python_filter_covers_its_guards_test`
+#: The deliberate widenings, per filter file and key. `python_filter_covers_its_guards_test`
 #: requires the python-suite filter to cover every file a guard reads, and these guards read
 #: `_changes.yml`; so editing it now runs the suite. Nothing else about any path set moves.
-ALLOWED_ADDITIONS = {".github/filters/python-paths.yml": {"python": [f"{WORKFLOWS}/_changes.yml"]}}
+ALLOWED_ADDITIONS = {
+    ".github/filters/python-paths.yml": {"python": [f"{WORKFLOWS}/_changes.yml"]},
+    # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
+    # `_changes.yml` entry the workflow gained has to be here too.
+    ".github/filters/frontend-paths.yml": {"frontend": [f"{WORKFLOWS}/_changes.yml"]},
+}
 
 
 def without_allowed_additions(src: dict) -> dict:
@@ -127,13 +143,35 @@ def without_allowed_additions(src: dict) -> dict:
     return {"file": src["file"], "content": content}
 
 
-def _common(text: str, doc: dict, read: ReadFile) -> dict:
+ADDED_ENTRY = f"{WORKFLOWS}/_changes.yml"
+
+
+def strip_added_on_entries(head: str, doc_on: dict, name: str | None) -> tuple[str, dict]:
+    """The header text and parsed `on:` with the pinned `_changes.yml` additions removed.
+
+    Asserts the additions are exactly where ON_ADDED_EVENTS says, and nowhere else.
+    """
+    events = ON_ADDED_EVENTS.get(name, ()) if name else ()
+    lines = head.split("\n")
+    marked = [i for i, ln in enumerate(lines) if ln.strip() in (f"- '{ADDED_ENTRY}'", f'- "{ADDED_ENTRY}"')]
+    assert len(marked) == len(events), f"{name}: {len(marked)} added entries, pinned {len(events)}"
+    kept = "\n".join(ln for i, ln in enumerate(lines) if i not in marked)
+    parsed = {e: dict(v) if isinstance(v, dict) else v for e, v in doc_on.items()}
+    for event in events:
+        paths = list(parsed[event]["paths"])
+        assert paths.count(ADDED_ENTRY) == 1, f"{name}: on.{event}.paths lacks the pinned entry"
+        parsed[event]["paths"] = [p for p in paths if p != ADDED_ENTRY]
+    return kept, parsed
+
+
+def _common(text: str, doc: dict, read: ReadFile, name: str | None = None) -> dict:
     head, blocks = split_jobs(text)
+    head, on_block = strip_added_on_entries(head, doc.get(True, doc.get("on")), name)
     others = {k: v for k, v in blocks.items() if k != "changes"}
     jobs = doc["jobs"]
     return {
         "header_sha256": digest(head.encode()),
-        "on": doc.get(True, doc.get("on")),
+        "on": on_block,
         "other_jobs_sha256": {k: digest(v.encode()) for k, v in others.items()},
         "other_jobs_if_needs": {k: [jobs[k].get("if"), jobs[k].get("needs")] for k in others},
         "consumed_outputs": sorted(set(re.findall(r"needs\.changes\.outputs\.(\w+)", text))),
@@ -180,7 +218,7 @@ def _input(reusable: dict, call_with: dict, name: str):
     return call_with.get(name, spec.get("default"))
 
 
-def post_record(text: str, reusable_text: str, read: ReadFile) -> dict:
+def post_record(text: str, reusable_text: str, read: ReadFile, name: str) -> dict:
     """The same record, resolved through the caller's `with:` and `_changes.yml`."""
     doc, reusable = yaml.safe_load(text), yaml.safe_load(reusable_text)
     job = doc["jobs"]["changes"]
@@ -193,7 +231,7 @@ def post_record(text: str, reusable_text: str, read: ReadFile) -> dict:
     assert dorny[0]["with"]["base"] == POST_BASE and dorny[0]["if"] == POST_DORNY_IF
     assert dorny[0]["with"]["filters"] == "${{ inputs.filters }}"
     assert inner["timeout-minutes"] == "${{ inputs.timeout_minutes }}"
-    rec = _common(text, doc, read)
+    rec = _common(text, doc, read, name)
     rec.update(
         filters=filter_source(call["filters"], read),
         base_is_merge_group=bool(_input(reusable, call, "merge_group_base")),
@@ -227,7 +265,7 @@ def _load_pre() -> dict:
 def _post(name: str) -> dict:
     text = (REPO / WORKFLOWS / f"{name}.yml").read_text(encoding="utf-8")
     reusable = (REPO / WORKFLOWS / "_changes.yml").read_text(encoding="utf-8")
-    return post_record(text, reusable, _worktree_reader)
+    return post_record(text, reusable, _worktree_reader, name)
 
 
 def _generate(ref: str) -> dict:
@@ -276,7 +314,7 @@ def test_each_resolved_field_equals_the_pre_conversion_value(name, field):
     assert post == pre
 
 
-def test_the_only_widening_is_the_one_declared_entry_in_one_filter_file():
+def test_the_only_widenings_are_the_declared_entries_in_two_filter_files():
     """Every other filter file is byte-identical (hash); this one differs by exactly the entry."""
     widened = 0
     for name in CALLERS:
@@ -286,9 +324,10 @@ def test_the_only_widening_is_the_one_declared_entry_in_one_filter_file():
             continue
         widened += 1
         entry = f"{WORKFLOWS}/_changes.yml"
-        assert entry not in pre["content"]["python"] and post["content"]["python"].count(entry) == 1
-        assert len(post["content"]["python"]) == len(pre["content"]["python"]) + 1
-    assert widened >= 1, "no caller reads the widened filter; the allowance is dead"
+        key = next(iter(ALLOWED_ADDITIONS[pre["file"]]))
+        assert entry not in pre["content"][key] and post["content"][key].count(entry) == 1
+        assert len(post["content"][key]) == len(pre["content"][key]) + 1
+    assert widened >= 2, "no caller reads the widened filter; the allowance is dead"
 
 
 @pytest.mark.parametrize("name", CALLERS)
@@ -319,7 +358,7 @@ def test_every_output_the_reusable_job_declares_reads_the_matching_step_output()
     for key, spec in wf.items():
         assert spec["value"] == "${{ jobs.changes.outputs." + key + " }}"
         assert inner["jobs"]["changes"]["outputs"][key] == "${{ steps.filter.outputs." + key + " }}"
-    assert len(wf) == 15  # the union, including the two deferred callers' outputs
+    assert len(wf) == 15  # the union of every caller's outputs
 
 
 def test_the_pinned_dorny_ref_carries_its_version_comment():

@@ -11,8 +11,7 @@ the pin, the `base` handling for merge groups (#14054) and the checkout would ag
 edited in some places and not others.
 
 Three workflows legitimately keep a dorny step of their own, each for a reason the reusable
-job cannot express, and two wait on another branch's edit of the same file; all five are in
-`_ALLOWED` with the reason. The detector reads the parsed
+job cannot express; they are in `_ALLOWED` with the reason. The detector reads the parsed
 workflow, so a comment or a string that merely names the action is not a step.
 """
 
@@ -42,14 +41,6 @@ _ALLOWED: dict[str, str] = {
     "codeql.yml": (
         "its `changes` output is the JSON list of matched filters (`steps.filter.outputs.changes`) "
         "fed to fromJSON, and the job carries its own `pull-requests: read` permission"
-    ),
-    "migration-gate.yml": (
-        "DEFERRED, not excused: branches issue-18160-ghcr-ci-* edit this file and are unmerged; "
-        "converts to the reusable job once they land (#15360). Drop this entry then"
-    ),
-    "ai-security-review.yml": (
-        "DEFERRED, not excused: branch issue-12984-pr-comment-upsert edits this file and is "
-        "unmerged; converts to the reusable job once it lands (#15360). Drop this entry then"
     ),
     "enforce-precommit.yml": (
         "a STEP inside the required `verify-precommit-config` job (#15299), not a job of its own; "
@@ -145,7 +136,7 @@ def test_the_scan_is_not_vacuous() -> None:
     texts = _texts()
     assert _REUSABLE in texts and _dorny_steps(yaml.safe_load(texts[_REUSABLE])) == 1
     callers = [n for n, t in texts.items() if _calls_reusable(yaml.safe_load(t))]
-    assert len(callers) >= 14, f"only {len(callers)} workflows call {_REUSABLE}"
+    assert len(callers) >= 16, f"only {len(callers)} workflows call {_REUSABLE}"
     assert len(texts) >= 50, f"parsed only {len(texts)} workflows"
 
 

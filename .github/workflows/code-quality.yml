@@ -70,6 +70,7 @@ on:
       # the job green on a linter nothing had executed.
       - 'scripts/lint-conventions.sh'
       - '.github/workflows/code-quality.yml'
+      - '.github/workflows/_changes.yml'
       # #15608: the shared filter file and the complement shim publishing the
       # same required context. Editing either must run the REAL gate, not the
       # shim reporting green over its own change.

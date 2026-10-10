@@ -81,6 +81,7 @@ on:
       - 'scripts/audit_api_wiring.py'
       - 'requirements*.txt'
       - '.github/workflows/verify-generated-types.yml'
+      - '.github/workflows/_changes.yml'
   # NOTE: no pull_request.paths filter — this workflow ALWAYS runs on PRs so its
   # required-check context ("verify-generated-types") always reports a conclusion.
   # A path-filtered required check that never triggers leaves the PR deadlocked

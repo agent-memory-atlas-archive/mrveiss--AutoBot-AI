@@ -24,6 +24,7 @@ on:
       # #14786: mirror of the filter file's own entry -- see its comment.
       - 'libs/autobot-ui/**'
       - '.github/workflows/frontend-test.yml'
+      - '.github/workflows/_changes.yml'
       - '.github/workflows/frontend-required-context.yml'
       - '.github/filters/frontend-paths.yml'
       # Canonical source for the cross-language parity guard (#13073, #13074):

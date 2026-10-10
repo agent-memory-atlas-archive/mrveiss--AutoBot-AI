@@ -1,4 +1,113 @@
 {
+ "ai-security-review": {
+  "base_is_merge_group": false,
+  "checkout": true,
+  "checkout_uses": "actions/checkout@v7",
+  "consumed_outputs": [
+   "reviewable"
+  ],
+  "declared_outputs_read_from_step": true,
+  "display_name": "Detect changed paths",
+  "dorny_uses": "dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d",
+  "filters": {
+   "content": {
+    "backend": [
+     [
+      "autobot-backend/**/*.py",
+      "autobot-slm-backend/**/*.py",
+      "autobot_shared/**/*.py",
+      ".github/filters/backend-python-paths.yml"
+     ],
+     "**/requirements*.txt",
+     "requirements-ci/**",
+     ".github/workflows/startup-import-smoke.yml",
+     ".github/workflows/backend-required-context.yml"
+    ],
+    "backend-python": [
+     "autobot-backend/**/*.py",
+     "autobot-slm-backend/**/*.py",
+     "autobot_shared/**/*.py",
+     ".github/filters/backend-python-paths.yml"
+    ],
+    "deps": [
+     "**/requirements*.txt",
+     "requirements-ci/**",
+     "pyproject.toml",
+     "autobot_shared/pyproject.toml",
+     "autobot-frontend/package*.json",
+     ".github/workflows/security.yml"
+    ],
+    "python": [
+     [
+      "autobot-backend/**/*.py",
+      "autobot-slm-backend/**/*.py",
+      "autobot_shared/**/*.py",
+      ".github/filters/backend-python-paths.yml"
+     ],
+     ".github/workflows/security.yml"
+    ],
+    "reviewable": [
+     [
+      "autobot-backend/**/*.py",
+      "autobot-slm-backend/**/*.py",
+      "autobot_shared/**/*.py",
+      ".github/filters/backend-python-paths.yml"
+     ],
+     "ansible/**",
+     ".github/workflows/ai-security-review.yml"
+    ],
+    "wiring": [
+     [
+      "autobot-backend/**/*.py",
+      "autobot-slm-backend/**/*.py",
+      "autobot_shared/**/*.py",
+      ".github/filters/backend-python-paths.yml"
+     ],
+     "autobot-frontend/src/**",
+     "scripts/audit_api_wiring.py",
+     "scripts/api_wiring_baseline.txt",
+     "requirements*.txt",
+     ".github/workflows/api-wiring.yml"
+    ]
+   },
+   "file": ".github/filters/backend-python-paths.yml",
+   "sha256": "18bfcaf8-e98f2c5c-797e4af0-fbb9e626-918c0ffa-8d56bcf0-58848749-72ffe9df"
+  },
+  "header_sha256": "6b14b130-240ae654-3579fc89-8b24097f-83d5a130-a63919da-2fa62ef4-9719e66c",
+  "job_level_extras": [],
+  "on": {
+   "pull_request": {
+    "branches": [
+     "release",
+     "main"
+    ],
+    "paths": [
+     "autobot-backend/**/*.py",
+     "autobot-slm-backend/**/*.py",
+     "autobot_shared/**/*.py",
+     ".github/filters/backend-python-paths.yml",
+     "ansible/**",
+     ".github/workflows/ai-security-review.yml"
+    ]
+   }
+  },
+  "other_jobs_if_needs": {
+   "review": [
+    "needs.changes.outputs.reviewable == 'true'",
+    "changes"
+   ]
+  },
+  "other_jobs_sha256": {
+   "review": "a894af95-8045782b-00b933e3-6599a0de-7c04c8f2-38cc9fe4-212e647a-f07439b9"
+  },
+  "outputs": [
+   "reviewable"
+  ],
+  "pr_only": false,
+  "runs_on": "ubuntu-latest",
+  "step_id": "filter",
+  "timeout": 360
+ },
  "api-wiring": {
   "base_is_merge_group": true,
   "checkout": true,
@@ -747,6 +856,98 @@
   "runs_on": "ubuntu-latest",
   "step_id": "filter",
   "timeout": 360
+ },
+ "migration-gate": {
+  "base_is_merge_group": true,
+  "checkout": true,
+  "checkout_uses": "actions/checkout@v7",
+  "consumed_outputs": [
+   "migrations"
+  ],
+  "declared_outputs_read_from_step": true,
+  "display_name": "Detect changed paths",
+  "dorny_uses": "dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d",
+  "filters": {
+   "inline": {
+    "migrations": [
+     "autobot-backend/migrations/**",
+     "autobot-backend/tests/migrations/**",
+     "autobot-backend/user_management/models/**",
+     "autobot-backend/llc/models/**",
+     "autobot-backend/canvas/models.py",
+     "autobot-backend/models/**",
+     "autobot-backend/initialization/lifespan.py",
+     "autobot-slm-backend/ansible/setup-user-backend.yml",
+     "autobot-slm-backend/ansible/playbooks/update-all-nodes.yml",
+     ".github/workflows/migration-gate.yml"
+    ]
+   }
+  },
+  "header_sha256": "f04d1f2a-f79b7b35-c6628c95-9d201909-88d7070d-bc4ee00c-ab1d2200-ccb051ae",
+  "job_level_extras": [],
+  "on": {
+   "merge_group": null,
+   "pull_request": {
+    "branches": [
+     "release",
+     "main"
+    ],
+    "types": [
+     "opened",
+     "synchronize",
+     "reopened",
+     "ready_for_review"
+    ]
+   },
+   "push": {
+    "branches": [
+     "release",
+     "main"
+    ],
+    "paths": [
+     "autobot-backend/migrations/**",
+     "autobot-backend/tests/migrations/**",
+     "autobot-backend/user_management/models/**",
+     "autobot-backend/llc/models/**",
+     "autobot-backend/canvas/models.py",
+     "autobot-backend/models/**",
+     "autobot-backend/initialization/lifespan.py",
+     "autobot-slm-backend/ansible/setup-user-backend.yml",
+     "autobot-slm-backend/ansible/playbooks/update-all-nodes.yml",
+     ".github/workflows/migration-gate.yml"
+    ]
+   },
+   "schedule": [
+    {
+     "cron": "40 4 * * *"
+    }
+   ],
+   "workflow_dispatch": null
+  },
+  "other_jobs_if_needs": {
+   "migration-matrix": [
+    "always()",
+    [
+     "changes",
+     "migration-tests"
+    ]
+   ],
+   "migration-tests": [
+    "needs.changes.outputs.migrations != 'false' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'",
+    "changes"
+   ]
+  },
+  "other_jobs_sha256": {
+   "migration-matrix": "56f77551-31073ea2-fcbedcc1-084d04d6-dd858fed-912ec86e-7b364952-d0a5fac8",
+   "migration-tests": "c5416d11-998a6d7a-7c507742-6abbd6b1-2a581f0b-ddb82604-cb1210a9-ab121c7a"
+  },
+  "outputs": [
+   "migrations"
+  ],
+  "pr_only": false,
+  "runs_on": "ubuntu-latest",
+  "step_id": "filter",
+  "timeout": 10
  },
  "npm-package-tests": {
   "base_is_merge_group": false,
