@@ -114,6 +114,7 @@ async def run_systemctl_over_ssh(
     use_noninteractive_sudo: bool,
     timeout: float,
     merge_stderr: bool = False,
+    shell_suffix: str = "",
 ) -> SystemctlResult:
     """The ONE place an SSH `sudo [-n] systemctl <action> <units>` command is built and run (#18186).
 
@@ -121,9 +122,10 @@ async def run_systemctl_over_ssh(
     to the host, so each caller keeps the builder it already used. Nothing is caught here: a
     timeout or spawn error propagates, because each site reports failure its own way
     (the unification of the `-n` flag, the timeout and that contract is #17455's decision).
+    `shell_suffix` is appended verbatim to the remote command (e.g. ` || true`).
     """
     sudo = "sudo -n" if use_noninteractive_sudo else "sudo"
-    ssh_cmd = [*ssh_base_cmd, f"{sudo} systemctl {action} {' '.join(units)}"]
+    ssh_cmd = [*ssh_base_cmd, f"{sudo} systemctl {action} {' '.join(units)}{shell_suffix}"]
     process = await asyncio.create_subprocess_exec(
         *ssh_cmd,
         stdout=asyncio.subprocess.PIPE,

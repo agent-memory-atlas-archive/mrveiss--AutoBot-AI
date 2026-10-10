@@ -23,6 +23,7 @@ from autobot_shared.ssot_config import config
 from autobot_shared.time_utils import utc_timestamp
 from models.database import Setting
 from services.database import db_service
+from services.service_restart import run_systemctl_over_ssh
 from services.ssh_utils import _ssh_key_usable
 
 logger = logging.getLogger(__name__)
@@ -331,25 +332,22 @@ class CodeDistributor:
             ssh_user: SSH username
             ssh_port: SSH port
         """
-        restart_cmd = self._build_ssh_command(ssh_port)
-        restart_cmd.extend(
-            [
-                f"{ssh_user}@{ip_address}",
-                "sudo systemctl restart slm-agent || true",
-            ]
-        )
+        ssh_base_cmd = [*self._build_ssh_command(ssh_port), f"{ssh_user}@{ip_address}"]  # outside the try, as before
 
         try:
             logger.info("Restarting slm-agent on node %s", node_id)
-            proc = await asyncio.create_subprocess_exec(
-                *restart_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+            done = await run_systemctl_over_ssh(
+                ssh_base_cmd,
+                "restart",
+                ["slm-agent"],
+                use_noninteractive_sudo=False,
+                timeout=60.0,
+                merge_stderr=True,
+                shell_suffix=" || true",
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60.0)
-            restart_output = stdout.decode("utf-8", errors="replace")
+            restart_output = done.stdout.decode("utf-8", errors="replace")
 
-            if proc.returncode == 0:
+            if done.returncode == 0:
                 logger.info("slm-agent restarted on node %s", node_id)
             else:
                 logger.warning(

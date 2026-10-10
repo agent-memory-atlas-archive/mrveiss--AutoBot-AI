@@ -17,8 +17,9 @@ no `sudo` in the string), so it never forms this command string. The detector re
 tree, so a comment is not a command, and docstrings and log-call arguments are skipped because
 they describe a restart rather than issue one.
 
-Four other SSH sites build the same command outside the executor. They are outside #18186's three
-and are recorded in `_PENDING` below, dated, rather than silently allowed.
+The four other SSH sites found while writing the first version (backup, blue_green,
+code_distributor, service_orchestrator) were moved onto the executor in the same issue, so there is
+no allowance list: the set of builders outside the executor is empty, and stays empty.
 """
 
 from __future__ import annotations
@@ -39,18 +40,6 @@ _CANONICAL = "autobot-slm-backend/services/service_restart.py"
 #: `sudo [-n] systemctl <verb>`, or `{sudo} systemctl <verb>` once an f-string is flattened to `{}`.
 _COMMAND = re.compile(r"(?:\bsudo\s+(?:-n\s+)?|\{\}\s+)systemctl\s+(?:restart|start|stop|\{\})")
 _LOG_METHODS = frozenset({"debug", "info", "warning", "error", "exception", "critical", "log"})
-
-#: Other SSH systemctl sites, found while writing this guard and NOT part of #18186's three. Each
-#: needs its own call (they differ in `|| true`, shlex quoting, `--user`, and the runner they use),
-#: so they are listed rather than rewritten blind. Dated 2026-10-10; tracked under #17452 and
-#: #17455. `test_every_pending_entry_still_offends` fails the moment one is fixed, so the list can
-#: only shrink.
-_PENDING = {
-    "autobot-slm-backend/services/backup.py": "stop/start of the redis unit over SSH, no -n",
-    "autobot-slm-backend/services/blue_green.py": "stop of a service over SSH, shlex-quoted, no -n",
-    "autobot-slm-backend/services/code_distributor.py": "restart of slm-agent over SSH with `|| true`",
-    "autobot-slm-backend/services/service_orchestrator.py": "`_systemctl_action` over SSH, -n, own runner",
-}
 
 
 def _flatten(node: ast.AST) -> str | None:
@@ -173,23 +162,14 @@ def test_the_executor_module_itself_builds_the_command() -> None:
 
 
 def test_the_scan_is_not_vacuous() -> None:
-    """The executor and the four pending sites mention systemctl; fewer parsed is a blind scan."""
-    found, parsed = _builders()
+    """The executor and the sites that call it mention systemctl; fewer parsed is a blind scan."""
+    _, parsed = _builders()
     assert parsed >= 5, f"parsed {parsed} files mentioning systemctl"
-    assert found, "no file outside the executor builds the command: the pending list cannot be checked"
 
 
-def test_only_the_executor_builds_the_ssh_systemctl_command_beyond_the_dated_pending_list() -> None:
+def test_only_the_executor_builds_the_ssh_systemctl_command() -> None:
     found, _ = _builders()
-    new = sorted(set(found) - set(_PENDING))
-    assert not new, (
-        f"#18186: {new} build a remote `sudo [-n] systemctl <action>` command. The command is built once, "
+    assert not found, (
+        f"#18186: {list(found)} build a remote `sudo [-n] systemctl <action>` command. The command is built once, "
         f"by run_systemctl_over_ssh in {_CANONICAL}; call it with explicit use_noninteractive_sudo and timeout."
     )
-
-
-def test_every_pending_entry_still_offends() -> None:
-    """A fixed site must leave `_PENDING`: the list is a debt record, not a permanent allowance."""
-    found, _ = _builders()
-    stale = sorted(set(_PENDING) - set(found))
-    assert not stale, f"#18186: {stale} no longer build the command; remove them from _PENDING."
