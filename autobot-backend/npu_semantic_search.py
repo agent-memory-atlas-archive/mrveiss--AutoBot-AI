@@ -38,7 +38,6 @@ from constants.threshold_constants import TimingConstants
 from knowledge.backends import get_default_client
 from knowledge.embedding_cache import EmbeddingCache, get_embedding_cache
 from knowledge_base import KnowledgeBase
-from services.npu_client import generate_embedding_with_fallback
 
 # Issue #387: GPU-accelerated vector search
 from utils.gpu_vector_search import (
@@ -58,6 +57,8 @@ except ImportError:
     CHROMADB_AVAILABLE = False
 
 logger = get_llm_logger("npu_semantic_search")
+
+_INDEX_SPACE_UNAVAILABLE = "accelerated embedding unavailable; the query space is not resolvable until #18217"
 
 
 # #8159: L2 embedding cache TTL. Override via AUTOBOT_NPU_EMBEDDING_CACHE_TTL (seconds).
@@ -501,31 +502,20 @@ class NPUSemanticSearch:
     async def _generate_embedding_with_device(
         self, text: str, enable_npu: bool, force_device: HardwareDevice | None
     ) -> Tuple[np.ndarray, str]:
-        """Generate the query embedding in the index's space on the requested device, else canonically. #620."""
-        if force_device:
-            embedding = await accelerated_embedding_generation(text, preferred_device=force_device)
-            return embedding, force_device.value
+        """Generate the query embedding in the index's space, or refuse. #620, #18185.
 
-        if enable_npu:
-            embedding = await accelerated_embedding_generation(text)
-            return embedding, "auto_selected"
-
-        return await self._generate_fallback_embedding(text, "gpu_fallback")
-
-    async def _generate_fallback_embedding(
-        self, text: str, label: str = "cpu_final_fallback"
-    ) -> Tuple[np.ndarray, str]:
-        """Embed via the canonical accessor (the model behind the stored vectors) or refuse. #18185."""
-        model = active_embedding_model()
+        No other space is ever emitted: a vector the indexes cannot search would surface as silent
+        "no matches". Which space the index is in is decided in #18217.
+        """
+        if force_device is None and not enable_npu:
+            raise EmbeddingUnavailableError(_INDEX_SPACE_UNAVAILABLE + ": the accelerated path is disabled")
         try:
-            vector = await generate_embedding_with_fallback(text, model)
-            reason = "no vector returned"
+            if force_device:
+                return await accelerated_embedding_generation(text, preferred_device=force_device), force_device.value
+            return await accelerated_embedding_generation(text), "auto_selected"
         except Exception as exc:
-            vector, reason = None, type(exc).__name__
-        if not vector:
-            logger.error("Embedding fallback refused: model=%s reason=%s", model, reason)
-            raise EmbeddingUnavailableError(f"embedding model {model!r} unavailable: {reason}")
-        return np.asarray(vector, dtype=np.float32), label
+            logger.error("Accelerated embedding failed, search refused: %s", type(exc).__name__)
+            raise EmbeddingUnavailableError(f"{_INDEX_SPACE_UNAVAILABLE}: {type(exc).__name__}") from exc
 
     @staticmethod
     def _l2_key(text: str) -> str:
@@ -580,10 +570,7 @@ class NPUSemanticSearch:
         try:
             embedding, device_name = await self._generate_embedding_with_device(text, enable_npu, force_device)
         except EmbeddingUnavailableError:
-            raise  # refused: nothing is cached under the active model's key
-        except Exception as e:
-            logger.warning("Optimized embedding generation failed: %s, using fallback", e)
-            embedding, device_name = await self._generate_fallback_embedding(text)
+            raise  # refused: no vector, and nothing is cached under the active model's key
 
         await self.embedding_cache.put(text, embedding.tolist(), model=active_embedding_model())
         await self._l2_cache_set(text, embedding)
