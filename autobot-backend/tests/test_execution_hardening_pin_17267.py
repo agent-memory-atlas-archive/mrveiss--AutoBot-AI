@@ -66,8 +66,6 @@ async def test_cold_start_run_kwargs() -> None:
         "detach": True,
         "cpus": 1.0,
         "environment": kwargs["environment"],
-        "stdout": True,
-        "stderr": True,
         "remove": False,
         **_hardened("512m"),
     }
@@ -135,4 +133,14 @@ def test_a_nameless_opt_in_fails_before_any_container_is_started() -> None:
     pool = WarmContainerPool(docker_client=client, image="i", pool_size=1, network_reason="")
     with pytest.raises(ValueError, match="named reason"):
         pool._run_kwargs()
+    client.containers.run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_warm_pool_refuses_a_privileged_caller_kwarg_and_starts_nothing() -> None:
+    client = _client()
+    pool = WarmContainerPool(docker_client=client, image="i", pool_size=1, container_kwargs={"privileged": True})
+    with pytest.raises(ValueError, match="not allowed"):
+        pool._run_kwargs()
+    assert await pool._create_warm_container() is None
     client.containers.run.assert_not_called()

@@ -137,3 +137,41 @@ def test_execution_builder_rejects_a_nameless_opt_out(reason: object) -> None:
         execution_hardening_kwargs(network_reason=reason)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="named reason"):
         execution_hardening_kwargs(writable_root_reason=reason)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "key", sorted(__import__("autobot_shared.container_hardening", fromlist=["x"]).DENIED_RUN_KWARGS)
+)
+def test_each_denied_run_kwarg_is_refused(key: str) -> None:
+    from autobot_shared.container_hardening import execution_hardening_kwargs
+
+    with pytest.raises(ValueError, match="not allowed"):
+        execution_hardening_kwargs(extra={key: True})
+
+
+@pytest.mark.parametrize(
+    "volumes",
+    [
+        {"/var/run/docker.sock": {"bind": "/s", "mode": "rw"}},
+        {"/run/docker.sock": {"bind": "/s", "mode": "ro"}},
+        {"/": {"bind": "/host", "mode": "ro"}},
+        {"/var//run/../run": {"bind": "/h", "mode": "ro"}},
+        ["/:/host:ro"],
+        ["/var/run/docker.sock:/var/run/docker.sock"],
+    ],
+)
+def test_a_bind_of_the_docker_socket_or_host_root_is_refused(volumes: object) -> None:
+    from autobot_shared.container_hardening import execution_hardening_kwargs
+
+    with pytest.raises(ValueError, match="not allowed"):
+        execution_hardening_kwargs(extra={"volumes": volumes})
+
+
+def test_an_ordinary_bind_and_harmless_extras_pass_through_and_cannot_override() -> None:
+    from autobot_shared.container_hardening import execution_hardening_kwargs
+
+    out = execution_hardening_kwargs(
+        extra={"volumes": {"/srv/work": {"bind": "/w", "mode": "ro"}}, "working_dir": "/w"}
+    )
+    assert out["volumes"] == {"/srv/work": {"bind": "/w", "mode": "ro"}} and out["working_dir"] == "/w"
+    assert execution_hardening_kwargs(extra={"network_mode": "host", "read_only": False})["network_mode"] == "none"

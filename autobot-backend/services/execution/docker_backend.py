@@ -266,19 +266,21 @@ class DockerBackend(ExecutionBackend):
             result.started_at = now_utc()
             result.status = ExecutionStatus.RUNNING
 
-            cmd = self._prepare_command(task)
+            cmd, limits = self._prepare_command(task), task.resource_limits
 
             try:
                 container = self.client.containers.run(
                     image,
                     cmd,
                     detach=True,
-                    cpus=task.resource_limits.cpu_cores,
-                    environment=safe_task_env({}, task.env_vars),
-                    stdout=True,
-                    stderr=True,
-                    remove=False,
-                    **execution_hardening_kwargs(memory_limit=f"{task.resource_limits.memory_mb}m"),
+                    **execution_hardening_kwargs(
+                        memory_limit=f"{limits.memory_mb}m",
+                        extra=dict(
+                            cpus=limits.cpu_cores,
+                            environment=safe_task_env({}, task.env_vars),
+                            remove=False,
+                        ),
+                    ),
                 )
 
                 self._container_map[task.task_id] = container.id
@@ -486,9 +488,7 @@ class DockerBackend(ExecutionBackend):
                 self.client.containers.run,
                 record.image_name,
                 "sleep infinity",
-                detach=True,
-                remove=False,
-                **execution_hardening_kwargs(),
+                **execution_hardening_kwargs(extra={"detach": True, "remove": False}),
             )
         except Exception as exc:
             raise RuntimeError(

@@ -12,7 +12,9 @@ client may legitimately vary is an explicit named parameter; everything else
 
 from __future__ import annotations
 
+import posixpath
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from autobot_shared.env_utils import env_int, env_str
@@ -99,11 +101,61 @@ def _audited_reason(flag: str, reason: str | None) -> str | None:
     return reason
 
 
+#: Run/create kwargs that widen the container's reach beyond the hardened set. Merging the
+#: builder last only overrides the builder's own keys; these pass through unless refused.
+DENIED_RUN_KWARGS: frozenset[str] = frozenset(
+    {
+        "privileged",
+        "cap_add",
+        "devices",
+        "device_requests",
+        "device_cgroup_rules",
+        "pid_mode",
+        "ipc_mode",
+        "uts_mode",
+        "userns_mode",
+        "cgroupns",
+        "network",
+        "security_opt",
+        "sysctls",
+        "volumes_from",
+        "mounts",
+    }
+)
+
+#: Host paths a bind mount may never expose (the path itself or anything beneath docker.sock).
+_DENIED_HOST_PATHS = frozenset({"/", "/proc", "/sys", "/dev", "/etc", "/run", "/var/run", "/var/lib/docker"})
+
+
+def _bind_host_paths(volumes: Any) -> list[str]:
+    if isinstance(volumes, Mapping):
+        return [str(k) for k in volumes]
+    if isinstance(volumes, (list, tuple)):
+        return [str(v).split(":", 1)[0] for v in volumes]
+    return [str(volumes)]
+
+
+def _is_denied_host_path(host_path: str) -> bool:
+    norm = posixpath.normpath(host_path) if host_path.startswith("/") else host_path
+    return norm in _DENIED_HOST_PATHS or posixpath.basename(norm).endswith("docker.sock")
+
+
+def reject_escalating_kwargs(extra: Mapping[str, Any]) -> None:
+    """Raise ValueError when caller-supplied run kwargs would widen the container's reach."""
+    bad = sorted(DENIED_RUN_KWARGS & set(extra))
+    if bad:
+        raise ValueError(f"container run kwargs not allowed on a hardened execution container: {bad}")
+    for host_path in _bind_host_paths(extra.get("volumes", {})) if "volumes" in extra else []:
+        if _is_denied_host_path(host_path):
+            raise ValueError(f"container bind mount of host path {host_path!r} is not allowed")
+
+
 def execution_hardening_kwargs(
     *,
     memory_limit: str | None = None,
     network_reason: str | None = None,
     writable_root_reason: str | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Full hardening for pooled and execution containers (#17267, option b).
 
@@ -115,11 +167,15 @@ def execution_hardening_kwargs(
         memory_limit: Docker memory string; default ``AUTOBOT_EXECUTION_MEMORY_LIMIT``.
         network_reason: slug naming the workload that needs network; enables ``bridge``.
         writable_root_reason: slug naming the workload that needs a writable root.
+        extra: caller kwargs to merge beneath the hardening; any key in
+            ``DENIED_RUN_KWARGS`` or a bind of the docker socket / host root raises ValueError.
     """
+    reject_escalating_kwargs(extra or {})
     memory = memory_limit or EXECUTION_MEMORY_LIMIT
     networked = _audited_reason("network", network_reason) is not None
     writable = _audited_reason("writable_root", writable_root_reason) is not None
     return {
+        **(extra or {}),
         "network_mode": "bridge" if networked else "none",
         "read_only": not writable,
         "tmpfs": {EXECUTION_SCRATCH_PATH: f"rw,noexec,nosuid,size={EXECUTION_TMPFS_SIZE}"},

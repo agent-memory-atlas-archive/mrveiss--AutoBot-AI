@@ -206,12 +206,14 @@ class WarmContainerPool:
         The hardening wins on conflict, so a caller's ``container_kwargs`` cannot drop
         network isolation, the read-only root, the memory cap or the privilege floor; the
         only way out is a named, logged reason (``network_reason`` / ``writable_root_reason``).
+        Keys that widen reach (privileged, cap_add, devices, host namespaces, the docker
+        socket or host root as a bind...) are refused with ValueError, not merely overridden.
         """
-        hardened = execution_hardening_kwargs(
+        return execution_hardening_kwargs(
             network_reason=self._network_reason,
             writable_root_reason=self._writable_root_reason,
+            extra=self._container_kwargs,
         )
-        return {**self._container_kwargs, **hardened}
 
     async def _create_warm_container(self) -> "docker.models.containers.Container | None":
         """Start a new idle container and return it.
