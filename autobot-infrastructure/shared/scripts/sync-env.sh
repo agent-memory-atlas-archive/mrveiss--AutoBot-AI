@@ -202,10 +202,6 @@ HEADER
                     echo "VITE_API_TIMEOUT=$value" >> "$FRONTEND_ENV"
                     count=$((count + 1))
                     ;;
-                AUTOBOT_LLM_TIMEOUT)
-                    echo "VITE_LLM_TIMEOUT=$value" >> "$FRONTEND_ENV"
-                    count=$((count + 1))
-                    ;;
                 AUTOBOT_API_RETRY_ATTEMPTS)
                     echo "VITE_API_RETRY_ATTEMPTS=$value" >> "$FRONTEND_ENV"
                     count=$((count + 1))
