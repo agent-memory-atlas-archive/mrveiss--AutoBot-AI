@@ -331,6 +331,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
     ),
+    "pr-comment-upsert-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow YAML and non-test python under five roots; each root grows and shrinks independently.",
+    ),
     "import-hermeticity": (
         ABSOLUTE,
         "NOT_PATHS",
