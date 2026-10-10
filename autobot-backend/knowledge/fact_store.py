@@ -19,13 +19,13 @@ rather than discovering it missing days later.
 
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Sequence
 
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, select, tuple_, update
 
+from autobot_shared.content_digest import fact_dedup_key
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.store_authority import Store, system_of_record
 from models.knowledge_fact import KnowledgeFact
@@ -38,13 +38,10 @@ logger = get_logger(__name__)
 SYSTEM_OF_RECORD = system_of_record("knowledge_facts")
 assert SYSTEM_OF_RECORD.system_of_record is Store.POSTGRES  # nosec B101
 
-#: Matches the ``content_hash:<hash>`` Redis key width the dedup index uses.
-_CONTENT_HASH_WIDTH = 16
-
 
 def content_hash(content: str) -> str:
     """The deduplication fingerprint, identical to the Redis index's."""
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:_CONTENT_HASH_WIDTH]
+    return fact_dedup_key(content)
 
 
 def _row_values(content: str, metadata: Dict[str, Any], *, hash_content: str | None = None) -> Dict[str, Any]:
