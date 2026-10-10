@@ -1,33 +1,42 @@
 # Copyright 2025-2026 mrveiss
 # SPDX-License-Identifier: Apache-2.0
-# #7050/#7051/#7053 shared role-active facts — DUPLICATE of inventory/group_vars/all.yml.
-#
-# WHY DUPLICATED:
-# When SLM triggers provision-fleet-roles.yml from a node-add or wizard flow,
-# it generates a TEMP inventory file in /tmp/ (no sibling group_vars/ dir).
-# Ansible only loads group_vars from directories adjacent to the inventory
-# file, so the facts in inventory/group_vars/all.yml are NOT available to
-# playbooks invoked with the temp inventory. Result: every conditional
-# `when: role_X_active` evaluates as undefined → fatal.
-#
-# Fix: load these facts via `vars_files: [vars/role_active_facts.yml]` in
-# every playbook that uses them, regardless of inventory layout. Static
-# inventories (localhost.yml, slm-nodes.yml) still get them via group_vars
-# for direct invocations; dynamic inventories get them via this file.
-#
-# DRY trade-off: kept identical to group_vars/all.yml definitions. If they
-# diverge, the CI test playbook (#7068) won't catch it — that test loads
-# group_vars directly. TODO follow-up: single source of truth via include.
-#
-# CANONICAL ROLE NAMES (#7053):
-# The short-form names in the OR-chains below (e.g. 'backend', 'frontend')
-# are DEPRECATED. Canonical form is 'autobot-X' (e.g. 'autobot-backend').
-# The OR-chain is retained for backward compatibility only. New node_roles
-# inventory entries MUST use canonical form. See also:
-#   - inventory/group_vars/all.yml (_role_aliases dict + CANONICAL ROLE NAMES section)
-#   - tools/lint/check_canonical_role_names.py (pre-commit enforcement)
-#   - docs/developer/ANSIBLE_ROLE_NAMES.md (full reference)
 ---
+# THE ONLY DEFINITION of the role_*_active facts and chromadb_service_owner.
+#
+# #14678: these lived in three tracked copies, then two, kept equal by a diff
+# guard (#7095 was closed without the fix). They now live here and nowhere
+# else. Two consumers read this one file:
+#   - every inventory with a group_vars/ directory beside it: Ansible
+#     auto-loads group_vars/all/*.yml, and every dynamic-inventory builder
+#     links this directory beside its temp inventory (#11781, #14286);
+#   - deploy.yml, through a `vars_files:` entry naming THIS path, because its
+#     callers (services/deployment.py, services/blue_green.py) pass a bare
+#     `-i "<host>,"` string with no directory to discover group_vars in
+#     (#15348).
+# Never copy this file. tools/lint/check_role_facts_single_source.py enforces that.
+
+# ==========================================
+# SHARED ROLE-ACTIVE FACTS (#7031, #7053)
+# ==========================================
+# Per-host booleans answering "is role X deployed on this host?".
+# Used by both:
+#   - Provision gates (provision-fleet-roles.yml: when: role_X_active)
+#   - Cleanup gates  (roles/*/tasks/clean.yml: when: not role_X_active)
+#
+# Single source of truth — keeps provision and cleanup decisions in sync.
+# Each fact mirrors the union of role checks the provision gate uses:
+#   1. Short role name in node_roles (e.g. 'backend')     ← DEPRECATED (#7053)
+#   2. autobot-prefixed role name in node_roles (e.g. 'autobot-backend') ← CANONICAL
+#   3. Inventory group membership (e.g. groups['main'], groups['backend'])
+#
+# The OR-chain below (short + canonical forms) is kept for backward
+# compatibility with any hosts still configured with the short form.
+# New inventory entries MUST use the canonical form (see _role_aliases in ../all.yml).
+#
+# History: prior to #7031, cleanup gates used only check (1), missing
+# (2) and (3). Co-located/single-host installs (where install.sh writes
+# node_roles=['autobot-backend', 'vnc']) hit the gap and got their dirs
+# wiped between deploy and validate.
 # #14560: the five facts below (backend, frontend, ai_stack, npu_worker,
 # browser) gate provision-fleet-roles.yml tasks that unpack a tree onto the
 # host (npm/vite, ChromaDB, OpenVINO, Playwright). #14513/#14552 filtered the
@@ -92,10 +101,19 @@ role_slm_active: >-
   {{ (inventory_hostname in (groups.get('slm_server', []) | default([]))) or
      (inventory_hostname in (groups.get('slm', []) | default([]))) }}
 
+# #7051: facts for the remaining provision gates so provision-fleet-roles.yml
+# can be refactored to use the shared facts uniformly (matches the cleanup-side
+# refactor from #7050).
 role_redis_active: >-
   {{ ('redis' in (node_roles | default([]))) or
      (inventory_hostname in (groups.get('redis', []) | default([]))) or
      (inventory_hostname in (groups.get('database', []) | default([]))) }}
+
+# #13870: ChromaDB is a database, so the db stack owns its unit wherever that
+# stack is present. It is also the only venv with chromadb installed — the
+# ai-stack fallback exists solely for a topology that runs ai-stack alone.
+chromadb_service_owner: "{{ 'redis' if (role_redis_active | default(false) | bool) else 'ai-stack' }}"
+
 
 # #13060: NO groups['main'] / groups['backend'] fallback. Those clauses pulled the
 # full desktop stack (tigervnc, x11vnc, novnc, websockify, xfce4) onto every backend
@@ -112,10 +130,9 @@ role_xrdp_active: >-
      ('autobot-xrdp' in (node_roles | default([]))) or
      (inventory_hostname in (groups.get('rdp_nodes', []) | default([]))) }}
 
-# #14567: `ai_stack`/`llm_nodes` became declaration-gated when the deploy gate
-# closed over the role map. Per #14560 a fact gating a privileged group must
-# read node_roles_declared, or the group half is gated while the node_roles
-# half is not and a detected-but-undeclared node still activates the role.
+# #14567: `ai_stack`/`llm_nodes` are declaration-gated deploy targets, so this
+# fact reads node_roles_declared (#14560).
+#
 # #14682: `ai_stack` is NOT an LLM signal. It is granted by `chromadb` and
 # `tts-worker` as well as by `ai-stack` and `autobot-llm-*`, so gating on it
 # meant declaring a vector database or a speech synthesiser ran roles/llm --
@@ -132,8 +149,3 @@ role_llm_active: >-
 role_tts_worker_active: >-
   {{ ('tts-worker' in (node_roles | default([]))) or
      ('autobot-tts-worker' in (node_roles | default([]))) }}
-
-# #13870: ChromaDB is a database, so the db stack owns its unit wherever that
-# stack is present. It is also the only venv with chromadb installed — the
-# ai-stack fallback exists solely for a topology that runs ai-stack alone.
-chromadb_service_owner: "{{ 'redis' if (role_redis_active | default(false) | bool) else 'ai-stack' }}"
