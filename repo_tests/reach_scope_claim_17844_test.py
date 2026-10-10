@@ -42,6 +42,7 @@ import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_par
 import repo_tests.migration_gate_filter_covers_what_its_tests_import_test as _migration_gate_guard  # noqa: F401 -- registers its scope
 import repo_tests.model_tier_single_definition_15502_test as _model_tier_guard  # noqa: F401 -- registers its scope
 import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_bm25_formula_18183_test as _bm25_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_fact_read_authorization_18184_test as _fact_read_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_paths_filter_job_15360_test as _paths_filter_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
@@ -221,6 +222,7 @@ _DECLARED_SCOPES = {
     "model-tier-map-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "embedding-model-render-sites": ("autobot-slm-backend/ansible",),
     "frontend-model-literal-scan": ("autobot-frontend/src",),
+    "one-bm25-formula": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),
