@@ -514,8 +514,8 @@ class NPUSemanticSearch:
         from utils.semantic_chunker import get_semantic_chunker
 
         chunker = get_semantic_chunker()
-        await chunker._initialize_model()
-        embeddings = await chunker._compute_sentence_embeddings_async([text])
+        await chunker.load_embedding_model()
+        embeddings = await chunker.embed_sentences([text])
         return embeddings[0], "gpu_fallback"
 
     async def _generate_fallback_embedding(self, text: str) -> Tuple[np.ndarray, str]:
@@ -530,7 +530,7 @@ class NPUSemanticSearch:
         from utils.semantic_chunker import get_semantic_chunker
 
         chunker = get_semantic_chunker()
-        embeddings = chunker._compute_sentence_embeddings([text])
+        embeddings = chunker.embed_sentences_sync([text])
         return embeddings[0], "cpu_final_fallback"
 
     async def _l2_cache_get(self, text: str) -> "np.ndarray | None":

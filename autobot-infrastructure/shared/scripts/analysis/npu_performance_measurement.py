@@ -190,12 +190,12 @@ class NPUPerformanceMeasurement:
 
             for _i in range(5):
                 start_time = time.time()
-                chunker._compute_sentence_embeddings([test_text])
+                chunker.embed_sentences_sync([test_text])
                 elapsed = (time.time() - start_time) * 1000
                 cpu_results["single_text_times"].append(elapsed)
 
             cpu_results["batch_times"] = self._run_batch_embedding_test(
-                chunker._compute_sentence_embeddings,
+                chunker.embed_sentences_sync,
                 [1, 5, 10, 25, 50],
             )
 
@@ -221,20 +221,20 @@ class NPUPerformanceMeasurement:
             from utils.semantic_chunker import get_semantic_chunker
 
             chunker = get_semantic_chunker()
-            await chunker._initialize_model()
+            await chunker.load_embedding_model()
 
             test_text = "This is a test sentence for GPU embedding performance."
 
             for _i in range(5):
                 start_time = time.time()
-                await chunker._compute_sentence_embeddings_async([test_text])
+                await chunker.embed_sentences([test_text])
                 elapsed = (time.time() - start_time) * 1000
                 gpu_results["single_text_times"].append(elapsed)
 
             for batch_size in [1, 5, 10, 25, 50, 100]:
                 batch_texts = [f"Test sentence number {i} for GPU batch processing." for i in range(batch_size)]
                 start_time = time.time()
-                await chunker._compute_sentence_embeddings_async(batch_texts)
+                await chunker.embed_sentences(batch_texts)
                 elapsed = (time.time() - start_time) * 1000
                 gpu_results["batch_times"][str(batch_size)] = {
                     "total_time_ms": elapsed,

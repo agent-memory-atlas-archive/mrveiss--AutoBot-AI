@@ -685,10 +685,10 @@ class AIHardwareAccelerator:
         from utils.semantic_chunker import get_semantic_chunker
 
         chunker = get_semantic_chunker()
-        await chunker._initialize_model()
+        await chunker.load_embedding_model()
 
         sentences = [content] if isinstance(content, str) else content
-        embeddings = await chunker._compute_sentence_embeddings_async(sentences)
+        embeddings = await chunker.embed_sentences(sentences)
         raw_embedding = embeddings[0] if len(embeddings) > 0 else np.zeros(HardwareAcceleratorConfig.MINILM_OUTPUT_DIM)
 
         if self.text_projection:
