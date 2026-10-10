@@ -63,9 +63,9 @@ describe('density scope (#18161, #17564)', () => {
 
 describe('ember palette scope (#18161)', () => {
   it('the base --red-500 and --orange-500 are the default palette', () => {
-    const notus = read('assets/vue-notus.css')
-    expect(notus).toMatch(/--red-500:\s*#ef4444/i)
-    expect(notus).toMatch(/--orange-500:\s*#ff7849/i)
+    const base = read('assets/css/design-tokens.css')
+    expect(base).toMatch(/--red-500:\s*#ef4444/i)
+    expect(base).toMatch(/--orange-500:\s*#ff7849/i)
   })
 
   it('ember.css declares them only behind the ember selector', () => {

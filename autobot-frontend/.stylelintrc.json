@@ -2,7 +2,6 @@
   "ignoreFiles": [
     "**/design-tokens.css",
     "**/themes/*.css",
-    "**/aui-theme.css",
     "**/tailwind.css",
     "**/vue-notus.css"
   ],

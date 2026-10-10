@@ -74,7 +74,7 @@
 
 /* The two palette primitives ember re-tints. Behind the variant selector, not a
    bare :root: declared on :root they overrode the default palette for every
-   theme (#18161). The base values are in vue-notus.css. */
+   theme (#18161). The base values are in design-tokens.css. */
 [data-theme-variant="ember"] {
   --red-500: #cb3326;
   --orange-500: #d6731f;

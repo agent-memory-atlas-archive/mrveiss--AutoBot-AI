@@ -36,12 +36,12 @@ import './assets/css/interaction-polish.css'
 // .view-container don't scroll properly.
 import './assets/base.css'
 
-// @autobot/ui shared kit: token contract fallbacks first, then this app's
-// adapter (mapping --aui-* onto the app's own design tokens). Loaded AFTER
-// the app design-system CSS above so the tokens the adapter references are
-// already defined (#10750 C2c, #10860 Task-C).
+// @autobot/ui shared kit: token contract fallbacks first, then the kit's one
+// adapter (mapping --aui-* onto the shared semantic token names, which this app
+// defines in the design-system CSS above). Loaded AFTER that CSS so the tokens
+// the adapter references are already defined (#10750 C2c, #10860 Task-C).
 import '@autobot/ui/tokens'
-import './assets/aui-theme.css'
+import '@autobot/ui/adapter'
 
 // Initialize theme early to prevent flash of unstyled content
 import { initializeTheme } from '@/composables/useTheme'

@@ -173,6 +173,7 @@
   --border-strong: #64748b;
   --border-emphasis: #94a3b8;
   --border-focus: var(--color-primary);
+  --focus-ring-width: 3px; /* the @autobot/ui adapter's --aui-focus-ring-width */
   --border-error: var(--color-error);
   --border-success: var(--color-success);
 
@@ -489,6 +490,40 @@
   --card-shadow: var(--shadow-md);
   --card-radius: var(--radius-lg);
   --card-padding: var(--spacing-4);
+  /* Palette primitives (formerly vue-notus.css, #14785). --red-500 and
+     --orange-500 are the default palette; the ember variant restates them
+     behind [data-theme-variant="ember"] (themes/ember.css, #18161). */
+  --blue-gray-50: #f8fafc;
+  --blue-gray-100: #f1f5f9;
+  --blue-gray-200: #e2e8f0;
+  --blue-gray-300: #cbd5e1;
+  --blue-gray-400: #94a3b8;
+  --blue-gray-500: #64748b;
+  --blue-gray-600: #475569;
+  --blue-gray-700: #334155;
+  --blue-gray-800: #1e293b;
+  --blue-gray-900: #0f172a;
+
+  --indigo-50: #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --indigo-700: #4338ca;
+
+  --emerald-50: #ecfdf5;
+  --emerald-500: #10b981;
+  --emerald-700: #047857;
+
+  /* --red-500 / --orange-500: the default palette. The ember variant restates
+     them behind [data-theme-variant="ember"] (themes/ember.css), so they no
+     longer reach every theme (#18161). */
+  --red-500: #ef4444;
+  --red-700: #dc2626;
+
+  --orange-500: #ff7849;
+  --yellow-500: #eab308;
+  --yellow-50: #fefce8;
+
   /* Density tokens (#17564). Comfortable values; themes/preferences.css
      redefines them per density scope ([data-layout-density], .density-*). */
   --spacing-unit: 0.25rem;
