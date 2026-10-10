@@ -17,17 +17,15 @@ Plugin lifecycle:
 from __future__ import annotations
 
 import logging
-import os
 from typing import Dict, Optional
-
-from plugin_sdk.base import BasePlugin, PluginManifest
 
 # Fully-qualified (#14373): the bare `tool_sdk` path is not guaranteed to be
 # importable at plugin-load time and, where it is, resolves to a second
 # module identity with its own, independently empty, registry singleton.
 from autobot_shared.tool_sdk.registry import get_tool_registry
+from plugin_sdk.base import BasePlugin, PluginManifest
 
-from .tools import GenerateImageTool
+from .tools import GenerateImageTool, read_provider_key, set_credential_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +40,10 @@ class ImageGenerationPlugin(BasePlugin):
     async def initialize(self) -> None:
         self._logger.info("ImageGenerationPlugin: initializing")
 
-        openai_key = os.environ.get("OPENAI_API_KEY", "")
-        flux_key = os.environ.get("FLUX_API_KEY", "")
-        stability_key = os.environ.get("STABILITY_API_KEY", "")
+        set_credential_resolver(self.credential_resolver)
+        openai_key = read_provider_key("OPENAI_API_KEY")
+        flux_key = read_provider_key("FLUX_API_KEY")
+        stability_key = read_provider_key("STABILITY_API_KEY")
 
         if not any([openai_key, flux_key, stability_key]):
             self._logger.warning(
@@ -60,12 +59,14 @@ class ImageGenerationPlugin(BasePlugin):
 
     async def shutdown(self) -> None:
         self._logger.info("ImageGenerationPlugin: shutting down")
+        set_credential_resolver(None)
         if self._registered:
             try:
                 registry = get_tool_registry()
                 registry.unregister(GenerateImageTool.metadata.name)
             except Exception:
                 pass
+
 
 # Loader entry-point alias (#10294)
 Plugin = ImageGenerationPlugin

@@ -49,7 +49,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,11 +127,17 @@ SERVICE_CREDENTIAL_KEY_NAMES: frozenset[str] = frozenset(
     }
 )
 
+#: Image-generation credentials (#18094): the names the image-generation API
+#: route and plugin read. ``OPENAI_API_KEY`` is the LLM set's member, referenced
+#: rather than repeated, so the name has exactly one definition.
+_IMAGE_ONLY_KEY_NAMES: frozenset[str] = frozenset({"FLUX_API_KEY", "STABILITY_API_KEY"})
+IMAGE_PROVIDER_KEY_NAMES: frozenset[str] = _IMAGE_ONLY_KEY_NAMES | (LLM_PROVIDER_KEY_NAMES & {"OPENAI_API_KEY"})
+
 #: The full set of names eligible for capture-time mirroring and startup
 #: hydration -- provider-agnostic per #15267's suggestion, since this module
 #: is no longer LLM-only once search joins it.
 VAULT_RESOLVED_CREDENTIAL_NAMES: frozenset[str] = (
-    LLM_PROVIDER_KEY_NAMES | SEARCH_PROVIDER_KEY_NAMES | SERVICE_CREDENTIAL_KEY_NAMES
+    LLM_PROVIDER_KEY_NAMES | SEARCH_PROVIDER_KEY_NAMES | SERVICE_CREDENTIAL_KEY_NAMES | IMAGE_PROVIDER_KEY_NAMES
 )
 
 #: Which module resolves each name -- the ``secret_dependencies`` edge
@@ -139,6 +145,7 @@ VAULT_RESOLVED_CREDENTIAL_NAMES: frozenset[str] = (
 _CREDENTIAL_CONSUMERS: dict[str, str] = {
     **{name: "llm_shared.provider_registry" for name in LLM_PROVIDER_KEY_NAMES},
     **{name: "agent_loop.search.registry" for name in SEARCH_PROVIDER_KEY_NAMES},
+    **{name: "api.image_generation" for name in _IMAGE_ONLY_KEY_NAMES},
     "SLACK_BOT_TOKEN": "integrations.capability_registry",  # nosec B105  # module path, not a credential
     "DISCORD_BOT_TOKEN": "integrations.capability_registry",  # nosec B105  # module path, not a credential
     "GOOGLE_API_KEY": "services.provider_health.providers",
@@ -164,6 +171,24 @@ def resolve_provider_key(env_var: str, config_value: str) -> str:
     setup wizard (never set as an env var) still resolves at runtime.
     """
     return config_value or _hydrated_keys.get(env_var, "")
+
+
+def resolve_image_provider_key(name: str) -> str:
+    """Scoped resolver handed to the image-generation plugin (#18094).
+
+    Accepts only :data:`IMAGE_PROVIDER_KEY_NAMES` and raises ``ValueError``
+    for anything else, so the plugin cannot read an arbitrary secret through
+    it. Precedence is :func:`resolve_provider_key`'s: env first, then vault.
+    Returns ``""`` when unset, as ``os.environ.get(name, "")`` did.
+    """
+    if name not in IMAGE_PROVIDER_KEY_NAMES:
+        raise ValueError("not an image-provider credential name")
+    return resolve_provider_key(name, os.environ.get(name, ""))
+
+
+def plugin_credential_resolvers() -> dict[str, Callable[[str], str]]:
+    """Plugin name -> scoped resolver; the one injection map handed to ``PluginLoader``/``PluginManager``."""
+    return {"image-generation-plugin": resolve_image_provider_key}
 
 
 async def _find_system_secret_id(session: AsyncSession, name: str) -> uuid.UUID | None:

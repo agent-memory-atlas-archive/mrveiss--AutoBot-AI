@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 # Fully-qualified (#14373) — see plugins/core-plugins/image-generation-plugin/main.py.
 from autobot_shared.generation_http_timeouts import generation_timeout, poll_timeout
@@ -21,6 +21,26 @@ from autobot_shared.http_client import get_http_client
 from autobot_shared.tool_sdk.base import BaseTool, ToolMetadata, ToolPermission, ToolResult
 
 logger = logging.getLogger(__name__)
+
+#: Scoped resolver injected by the host plugin loader (#18094). ``None`` means
+#: standalone: keys are read straight from the environment, as before.
+_injected: Dict[str, Callable[[str], str]] = {}
+
+
+def set_credential_resolver(resolver: Callable[[str], str] | None) -> None:
+    """Install (or clear) the host-injected, name-scoped key resolver."""
+    if resolver is None:
+        _injected.clear()
+    else:
+        _injected["resolver"] = resolver
+
+
+def read_provider_key(name: str) -> str:
+    """Return the provider key *name*: via the injected resolver, else ``os.environ``; ``""`` when unset."""
+    resolver = _injected.get("resolver")
+    if resolver is not None:
+        return resolver(name)
+    return os.environ.get(name, "")
 
 
 class GenerateImageTool(BaseTool):
@@ -107,7 +127,7 @@ class GenerateImageTool(BaseTool):
     # ------------------------------------------------------------------
 
     async def _generate_dalle(self, prompt: str, size: str, quality: str, n: int) -> ToolResult:
-        api_key = os.environ.get("OPENAI_API_KEY", "")
+        api_key = read_provider_key("OPENAI_API_KEY")
         if not api_key:
             return ToolResult(success=False, error="OPENAI_API_KEY not configured")
 
@@ -158,7 +178,7 @@ class GenerateImageTool(BaseTool):
     # ------------------------------------------------------------------
 
     async def _generate_flux(self, prompt: str, size: str, negative_prompt: str) -> ToolResult:
-        api_key = os.environ.get("FLUX_API_KEY", "")
+        api_key = read_provider_key("FLUX_API_KEY")
         if not api_key:
             return ToolResult(success=False, error="FLUX_API_KEY not configured")
 
@@ -228,7 +248,7 @@ class GenerateImageTool(BaseTool):
     # ------------------------------------------------------------------
 
     async def _generate_sd(self, prompt: str, size: str, negative_prompt: str, n: int) -> ToolResult:
-        api_key = os.environ.get("STABILITY_API_KEY", "")
+        api_key = read_provider_key("STABILITY_API_KEY")
         if not api_key:
             return ToolResult(success=False, error="STABILITY_API_KEY not configured")
 

@@ -34,14 +34,14 @@ from autobot_shared.redis_client import get_async_redis_client
 from autobot_shared.redis_utils import decode_redis_value
 from autobot_shared.ssot_config import config
 from plugin_install import install_from_git, install_from_zip
+from services.provider_key_vault import plugin_credential_resolvers
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
-# Global plugin loader instance.
-# Issue #10916: _plugin_loader_lock + double-checked pattern prevents two
-# threads from each constructing a PluginLoader (which scans the filesystem).
+# Global plugin loader (#10916: the lock + double-check stops two threads each
+# constructing a PluginLoader, which scans the filesystem).
 _plugin_loader: PluginLoader | None = None
 _plugin_loader_lock = threading.Lock()
 
@@ -61,7 +61,7 @@ def get_plugin_loader() -> PluginLoader:
                     Path("plugins/core-plugins"),
                     Path("plugins/community-plugins"),
                 ]
-                _plugin_loader = PluginLoader(plugin_dirs)
+                _plugin_loader = PluginLoader(plugin_dirs, plugin_credential_resolvers())
     return _plugin_loader
 
 

@@ -491,7 +491,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 616,
     "autobot_shared/npu/integration.py": 929,
-    "autobot_shared/plugin_sdk/loader.py": 696,
+    "autobot_shared/plugin_sdk/loader.py": 692,
     "autobot_shared/plugin_sdk/plugin_load_visibility_test.py": 750,
     "autobot_shared/plugin_sdk/plugin_sdk_test.py": 941,
     "autobot_shared/rate_limiter_test.py": 618,

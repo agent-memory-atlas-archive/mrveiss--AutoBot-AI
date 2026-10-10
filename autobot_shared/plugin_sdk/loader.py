@@ -21,7 +21,7 @@ import logging
 import os
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple, Type
 
 from .base import BasePlugin, PluginLoadError, PluginManifest, PluginRegistry, PluginStatus
 from .hooks import validate_hook_names
@@ -203,14 +203,12 @@ class PluginLoader:
     Discovers plugins from filesystem, loads manifests, and instantiates plugins.
     """
 
-    def __init__(self, plugin_dirs: List[Path] | None = None) -> None:
-        """
-        Initialize plugin loader.
-
-        Args:
-            plugin_dirs: List of directories to search for plugins
-        """
+    def __init__(
+        self, plugin_dirs: List[Path] | None = None, credential_resolvers: Dict[str, Callable[[str], str]] | None = None
+    ) -> None:
+        """Search ``plugin_dirs``; ``credential_resolvers`` maps plugin name -> its scoped resolver (#18094)."""
         self.plugin_dirs = plugin_dirs or []
+        self.credential_resolvers = credential_resolvers or {}
         self.registry = PluginRegistry()
         # Maps plugin name -> directory containing its plugin.json (set during discover_plugins)
         self._manifest_dirs: Dict[str, Path] = {}
@@ -368,10 +366,8 @@ class PluginLoader:
             if not plugin_class:
                 return None
 
-            # Instantiate plugin
             plugin = plugin_class(manifest, config)
-
-            # Initialize plugin
+            plugin.credential_resolver = self.credential_resolvers.get(manifest.name)
             await plugin.initialize()
             plugin.status = PluginStatus.LOADED
 
