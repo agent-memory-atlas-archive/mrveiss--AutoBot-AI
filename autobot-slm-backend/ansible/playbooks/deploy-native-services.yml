@@ -710,7 +710,7 @@
             - "mistral:7b-instruct"   # Instruction tier
             - "dolphin-llama3:8b"     # System/uncensored tier
             - "qwen3.5:9b"            # Quality tier
-            - "nomic-embed-text"      # Embeddings
+            - "nomic-embed-text:latest"  # Embeddings (DEFAULT_EMBEDDING_MODEL)
 
     - name: Create AI Stack service
       copy:

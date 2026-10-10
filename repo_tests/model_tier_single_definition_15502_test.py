@@ -54,6 +54,11 @@ _AGENT_CONFIG_ROLE = "autobot-slm-backend/ansible/roles/agent_config/defaults/ma
 _ENV_REGISTRY = "autobot_shared/env_registry.py"
 _AGENTS_YAML = "autobot-infrastructure/shared/config/agents.yaml"
 _COMPLETE_YAML = "autobot-infrastructure/shared/config/complete.yaml"
+_LLM_ROLE = "autobot-slm-backend/ansible/roles/llm/defaults/main.yml"
+_PULL_PLAYBOOKS = (
+    "autobot-slm-backend/ansible/playbooks/deploy-native-services.yml",
+    "autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml",
+)
 _SETTINGS_JSON = "autobot-infrastructure/shared/config/settings.json"
 #: The `# <Tier> tier (<model>)` comment ai-stack puts above each group of vars -> the constant it names.
 _COMMENT_TIER = {
@@ -115,11 +120,6 @@ def _local_models() -> frozenset[str]:
     return frozenset(_canonical().values())
 
 
-def _bare(model: str) -> str:
-    """`nomic-embed-text:latest` and `nomic-embed-text` are the same Ollama model."""
-    return model.removesuffix(":latest")
-
-
 # --- (a) one definition ----------------------------------------------------
 
 
@@ -163,8 +163,7 @@ def test_ai_stack_model_vars_equal_their_tier() -> None:
 
 def test_agent_config_ollama_models_are_the_canonical_local_models() -> None:
     """Mirror: the provisioning list must pull exactly the models the tiers can select."""
-    listed = {_bare(m) for m in _load_yaml(_AGENT_CONFIG_ROLE)["ollama_models"]}
-    assert listed == {_bare(m) for m in _local_models()}
+    assert set(_load_yaml(_AGENT_CONFIG_ROLE)["ollama_models"]) == _local_models()
 
 
 def _env_registry_defaults() -> dict[str, str]:
@@ -441,3 +440,58 @@ def test_settings_json_template_has_no_stale_hosted_defaults_or_nested_copy() ->
     text = _read(_SETTINGS_JSON).lower()
     assert "gpt-3.5-turbo" not in text and "dialogpt" not in text
     assert "settings" not in json.loads(text), "the nested top-level `settings` duplicate is gone"
+
+
+# --- (g) provisioning: which tier models each node class pulls ------------------
+
+#: The skip is declared, not accidental: a CPU-only node pulls the CPU class (models of at most
+#: ~4B parameters) and the llm role warns which GPU-class tiers it left out (roles/llm/tasks).
+_CPU_CLASS = frozenset({"nomic-embed-text:latest", "llama3.2:1b", "gemma2:2b", "phi3:mini"})
+_GPU_CLASS = frozenset({"qwen3.5:9b", "mistral:7b-instruct", "dolphin-llama3:8b"})
+
+
+def test_the_llm_role_node_classes_are_the_pinned_per_class_tier_sets() -> None:
+    defaults = _load_yaml(_LLM_ROLE)
+    assert set(defaults["llm_cpu_models"]) == _CPU_CLASS
+    assert set(defaults["llm_gpu_models"]) == _GPU_CLASS
+    assert len(defaults["llm_cpu_models"]) == len(_CPU_CLASS) and len(defaults["llm_gpu_models"]) == len(_GPU_CLASS)
+
+
+def test_the_node_classes_together_cover_every_canonical_local_tier_model() -> None:
+    defaults = _load_yaml(_LLM_ROLE)
+    union = set(defaults["llm_cpu_models"]) | set(defaults["llm_gpu_models"])
+    assert union == _local_models(), f"tier models no node class pulls: {sorted(_local_models() - union)}"
+    assert not set(defaults["llm_cpu_models"]) & set(defaults["llm_gpu_models"]), "a model sits in both classes"
+
+
+def _pull_loops(node: Any) -> list[list[str]]:
+    """The `loop:` of every task named `Pull required Ollama models...`, at any depth of a play."""
+    found: list[list[str]] = []
+    if isinstance(node, dict):
+        if str(node.get("name", "")).startswith("Pull required Ollama models") and isinstance(node.get("loop"), list):
+            found.append(node["loop"])
+        for value in node.values():
+            found += _pull_loops(value)
+    elif isinstance(node, list):
+        for item in node:
+            found += _pull_loops(item)
+    return found
+
+
+@pytest.mark.parametrize("rel", _PULL_PLAYBOOKS)
+def test_a_deploy_playbook_inline_pull_list_is_the_canonical_local_models(rel: str) -> None:
+    loops = [loop for doc in yaml.safe_load_all(_read(rel)) for loop in _pull_loops(doc)]
+    assert len(loops) == 1, f"{rel}: expected one inline Ollama pull list, found {len(loops)}"
+    assert sorted(loops[0]) == sorted(_local_models()), f"#15502: {rel} pulls {sorted(loops[0])}"
+
+
+def test_the_pull_list_finder_sees_a_nested_loop_and_ignores_other_tasks() -> None:
+    play = [
+        {
+            "tasks": [
+                {"block": [{"name": "Pull required Ollama models (x)", "loop": ["a", "b"]}]},
+                {"name": "Other", "loop": ["c"]},
+            ]
+        }
+    ]
+    assert _pull_loops(play) == [["a", "b"]]

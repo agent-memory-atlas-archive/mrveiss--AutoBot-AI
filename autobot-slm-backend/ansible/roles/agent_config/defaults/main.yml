@@ -31,7 +31,7 @@ ollama_models:
   - "mistral:7b-instruct"   # Instruction following tier
   - "dolphin-llama3:8b"     # System/uncensored tier
   - "qwen3.5:9b"            # Quality/tools tier (all tool-using agents)
-  - "nomic-embed-text"      # Embeddings
+  - "nomic-embed-text:latest"  # Embeddings
 
 # Node.js configuration
 install_nodejs: true
