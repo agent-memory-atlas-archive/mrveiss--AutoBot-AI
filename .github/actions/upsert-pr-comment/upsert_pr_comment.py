@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -37,7 +38,30 @@ from typing import Any, Iterator
 logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 100
-TIMEOUT_SECONDS = int(os.environ.get("AUTOBOT_UPSERT_COMMENT_TIMEOUT", "30"))
+DEFAULT_TIMEOUT_SECONDS = 30.0
+TIMEOUT_ENV = "AUTOBOT_UPSERT_COMMENT_TIMEOUT"
+
+
+def read_timeout(raw: str | None) -> float:
+    """A positive finite number of seconds, else the default with a warning.
+
+    Local on purpose: this file runs on a bare runner with only the standard library, so it
+    cannot import `autobot_shared.env_utils.env_float_clamped`. Same `positive_finite`
+    semantics: NaN, infinity, zero and negatives are rejected, not clamped.
+    """
+    if raw is None or not raw.strip():
+        return DEFAULT_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value) or value <= 0:
+        logger.warning("%s=%r is not a positive finite number; using %s", TIMEOUT_ENV, raw, DEFAULT_TIMEOUT_SECONDS)
+        return DEFAULT_TIMEOUT_SECONDS
+    return value
+
+
+TIMEOUT_SECONDS = read_timeout(os.environ.get(TIMEOUT_ENV))
 _NEXT_LINK = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
 
 

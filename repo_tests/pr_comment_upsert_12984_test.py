@@ -192,6 +192,14 @@ def test_next_page_url(header, expected) -> None:
     assert helper.next_page_url(header) == expected
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(None, 30.0), ("", 30.0), ("12.5", 12.5), ("0", 30.0), ("-3", 30.0), ("nan", 30.0), ("inf", 30.0), ("abc", 30.0)],
+)
+def test_the_timeout_accepts_only_a_positive_finite_number(raw, expected) -> None:
+    assert helper.read_timeout(raw) == expected
+
+
 # ---- the guard: no second implementation ---------------------------------------------------
 
 _OLD_API = re.compile(r"\b(updateComment|listComments|update_comment|list_comments)\b|issues/comments/|--edit-last")
