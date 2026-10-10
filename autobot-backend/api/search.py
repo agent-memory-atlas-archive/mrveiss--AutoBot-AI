@@ -130,6 +130,9 @@ async def semantic_search(request: NPUSearchRequest):
             force_device=force_device,
         )
 
+        if getattr(metrics, "error", None):  # embedding refused: a failed search, never "no results" (#18185)
+            raise HTTPException(status_code=503, detail=metrics.error)
+
         results_data = _convert_search_results_to_api_format(search_results)
         metrics_data = _convert_metrics_to_api_format(metrics)
         total_time = (time.time() - start_time) * 1000
