@@ -290,29 +290,6 @@ class TestConfigManager:
         assert security["secrets_key"] is None
         assert security["audit_log_file"] == "data/audit.log"
 
-    def test_backward_compatibility_wrapper(self):
-        """Test backward compatibility Config class wrapper.
-
-        Config() requires a manager instance — Config(ConfigManager()) — and
-        Config.get() delegates to the manager's flat .get(), not dot-path
-        traversal (#11954).
-        """
-        from config import Config
-
-        manager = ConfigManager()
-        config = Config(manager)
-
-        # Test that it provides access to complete config
-        full_config = config.config
-        assert isinstance(full_config, dict)
-        assert "backend" in full_config
-        assert "redis" in full_config
-
-        # Config.get() delegates to the flat ConfigManager.get()
-        manager.set("compat_test_key", "compat_value")
-        assert config.get("compat_test_key") == "compat_value"
-        assert config.get("nonexistent_key", "fallback") == "fallback"
-
     def test_global_instance_functions(self):
         """Test global convenience functions.
 

@@ -66,9 +66,9 @@ class AutomatedTestingSuite:
             "api_tests": [],
         }
         # Import configuration from centralized source
-        from config import API_BASE_URL
+        from autobot_shared.ssot_config import config as ssot_config
 
-        self.backend_url = API_BASE_URL
+        self.backend_url = ssot_config.backend_url
 
     def run_unit_tests(self) -> List[TestResult]:
         """Run Python unit tests"""

@@ -94,12 +94,12 @@ def test_config_values():
     logger.info("Testing configuration values...")
 
     from autobot_shared.ssot_config import config as ssot_config
-    from config import API_BASE_URL, OLLAMA_URL, PLAYWRIGHT_VNC_PORT, get_vnc_direct_url
+    from config import PLAYWRIGHT_VNC_PORT, get_vnc_direct_url
 
     # Test basic values
-    assert API_BASE_URL.startswith("http"), "API_BASE_URL should start with http"
+    assert ssot_config.backend_url.startswith("http"), "backend_url should start with http"
     assert ssot_config.redis_url.startswith("redis"), "redis_url should start with redis"
-    assert OLLAMA_URL.startswith("http"), "OLLAMA_URL should start with http"
+    assert ssot_config.ollama_url.startswith("http"), "ollama_url should start with http"
     assert isinstance(ssot_config.timeout.api, int), "timeout.api should be integer"
 
     # Test VNC configuration
@@ -108,9 +108,9 @@ def test_config_values():
     assert vnc_url.startswith("http://"), "VNC URL should start with http://"
     assert f":{PLAYWRIGHT_VNC_PORT}/" in vnc_url, "VNC URL should embed the VNC port"
 
-    logger.info("   API_BASE_URL: %s", API_BASE_URL)
+    logger.info("   BACKEND_URL: %s", ssot_config.backend_url)
     logger.info("   REDIS_URL: %s", ssot_config.redis_url)
-    logger.info("   OLLAMA_URL: %s", OLLAMA_URL)
+    logger.info("   OLLAMA_URL: %s", ssot_config.ollama_url)
     logger.info("   API_TIMEOUT: %dms", ssot_config.timeout.api)
     logger.info("   VNC_PORT: %d", PLAYWRIGHT_VNC_PORT)
     logger.info("   VNC_URL: %s", vnc_url)
@@ -174,15 +174,15 @@ def test_environment_overrides():
         # Reload configuration to pick up changes
         reload_config()
 
-        from config import API_BASE_URL
+        from autobot_shared.ssot_config import config as ssot_config
 
         # Check if override worked
-        if API_BASE_URL == test_value:
-            logger.info("   Environment override successful: %s", API_BASE_URL)
+        if ssot_config.backend_url == test_value:
+            logger.info("   Environment override successful: %s", ssot_config.backend_url)
         else:
             logger.warning(
                 "   Environment override partial: got %s, expected %s",
-                API_BASE_URL,
+                ssot_config.backend_url,
                 test_value,
             )
         return True

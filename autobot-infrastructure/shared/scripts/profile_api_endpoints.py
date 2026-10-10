@@ -100,9 +100,9 @@ async def test_api_endpoints():
     logger.info("API Endpoint Performance Testing")
     logger.info("=" * 50)
 
-    from config import API_BASE_URL
+    from autobot_shared.ssot_config import config as ssot_config
 
-    endpoints = _get_endpoint_list(API_BASE_URL)
+    endpoints = _get_endpoint_list(ssot_config.backend_url)
     results = []
     total_time = 0
     successful_tests = 0

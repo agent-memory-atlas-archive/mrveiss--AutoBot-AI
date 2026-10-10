@@ -24,7 +24,7 @@ from typing import Any, Dict
 
 import psutil
 
-from config import API_BASE_URL
+from autobot_shared.ssot_config import config as ssot_config
 from constants import ServiceURLs
 from constants.threshold_constants import TimingConstants
 
@@ -291,7 +291,7 @@ class SystemMonitor:
         services_to_monitor = [
             {
                 "name": "backend",
-                "url": f"{API_BASE_URL}/api/system/health",
+                "url": f"{ssot_config.backend_url}/api/system/health",
                 "port": 8001,
             },
             {

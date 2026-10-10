@@ -20,7 +20,7 @@ import requests
 
 # Import configuration from centralized source
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import API_BASE_URL, OLLAMA_URL
+from autobot_shared.ssot_config import config as ssot_config
 
 
 @dataclass
@@ -85,9 +85,9 @@ logger.info("🔍 Checking backend health...")
 
 # Test endpoints
 endpoints = [
-    (f"{API_BASE_URL}/api/hello", "Basic API"),
-    (f"{API_BASE_URL}/api/system/health", "Health Check"),
-    (f"{API_BASE_URL}/api/chat/list", "Chat List"),
+    (f"{ssot_config.backend_url}/api/hello", "Basic API"),
+    (f"{ssot_config.backend_url}/api/system/health", "Health Check"),
+    (f"{ssot_config.backend_url}/api/chat/list", "Chat List"),
 ]
 
 # Batch check all endpoints concurrently
@@ -109,7 +109,7 @@ for result in results:
 # Check Ollama
 logger.info("\n🤖 Checking Ollama...")
 try:
-    response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+    response = requests.get(f"{ssot_config.ollama_url}/api/tags", timeout=5)
     if response.status_code == 200:
         models = response.json().get("models", [])
         logger.info(f"   ✅ Ollama is running with {len(models)} models")
