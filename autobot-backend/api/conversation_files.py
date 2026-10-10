@@ -105,7 +105,7 @@ async def _authorize_file_operation(request: Request, session_id: str, operation
     if not has_permission:
         raise HTTPException(status_code=403, detail=f"Insufficient permissions for file {operation}")
     request.state.user = user_data
-    await validate_session_ownership(request, session_id, user_data)
+    await _authorize_session_for_user(request, session_id, user_data)
     return user_data
 
 
@@ -153,7 +153,7 @@ def _validate_user_role(user_data: Dict) -> str:
     """
     Validate user has an assigned role.
 
-    Issue #620: Extracted from validate_session_ownership for function length reduction.
+    Issue #620: Extracted from _authorize_session_for_user for function length reduction.
 
     Args:
         user_data: Authenticated user data from auth middleware
@@ -174,7 +174,7 @@ def _check_admin_access(user_data: Dict, session_id: str) -> bool:
     """
     Check if user has admin access to bypass ownership validation.
 
-    Issue #620: Extracted from validate_session_ownership for function length reduction.
+    Issue #620: Extracted from _authorize_session_for_user for function length reduction.
 
     Args:
         user_data: Authenticated user data from auth middleware
@@ -194,7 +194,7 @@ async def _verify_session_owner(chat_history_manager, session_id: str, current_u
     """
     Verify current user matches session owner.
 
-    Issue #620: Extracted from validate_session_ownership for function length reduction.
+    Issue #620: Extracted from _authorize_session_for_user for function length reduction.
 
     Args:
         chat_history_manager: Chat history manager instance
@@ -227,11 +227,11 @@ async def _verify_session_owner(chat_history_manager, session_id: str, current_u
     return True
 
 
-async def validate_session_ownership(request: Request, session_id: str, user_data: Dict) -> bool:
+async def _authorize_session_for_user(request: Request, session_id: str, user_data: Dict) -> bool:
     """
     Validate that the authenticated user owns the conversation session.
 
-    Issue #620: Refactored using Extract Method pattern.
+    Always enforces; stricter than the ``security.session_ownership`` dependency (#14016).
 
     Args:
         request: FastAPI request object
@@ -624,7 +624,7 @@ async def preview_conversation_file(request: Request, session_id: str, file_id: 
 
     try:
         # Validate session ownership
-        await validate_session_ownership(request, session_id, user_data)
+        await _authorize_session_for_user(request, session_id, user_data)
 
         # Get conversation file manager
         file_manager = get_conversation_file_manager(request)

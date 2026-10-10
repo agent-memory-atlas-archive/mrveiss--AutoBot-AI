@@ -325,7 +325,6 @@
     "stop_fleet_service",
     "validate_config",
     "validate_cron_expression",
-    "validate_session_ownership",
     "validate_url",
     "verify_internal_api_key",
     "verify_webhook_signature",

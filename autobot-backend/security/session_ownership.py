@@ -774,7 +774,7 @@ class SessionOwnershipValidator:
 # Dependency function for FastAPI endpoints
 async def validate_session_ownership(session_id: str, request: Request) -> Dict:
     """
-    FastAPI dependency to validate session ownership with feature flag support.
+    The ONE endpoint ownership dependency (#14016), with feature flag support.
 
     Integrates with:
     - Feature flags service (for enforcement mode)
