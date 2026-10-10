@@ -33,7 +33,7 @@ def _generator_model() -> str:
 def _cache_key_model_and_generator_model(configured: str) -> tuple[str, str, str]:
     with patch("autobot_shared.ssot_config.config.llm") as llm:
         llm.embedding_model = configured
-        key = EmbeddingCache(ttl_seconds=1)._make_key(embedding_model.active_embedding_model(), "text")
+        key = EmbeddingCache.make_key(embedding_model.active_embedding_model(), "text")
         return key, embedding_model.active_embedding_model(), _generator_model()
 
 

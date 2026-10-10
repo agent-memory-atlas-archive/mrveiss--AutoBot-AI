@@ -36,7 +36,7 @@ from config import cfg
 # Import existing AutoBot components
 from constants.threshold_constants import TimingConstants
 from knowledge.backends import get_default_client
-from knowledge.embedding_cache import get_embedding_cache
+from knowledge.embedding_cache import EmbeddingCache, get_embedding_cache
 from knowledge_base import KnowledgeBase
 from services.npu_client import generate_embedding_with_fallback
 
@@ -527,17 +527,19 @@ class NPUSemanticSearch:
             raise EmbeddingUnavailableError(f"embedding model {model!r} unavailable: {reason}")
         return np.asarray(vector, dtype=np.float32), label
 
+    @staticmethod
+    def _l2_key(text: str) -> str:
+        """L2 key: the same (active model, text) key L1 uses, so a model change never collides. #18143."""
+        return f"emb:{EmbeddingCache.make_key(active_embedding_model(), text)[:16]}"
+
     async def _l2_cache_get(self, text: str) -> "np.ndarray | None":
         """Check Redis L2 embedding cache. Issue #8159."""
-        # #11834: get_async_redis_client is async — the un-awaited call stored a
-        # coroutine, every redis.get raised AttributeError (swallowed below),
-        # and the L2 cache was silently inert.
+        # #11834: get_async_redis_client is async and must be awaited (else the L2 cache was inert).
         redis = await get_async_redis_client()
         if redis is None:
             return None
         try:
-            key = f"emb:{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
-            cached = await redis.get(key)
+            cached = await redis.get(self._l2_key(text))
             if cached:
                 return np.frombuffer(cached, dtype=np.float32).copy()
         except Exception as exc:
@@ -546,13 +548,11 @@ class NPUSemanticSearch:
 
     async def _l2_cache_set(self, text: str, embedding: np.ndarray) -> None:
         """Store embedding in Redis L2 cache. Issue #8159."""
-        # #11834: see _l2_cache_get — must be awaited.
         redis = await get_async_redis_client()
         if redis is None:
             return
         try:
-            key = f"emb:{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
-            await redis.set(key, embedding.astype(np.float32).tobytes(), ex=_NPU_EMBEDDING_CACHE_TTL)
+            await redis.set(self._l2_key(text), embedding.astype(np.float32).tobytes(), ex=_NPU_EMBEDDING_CACHE_TTL)
         except Exception as exc:
             logger.debug("L2 cache set failed (non-fatal): %s", exc)
 

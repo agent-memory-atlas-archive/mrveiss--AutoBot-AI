@@ -207,3 +207,23 @@ async def test_generate_optimized_embedding_miss_populates_both_caches():
     assert obj._cache_misses == 1
     assert obj._l1_hits == 0
     assert obj._l2_hits == 0
+
+
+# ---------------------------------------------------------------------------
+# L2 key carries the active model (#18143)
+# ---------------------------------------------------------------------------
+
+
+def test_l2_key_differs_per_active_model_and_text_only_key_collided():
+    import hashlib
+
+    from npu_semantic_search import NPUSemanticSearch
+
+    with patch("npu_semantic_search.active_embedding_model", return_value="model-a"):
+        key_a = NPUSemanticSearch._l2_key("same text")
+    with patch("npu_semantic_search.active_embedding_model", return_value="model-b"):
+        key_b = NPUSemanticSearch._l2_key("same text")
+    assert key_a != key_b
+    old = f"emb:{hashlib.sha256(b'same text').hexdigest()[:16]}"  # the old text-only key: model-blind
+    assert old not in (key_a, key_b)
+    assert old == f"emb:{hashlib.sha256(b'same text').hexdigest()[:16]}"  # same for any model: collided
