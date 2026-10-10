@@ -48,11 +48,13 @@ import repo_tests.one_paths_filter_job_15360_test as _paths_filter_guard  # noqa
 import repo_tests.one_semantic_chunker_14485_test as _semantic_chunker_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_ssh_restart_executor_18186_test as _ssh_restart_guard
 from repo_tests._paths import repo_root
 from repo_tests._reach import Reach, ReachScopeError, declare
 from repo_tests._reach_scope import relative_paths, scope_complaint
 
 _ROOT = repo_root()
+_NEW_GUARD_MODULES = (_ssh_restart_guard,)  # importing a guard module is what registers its scope
 
 
 def test_declare_renders_the_scope_from_the_data() -> None:
@@ -246,6 +248,7 @@ _DECLARED_SCOPES = {
         "pipeline-scripts",
     ),
     "store-fact-chokepoint": ("autobot-backend/", "autobot_shared/"),
+    "ssh-restart-executor-scan": ("autobot-slm-backend",),
 }
 
 
