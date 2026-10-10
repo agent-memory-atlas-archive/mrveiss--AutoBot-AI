@@ -5,12 +5,14 @@
 """The model tier map has one definition, and its mirrors still equal it (#15502).
 
 `autobot_shared/ssot_config.py` defines the tier models once, as module constants. Several files
-hand-copy them because they cannot import Python: the frontend's `LLM_DEFAULTS`, the Ansible
-role defaults, and two defaults in `env_registry.py`. This guard parses (never imports) the
+hand-copy them because they cannot import Python: the Ansible role defaults and two defaults
+in `env_registry.py`. The frontend holds no model literal at all: it fetches the one name it
+needs from the backend (owner decision 2026-10-10). This guard parses (never imports) the
 canonical file and asserts that
 
 * each of the nine names is assigned exactly once at module level;
 * every recorded mirror equals the tier it mirrors;
+* no TypeScript or Vue source under `autobot-frontend/src` holds a local-model string literal;
 * the divergences the owner has not yet ruled on are listed in `KNOWN_DIVERGENCES` and still
   diverge, so resolving one forces its entry to be removed rather than lingering;
 * no backend module grows a hand-written tier map: a dict literal with two or more values that
@@ -46,8 +48,6 @@ _TIERS = (
     "SYSTEM_MODEL",
     "QUALITY_MODEL",
 )
-_FRONTEND_LLM_DEFAULTS = "autobot-frontend/src/config/llm-defaults.ts"
-_FRONTEND_SSOT_CONFIG = "autobot-frontend/src/config/ssot-config.ts"
 _AI_STACK = "autobot-slm-backend/ansible/roles/ai-stack/defaults/main.yml"
 _AGENT_CONFIG_ROLE = "autobot-slm-backend/ansible/roles/agent_config/defaults/main.yml"
 _ENV_REGISTRY = "autobot_shared/env_registry.py"
@@ -134,26 +134,6 @@ def test_the_assignment_counter_sees_a_second_definition() -> None:
 
 
 # --- (b) mirrors -----------------------------------------------------------
-
-
-def _frontend_defaults() -> dict[str, str]:
-    body = re.search(r"export const LLM_DEFAULTS = \{(.*?)\} as const", _read(_FRONTEND_LLM_DEFAULTS), re.S)
-    assert body, f"LLM_DEFAULTS not found in {_FRONTEND_LLM_DEFAULTS}"
-    return dict(re.findall(r"(\w+):\s*'([^']+)'", body.group(1)))
-
-
-def test_frontend_llm_defaults_equal_the_ssot() -> None:
-    """Mirror: TypeScript cannot import Python; ssot-parity.spec.ts checks the same pair in vitest."""
-    assert _frontend_defaults() == {
-        "defaultModel": _canonical()["DEFAULT_LLM_MODEL"],
-        "embeddingModel": _canonical()["DEFAULT_EMBEDDING_MODEL"],
-    }
-
-
-def test_ssot_config_ts_holds_no_model_name_literal() -> None:
-    text = _read(_FRONTEND_SSOT_CONFIG)
-    held = sorted(m for m in _local_models() if m in text)
-    assert not held, f"#15502: {_FRONTEND_SSOT_CONFIG} hardcodes {held}; read them from LLM_DEFAULTS"
 
 
 def _ai_stack_vars() -> list[tuple[str, str, str]]:
@@ -328,6 +308,84 @@ def test_no_module_hand_writes_a_tier_map() -> None:
     models = _local_models()
     found = {r: lines for r in REACH.examined(repo_root()) if (lines := _tier_maps(_read(r), models))}
     assert not found, f"#15502: hand-written tier map(s) {found}; import the tier constants from {_SSOT}"
+
+
+# --- (e) the frontend holds no model literal --------------------------------
+
+_FRONTEND_SRC = "autobot-frontend/src"
+#: A local-model tag as a family name followed by `:`; hosted catalogue ids (`gpt-...`) are out of scope.
+_MODEL_TAG = re.compile(r"\b(?:qwen|llama|gemma|phi|mistral|dolphin|nomic)[\w.\-]*:")
+_TS_TOKEN = re.compile(r"""//[^\n]*|/\*.*?\*/|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`""", re.S)
+_VUE_TOKEN = re.compile(r"""/\*.*?\*/|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`""", re.S)
+
+
+def _model_literals(source: str, models: frozenset[str], *, vue: bool = False) -> list[str]:
+    """String literals naming a local model: a canonical tier model, or a `family...:tag` shape.
+
+    Comments are skipped, and so is anything that is not a quoted string, so an identifier such as
+    `llama_index_configured: boolean` is not mistaken for a model tag.
+    """
+    found = []
+    for token in (_VUE_TOKEN if vue else _TS_TOKEN).finditer(source):
+        text = token.group(0)
+        if text[0] in "/":
+            continue
+        body = text[1:-1]
+        if body in models or _MODEL_TAG.search(body):
+            found.append(body)
+    return found
+
+
+def _frontend_population(root: Path) -> list[str]:
+    try:
+        tracked = tracked_paths(root, _FRONTEND_SRC, exclude=(f"{_FRONTEND_SRC}/types/generated",))
+    except EmptyEnumeration:
+        return []
+    return [
+        rel
+        for rel in tracked
+        if rel.endswith((".ts", ".vue")) and not rel.endswith(".spec.ts") and "/__tests__/" not in rel
+    ]
+
+
+REACH_FRONTEND = declare(
+    "frontend-model-literal-scan",
+    discover=_frontend_population,
+    # Mid-window, from REACH_FRONTEND.window(); the arithmetic is on the PR, not here.
+    floor=1080,
+    what="frontend ts and vue source",
+    roots=(_FRONTEND_SRC,),
+    growth=100,
+)
+
+
+def test_a_frontend_model_literal_is_flagged_and_a_lookalike_is_not() -> None:
+    models = _local_models()
+    canonical = next(iter(sorted(models)))
+    assert _model_literals(f"const m = '{canonical}'", models) == [canonical]
+    assert _model_literals('const m = "llama3.2:1b-instruct-q4_K_M"', models) == ["llama3.2:1b-instruct-q4_K_M"]
+    assert _model_literals("const m = `mistral:7b`", models) == ["mistral:7b"]
+    assert _model_literals('<p title="qwen3:8b">', models, vue=True) == ["qwen3:8b"]
+    assert _model_literals("// qwen3.5:9b is the default\nconst x = 1", models) == []
+    assert _model_literals("llama_index_configured: boolean\nconst a = 'llama_index'", models) == []
+    assert _model_literals("const hosted = 'gpt-3.5-turbo'", models) == []
+
+
+def test_the_frontend_scan_is_not_vacuous() -> None:
+    population = REACH_FRONTEND.examined(repo_root())
+    assert "autobot-frontend/src/config/ssot-config.ts" in population
+    assert not [r for r in population if "/__tests__/" in r or r.endswith(".spec.ts") or "types/generated" in r]
+    assert any(r.endswith(".vue") for r in population), "no .vue file was scanned"
+
+
+def test_frontend_holds_no_model_literal() -> None:
+    """Owner decision 2026-10-10: the frontend fetches model names from the backend at runtime."""
+    models = _local_models()
+    found = {}
+    for rel in REACH_FRONTEND.examined(repo_root()):
+        if hits := _model_literals(_read(rel), models, vue=rel.endswith(".vue")):
+            found[rel] = hits
+    assert not found, f"#15502: the frontend hardcodes model name(s) {found}; fetch them from the backend"
 
 
 _READERS = (

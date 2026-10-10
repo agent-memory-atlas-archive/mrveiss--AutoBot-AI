@@ -1286,7 +1286,9 @@
         "envVarRecommendations": "Vides mainīgo ieteikumi",
         "sampleHardcodedValues": "Kodēto vērtību paraugi",
         "noHardcodedValues": "Nav atrastas cietkodētas vides vērtības. Jūsu konfigurācija izskatās tīra!",
-        "noData": "Nav pieejami vides analīzes dati."
+        "noData": "Nav pieejami vides analīzes dati.",
+        "modelHint": "Modelis: {model}",
+        "modelLoading": "notiek ielāde…"
       },
       "ownership": {
         "title": "Koda īpašumtiesību analīze",

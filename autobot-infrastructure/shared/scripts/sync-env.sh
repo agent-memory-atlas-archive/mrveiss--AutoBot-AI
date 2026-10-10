@@ -233,16 +233,6 @@ HEADER
                     count=$((count + 1))
                     ;;
 
-                # LLM settings
-                AUTOBOT_DEFAULT_LLM_MODEL)
-                    echo "VITE_LLM_DEFAULT_MODEL=$value" >> "$FRONTEND_ENV"
-                    count=$((count + 1))
-                    ;;
-                AUTOBOT_EMBEDDING_MODEL)
-                    echo "VITE_LLM_EMBEDDING_MODEL=$value" >> "$FRONTEND_ENV"
-                    count=$((count + 1))
-                    ;;
-
                 # Variables that already have VITE_ prefix - pass through
                 VITE_*)
                     echo "$key=$value" >> "$FRONTEND_ENV"

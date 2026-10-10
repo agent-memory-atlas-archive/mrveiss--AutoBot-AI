@@ -183,6 +183,7 @@ _DECLARED_SCOPES = {
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),
     "model-tier-map-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "frontend-model-literal-scan": ("autobot-frontend/src",),
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),

@@ -35,7 +35,6 @@
  * Author: mrveiss
  */
 
-import { LLM_DEFAULTS } from './llm-defaults';
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -108,16 +107,6 @@ export const PORT_DEFAULTS = {
   slm: 8000,
   slmAdmin: 5174,
 } as const satisfies PortConfig;
-
-/**
- * LLM model configuration.
- */
-export interface LLMConfig {
-  defaultModel: string;
-  embeddingModel: string;
-  provider: string;
-  timeout: number;
-}
 
 /**
  * Timeout configuration (in milliseconds).
@@ -272,7 +261,6 @@ export interface AutoBotConfig {
   // Sub-configurations
   vm: VMConfig;
   port: PortConfig;
-  llm: LLMConfig;
   timeout: TimeoutConfig;
   vnc: VNCConfig;
   feature: FeatureConfig;
@@ -438,14 +426,6 @@ function buildConfig(): AutoBotConfig {
     slmAdmin: getEnvNumber('VITE_SLM_ADMIN_PORT', PORT_DEFAULTS.slmAdmin),
   };
 
-  // LLM configuration
-  const llm: LLMConfig = {
-    defaultModel: getEnv('VITE_LLM_DEFAULT_MODEL', LLM_DEFAULTS.defaultModel),
-    embeddingModel: getEnv('VITE_LLM_EMBEDDING_MODEL', LLM_DEFAULTS.embeddingModel),
-    provider: getEnv('VITE_LLM_PROVIDER', 'ollama'),
-    timeout: getEnvNumber('VITE_LLM_TIMEOUT', 30000),
-  };
-
   // Timeout configuration (all in milliseconds)
   const timeout: TimeoutConfig = {
     api: getEnvNumber('VITE_API_TIMEOUT', 60000),
@@ -492,7 +472,6 @@ function buildConfig(): AutoBotConfig {
   const configObj: AutoBotConfig = {
     vm,
     port,
-    llm,
     timeout,
     vnc,
     feature,

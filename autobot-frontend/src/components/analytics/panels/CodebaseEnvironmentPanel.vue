@@ -71,7 +71,7 @@
           <option value="low">{{ $t('analytics.codebase.environment.lowPriority') }}</option>
           <option value="all">{{ $t('analytics.codebase.environment.allPriorities') }}</option>
         </select>
-        <span class="ai-filter-model-hint">Model: {{ aiFilteringModel }}</span>
+        <span class="ai-filter-model-hint">{{ $t('analytics.codebase.environment.modelHint', { model: aiFilteringModel ?? $t('analytics.codebase.environment.modelLoading') }) }}</span>
       </span>
       <span v-if="llmFilteringResult" class="llm-result-badge">
         <Icon name="check-circle" />
@@ -250,7 +250,7 @@ defineProps<{
   loading: boolean
   error: string | null
   useAiFiltering: boolean
-  aiFilteringModel: string
+  aiFilteringModel: string | null
   aiFilteringPriority: string
   llmFilteringResult: LLMFilteringResult | null
 }>()

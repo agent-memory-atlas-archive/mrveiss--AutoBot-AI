@@ -15,7 +15,6 @@
 
 import { ref } from 'vue'
 import { useFetchEndpoint } from '@/composables/api/useFetchEndpoint'
-import { getConfig } from '@/config/ssot-config'
 import { createLogger } from '@/utils/debugUtils'
 import type {
   UseCodeIntelAnalysisDeps,
@@ -49,7 +48,8 @@ export function useEnvironmentAnalysis(
   const { rootPath, withSourceId } = deps
 
   const useAiFiltering = ref(false)
-  const aiFilteringModel = ref(getConfig().llm.defaultModel)
+  // #15502: the frontend holds no model literal; the backend names the filter model.
+  const aiFilteringModel = ref<string | null>(null)
   const aiFilteringPriority = ref('high')
   const llmFilteringResult = ref<{
     enabled: boolean
@@ -97,6 +97,19 @@ export function useEnvironmentAnalysis(
     { withSourceId },
   )
 
+  const defaultModelEndpoint = useFetchEndpoint<{ model: string }, string>({
+    path: '/api/analytics/codebase/env-analysis/default-model',
+    pickData: (raw) => raw.model || null,
+    onSuccess: (model) => {
+      aiFilteringModel.value = model
+    },
+    onError: (_message, err) => {
+      logger.error('Failed to load the AI filtering default model:', err)
+    },
+    label: 'Environment analysis default model',
+  })
+  void defaultModelEndpoint.load()
+
   const loadEnvironmentAnalysis = async () => {
     if (!rootPath.value) return
     llmFilteringResult.value = null
@@ -106,7 +119,9 @@ export function useEnvironmentAnalysis(
     }
     if (useAiFiltering.value) {
       queryExtras['use_llm_filter'] = 'true'
-      queryExtras['llm_model'] = aiFilteringModel.value
+      if (aiFilteringModel.value) {
+        queryExtras['llm_model'] = aiFilteringModel.value
+      }
       queryExtras['filter_priority'] = aiFilteringPriority.value
     }
 

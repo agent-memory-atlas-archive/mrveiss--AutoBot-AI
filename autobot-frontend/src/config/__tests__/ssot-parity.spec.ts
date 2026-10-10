@@ -14,7 +14,6 @@
  * Covered:
  *   #13073 - PermissionMode / PermissionAction value vocabularies.
  *   #13074 - PortConfig literal default values.
- *   #15502 - DEFAULT_LLM_MODEL / DEFAULT_EMBEDDING_MODEL (LLM_DEFAULTS).
  *
  * Mechanism: this reads the *Python source text* and extracts the declarations
  * with anchored regexes.  It deliberately does not execute Python, import
@@ -38,7 +37,6 @@ import {
   PORT_DEFAULTS,
   CATEGORY_DEFAULTS,
 } from '../ssot-config'
-import { LLM_DEFAULTS } from '../llm-defaults'
 
 const PYTHON_SSOT_RELATIVE = join('autobot_shared', 'ssot_config.py')
 
@@ -129,17 +127,6 @@ function pythonPortDefaults(source: string): Record<string, number> {
     )
   }
   return defaults
-}
-
-/** Extract a module-level `NAME = "value"` string constant; throws when absent. */
-function pythonModuleString(source: string, name: string): string {
-  const match = new RegExp(`^${name}\\s*=\\s*"([^"]+)"`, 'm').exec(source)
-  if (match === null) {
-    throw new Error(
-      `Module constant ${name} not found in Python SSOT — the declaration shape changed; fix this parser rather than trusting an empty comparison.`,
-    )
-  }
-  return match[1]
 }
 
 /**
@@ -327,15 +314,5 @@ describe('SSOT parity: port defaults (#13074)', () => {
       expect(PORT_DEFAULTS).toHaveProperty(name)
       expect(pythonPorts).not.toHaveProperty(name)
     }
-  })
-})
-
-describe('SSOT parity: default models (#15502)', () => {
-  it('LLM_DEFAULTS matches DEFAULT_LLM_MODEL / DEFAULT_EMBEDDING_MODEL', () => {
-    const source = readPythonSsot()
-    expect(LLM_DEFAULTS).toEqual({
-      defaultModel: pythonModuleString(source, 'DEFAULT_LLM_MODEL'),
-      embeddingModel: pythonModuleString(source, 'DEFAULT_EMBEDDING_MODEL'),
-    })
   })
 })
