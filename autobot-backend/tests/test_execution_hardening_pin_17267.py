@@ -64,7 +64,7 @@ async def test_cold_start_run_kwargs() -> None:
     assert args[0] == "python:3.10-slim"
     assert kwargs == {
         "detach": True,
-        "cpus": 1.0,
+        "nano_cpus": 1_000_000_000,
         "environment": kwargs["environment"],
         "remove": False,
         **_hardened("512m"),
@@ -144,3 +144,39 @@ async def test_warm_pool_refuses_a_privileged_caller_kwarg_and_starts_nothing() 
         pool._run_kwargs()
     assert await pool._create_warm_container() is None
     client.containers.run.assert_not_called()
+
+
+#: Keys ``ContainerCollection.run`` consumes itself before building the create/host config.
+_RUN_ONLY_KWARGS = frozenset({"detach", "remove", "stdout", "stderr"})
+
+
+def _accepted_by_docker_py() -> set[str]:
+    from docker.models.containers import RUN_CREATE_KWARGS, RUN_HOST_CONFIG_KWARGS
+
+    return set(RUN_CREATE_KWARGS) | set(RUN_HOST_CONFIG_KWARGS) | _RUN_ONLY_KWARGS
+
+
+@pytest.mark.asyncio
+async def test_every_run_site_passes_only_kwargs_docker_py_accepts() -> None:
+    client = _client()
+    backend = _backend(client)
+    await backend._execute_cold(ExecutionTask(task_id="t", code="x"), "i")
+    cold = set(client.containers.run.call_args.kwargs)
+    backend._snapshot_index.get.return_value = MagicMock(user_id="", image_name="s:1", session_id="s")
+    await backend.restore("sid", "anyone")
+    restore = set(client.containers.run.call_args.kwargs)
+    pool = WarmContainerPool(docker_client=client, image="i", pool_size=1)
+    await pool._create_warm_container()
+    warm = set(client.containers.run.call_args.kwargs)
+    accepted = _accepted_by_docker_py()
+    for label, keys in (("cold", cold), ("restore", restore), ("pool", warm)):
+        assert keys <= accepted, f"{label}: docker-py would raise TypeError on {sorted(keys - accepted)}"
+
+
+@pytest.mark.asyncio
+async def test_cold_start_cpu_limit_is_nano_cpus_not_cpus() -> None:
+    client = _client()
+    task = ExecutionTask(task_id="t", code="x", resource_limits=ResourceLimits(cpu_cores=0.5))
+    await _backend(client)._execute_cold(task, "i")
+    kwargs = client.containers.run.call_args.kwargs
+    assert kwargs["nano_cpus"] == 500_000_000 and "cpus" not in kwargs

@@ -276,7 +276,7 @@ class DockerBackend(ExecutionBackend):
                     **execution_hardening_kwargs(
                         memory_limit=f"{limits.memory_mb}m",
                         extra=dict(
-                            cpus=limits.cpu_cores,
+                            nano_cpus=int(limits.cpu_cores * 1e9),
                             environment=safe_task_env({}, task.env_vars),
                             remove=False,
                         ),
