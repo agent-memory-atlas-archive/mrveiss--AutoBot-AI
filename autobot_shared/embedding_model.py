@@ -20,6 +20,17 @@ class EmbeddingUnavailableError(RuntimeError):
     """
 
 
+def raise_if_embedding_refused(metrics: object) -> None:
+    """Raise EmbeddingUnavailableError if a search's metrics record an embedding refusal (#18185).
+
+    A refused search returns ``([], metrics)`` with ``metrics.error`` set; a caller that only
+    reads the results would report an outage as "no matches".
+    """
+    reason = getattr(metrics, "error", None)
+    if reason:
+        raise EmbeddingUnavailableError(reason)
+
+
 def active_embedding_model() -> str:
     """Return the configured embedding model, read at call time (never cached)."""
     from autobot_shared.ssot_config import config

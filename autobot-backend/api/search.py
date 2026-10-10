@@ -27,6 +27,7 @@ from api.schemas_knowledge import (
     SearchPerformanceAnalyticsResponse,
 )
 from api.system_health import register_singleton_probe
+from autobot_shared.embedding_model import raise_if_embedding_refused
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_llm_logger
 
@@ -320,6 +321,7 @@ async def test_npu_connectivity():
             query="test connectivity", similarity_top_k=3, enable_npu_acceleration=True
         )
 
+        raise_if_embedding_refused(test_metrics)  # reported as a failed connectivity test (#18185)
         return {
             "connectivity": "success",
             "npu_worker_url": search_engine.npu_worker_url,

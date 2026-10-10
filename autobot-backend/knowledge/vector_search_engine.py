@@ -25,6 +25,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
 
+from autobot_shared.embedding_model import raise_if_embedding_refused
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 
@@ -119,12 +120,13 @@ class _NPUBackend:
         filters: Dict[str, Any] | None,
     ) -> List[VectorSearchResult]:
         engine = await self._get_engine()
-        npu_results, _ = await engine.search(
+        npu_results, metrics = await engine.search(
             query=query,
             similarity_top_k=top_k,
             filters=filters,
             enable_npu_acceleration=True,
         )
+        raise_if_embedding_refused(metrics)  # an outage is not "no matches" (#18185)
         return [
             VectorSearchResult(
                 text=r.content,

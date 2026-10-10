@@ -26,7 +26,7 @@ from ai_hardware_accelerator import (
     accelerated_embedding_generation,
     get_ai_accelerator,
 )
-from autobot_shared.embedding_model import EmbeddingUnavailableError, active_embedding_model
+from autobot_shared.embedding_model import EmbeddingUnavailableError, active_embedding_model, raise_if_embedding_refused
 from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_llm_logger
 from autobot_shared.redis_client import get_async_redis_client
@@ -976,8 +976,8 @@ class NPUSemanticSearch:
                         force_device=device,
                     )
 
+                    raise_if_embedding_refused(metrics)
                     end_time = time.time()
-
                     device_results.append(
                         {
                             "query": query,

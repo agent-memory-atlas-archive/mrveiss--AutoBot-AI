@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 
 import aiofiles
 
+from autobot_shared.embedding_model import raise_if_embedding_refused
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client, get_redis_client
 from autobot_shared.security.path_validator import PROJECT_ALLOWED_ROOTS, validate_path
@@ -1043,6 +1044,7 @@ class NPUCodeSearchAgent(StandardizedAgent):
             filters={"language": language} if language else None,
             enable_npu_acceleration=self.npu_available,
         )
+        raise_if_embedding_refused(metrics)  # an outage is not "no matches" (#18185)
         code_results = [await self._convert_npu_result(r) for r in search_results]
         self.stats = SearchStats(
             total_files_indexed=len(code_results),
@@ -1062,16 +1064,7 @@ class NPUCodeSearchAgent(StandardizedAgent):
     async def _convert_embedding_search_result(
         self, sr: Dict[str, Any], query: str, device_used: str
     ) -> CodeSearchResult:
-        """Convert a single embedding search result to CodeSearchResult. Issue #620.
-
-        Args:
-            sr: Raw search result dict with content, metadata, score
-            query: Original search query for metadata
-            device_used: Device identifier for metadata
-
-        Returns:
-            Converted CodeSearchResult object. Issue #620.
-        """
+        """Convert a single embedding search result dict to CodeSearchResult. Issue #620."""
         metadata = sr["metadata"]
         file_path = metadata.get("file_path", "unknown")
         line_number = metadata.get("line_number", 0)
