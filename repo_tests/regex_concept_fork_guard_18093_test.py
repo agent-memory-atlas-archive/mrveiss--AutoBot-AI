@@ -128,6 +128,19 @@ CONCEPTS = (
         rejects=(r"[0-9a-f]{8}", r"[0-9]{4}-[0-9]{2}", r"[0-9a-fA-F]{32}", r"[a-z]{8}-[a-z]{4}"),
     ),
     Concept(
+        "word-tokenizer",
+        # A bare `\\W` / `[\\W_]` run: the separator pattern of "lowercase and split into words".
+        r"^(?:\\W|\[\\W_\])\+$",
+        canonical={
+            "autobot_shared/text_tokens.py": "the one tokenizer; replaced identical copies in prepared_facts and skill_router"
+        },
+        allowed={},
+        matches=(r"[\W_]+", r"\W+"),
+        # Near neighbours: a different separator class, a positive word class, and the
+        # sanitiser shape that the other concept owns.
+        rejects=(r"\s+", r"\w+", r"[\w_]+", r"[^a-z0-9]+", r"[\W_]", r"[\W_]+x"),
+    ),
+    Concept(
         "char-sanitizer-class",
         # A pattern that is NOTHING but a negated alphanumeric/word class (`[^a-z0-9]+`,
         # `[^\\w-]`, `[^A-Za-z0-9._@+-]`) or a bare `\\W` run: "everything that is not
@@ -146,14 +159,9 @@ CONCEPTS = (
             "autobot-backend/voice_processing/language_detection.py": (
                 "`.split()` into filename tokens -- tokenising, not sanitising; no output string is built"
             ),
-            "autobot-backend/prepared_facts.py": (
-                "`re.split` into word tokens (`_tok`) -- tokenising, not sanitising. Byte-identical "
-                "twin of `skills/builtin/skill_router._tokenize`: a separate fork, reported in the "
-                "#18093 hand-off rather than folded into the sanitizer concept"
-            ),
-            "autobot-backend/skills/builtin/skill_router.py": (
-                "`re.split` into word tokens (`_tokenize`) -- tokenising, not sanitising; twin of "
-                "`prepared_facts._tok`"
+            "autobot_shared/text_tokens.py": (
+                "the one word tokenizer (`tokenize`): a split into tokens, not a sanitiser; has its own "
+                "`word-tokenizer` concept below"
             ),
             "autobot-slm-backend/api/setup_wizard.py": (
                 '`_sanitize_ansible_name` fits `sanitize_token(allowed="a-zA-Z0-9_", replacement="_", '
