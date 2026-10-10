@@ -264,7 +264,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/llm_shared/optimization/attention_backend_test.py": 802,
     "autobot-backend/llm_shared/optimization/flash_attention.py": 669,
     "autobot-backend/llm_shared/optimization/kv_cache_test.py": 675,
-    "autobot-backend/llm_shared/optimization/layer_inference.py": 925,
+    "autobot-backend/llm_shared/optimization/layer_inference.py": 869,
     "autobot-backend/llm_shared/optimization/layer_inference_test.py": 715,
     "autobot-backend/llm_shared/provider_auth.py": 653,
     "autobot-backend/llm_shared/tests/test_provider_auth.py": 1187,
