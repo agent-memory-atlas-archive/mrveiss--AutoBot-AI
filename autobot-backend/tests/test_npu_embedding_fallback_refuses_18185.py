@@ -80,3 +80,28 @@ def test_contrast_old_fallback_would_have_used_the_chunker():
 
     src = inspect.getsource(mod.NPUSemanticSearch._generate_fallback_embedding)
     assert "semantic_chunker" not in src and "embed_sentences" not in src
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enable_npu", [True, False])
+async def test_device_path_never_uses_the_accelerator_unified_space(enable_npu):
+    """F3: the accelerator's vectors are not the KB's model; the default (NPU) path must not use them."""
+    obj = _instance()
+    boom = AsyncMock(side_effect=AssertionError("accelerator used"))
+    with patch("npu_semantic_search.accelerated_embedding_generation", boom):
+        with patch(ACCESSOR, AsyncMock(return_value=[0.5])), _no_chunker():
+            vec, _ = await obj._generate_embedding_with_device("q", enable_npu, None)
+    assert np.allclose(vec, [0.5])
+    boom.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_batch_embedding_refusal_keeps_its_reason_per_query():
+    """F5: a refused batch query is an explicit error result carrying the reason, not a bare empty one."""
+    obj = _instance()
+    obj._get_cached_result = MagicMock(return_value=None)
+    obj._generate_cache_key = MagicMock(return_value="k")
+    obj.collections = {}
+    obj._generate_optimized_embedding = AsyncMock(side_effect=EmbeddingUnavailableError("model 'm' unavailable"))
+    ((results, metrics),) = await obj.batch_search(["q"])
+    assert results == [] and metrics.error == "model 'm' unavailable" and metrics.device_used == "error"

@@ -501,16 +501,11 @@ class NPUSemanticSearch:
     async def _generate_embedding_with_device(
         self, text: str, enable_npu: bool, force_device: HardwareDevice | None
     ) -> Tuple[np.ndarray, str]:
-        """Generate embedding on the requested device; else the canonical fallback. Issue #620."""
-        if force_device:
-            embedding = await accelerated_embedding_generation(text, force_device)
-            return embedding, force_device.value
-
-        if enable_npu:
-            embedding = await accelerated_embedding_generation(text)
-            return embedding, "auto_selected"
-
-        return await self._generate_fallback_embedding(text, "gpu_fallback")
+        """Generate the query embedding with the canonical model. Issue #620, #18185."""
+        # #18185: the accelerator's vectors live in its own unified space, not the KB's; every
+        # query embedding comes from the canonical model (force_device only labels the result).
+        label = force_device.value if force_device else ("auto_selected" if enable_npu else "gpu_fallback")
+        return await self._generate_fallback_embedding(text, label)
 
     async def _generate_fallback_embedding(
         self, text: str, label: str = "cpu_final_fallback"
@@ -723,25 +718,9 @@ class NPUSemanticSearch:
 
         self.search_results_cache[cache_key] = (result, time.time())
 
-    def _create_error_search_result(
-        self,
-    ) -> Tuple[List[NpuSearchResult], SearchMetrics]:
-        """Create empty result tuple for failed batch search query. Issue #620.
-
-        Returns:
-            Tuple of empty results list and error metrics
-        """
-        return (
-            [],
-            SearchMetrics(
-                total_documents_searched=0,
-                embedding_generation_time_ms=0,
-                similarity_computation_time_ms=0,
-                total_search_time_ms=0,
-                device_used="error",
-                hardware_utilization={},
-            ),
-        )
+    def _create_error_search_result(self, reason: str = "search failed") -> Tuple[List[NpuSearchResult], SearchMetrics]:
+        """Empty result tuple for a failed batch query; metrics.error records why. Issue #620, #18185."""
+        return [], SearchMetrics(0, 0, 0, 0, "error", {}, error=reason)
 
     def _process_batch_results(self, results: List[Any]) -> List[Tuple[List[NpuSearchResult], SearchMetrics]]:
         """Process batch search results, handling exceptions. Issue #620.
@@ -882,7 +861,8 @@ class NPUSemanticSearch:
         for pos, (orig_idx, emb_result) in enumerate(zip(miss_indices, emb_results)):
             if isinstance(emb_result, Exception):
                 logger.error("Embedding failed for query %s: %s", orig_idx, emb_result)
-                output[orig_idx] = self._create_error_search_result()
+                refused = isinstance(emb_result, EmbeddingUnavailableError)
+                output[orig_idx] = self._create_error_search_result(str(emb_result) if refused else "embedding failed")
                 continue
             emb_array, device = emb_result
             embedding_device = device
