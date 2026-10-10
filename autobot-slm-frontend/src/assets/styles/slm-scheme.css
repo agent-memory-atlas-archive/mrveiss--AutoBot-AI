@@ -1,0 +1,352 @@
+/* Copyright 2025-2026 mrveiss
+   SPDX-License-Identifier: Apache-2.0 */
+/**
+ * AutoBot - AI-Powered Automation Platform
+ * Author: mrveiss
+ *
+ * slm-scheme.css - the Refined SLM scheme (#18223, token contract #17566)
+ *
+ * The SLM control plane always wears its own teal scheme plus a dark identity
+ * bar, in every theme, so a user can tell it from the user frontend. It is
+ * keyed on data-app="slm" on <html> (index.html), never on the theme.
+ *
+ * Same token NAMES as the user frontend (--bg, --surface, --text, ... and the
+ * existing --bg-primary, --text-primary, --border-default, card/table/input
+ * names), SLM's own VALUES. The values below are the SLM columns of the
+ * Refined tokens, merged with the neutral parts they inherit, so this app
+ * does not import the user frontend's stylesheets.
+ *
+ * Themes: no data-theme / "light", "dark", "contrast", "mono". The legacy
+ * data-theme="high-contrast" (useAccessibility.ts) keeps its own palette in
+ * main.css and is excluded from the mapping at the end of this file.
+ */
+
+/* ===== Identity bar (every theme) ===== */
+:root[data-app='slm'] {
+  --slm-bar: #0B2E2B;
+  --slm-bar-fg: #E6F4F1;
+  --slm-bar-muted: #A9CBC5;
+  --slm-bar-hover: #14423D;
+  --slm-bar-line: #1D4A45;
+  --slm-stripe: #14A38B;
+  --slm-badge-bg: #14A38B;
+  --slm-badge-fg: #062220;
+  --slm-bar-on: #2CC5A8;
+}
+
+/* ===== Colour themes ===== */
+:root[data-app='slm']:not([data-theme]),
+:root[data-app='slm'][data-theme='light'] {
+  /* Surfaces and borders */
+  --bg: #F2F8F7;
+  --surface: #FFFFFF;
+  --surface2: #F6FBFA;
+  --border: #D7E6E3;
+  --line: #E6F0EE;
+  --bw: 1px;
+  /* Text and links */
+  --text: #10302D;
+  --text2: #3C5A56;
+  --muted: #52706C;
+  --link: #0D5C55;
+  --link-h: #0A4740;
+  /* Brand, accent and focus */
+  --primary: #0D5C55;
+  --primary-h: #0A4A44;
+  --on-primary: #FFFFFF;
+  --accent: #14A38B;
+  --focus: #2563EB;
+  --brand-bg: #0D5C55;
+  --brand-fg: #FFFFFF;
+  --nav-on-bw: 2px;
+  /* Illustration */
+  --tile: #EAF4F2;
+  --tile-b: #D7E6E3;
+  --stroke: #10302D;
+  --i1: #9FD8CC;
+  --i2: #E9CF7A;
+  --i3: #5FB8A6;
+  --i1t: #D6EEE9;
+  --i2t: #F5EBC6;
+  --i3t: #CBE8E1;
+  /* Bars and alert text */
+  --bar: #0D5C55;
+  --bar-alert: #D9603F;
+  --bar-track: #E6F0EE;
+  --alert-text: #9A3412;
+  /* Status pills */
+  --ok-bg: #E6F4EC;
+  --ok-fg: #1D6A3E;
+  --warn-bg: #FCF1D9;
+  --warn-fg: #7A5300;
+  --bad-bg: #FBE5DF;
+  --bad-fg: #9A3412;
+  --idle-bg: #E8F1EF;
+  --idle-fg: #3C5A56;
+  --info-bg: #DFF1EE;
+  --info-fg: #0D5C55;
+  --pill-b: 0 solid transparent;
+  /* Status dots */
+  --dot-ok: #2E9E60;
+  --dot-idle: #B7BECB;
+  --dot-warn: #E0A93A;
+  --dot-bad: #D9603F;
+  /* Danger tile */
+  --danger-tile: #FBE5DF;
+  --danger-tile-b: #F2C9BC;
+}
+
+:root[data-app='slm'][data-theme='dark'] {
+  /* Surfaces and borders */
+  --bg: #0B1C1B;
+  --surface: #112624;
+  --surface2: #15302D;
+  --border: #24423E;
+  --line: #1B3532;
+  --bw: 1px;
+  /* Text and links */
+  --text: #DDEFEB;
+  --text2: #B3D1CB;
+  --muted: #8FB3AC;
+  --link: #DDEFEB;
+  --link-h: #2CC5A8;
+  /* Brand, accent and focus */
+  --primary: #2CC5A8;
+  --primary-h: #4FD3BA;
+  --on-primary: #06201D;
+  --accent: #2CC5A8;
+  --focus: #7FD8FF;
+  --brand-bg: #2CC5A8;
+  --brand-fg: #06201D;
+  --nav-on-bw: 2px;
+  /* Illustration */
+  --tile: #173330;
+  --tile-b: #24423E;
+  --stroke: #CBE7E1;
+  --i1: #3E8F80;
+  --i2: #B8973F;
+  --i3: #2E7A6D;
+  --i1t: #1D3F3A;
+  --i2t: #3A3420;
+  --i3t: #1A3A35;
+  /* Bars and alert text */
+  --bar: #8FD3C4;
+  --bar-alert: #F08A6C;
+  --bar-track: #1B3532;
+  --alert-text: #F5A48C;
+  /* Status pills */
+  --ok-bg: #163A28;
+  --ok-fg: #8EE0B2;
+  --warn-bg: #3D3016;
+  --warn-fg: #F2CF7A;
+  --bad-bg: #45231B;
+  --bad-fg: #F7A893;
+  --idle-bg: #1B3532;
+  --idle-fg: #B3D1CB;
+  --info-bg: #123A35;
+  --info-fg: #9FE3D4;
+  --pill-b: 0 solid transparent;
+  /* Status dots */
+  --dot-ok: #4CC486;
+  --dot-idle: #6B7690;
+  --dot-warn: #E8B44E;
+  --dot-bad: #F08A6C;
+  /* Danger tile */
+  --danger-tile: #45231B;
+  --danger-tile-b: #6B3326;
+  /* SLM identity bar */
+  --slm-bar: #050F0E;
+  --slm-bar-fg: #DDEFEB;
+  --slm-bar-muted: #8FB3AC;
+  --slm-bar-hover: #10272A;
+  --slm-bar-line: #1B3532;
+  --slm-stripe: #2CC5A8;
+  --slm-badge-bg: #2CC5A8;
+  --slm-badge-fg: #06201D;
+  --slm-bar-on: #2CC5A8;
+}
+
+:root[data-app='slm'][data-theme='contrast'] {
+  /* Surfaces and borders */
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface2: #FFFFFF;
+  --border: #000000;
+  --line: #000000;
+  --bw: 2px;
+  /* Text and links */
+  --text: #000000;
+  --text2: #000000;
+  --muted: #1A1A1A;
+  --link: #003D36;
+  --link-h: #001F1B;
+  /* Brand, accent and focus */
+  --primary: #003D36;
+  --primary-h: #002420;
+  --on-primary: #FFFFFF;
+  --accent: #00695C;
+  --focus: #0033CC;
+  --brand-bg: #003D36;
+  --brand-fg: #FFFFFF;
+  --nav-on-bw: 4px;
+  /* Illustration */
+  --tile: #FFFFFF;
+  --tile-b: #000000;
+  --stroke: #000000;
+  --i1: #FFFFFF;
+  --i2: #FFFFFF;
+  --i3: #FFFFFF;
+  --i1t: #FFFFFF;
+  --i2t: #FFFFFF;
+  --i3t: #FFFFFF;
+  /* Bars and alert text */
+  --bar: #000000;
+  --bar-alert: #B00020;
+  --bar-track: #FFFFFF;
+  --alert-text: #B00020;
+  /* Status pills */
+  --ok-bg: #FFFFFF;
+  --ok-fg: #000000;
+  --warn-bg: #FFFFFF;
+  --warn-fg: #000000;
+  --bad-bg: #B00020;
+  --bad-fg: #FFFFFF;
+  --idle-bg: #FFFFFF;
+  --idle-fg: #000000;
+  --info-bg: #FFFFFF;
+  --info-fg: #000000;
+  --pill-b: 1.5px solid #000000;
+  /* Status dots */
+  --dot-ok: #000000;
+  --dot-idle: #FFFFFF;
+  --dot-warn: #000000;
+  --dot-bad: #B00020;
+  /* Danger tile */
+  --danger-tile: #FFFFFF;
+  --danger-tile-b: #B00020;
+  /* SLM identity bar */
+  --slm-bar: #002420;
+  --slm-bar-fg: #FFFFFF;
+  --slm-bar-muted: #FFFFFF;
+  --slm-bar-hover: #003D36;
+  --slm-bar-line: #FFFFFF;
+  --slm-stripe: #00695C;
+  --slm-badge-bg: #FFFFFF;
+  --slm-badge-fg: #002420;
+  --slm-bar-on: #FFFFFF;
+}
+
+:root[data-app='slm'][data-theme='mono'] {
+  /* Surfaces and borders */
+  --bg: #EEEEF0;
+  --surface: #FFFFFF;
+  --surface2: #F7F7F8;
+  --border: #E4E4E7;
+  --line: #F0F0F2;
+  --bw: 1px;
+  /* Text and links */
+  --text: #18181B;
+  --text2: #3F3F46;
+  --muted: #52525B;
+  --link: #18181B;
+  --link-h: #000000;
+  /* Brand, accent and focus */
+  --primary: #18181B;
+  --primary-h: #27272A;
+  --on-primary: #FFFFFF;
+  --accent: #18181B;
+  --focus: #18181B;
+  --brand-bg: #18181B;
+  --brand-fg: #FFFFFF;
+  --nav-on-bw: 2px;
+  /* Illustration */
+  --tile: #F4F4F5;
+  --tile-b: #E4E4E7;
+  --stroke: #18181B;
+  --i1: #D4D4D8;
+  --i2: #E4E4E7;
+  --i3: #A1A1AA;
+  --i1t: #EDEDEF;
+  --i2t: #F4F4F5;
+  --i3t: #E4E4E7;
+  /* Bars and alert text */
+  --bar: #A1A1AA;
+  --bar-alert: #18181B;
+  --bar-track: #EDEDEF;
+  --alert-text: #18181B;
+  /* Status pills */
+  --ok-bg: #F4F4F5;
+  --ok-fg: #18181B;
+  --warn-bg: #E4E4E7;
+  --warn-fg: #18181B;
+  --bad-bg: #18181B;
+  --bad-fg: #FFFFFF;
+  --idle-bg: #F4F4F5;
+  --idle-fg: #52525B;
+  --info-bg: #F4F4F5;
+  --info-fg: #3F3F46;
+  --pill-b: 1px solid #D4D4D8;
+  /* Status dots */
+  --dot-ok: #18181B;
+  --dot-idle: #D4D4D8;
+  --dot-warn: #71717A;
+  --dot-bad: #18181B;
+  /* Danger tile */
+  --danger-tile: #F4F4F5;
+  --danger-tile-b: #18181B;
+  /* SLM identity bar */
+  --slm-bar: #27272A;
+  --slm-bar-fg: #FAFAFA;
+  --slm-bar-muted: #D4D4D8;
+  --slm-bar-hover: #3F3F46;
+  --slm-bar-line: #3F3F46;
+  --slm-stripe: #71717A;
+  --slm-badge-bg: #FAFAFA;
+  --slm-badge-fg: #18181B;
+  --slm-bar-on: #FAFAFA;
+}
+
+/* ===== Shared token names (the contract with the user frontend) =====
+   Identical mapping to autobot-frontend css/themes/refined-map.css: the
+   existing semantic names resolve to the Refined name of the active theme. */
+:root[data-app='slm']:not([data-theme='high-contrast']) {
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--surface);
+  --bg-tertiary: var(--surface2);
+  --bg-elevated: var(--surface);
+  --bg-surface: var(--surface);
+  --bg-card: var(--surface);
+  --bg-input: var(--surface);
+  --bg-hover: var(--surface2);
+  --text-primary: var(--text);
+  --text-secondary: var(--text2);
+  --text-tertiary: var(--muted);
+  --text-muted: var(--muted);
+  --text-inverse: var(--on-primary);
+  --text-link: var(--link);
+  --text-link-hover: var(--link-h);
+  --border-default: var(--border);
+  --border-subtle: var(--line);
+  --card-bg: var(--surface);
+  --card-border: var(--border);
+  --table-header-bg: var(--surface2);
+  --table-row-bg: var(--surface);
+  --table-border: var(--border);
+  --input-bg: var(--surface);
+  --input-border: var(--border);
+  --color-focus: var(--focus);
+  --color-focus-ring: var(--focus);
+  --color-accent: var(--accent);
+
+  /* SLM's own accessibility set follows the scheme (it fed the old values). */
+  --a11y-bg: var(--bg);
+  --a11y-bg-surface: var(--surface);
+  --a11y-bg-muted: var(--surface2);
+  --a11y-text: var(--text);
+  --a11y-text-muted: var(--muted);
+  --a11y-border: var(--border);
+  --a11y-focus-ring: var(--focus);
+  --a11y-sidebar-bg: var(--slm-bar);
+  --a11y-sidebar-text: var(--slm-bar-fg);
+  --a11y-sidebar-active: var(--slm-bar-on);
+}

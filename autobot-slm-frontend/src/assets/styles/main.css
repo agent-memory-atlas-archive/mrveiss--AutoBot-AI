@@ -5,6 +5,9 @@
 
 @import 'tailwindcss';
 
+/* Refined SLM scheme: teal identity, shared token names (#18223, #17566) */
+@import './slm-scheme.css';
+
 @theme {
   --color-primary-50: #f0f9ff;
   --color-primary-100: #e0f2fe;
