@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Tuple
 
 import aiohttp
 
-from autobot_shared.embedding_model import active_embedding_model
+from autobot_shared.embedding_model import active_embedding_model, npu_worker_model_name
 from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_logger
@@ -245,7 +245,7 @@ class NPUClient:
             async with session.post(
                 f"{self.base_url}/embedding/generate",
                 json=texts,
-                params={"model_name": model_name, "use_cache": str(use_cache).lower()},
+                params={"model_name": npu_worker_model_name(model_name), "use_cache": str(use_cache).lower()},
                 timeout=aiohttp.ClientTimeout(total=BATCH_TIMEOUT),
             ) as response:
                 if response.status == 200:

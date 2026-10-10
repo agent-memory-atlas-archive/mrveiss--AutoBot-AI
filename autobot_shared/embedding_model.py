@@ -31,6 +31,15 @@ def raise_if_embedding_refused(metrics: object) -> None:
         raise EmbeddingUnavailableError(reason)
 
 
+def npu_worker_model_name(model: str) -> str:
+    """The name the NPU worker loads for ``model``: an Ollama-style ``:tag`` is not part of it.
+
+    The worker keys its sessions on the bare name (``nomic-embed-text``) and answers an unknown
+    name with a mock vector, so the worker boundary - and only it - sends this form (#18143).
+    """
+    return model.split(":", 1)[0]
+
+
 def active_embedding_model() -> str:
     """Return the configured embedding model, read at call time (never cached)."""
     from autobot_shared.ssot_config import config
