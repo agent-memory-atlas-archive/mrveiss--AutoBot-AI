@@ -191,6 +191,10 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Tracked .py under thirteen declared trees; Python elsewhere (hidden dirs, root files) drifts alone.",
+    "container-hardening-inline": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
     "post-commit-seed-scan": (
         ABSOLUTE,

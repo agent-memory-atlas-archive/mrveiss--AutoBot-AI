@@ -300,7 +300,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/protocols/agent_communication.py": 654,
     "autobot-backend/research_browser_manager.py": 704,
     "autobot-backend/secure_command_executor.py": 1220,
-    "autobot-backend/secure_sandbox_executor.py": 1019,
+    "autobot-backend/secure_sandbox_executor.py": 1017,
     "autobot-backend/security/command_patterns.py": 609,
     "autobot-backend/security/domain_security.py": 725,
     "autobot-backend/security/enterprise/compliance_manager.py": 910,

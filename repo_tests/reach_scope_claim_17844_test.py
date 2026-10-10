@@ -30,6 +30,7 @@ from pathlib import Path
 
 import pytest
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
+import repo_tests.container_hardening_single_source_17267_test as _hardening_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
 import repo_tests.one_fact_read_authorization_18184_test as _fact_read_guard  # noqa: F401 -- registers its scope
@@ -177,6 +178,7 @@ _DECLARED_SCOPES = {
         "autobot-browser-worker",
         "libs",
     ),
+    "container-hardening-inline": ("autobot-backend", "autobot_shared"),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
