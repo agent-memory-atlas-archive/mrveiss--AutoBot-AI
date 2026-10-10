@@ -40,6 +40,18 @@
 [data-layout-density="compact"] {
   --content-padding-x: 0.75rem;
   --content-padding-y: 1rem;
+  /* Refined table rows tighten with the same setting (#18223). The mockups
+     call this data-density="compact"; one density attribute, not two. */
+  --tbl-row-h: 32px;
+  --tbl-cell-px: 12px;
+  --tbl-cell-py: 6px;
+  --tbl-head-h: 32px;
+}
+
+/* Refined table zebra striping (#18223). */
+[data-zebra="on"] {
+  --tbl-zebra: var(--tbl-zebra-bg);
+  --tbl-row-hover: var(--line);
 }
 
 [data-layout-density="spacious"] {

@@ -1288,6 +1288,178 @@
   --badge-sprint-review-fg: #d6ccff;
   --badge-sprint-closed-bg: #2f3742;
   --badge-sprint-closed-fg: #cdd6e2;
+
+  /* ============================================
+   * REFINED UI TOKENS (#18223, folded under #14785)
+   * Source: the Refined UI redesign handoff (tokens.css). These are the
+   * LIGHT theme values and the theme-independent sizes; dark, contrast and
+   * mono restate only the colour names in themes/. The legacy --bg-*,
+   * --text-*, --border-* and --card-* names derive from these in
+   * themes/refined-map.css. Name-by-name mapping and the list of new names:
+   * docs/design/REFINED_TOKEN_MAPPING.md
+   * ============================================ */
+
+  /* Surfaces and borders */
+  --bg: #F5F6F8;
+  --surface: #FFFFFF;
+  --surface2: #F8F9FB;
+  --border: #E3E6EC;
+  --line: #EEF0F3;
+  --bw: 1px;
+  /* Text and links */
+  --text: #1E2A44;
+  --text2: #4B5570;
+  --muted: #5F6B85;
+  --link: #1E2A44;
+  --link-h: #B8452A;
+  /* Brand, accent and focus */
+  --primary: #1E2A44;
+  --primary-h: #2C3A5A;
+  --on-primary: #FFFFFF;
+  --accent: #D9603F;
+  --focus: #2563EB;
+  --brand-bg: #1E2A44;
+  --brand-fg: #FFFFFF;
+  --nav-on-bw: 2px;
+  /* Illustration */
+  --tile: #F1F4F8;
+  --tile-b: #E3E6EC;
+  --stroke: #1E2A44;
+  --i1: #A9D4E4;
+  --i2: #F0C674;
+  --i3: #EF9077;
+  --i1t: #D5E9F1;
+  --i2t: #F7E3B8;
+  --i3t: #F7D3C8;
+  /* Bars and alert text */
+  --bar: #1E2A44;
+  --bar-alert: #D9603F;
+  --bar-track: #EEF0F3;
+  --alert-text: #9A3412;
+  /* Status pills */
+  --ok-bg: #E6F4EC;
+  --ok-fg: #1D6A3E;
+  --warn-bg: #FCF1D9;
+  --warn-fg: #7A5300;
+  --bad-bg: #FBE5DF;
+  --bad-fg: #9A3412;
+  --idle-bg: #EEF0F3;
+  --idle-fg: #4B5570;
+  --info-bg: #E2F0F6;
+  --info-fg: #155A70;
+  --pill-b: 0 solid transparent;
+  /* Status dots */
+  --dot-ok: #2E9E60;
+  --dot-idle: #B7BECB;
+  --dot-warn: #E0A93A;
+  --dot-bad: #D9603F;
+  /* Danger tile */
+  --danger-tile: #FBE5DF;
+  --danger-tile-b: #F2C9BC;
+
+  /* Breakpoints, grid and page frame */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  --bp-2xl: 1536px;
+  --grid-cols: 12;
+  --grid-gutter: 24px;
+  --page-margin: clamp(16px,2.5vw,32px);
+  --topbar-h: var(--header-height);
+  --subnav-w: 220px;
+  --subnav-rail: 56px;
+  --panel-w: 360px;
+  --content-max: 1440px;
+  --reading-max: 72ch;
+  --space-section: 32px;
+  --stack: 16px;
+  --widget-s: 4;
+  --widget-m: 6;
+  --widget-l: 8;
+  --widget-full: 12;
+  --kpi-span: 3;
+
+  /* Table */
+  --tbl-font-size: 13px;
+  --tbl-row-h: 44px;
+  --tbl-cell-px: 16px;
+  --tbl-cell-py: 10px;
+  --tbl-head-h: 36px;
+  --tbl-head-bg: var(--surface2);
+  --tbl-head-fg: var(--muted);
+  --tbl-head-font: 600 11.5px/1.2 'IBM Plex Sans',system-ui,sans-serif;
+  --tbl-head-case: uppercase;
+  --tbl-head-ls: .05em;
+  --tbl-head-border: var(--bw) solid var(--border);
+  --tbl-border: var(--bw) solid var(--line);
+  --tbl-row-hover: var(--surface2);
+  --tbl-row-selected: var(--surface2);
+  --tbl-selected-edge: 3px solid var(--primary);
+  --tbl-zebra: transparent;
+  --tbl-zebra-bg: var(--surface2);
+  --tbl-check-col-w: 44px;
+  --tbl-actions-col-w: 48px;
+  --tbl-min-col: 96px;
+  --tbl-cell-max: 360px;
+  --tbl-num: tabular-nums;
+  --tbl-sticky-top: var(--topbar-h);
+
+  /* Form fields */
+  --field-h-sm: 32px;
+  --field-h-md: 36px;
+  --field-h-lg: 44px;
+  --field-px: 12px;
+  --field-radius: var(--radius-md);
+  --field-font-size: 13.5px;
+  --field-border: var(--bw) solid var(--border);
+  --field-border-hover: var(--muted);
+  --field-bg: var(--surface);
+  --field-bg-disabled: var(--surface2);
+  --field-fg: var(--text);
+  --field-focus-ring: 3px solid var(--focus);
+  --field-focus-offset: 1px;
+  --label-size: 13px;
+  --label-weight: 500;
+  --label-gap: 6px;
+  --help-size: 12.5px;
+  --help-fg: var(--muted);
+  --error-fg: var(--alert-text);
+  --error-border: var(--bar-alert);
+  --error-bw: 2px;
+  --field-gap: 16px;
+  --inline-gap: 8px;
+  --form-section-gap: 28px;
+  --form-label-col: 200px;
+  --form-max: 640px;
+  --action-gap: 8px;
+  --check-gap: 8px;
+  --control-size: 18px;
+  --switch-w: 36px;
+  --switch-h: 20px;
+  --switch-knob: 14px;
+
+  /* Tooltip */
+  --tooltip-delay: 500ms;
+  --tooltip-hide-delay: 100ms;
+  --tooltip-offset: 8px;
+  --tooltip-max: 280px;
+}
+
+/* Refined grid steps down with the viewport (#18223). Behind @media, so an override, not a second base. */
+@media (max-width: 1023.98px) {
+  :root {
+    --grid-cols: 8;
+    --grid-gutter: 16px;
+    --space-section: 24px;
+    --stack: 12px;
+  }
+}
+
+@media (max-width: 767.98px) {
+  :root {
+    --grid-cols: 4;
+  }
 }
 
 /* ============================================
