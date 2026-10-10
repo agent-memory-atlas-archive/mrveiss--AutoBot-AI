@@ -66,6 +66,10 @@ python:
   # The shim gates a required context, so editing it must run the real suite for
   # the same reason editing ci.yml does.
   - '.github/workflows/python-required-context.yml'
+  # #15360: the one reusable `changes` job every converted workflow calls; the
+  # equivalence and one-job guards under repo_tests read it, so editing it must
+  # run them rather than take the shim's green.
+  - '.github/workflows/_changes.yml'
   # A change here changes what "python" means for both workflows.
   - '.github/filters/python-paths.yml'
   # #14544/#14575: repo_tests/deployment_declares_project_root_14544_test.py
