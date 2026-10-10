@@ -420,7 +420,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/utils/performance_monitoring/monitor.py": 718,
     "autobot-backend/utils/request_batcher.py": 752,
     "autobot-backend/utils/service_discovery.py": 677,
-    "autobot-backend/utils/system_validator.py": 1415,
+    "autobot-backend/utils/system_validator.py": 1349,
     "autobot-backend/utils/task_queue.py": 890,
     "autobot-backend/utils/timeout_migration_examples.py": 1024,
     "autobot-backend/utils/todowrite_optimizer.py": 806,
