@@ -15,6 +15,7 @@ import asyncio
 from typing import Any, Dict
 
 from autobot_shared.async_compat import fire_and_forget
+from autobot_shared.container_hardening import baseline_hardening_kwargs
 from autobot_shared.logging_manager import get_logger
 
 try:
@@ -193,6 +194,17 @@ class WarmContainerPool:
         """Blocking coroutine that waits for a container from the queue."""
         return await self._pool.get()
 
+    def _run_kwargs(self) -> Dict[str, Any]:
+        """Caller kwargs with the privilege floor applied on top (#17267).
+
+        The floor (cap_drop, no-new-privileges, pids cap) wins on conflict, so a caller's
+        ``container_kwargs`` cannot weaken it; no current caller passes any of those keys.
+        Why here: the only caller, DockerBackend (docker_backend.py, ``ContainerPoolRegistry(``),
+        passes no ``default_container_kwargs``, so pooled containers were unhardened before.
+        Network, filesystem, mounts, memory and user are untouched.
+        """
+        return {**self._container_kwargs, **baseline_hardening_kwargs()}
+
     async def _create_warm_container(self) -> "docker.models.containers.Container | None":
         """Start a new idle container and return it.
 
@@ -209,7 +221,7 @@ class WarmContainerPool:
                 ["sleep", "infinity"],
                 detach=True,
                 remove=False,
-                **self._container_kwargs,
+                **self._run_kwargs(),
             )
             logger.debug("Created warm container %s for %s", container.short_id, self._image)
             return container

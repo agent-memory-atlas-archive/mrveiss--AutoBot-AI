@@ -25,7 +25,15 @@ _CANONICAL = "autobot_shared/container_hardening.py"
 _KEYS = frozenset({"cap_drop", "security_opt"})
 
 #: The two clients that create hardened containers must keep taking them from the builder.
-_CONSUMERS = ("autobot-backend/secure_sandbox_executor.py", "autobot-backend/services/docker_task_workspace.py")
+_CONSUMERS = (
+    "autobot-backend/secure_sandbox_executor.py",
+    "autobot-backend/services/docker_task_workspace.py",
+    "autobot-backend/services/execution/docker_backend.py",
+    "autobot-backend/services/execution/container_pool.py",
+)
+_BUILDERS = frozenset({"hardening_kwargs", "baseline_hardening_kwargs"})
+#: Every ``containers.run`` here must itself carry the builder output (decision (c) on #17267).
+_RUN_SITES_FILE = "autobot-backend/services/execution/docker_backend.py"
 
 
 def _is_key(node: ast.AST | None) -> bool:
@@ -46,9 +54,43 @@ def builds_hardening_inline(source: str) -> bool:
 
 def _calls_builder(source: str) -> bool:
     return any(
-        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "hardening_kwargs"
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _BUILDERS
         for n in ast.walk(ast.parse(source))
     )
+
+
+def _is_containers_run(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "run"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "containers"
+    )
+
+
+def _is_run_site(node: ast.AST) -> bool:
+    """``x.containers.run(...)`` or ``to_thread(x.containers.run, ...)``."""
+    if not isinstance(node, ast.Call):
+        return False
+    if _is_containers_run(node.func):
+        return True
+    name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+    return name == "to_thread" and bool(node.args) and _is_containers_run(node.args[0])
+
+
+def _spreads_builder(call: ast.Call) -> bool:
+    return any(
+        kw.arg is None
+        and isinstance(kw.value, ast.Call)
+        and isinstance(kw.value.func, ast.Name)
+        and kw.value.func.id in _BUILDERS
+        for kw in call.keywords
+    )
+
+
+def unhardened_run_sites(source: str) -> list[int]:
+    """Line numbers of ``containers.run`` calls that do not spread the builder output."""
+    return [n.lineno for n in ast.walk(ast.parse(source)) if _is_run_site(n) and not _spreads_builder(n)]
 
 
 @pytest.mark.parametrize(
@@ -66,6 +108,35 @@ def _calls_builder(source: str) -> bool:
 )
 def test_the_matcher_tells_an_inline_build_from_a_use(label: str, source: str, expected: bool) -> None:
     assert builds_hardening_inline(source) is expected, label
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "expected"),
+    [
+        ("direct run, builder spread", "c.containers.run(i, **baseline_hardening_kwargs())\n", []),
+        (
+            "to_thread run, builder spread",
+            "await to_thread(self.client.containers.run, i, **hardening_kwargs(a=1))\n",
+            [],
+        ),
+        ("direct run, no hardening", "c.containers.run(i, detach=True)\n", [1]),
+        ("to_thread run, no hardening", "await asyncio.to_thread(c.containers.run, i, detach=True)\n", [1]),
+        ("literal keyword is not the builder", 'c.containers.run(i, cap_drop=["ALL"])\n', [1]),
+        ("unrelated run", "proc.run(i)\n", []),
+    ],
+)
+def test_the_run_site_matcher_tells_hardened_from_bare(label: str, source: str, expected: list[int]) -> None:
+    assert unhardened_run_sites(source) == expected, label
+
+
+def test_every_execution_backend_run_site_takes_the_builder() -> None:
+    source = (repo_root() / _RUN_SITES_FILE).read_text(encoding="utf-8")
+    sites = [n for n in ast.walk(ast.parse(source)) if _is_run_site(n)]
+    assert len(sites) == 2, f"#17267: expected the cold-start and snapshot-restore run sites, found {len(sites)}"
+    assert not unhardened_run_sites(source), (
+        f"#17267: {_RUN_SITES_FILE} containers.run at lines {unhardened_run_sites(source)} "
+        "does not take `**baseline_hardening_kwargs()` / `**hardening_kwargs(...)`."
+    )
 
 
 def _is_source_python(rel: str) -> bool:

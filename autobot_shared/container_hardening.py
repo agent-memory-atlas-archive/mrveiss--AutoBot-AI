@@ -14,8 +14,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from autobot_shared.env_utils import env_int
+
+#: Process cap for hardened containers (Linux pids cgroup), so a fork-bomb cannot
+#: exhaust host PIDs (GH#11059). One env-backed value shared by every client.
+CONTAINER_PIDS_LIMIT: int = env_int("AUTOBOT_WORKSPACE_PIDS_LIMIT", 512)
+
 #: CFS period paired with every ``cpu_quota`` (microseconds).
 CPU_PERIOD_US = 100000
+
+
+def baseline_hardening_kwargs(*, pids_limit: int | None = CONTAINER_PIDS_LIMIT) -> dict[str, Any]:
+    """The non-behavioural subset: ``cap_drop=ALL``, ``no-new-privileges`` and a pids cap.
+
+    Changes no network, filesystem, mount, memory or user behaviour, so a client that
+    cannot yet take the full set (``hardening_kwargs``) still gets the privilege floor.
+    ``pids_limit=None`` omits the cap.
+    """
+    kwargs: dict[str, Any] = {"security_opt": ["no-new-privileges"], "cap_drop": ["ALL"]}
+    if pids_limit is not None:
+        kwargs["pids_limit"] = pids_limit
+    return kwargs
 
 
 def hardening_kwargs(
@@ -38,8 +57,7 @@ def hardening_kwargs(
     kwargs: dict[str, Any] = {
         "network_mode": network_mode,
         "read_only": read_only,
-        "security_opt": ["no-new-privileges"],
-        "cap_drop": ["ALL"],
+        **baseline_hardening_kwargs(pids_limit=None),
         "cap_add": [],
         "mem_limit": memory_limit,
         "memswap_limit": memory_limit,

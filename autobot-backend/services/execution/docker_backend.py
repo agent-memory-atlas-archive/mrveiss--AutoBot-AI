@@ -24,6 +24,7 @@ import asyncio
 import os
 from typing import Any, Dict, Optional, Tuple
 
+from autobot_shared.container_hardening import baseline_hardening_kwargs
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import now_utc
 
@@ -221,8 +222,7 @@ class DockerBackend(ExecutionBackend):
                 demux=False,
             )
 
-            output = (exec_result.output or b"").decode("utf-8", errors="replace")
-            result.stdout = output
+            result.stdout = (exec_result.output or b"").decode("utf-8", errors="replace")
             result.stderr = ""
             result.return_code = exec_result.exit_code if exec_result.exit_code is not None else -1
             result.status = ExecutionStatus.SUCCESS if result.return_code == 0 else ExecutionStatus.FAILED
@@ -279,6 +279,7 @@ class DockerBackend(ExecutionBackend):
                     stdout=True,
                     stderr=True,
                     remove=False,
+                    **baseline_hardening_kwargs(),
                 )
 
                 self._container_map[task.task_id] = container.id
@@ -296,9 +297,7 @@ class DockerBackend(ExecutionBackend):
                     return result
 
                 try:
-                    logs = container.logs(stdout=True, stderr=True)
-                    output = logs.decode(encoding="utf-8", errors="replace")
-                    result.stdout = output
+                    result.stdout = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
                     result.stderr = ""
                 except Exception as e:
                     logger.warning("Failed to capture container logs: %s", e)
@@ -490,6 +489,7 @@ class DockerBackend(ExecutionBackend):
                 "sleep infinity",
                 detach=True,
                 remove=False,
+                **baseline_hardening_kwargs(),
             )
         except Exception as exc:
             raise RuntimeError(
