@@ -86,7 +86,7 @@ def test_config_values():
     (Redis URL, the legacy-ms API timeout) now live on the SSOT
     ``autobot_shared.ssot_config.config`` singleton, not on the ``config``
     package's compat constants. There is also only one VNC port surface left
-    (``PLAYWRIGHT_VNC_PORT`` / ``get_vnc_direct_url``, an HTTP noVNC URL) --
+    (``ssot_config.port.vnc`` / ``browser_vnc_url``, an HTTP noVNC URL) --
     the old dual display/container port selection is gone, so the assertions
     below check what the current API actually provides instead of restoring
     the retired names.
@@ -94,7 +94,6 @@ def test_config_values():
     logger.info("Testing configuration values...")
 
     from autobot_shared.ssot_config import config as ssot_config
-    from config import PLAYWRIGHT_VNC_PORT, get_vnc_direct_url
 
     # Test basic values
     assert ssot_config.backend_url.startswith("http"), "backend_url should start with http"
@@ -103,16 +102,16 @@ def test_config_values():
     assert isinstance(ssot_config.timeout.api, int), "timeout.api should be integer"
 
     # Test VNC configuration
-    vnc_url = get_vnc_direct_url()
-    assert isinstance(PLAYWRIGHT_VNC_PORT, int), "VNC port should be integer"
+    vnc_url = ssot_config.browser_vnc_url
+    assert isinstance(ssot_config.port.vnc, int), "VNC port should be integer"
     assert vnc_url.startswith("http://"), "VNC URL should start with http://"
-    assert f":{PLAYWRIGHT_VNC_PORT}/" in vnc_url, "VNC URL should embed the VNC port"
+    assert f":{ssot_config.port.vnc}/" in vnc_url, "VNC URL should embed the VNC port"
 
     logger.info("   BACKEND_URL: %s", ssot_config.backend_url)
     logger.info("   REDIS_URL: %s", ssot_config.redis_url)
     logger.info("   OLLAMA_URL: %s", ssot_config.ollama_url)
     logger.info("   API_TIMEOUT: %dms", ssot_config.timeout.api)
-    logger.info("   VNC_PORT: %d", PLAYWRIGHT_VNC_PORT)
+    logger.info("   VNC_PORT: %d", ssot_config.port.vnc)
     logger.info("   VNC_URL: %s", vnc_url)
 
     return True

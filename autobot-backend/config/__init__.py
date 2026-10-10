@@ -20,7 +20,6 @@ Architecture:
 - file_watcher.py: File watching and callbacks
 - validation.py: Config validation
 - manager.py: Core manager class (composition of mixins)
-- compat.py: Playwright/noVNC URL constants (the one part with no SSOT home yet)
 
 Note: Uses lazy imports via __getattr__ to avoid circular import with NetworkConstants.
     Cycle: network_constants → ConfigRegistry → src.config.__init__ → manager → network_constants
@@ -45,12 +44,6 @@ logger = logging.getLogger(__name__)
 
 # Type hints for IDE support without runtime import
 if TYPE_CHECKING:
-    from config.compat import (
-        PLAYWRIGHT_HOST_IP,
-        PLAYWRIGHT_VNC_PORT,
-        PLAYWRIGHT_VNC_URL,
-        get_vnc_direct_url,
-    )
     from config.manager import ConfigManager, get_config_manager
     from config.settings import ConfigSettings
 
@@ -183,25 +176,6 @@ def _lazy_import_settings():
     return _lazy_cache["settings"]
 
 
-def _lazy_import_compat():
-    """Lazily import the compat module."""
-    if "compat" not in _lazy_cache:
-        from config.compat import (
-            PLAYWRIGHT_HOST_IP,
-            PLAYWRIGHT_VNC_PORT,
-            PLAYWRIGHT_VNC_URL,
-            get_vnc_direct_url,
-        )
-
-        _lazy_cache["compat"] = {
-            "PLAYWRIGHT_HOST_IP": PLAYWRIGHT_HOST_IP,
-            "PLAYWRIGHT_VNC_PORT": PLAYWRIGHT_VNC_PORT,
-            "PLAYWRIGHT_VNC_URL": PLAYWRIGHT_VNC_URL,
-            "get_vnc_direct_url": get_vnc_direct_url,
-        }
-    return _lazy_cache["compat"]
-
-
 def __getattr__(name: str):
     """Lazy attribute lookup for module-level imports."""
     # Manager-related attributes (new names + deprecated aliases)
@@ -223,16 +197,6 @@ def __getattr__(name: str):
     # Settings (new name + deprecated alias)
     if name in ("ConfigSettings", "UnifiedConfigSettings"):
         return _lazy_import_settings()[name]
-
-    # Compat constants and classes
-    compat_names = {
-        "PLAYWRIGHT_HOST_IP",
-        "PLAYWRIGHT_VNC_PORT",
-        "PLAYWRIGHT_VNC_URL",
-        "get_vnc_direct_url",
-    }
-    if name in compat_names:
-        return _lazy_import_compat()[name]
 
     raise AttributeError(f"module 'src.config' has no attribute '{name}'")
 
@@ -337,8 +301,4 @@ __all__ = [
     "get_config_value_async",
     "set_config_value_async",
     # Constants
-    "PLAYWRIGHT_HOST_IP",
-    "PLAYWRIGHT_VNC_PORT",
-    "PLAYWRIGHT_VNC_URL",
-    "get_vnc_direct_url",
 ]

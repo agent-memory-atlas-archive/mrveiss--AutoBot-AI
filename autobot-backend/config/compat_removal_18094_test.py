@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""config.compat keeps only the browser-VM VNC URL; the rest is gone (#18094)."""
+"""config.compat and its re-exports are gone; callers read ssot_config (#18094)."""
 
 import ast
 import importlib
@@ -23,8 +23,11 @@ _REMOVED = (
     "REDIS_HOST_IP",
     "Config",
     "legacy_config",
+    "PLAYWRIGHT_HOST_IP",
+    "PLAYWRIGHT_VNC_PORT",
+    "PLAYWRIGHT_VNC_URL",
+    "get_vnc_direct_url",
 )
-_KEPT = ("PLAYWRIGHT_HOST_IP", "PLAYWRIGHT_VNC_PORT", "PLAYWRIGHT_VNC_URL", "get_vnc_direct_url")
 
 
 def test_import_config_still_works():
@@ -39,22 +42,10 @@ def test_removed_name_is_not_exported(name):
     assert name not in config.__all__
 
 
-@pytest.mark.parametrize("name", _KEPT)
-def test_vnc_names_still_resolve(name):
-    config = importlib.import_module("config")
-    assert getattr(config, name) is not None
-    compat = importlib.import_module("config.compat")
-    assert hasattr(compat, name)
-
-
-def test_compat_module_has_no_wrapper_functions():
-    compat = importlib.import_module("config.compat")
-    leftovers = [
-        n
-        for n in ("Config", "get_config_value_from", "get_config_section_from", "load_config_async")
-        if hasattr(compat, n)
-    ]
-    assert leftovers == []
+def test_compat_module_is_gone():
+    assert not (Path(__file__).with_name("compat.py")).exists()
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("config.compat")
 
 
 def test_scripts_read_backend_and_ollama_urls_from_ssot():
@@ -64,6 +55,6 @@ def test_scripts_read_backend_and_ollama_urls_from_ssot():
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "config":
                 names = {a.name for a in node.names}
-                if names & {"API_BASE_URL", "OLLAMA_URL"}:
+                if names & {"API_BASE_URL", "OLLAMA_URL", "PLAYWRIGHT_VNC_PORT", "get_vnc_direct_url"}:
                     offenders.append(f"{path.name}:{node.lineno}")
     assert offenders == []
