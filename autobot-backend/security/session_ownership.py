@@ -28,7 +28,6 @@ from security.enforcement_mode import (
     resolve_enforcement_mode,
     resolve_enforcement_mode_for_request,
 )
-from security.session_owner_errors import SessionOwnerUnreadable
 from security.session_posture import SessionPosture, authenticated_user, deny_unreadable_owner, validate_strict
 
 logger = get_logger(__name__)
@@ -500,22 +499,18 @@ class SessionOwnershipValidator:
         unowned and handed them to their next visitor, which is this issue's own
         defect reintroduced for that vintage of file.
 
-        Returns None when the session records no owner. An owner that cannot be
-        read raises 403 (#14033): that is not "unowned", and claiming it would
-        hand the session to the caller.
+        Returns None only when the session records no owner. ANY failure to look
+        the owner up -- typed or not, or no manager to ask -- raises 403 (#14033):
+        an unknown owner is not "unowned", and claiming it would hand the session
+        to the caller.
         """
         try:
             from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415
 
-            manager = get_chat_history_manager(request)
-            if manager is None:
-                return None
-            owner = await manager.get_session_owner(session_id)
-        except SessionOwnerUnreadable:
-            raise deny_unreadable_owner(session_id, None) from None
+            owner = await get_chat_history_manager(request).get_session_owner(session_id)
         except Exception as exc:
             logger.warning("Could not read the durable owner of session %s...: %s", session_id[:8], exc)
-            return None
+            raise deny_unreadable_owner(session_id, None) from None
         return owner if isinstance(owner, str) and owner else None
 
     async def _owner_when_cache_is_empty(

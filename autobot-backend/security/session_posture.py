@@ -13,8 +13,9 @@
   a global admin is allowed, everyone else must be the recorded owner, and there are no shared or
   org grants. An unowned (pre-ownership) session is allowed and is NOT claimed.
 
-An owner that cannot be read denies under both postures (#14033). Its own module because
-``session_ownership.py`` is at its recorded size ceiling (#14236).
+Any failure to look the owner up denies under both postures (#14033), with 403 and nothing claimed.
+
+Its own module because ``session_ownership.py`` is at its recorded size ceiling (#14236).
 """
 
 from __future__ import annotations
@@ -27,7 +28,6 @@ from fastapi import HTTPException, Request
 from auth_middleware import get_auth_middleware
 from autobot_shared.auth.permissions import is_admin_role
 from autobot_shared.logging_manager import get_logger
-from security.session_owner_errors import SessionOwnerUnreadable
 from utils.catalog_http_exceptions import raise_internal_error
 
 logger = get_logger(__name__)
@@ -62,7 +62,7 @@ async def _strict_owner_check(session_id: str, user_data: Dict, request: Request
     username = user_data.get("username")
     try:
         owner = await get_chat_history_manager(request).get_session_owner(session_id)
-    except SessionOwnerUnreadable:
+    except Exception:  # any lookup failure, typed (SessionOwnerUnreadable) or not, is an unknown owner
         raise deny_unreadable_owner(session_id, username) from None
     if owner is None:
         logger.info("Session %s... has no owner - allowing access (legacy session)", session_id[:8])

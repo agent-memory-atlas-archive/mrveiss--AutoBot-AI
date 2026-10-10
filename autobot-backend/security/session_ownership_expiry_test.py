@@ -117,8 +117,8 @@ class TestAGenuinelyUnownedSessionIsStillClaimable:
         validator.set_session_owner.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_an_untyped_read_failure_still_reads_as_unowned(self):
-        """`_durable_owner` returns None on an untyped failure; that path is the legacy one."""
+    async def test_a_recorded_nothing_session_is_the_legacy_claim(self):
+        """`_durable_owner` returning None (no owner recorded) is the legacy path."""
         validator = _validator(redis_owner=None, file_owner=None)
 
         result = await _resolve(validator, _ALICE)
@@ -218,14 +218,14 @@ class TestTheDurableLookupSeesOlderSessions:
         assert await validator._durable_owner("chat-1", MagicMock()) is None
 
     @pytest.mark.asyncio
-    async def test_a_read_failure_yields_none_and_is_logged(self, monkeypatch, caplog):
+    async def test_an_untyped_read_failure_denies_and_is_logged(self, monkeypatch, caplog):
         manager = MagicMock()
         manager.get_session_owner = AsyncMock(side_effect=RuntimeError("storage down"))
         monkeypatch.setattr("utils.chat_utils.get_chat_history_manager", MagicMock(return_value=manager))
 
         validator = self._validator_with_manager(manager)
-        with caplog.at_level("WARNING"):
-            result = await validator._durable_owner("chat-1", MagicMock())
+        with caplog.at_level("WARNING"), pytest.raises(HTTPException) as denied:
+            await validator._durable_owner("chat-1", MagicMock())
 
-        assert result is None
-        assert any("durable owner" in r.message for r in caplog.records), "the fail-open must not be silent"
+        assert denied.value.status_code == 403
+        assert any("durable owner" in r.message for r in caplog.records)

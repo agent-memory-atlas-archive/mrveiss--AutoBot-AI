@@ -40,6 +40,7 @@ def _case(
     old_strict,
     old_default,
     new_default=None,
+    new_strict=None,
     ctx_org=None,
 ):
     return pytest.param(
@@ -56,6 +57,7 @@ def _case(
             old_strict=old_strict,
             old_default=old_default,
             new_default=new_default or old_default,
+            new_strict=new_strict or old_strict,
         ),
         id=name,
     )
@@ -98,7 +100,23 @@ CASES = [
         old_default=ALLOW,
         new_default=DENY,
     ),
-    _case("owner lookup breaks (not the typed error)", file=BROKEN, old_strict=ERROR, old_default=ALLOW),
+    _case(
+        "owner lookup breaks (not the typed error)",
+        file=BROKEN,
+        old_strict=ERROR,
+        old_default=ALLOW,
+        new_strict=DENY,
+        new_default=DENY,
+    ),
+    _case(
+        "owner lookup breaks, log_only",
+        file=BROKEN,
+        mode="log_only",
+        old_strict=ERROR,
+        old_default=ALLOW,
+        new_strict=DENY,
+        new_default=DENY,
+    ),
 ]
 
 
@@ -161,8 +179,7 @@ async def test_strict_posture_equals_the_old_file_route_verdict(monkeypatch, c) 
     _drive(monkeypatch, c)
     request = MagicMock()
     verdict = await _verdict(SessionPosture.STRICT, request)
-    expected = "http-500" if c["old_strict"] == ERROR else c["old_strict"]
-    assert verdict == expected
+    assert verdict == c["new_strict"]
 
 
 @pytest.mark.asyncio
@@ -172,15 +189,20 @@ async def test_default_posture_equals_the_old_canonical_verdict_except_the_unrea
     assert await _verdict(SessionPosture.DEFAULT) == c["new_default"]
 
 
-def test_the_only_intended_delta_is_the_unreadable_owner() -> None:
-    changed = sorted(p.id for p in CASES if p.values[0]["old_default"] != p.values[0]["new_default"])
-    assert changed == ["owner unreadable, enforced", "owner unreadable, log_only"]
+def test_the_only_intended_deltas_are_the_owner_lookup_failures() -> None:
+    ids = {p.id: p.values[0] for p in CASES}
+    default = sorted(i for i, c in ids.items() if c["old_default"] != c["new_default"])
+    strict = sorted(i for i, c in ids.items() if c["old_strict"] != c["new_strict"])
+    failures = sorted(i for i in ids if "unreadable" in i or "lookup breaks" in i)
+    assert default == failures
+    assert strict == ["owner lookup breaks (not the typed error)", "owner lookup breaks, log_only"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("posture", list(SessionPosture))
-async def test_an_unreadable_owner_is_denied_and_the_session_is_not_claimed(monkeypatch, posture) -> None:
-    case = dict(CASES[11].values[0])
+@pytest.mark.parametrize("index", [11, 12, 13, 14])
+async def test_an_owner_lookup_failure_is_denied_and_the_session_is_not_claimed(monkeypatch, posture, index) -> None:
+    case = dict(CASES[index].values[0])
     redis = _drive(monkeypatch, case)
     assert await _verdict(posture) == DENY
     redis.set.assert_not_awaited()
