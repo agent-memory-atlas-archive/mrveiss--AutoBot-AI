@@ -127,9 +127,6 @@ DISTINCT_VOCABULARIES = {
 UNCLASSIFIED_VALUE_MATCHES = {
     "autobot-backend/api/knowledge_grounding_models.py::ReviewTicketPriority": "priority; urgency vs severity",
     "autobot-backend/llc/models/enums.py::WorkItemPriority": "priority; urgency vs severity",
-    "autobot-backend/security/enterprise/threat_detection/types.py::ThreatLevel": (
-        "docstring says 'Threat severity levels': possibly a plain fork, needs a consumer audit"
-    ),
     "autobot-backend/services/analytics_service.py::MaintenancePriority": "priority; urgency vs severity",
     "autobot-backend/temporal_knowledge_manager.py::KnowledgePriority": "priority; urgency vs severity",
 }
