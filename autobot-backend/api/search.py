@@ -85,7 +85,7 @@ def _convert_metrics_to_api_format(metrics) -> dict:
     """
     Convert metrics object to API response format (Issue #665: extracted helper).
     """
-    return {
+    data = {
         "total_documents_searched": metrics.total_documents_searched,
         "embedding_generation_time_ms": metrics.embedding_generation_time_ms,
         "similarity_computation_time_ms": metrics.similarity_computation_time_ms,
@@ -93,6 +93,9 @@ def _convert_metrics_to_api_format(metrics) -> dict:
         "device_used": metrics.device_used,
         "hardware_utilization": metrics.hardware_utilization,
     }
+    if getattr(metrics, "error", None):  # a failed search carries its reason (#18185)
+        data["error"] = metrics.error
+    return data
 
 
 @router.post("/semantic", response_model=NPUSearchResponse)
