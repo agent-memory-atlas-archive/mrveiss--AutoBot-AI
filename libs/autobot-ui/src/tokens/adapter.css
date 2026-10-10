@@ -42,8 +42,8 @@
   --aui-color-success-contrast: var(--text-on-success);
   --aui-color-warning: var(--color-warning);
   --aui-color-warning-contrast: var(--text-on-warning);
-  --aui-color-danger: var(--color-error);
-  --aui-color-danger-contrast: var(--text-on-error);
+  --aui-color-error: var(--color-error);
+  --aui-color-error-contrast: var(--text-on-error);
   --aui-color-info: var(--color-info);
   --aui-color-info-contrast: var(--text-on-primary);
 

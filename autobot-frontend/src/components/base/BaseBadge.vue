@@ -23,7 +23,7 @@ import type { BadgeVariant } from '@/types/component-props'
 import { createLogger } from '@/utils/debugUtils'
 
 const BADGE_SIZES = ['xs', 'sm', 'md', 'lg'] as const
-const BADGE_VARIANTS = ['neutral', 'primary', 'success', 'warning', 'danger', 'info'] as const
+const BADGE_VARIANTS = ['neutral', 'primary', 'success', 'warning', 'error', 'info'] as const
 
 const logger = createLogger('BaseBadge')
 
@@ -168,7 +168,7 @@ if (import.meta.env.DEV) {
   border: 1px solid transparent;
 }
 
-.badge-danger {
+.badge-error {
   background-color: var(--color-error-bg);
   color: var(--color-error-dark);
   border: 1px solid transparent;
@@ -205,7 +205,7 @@ if (import.meta.env.DEV) {
   border-color: var(--color-warning);
 }
 
-.badge-outline.badge-danger {
+.badge-outline.badge-error {
   background-color: transparent;
   color: var(--color-error);
   border-color: var(--color-error);

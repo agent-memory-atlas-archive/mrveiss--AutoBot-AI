@@ -142,3 +142,18 @@ apply in every theme and the SLM is always distinguishable from the user fronten
   teal primary that white text does not suit), and belongs with the component sweep (#17566).
 - SLM-only Refined names are the `--slm-*` identity-bar tokens; they are in the handoff and have no user-frontend use.
 - Sizes (grid, table, form, tooltip) are not declared in the SLM: no SLM component reads them yet.
+
+## One semantic vocabulary across the kit and both apps (#14775)
+
+- `SemanticVariant` is `neutral | primary | success | warning | error | info`. `danger` is gone from the kit
+  (`BaseBadge`, `BaseButton`, the `--aui-color-error` contract tokens) and from every call site in both apps.
+  The SLM's `--color-danger-500/600`, `bg-danger-*`/`text-danger-*` utilities and `btn-danger` became
+  `error` (`--color-error-500/600`, `bg-error-*`, `btn-error`); its legacy aliases are `--color-error`, `--error-color`,
+  `--error-bg`.
+- `libs/autobot-ui/src/tokens/adapter.css` is the one mapping of the kit contract onto the shared semantic names
+  (see the SLM section); it replaced the two `aui-theme.css` copies.
+- Both apps define the same 91 `--color-autobot-*` names in their `@theme` block, each with its own values
+  behind them. `scripts/canonical/rules/ds_theme_contract.mjs` fails when the two sets drift, in either direction.
+- Still `danger` in the user frontend, deliberately: the token family `--color-danger*` (a separate "critical
+  action" colour next to `--color-error*`, used across many components) and `--danger-tile*` (a Refined name).
+  Merging the families is a value decision (they differ), not a rename; it is left to its own change.

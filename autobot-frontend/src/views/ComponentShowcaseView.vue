@@ -84,7 +84,7 @@
             <BaseBadge variant="primary">{{ $t('views.componentShowcase.primary') }}</BaseBadge>
             <BaseBadge variant="success">{{ $t('views.componentShowcase.success') }}</BaseBadge>
             <BaseBadge variant="warning">{{ $t('views.componentShowcase.warning') }}</BaseBadge>
-            <BaseBadge variant="danger">{{ $t('views.componentShowcase.error') }}</BaseBadge>
+            <BaseBadge variant="error">{{ $t('views.componentShowcase.error') }}</BaseBadge>
             <BaseBadge variant="info">{{ $t('views.componentShowcase.info') }}</BaseBadge>
           </div>
 
@@ -93,7 +93,7 @@
             <BaseBadge variant="primary" outline>{{ $t('views.componentShowcase.primary') }}</BaseBadge>
             <BaseBadge variant="success" outline>{{ $t('views.componentShowcase.success') }}</BaseBadge>
             <BaseBadge variant="warning" outline>{{ $t('views.componentShowcase.warning') }}</BaseBadge>
-            <BaseBadge variant="danger" outline>{{ $t('views.componentShowcase.error') }}</BaseBadge>
+            <BaseBadge variant="error" outline>{{ $t('views.componentShowcase.error') }}</BaseBadge>
           </div>
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.monospace') }}</h4>

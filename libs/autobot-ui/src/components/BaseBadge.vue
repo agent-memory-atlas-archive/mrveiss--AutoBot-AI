@@ -68,9 +68,9 @@ withDefaults(
   background-color: var(--aui-color-warning);
   color: var(--aui-color-warning-contrast);
 }
-.aui-badge--danger {
-  background-color: var(--aui-color-danger);
-  color: var(--aui-color-danger-contrast);
+.aui-badge--error {
+  background-color: var(--aui-color-error);
+  color: var(--aui-color-error-contrast);
 }
 .aui-badge--info {
   background-color: var(--aui-color-info);

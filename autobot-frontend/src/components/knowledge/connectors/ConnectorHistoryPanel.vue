@@ -69,10 +69,10 @@ function toggleRow(index: number) {
   }
 }
 
-function statusVariant(status: string | null): 'success' | 'danger' | 'warning' | 'neutral' {
+function statusVariant(status: string | null): 'success' | 'error' | 'warning' | 'neutral' {
   switch (status) {
     case 'success': return 'success'
-    case 'failed': return 'danger'
+    case 'failed': return 'error'
     case 'partial': return 'warning'
     default: return 'neutral'
   }

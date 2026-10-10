@@ -217,7 +217,7 @@ function formatDate(dateStr: string | null): string {
                   </button>
                   <button
                     v-if="role.assignment_type === 'manual'"
-                    class="btn btn-sm btn-danger"
+                    class="btn btn-sm btn-error"
                     :disabled="isSaving || isRemoving"
                     @click="handleRemoveRole(role.role_name)"
                     :aria-label="$t('roleManagementModal.removeRoleAria', { roleName: role.role_name })"
@@ -292,7 +292,7 @@ function formatDate(dateStr: string | null): string {
                 {{ $t('roleManagementModal.backupAmpRemove') }}
               </button>
               <button
-                class="btn btn-sm btn-danger"
+                class="btn btn-sm btn-error"
                 @click="confirmRemove(false)"
               >
                 {{ isDataBearingRole ? $t('roleManagementModal.removeWithoutBackup') : $t('roleManagementModal.remove') }}
@@ -561,8 +561,8 @@ function formatDate(dateStr: string | null): string {
   color: var(--text-primary);
 }
 
-.btn-danger {
-  background: var(--danger-color);
+.btn-error {
+  background: var(--error-color);
   color: white;
 }
 
@@ -571,7 +571,7 @@ function formatDate(dateStr: string | null): string {
   margin-top: var(--spacing-4);
   padding: var(--spacing-4);
   background: var(--bg-tertiary);
-  border: 1px solid var(--danger-color);
+  border: 1px solid var(--error-color);
   border-radius: var(--radius-md);
 }
 
