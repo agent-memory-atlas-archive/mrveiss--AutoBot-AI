@@ -62,8 +62,9 @@ def _repair_stubbed_packages() -> None:
             continue
         if not isinstance(mod, types.ModuleType):
             replacement = _stubs.install_package(pkg, _BACKEND_ROOT / pkg)
-            replacement.__dict__.update(getattr(mod, "__dict__", {}))
-            replacement.__path__ = [str(_BACKEND_ROOT / pkg)]
+            # install_package owns __path__; carry over everything else the old object had.
+            carried = {k: v for k, v in getattr(mod, "__dict__", {}).items() if k != "__path__"}
+            replacement.__dict__.update(carried)
         elif not mod.__dict__.get("__path__") and (_BACKEND_ROOT / pkg).is_dir():
             _stubs.adopt_package(pkg, _BACKEND_ROOT / pkg)
 

@@ -35,6 +35,7 @@ import repo_tests.chat_history_async_calls_awaited_18316_test as _chat_async_gua
 import repo_tests.chat_single_delete_implementation_18316_test as _chat_delete_guard  # noqa: F401 -- registers its scope
 import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
 import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
+import repo_tests.conftest_stubset_primitives_13596_test as _conftest_stubset_guard  # noqa: F401 -- registers its scope
 import repo_tests.conversation_turn_single_store_18293_test as _conversation_turn_guard  # noqa: F401 -- registers its scope
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
@@ -230,6 +231,13 @@ _DECLARED_SCOPES = {
     ),
     "ansible-concept-forks-17856-scan": ("autobot-slm-backend/ansible",),
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "conftest-stubset-primitives": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot-tts-worker",
+        "autobot_shared",
+        "repo_tests",
+    ),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "infra-backend-import-scan": ("autobot-infrastructure",),

@@ -241,6 +241,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
+    "conftest-stubset-primitives": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "conftest.py files are a proper subset of tracked files under the pytest roots; no reference co-moves.",
+    ),
     "post-commit-seed-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
