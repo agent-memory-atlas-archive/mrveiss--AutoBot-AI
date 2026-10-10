@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,7 @@ _AGENT_CONFIG_ROLE = "autobot-slm-backend/ansible/roles/agent_config/defaults/ma
 _ENV_REGISTRY = "autobot_shared/env_registry.py"
 _AGENTS_YAML = "autobot-infrastructure/shared/config/agents.yaml"
 _COMPLETE_YAML = "autobot-infrastructure/shared/config/complete.yaml"
+_SETTINGS_JSON = "autobot-infrastructure/shared/config/settings.json"
 #: The `# <Tier> tier (<model>)` comment ai-stack puts above each group of vars -> the constant it names.
 _COMMENT_TIER = {
     "Quality": "QUALITY_MODEL",
@@ -189,14 +191,6 @@ _PENDING = "pending the #15502 owner decision"
 #: `(file, dotted path)` -> `(value held today, what it diverges from, reason)`.
 KNOWN_DIVERGENCES: dict[tuple[str, str], tuple[str, str, str]] = {
     **{
-        (_AGENTS_YAML, f"llm.models.{role}"): (
-            "phi3:mini",
-            "mistral:7b-instruct",
-            f"agents.yaml puts this role on the light tier; ai-stack's ai_{role}_model is the instruction tier; {_PENDING}",
-        )
-        for role in ("kb_librarian", "knowledge_extraction", "knowledge_retrieval")
-    },
-    **{
         (_COMPLETE_YAML, f"llm.models.{role}"): (value, "no canonical tier", f"{_PENDING}; owned by issue-17599")
         for role, value in (
             ("rag", "gemma3:270m"),
@@ -233,16 +227,22 @@ def _ai_stack_value(role: str) -> str:
 @pytest.mark.parametrize(("file", "path"), sorted(KNOWN_DIVERGENCES))
 def test_a_known_divergence_still_diverges(file: str, path: str) -> None:
     """Stale entry: once a value is reconciled, the entry must be deleted, not left to rot."""
-    value, against, reason = KNOWN_DIVERGENCES[file, path]
+    value, _against, reason = KNOWN_DIVERGENCES[file, path]
     live = _dig(_load_yaml(file), path)
     assert (
         live == value
     ), f"{file}:{path} is now {live!r}, not the recorded {value!r}; update or remove the entry ({reason})"
-    if against == "no canonical tier":
-        assert live not in _local_models(), f"{file}:{path} now names a canonical model; remove this entry"
-    else:
-        other = _ai_stack_value(path.rsplit(".", 1)[-1])
-        assert other == against and live != other, f"{file}:{path} converged; remove this entry"
+    assert live not in _local_models(), f"{file}:{path} now names a canonical model; remove this entry"
+
+
+_KB_ROLES = ("kb_librarian", "knowledge_extraction", "knowledge_retrieval")
+
+
+@pytest.mark.parametrize("role", _KB_ROLES)
+def test_agents_yaml_kb_roles_are_on_the_instruction_tier(role: str) -> None:
+    """Owner decision 2026-10-10: agents.yaml agrees with the deployed ai-stack role -> tier assignment."""
+    assert _load_yaml(_AGENTS_YAML)["llm"]["models"][role] == _ai_stack_value(role)
+    assert _ai_stack_value(role) == _canonical()["INSTRUCTION_MODEL"]
 
 
 # --- (d) no new hand-written tier map --------------------------------------
@@ -394,6 +394,7 @@ _READERS = (
     "autobot-backend/api/agent_config.py",
     "autobot-slm-backend/agent_seed_roster.py",
     "autobot-slm-backend/services/capability_tiers.py",
+    "autobot-backend/orchestration/orchestrator_config.py",
 )
 
 
@@ -405,3 +406,38 @@ def test_a_canonical_reader_imports_the_ssot_and_holds_no_model_literal(rel: str
         n.value for n in ast.walk(ast.parse(source)) if isinstance(n, ast.Constant) and n.value in _local_models()
     ]
     assert not literals, f"#15502: {rel} holds model literal(s) {sorted(set(literals))}; use the constants"
+
+
+# --- (f) the settings.json template holds no model -----------------------------
+
+
+def _json_strings(node: Any) -> list[str]:
+    """Every key and every string value of a JSON document, at any depth."""
+    if isinstance(node, dict):
+        return [str(k) for k in node] + [s for v in node.values() for s in _json_strings(v)]
+    if isinstance(node, list):
+        return [s for v in node for s in _json_strings(v)]
+    return [node] if isinstance(node, str) else []
+
+
+def _model_strings(doc: Any, models: frozenset[str]) -> list[str]:
+    return [s for s in _json_strings(doc) if s in models or _MODEL_TAG.search(s)]
+
+
+def test_a_json_model_name_is_flagged_as_key_or_value_and_a_url_is_not() -> None:
+    models = _local_models()
+    doc = {"a": {"qwen3.5:9b": 1}, "b": ["gemma2:2b"], "c": {"d": "mistral:7b"}}
+    assert _model_strings(doc, models) == ["qwen3.5:9b", "gemma2:2b", "mistral:7b"]
+    assert _model_strings({"endpoint": "http://localhost:11434", "provider": "ollama"}, models) == []
+
+
+def test_settings_json_template_holds_no_model_name() -> None:
+    """Owner decision 2026-10-10: the tier map is the only model authority; the template names none."""
+    found = _model_strings(json.loads(_read(_SETTINGS_JSON)), _local_models())
+    assert not found, f"#15502: {_SETTINGS_JSON} names model(s) {found}; the tier map owns them"
+
+
+def test_settings_json_template_has_no_stale_hosted_defaults_or_nested_copy() -> None:
+    text = _read(_SETTINGS_JSON).lower()
+    assert "gpt-3.5-turbo" not in text and "dialogpt" not in text
+    assert "settings" not in json.loads(text), "the nested top-level `settings` duplicate is gone"

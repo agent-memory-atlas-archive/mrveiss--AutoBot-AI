@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from config.loader import ENV_VAR_MAPPINGS
+from config.model_drift import warn_on_selected_model_drift
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +295,9 @@ class ValidationMixin:
         # Log override warnings so operators see them at startup.
         for warning in result.warnings:
             logger.warning("Config warning: %s", warning)
+
+        # #15502: report (never rewrite) a config.yaml model that disagrees with the tier map.
+        warn_on_selected_model_drift(raw)
 
         if result.errors:
             for error in result.errors:
