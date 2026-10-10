@@ -156,6 +156,16 @@ def test_each_denied_run_kwarg_is_refused(key: str) -> None:
         {"/run/docker.sock": {"bind": "/s", "mode": "ro"}},
         {"/": {"bind": "/host", "mode": "ro"}},
         {"/var//run/../run": {"bind": "/h", "mode": "ro"}},
+        {"//": {"bind": "/h", "mode": "ro"}},
+        {"/proc/1/root": {"bind": "/h", "mode": "ro"}},
+        {"/proc/self/root": {"bind": "/h", "mode": "ro"}},
+        {"/run/containerd/containerd.sock": {"bind": "/h", "mode": "rw"}},
+        {"/etc/shadow": {"bind": "/h", "mode": "ro"}},
+        {"/sys/fs/cgroup": {"bind": "/h", "mode": "rw"}},
+        {"/var/lib/docker/overlay2": {"bind": "/h", "mode": "ro"}},
+        {"/root": {"bind": "/h", "mode": "ro"}},
+        {"/boot/grub": {"bind": "/h", "mode": "ro"}},
+        {"/srv/x.sock": {"bind": "/h", "mode": "rw"}},
         ["/:/host:ro"],
         ["/var/run/docker.sock:/var/run/docker.sock"],
     ],
@@ -165,6 +175,15 @@ def test_a_bind_of_the_docker_socket_or_host_root_is_refused(volumes: object) ->
 
     with pytest.raises(ValueError, match="not allowed"):
         execution_hardening_kwargs(extra={"volumes": volumes})
+
+
+@pytest.mark.parametrize(
+    "path", ["/srv/work", "/home/agent/workspace/t1", "/var/lib/other", "namedvol", "/procfoo", "/etcetera"]
+)
+def test_a_legitimate_bind_path_still_passes(path: str) -> None:
+    from autobot_shared.container_hardening import execution_hardening_kwargs
+
+    assert execution_hardening_kwargs(extra={"volumes": {path: {"bind": "/w", "mode": "ro"}}})["volumes"]
 
 
 def test_an_ordinary_bind_and_harmless_extras_pass_through_and_cannot_override() -> None:

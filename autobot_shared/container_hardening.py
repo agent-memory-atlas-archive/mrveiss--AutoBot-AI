@@ -123,8 +123,8 @@ DENIED_RUN_KWARGS: frozenset[str] = frozenset(
     }
 )
 
-#: Host paths a bind mount may never expose (the path itself or anything beneath docker.sock).
-_DENIED_HOST_PATHS = frozenset({"/", "/proc", "/sys", "/dev", "/etc", "/run", "/var/run", "/var/lib/docker"})
+#: Host paths a bind mount may never expose: each one itself, and anything beneath it.
+_DENIED_HOST_PATHS = ("/", "/proc", "/sys", "/dev", "/etc", "/run", "/var/run", "/var/lib/docker", "/root", "/boot")
 
 
 def _bind_host_paths(volumes: Any) -> list[str]:
@@ -136,8 +136,18 @@ def _bind_host_paths(volumes: Any) -> list[str]:
 
 
 def _is_denied_host_path(host_path: str) -> bool:
-    norm = posixpath.normpath(host_path) if host_path.startswith("/") else host_path
-    return norm in _DENIED_HOST_PATHS or posixpath.basename(norm).endswith("docker.sock")
+    """True for a path equal to or beneath a denied root, or any ``*.sock`` file.
+
+    Leading slashes are collapsed first (dockerd reads ``//`` as ``/``). ``/`` is denied
+    only as the root itself (``/srv/work`` passes); the other roots also deny their subtrees.
+    A named volume (no leading ``/``) is not a host path and passes.
+    """
+    if not host_path.startswith("/"):
+        return False
+    norm = "/" + posixpath.normpath(host_path).lstrip("/")
+    if posixpath.basename(norm).endswith(".sock"):
+        return True
+    return any(norm == root or (root != "/" and norm.startswith(root + "/")) for root in _DENIED_HOST_PATHS)
 
 
 def reject_escalating_kwargs(extra: Mapping[str, Any]) -> None:
