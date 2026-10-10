@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""The command-utils template emits the canonical ANSI stripper (#18093).
+"""The duplicate analyser generates no second copy of the command utilities (#18093, #18124).
 
-The template used to carry a private ``strip_ansi_codes`` whose raw-string pattern
-double-escaped ``\\x1B`` and so matched the literal text, never the ESC byte.
+It used to embed a 190-line template of `utils/command_utils.py` as a string constant
+and write it to a path that no longer exists. Nothing imported the output, and every
+function in it already lived in the canonical module, so the template was removed.
+This pins that a generated copy cannot come back as a string constant.
 """
 
 import ast
@@ -14,24 +16,28 @@ from pathlib import Path
 _SCRIPT = Path(__file__).with_name("analyze_duplicates.py")
 
 
-def _template() -> str:
-    tree = ast.parse(_SCRIPT.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "_COMMAND_UTILS_LIBRARY_CONTENT":
-            return ast.literal_eval(node.value)
-    raise AssertionError("_COMMAND_UTILS_LIBRARY_CONTENT not found")
+def _embeds_generated_command_utils(source: str) -> bool:
+    """True when a module-level string constant carries a command-execution definition."""
+    for node in ast.parse(source).body:
+        value = node.value if isinstance(node, (ast.Assign, ast.AnnAssign)) else None
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            if "def execute_shell_command" in value.value:
+                return True
+    return False
 
 
-def test_template_has_no_private_ansi_pattern():
-    text = _template()
-    assert "ansi_escape" not in text
-    assert "def strip_ansi_codes" not in text
-    assert "from utils.encoding_utils import strip_ansi_codes" in text
+def test_the_analyser_embeds_no_generated_command_utils():
+    assert not _embeds_generated_command_utils(_SCRIPT.read_text(encoding="utf-8"))
 
 
-def test_template_import_target_strips_a_real_esc_byte():
+def test_the_matcher_tells_a_template_from_a_mention():
+    template = '_T = """\nasync def execute_shell_command(cmd):\n    pass\n"""\n'
+    mention = 'NAMES = ["execute_shell_command"]\nlogger_hint = "use execute_shell_command"\n'
+    assert _embeds_generated_command_utils(template)
+    assert not _embeds_generated_command_utils(mention)
+
+
+def test_the_canonical_stripper_strips_a_real_esc_byte():
     from utils.encoding_utils import strip_ansi_codes
 
-    real = "\x1b[31mERROR\x1b[0m done"
-    assert "\x1b" in real
-    assert strip_ansi_codes(real) == "ERROR done"
+    assert strip_ansi_codes("\x1b[31mERROR\x1b[0m done") == "ERROR done"
