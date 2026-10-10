@@ -10,11 +10,7 @@
  * Replaces the override half of the retired styles/theme.css.
  *
  * [data-font-size]       -- the type scale, set by usePreferences
- * [data-layout-density]  -- content padding. The --spacing-xs..2xl overrides
- *   that theme.css also carried never applied (design-tokens.css, loaded
- *   later at the same specificity, always won), so they are not carried over;
- *   rendering is unchanged. Making density scale those tokens is a visible
- *   change and is tracked separately.
+ * [data-layout-density], .density-*  -- the density scope, below.
  */
 
 [data-font-size="small"] {
@@ -37,24 +33,90 @@
   --font-size-3xl: 2rem;       /* 32px */
 }
 
-[data-layout-density="compact"] {
+/* ----------------------------------------------------------------------------
+   Density scope (#18161, #17564, #18223)
+
+   One scope, two ways to enter it: the [data-layout-density] attribute on
+   <html> (usePreferences) or a .density-* class on ANY ancestor. Components
+   read var(--...) and never learn density exists.
+
+   Every scope below sets the SAME list of tokens. That is required, not
+   tidiness: a derived token such as --spacing-md: var(--spacing-4) is resolved
+   where it is declared (:root), so changing --spacing-unit or --spacing-4 in a
+   subtree does not move it. The derived names are therefore restated here, and
+   a test (densityScope.test.ts) fails if one scope drops a name.
+
+   #18161: the --spacing-xs..2xl overrides in the retired styles/theme.css never
+   applied, because design-tokens.css declared the same names later at equal
+   specificity. This file loads after it, so they apply now.
+
+   Comfortable is the default; its block exists so a comfortable region can sit
+   inside a compact one. Its values are references to the base tokens where one
+   exists, so there is no second copy of a number.
+   ---------------------------------------------------------------------------- */
+
+[data-layout-density="compact"],
+.density-compact {
+  --spacing-unit: 0.1875rem;
+  --spacing-xs: 0.125rem; /* 2px */
+  --spacing-sm: 0.375rem; /* 6px */
+  --spacing-md: 0.75rem;  /* 12px */
+  --spacing-lg: 1rem;     /* 16px */
+  --spacing-xl: 1.5rem;   /* 24px */
+  --spacing-2xl: 2rem;    /* 32px */
   --content-padding-x: 0.75rem;
   --content-padding-y: 1rem;
-  /* Refined table rows tighten with the same setting (#18223). The mockups
-     call this data-density="compact"; one density attribute, not two. */
+  --card-padding: 0.75rem;
   --tbl-row-h: 32px;
   --tbl-cell-px: 12px;
   --tbl-cell-py: 6px;
   --tbl-head-h: 32px;
+  --table-row-height: 32px;
+  --table-cell-py: 6px;
+}
+
+[data-layout-density="spacious"],
+.density-spacious {
+  --spacing-unit: 0.375rem;
+  --spacing-xs: 0.375rem; /* 6px */
+  --spacing-sm: 0.75rem;  /* 12px */
+  --spacing-md: 1.5rem;   /* 24px */
+  --spacing-lg: 2rem;     /* 32px */
+  --spacing-xl: 2.5rem;   /* 40px */
+  --spacing-2xl: 4rem;    /* 64px */
+  --content-padding-x: 1.5rem;
+  --content-padding-y: 2rem;
+  --card-padding: 1.5rem;
+  --tbl-row-h: 52px;
+  --tbl-cell-px: 20px;
+  --tbl-cell-py: 14px;
+  --tbl-head-h: 40px;
+  --table-row-height: 52px;
+  --table-cell-py: 14px;
+}
+
+[data-layout-density="comfortable"],
+.density-comfortable {
+  --spacing-unit: 0.25rem;
+  --spacing-xs: var(--spacing-1);
+  --spacing-sm: var(--spacing-2);
+  --spacing-md: var(--spacing-4);
+  --spacing-lg: var(--spacing-6);
+  --spacing-xl: var(--spacing-8);
+  --spacing-2xl: var(--spacing-12);
+  --content-padding-x: 1rem;
+  --content-padding-y: 1.5rem;
+  --card-padding: var(--spacing-4);
+  --tbl-row-h: 44px;
+  --tbl-cell-px: 16px;
+  --tbl-cell-py: 10px;
+  --tbl-head-h: 36px;
+  --table-row-height: 44px;
+  --table-cell-py: 10px;
 }
 
 /* Refined table zebra striping (#18223). */
 [data-zebra="on"] {
   --tbl-zebra: var(--tbl-zebra-bg);
   --tbl-row-hover: var(--line);
-}
-
-[data-layout-density="spacious"] {
-  --content-padding-x: 1.5rem;
-  --content-padding-y: 2rem;
 }

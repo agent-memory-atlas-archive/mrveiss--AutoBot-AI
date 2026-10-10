@@ -26,13 +26,13 @@
   --emerald-500: #10b981;
   --emerald-700: #047857;
 
-  /* --red-500 / --orange-500: single base site (#14785). The values are the
-     ember palette's, which won the cascade before consolidation because
-     ember.css re-declared them on a bare :root after this file. */
-  --red-500: #cb3326;
+  /* --red-500 / --orange-500: the default palette. The ember variant restates
+     them behind [data-theme-variant="ember"] (themes/ember.css), so they no
+     longer reach every theme (#18161). */
+  --red-500: #ef4444;
   --red-700: #dc2626;
 
-  --orange-500: #d6731f;
+  --orange-500: #ff7849;
   --yellow-500: #eab308;
   --yellow-50: #fefce8;
 }

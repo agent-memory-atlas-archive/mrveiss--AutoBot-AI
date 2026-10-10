@@ -489,6 +489,11 @@
   --card-shadow: var(--shadow-md);
   --card-radius: var(--radius-lg);
   --card-padding: var(--spacing-4);
+  /* Density tokens (#17564). Comfortable values; themes/preferences.css
+     redefines them per density scope ([data-layout-density], .density-*). */
+  --spacing-unit: 0.25rem;
+  --table-row-height: var(--tbl-row-h);
+  --table-cell-py: var(--tbl-cell-py);
 
   /* Buttons */
   --btn-height-sm: 32px;
