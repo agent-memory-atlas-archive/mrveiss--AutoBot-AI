@@ -241,6 +241,7 @@ _DECLARED_SCOPES = {
     "frontend-model-literal-scan": ("autobot-frontend/src",),
     "one-bm25-formula": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "one-hybrid-search": ("autobot-backend", "autobot_shared"),
+    "one-claim-model-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),
