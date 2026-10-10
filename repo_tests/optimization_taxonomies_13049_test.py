@@ -9,9 +9,7 @@ the dtype names as keys is a second byte-width table; a set/frozenset literal ho
 `4bit`/`8bit` compression modes is a second validity set. The detector reads the syntax tree,
 so prose naming the strings is not a definition.
 
-Deferred, not allowed: `layer_inference.py` still carries `_VALID_COMPRESSIONS`; it is owned by
-the queued #13034 branch and listed in `_DEFERRED` so the guard reads green today and goes red
-the day the entry is no longer needed (`test_the_deferral_is_still_needed`).
+Third marker: a set holding the GPT-2-style `model_type` names is a second layer-layout table.
 """
 
 from __future__ import annotations
@@ -29,24 +27,25 @@ _PKG = "autobot-backend/llm_shared/optimization/"
 _CANONICAL = _PKG + "taxonomy.py"
 _DTYPE_NAMES = frozenset({"fp16", "bf16", "fp32", "float16", "bfloat16", "float32"})
 _COMPRESSION_MODES = frozenset({"4bit", "8bit"})
-#: Owned by the queued #13034 branch (autobot-backend/llm_shared/optimization/layer_inference.py).
-_DEFERRED = frozenset({_PKG + "layer_inference.py"})
+_GPT2_STYLE = frozenset({"gpt2", "gptj"})
 
 
 def _str_consts(nodes: list[ast.expr | None]) -> set[str]:
     return {n.value for n in nodes if isinstance(n, ast.Constant) and isinstance(n.value, str)}
 
 
-def _forks(source: str) -> tuple[bool, bool]:
-    """(second dtype table, second compression set) in `source`."""
-    dtype = comp = False
+def _forks(source: str) -> tuple[bool, bool, bool]:
+    """(second dtype table, second compression set, second layout set) in `source`."""
+    dtype = comp = layout = False
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Dict) and len(_str_consts(node.keys) & _DTYPE_NAMES) >= 2:
             dtype = True
         elements = node.elts if isinstance(node, (ast.Set, ast.List, ast.Tuple)) else None
         if elements is not None and _COMPRESSION_MODES <= _str_consts(elements):
             comp = True
-    return dtype, comp
+        if elements is not None and _GPT2_STYLE <= _str_consts(elements):
+            layout = True
+    return dtype, comp, layout
 
 
 def _is_package_source(rel: str) -> bool:
@@ -74,7 +73,7 @@ REACH = declare(
 
 
 @functools.lru_cache(maxsize=1)
-def _forked_files() -> dict[str, tuple[bool, bool]]:
+def _forked_files() -> dict[str, tuple[bool, bool, bool]]:
     found = {}
     for rel in REACH.examined(repo_root()):
         flags = _forks((repo_root() / rel).read_text(encoding="utf-8"))
@@ -86,18 +85,19 @@ def _forked_files() -> dict[str, tuple[bool, bool]]:
 @pytest.mark.parametrize(
     ("label", "source", "expected"),
     [
-        ("a second byte table", 'T = {"fp16": 2, "float16": 2}\n', (True, False)),
-        ("a second validity set", 'V = frozenset({"4bit", "8bit", "none"})\n', (False, True)),
-        ("a lookup of one spelling", 'x = {"fp16": 2}\n', (False, False)),
-        ("a comment naming them", '# {"fp16", "4bit", "8bit"}\nx = 1\n', (False, False)),
+        ("a second byte table", 'T = {"fp16": 2, "float16": 2}\n', (True, False, False)),
+        ("a second validity set", 'V = frozenset({"4bit", "8bit", "none"})\n', (False, True, False)),
+        ("a second layout set", 'G = frozenset({"gpt2", "gptj", "gpt_neo"})\n', (False, False, True)),
+        ("a lookup of one spelling", 'x = {"fp16": 2}\n', (False, False, False)),
+        ("a comment naming them", '# {"fp16", "4bit", "8bit"}\nx = 1\n', (False, False, False)),
     ],
 )
-def test_the_matcher_tells_a_fork_from_a_use(label: str, source: str, expected: tuple[bool, bool]) -> None:
+def test_the_matcher_tells_a_fork_from_a_use(label: str, source: str, expected: tuple[bool, bool, bool]) -> None:
     assert _forks(source) == expected, label
 
 
 def test_only_the_taxonomy_module_defines_them() -> None:
-    offenders = sorted(set(_forked_files()) - {_CANONICAL} - _DEFERRED)
+    offenders = sorted(set(_forked_files()) - {_CANONICAL})
     assert not offenders, f"second dtype table or compression set outside taxonomy.py: {offenders}"
 
 
@@ -107,9 +107,8 @@ def test_the_canonical_module_defines_both_enums() -> None:
     assert {"Dtype", "Compression"} <= classes
 
 
-def test_the_deferral_is_still_needed() -> None:
-    stale = sorted(rel for rel in _DEFERRED if rel not in _forked_files())
-    assert not stale, f"drop from _DEFERRED, the fork is gone: {stale}"
+def test_the_canonical_module_is_seen_defining_the_layout_set() -> None:
+    assert _forked_files().get(_CANONICAL) == (False, False, True)
 
 
 _FAMILY_HOME = "autobot_shared/model_taxonomy.py"

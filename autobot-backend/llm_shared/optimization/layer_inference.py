@@ -26,6 +26,7 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.pinned_model_registry import pinned_revision_kwargs
 
 from ..torch_loader import lazy_torch
+from .taxonomy import Compression, layer_layout_for
 
 if TYPE_CHECKING:
     import torch
@@ -46,15 +47,6 @@ def _get_torch() -> Any:
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-#: Valid compression modes understood by LayerInferenceConfig.
-_VALID_COMPRESSIONS = frozenset({"4bit", "8bit", "none"})
-
-#: Architectures that nest transformer blocks under ``transformer.`` and name
-#: their token embedding ``wte``, rather than the LLaMA-style ``model.`` layout.
-#: Shared by the prefix, embedding and head resolvers so they cannot disagree
-#: about which family a model belongs to (#13032).
-_GPT2_STYLE = frozenset({"gpt2", "gptj", "gpt_neo", "gpt_neox"})
 
 
 @dataclass
@@ -83,8 +75,7 @@ class LayerInferenceConfig:
         """Validate all configuration fields."""
         if not self.model_name:
             raise ValueError("model_name must not be empty")
-        if self.compression not in _VALID_COMPRESSIONS:
-            raise ValueError(f"compression must be one of {sorted(_VALID_COMPRESSIONS)}, got '{self.compression}'")
+        Compression.validate(self.compression)
         if self.max_seq_len < 1:
             raise ValueError(f"max_seq_len must be >= 1, got {self.max_seq_len}")
         if self.batch_size < 1:
@@ -701,10 +692,7 @@ def _layer_prefix_for_arch(model_type: str) -> str:
     Returns:
         Dot-separated prefix including trailing dot, e.g. ``"model.layers."``.
     """
-    if model_type in _GPT2_STYLE:
-        return "transformer.h."
-    # LLaMA, Mistral, Falcon, Qwen, Gemma, Phi, etc.
-    return "model.layers."
+    return layer_layout_for(model_type).layer_prefix
 
 
 def _embedding_name_for_arch(model_type: str) -> str:
@@ -714,9 +702,7 @@ def _embedding_name_for_arch(model_type: str) -> str:
     engine fed raw vocabulary indices into layer 0 as floats, so every
     downstream activation was meaningless.
     """
-    if model_type in _GPT2_STYLE:
-        return "transformer.wte"
-    return "model.embed_tokens"
+    return layer_layout_for(model_type).embedding
 
 
 def _head_name_for_arch(model_type: str) -> str:
@@ -726,7 +712,7 @@ def _head_name_for_arch(model_type: str) -> str:
     the caller reads symmetrically with the embedding and prefix helpers, and so
     an architecture needing something else has one place to change.
     """
-    return "lm_head"
+    return layer_layout_for(model_type).head
 
 
 def _apply_embedding(module: Any, input_ids: "torch.Tensor") -> "torch.Tensor":

@@ -6,7 +6,14 @@
 
 import pytest
 
+from ..model_param_registry import _MODEL_TYPE_MAP
 from .kv_cache import KVCacheConfig
+from .layer_inference import (
+    LayerInferenceConfig,
+    _embedding_name_for_arch,
+    _head_name_for_arch,
+    _layer_prefix_for_arch,
+)
 from .pipeline import PipelineConfig
 from .taxonomy import Compression, Dtype
 
@@ -50,3 +57,45 @@ def test_contrast_pair_pipeline_rejects_at_the_field_the_caller_set():
     PipelineConfig(model_name="m", compression="8bit")
     with pytest.raises(ValueError, match=r"compression must be one of \['4bit', '8bit', 'none'\], got 'fp4'"):
         PipelineConfig(model_name="m", compression="fp4")
+
+
+# --- layer-name layout (#13049 C1): frozen pre-refactor behaviour -------------------------
+
+_OLD_GPT2_STYLE = frozenset({"gpt2", "gptj", "gpt_neo", "gpt_neox"})
+
+
+def _old_layout(model_type):
+    if model_type in _OLD_GPT2_STYLE:
+        return "transformer.h.", "transformer.wte", "lm_head"
+    return "model.layers.", "model.embed_tokens", "lm_head"
+
+
+#: Every model_type the registry classifies, plus unrecognised and edge spellings.
+_MODEL_TYPE_CORPUS = sorted(
+    set(_MODEL_TYPE_MAP) | _OLD_GPT2_STYLE | {"", "novelarch", "GPT2", "gpt-neox", "mamba", "gpt2 "}
+)
+
+
+@pytest.mark.parametrize("model_type", _MODEL_TYPE_CORPUS)
+def test_layout_is_identical_for_every_known_model_type(model_type):
+    got = (
+        _layer_prefix_for_arch(model_type),
+        _embedding_name_for_arch(model_type),
+        _head_name_for_arch(model_type),
+    )
+    assert got == _old_layout(model_type)
+
+
+def test_contrast_pair_gpt2_style_differs_from_llama_style():
+    assert _layer_prefix_for_arch("gpt2") != _layer_prefix_for_arch("llama")
+
+
+@pytest.mark.parametrize("mode", ["4bit", "8bit", "none", "fp4", "", "NONE", "4-bit"])
+def test_layer_inference_compression_accepts_and_rejects_as_before(mode):
+    ok = mode in _OLD_COMPRESSIONS
+    if ok:
+        assert LayerInferenceConfig(model_name="m", compression=mode).compression == mode
+        return
+    with pytest.raises(ValueError) as exc:
+        LayerInferenceConfig(model_name="m", compression=mode)
+    assert str(exc.value) == f"compression must be one of {sorted(_OLD_COMPRESSIONS)}, got '{mode}'"
