@@ -110,3 +110,58 @@ def test_the_canonical_module_defines_both_enums() -> None:
 def test_the_deferral_is_still_needed() -> None:
     stale = sorted(rel for rel in _DEFERRED if rel not in _forked_files())
     assert not stale, f"drop from _DEFERRED, the fork is gone: {stale}"
+
+
+_FAMILY_HOME = "autobot_shared/model_taxonomy.py"
+
+
+def _defines_architecture_family(source: str) -> bool:
+    """True when `source` has a class statement named ArchitectureFamily."""
+    return any(isinstance(n, ast.ClassDef) and n.name == "ArchitectureFamily" for n in ast.walk(ast.parse(source)))
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "expected"),
+    [
+        ("a local enum", "class ArchitectureFamily(str, Enum):\n    SSM = 'ssm'\n", True),
+        ("an import", "from autobot_shared.model_taxonomy import ArchitectureFamily\n", False),
+        ("a re-export alias", "ArchitectureFamily = _Shared\n", False),
+    ],
+)
+def test_the_matcher_tells_a_definition_from_an_import(label: str, source: str, expected: bool) -> None:
+    assert _defines_architecture_family(source) is expected, label
+
+
+_FAMILY_ROOTS = ("autobot-backend", "autobot-npu-worker", "autobot-slm-backend", "autobot_shared")
+
+
+def _family_population(root) -> list[str]:
+    try:
+        tracked = tracked_paths(root, *_FAMILY_ROOTS)
+    except EmptyEnumeration:
+        return []
+    return [rel for rel in tracked if rel.endswith(".py") and not rel.endswith("_test.py") and "/tests/" not in rel]
+
+
+FAMILY_REACH = declare(
+    "architecture-family-definition-scan",
+    discover=_family_population,
+    floor=2952,
+    what="non-test python source",
+    roots=_FAMILY_ROOTS,
+    growth=300,
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _family_definitions() -> tuple[str, ...]:
+    found = []
+    for rel in FAMILY_REACH.examined(repo_root()):
+        text = (repo_root() / rel).read_text(encoding="utf-8")
+        if "ArchitectureFamily" in text and _defines_architecture_family(text):
+            found.append(rel)
+    return tuple(found)
+
+
+def test_architecture_family_is_defined_only_in_autobot_shared() -> None:
+    assert _family_definitions() == (_FAMILY_HOME,)

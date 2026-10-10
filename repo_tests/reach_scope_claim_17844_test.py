@@ -231,6 +231,12 @@ _DECLARED_SCOPES = {
     ),
     "ansible-concept-forks-17856-scan": ("autobot-slm-backend/ansible",),
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "architecture-family-definition-scan": (
+        "autobot-backend",
+        "autobot-npu-worker",
+        "autobot-slm-backend",
+        "autobot_shared",
+    ),
     "optimization-taxonomy-scan": ("autobot-backend/llm_shared/optimization",),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
