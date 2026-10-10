@@ -501,11 +501,16 @@ class NPUSemanticSearch:
     async def _generate_embedding_with_device(
         self, text: str, enable_npu: bool, force_device: HardwareDevice | None
     ) -> Tuple[np.ndarray, str]:
-        """Generate the query embedding with the canonical model. Issue #620, #18185."""
-        # #18185: the accelerator's vectors live in its own unified space, not the KB's; every
-        # query embedding comes from the canonical model (force_device only labels the result).
-        label = force_device.value if force_device else ("auto_selected" if enable_npu else "gpu_fallback")
-        return await self._generate_fallback_embedding(text, label)
+        """Generate the query embedding in the index's space on the requested device, else canonically. #620."""
+        if force_device:
+            embedding = await accelerated_embedding_generation(text, preferred_device=force_device)
+            return embedding, force_device.value
+
+        if enable_npu:
+            embedding = await accelerated_embedding_generation(text)
+            return embedding, "auto_selected"
+
+        return await self._generate_fallback_embedding(text, "gpu_fallback")
 
     async def _generate_fallback_embedding(
         self, text: str, label: str = "cpu_final_fallback"

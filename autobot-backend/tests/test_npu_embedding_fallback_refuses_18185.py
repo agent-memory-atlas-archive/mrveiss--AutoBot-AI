@@ -83,16 +83,19 @@ def test_contrast_old_fallback_would_have_used_the_chunker():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("enable_npu", [True, False])
-async def test_device_path_never_uses_the_accelerator_unified_space(enable_npu):
-    """F3: the accelerator's vectors are not the KB's model; the default (NPU) path must not use them."""
+async def test_accelerated_paths_stay_in_the_index_space_with_correct_arguments():
+    """The query vector must match the indexes (accelerator space); force_device is a device, not a modality."""
+    from ai_hardware_accelerator import HardwareDevice
+
     obj = _instance()
-    boom = AsyncMock(side_effect=AssertionError("accelerator used"))
-    with patch("npu_semantic_search.accelerated_embedding_generation", boom):
-        with patch(ACCESSOR, AsyncMock(return_value=[0.5])), _no_chunker():
-            vec, _ = await obj._generate_embedding_with_device("q", enable_npu, None)
-    assert np.allclose(vec, [0.5])
-    boom.assert_not_awaited()
+    acc = AsyncMock(return_value=np.array([0.1]))
+    with patch("npu_semantic_search.accelerated_embedding_generation", acc):
+        _, label = await obj._generate_embedding_with_device("q", True, None)
+        assert label == "auto_selected"
+        acc.assert_awaited_with("q")
+        _, label = await obj._generate_embedding_with_device("q", True, HardwareDevice.GPU)
+        assert label == HardwareDevice.GPU.value
+        acc.assert_awaited_with("q", preferred_device=HardwareDevice.GPU)
 
 
 @pytest.mark.asyncio
