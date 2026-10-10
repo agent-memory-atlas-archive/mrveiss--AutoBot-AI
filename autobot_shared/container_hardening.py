@@ -120,6 +120,10 @@ DENIED_RUN_KWARGS: frozenset[str] = frozenset(
         "sysctls",
         "volumes_from",
         "mounts",
+        "cgroup_parent",
+        "runtime",
+        "oom_kill_disable",
+        "volume_driver",
     }
 )
 
