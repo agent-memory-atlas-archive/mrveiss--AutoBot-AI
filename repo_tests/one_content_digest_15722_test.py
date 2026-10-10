@@ -37,21 +37,20 @@ _ROOTS = ("autobot-backend", "autobot_shared")
 _CONTENT_NAME = re.compile(r"content|text|^code$|element_code|body|hash_source|source", re.IGNORECASE)
 
 _QUEUED = "queued on another branch; convert when it merges"
+_CEILING = "grandfathered over its size ceiling; the import line would grow it"
 _TOOL = "standalone code-analysis tool script, not a stored key"
 _UNCONVERTED = {
-    "autobot-backend/agents/npu_code_search_agent.py": "grandfathered over the size ceiling; the import line would grow it",
+    "autobot-backend/agents/npu_code_search_agent.py": _CEILING,
     "autobot-backend/agents/scope_enforcement.py": "x- prefixed id, unconverted",
-    "autobot-backend/api/analytics_continuous_learning.py": _QUEUED,
+    "autobot-backend/api/analytics_continuous_learning.py": _CEILING,
     "autobot-backend/api/codebase_analytics/duplicate_detector.py": _QUEUED,
     "autobot-backend/code_analysis/auto-tools/playwright_sanitizer.py": _TOOL,
     "autobot-backend/code_analysis/auto-tools/security_deep_sanitizer.py": _TOOL,
     "autobot-backend/code_analysis/auto-tools/security_sanitizer.py": _TOOL,
     "autobot-backend/code_intelligence/analytics_infrastructure.py": _QUEUED,
-    "autobot-backend/code_intelligence/cross_language_patterns/models.py": _QUEUED,
-    "autobot-backend/code_intelligence/pattern_analysis/analyzer.py": _QUEUED,
     "autobot-backend/knowledge/connectors/notion.py": _QUEUED,
     "autobot-backend/markdown_reference_system.py": _QUEUED,
-    "autobot-backend/npu_semantic_search.py": _QUEUED,
+    "autobot-backend/npu_semantic_search.py": _CEILING,
     "autobot-backend/services/claim_verifier.py": "claim-text digest, unconverted",
     "autobot-backend/services/npu_client.py": "encodes with errors=replace, a different input form",
 }
