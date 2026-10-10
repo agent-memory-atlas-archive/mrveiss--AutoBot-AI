@@ -62,10 +62,24 @@ def _calls_builder(source: str) -> bool:
     )
 
 
+_CREATING_METHODS = frozenset({"run", "create"})
+
+#: Files whose run/create sites build their config elsewhere (a ``**cfg`` the builder produced);
+#: each is separately pinned to call the builder (`_CONSUMERS`, `_POOL_FILE` test).
+#: sandbox: containers.create at :373 and :576; workspace: containers.run at :415 and :429.
+_ALLOWED_CFG_SITES = frozenset(
+    {
+        "autobot-backend/secure_sandbox_executor.py",
+        "autobot-backend/services/docker_task_workspace.py",
+        _POOL_FILE,
+    }
+)
+
+
 def _is_containers_run(node: ast.AST) -> bool:
     return (
         isinstance(node, ast.Attribute)
-        and node.attr == "run"
+        and node.attr in _CREATING_METHODS
         and isinstance(node.value, ast.Attribute)
         and node.value.attr == "containers"
     )
@@ -154,6 +168,39 @@ def test_every_execution_backend_run_site_takes_the_builder() -> None:
 )
 def test_the_execution_matcher_demands_the_full_builder(label: str, source: str, expected: list[int]) -> None:
     assert unhardened_run_sites(source, _EXECUTION_BUILDER) == expected, label
+
+
+def unhardened_sites_outside_allowlist(sources: dict[str, str]) -> dict[str, list[int]]:
+    """Per-file bare ``containers.run``/``create`` lines, skipping the declared cfg-building files."""
+    found = {
+        rel: unhardened_run_sites(text)
+        for rel, text in sources.items()
+        if rel not in _ALLOWED_CFG_SITES and "containers." in text
+    }
+    return {rel: lines for rel, lines in found.items() if lines}
+
+
+def test_a_new_module_with_a_bare_run_or_create_is_caught() -> None:
+    bare_run = "def f(client, img):\n    return client.containers.run(img)\n"
+    bare_create = "def f(client):\n    return client.containers.create(image='x')\n"
+    ok = "def f(c, i):\n    return c.containers.run(i, **execution_hardening_kwargs())\n"
+    sources = {"new/a.py": bare_run, "new/b.py": bare_create, "new/c.py": ok, sorted(_ALLOWED_CFG_SITES)[0]: bare_run}
+    assert unhardened_sites_outside_allowlist(sources) == {"new/a.py": [2], "new/b.py": [2]}
+
+
+def test_every_run_and_create_site_in_the_tree_takes_the_builder_or_is_allowlisted() -> None:
+    root = repo_root()
+    sources = {rel: (root / rel).read_text(encoding="utf-8") for rel in REACH.examined(root)}
+    offenders = unhardened_sites_outside_allowlist(sources)
+    assert not offenders, f"#17267: containers.run/create without the shared hardening builder: {offenders}"
+
+
+def test_the_allowlisted_files_still_have_their_run_or_create_sites() -> None:
+    root = repo_root()
+    for rel in _ALLOWED_CFG_SITES:
+        assert any(
+            _is_run_site(n) for n in ast.walk(ast.parse((root / rel).read_text(encoding="utf-8")))
+        ), f"{rel} has no run/create site; drop it from _ALLOWED_CFG_SITES"
 
 
 def test_the_warm_pool_run_kwargs_come_from_the_full_builder() -> None:
