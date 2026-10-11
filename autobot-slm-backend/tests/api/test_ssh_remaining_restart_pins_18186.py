@@ -13,6 +13,7 @@ from before the move, which is what shows they are today's behaviour.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 import sys
 from pathlib import Path
@@ -21,7 +22,8 @@ from unittest.mock import create_autospec
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _real_orm_import import SLM_ROOT, import_modules_with_real_orm  # noqa: E402
+_real_orm = importlib.import_module("_real_orm_import")
+SLM_ROOT, import_modules_with_real_orm = _real_orm.SLM_ROOT, _real_orm.import_modules_with_real_orm
 
 _SVC = SLM_ROOT / "services"
 _LOADED = import_modules_with_real_orm(

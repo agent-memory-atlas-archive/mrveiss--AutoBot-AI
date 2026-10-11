@@ -16,6 +16,7 @@ fails here instead of passing against a looser fake.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 import sys
 from pathlib import Path
@@ -30,7 +31,8 @@ from autobot_shared.ssot_config import config
 # MagicMocks, and `models.database` with them. Load the three modules under test for real, the
 # way test_restart_all_session_lifetime_15611.py does, so the sites run their own code.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _real_orm_import import SLM_ROOT, import_modules_with_real_orm  # noqa: E402
+_real_orm = importlib.import_module("_real_orm_import")
+SLM_ROOT, import_modules_with_real_orm = _real_orm.SLM_ROOT, _real_orm.import_modules_with_real_orm
 
 service_restart, sync_orchestrator, roles = import_modules_with_real_orm(
     ("services.sync_orchestrator", "api.roles"),
