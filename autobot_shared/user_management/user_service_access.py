@@ -19,6 +19,7 @@ import uuid
 from sqlalchemy import select
 
 from autobot_shared.time_utils import now_utc
+from autobot_shared.user_management.login_eligibility import login_refusal
 from autobot_shared.user_management.models.audit import AuditAction, AuditResourceType
 from autobot_shared.user_management.models.role import Role, UserRole
 from autobot_shared.user_management.models.user import UserCore
@@ -55,8 +56,9 @@ class UserAccessMixin(UserServiceBase):
 
     async def _validate_user_can_login(self, user: UserCore, password: str, ip_address: str | None) -> bool:
         """Return True only for an active user whose password verifies."""
-        if not user.is_active:
-            await self._log_auth_failure("account_inactive", ip_address, user.id)
+        refusal = login_refusal(user)
+        if refusal:
+            await self._log_auth_failure(refusal, ip_address, user.id)
             return False
         if not user.password_hash:
             await self._log_auth_failure("no_password_set", ip_address, user.id)
