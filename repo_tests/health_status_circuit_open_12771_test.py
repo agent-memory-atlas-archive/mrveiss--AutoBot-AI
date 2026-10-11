@@ -32,8 +32,22 @@ def _bound_names(tree: ast.Module) -> set[str]:
     return names
 
 
+# The registry's former private enum, member by member: what the CLI printed via `.value`.
+_FORMER_REGISTRY_MEMBERS = {
+    "HEALTHY": "healthy",
+    "UNHEALTHY": "unhealthy",
+    "UNKNOWN": "unknown",
+    "CIRCUIT_OPEN": "circuit_open",
+}
+
+
 def test_circuit_open_member_is_canonical() -> None:
     assert HealthStatus.CIRCUIT_OPEN.value == "circuit_open"
+
+
+def test_four_registry_members_keep_name_and_value() -> None:
+    """CLI/consumers see identical values before and after (#12771 decision 2)."""
+    assert {n: HealthStatus[n].value for n in _FORMER_REGISTRY_MEMBERS} == _FORMER_REGISTRY_MEMBERS
 
 
 def test_registry_status_is_an_alias_not_a_class() -> None:
