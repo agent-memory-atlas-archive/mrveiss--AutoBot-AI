@@ -212,6 +212,21 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
     ),
+    "model-tier-map-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "embedding-model-render-sites": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked ansible yml/yaml files, of which only those naming a template that carries the variable are parsed.",
+    ),
+    "frontend-model-literal-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Frontend ts and vue source, excluding tests and generated types, against all tracked frontend files.",
+    ),
     "chunker-private-hook-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

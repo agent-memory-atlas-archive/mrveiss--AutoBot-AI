@@ -1003,8 +1003,7 @@ Get the active model name and provider. Any authenticated user. The full LLM con
 ```json
 {
   "model": "qwen3.5:9b",
-  "provider": "ollama",
-  "config": {}
+  "provider": "ollama"
 }
 ```
 

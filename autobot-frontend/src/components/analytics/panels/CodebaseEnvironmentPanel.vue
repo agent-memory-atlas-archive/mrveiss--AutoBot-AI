@@ -71,7 +71,7 @@
           <option value="low">{{ $t('analytics.codebase.environment.lowPriority') }}</option>
           <option value="all">{{ $t('analytics.codebase.environment.allPriorities') }}</option>
         </select>
-        <span class="ai-filter-model-hint">Model: {{ aiFilteringModel }}</span>
+        <span class="ai-filter-model-hint">{{ $t('analytics.codebase.environment.modelHint', { model: modelHintLabel }) }}</span>
       </span>
       <span v-if="llmFilteringResult" class="llm-result-badge">
         <Icon name="check-circle" />
@@ -212,9 +212,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/ui/EmptyState.vue'
 // #5311: canonical HardcodedValue from analyticsTypes — was inline-duplicated here.
 import type { HardcodedValue } from '@/composables/analytics/analyticsTypes'
+import type { AiFilteringModelState } from '@/composables/analytics/codeIntelTypes'
 import Icon from '@/components/ui/Icon.vue'
 
 interface EnvRecommendation {
@@ -245,12 +248,12 @@ interface LLMFilteringResult {
   filter_priority: string | null
 }
 
-defineProps<{
+const props = defineProps<{
   analysis: EnvironmentAnalysisResult | null
   loading: boolean
   error: string | null
   useAiFiltering: boolean
-  aiFilteringModel: string
+  aiFilteringModelState: AiFilteringModelState
   aiFilteringPriority: string
   llmFilteringResult: LLMFilteringResult | null
 }>()
@@ -261,6 +264,16 @@ const emit = defineEmits<{
   'update:use-ai-filtering': [value: boolean]
   'update:ai-filtering-priority': [value: string]
 }>()
+
+const { t } = useI18n()
+
+const modelHintLabel = computed(() => {
+  const { model, unavailable } = props.aiFilteringModelState
+  if (model) return model
+  return unavailable
+    ? t('analytics.codebase.environment.modelServerDefault')
+    : t('analytics.codebase.environment.modelLoading')
+})
 
 function truncateValue(value: string, maxLength = 50): string {
   if (!value) return 'Unknown'

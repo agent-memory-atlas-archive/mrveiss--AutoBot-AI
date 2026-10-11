@@ -290,7 +290,7 @@
         :loading="loadingEnvAnalysis"
         :error="envAnalysisError"
         :use-ai-filtering="useAiFiltering"
-        :ai-filtering-model="aiFilteringModel"
+        :ai-filtering-model-state="aiFilteringModelState"
         :ai-filtering-priority="aiFilteringPriority"
         :llm-filtering-result="llmFilteringResult"
         @refresh="loadEnvironmentAnalysis"
@@ -697,7 +697,7 @@ const {
   loadingEnvAnalysis,
   envAnalysisError,
   useAiFiltering,
-  aiFilteringModel,
+  aiFilteringModelState,
   aiFilteringPriority,
   llmFilteringResult,
   loadEnvironmentAnalysis,

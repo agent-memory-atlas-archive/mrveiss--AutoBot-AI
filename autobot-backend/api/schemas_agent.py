@@ -295,7 +295,6 @@ class LLMCurrentResponse(BaseModel):
 
     model: str
     provider: str
-    config: Dict[str, Any]
 
 
 class LLMEmbeddingModelsResponse(BaseModel):

@@ -1243,7 +1243,6 @@
 1|other|autobot-slm-backend/ansible/roles/frontend/defaults/main.yml|https://github.com/mrveiss/AutoBot-AI.git
 1|other|autobot-slm-backend/ansible/roles/frontend/vars/main.yml|/home/autobot
 1|ssot|autobot-slm-backend/ansible/roles/llm/defaults/main.yml|gemma2:2b
-1|ssot|autobot-slm-backend/ansible/roles/llm/defaults/main.yml|gemma3:4b
 1|ssot|autobot-slm-backend/ansible/roles/llm/defaults/main.yml|llama3.2:1b
 1|ssot|autobot-slm-backend/ansible/roles/llm/defaults/main.yml|qwen3.5:9b
 1|other|autobot-slm-backend/ansible/roles/llm/tasks/main.yml|https://ollama.ai/install.sh
