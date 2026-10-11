@@ -22,12 +22,10 @@ import json
 import logging
 import os
 import sys
-import tempfile
 import time
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Optional
+from typing import Optional
 
 # Two roots, kept apart on purpose (#15643). `backend_root` is the IMPORT root for the backend's
 # `constants.*` and `utils.*`; `project_root` is the repository root, which is both the import root
@@ -36,8 +34,10 @@ from typing import Any, Awaitable, Callable, Optional
 # autobot-infrastructure/shared/ and the script could not start at all (#15643, #14129).
 project_root = Path(__file__).resolve().parents[4]
 backend_root = Path(__file__).resolve().parents[4] / "autobot-backend"
+monitoring_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(backend_root))
 sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(monitoring_dir))  # the sibling monitoring_backends module
 
 from autobot_shared.async_compat import fire_and_forget  # noqa: E402
 from constants.threshold_constants import CategoryDefaults, TimingConstants
@@ -48,97 +48,14 @@ from utils.gpu_acceleration_optimizer import (
     monitor_gpu_efficiency,
     optimize_gpu_for_multimodal,
 )
-
-BACKEND_PERFORMANCE = "performance"
-BACKEND_HARDWARE = "hardware"
-BACKENDS = (BACKEND_PERFORMANCE, BACKEND_HARDWARE)
+from monitoring_backends import (  # noqa: E402
+    BACKEND_PERFORMANCE,
+    BACKENDS,
+    MonitoringBackend,
+    load_backend,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class MonitoringBackend:
-    """The monitor a launcher drives, behind one async surface.
-
-    The two backends differ in what they call, not in what the launcher does: the hardware
-    functions are partly synchronous, so they are wrapped here and the manager awaits one shape.
-    """
-
-    name: str
-    monitor: Any
-    start: Callable[[], Awaitable[Any]]
-    stop: Callable[[], Awaitable[Any]]
-    collect: Callable[[], Awaitable[dict]]
-    dashboard: Callable[[], Awaitable[dict]]
-    add_alert_callback: Callable[[Callable], Awaitable[Any]]
-    log_file: Path
-    report_dir: Path
-    report_prefix: str
-    task_prefix: str
-
-
-def _performance_backend() -> MonitoringBackend:
-    from utils.performance_monitor import (
-        add_alert_callback,
-        collect_metrics,
-        get_performance_dashboard,
-        performance_monitor,
-        start_monitoring,
-        stop_monitoring,
-    )
-
-    return MonitoringBackend(
-        name=BACKEND_PERFORMANCE,
-        monitor=performance_monitor,
-        start=start_monitoring,
-        stop=stop_monitoring,
-        collect=collect_metrics,
-        dashboard=get_performance_dashboard,
-        add_alert_callback=add_alert_callback,
-        log_file=project_root / "logs" / "monitoring" / "monitoring.log",
-        report_dir=project_root / "reports" / "performance",
-        report_prefix="performance_benchmark",
-        task_prefix="monitor",
-    )
-
-
-def _hardware_backend() -> MonitoringBackend:
-    from utils import hardware_metrics as hw
-
-    async def dashboard() -> dict:
-        return hw.get_phase9_performance_dashboard()
-
-    async def add_alert_callback(callback: Callable) -> None:
-        hw.add_phase9_alert_callback(callback)
-
-    # The hardware launcher has always written to the system temp dir, not the repository's
-    # logs/ and reports/ trees; kept so existing readers of those files still find them.
-    tmp = Path(tempfile.gettempdir())
-    return MonitoringBackend(
-        name=BACKEND_HARDWARE,
-        monitor=hw.hardware_monitor,
-        start=hw.start_hardware_monitoring,
-        stop=hw.stop_hardware_monitoring,
-        collect=hw.collect_phase9_metrics,
-        dashboard=dashboard,
-        add_alert_callback=add_alert_callback,
-        log_file=tmp / "hardware_monitoring.log",
-        report_dir=tmp,
-        report_prefix="hardware_benchmark",
-        task_prefix="hw-monitor",
-    )
-
-
-_BACKEND_FACTORIES = {BACKEND_PERFORMANCE: _performance_backend, BACKEND_HARDWARE: _hardware_backend}
-
-
-def load_backend(name: str) -> MonitoringBackend:
-    """Resolve *name* to its backend, importing only that backend's modules."""
-    try:
-        factory = _BACKEND_FACTORIES[name]
-    except KeyError:
-        raise ValueError(f"unknown monitoring backend {name!r}; expected one of {BACKENDS}") from None
-    return factory()
 
 
 def configure_logging(backend: MonitoringBackend) -> None:

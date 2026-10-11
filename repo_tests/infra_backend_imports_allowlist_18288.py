@@ -31,6 +31,11 @@ BACKEND_TOOLS: dict[str, str] = {
         "ssot_config and psutil, so it is no pure helper to move to autobot_shared"
     ),
     _P
+    + "monitoring/monitoring_backends.py": (
+        "backend tool: the launcher's performance and hardware backends, split from start_monitoring.py "
+        "(#17906); imports utils.performance_monitor or utils.hardware_metrics when selected"
+    ),
+    _P
     + "monitoring/start_monitoring.py": (
         "backend tool: the one monitoring launcher (#17906); drives the backend's performance, "
         "hardware and GPU monitors"

@@ -18,6 +18,7 @@ import ast
 import asyncio
 import importlib.util
 import sys
+import tempfile
 import types
 from pathlib import Path
 
@@ -117,7 +118,7 @@ def launcher(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     spec = importlib.util.spec_from_file_location("start_monitoring_under_test_17906", LAUNCHER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))  # read by monitoring_backends
     return module, calls
 
 

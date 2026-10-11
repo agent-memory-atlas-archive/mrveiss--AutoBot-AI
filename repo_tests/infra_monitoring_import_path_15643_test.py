@@ -157,9 +157,10 @@ def test_every_inserted_sys_path_root_holds_the_packages_that_script_imports(scr
     # which is exactly the defect #15643 is about and the discrimination this test needs.
     candidates = [*roots, repo_root()]
     for package in sorted(needed):
-        assert any((root / package).is_dir() for root in candidates), (
+        # A sibling MODULE (`monitoring_backends.py`, split from the launcher) resolves the same way.
+        assert any((root / package).is_dir() or (root / f"{package}.py").is_file() for root in candidates), (
             f"{script.name} imports `{package}.*`, but neither the repo root nor any inserted "
-            f"sys.path root contains a `{package}/` package. "
+            f"sys.path root contains a `{package}/` package or `{package}.py` module. "
             f"Inserted roots resolved: {[str(r) for r in roots]}"
         )
 
