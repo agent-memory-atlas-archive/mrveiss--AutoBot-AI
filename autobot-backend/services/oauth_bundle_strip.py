@@ -162,11 +162,19 @@ def _write_verified(svc, secret_id: str, original: str, creds: dict, actor: str)
         _, after = _read_bundle(svc, secret_id, actor)
         if after is not None and token_digest(after) == before and not any(k in after for k in APP_CREDENTIAL_KEYS):
             return True
-    except Exception:
-        svc.update_secret(secret_id=secret_id, value=original, updated_by=actor)
+    except Exception as exc:
+        _restore(svc, secret_id, original, actor, cause=exc)
         raise
-    svc.update_secret(secret_id=secret_id, value=original, updated_by=actor)
+    _restore(svc, secret_id, original, actor)
     return False
+
+
+def _restore(svc, secret_id: str, original: str, actor: str, cause: Exception | None = None) -> None:
+    """Put the original value back. A failing restore is chained to *cause*, never masking it."""
+    try:
+        svc.update_secret(secret_id=secret_id, value=original, updated_by=actor)
+    except Exception as restore_exc:
+        raise restore_exc from cause
 
 
 def strip_one_sync(svc, secret_id: str, actor: str, report: StripReport) -> str | None:
@@ -188,17 +196,38 @@ async def preview(svc, accessed_by: str) -> StripReport:
 
 
 async def _strip_under_lease(svc, secret_id: str, actor: str, report: StripReport) -> str | None:
-    """Take the shared refresh lease, strip under it, release. No lease -> skip and record."""
-    from knowledge.connectors.credential_store import _release_quietly, refresh_lease
+    """Take the shared refresh lease, strip AND mirror under it, release. No lease -> skip and record.
+
+    The vault mirror is part of the critical section: a refresh that rotates and
+    mirrors the tokens between the strip's write and its mirror would otherwise be
+    overwritten in the vault by the strip's stale value.
+    """
+    from knowledge.connectors.credential_store import _release_quietly, _vault_write_enabled, refresh_lease
 
     lease = refresh_lease(secret_id)
     if not await lease.update_leadership():
         report.add(LEASE_UNAVAILABLE, UNKNOWN_PROVIDER, secret_id)
         return None
     try:
-        return await asyncio.get_running_loop().run_in_executor(None, strip_one_sync, svc, secret_id, actor, report)
+        new_value = await _run_shielded(strip_one_sync, svc, secret_id, actor, report)
+        if new_value is not None and _vault_write_enabled():
+            await _mirror(svc, secret_id, new_value)
+        return new_value
     finally:
         await _release_quietly(lease)
+
+
+async def _run_shielded(fn, *args):
+    """Run *fn* in the executor; on cancellation WAIT for the thread before re-raising.
+
+    The lease must not be released while the thread may still be writing.
+    """
+    future = asyncio.get_running_loop().run_in_executor(None, fn, *args)
+    try:
+        return await asyncio.shield(future)
+    except asyncio.CancelledError:
+        await asyncio.wait({future})
+        raise
 
 
 async def _mirror(svc, secret_id: str, new_value: str) -> None:
@@ -214,14 +243,10 @@ async def strip_all(svc, actor: str, report: StripReport | None = None) -> Strip
     the loop continues; an interruption (cancellation) records the in-flight bundle
     as ``interrupted`` and re-raises.
     """
-    from knowledge.connectors.credential_store import _vault_write_enabled
-
     report = report if report is not None else StripReport()
     for secret_id in await asyncio.get_running_loop().run_in_executor(None, _list_bundle_ids, svc):
         try:
-            new_value = await _strip_under_lease(svc, secret_id, actor, report)
-            if new_value is not None and _vault_write_enabled():
-                await _mirror(svc, secret_id, new_value)
+            await _strip_under_lease(svc, secret_id, actor, report)
         except Exception:
             logger.exception("OAuth bundle strip failed for one bundle (secret %s)", secret_id)
             report.add(ERROR, UNKNOWN_PROVIDER, secret_id)

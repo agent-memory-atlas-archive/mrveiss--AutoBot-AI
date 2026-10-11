@@ -4,6 +4,7 @@
 # Author: mrveiss
 """The OAuth bundle strip (#13630): dry run writes nothing, strip is gated, verified and value-free."""
 
+import asyncio
 import json
 import uuid
 
@@ -204,6 +205,73 @@ async def test_a_refresh_landing_between_the_strips_read_and_write_is_never_over
     assert state["done"] and state["blocked"] == 1
     assert final["access_token"] == "at-2" and final["refresh_token"] == "rt-2"
     assert "client_secret" not in final
+
+
+async def test_a_refresh_between_the_strips_write_and_its_vault_mirror_is_not_overwritten(
+    configured, locks, monkeypatch
+):
+    """The mirror is inside the lease: a refresh cannot rotate+mirror between write and mirror."""
+    monkeypatch.setenv("AUTOBOT_SECRETS_UNIFIED_WRITE", "true")
+    svc = _svc()
+    key = _refresh_lock_key("s-legacy")
+    vault, state = [], {"done": False}
+
+    def _try_refresh():
+        if state["done"] or not locks.acquire(key, "refresher"):
+            return
+        svc.rows["s-legacy"] = json.dumps({**json.loads(svc.rows["s-legacy"]), "access_token": "at-2"})
+        vault.append(("refresher", "at-2"))
+        locks.release(key, "refresher")
+        state["done"] = True
+
+    async def _mirror(secret_id, owner, value):
+        _try_refresh()  # a refresh lands after the strip's write, before its mirror
+        vault.append(("strip", json.loads(value)["access_token"]))
+
+    monkeypatch.setattr(oauth_bundle_strip, "mirror_credential_to_vault", _mirror)
+    await oauth_bundle_strip.strip_all(svc, "approver")
+    _try_refresh()  # the blocked refresh retries after the lease is free
+    assert vault[-1] == ("refresher", "at-2"), vault
+    assert json.loads(svc.rows["s-legacy"])["access_token"] == "at-2"
+
+
+async def test_cancellation_waits_for_the_writing_thread_before_the_lease_is_released(configured, locks):
+    import threading
+
+    svc = _svc()
+    key = _refresh_lock_key("s-legacy")
+    started, proceed = threading.Event(), threading.Event()
+    held_at_finish = []
+    real_update = svc.update_secret
+
+    def _slow_update(secret_id, **kw):
+        started.set()
+        proceed.wait(5)
+        held_at_finish.append(key in locks.held)
+        return real_update(secret_id, **kw)
+
+    svc.update_secret = _slow_update
+    task = asyncio.ensure_future(oauth_bundle_strip.strip_all(svc, "approver"))
+    while not started.is_set():
+        await asyncio.sleep(0.01)
+    task.cancel()
+    await asyncio.sleep(0.05)
+    assert key in locks.held  # still held while the thread is mid-write
+    proceed.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert held_at_finish == [True] and key not in locks.held
+
+
+def test_a_failing_restore_is_chained_to_the_original_error_not_masking_it():
+    class _Svc:
+        def update_secret(self, **kw):
+            raise OSError("restore failed")
+
+    cause = ValueError("first")
+    with pytest.raises(OSError) as info:
+        oauth_bundle_strip._restore(_Svc(), "s", "orig", "a", cause=cause)
+    assert info.value.__cause__ is cause
 
 
 async def test_one_bundle_failing_is_recorded_and_the_rest_are_still_processed(configured):
