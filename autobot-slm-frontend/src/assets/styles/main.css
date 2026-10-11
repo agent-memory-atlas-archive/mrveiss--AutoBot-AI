@@ -577,3 +577,17 @@ p {
   color: var(--color-primary-500);
   border-bottom-color: var(--color-primary-500);
 }
+
+/* Links in body text carry a cue that is not colour (WCAG 1.4.1, #18223): the link
+ * colour can equal the text colour, so an underline at rest tells a link from a
+ * word. Anchors that carry a class (nav, buttons, cards) style themselves. */
+a:not([class]),
+.prose a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+a:not([class]):hover,
+.prose a:hover {
+  color: var(--text-link-hover);
+}

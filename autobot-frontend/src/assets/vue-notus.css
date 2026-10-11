@@ -249,7 +249,7 @@ body {
 
 /* Header Styles */
 .header-gradient {
-  background: linear-gradient(135deg, var(--indigo-600), var(--indigo-800));
+  background: linear-gradient(135deg, var(--indigo-600), var(--indigo-700));
   padding-top: 8rem;
   padding-bottom: 8rem;
 }

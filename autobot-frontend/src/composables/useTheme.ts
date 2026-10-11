@@ -62,6 +62,9 @@ const PRESET_STORAGE_KEY = 'autobot-theme-preset'
 const DEFAULT_THEME: Theme = 'light'
 // `theme` = no accent preset: the theme's own primary colour stands (#18223).
 const DEFAULT_ACCENT: AccentColor = 'theme'
+// 'auto' is also the "no preset chosen" sentinel: initTheme/initializeTheme skip
+// applyPreset for it and use the stored individual theme, whose default is light. So a
+// fresh install is light; picking Auto stores theme 'system' and follows the OS.
 const DEFAULT_PRESET: ThemePreset = 'auto'
 
 /** Global reactive state (singleton pattern) */
