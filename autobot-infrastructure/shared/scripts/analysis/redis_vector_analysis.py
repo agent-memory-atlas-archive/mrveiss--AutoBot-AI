@@ -15,7 +15,7 @@ import sys
 from typing import Any, Dict, List, Tuple
 
 from autobot_shared.paths import project_root
-from constants import ServiceURLs
+from autobot_shared.network_constants import ServiceURLs
 from langchain_redis_arm import (
     INSTALL_HINT,
     NOT_MEASURED,

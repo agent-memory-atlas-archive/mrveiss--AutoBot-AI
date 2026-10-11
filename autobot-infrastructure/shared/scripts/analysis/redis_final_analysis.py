@@ -17,8 +17,8 @@ from typing import Any, Dict, List, Tuple
 from autobot_shared.paths import project_root
 
 sys.path.insert(0, str(project_root()))
-from constants import ServiceURLs
-from constants.network_constants import NetworkConstants
+from autobot_shared.network_constants import ServiceURLs
+from autobot_shared.network_constants import NetworkConstants
 from langchain_redis_arm import (  # noqa: E402
     INSTALL_HINT,
     ModernArmUnavailable,
