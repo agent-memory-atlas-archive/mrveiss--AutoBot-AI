@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 
+from api.embedding_refusal import reraise_http_or_refusal
 from api.schemas_knowledge import (
     NLCodeExplanationResponse,
     NLDomainsResponse,
@@ -1028,9 +1029,7 @@ def _convert_suggestions_to_dicts(suggestions: list) -> list:
     error_code_prefix="NATURAL_LANGUAGE_SEARCH",
 )
 async def natural_language_search(request: NLSearchRequest):
-    """
-    Search codebase using natural language queries.
-
+    """Search codebase using natural language queries.
     Issue #665: Refactored to use extracted helper functions.
 
     Examples:
@@ -1077,6 +1076,7 @@ async def natural_language_search(request: NLSearchRequest):
         )
 
     except Exception as e:
+        reraise_http_or_refusal(e)  # a refused query space is a 503 with its reason (#18185)
         logger.error("Natural language search error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
 

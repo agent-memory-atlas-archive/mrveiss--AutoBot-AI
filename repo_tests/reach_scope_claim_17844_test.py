@@ -29,8 +29,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.anti_pattern_type_emitted_18189_test as _anti_pattern_guard  # noqa: F401 -- registers its scope
+import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
+import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
 import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_parse_guard  # noqa: F401 -- registers its scope
@@ -180,6 +181,7 @@ _DECLARED_SCOPES = {
         "autobot-browser-worker",
         "libs",
     ),
+    "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),
