@@ -38,6 +38,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from autobot_shared.auth.interactive_principal import is_purpose_bound
 from autobot_shared.auth.jwt_core import _peek_alg, decode_jwt_or_none, encode_jwt, hash_password
 from autobot_shared.auth.permission_evaluator import evaluate_permission
 from autobot_shared.auth.permission_gate import PermissionGate
@@ -261,6 +262,13 @@ async def get_current_user(
     """
     token = credentials.credentials
     payload = await auth_service.decode_token_async(token)
+
+    # #18321: a token minted for another purpose -- the MFA-pending temp token issued
+    # BEFORE the second factor, a service token -- is never a session. One choke point,
+    # the shared #17049 predicate; only api/mfa.py accepts the MFA-pending token.
+    if payload and is_purpose_bound(payload):
+        logger.warning("get_current_user: refusing a purpose-bound token for sub=%r", payload.get("sub"))
+        payload = None
 
     if not payload:
         raise HTTPException(

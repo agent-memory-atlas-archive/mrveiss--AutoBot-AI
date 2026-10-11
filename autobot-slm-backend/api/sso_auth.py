@@ -274,17 +274,10 @@ async def oauth_callback(
         except Exception as audit_err:
             logger.warning("SSO audit write failed: %s", audit_err)
 
-        # Convert User ORM object to dict-like structure for auth_service
-        user_dict = type(
-            "User",
-            (),
-            {
-                "username": user.username,
-                "is_admin": (user.is_platform_admin if hasattr(user, "is_platform_admin") else False),
-            },
-        )()
-
-        token_response = await auth_service.create_token_response(user_dict)
+        # #18322: the token is built from the provisioned User record itself. A stand-in
+        # lacked `is_platform_admin`, so create_token_response raised; the role comes only
+        # from the record (role_for_user), never from a default.
+        token_response = await auth_service.create_token_response(user)
         return RedirectResponse(
             url=f"/?token={token_response.access_token}",
             status_code=status.HTTP_302_FOUND,
@@ -362,21 +355,14 @@ async def ldap_login(
         except Exception as audit_err:
             logger.warning("SSO audit write failed: %s", audit_err)
 
-        # Convert User ORM object to dict-like structure for auth_service
-        user_dict = type(
-            "User",
-            (),
-            {
-                "username": user.username,
-                "is_admin": (user.is_platform_admin if hasattr(user, "is_platform_admin") else False),
-            },
-        )()
-
+        # #18322: the token is built from the provisioned User record itself. A stand-in
+        # lacked `is_platform_admin`, so create_token_response raised; the role comes only
+        # from the record (role_for_user), never from a default.
         # #13139: return the model itself rather than re-packing three of its
         # fields into a dict. The repack dropped `token`, which #12216 added so
         # a client written against the core backend reads the SLM JWT too --
         # every other SLM token-issuing route already emits it.
-        return await auth_service.create_token_response(user_dict)
+        return await auth_service.create_token_response(user)
     except SSOAuthenticationError as e:
         logger.error("LDAP login failed: %s", e)
         try:
@@ -535,17 +521,10 @@ async def saml_callback(
         except Exception as audit_err:
             logger.warning("SSO audit write failed: %s", audit_err)
 
-        # Convert User ORM object to dict-like structure for auth_service
-        user_dict = type(
-            "User",
-            (),
-            {
-                "username": user.username,
-                "is_admin": (user.is_platform_admin if hasattr(user, "is_platform_admin") else False),
-            },
-        )()
-
-        token_response = await auth_service.create_token_response(user_dict)
+        # #18322: the token is built from the provisioned User record itself. A stand-in
+        # lacked `is_platform_admin`, so create_token_response raised; the role comes only
+        # from the record (role_for_user), never from a default.
+        token_response = await auth_service.create_token_response(user)
         return RedirectResponse(
             url=f"/?token={token_response.access_token}",
             status_code=status.HTTP_302_FOUND,
