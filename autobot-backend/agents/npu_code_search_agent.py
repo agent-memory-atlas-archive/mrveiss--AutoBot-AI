@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 
 import aiofiles
 
+from autobot_shared.embedding_model import EmbeddingUnavailableError, raise_if_embedding_refused
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client, get_redis_client
 from autobot_shared.security.path_validator import PROJECT_ALLOWED_ROOTS, validate_path
@@ -664,23 +665,15 @@ class NPUCodeSearchAgent(StandardizedAgent):
         max_results: int,
         semantic_weight: float = 0.7,
     ) -> List[CodeSearchResult]:
-        """Perform hybrid search combining semantic and keyword matching. Issue #207, #620.
-
-        Args:
-            query: Search query
-            language: Filter by language
-            max_results: Maximum results
-            semantic_weight: Weight for semantic results (0-1)
-
-        Returns:
-            Combined and ranked results
-        """
+        """Combine semantic and keyword matches (``semantic_weight`` in 0-1), ranked. Issue #207, #620."""
         keyword_weight = 1.0 - semantic_weight
         semantic_results = []
         keyword_results = []
 
         try:
             semantic_results = await self._search_code_embeddings(query, language, max_results * 2)
+        except EmbeddingUnavailableError:
+            raise  # never keyword-only results in place of a refused semantic half (#18185)
         except Exception as e:
             self.logger.warning("Hybrid: semantic search failed: %s", e)
 
@@ -718,6 +711,17 @@ class NPUCodeSearchAgent(StandardizedAgent):
             return await self._search_hybrid(query, language, max_results)
         return await self._search_semantic(query, language, max_results)
 
+    async def _cached_results(self, cache_key: str, start_time: float) -> List[CodeSearchResult] | None:
+        """Results cached under ``cache_key``, recording the hit in stats; None on a miss."""
+        cached_result = await asyncio.to_thread(self.redis_client.get, cache_key)
+        if not cached_result:
+            return None
+        self.stats.redis_cache_hit = True
+        results = [CodeSearchResult(**r) for r in json.loads(cached_result)]
+        self.stats.search_time_ms = (time.time() - start_time) * 1000
+        self.stats.results_count = len(results)
+        return results
+
     async def search_code(
         self,
         query: str,
@@ -730,14 +734,9 @@ class NPUCodeSearchAgent(StandardizedAgent):
 
         try:
             cache_key = self._get_search_cache_key(query, search_type, language)
-            cached_result = await asyncio.to_thread(self.redis_client.get, cache_key)
-
-            if cached_result:
-                self.stats.redis_cache_hit = True
-                results = [CodeSearchResult(**r) for r in json.loads(cached_result)]
-                self.stats.search_time_ms = (time.time() - start_time) * 1000
-                self.stats.results_count = len(results)
-                return results[:max_results]
+            cached = await self._cached_results(cache_key, start_time)
+            if cached is not None:
+                return cached[:max_results]
 
             results = await self._execute_search_by_type(query, search_type, language, max_results)
             serializable_results = self._serialize_results(results)
@@ -756,6 +755,8 @@ class NPUCodeSearchAgent(StandardizedAgent):
             self.stats.results_count = len(results)
             return results
 
+        except EmbeddingUnavailableError:
+            raise  # a refused query space is a failed search, never "no matches" (#18185)
         except Exception as e:
             self.logger.error("Code search failed: %s", e)
             return []
@@ -1043,11 +1044,12 @@ class NPUCodeSearchAgent(StandardizedAgent):
             filters={"language": language} if language else None,
             enable_npu_acceleration=self.npu_available,
         )
+        raise_if_embedding_refused(metrics)  # an outage is not "no matches" (#18185)
         code_results = [await self._convert_npu_result(r) for r in search_results]
         self.stats = SearchStats(
             total_files_indexed=len(code_results),
             search_time_ms=metrics.total_search_time_ms,
-            npu_acceleration_used=(metrics.device_used != "cpu_fallback"),
+            npu_acceleration_used=(metrics.device_used not in ("cpu_fallback", "knowledge_base")),
             redis_cache_hit=False,
             results_count=len(code_results),
         )
@@ -1062,16 +1064,7 @@ class NPUCodeSearchAgent(StandardizedAgent):
     async def _convert_embedding_search_result(
         self, sr: Dict[str, Any], query: str, device_used: str
     ) -> CodeSearchResult:
-        """Convert a single embedding search result to CodeSearchResult. Issue #620.
-
-        Args:
-            sr: Raw search result dict with content, metadata, score
-            query: Original search query for metadata
-            device_used: Device identifier for metadata
-
-        Returns:
-            Converted CodeSearchResult object. Issue #620.
-        """
+        """Convert a single embedding search result dict to CodeSearchResult. Issue #620."""
         metadata = sr["metadata"]
         file_path = metadata.get("file_path", "unknown")
         line_number = metadata.get("line_number", 0)
@@ -1096,13 +1089,7 @@ class NPUCodeSearchAgent(StandardizedAgent):
     def _update_embedding_search_stats(
         self, results: List[CodeSearchResult], search_time: float, query_result: Any
     ) -> None:
-        """Update search statistics after embedding search. Issue #620.
-
-        Args:
-            results: List of search results
-            search_time: Search duration in milliseconds
-            query_result: Query result object with device_used and cache_hit
-        """
+        """Update search statistics after embedding search (``search_time`` in ms). Issue #620."""
         self.stats = SearchStats(
             total_files_indexed=len(results),
             search_time_ms=search_time,
@@ -1114,23 +1101,12 @@ class NPUCodeSearchAgent(StandardizedAgent):
     async def _search_code_embeddings(
         self, query: str, language: str | None, max_results: int
     ) -> List[CodeSearchResult]:
-        """Search code embeddings using CodeBERT. Issue #207, #620.
-
-        Args:
-            query: Search query (natural language or code)
-            language: Filter by programming language
-            max_results: Maximum results to return
-
-        Returns:
-            List of CodeSearchResult
-        """
+        """Search the code index with a CodeBERT query, the model that built it. Issue #207, #620, #18185."""
         start_time = time.time()
 
         try:
-            embedding_generator = await get_code_embedding_generator()
+            query_result = await self._embed_code_query(query, language)
             await self._ensure_search_engine_initialized()
-
-            query_result = await embedding_generator.generate_embedding(query, language or "python")
 
             search_results = await self.npu_search_engine.search_code_embeddings(
                 query_embedding=query_result.embedding,
@@ -1157,6 +1133,14 @@ class NPUCodeSearchAgent(StandardizedAgent):
         except Exception as e:
             self.logger.error("Code embedding search failed: %s", e)
             raise
+
+    async def _embed_code_query(self, query: str, language: str | None) -> Any:
+        """Embed ``query`` with the code index's model, or refuse: never another model's vector (#18185)."""
+        try:
+            embedding_generator = await get_code_embedding_generator()
+            return await embedding_generator.generate_embedding(query, language or "python")
+        except Exception as exc:
+            raise EmbeddingUnavailableError(f"code index model unavailable ({type(exc).__name__}); refused") from exc
 
     async def _fallback_word_matching(
         self, query: str, language: str | None, max_results: int
@@ -1199,11 +1183,15 @@ class NPUCodeSearchAgent(StandardizedAgent):
         """
         try:
             return await self._search_code_embeddings(query, language, max_results)
+        except EmbeddingUnavailableError:
+            raise  # a refusal reaches the caller; it is not degraded to another tier (#18185)
         except Exception as e:
             self.logger.warning("Code embedding search failed: %s, trying NPU search", e)
 
         try:
             return await self._run_npu_semantic_search(query, language, max_results)
+        except EmbeddingUnavailableError:
+            raise
         except Exception as e:
             self.logger.warning("NPU semantic search failed: %s, using word matching", e)
 

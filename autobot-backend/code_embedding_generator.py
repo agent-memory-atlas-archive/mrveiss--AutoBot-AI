@@ -26,7 +26,8 @@ from worker_node import WorkerNode
 
 logger = get_llm_logger("code_embedding_generator")
 
-# CodeBERT embedding dimension
+# CodeBERT model and embedding dimension; the code index's recorded space (#18185)
+CODEBERT_MODEL_NAME = "microsoft/codebert-base"
 CODEBERT_EMBEDDING_DIM = 768
 
 # Persistent OpenVINO compiled-model cache (#10601): without CACHE_DIR the model
@@ -56,7 +57,7 @@ class CodeEmbeddingGenerator:
 
     def __init__(self):
         """Initialize the code embedding generator."""
-        self.model_name = "microsoft/codebert-base"
+        self.model_name = CODEBERT_MODEL_NAME
         self.embedding_dim = CODEBERT_EMBEDDING_DIM
         self.tokenizer = None
         self.model = None

@@ -83,6 +83,10 @@ _ALLOWED = {
         "Its assertion that `refresh_system_knowledge` contains the script name describes the "
         "pre-#15853 shape and would fail if it ran; the file is not to be edited."
     ),
+    "repo_tests/infra_backend_imports_allowlist_18288.py": (
+        "data, not an invocation: the #18288 class guard lists the infra script's PATH as a "
+        "classified backend tool; nothing there runs the indexer"
+    ),
 }
 
 #: Below this the sweep collapsed rather than the tree being clean. Bound to files

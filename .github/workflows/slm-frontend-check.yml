@@ -19,6 +19,7 @@ on:
     paths:
       - 'autobot-slm-frontend/**'
       - '.github/workflows/slm-frontend-check.yml'
+      - '.github/workflows/_changes.yml'
       - 'autobot-frontend/scripts/check-i18n-keys.mjs'
       # The lifting rule's INPUTS, not just its output (review finding on
       # #17395). `lift_locale_translations.py --check` regenerates the SLM
@@ -42,6 +43,7 @@ on:
     paths:
       - 'autobot-slm-frontend/**'
       - '.github/workflows/slm-frontend-check.yml'
+      - '.github/workflows/_changes.yml'
       - 'autobot-frontend/scripts/check-i18n-keys.mjs'
       # The lifting rule's INPUTS, not just its output (review finding on
       # #17395). `lift_locale_translations.py --check` regenerates the SLM
@@ -71,24 +73,18 @@ jobs:
     # context would report FAILED on every draft -- worse than no gate.
     # Gate the expensive jobs, never the cheap thing others read.
     name: Detect changed paths
-    runs-on: ubuntu-latest
-    outputs:
-      slm_frontend: ${{ steps.filter.outputs.slm_frontend }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
-        id: filter
-        with:
-          filters: |
-            slm_frontend:
-              - 'autobot-slm-frontend/**'
-              - '.github/workflows/slm-frontend-check.yml'
-              - 'autobot-frontend/scripts/check-i18n-keys.mjs'
-              # Mirrors the `on:` paths above -- the trigger and the
-              # job-level filter have to agree, or the workflow starts and
-              # every step self-skips.
-              - 'autobot-frontend/src/i18n/locales/**'
-              - 'scripts/lift_locale_translations.py'
+    uses: ./.github/workflows/_changes.yml
+    with:
+      filters: |
+        slm_frontend:
+          - 'autobot-slm-frontend/**'
+          - '.github/workflows/slm-frontend-check.yml'
+          - 'autobot-frontend/scripts/check-i18n-keys.mjs'
+          # Mirrors the `on:` paths above -- the trigger and the
+          # job-level filter have to agree, or the workflow starts and
+          # every step self-skips.
+          - 'autobot-frontend/src/i18n/locales/**'
+          - 'scripts/lift_locale_translations.py'
 
   slm-frontend-check:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}

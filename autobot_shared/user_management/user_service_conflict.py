@@ -19,9 +19,9 @@ reaches the identical code path on both dialects, and isolates the failed
 INSERT so it rolls back only itself, leaving the caller's outer transaction
 usable for whatever it does next.
 
-Split into its own module because ``user_service.py`` is grandfathered at a
-recorded line ceiling with zero headroom (#14236); the precedent for this
-kind of split is ``user_service_errors.py`` (#15736).
+Shared by both backends since #15068: the SLM's copy did a plain
+``add``/``flush`` and surfaced the same race as an ``IntegrityError``. The
+SAVEPOINT version is the stricter of the two, so both services now run it.
 """
 
 from __future__ import annotations
@@ -32,17 +32,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from autobot_shared.logging_manager import get_logger
-from user_management.models import User
-from user_management.services.user_service_errors import DuplicateUserError
+from autobot_shared.user_management.models.user import UserCore
+from autobot_shared.user_management.user_service_errors import DuplicateUserError
 
 logger = get_logger(__name__)
 
-FindExisting = Callable[[str, str], Awaitable["User | None"]]
+FindExisting = Callable[[str, str], Awaitable["UserCore | None"]]
 
 
 async def insert_user_or_raise_duplicate(
     session: AsyncSession,
-    user: User,
+    user: UserCore,
     email: str,
     username: str,
     find_existing: FindExisting,

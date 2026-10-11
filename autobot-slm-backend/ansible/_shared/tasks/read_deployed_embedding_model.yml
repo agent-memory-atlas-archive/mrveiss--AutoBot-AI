@@ -1,0 +1,35 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+#
+# #15502: an update must never silently change a deployment's embedding model.
+#
+# Vectors indexed under one model are in a different space (and dimension) from vectors a
+# different model produces, so re-rendering AUTOBOT_EMBEDDING_MODEL from a new default would
+# strand the knowledge base. Before any render, read the value already deployed and adopt it
+# as `backend_embedding_model`; only a fresh install (no value on the host) takes the
+# canonical default. Changing an existing deployment's model happens only through a re-index
+# proposal (#18217, the #17038 approval queue), never through a template default.
+#
+# Caller sets `deployed_embedding_env_files` (list of rendered env files, most authoritative first).
+---
+
+- name: "Read the deployed AUTOBOT_EMBEDDING_MODEL, if any (#15502)"
+  ansible.builtin.shell:
+    cmd: |
+      for f in {{ deployed_embedding_env_files | join(' ') }}; do
+        v=$(grep -m1 -E '^(export[[:space:]]+)?AUTOBOT_EMBEDDING_MODEL=' "$f" 2>/dev/null \
+          | sed -E "s/^(export[[:space:]]+)?AUTOBOT_EMBEDDING_MODEL=//; s/\r\$//; s/^[\"']//; s/[\"']\$//")
+        if [ -n "$v" ]; then echo "$v"; break; fi
+      done
+      true
+  register: _embedding_model_probe
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: "Keep the deployed embedding model (#15502)"
+  ansible.builtin.set_fact:
+    backend_embedding_model: "{{ _embedding_model_probe.stdout | trim }}"
+  when: (_embedding_model_probe.stdout | default('') | trim) | length > 0

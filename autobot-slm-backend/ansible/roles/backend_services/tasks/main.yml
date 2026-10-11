@@ -90,10 +90,16 @@
   become_user: autobot
   notify: restart backend services
 
+- name: "Backend | Keep the deployed embedding model (#15502)"
+  ansible.builtin.include_tasks: ../../../_shared/tasks/read_deployed_embedding_model.yml
+  vars:
+    deployed_embedding_env_files: ["{{ backend_services_env_dest }}"]
+  tags: ['backend', 'config']
+
 - name: Generate environment configuration
   template:
     src: backend.env.j2
-    dest: /opt/autobot/config/backend.env
+    dest: "{{ backend_services_env_dest }}"
     owner: autobot
     group: autobot
     mode: '0640'

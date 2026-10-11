@@ -1296,7 +1296,10 @@
         "envVarRecommendations": "Environment Variable Recommendations",
         "sampleHardcodedValues": "Sample Hardcoded Values",
         "noHardcodedValues": "No hardcoded environment values found. Your configuration looks clean!",
-        "noData": "No environment analysis data available."
+        "noData": "No environment analysis data available.",
+        "modelHint": "النموذج: {model}",
+        "modelLoading": "جارٍ التحميل…",
+        "modelServerDefault": "افتراضي الخادم"
       },
       "ownership": {
         "title": "Code Ownership Analysis",

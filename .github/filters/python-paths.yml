@@ -66,8 +66,17 @@ python:
   # The shim gates a required context, so editing it must run the real suite for
   # the same reason editing ci.yml does.
   - '.github/workflows/python-required-context.yml'
+  # #15360: the one reusable `changes` job every converted workflow calls; the
+  # equivalence and one-job guards under repo_tests read it, so editing it must
+  # run them rather than take the shim's green.
+  - '.github/workflows/_changes.yml'
   # A change here changes what "python" means for both workflows.
   - '.github/filters/python-paths.yml'
+  # #17822: migration_gate_filter_covers_what_its_tests_import_test reads this workflow
+  # by concrete literal to prove its path filter still covers the modules its tests
+  # import. Editing the workflow without running that guard is how the filter drifted
+  # in the first place -- the gate skipped on the code under test and merged green.
+  - '.github/workflows/migration-gate.yml'
   # #14544/#14575: repo_tests/deployment_declares_project_root_14544_test.py
   # asserts each of these five non-.py deployment sources still declares
   # AUTOBOT_PROJECT_ROOT. Without an explicit entry here, editing only one of

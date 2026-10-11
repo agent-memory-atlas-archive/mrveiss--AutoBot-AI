@@ -24,6 +24,7 @@ on:
       # #14786: mirror of the filter file's own entry -- see its comment.
       - 'libs/autobot-ui/**'
       - '.github/workflows/frontend-test.yml'
+      - '.github/workflows/_changes.yml'
       - '.github/workflows/frontend-required-context.yml'
       - '.github/filters/frontend-paths.yml'
       # Canonical source for the cross-language parity guard (#13073, #13074):
@@ -92,26 +93,20 @@ jobs:
     # context would report FAILED on every draft -- worse than no gate.
     # Gate the expensive jobs, never the cheap thing others read.
     name: Detect changed paths
-    runs-on: ubuntu-latest
-    outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
-        id: filter
-        with:
-          # #14054: dorny/paths-filter errors on an event it does not
-          # recognise unless `base` is given, and a failed `changes` job
-          # skips every job that needs it -- i.e. the required context
-          # never reports and the queue deadlocks. Empty on push/PR, so
-          # their existing behaviour is unchanged.
-          base: ${{ github.event.merge_group.base_sha || '' }}
-          # Shared file, NOT an inline list: frontend-required-context.yml's
-          # `changes` job loads the very same path set. Its shim job and the
-          # `unit-tests` job below carry the same required context name under
-          # exactly complementary conditions, so the split is only correct while
-          # both compute the same answer — one file, one answer (#13405).
-          filters: .github/filters/frontend-paths.yml
+    uses: ./.github/workflows/_changes.yml
+    with:
+      # #14054: dorny/paths-filter errors on an event it does not
+      # recognise unless `base` is given, and a failed `changes` job
+      # skips every job that needs it -- i.e. the required context
+      # never reports and the queue deadlocks. Empty on push/PR, so
+      # their existing behaviour is unchanged.
+      merge_group_base: true
+      # Shared file, NOT an inline list: frontend-required-context.yml's
+      # `changes` job loads the very same path set. Its shim job and the
+      # `unit-tests` job below carry the same required context name under
+      # exactly complementary conditions, so the split is only correct while
+      # both compute the same answer — one file, one answer (#13405).
+      filters: .github/filters/frontend-paths.yml
 
   # Job 1: Unit and Integration Tests
   unit-tests:

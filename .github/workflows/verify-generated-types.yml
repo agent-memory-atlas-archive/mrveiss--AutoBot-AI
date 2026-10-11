@@ -81,6 +81,7 @@ on:
       - 'scripts/audit_api_wiring.py'
       - 'requirements*.txt'
       - '.github/workflows/verify-generated-types.yml'
+      - '.github/workflows/_changes.yml'
   # NOTE: no pull_request.paths filter — this workflow ALWAYS runs on PRs so its
   # required-check context ("verify-generated-types") always reports a conclusion.
   # A path-filtered required check that never triggers leaves the PR deadlocked
@@ -109,41 +110,34 @@ jobs:
     # context would report FAILED on every draft -- worse than no gate.
     # Gate the expensive jobs, never the cheap thing others read.
     name: Detect changed paths
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      types: ${{ steps.filter.outputs.types }}
-      slm_types: ${{ steps.filter.outputs.slm_types }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
-        id: filter
-        with:
-          # #14054: dorny/paths-filter errors on an event it does not
-          # recognise unless `base` is given, and a failed `changes` job
-          # skips every job that needs it -- i.e. the required context
-          # never reports and the queue deadlocks. Empty on push/PR, so
-          # their existing behaviour is unchanged.
-          base: ${{ github.event.merge_group.base_sha || '' }}
-          filters: |
-            types:
-              - 'autobot-backend/**/*.py'
-              - 'autobot_shared/**/*.py'
-              - 'autobot-frontend/src/types/generated/api.ts'
-              - 'autobot-frontend/package.json'
-              - 'autobot-frontend/package-lock.json'
-              - 'scripts/audit_api_wiring.py'
-              - '**/requirements*.txt'
-              - '.github/workflows/verify-generated-types.yml'
-            slm_types:
-              - 'autobot-slm-backend/**/*.py'
-              - 'autobot_shared/**/*.py'
-              - 'autobot-slm-frontend/src/types/generated/api.ts'
-              - 'autobot-slm-frontend/package.json'
-              - 'autobot-slm-frontend/package-lock.json'
-              - 'scripts/audit_api_wiring.py'
-              - '**/requirements*.txt'
-              - '.github/workflows/verify-generated-types.yml'
+    uses: ./.github/workflows/_changes.yml
+    with:
+      timeout_minutes: 10
+      # #14054: dorny/paths-filter errors on an event it does not
+      # recognise unless `base` is given, and a failed `changes` job
+      # skips every job that needs it -- i.e. the required context
+      # never reports and the queue deadlocks. Empty on push/PR, so
+      # their existing behaviour is unchanged.
+      merge_group_base: true
+      filters: |
+        types:
+          - 'autobot-backend/**/*.py'
+          - 'autobot_shared/**/*.py'
+          - 'autobot-frontend/src/types/generated/api.ts'
+          - 'autobot-frontend/package.json'
+          - 'autobot-frontend/package-lock.json'
+          - 'scripts/audit_api_wiring.py'
+          - '**/requirements*.txt'
+          - '.github/workflows/verify-generated-types.yml'
+        slm_types:
+          - 'autobot-slm-backend/**/*.py'
+          - 'autobot_shared/**/*.py'
+          - 'autobot-slm-frontend/src/types/generated/api.ts'
+          - 'autobot-slm-frontend/package.json'
+          - 'autobot-slm-frontend/package-lock.json'
+          - 'scripts/audit_api_wiring.py'
+          - '**/requirements*.txt'
+          - '.github/workflows/verify-generated-types.yml'
 
   verify-types-run:
     needs: changes

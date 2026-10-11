@@ -489,6 +489,7 @@ class HealthStatus(Enum):
     UNKNOWN = "unknown"
     STARTING = "starting"
     STOPPING = "stopping"
+    CIRCUIT_OPEN = "circuit_open"  # breaker open: probes suppressed (#12771)
 
 
 class AgentStatus(Enum):
