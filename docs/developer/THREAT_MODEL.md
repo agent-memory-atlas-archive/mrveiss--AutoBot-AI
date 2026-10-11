@@ -62,9 +62,13 @@ conversation-file routes call the same function with `SessionPosture.STRICT`
   admin is allowed, everyone else must be the recorded owner, no shared or org grants, and an
   unowned session is allowed but not claimed. `posture` is hidden from FastAPI, so a client can
   never choose it. A new private ownership validator beside it is a finding.
-- Any failure to look the owner up denies with 403 under **both** postures, and nothing is
-  claimed (#14033): `SessionOwnerUnreadable` and every other lookup exception alike. "Unknown"
-  is never "unowned"; an `except` that returns `None` from the owner lookup is a fail-open.
+- Any failure of the **durable owner lookup** (the session file read, `_durable_owner`) denies with 403
+  under **both** postures, and nothing is claimed (#14033): `SessionOwnerUnreadable`, any other
+  exception, a missing chat-history manager, and a recorded owner that is not a string alike.
+  "Unknown" is never "unowned"; an `except` that returns `None` from that lookup is a fail-open.
+  The Redis ownership cache is not covered: `get_session_owner` returns `None` on a Redis error, which
+  only sends the check on to the durable lookup. `posture` must be a `SessionPosture`; anything else
+  is a `TypeError`, never a silent `DEFAULT`.
 - Undetermined enforcement policy degrades, in
   [`security/enforcement_mode.py`](../../autobot-backend/security/enforcement_mode.py), to
   `DEGRADED_ENFORCEMENT_MODE` (:53) and never to `disabled`: checks still run and violations

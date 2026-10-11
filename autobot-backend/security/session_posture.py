@@ -55,6 +55,32 @@ def deny_unreadable_owner(session_id: str, username: str | None) -> HTTPExceptio
     return HTTPException(status_code=403, detail="Cannot verify session ownership")
 
 
+def require_posture(posture: object) -> SessionPosture:
+    """*posture* itself; anything else (e.g. the string "strict") is a bug, not a silent DEFAULT."""
+    if not isinstance(posture, SessionPosture):
+        raise TypeError(f"posture must be a SessionPosture, not {type(posture).__name__}")
+    return posture
+
+
+async def read_owner(session_id: str, request: Request) -> str | None:
+    """The durable owner: None only when none is recorded. Every failure to learn it denies (#14033).
+
+    A raising lookup, no manager, or a recorded owner that is not a string is an unknown owner, and
+    an unknown owner is never "unowned" -- claiming it would hand the session to the caller.
+    """
+    from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415
+
+    try:
+        owner = await get_chat_history_manager(request).get_session_owner(session_id)
+    except Exception as exc:
+        logger.warning("Could not read the durable owner of session %s...: %s", session_id[:8], exc)
+        raise deny_unreadable_owner(session_id, None) from None
+    if owner is not None and not isinstance(owner, str):
+        logger.warning("Session %s... records a non-string owner (%s)", session_id[:8], type(owner).__name__)
+        raise deny_unreadable_owner(session_id, None)
+    return owner or None
+
+
 async def _strict_owner_check(session_id: str, user_data: Dict, request: Request) -> Dict:
     """Admin passes; otherwise the recorded owner must be the caller. Unowned is legacy-allowed."""
     from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415

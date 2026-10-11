@@ -24,6 +24,7 @@ from security.session_ownership import validate_session_ownership
 from security.session_posture import SessionPosture
 
 ALLOW, DENY, ERROR, UNOWNED, UNREADABLE, BROKEN = "allow", "deny", "error", None, "unreadable", "broken"
+NONSTR = object()  # a stored owner that is not a name
 
 
 def _case(
@@ -117,6 +118,7 @@ CASES = [
         new_strict=DENY,
         new_default=DENY,
     ),
+    _case("owner recorded as a non-name", file=NONSTR, old_strict=DENY, old_default=ALLOW, new_default=DENY),
 ]
 
 
@@ -147,6 +149,8 @@ def _drive(monkeypatch, c):
     manager = MagicMock()
     if c["file"] == UNREADABLE:
         manager.get_session_owner = AsyncMock(side_effect=SessionOwnerUnreadable("s"))
+    elif c["file"] is NONSTR:
+        manager.get_session_owner = AsyncMock(return_value=12345)
     elif c["file"] == BROKEN:
         manager.get_session_owner = AsyncMock(side_effect=RuntimeError("boom"))
     else:
@@ -193,14 +197,14 @@ def test_the_only_intended_deltas_are_the_owner_lookup_failures() -> None:
     ids = {p.id: p.values[0] for p in CASES}
     default = sorted(i for i, c in ids.items() if c["old_default"] != c["new_default"])
     strict = sorted(i for i, c in ids.items() if c["old_strict"] != c["new_strict"])
-    failures = sorted(i for i in ids if "unreadable" in i or "lookup breaks" in i)
+    failures = sorted(i for i in ids if "unreadable" in i or "lookup breaks" in i or "non-name" in i)
     assert default == failures
     assert strict == ["owner lookup breaks (not the typed error)", "owner lookup breaks, log_only"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("posture", list(SessionPosture))
-@pytest.mark.parametrize("index", [11, 12, 13, 14])
+@pytest.mark.parametrize("index", [11, 12, 13, 14, 15])
 async def test_an_owner_lookup_failure_is_denied_and_the_session_is_not_claimed(monkeypatch, posture, index) -> None:
     case = dict(CASES[index].values[0])
     redis = _drive(monkeypatch, case)
@@ -223,3 +227,10 @@ def test_the_posture_is_not_a_client_controllable_parameter() -> None:
     dependant = get_dependant(path="/chat/sessions/{session_id}", call=validate_session_ownership)
     assert [p.name for p in dependant.query_params] == []
     assert [p.name for p in dependant.path_params] == ["session_id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["strict", "STRICT", None, 1, True])
+async def test_a_posture_that_is_not_a_session_posture_is_a_type_error_not_default(bad) -> None:
+    with pytest.raises(TypeError):
+        await validate_session_ownership("session-0001", MagicMock(), posture=bad)

@@ -28,7 +28,7 @@ from security.enforcement_mode import (
     resolve_enforcement_mode,
     resolve_enforcement_mode_for_request,
 )
-from security.session_posture import SessionPosture, authenticated_user, deny_unreadable_owner, validate_strict
+from security.session_posture import SessionPosture, authenticated_user, read_owner, require_posture, validate_strict
 
 logger = get_logger(__name__)
 
@@ -504,14 +504,7 @@ class SessionOwnershipValidator:
         an unknown owner is not "unowned", and claiming it would hand the session
         to the caller.
         """
-        try:
-            from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415
-
-            owner = await get_chat_history_manager(request).get_session_owner(session_id)
-        except Exception as exc:
-            logger.warning("Could not read the durable owner of session %s...: %s", session_id[:8], exc)
-            raise deny_unreadable_owner(session_id, None) from None
-        return owner if isinstance(owner, str) and owner else None
+        return await read_owner(session_id, request)
 
     async def _owner_when_cache_is_empty(
         self, session_id: str, username: str, user_data: Dict, request: Request
@@ -783,7 +776,7 @@ async def validate_session_ownership(
     Raises:
         HTTPException: 401 if not authenticated, 403 if not authorized (ENFORCED mode)
     """
-    if posture is SessionPosture.STRICT:
+    if require_posture(posture) is SessionPosture.STRICT:
         return await validate_strict(session_id, authenticated_user(session_id, request), request)
 
     from autobot_shared.redis_client import get_redis_client as get_redis_manager
