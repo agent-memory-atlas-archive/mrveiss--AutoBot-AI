@@ -43,13 +43,12 @@ _KNOWN_WRITERS: dict[str, str] = {
     "autobot_shared/user_management/middleware/rbac_middleware.py": "audit_logs via audit_row (D1)",
     "autobot_shared/user_management/organization_service.py": "audit_logs via audit_row (D1)",
     "autobot_shared/user_management/team_service.py": "audit_logs via audit_row (D1)",
-    # Constructs AuditLog directly; routing it through audit_row edits a file #18267 rewrites.
-    "autobot-backend/user_management/services/user_service.py": "audit_logs, direct -- after #18267",
-    "autobot-slm-backend/user_management/services/user_service.py": "audit_logs, direct -- after #18267",
-    "autobot-backend/services/workflow_permission_service.py": "workflow_audit_log (Postgres), undecided",
-    "autobot-backend/services/secrets_audit_store.py": "secrets_audit (SQLite), undecided",
-    "autobot-backend/a2a/trust_score.py": "trust_audit (SQLite), undecided",
-    "autobot-backend/security/enterprise/compliance_manager.py": "encrypted JSONL files, undecided",
+    # #18267 made this the one UserService both backends use.
+    "autobot_shared/user_management/user_service_base.py": "audit_logs via audit_row (D1)",
+    "autobot-backend/services/workflow_permission_service.py": "workflow_audit_log (Postgres), moves to the service in #18284",
+    "autobot-backend/services/secrets_audit_store.py": "secrets_audit (SQLite), moves to the service in #18284",
+    "autobot-backend/a2a/trust_score.py": "trust_audit (SQLite), a domain history table -- #18285",
+    "autobot-backend/security/enterprise/compliance_manager.py": "encrypted JSONL files, wired through the service in #18286",
     "autobot-slm-backend/api/security.py": "SLM slm_node_audit_logs, a separate table",
     # Not an audit record: code-audit daemon state sharing the `audit:` prefix (D4, needs a key move).
     "autobot-backend/workers/audit_tasks.py": "daemon state, D4 pending a key move",
@@ -288,17 +287,9 @@ def test_nothing_imports_a_retired_module() -> None:
     assert not hits, f"#17225: {hits} still import a retired audit module; use services.audit.audit."
 
 
-#: Still construct `AuditLog(...)` themselves. The two user services are rewritten by #18267;
-#: routing them through `audit_row` follows its merge. The SLM API's `AuditLog` is its own
-#: `slm_node_audit_logs` model, not this table.
-_DIRECT_ROW_CONSTRUCTORS = frozenset(
-    {
-        _ROW_BUILDER,
-        "autobot-backend/user_management/services/user_service.py",
-        "autobot-slm-backend/user_management/services/user_service.py",
-        "autobot-slm-backend/api/security.py",
-    }
-)
+#: The only modules that construct `AuditLog(...)`: the one row builder, and the SLM API, whose
+#: `AuditLog` is its own `slm_node_audit_logs` model, not this table.
+_DIRECT_ROW_CONSTRUCTORS = frozenset({_ROW_BUILDER, "autobot-slm-backend/api/security.py"})
 
 
 def test_audit_logs_rows_have_one_constructor() -> None:

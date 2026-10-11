@@ -2,11 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""One mapping onto ``audit_logs``, whoever writes the row (#17225 D1)."""
+"""One mapping onto ``audit_logs``, whoever writes the row (#17225 D1).
+
+The ORM class is replaced by a plain recorder of its keyword arguments: what is
+under test is the mapping, and instantiating the real mapped class configures
+every mapper in the shared registry, which needs each backend's concrete
+``Organization`` -- a property of the process, not of this module.
+"""
 
 import uuid
+from types import SimpleNamespace
 
+import pytest
+
+from autobot_shared.user_management import audit_rows
 from autobot_shared.user_management.audit_rows import ACTION_FULL_KEY, SYSTEM_ACTOR, UNSPECIFIED_RESOURCE, audit_row
+
+
+@pytest.fixture(autouse=True)
+def _rows_are_plain_records(monkeypatch):
+    monkeypatch.setattr(audit_rows, "AuditLog", lambda **columns: SimpleNamespace(**columns))
 
 
 def test_a_user_writers_row_names_the_user_as_actor() -> None:

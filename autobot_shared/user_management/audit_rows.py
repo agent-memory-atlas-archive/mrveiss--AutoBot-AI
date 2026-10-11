@@ -35,7 +35,8 @@ SYSTEM_ACTOR = "system"
 ACTION_FULL_KEY = "action_full"
 #: ``resource_type`` is NOT NULL in the original schema.
 UNSPECIFIED_RESOURCE = "unspecified"
-_ACTION_WIDTH = AuditLog.__table__.c.action.type.length
+_TABLE = AuditLog.__table__
+_ACTION_WIDTH = _TABLE.c.action.type.length
 
 
 def _as_uuid(value: Any) -> uuid.UUID | None:
@@ -49,7 +50,7 @@ def _as_uuid(value: Any) -> uuid.UUID | None:
 
 def _fit(value: str | None, column: str) -> str | None:
     """Cap free text at its column width so an over-long value cannot cost the whole row."""
-    width = AuditLog.__table__.c[column].type.length
+    width = _TABLE.c[column].type.length
     return value if value is None or len(value) <= width else value[:width]
 
 
