@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""Four concepts that were each written twice, now once each (#17856).
+"""Concepts that were each written twice, now once each (#17856).
 
 | Concept                             | The one home                                  |
 |-------------------------------------|-----------------------------------------------|
@@ -10,6 +10,7 @@
 | unverified JWT claims decoder       | `autobot_shared/auth/jwt_core.py`              |
 | node lifecycle event writer         | `autobot-slm-backend/services/node_events.py`  |
 | RS256 jti denylist Redis key prefix | `autobot_shared/auth/jwt_core.py`              |
+| TTL cache manager class             | `utils/advanced_cache_manager.py` (`SimpleCacheManager`); `utils/cache_manager.py` is retired |
 
 Each detector reads the syntax tree, so prose naming a concept is not a definition. The
 denylist prefix is a stored Redis key: a second literal that drifts orphans live entries.
@@ -79,6 +80,21 @@ def _spells_denylist_prefix(source: str) -> bool:
     return any(isinstance(n, ast.Constant) and n.value == _PREFIX for n in ast.walk(ast.parse(source)))
 
 
+def _defines_class(name: str):
+    """Matcher: True when `source` defines a class called `name` (a retired concept's old name)."""
+
+    def probe(source: str) -> bool:
+        return any(isinstance(n, ast.ClassDef) and n.name == name for n in ast.walk(ast.parse(source)))
+
+    return probe
+
+
+#: Concept key -> (matcher, files that may define it). An empty tuple means the concept is retired.
+_CLASS_CONCEPTS: dict[str, tuple] = {
+    "cache_manager_class": (_defines_class("CacheManager"), ()),
+}
+
+
 @pytest.mark.parametrize(
     ("matcher", "fork", "import_only"),
     [
@@ -101,6 +117,11 @@ def _spells_denylist_prefix(source: str) -> bool:
             _spells_denylist_prefix,
             f'RS256_DENYLIST_PREFIX = "{_PREFIX}"\n',
             "from autobot_shared.auth.jwt_core import RS256_DENYLIST_PREFIX\n",
+        ),
+        (
+            _CLASS_CONCEPTS["cache_manager_class"][0],
+            "class CacheManager:\n    pass\n",
+            "from utils.advanced_cache_manager import cache_manager\n",
         ),
     ],
 )
@@ -134,7 +155,7 @@ REACH = declare(
 
 @functools.lru_cache(maxsize=1)
 def _homes() -> dict[str, tuple[str, ...]]:
-    found: dict[str, list[str]] = {k: [] for k in ("retention", "decoder", "writer", "prefix")}
+    found: dict[str, list[str]] = {k: [] for k in ("retention", "decoder", "writer", "prefix", *_CLASS_CONCEPTS)}
     root = repo_root()
     for rel in REACH.examined(root):
         source = (root / rel).read_text(encoding="utf-8")
@@ -143,6 +164,7 @@ def _homes() -> dict[str, tuple[str, ...]]:
             ("decoder", _decodes_jwt_payload),
             ("writer", _defines_node_event_writer),
             ("prefix", _spells_denylist_prefix),
+            *((key, probe) for key, (probe, _homes_ok) in _CLASS_CONCEPTS.items()),
         ):
             if probe(source):
                 found[key].append(rel)
@@ -162,3 +184,12 @@ def test_each_concept_is_defined_in_exactly_its_one_home(key: str, home: str) ->
     assert _homes()[key] == (
         home,
     ), f"#17856: {key} is defined in {list(_homes()[key])}; it lives once in {home}. Import it instead of copying it."
+
+
+@pytest.mark.parametrize("key", sorted(_CLASS_CONCEPTS))
+def test_a_retired_or_single_home_class_is_defined_only_where_allowed(key: str) -> None:
+    allowed = _CLASS_CONCEPTS[key][1]
+    assert _homes()[key] == allowed, (
+        f"#17856: {key} is defined in {list(_homes()[key])}; allowed: {list(allowed)}. "
+        "Use the canonical implementation instead of re-adding the copy."
+    )
