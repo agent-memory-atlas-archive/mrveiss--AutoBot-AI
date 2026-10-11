@@ -12,7 +12,6 @@ Issue #730 - Plugin SDK for extensible tool architecture.
 
 import json
 import threading
-from pathlib import Path
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -32,8 +31,8 @@ from autobot_shared.plugin_sdk.base import PluginLoadError
 from autobot_shared.plugin_sdk.loader import validate_plugin_config
 from autobot_shared.redis_client import get_async_redis_client
 from autobot_shared.redis_utils import decode_redis_value
-from autobot_shared.ssot_config import config
 from plugin_install import install_from_git, install_from_zip
+from plugin_paths import plugin_search_dirs, trusted_plugin_roots
 from services.provider_key_vault import plugin_credential_resolvers
 
 logger = get_logger(__name__)
@@ -52,14 +51,10 @@ def get_plugin_loader() -> PluginLoader:
     if _plugin_loader is None:
         with _plugin_loader_lock:
             if _plugin_loader is None:
-                # Define plugin directories using SSOT config (#3397)
-                plugins_root = config.path.plugins_path
-                core_dirs = [plugins_root / "core-plugins", Path("plugins/core-plugins")]
-                community_dirs = [plugins_root / "community-plugins", Path("plugins/community-plugins")]
-                # Deployed core, deployed community, then the development fallback.
-                plugin_dirs = [core_dirs[0], community_dirs[0], core_dirs[1], community_dirs[1]]
-                # Only the built-in core dirs are trusted for credential injection (#18094).
-                _plugin_loader = PluginLoader(plugin_dirs, plugin_credential_resolvers(), core_dirs)
+                # Search and trust come from plugin_paths, shared with the startup host (#3397, #18094).
+                _plugin_loader = PluginLoader(
+                    plugin_search_dirs(), plugin_credential_resolvers(), trusted_plugin_roots()
+                )
     return _plugin_loader
 
 

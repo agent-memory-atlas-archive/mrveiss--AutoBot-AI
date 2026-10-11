@@ -212,7 +212,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/events/stream_manager.py": 654,
     "autobot-backend/events/types.py": 885,
     "autobot-backend/hardware_acceleration.py": 609,
-    "autobot-backend/initialization/lifespan.py": 2340,
+    "autobot-backend/initialization/lifespan.py": 2331,
     "autobot-backend/initialization/router_registry/feature_routers.py": 779,
     "autobot-backend/integrations/cloud_integration.py": 630,
     "autobot-backend/integrations/communication_integration.py": 605,
@@ -299,7 +299,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/performance_benchmarks_test.py": 661,
     "autobot-backend/phase_progression_manager.py": 850,  # #17089: dedup threshold
     "autobot-backend/planner/planner.py": 877,
-    "autobot-backend/plugin_manager.py": 700,
+    "autobot-backend/plugin_manager.py": 695,
     "autobot-backend/project_state_manager.py": 998,
     "autobot-backend/prompt_manager.py": 1481,
     "autobot-backend/protocols/agent_communication.py": 654,

@@ -1939,21 +1939,12 @@ async def _init_plugin_manager(app: FastAPI) -> None:
     Non-critical: failures are logged and do not block startup.
     """
     try:
-        from pathlib import Path
-
         from autobot_shared.plugin_sdk import PluginManager
-        from autobot_shared.ssot_config import config as ssot_config
+        from plugin_paths import plugin_search_dirs, trusted_plugin_roots
+        from services.provider_key_vault import plugin_credential_resolvers
 
-        plugins_root = ssot_config.path.plugins_path
-        plugin_dirs = [
-            plugins_root / "core-plugins",
-            plugins_root / "community-plugins",
-            # Development fallback
-            Path("plugins/core-plugins"),
-            Path("plugins/community-plugins"),
-        ]
-
-        plugin_manager = PluginManager(plugin_dirs)
+        # #18094: the instance that actually runs the plugins gets the origin-bound resolvers too.
+        plugin_manager = PluginManager(plugin_search_dirs(), plugin_credential_resolvers(), trusted_plugin_roots())
         # #13677: stored BEFORE startup. `completed=False` distinguishes exactly
         # one thing — a crashed discovery from an empty tree — and on a crash the
         # manager was discarded before it ever reached app.state, so the only
