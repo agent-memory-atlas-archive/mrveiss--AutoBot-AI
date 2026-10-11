@@ -288,6 +288,19 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "It is single-store, so the dual-store guard was never going to surface it: it "
         "belongs by judgement, not because a detector found it.",
     ),
+    "audit_trail": Concept(
+        name="audit_trail",
+        system_of_record=Store.REDIS,
+        projections=(),
+        write_sites=("autobot-backend/services/audit/projection.py",),
+        rebuilt_by="Nothing rebuilds it. A lost audit:unified key loses the audit trail.",
+        note="NOT a deliberate exception -- a declared inadequacy (#17225). Every audit producer "
+        "(services.audit.audit, the audit_logger adapter, SecurityLayer) now records here, so this "
+        "is the one audit trail, but a Redis sorted set is not a compliance record. The owner "
+        "decided (D1) that a Postgres table is the system of record with Redis as its projection; "
+        "that flips this entry to POSTGRES. Which table -- a new audit_event or the existing "
+        "audit_logs -- is open on #17225. Declared so the gap is visible to the registry.",
+    ),
     "pre_auth_lockout": Concept(
         name="pre_auth_lockout",
         system_of_record=Store.REDIS,

@@ -1,70 +1,89 @@
 # Audit and event-record systems (#17225)
 
-Inventory taken on `main` at the commit this file lands in. Counts are call sites in non-test
-Python under `autobot-backend/`, `autobot_shared/` and `scripts/`, by grep of the call name; a call
-through an alias is not counted. #6475 closed on three systems; the issue counts six. The tree has
-**eight stores** plus one non-store writer, because two "deprecated" modules still write on their own.
+Re-verified against `main` when D2/D3/D5/D6 landed. Counts are call sites in non-test Python, found
+by grepping the **behaviour** (a store write onto an audit-shaped key, an audit ORM row, an
+`INSERT INTO ...audit`, an append to an audit path), not only the symbol names. The guard
+`repo_tests/audit_writer_single_source_17225_test.py` applies the same detector to the tree and
+fails on a writer outside the pinned set.
+
+The first inventory (eight stores plus one non-store writer) was incomplete: a behaviour sweep found
+five more audit stores it had missed. They are rows 9-13 below and are **not** covered by the owner
+decision of 2026-10-10.
+
+## The canonical service
+
+`autobot-backend/services/audit/`:
+
+| Module | Role |
+|---|---|
+| `audit.py` | The one write path (`record`, `emit`, `emit_security`/`emit_compliance`/`emit_knowledge`, `audit_record`) and read path (`query`, `query_filtered`, `query_events`, `count_since`), plus `apply_retention`. Every producer reaches `record`, which also feeds threat detection (#13562). |
+| `taxonomy.py` | `AuditEvent`, `AuditCategory`, `AuditFilter`, and the three legacy action vocabularies (`AuditAction`, `EventType`, `AuditEventType`). |
+| `projection.py` | The only module that writes an `audit:` key: `audit:unified` plus `audit:category:<cat>`. Declares `system_of_record("audit_trail")`. |
+| `retention.py` | The one retention policy table (D5). |
+| `purge.py` | The one purge path, used by the nightly task and the admin cleanup endpoint. |
+| `knowledge_view.py` | `KnowledgeAuditLog`: the knowledge audit API's views over KNOWLEDGE events. |
+
+"Everything recorded for user U in window W" is one call: `query(actor_id=U, from_ts=..., to_ts=...)`.
+`query_filtered` raises `AuditStoreUnavailable` when the store cannot be read, so an unreadable
+trail is never reported as an empty one (#13258).
 
 ## Inventory
 
-| # | Module | Store | Schema | Writers (call sites) | Readers | Retention | Tamper protection |
-|---|---|---|---|---|---|---|---|
-| 1 | `services/audit/audit.py` (canonical) | Redis zset `audit:unified` plus `audit:category:<cat>` | JSON `AuditEvent` (category, action, actor, resource, metadata, `occurred_at`) | `emit`/`record`/`emit_*`: ~15; bridge `audit_record` (security category): 19; `KnowledgeAuditLog` bridge | `query`, `query_events`; `api/admin_event_logs.py` | Per category TTL on the category key (90 d SECURITY/COMPLIANCE, 365 d KNOWLEDGE/GOVERNANCE); `audit:unified` deliberately has none (#8303) | None. Redis zset, mutable. |
-| 2 | `services/audit/audit_log.py` (deprecated, live via `services/audit/__init__.py`) | Redis zset `audit_log:<user_id>` plus `audit_log:global` | JSON with `created_at` | `record_event` / `audit_record` shim (re-exported by #1) | `query_audit_log` | 90 d TTL refreshed on every write | None |
-| 3 | `services/audit_logger.py` | Redis `audit` database (db 10): daily zsets `audit:log:<date>`, `audit:op:*`, `audit:user:*`, `audit:session:*`, `audit:vm:*`, `audit:result:*`; JSONL fallback `audit_<date>.jsonl` | JSON `AuditEntry` (entry sanitised before write) | `audit_log(...)` 123 call sites; `get_audit_logger().log` 4 (`middleware/audit_middleware.py`, `services/gateway/egress_governor.py`) | `AuditLogger.query` and `api/audit.py` (6 endpoints) | `audit_retention_days` (default 90) as TTL on the daily partitions; `cleanup_old_logs` | None. Entry sanitising only. |
-| 4 | `security_layer.py` `SecurityLayer.audit_log` | Plain JSONL file at `config.audit_log_file` | `{timestamp,user,action,outcome,details}` | `auth_rbac.py` 3, `auth_middleware.py` 7, `worker_node.py` 2, and `security_layer.py` itself (8) | `get_command_history` (parses the file) | **None.** No rotation or TTL in this module. | Described as "tamper-resistant (append-only)"; the only mechanism is `open(..., "a")`. File mode and immutability are not enforced here. |
-| 5 | `models/workflow_audit.py` + `services/workflow_permission_service.py` | Postgres `workflow_audit_log` | `id, timestamp, user_id, workflow_id, action, details JSONB` | `WorkflowPermissionService` 1 write site | `get_audit_log` -> `api/workflow_permissions.py` | **None** (no purge anywhere) | "Never updated or deleted by the application" by convention; no DB trigger or revoke |
-| 6 | `middleware/audit_middleware.py` | Not a store: feeds #3 through `get_audit_logger().log` | n/a | ASGI middleware, `initialization/middleware.py` `configure_audit` | via #3 | via #3 | via #3 |
-| 7 | `services/event_log.py` (deprecated) | Redis zset `autobot:event_log` (`main` db) | JSON event | **Direct, not via #1:** `api/voice_bundle_admin.py` imports `emit` from it | `event_log.query_events`. **Not** what `audit.query_events` reads: that bridge queries #1's COMPLIANCE category, so the `voice_bundle_admin` records are invisible to the admin events API (`api/admin_event_logs.py`) | 90 d TTL on the single key | None |
-| 8 | `knowledge/audit_log.py` (deprecated) | Redis zsets `audit:user:<id>`, `audit:fact:<id>`, `audit:org:<id>` (index of event ids) plus the event body via `setex` | JSON | `KnowledgeAuditLog.log_event`, subclassed by #1, so every knowledge event is written **twice** (here and `audit:unified`) | `get_user_activity`, `get_fact_access_log`, `get_organization_audit_log`, `generate_compliance_report`; `api/knowledge_audit.py` | `ttl_seconds` per instance (on the index zsets and the `setex` body) | None |
+| # | Module | Store | Status | Writers | Retention | Tamper protection |
+|---|---|---|---|---|---|---|
+| 1 | `services/audit/` (canonical) | Redis `audit:unified` + `audit:category:<cat>` | **Canonical.** The system of record until D1 lands (declared as an inadequacy in `store_authority.py`). | All of rows 2, 3, 4, 7, 8 below, plus direct `emit`/`record` producers | `retention.py` table: category-key TTL and nightly purge | None: a Redis sorted set. D1 is the fix. |
+| 2 | `services/audit/audit_log.py` | Redis `audit_log:<user>` / `audit_log:global` | **Retired (D2), module deleted.** `AuditAction` moved to `taxonomy.py`; `audit_record` is the canonical helper. | 0. Callers already used the canonical bridge: 14 `audit_record` sites in `api/chat_sessions.py` (3), `api/knowledge.py` (5), `api/secrets.py` (2), `services/device_jwt.py` (1), `services/run_jwt.py` (3) | Old keys expire by their 90-day TTL | n/a |
+| 3 | `services/audit_logger.py` | Redis `audit` database (db 10): daily `audit:log:<date>` and five index zsets, JSONL fallback | **Adapter (D3).** Stores nothing; `AuditEntry` is recorded as a SECURITY `AuditEvent` and read back from #1. | `audit_log()`: 18 sites in 11 modules (`api/feature_flags.py` 2, `api/knowledge_source_liveness.py` 1, `api/mcp_external_servers.py` 1, `api/memory_privacy.py` 6, `api/scheduler_toggles.py` 2, `services/approval_execution.py` 1, `services/mcp_external_bridge.py` 1, `services/orphan_repair.py` 1, `services/orphan_storage_cleanup_action.py` 1, `services/realtime_mcp_bridge.py` 1, `scripts/migrate_shared_facts_index.py` 1); `get_audit_logger().log`: 4 (`middleware/audit_middleware.py` 3, `services/gateway/egress_governor.py` 1). Reader: `api/audit.py` (6 endpoints). | db-10 keys expire by the TTL they were written with | n/a |
+| 4 | `security_layer.py` `SecurityLayer.audit_log` | JSONL file at `config.audit_log_file` | **Routed through #1 (D6).** One tamper mechanism; no second hash chain. A record that cannot be scheduled is counted (`autobot_audit_write_failures_total`, `NotScheduled`). | 64 call sites in 15 modules (`api/agent.py`, `auth_middleware.py`, `auth_rbac.py`, `worker_node.py`, ...). Readers `get_command_history` and `get_audit_entries` (`api/security.py`). | Table (SECURITY) | via #1 |
+| 5 | `models/workflow_audit.py` + `services/workflow_permission_service.py` | Postgres `workflow_audit_log` | Undecided. | 1 | None | Convention only |
+| 6 | `middleware/audit_middleware.py` | Not a store: feeds #3 | via #3 | 3 | via #1 | via #1 |
+| 7 | `services/event_log.py` | Redis `autobot:event_log` | **Retired (D2), module deleted.** `EventType` moved to `taxonomy.py`. | 0. `api/voice_bundle_admin.py` (1, the only direct writer, whose records were invisible to the admin events API) and `api/auth.py` (2) now call `emit_compliance`. | Old key expires by its 90-day TTL | n/a |
+| 8 | `knowledge/audit_log.py` | Redis `audit:user:<id>`, `audit:fact:<id>`, `audit:org:<id>` + `setex` bodies | **Retired (D2), module deleted.** `knowledge_view.KnowledgeAuditLog` records and reads KNOWLEDGE events in #1; the double write is gone. | 0 (no production caller ever called `log_event`). Reader: `api/knowledge_audit.py` (5 endpoints). | Old keys expire by their TTL | n/a |
+| 9 | `autobot_shared/user_management/models/audit.py` (`AuditLog`) | Postgres `audit_logs` (org, user UUID FK, action, resource, outcome, details JSONB, ip, user agent) | **Missed by the first inventory.** Undecided, and bears on D1 (see below). | `rbac_middleware.py` (denial audit, #14750), `user_management/services/user_service.py`, `organization_service.py`, `team_service.py` | None | Convention only |
+| 10 | `services/secrets_audit_store.py` | SQLite `secrets_audit` | Missed. Undecided. | 1 module | None | None |
+| 11 | `a2a/trust_score.py` | SQLite `trust_audit` | Missed. Undecided. | 1 module | None | None |
+| 12 | `security/enterprise/compliance_manager.py` | Encrypted/plain JSONL under `audit_base_path` | Missed. Undecided. `ComplianceManager` has no production constructor call (exported only). | 1 module | None | Fernet encryption for sensitive events |
+| 13 | SLM backend (`autobot-slm-backend/api/security.py`, its `user_service.py`) | SLM's own `AuditLog` table | Missed. A separate service. | 2 modules | n/a | n/a |
 
-Not an audit store, same prefix: `workers/audit_tasks.py` keeps code-audit daemon state under
-`audit:testgaps:*`, `audit:dead_code:*`, `audit:claims:*`, `audit:deferred_findings`,
-`audit:filing_status`. It shares the `audit:` namespace with #3 and #8.
+Not stores, recorded for completeness: `workers/audit_tasks.py` keeps code-audit **daemon state**
+under `audit:testgaps:*`, `audit:dead_code:*`, `audit:claims:*`, `audit:deferred_findings`,
+`audit:filing_status` (D4, below). `services/terminal_websocket/audit.py` and `api/secrets.py`'s
+`audit_log()` write only to the application log. `autobot-infrastructure/shared/scripts/secrets_manager.py`
+keeps an `audit_log.json` outside the guard's roots.
 
-Retention sweep: `tasks/audit_log_retention.py` scans `audit:*` zsets with
-`zremrangebyscore` through `get_redis_client()` (default database). That reaches #1, #8 and the
-daemon keys' zsets (it skips non-zsets). Whether the default database is the one that holds #3
-(db 10) was not verified here; it is a host/config question, not answered from the source read.
+## Decisions (owner, 2026-10-10) and status
 
-## Classification
-
-| System | Verdict | Reason |
+| # | Decision | Status |
 |---|---|---|
-| 1 `audit.py` | Same concept, canonical | Who did what to which resource |
-| 2 `audit_log.py` | **Fork of 1** | Same record (security actions by user), already bridged by `audit_record` |
-| 3 `audit_logger.py` (+6 middleware) | **Fork of 1** | Operation audit trail with user/session/result; different schema and 6 indexes, same question |
-| 4 `security_layer` file | **Fork of 1** | Auth/RBAC/command actions by user; same question, weakest store |
-| 5 `workflow_audit_log` | **Fork of 1, but the only one with an RDBMS durability claim.** | A workflow lifecycle audit trail; arguably the only one meeting a durable-record bar |
-| 7 `event_log` | **Fork of 1** | Compliance events; #1 `COMPLIANCE` category is its documented successor |
-| 8 `knowledge/audit_log` | **Fork of 1** | Per-user/fact/org knowledge access; #1 `KNOWLEDGE` category |
-| daemon keys | Distinct | Work-queue/state of a CI-style daemon, not a record of user actions. Rename of prefix is a data move; see D4 |
+| D1 | Postgres `audit_event` is the system of record; Redis a projection | **Not implemented: needs a decision.** The existing Postgres `audit_logs` table (row 9) already holds this concept with nearly the canonical schema. A new `audit_event` table beside it would be a second Postgres audit table. Options: (a) extend `audit_logs` (add `category`, `actor` text, `session_id`, `event_id`; its `user_id` is a UUID FK, the canonical actor is a string) and point `record` at it; (b) a new `audit_event` table as decided, with row 9's writers moved onto it later. Recommendation: (a). Until then `store_authority.py` declares `audit_trail` with a Redis system of record **as an inadequacy**, so the gap is visible to the registry. |
+| D2 | Retire #2, #7, #8 by repointing callers; old keys expire by TTL | **Done.** Modules deleted, callers repointed, guard forbids their import. No stored data was touched. |
+| D3 | `audit_log()` becomes an adapter onto #1 | **Done.** |
+| D4 | Daemon keys get their own prefix | **Not implemented: needs a data move.** `audit:deferred_findings` is a dead-letter queue with no TTL; renaming the key in code orphans every queued finding, and `audit:dead_code:last_inventory` is the diff baseline (losing it re-files every finding). The move needs a `RENAME` of the existing keys at the same moment as the code change, which is a #17038 action. The harm the shared prefix caused (the retention task trimming daemon zsets) is gone with D5: the purge no longer scans `audit:*`. |
+| D5 | One retention policy table | **Done.** `retention.py` (`AUTOBOT_AUDIT_<CATEGORY>_RETENTION_DAYS`, defaults 90/90/365/365) drives the projection TTLs and the one purge path. `AUTOBOT_AUDIT_RETENTION_DAYS` stays the nightly purge's on-switch (0 = off) and only ever shortens a period. The old task trimmed every `audit:*` zset at one period, cutting 365-day records at 90. |
+| D6 | Route `security_layer.py` through #1 | **Done.** |
 
-## What this change does and does not do
+## Behaviour changes a reviewer should know
 
-Done: this inventory, the decisions below, and a guard
-(`repo_tests/audit_writer_single_source_17225_test.py`) that pins the set of modules allowed to
-write an audit store. A ninth writer fails the test with the fix named.
+* `audit.emit(AuditEvent(...))` records the event it is given. It used to be shadowed by an
+  `EventType` bridge, so 7 producers (`services/task_claim.py`, `api/voice_bundle_user.py` x2,
+  the four retention tasks) recorded a COMPLIANCE event whose action was the event's repr.
+* A producer on a thread with no running loop (a sync FastAPI handler, a worker thread) hands its
+  record to the serving loop instead of dropping it.
+* Reads scan newest-first (`zrevrangebyscore`), so a trail longer than the scan cap shows its most
+  recent records, not its oldest.
+* The operation-audit dashboard (`api/audit.py`) and the security-layer views now show records from
+  every producer for the same filters, and records written to the retired stores before the
+  upgrade are not shown (they stay in Redis until their TTL).
+* `GET /api/security/audit-log` returns newest-first.
 
-Not done, on purpose. Every candidate merge below changes a stored record's location, schema or
-retention, which the no-agent-rewrite rule (#17038) reserves for a human decision:
+## Data-move proposal (for the #17038 approval queue; not implemented)
 
-* Moving a caller from #7 or #8 to #1 changes where its record lands.
-* Moving the 123 `audit_log()` callers to #1 changes the store, schema and index set.
-* A "facade" that writes the same record to several stores changes what each store holds.
-
-## Decisions (owner)
-
-| # | Decision | Options | Recommendation |
-|---|---|---|---|
-| D1 | One system of record | (a) #1 Redis; (b) #5-style Postgres table as the durable record, Redis as a projection (`store_authority.system_of_record`); (c) keep several by purpose | **(b)**. Redis zsets with TTL are not a compliance record. Add one Postgres `audit_event` table; #1 `record()` writes it. Needs a migration: human approval. |
-| D2 | Retire #2, #7, #8 | (a) backfill their keys into #1 then stop writing; (b) stop writing, let TTL expire (<=90 d lose nothing new); (c) leave | **(b)** after pointing `voice_bundle_admin.py` and the knowledge callers at #1. Each is a location change for new records, no rewrite of old ones. The #8 double write goes away. |
-| D3 | #3 (`audit_logger`, 123 callers) | (a) make `audit_log()` an adapter that writes #1 and keep its queries; (b) migrate callers; (c) keep as the operation trail | **(a)**: callers unchanged, store changes. Schema mapping (entry fields into `AuditEvent.metadata`) must be signed off. |
-| D4 | `audit:` namespace | (a) rename daemon keys to `daemon:audit:*`; (b) leave | **(a)** when daemon state is next touched; it is a key move. |
-| D5 | Retention | one policy table keyed by category, applied by `tasks/audit_log_retention.py`; remove per-writer TTLs | Depends on D1. Interacts with #16846. #4 and #5 have none today: that is a compliance gap in its own right. |
-| D6 | #4 "tamper-resistant" claim | (a) hash-chain or write via #1; (b) fix the docstring | **(a)**, with D1. Until then the docstring overstates. |
-
-Open acceptance criteria of #17225 and their status: one system of record (needs D1/D2/D3); single
-"everything for user U in window W" query (needs D1; the stores key users differently: `audit:user:<id>:<date>`,
-`audit_log:<id>`, `audit:user:<id>`, a JSONL scan, a Postgres column); one retention path (D5); CONTROL_PLANE_MAP row
-(left for the PR that does D1, since this change updates no status). Writers enumerated: see the table.
+1. Optional backfill for visibility: copy db-10 `audit:log:<date>` entries, `audit_log:global`,
+   `autobot:event_log` and the knowledge `audit:*:<id>` bodies into `audit:unified`/
+   `audit:category:*` in the canonical shape, so records from before the upgrade remain visible
+   until they would have expired. Without it they are retained but unreadable for up to 90/365 days.
+2. D4: `RENAME audit:testgaps:last_run`, `audit:dead_code:last_inventory`, `audit:claims:last_run*`,
+   `audit:deferred_findings`, `audit:filing_status` to a `daemon:audit:` prefix, deployed together
+   with the matching constant change in `workers/audit_tasks.py`.
+3. D1, once the table is chosen: backfill the Redis projection into Postgres so the system of record
+   starts complete.

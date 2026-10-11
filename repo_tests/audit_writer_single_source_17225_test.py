@@ -4,20 +4,25 @@
 # Author: mrveiss
 """A new audit store writer cannot appear outside the known set (#17225).
 
-#6475 closed on three audit systems; there were eight stores by #17225. This pins the writers
-that exist (see docs/developer/AUDIT_SYSTEMS.md) so a ninth is a deliberate, recorded act: add
-the module to `_KNOWN_WRITERS` AND to the inventory, or route the record through
-`services.audit.audit`. It does not merge any store; that needs an owner decision (#17038).
+#6475 closed on three audit systems; #17225 counted eight and a behaviour sweep found more.
+D2/D3/D6 of docs/developer/AUDIT_SYSTEMS.md routed five of them through the canonical service,
+whose Redis projection (`services/audit/projection.py`) is now the only module that writes an
+`audit:` key. Every other module below writes a store the owner has not yet decided on; it is
+pinned so a new one is a deliberate, recorded act: route the record through
+`services.audit.audit` (emit/record), or add the module here AND to the inventory.
 
-A "writer" is a non-test module that either
+A "writer" is a non-test module that
   * has a store-write call (`zadd`, `lpush`, ...) AND a string literal that starts with an audit
     key prefix, or
-  * constructs `WorkflowAuditLog`, or
-  * opens a file whose path expression names "audit" in append/write mode.
+  * constructs an audit ORM row (`AuditLog`, `WorkflowAuditLog`), or
+  * holds an `INSERT INTO <...>audit` SQL literal, or
+  * opens a file in a write mode (`open`, `aiofiles.open`) whose path names "audit", or in a
+    module that binds an audit path (`audit_base_path`, `audit_log_file`).
 """
 
 import ast
 import functools
+import re
 from pathlib import Path
 
 import pytest
@@ -26,23 +31,40 @@ from repo_tests._reach import declare
 
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
-#: Modules that write an audit store today. Shrinks as D2/D3 of AUDIT_SYSTEMS.md land.
-_KNOWN_WRITERS = frozenset(
-    {
-        "autobot-backend/services/audit/audit.py",
-        "autobot-backend/services/audit/audit_log.py",
-        "autobot-backend/services/audit_logger.py",
-        "autobot-backend/services/event_log.py",
-        "autobot-backend/knowledge/audit_log.py",
-        "autobot-backend/security_layer.py",
-        "autobot-backend/services/workflow_permission_service.py",
-        # Not an audit record: code-audit daemon state that shares the `audit:` prefix (D4).
-        "autobot-backend/workers/audit_tasks.py",
-    }
+_CANONICAL = "autobot-backend/services/audit/projection.py"
+
+#: Module -> why it may write. Shrinks as the open decisions in AUDIT_SYSTEMS.md land.
+_KNOWN_WRITERS: dict[str, str] = {
+    _CANONICAL: "canonical: the Redis projection of the audit trail",
+    "autobot-backend/services/workflow_permission_service.py": "workflow_audit_log (Postgres), undecided",
+    "autobot-backend/user_management/services/user_service.py": "audit_logs (Postgres), undecided -- see D1",
+    "autobot_shared/user_management/middleware/rbac_middleware.py": "audit_logs (Postgres), undecided -- see D1",
+    "autobot_shared/user_management/organization_service.py": "audit_logs (Postgres), undecided -- see D1",
+    "autobot_shared/user_management/team_service.py": "audit_logs (Postgres), undecided -- see D1",
+    "autobot-backend/services/secrets_audit_store.py": "secrets_audit (SQLite), undecided",
+    "autobot-backend/a2a/trust_score.py": "trust_audit (SQLite), undecided",
+    "autobot-backend/security/enterprise/compliance_manager.py": "encrypted JSONL files, undecided",
+    "autobot-slm-backend/api/security.py": "SLM audit_logs, a separate service",
+    "autobot-slm-backend/user_management/services/user_service.py": "SLM audit_logs, a separate service",
+    # Not an audit record: code-audit daemon state sharing the `audit:` prefix (D4, needs a key move).
+    "autobot-backend/workers/audit_tasks.py": "daemon state, D4 pending a key move",
+}
+#: Retired by #17225 D2/D3/D6. Each must stay gone or stop writing.
+_RETIRED = (
+    "autobot-backend/services/audit/audit_log.py",
+    "autobot-backend/services/event_log.py",
+    "autobot-backend/knowledge/audit_log.py",
+    "autobot-backend/services/audit_logger.py",
+    "autobot-backend/security_layer.py",
 )
 _WRITE_VERBS = frozenset({"zadd", "lpush", "rpush", "xadd", "sadd", "hset", "setex", "set", "append"})
 _KEY_PREFIXES = ("audit:", "audit_log:", "autobot:event_log")
 _WRITE_MODES = ("a", "w", "ab", "wb", "a+", "w+")
+#: ORM rows that ARE audit records. A view class whose name merely ends in
+#: "AuditLog" (KnowledgeAuditLog) is not one -- it records through the service.
+_AUDIT_ORM_CLASSES = ("WorkflowAuditLog", "AuditLog")
+_PATH_WORDS = ("path", "file", "dir", "root")
+_AUDIT_INSERT = re.compile(r"\binsert\s+into\s+\w*audit", re.IGNORECASE)
 
 
 def _is_source_python(rel: str) -> bool:
@@ -74,6 +96,33 @@ def _mode_of(call: ast.Call) -> str | None:
     return arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
 
 
+def _is_file_write(node: ast.AST) -> bool:
+    """`open(p, "a")` or `aiofiles.open(p, "a")` -- any write mode."""
+    is_open = _is_call(node, name="open") or _is_call(node, attr_in=frozenset({"open"}))
+    return is_open and bool(node.args) and _mode_of(node) in _WRITE_MODES
+
+
+def _target_names(node: ast.AST) -> list[str]:
+    targets = node.targets if isinstance(node, ast.Assign) else [getattr(node, "target", None)]
+    return [t.id if isinstance(t, ast.Name) else t.attr for t in targets if isinstance(t, (ast.Name, ast.Attribute))]
+
+
+def _assigns_audit_path(nodes: list[ast.AST]) -> bool:
+    """The module binds a name like `audit_base_path` / `audit_log_file`: its file writes are audit writes.
+
+    A one-hop path argument (`storage_path = self.audit_base_path / ...`, passed to a helper that
+    opens it) does not name "audit" at the open() call, which is how a file-backed audit store
+    went unseen by the first version of this guard.
+    """
+    for node in nodes:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            for name in _target_names(node):
+                low = name.lower()
+                if "audit" in low and any(part in low for part in _PATH_WORDS):
+                    return True
+    return False
+
+
 def _is_call(node: ast.AST, *, attr_in: frozenset[str] = frozenset(), name: str = "") -> bool:
     if not isinstance(node, ast.Call):
         return False
@@ -81,14 +130,24 @@ def _is_call(node: ast.AST, *, attr_in: frozenset[str] = frozenset(), name: str 
     return (isinstance(f, ast.Attribute) and f.attr in attr_in) or (isinstance(f, ast.Name) and f.id == name)
 
 
+def _has_audit_insert(tree: ast.AST) -> bool:
+    return any(
+        isinstance(n, ast.Constant) and isinstance(n.value, str) and _AUDIT_INSERT.search(n.value)
+        for n in ast.walk(tree)
+    )
+
+
 def is_audit_writer(source: str) -> bool:
-    """True when `source` writes an audit store by one of the three shapes in the module doc."""
+    """True when `source` writes an audit store by one of the shapes in the module doc."""
     tree = ast.parse(source)
     nodes = list(ast.walk(tree))
-    if any(_is_call(n, name="WorkflowAuditLog") for n in nodes):
+    if any(_is_call(n, name=orm) for n in nodes for orm in _AUDIT_ORM_CLASSES):
         return True
+    if _has_audit_insert(tree):
+        return True
+    audit_path_module = _assigns_audit_path(nodes)
     for n in nodes:
-        if _is_call(n, name="open") and n.args and _mode_of(n) in _WRITE_MODES and _names_audit(n.args[0]):
+        if _is_file_write(n) and (audit_path_module or _names_audit(n.args[0])):
             return True
     return any(_is_call(n, attr_in=_WRITE_VERBS) for n in nodes) and _has_key_literal(tree)
 
@@ -108,6 +167,25 @@ def is_audit_writer(source: str) -> bool:
         ("writes an unrelated key", 'def f(r):\n    r.zadd("queue:x", {"a": 1})\n', False),
         ("reads an audit file", 'def f(self):\n    open(self.audit_log_file, "r")\n', False),
         ("appends to an unrelated file", 'def f():\n    open("out.txt", "a")\n', False),
+        ("audit orm row", "def f(s):\n    s.add(AuditLog(action='x'))\n", True),
+        ("a view class named like a row", "def f(r):\n    return KnowledgeAuditLog(r)\n", False),
+        (
+            "sql insert into an audit table",
+            'def f(c):\n    c.execute("INSERT INTO secrets_audit (id) VALUES (?)")\n',
+            True,
+        ),
+        ("sql read of an audit table", 'def f(c):\n    c.execute("SELECT id FROM secrets_audit")\n', False),
+        (
+            "aiofiles append in a module binding an audit path",
+            "class C:\n    def __init__(self, p):\n        self.audit_base_path = p\n"
+            '    async def w(self, path):\n        async with aiofiles.open(path, "a") as f:\n            pass\n',
+            True,
+        ),
+        (
+            "aiofiles append with no audit path",
+            'async def w(path):\n    async with aiofiles.open(path, "a"):\n        pass\n',
+            False,
+        ),
     ],
 )
 def test_the_matcher_tells_a_writer_from_a_reader(label: str, source: str, expected: bool) -> None:
@@ -146,7 +224,7 @@ def _writers() -> tuple[str, ...]:
 
 
 def test_no_audit_writer_outside_the_known_set() -> None:
-    new = sorted(set(_writers()) - _KNOWN_WRITERS)
+    new = sorted(set(_writers()) - set(_KNOWN_WRITERS))
     assert not new, (
         f"#17225: {new} write an audit store. Route the record through services.audit.audit "
         "(emit/record) instead of a new store, or, if a new store is a recorded decision, add the "
@@ -156,5 +234,48 @@ def test_no_audit_writer_outside_the_known_set() -> None:
 
 def test_every_known_writer_still_writes() -> None:
     """A writer that stopped writing, or moved, must leave the set; a stale entry hides a new one."""
-    gone = sorted(_KNOWN_WRITERS - set(_writers()))
+    gone = sorted(set(_KNOWN_WRITERS) - set(_writers()))
     assert not gone, f"#17225: {gone} no longer match as audit writers; remove them from _KNOWN_WRITERS."
+
+
+def test_a_retired_writer_does_not_come_back() -> None:
+    """D2/D3/D6: the five retired stores are gone or record through the service."""
+    back = sorted(set(_RETIRED) & set(_writers()))
+    assert not back, f"#17225: {back} write an audit store again; record through services.audit.audit."
+
+
+def _redis_key_writers() -> list[str]:
+    root = repo_root()
+    found = []
+    for rel in _writers():
+        tree = ast.parse((root / rel).read_text(encoding="utf-8"))
+        if any(_is_call(n, attr_in=_WRITE_VERBS) for n in ast.walk(tree)) and _has_key_literal(tree):
+            found.append(rel)
+    return found
+
+
+def test_the_projection_is_the_only_redis_audit_writer() -> None:
+    """One Redis audit store: anything else writing an `audit:` key is a second one."""
+    others = sorted(set(_redis_key_writers()) - {_CANONICAL, "autobot-backend/workers/audit_tasks.py"})
+    assert not others, f"#17225: {others} write `audit:` keys; only {_CANONICAL} may."
+
+
+_RETIRED_IMPORTS = re.compile(
+    r"^\s*(?:from|import)\s+(?:services\.event_log|services\.audit\.audit_log|knowledge\.audit_log)\b"
+    r"|^\s*from\s+(?:services|knowledge)\s+import\s+(?:[^#\n]*\b)?(?:event_log|audit_log)\b",
+    re.MULTILINE,
+)
+
+
+def test_the_import_matcher_tells_an_import_from_prose() -> None:
+    """Contrast pair: without it, a clean result could mean a matcher that never fires."""
+    assert _RETIRED_IMPORTS.search("from services.event_log import emit\n")
+    assert _RETIRED_IMPORTS.search("    from knowledge import audit_log\n")
+    assert not _RETIRED_IMPORTS.search('"""was ``services.event_log.query_events``"""\n')
+
+
+def test_nothing_imports_a_retired_module() -> None:
+    """Behaviour, not symbols: an import of a retired module is a caller left half-migrated."""
+    root = repo_root()
+    hits = [rel for rel in REACH.examined(root) if _RETIRED_IMPORTS.search((root / rel).read_text(encoding="utf-8"))]
+    assert not hits, f"#17225: {hits} still import a retired audit module; use services.audit.audit."
