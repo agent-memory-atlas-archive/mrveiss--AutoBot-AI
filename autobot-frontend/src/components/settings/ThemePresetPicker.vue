@@ -294,95 +294,95 @@ function handleSetAccent(colorOption: AccentColor): void {
 
 /* Preset-specific preview colors */
 [data-preset="auto"] .preview-bg {
-  background: linear-gradient(135deg, #1a1a1a 50%, #f5f5f5 50%);
+  background: linear-gradient(135deg, var(--preset-preview-auto-dark) 50%, var(--preset-preview-auto-light) 50%);
 }
 
 [data-preset="catppuccin-mocha"] .preview-bg {
-  background: #1e1e2e;
+  background: var(--preset-preview-catppuccin-mocha-bg);
 }
 
 [data-preset="catppuccin-mocha"] .preview-accent {
-  background: #9333ea;
+  background: var(--preset-preview-catppuccin-mocha-accent);
 }
 
 [data-preset="catppuccin-latte"] .preview-bg {
-  background: #eff1f5;
+  background: var(--preset-preview-catppuccin-latte-bg);
 }
 
 [data-preset="catppuccin-latte"] .preview-accent {
-  background: #9333ea;
+  background: var(--preset-preview-catppuccin-latte-accent);
 }
 
 [data-preset="solarized-dark"] .preview-bg {
-  background: #002b36;
+  background: var(--preset-preview-solarized-dark-bg);
 }
 
 [data-preset="solarized-dark"] .preview-accent {
-  background: #14b8a6;
+  background: var(--preset-preview-solarized-dark-accent);
 }
 
 [data-preset="solarized-light"] .preview-bg {
-  background: #fdf6e3;
+  background: var(--preset-preview-solarized-light-bg);
 }
 
 [data-preset="solarized-light"] .preview-accent {
-  background: #14b8a6;
+  background: var(--preset-preview-solarized-light-accent);
 }
 
 [data-preset="high-contrast-dark"] .preview-bg {
-  background: #000000;
+  background: var(--preset-preview-high-contrast-dark-bg);
 }
 
 [data-preset="high-contrast-light"] .preview-bg {
-  background: #ffffff;
+  background: var(--preset-preview-high-contrast-light-bg);
 }
 
 [data-preset="brand-dark"] .preview-bg {
-  background: #0a0a0a;
+  background: var(--preset-preview-brand-dark-bg);
 }
 
 [data-preset="brand-dark"] .preview-accent {
-  background: #14b8a6;
+  background: var(--preset-preview-brand-dark-accent);
 }
 
 [data-preset="brand-light"] .preview-bg {
-  background: #ffffff;
+  background: var(--preset-preview-brand-light-bg);
 }
 
 [data-preset="brand-light"] .preview-accent {
-  background: #14b8a6;
+  background: var(--preset-preview-brand-light-accent);
 }
 
 [data-preset="midnight"] .preview-bg {
-  background: #0a0a1a;
+  background: var(--preset-preview-midnight-bg);
 }
 
 [data-preset="midnight"] .preview-accent {
-  background: #6366f1;
+  background: var(--preset-preview-midnight-accent);
 }
 
 [data-preset="sunset"] .preview-bg {
-  background: #fff8f0;
+  background: var(--preset-preview-sunset-bg);
 }
 
 [data-preset="sunset"] .preview-accent {
-  background: #f97316;
+  background: var(--preset-preview-sunset-accent);
 }
 
 [data-preset="forest"] .preview-bg {
-  background: #0a1a0a;
+  background: var(--preset-preview-forest-bg);
 }
 
 [data-preset="forest"] .preview-accent {
-  background: #10b981;
+  background: var(--preset-preview-forest-accent);
 }
 
 [data-preset="rose"] .preview-bg {
-  background: #fff0f5;
+  background: var(--preset-preview-rose-bg);
 }
 
 [data-preset="rose"] .preview-accent {
-  background: #ec4899;
+  background: var(--preset-preview-rose-accent);
 }
 
 /* ============================================
@@ -540,35 +540,35 @@ function handleSetAccent(colorOption: AccentColor): void {
 
 [data-accent="theme"] .accent-swatch { background: var(--primary); } /* accent swatch colors; "theme" is the Refined ink */
 [data-accent="blue"] .accent-swatch {
-  background: #3b82f6;
+  background: var(--accent-swatch-blue);
 }
 
 [data-accent="green"] .accent-swatch {
-  background: #10b981;
+  background: var(--accent-swatch-green);
 }
 
 [data-accent="purple"] .accent-swatch {
-  background: #9333ea;
+  background: var(--accent-swatch-purple);
 }
 
 [data-accent="orange"] .accent-swatch {
-  background: #f97316;
+  background: var(--accent-swatch-orange);
 }
 
 [data-accent="pink"] .accent-swatch {
-  background: #ec4899;
+  background: var(--accent-swatch-pink);
 }
 
 [data-accent="teal"] .accent-swatch {
-  background: #14b8a6;
+  background: var(--accent-swatch-teal);
 }
 
 [data-accent="indigo"] .accent-swatch {
-  background: #6366f1;
+  background: var(--accent-swatch-indigo);
 }
 
 [data-accent="red"] .accent-swatch {
-  background: #ef4444;
+  background: var(--accent-swatch-red);
 }
 
 .accent-label {

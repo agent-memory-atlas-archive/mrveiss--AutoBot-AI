@@ -1209,6 +1209,61 @@
   --codecell-syntax-tag-light: #800000;      /* #14853, see the dark entry above */
 
   /* ============================================
+   * THEME PRESET PICKER SWATCH TOKENS (#14785, umbrella #11515)
+   * settings/ThemePresetPicker.vue previews EVERY preset's background/accent
+   * and every accent colour at once, so these are sample colours of themes that
+   * are NOT active - they cannot read the live --color-* scale and must not
+   * follow the active theme. Tokenised rather than suppressed, as with the
+   * CodeCell syntax palette above.
+   * ============================================ */
+  --preset-preview-auto-dark: #1a1a1a;
+  --preset-preview-auto-light: #f5f5f5;
+  --preset-preview-catppuccin-mocha-bg: #1e1e2e;
+  --preset-preview-catppuccin-mocha-accent: #9333ea;
+  --preset-preview-catppuccin-latte-bg: #eff1f5;
+  --preset-preview-catppuccin-latte-accent: #9333ea;
+  --preset-preview-solarized-dark-bg: #002b36;
+  --preset-preview-solarized-dark-accent: #14b8a6;
+  --preset-preview-solarized-light-bg: #fdf6e3;
+  --preset-preview-solarized-light-accent: #14b8a6;
+  --preset-preview-high-contrast-dark-bg: #000000;
+  --preset-preview-high-contrast-light-bg: #ffffff;
+  --preset-preview-brand-dark-bg: #0a0a0a;
+  --preset-preview-brand-dark-accent: #14b8a6;
+  --preset-preview-brand-light-bg: #ffffff;
+  --preset-preview-brand-light-accent: #14b8a6;
+  --preset-preview-midnight-bg: #0a0a1a;
+  --preset-preview-midnight-accent: #6366f1;
+  --preset-preview-sunset-bg: #fff8f0;
+  --preset-preview-sunset-accent: #f97316;
+  --preset-preview-forest-bg: #0a1a0a;
+  --preset-preview-forest-accent: #10b981;
+  --preset-preview-rose-bg: #fff0f5;
+  --preset-preview-rose-accent: #ec4899;
+  --accent-swatch-blue: #3b82f6;
+  --accent-swatch-green: #10b981;
+  --accent-swatch-purple: #9333ea;
+  --accent-swatch-orange: #f97316;
+  --accent-swatch-pink: #ec4899;
+  --accent-swatch-teal: #14b8a6;
+  --accent-swatch-indigo: #6366f1;
+  --accent-swatch-red: #ef4444;
+
+  /* ============================================
+   * COMPONENT SHOWCASE SWATCH TOKENS (#14785, umbrella #11515)
+   * views/ComponentShowcaseView.vue prints each swatch's hex next to it as
+   * documentation, so the fill is pinned to that printed value instead of
+   * following the active theme (--color-info, for one, is not the cyan shown).
+   * ============================================ */
+  --showcase-swatch-primary: #3b82f6;
+  --showcase-swatch-hover: #2563eb;
+  --showcase-swatch-active: #1d4ed8;
+  --showcase-swatch-success: #10b981;
+  --showcase-swatch-warning: #f59e0b;
+  --showcase-swatch-error: #ef4444;
+  --showcase-swatch-info: #06b6d4;
+
+  /* ============================================
    * KB SEARCH HIGHLIGHT TOKENS (#14770, umbrella #11515)
    * Scoped to knowledge/KBSearchResultPanel.vue's `.kb-highlight` mark, which
    * lives in an UNSCOPED style block because it decorates `v-html` content.

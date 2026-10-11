@@ -98,15 +98,20 @@ BASELINE = {
     # cross-referencing sibling admin views) -- this pair is documented above
     # as measuring page SIZE, not duplication, and is interim until #15455
     # replaces them with a real duplication measure.
-    "distinct_class_names": 5613,  # #17565: App.vue's hand-rolled .skip-links/.skip-link
-    # replaced by the shared kit SkipLink (lowered from 5615). Earlier: #17020,
-    # Terminal.vue removed -- pure deletion of dead code, lowered, not held.
+    "distinct_class_names": 5616,  # #14785: +3 = the density scope's ancestor-class
+    # entry points .density-compact/.density-spacious/.density-comfortable in
+    # themes/preferences.css (#18161, #17564, #18223) -- new names, no existing
+    # class does this job. Raised from 5613, which was lowered by #17565: App.vue's
+    # hand-rolled .skip-links/.skip-link replaced by the shared kit SkipLink.
+    # Earlier: #17020, Terminal.vue removed -- pure deletion of dead code.
     # Total CSS rule declarations.
     #
     # #16972/#15455: same owner-approved, one-off exception as distinct_class_names
     # directly above -- see that comment.
-    "css_rule_declarations": 9379,  # #17565: the App.vue skip-link rules moved to
-    # the kit (lowered from 9381); earlier #17020, same reason as distinct_class_names
+    "css_rule_declarations": 9381,  # #14785: +3 density-scope rules in
+    # themes/preferences.css, -1 .sr-only (assets/main.css deleted; its other rules
+    # moved to components.css one for one). Raised from 9379, which was lowered by
+    # #17565 (App.vue skip-link rules moved to the kit); earlier #17020.
     # Files declaring at least one `.btn-*` CSS rule. Target is 1 — a single
     # shared stylesheet.
     "button_definition_files": 101,
