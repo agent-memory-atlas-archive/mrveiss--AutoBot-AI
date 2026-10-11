@@ -95,9 +95,6 @@ class _ConfigStub:
     def validate_config(self):
         return {}
 
-    def is_feature_enabled(self, feature):
-        return False
-
     async def load_config_async(self, config_type="main"):
         return {}
 
@@ -236,11 +233,6 @@ def reload_config():
 def validate_config():
     """Validate configuration and return status"""
     return _get_cached_config_manager().validate_config()
-
-
-def is_feature_enabled(feature: str) -> bool:
-    """Check if a feature is enabled (e.g. 'multimodal.vision', 'npu')."""
-    return _get_cached_config_manager().is_feature_enabled(feature)
 
 
 # Async convenience functions
