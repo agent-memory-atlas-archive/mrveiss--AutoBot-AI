@@ -504,7 +504,7 @@ async def signup(request: Request, signup_data: SignupRequest):
         # Re-raise HTTP exceptions (e.g. 409 duplicate)
         if hasattr(exc, "status_code"):
             raise
-        from user_management.services.user_service import DuplicateUserError
+        from autobot_shared.user_management.user_service_errors import DuplicateUserError
 
         if isinstance(exc, DuplicateUserError):
             raise HTTPException(status_code=409, detail="Username already taken")
