@@ -36,7 +36,9 @@ from api.ws_security import enforce_ws_desktop_auth, enforce_ws_origin
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.ssot_config import config
 from autobot_shared.websocket_subprotocol import accept_websocket
 from constants.network_constants import NetworkConstants
 from security.vnc_rfb_auth import VncAuthError
@@ -168,12 +170,13 @@ async def record_observation(vnc_type: str, observation_type: str, data: Metadat
         }
 
         # Post to VNC MCP bridge (non-blocking) using singleton HTTP client
-        backend_url = f"http://{NetworkConstants.MAIN_MACHINE_IP}:{NetworkConstants.BACKEND_PORT}"
+        backend_url = config.backend_url
         http_client = get_http_client()
         async with await http_client.post(
             f"{backend_url}/api/vnc/observations/{vnc_type}",
             json=observation,
             timeout=aiohttp.ClientTimeout(total=1),
+            guard_egress=EGRESS_POLICY,
         ):
             pass  # Just fire and forget, we don't need the response
     except Exception as e:

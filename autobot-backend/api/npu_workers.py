@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse
 
 from auth_middleware import check_admin_permission
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
+from autobot_shared.http_egress_guard import assert_egress_policy
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_management.types import DATABASE_MAPPING
 from autobot_shared.ssot_config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL
@@ -613,11 +614,10 @@ async def proxy_npu_health():
     """
     from autobot_shared.ssot_config import config as ssot_config
 
-    npu_host = ssot_config.vm.npu
-    npu_port = ssot_config.port.npu
-    url = f"http://{npu_host}:{npu_port}/health"
+    url = f"{ssot_config.npu_worker_url}/health"
 
     try:
+        await assert_egress_policy(url)  # server-chosen SSOT npu_worker origin; redirects stay off (httpx default)
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url)
             return JSONResponse(
