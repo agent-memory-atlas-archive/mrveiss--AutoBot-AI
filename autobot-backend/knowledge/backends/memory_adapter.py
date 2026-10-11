@@ -296,6 +296,9 @@ class InMemoryCollection(BaseCollection):
             "embeddings": [self._embeddings[_id] for _id in ids],
         }
 
+    def modify_metadata(self, metadata: Metadata) -> None:
+        self.metadata = {**self.metadata, **metadata}
+
 
 class InMemoryClient(BaseClient):
     """Deterministic in-memory implementation of ``BaseClient``."""

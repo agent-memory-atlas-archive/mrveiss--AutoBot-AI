@@ -130,10 +130,10 @@ async def test_the_stamp_proposal_is_reused_when_one_is_pending_and_never_writes
     factory = MagicMock(return_value=MagicMock(__aenter__=AsyncMock(return_value=session), __aexit__=AsyncMock()))
     with (
         patch.object(csp, "get_async_session_factory", return_value=factory),
-        patch.object(csp, "ApprovalService") as service,
+        patch.object(csp, "ApprovalGateService") as service,
     ):
         assert await csp.propose_stamp("autobot_docs", "m", 768) is True
-    service.return_value.request_approval.assert_not_called()
+    service.return_value.create_approval.assert_not_called()
 
 
 def test_the_cognition_seeder_refuses_a_collection_recorded_in_another_space() -> None:
@@ -151,3 +151,68 @@ def test_the_cognition_seeder_refuses_a_collection_recorded_in_another_space() -
     seeder._client.get_or_create_collection.return_value = MagicMock(metadata=new)
     assert seeder._get_or_create_collection("cognition_store") is not None
     assert seeder._client.get_or_create_collection.call_args.kwargs["metadata"]["hnsw:space"] == "cosine"
+
+
+# -- the executor of the stamp proposal --------------------------------------------------------------
+
+
+def _real_collection(tmp_path, dim: int, **meta):
+    """An in-memory backend client (conftest stubs chromadb); ChromaDBCollection.modify_metadata was checked
+    against a real PersistentClient separately."""
+    from knowledge.backends.memory_adapter import InMemoryClient
+
+    client = InMemoryClient()
+    col = client.get_or_create_collection("autobot_docs", metadata={"hnsw:space": "cosine", "keep": "me", **meta})
+    col.add(ids=["1"], embeddings=[[0.1] * dim])
+    return client
+
+
+def _approval(dim: int = 768):
+    ctx = {"action": "stamp_collection_embedding_space", "collection": "autobot_docs", "model": "m", "dim": dim}
+    return MagicMock(id="a1", context=ctx, decided_by_user="owner")
+
+
+async def _run(tmp_path, client, approval):
+    from services.knowledge import collection_space_stamp_action as act
+
+    session = MagicMock(commit=AsyncMock())
+    with (
+        patch.object(act, "_open_collection", lambda name: client.get_collection(name)),
+        patch.object(act, "audit_log", new=AsyncMock()) as audit,
+    ):
+        await act.execute_stamp(approval, session)
+    return session, audit
+
+
+async def test_an_approved_stamp_records_the_space_keeps_existing_metadata_and_the_searcher_then_uses_it(
+    tmp_path,
+) -> None:
+    client = _real_collection(tmp_path, 768)
+    session, audit = await _run(tmp_path, client, _approval(768))
+
+    meta = client.get_collection("autobot_docs").metadata
+    assert meta["keep"] == "me" and meta["hnsw:space"] == "cosine"  # merged, not replaced
+    searcher = _searcher(meta)
+    space = searcher._recorded_space()  # the recorded path: no probe, no warning
+    assert (space.model_name, space.dim) == ("m", 768)
+    assert "Recorded embedding space" in session.add.call_args.args[0].body
+    assert audit.call_args.kwargs["result"] == "success"
+
+
+async def test_a_dimension_that_changed_since_the_proposal_is_refused_and_nothing_is_written(tmp_path) -> None:
+    client = _real_collection(tmp_path, 384)
+    before = dict(client.get_collection("autobot_docs").metadata)
+    session, audit = await _run(tmp_path, client, _approval(768))
+
+    assert dict(client.get_collection("autobot_docs").metadata) == before
+    assert "REFUSED" in session.add.call_args.args[0].body
+    assert audit.call_args.kwargs["result"] == "refused"
+
+
+def test_the_stamp_action_is_registered_with_its_proposer() -> None:
+    from services.approval_execution import is_registered_action, registered_action_proposers
+    from services.knowledge.collection_space_stamp_action import ACTION, PROPOSED_BY, register_stamp_action
+
+    register_stamp_action()
+    assert is_registered_action(ACTION)
+    assert registered_action_proposers()[ACTION] == PROPOSED_BY

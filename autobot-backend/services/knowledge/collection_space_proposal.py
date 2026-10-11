@@ -17,13 +17,13 @@ import asyncio
 from sqlalchemy import select
 
 from autobot_shared.logging_manager import get_logger
-from llc.services.approval import ApprovalService
 from models.approval import Approval, ApprovalStatus, ApprovalType
+from services.approval_gate_service import ApprovalGateService
+from services.knowledge.collection_space_stamp_action import ACTION
 from user_management.database import get_async_session_factory
 
 logger = get_logger(__name__)
 
-PROPOSAL_KIND = "stamp_collection_embedding_space"
 REQUESTER = "collection-space-proposal"
 _TASKS: set[asyncio.Task] = set()
 
@@ -41,21 +41,13 @@ async def propose_stamp(collection: str, model: str, dim: int) -> bool:
             )
             if any((a.context or {}).get("collection") == collection for a in pending.scalars().all()):
                 return True
-            approval = await ApprovalService().request_approval(
-                session,
-                company_id=None,
-                gate_type=ApprovalType.DESTRUCTIVE_ACTION,
-                payload={
-                    "kind": PROPOSAL_KIND,
-                    "summary": f"Record embedding space ({model}, {dim}-d) on collection '{collection}'",
-                    "collection": collection,
-                    "model": model,
-                    "dim": dim,
-                },
-                requested_by=REQUESTER,
+            await ApprovalGateService(session).create_approval(
+                title=f"Record embedding space on collection '{collection}'",
+                approval_type=ApprovalType.DESTRUCTIVE_ACTION.value,
+                requested_by_agent=REQUESTER,
+                description=f"Writes ({model}, {dim}-d) into the collection's metadata; existing keys are kept.",
+                context={"action": ACTION, "collection": collection, "model": model, "dim": dim},
             )
-            await session.commit()
-            await ApprovalService().publish_requested(approval)
             return True
     except Exception as exc:
         logger.error("Could not raise the embedding-space stamp proposal for '%s': %s", collection, exc)
