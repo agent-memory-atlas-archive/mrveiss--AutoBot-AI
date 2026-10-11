@@ -66,6 +66,7 @@ class DocumentationSearcher:
         self._client: "BaseClient" | None = None
         self._collection: "BaseCollection" | None = None
         self._embed_model = None
+        self._space = None
         self._initialized = False
         self._doc_patterns = [re.compile(p, re.IGNORECASE) for p in self.DOC_QUERY_PATTERNS]
 
@@ -104,8 +105,11 @@ class DocumentationSearcher:
                 )
                 return False
 
-            # Initialize embedding model
-            self._embed_model = OllamaEmbedding(model_name="nomic-embed-text", base_url=get_ollama_url())
+            # #18143: query in the space the collection records for itself, never a model chosen here.
+            self._space = self._recorded_space()
+            if self._space is None:
+                return False
+            self._embed_model = OllamaEmbedding(model_name=self._space.model_name, base_url=get_ollama_url())
 
             self._initialized = True
             return True
@@ -113,6 +117,19 @@ class DocumentationSearcher:
         except Exception as e:
             logger.error("Failed to initialize DocumentationSearcher: %s", e)
             return False
+
+    def _recorded_space(self):
+        """The (model, dim) the collection was built with, or None when it records none (search refused)."""
+        from autobot_shared.embedding_provenance import provenance_from_metadata
+
+        space = provenance_from_metadata(getattr(self._collection, "metadata", None))
+        if space is None:
+            logger.error(
+                "Documentation collection '%s' records no embedding model, so a query cannot be put in its "
+                "space; search refused until it is re-indexed (#18143)",
+                self.collection_name,
+            )
+        return space
 
     def is_documentation_query(self, query: str) -> bool:
         """
@@ -196,6 +213,14 @@ class DocumentationSearcher:
 
         try:
             embedding = self._embed_model.get_text_embedding(query)
+            if len(embedding) != self._space.dim:
+                logger.error(
+                    "Query vector is %d-d but '%s' is %d-d; refused",
+                    len(embedding),
+                    self.collection_name,
+                    self._space.dim,
+                )
+                return []
             results = self._query_chromadb(embedding, n_results)
 
             if not results:

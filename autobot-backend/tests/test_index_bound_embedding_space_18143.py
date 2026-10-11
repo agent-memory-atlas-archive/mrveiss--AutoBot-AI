@@ -71,3 +71,39 @@ def test_fresh_embedders_follow_the_active_model(active_changed) -> None:
 
     assert active_npu_worker_model() == "some-other-model"  # the worker form drops the tag
     assert graph_config.embedding_model == ACTIVE
+
+
+def _searcher(metadata):
+    from services.knowledge.doc_searcher import DocumentationSearcher
+
+    searcher = DocumentationSearcher()
+    searcher._collection = MagicMock(metadata=metadata)
+    return searcher
+
+
+def test_the_doc_searcher_takes_the_space_the_collection_records(active_changed) -> None:
+    from autobot_shared.embedding_provenance import EmbeddingProvenance, provenance_to_metadata
+
+    space = _searcher(provenance_to_metadata(EmbeddingProvenance("mxbai-embed-large", 1024)))._recorded_space()
+    assert (space.model_name, space.dim) == ("mxbai-embed-large", 1024)
+
+
+def test_the_doc_searcher_refuses_a_collection_that_records_no_space() -> None:
+    assert _searcher({"hnsw:space": "cosine"})._recorded_space() is None
+
+
+def test_the_cognition_seeder_refuses_a_collection_recorded_in_another_space() -> None:
+    from autobot_shared.embedding_provenance import EmbeddingMismatchError, EmbeddingProvenance, provenance_to_metadata
+    from services.knowledge.cognition_seeder import CognitionSeeder
+
+    seeder = CognitionSeeder()
+    seeder._model_name, seeder._embed_dim = "new-model", 512
+    old = provenance_to_metadata(EmbeddingProvenance("nomic-embed-text", 768))
+    seeder._client = MagicMock()
+    seeder._client.get_or_create_collection.return_value = MagicMock(metadata=old)
+    with pytest.raises(EmbeddingMismatchError):
+        seeder._get_or_create_collection("cognition_store")
+    new = provenance_to_metadata(EmbeddingProvenance("new-model", 512))
+    seeder._client.get_or_create_collection.return_value = MagicMock(metadata=new)
+    assert seeder._get_or_create_collection("cognition_store") is not None
+    assert seeder._client.get_or_create_collection.call_args.kwargs["metadata"]["hnsw:space"] == "cosine"

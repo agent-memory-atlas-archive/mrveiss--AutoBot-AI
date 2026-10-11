@@ -38,7 +38,7 @@ _SSOT = "autobot_shared/ssot_config.py"
 _PRICING = "not a choice: a pricing/cost table keyed by every model the analytics page may display"
 _CATALOGUE = "not a choice: a catalogue/listing shown to the user, nothing embeds with it"
 _DIMS = "not a choice: model name -> dimension lookup consulted for whichever model is configured"
-_OTHER_PIPELINE = "own pipeline, resolved outside #18143's pattern/code-intelligence/memory-graph scope; follow-up"
+_CHUNKER = "local sentence-transformer, owned by the semantic-chunker branch (#14485); no stored-index query"
 
 ALLOWED: dict[str, str] = {
     _SPACE_TABLE: "the table: the one place an index's recorded model is written",
@@ -51,12 +51,10 @@ ALLOWED: dict[str, str] = {
     "autobot-backend/config/defaults.py": "ssot fallback for the settings default: config.llm.embedding_model or ...",
     "autobot-backend/services/knowledge/doc_indexer.py": _DIMS
     + "; the 'or' default is the org-config fallback (follow-up)",
-    "autobot-backend/services/knowledge/doc_searcher.py": _OTHER_PIPELINE + " (documentation collection query)",
-    "autobot-backend/services/knowledge/cognition_seeder.py": _OTHER_PIPELINE + " (cognition collection)",
-    "autobot-backend/utils/entity_resolver.py": _OTHER_PIPELINE + " (in-memory sentence-transformer, no index)",
-    "autobot-backend/utils/semantic_chunker.py": _OTHER_PIPELINE + " (local sentence-transformer chunker)",
-    "autobot-backend/utils/semantic_chunker_base.py": _OTHER_PIPELINE + " (local sentence-transformer chunker)",
-    "autobot-backend/utils/semantic_chunker_gpu.py": _OTHER_PIPELINE + " (local sentence-transformer chunker)",
+    "autobot-backend/utils/entity_resolver.py": "default of a config key for an in-memory sentence-transformer; it stores and queries no vectors",
+    "autobot-backend/utils/semantic_chunker.py": _CHUNKER,
+    "autobot-backend/utils/semantic_chunker_base.py": _CHUNKER,
+    "autobot-backend/utils/semantic_chunker_gpu.py": _CHUNKER,
 }
 
 
