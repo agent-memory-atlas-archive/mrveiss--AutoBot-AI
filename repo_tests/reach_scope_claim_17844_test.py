@@ -193,6 +193,7 @@ _DECLARED_SCOPES = {
         "libs",
     ),
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
+    "tool-effect-table-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "deployment-mode-detector-scan": ("autobot-backend/", "autobot-infrastructure/"),
     "egress-default-outbound-call-sites": (
         "autobot-",
@@ -255,6 +256,12 @@ def test_every_scoped_declaration_claims_the_roots_recorded_here() -> None:
     import repo_tests.kb_admin_read_bypass_guard_test  # noqa: F401, PLC0415
     import repo_tests.model_revision_pinning_enforced_17804_test  # noqa: F401, PLC0415
     import repo_tests.one_claim_registry_16653_test  # noqa: F401, PLC0415
+
+    # Every guard module, not a hand-kept list: importing reach_declarations_test runs its
+    # _import_every_guard(), so this check sees the same REGISTRY alone as in a full run. A
+    # hand list drifted (#18295 train fixups recorded scopes whose modules it never imported),
+    # and the test then failed only when run alone -- i.e. in every pre-push.
+    import repo_tests.reach_declarations_test  # noqa: F401, PLC0415
     import repo_tests.store_fact_chokepoint_guard_test  # noqa: F401, PLC0415
     from repo_tests._reach import REGISTRY
 
