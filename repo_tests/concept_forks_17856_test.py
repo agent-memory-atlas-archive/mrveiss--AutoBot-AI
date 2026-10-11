@@ -10,6 +10,7 @@
 | unverified JWT claims decoder       | `autobot_shared/auth/jwt_core.py`              |
 | node lifecycle event writer         | `autobot-slm-backend/services/node_events.py`  |
 | RS256 jti denylist Redis key prefix | `autobot_shared/auth/jwt_core.py`              |
+| device JWT minter                   | `services/device_jwt.py`; `services/device_token_service.py` is retired |
 | workflow shared memory              | `orchestration/workflow_memory.py`; the async `autobot_shared` copy is retired |
 | TTL cache manager class             | `utils/advanced_cache_manager.py` (`SimpleCacheManager`); `utils/cache_manager.py` is retired |
 
@@ -90,9 +91,22 @@ def _defines_class(name: str):
     return probe
 
 
+def _defines_function(*names: str):
+    """Matcher: True when `source` defines a function called any of `names`."""
+
+    def probe(source: str) -> bool:
+        return any(
+            isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names
+            for n in ast.walk(ast.parse(source))
+        )
+
+    return probe
+
+
 #: Concept key -> (matcher, files that may define it). An empty tuple means the concept is retired.
-_CLASS_CONCEPTS: dict[str, tuple] = {
+_RETIRED_CONCEPTS: dict[str, tuple] = {
     "cache_manager_class": (_defines_class("CacheManager"), ()),
+    "device_token_minter": (_defines_function("create_device_jwt", "verify_device_jwt"), ()),
     "workflow_memory_class": (_defines_class("WorkflowMemory"), ("autobot-backend/orchestration/workflow_memory.py",)),
 }
 
@@ -121,12 +135,17 @@ _CLASS_CONCEPTS: dict[str, tuple] = {
             "from autobot_shared.auth.jwt_core import RS256_DENYLIST_PREFIX\n",
         ),
         (
-            _CLASS_CONCEPTS["cache_manager_class"][0],
+            _RETIRED_CONCEPTS["cache_manager_class"][0],
             "class CacheManager:\n    pass\n",
             "from utils.advanced_cache_manager import cache_manager\n",
         ),
         (
-            _CLASS_CONCEPTS["workflow_memory_class"][0],
+            _RETIRED_CONCEPTS["device_token_minter"][0],
+            "def create_device_jwt(device_id, user_id):\n    pass\n",
+            "from services.device_jwt import mint_device_jwt\n",
+        ),
+        (
+            _RETIRED_CONCEPTS["workflow_memory_class"][0],
             "class WorkflowMemory:\n    pass\n",
             "from orchestration.workflow_memory import WorkflowMemory\n",
         ),
@@ -162,7 +181,7 @@ REACH = declare(
 
 @functools.lru_cache(maxsize=1)
 def _homes() -> dict[str, tuple[str, ...]]:
-    found: dict[str, list[str]] = {k: [] for k in ("retention", "decoder", "writer", "prefix", *_CLASS_CONCEPTS)}
+    found: dict[str, list[str]] = {k: [] for k in ("retention", "decoder", "writer", "prefix", *_RETIRED_CONCEPTS)}
     root = repo_root()
     for rel in REACH.examined(root):
         source = (root / rel).read_text(encoding="utf-8")
@@ -171,7 +190,7 @@ def _homes() -> dict[str, tuple[str, ...]]:
             ("decoder", _decodes_jwt_payload),
             ("writer", _defines_node_event_writer),
             ("prefix", _spells_denylist_prefix),
-            *((key, probe) for key, (probe, _homes_ok) in _CLASS_CONCEPTS.items()),
+            *((key, probe) for key, (probe, _homes_ok) in _RETIRED_CONCEPTS.items()),
         ):
             if probe(source):
                 found[key].append(rel)
@@ -193,9 +212,9 @@ def test_each_concept_is_defined_in_exactly_its_one_home(key: str, home: str) ->
     ), f"#17856: {key} is defined in {list(_homes()[key])}; it lives once in {home}. Import it instead of copying it."
 
 
-@pytest.mark.parametrize("key", sorted(_CLASS_CONCEPTS))
+@pytest.mark.parametrize("key", sorted(_RETIRED_CONCEPTS))
 def test_a_retired_or_single_home_class_is_defined_only_where_allowed(key: str) -> None:
-    allowed = _CLASS_CONCEPTS[key][1]
+    allowed = _RETIRED_CONCEPTS[key][1]
     assert _homes()[key] == allowed, (
         f"#17856: {key} is defined in {list(_homes()[key])}; allowed: {list(allowed)}. "
         "Use the canonical implementation instead of re-adding the copy."
