@@ -28,13 +28,17 @@ function rules(css: string): Map<string, Set<string>> {
 
 describe('density scope (#18161, #17564)', () => {
   const prefs = rules(read('assets/css/themes/preferences.css'))
-  const scopes = ['compact', 'spacious', 'comfortable'].map((name) => {
-    const key = `[data-layout-density="${name}"], .density-${name}`
+  const scopes = ['compact', 'spacious'].map((name) => {
+    const key = `[data-layout-density="${name}"]`
     return { name, key, names: prefs.get(key) }
   })
 
-  it.each(scopes)('$name is entered by the attribute and by a class', ({ key, names }) => {
+  it.each(scopes)('$name is entered by the existing attribute alone', ({ key, names }) => {
     expect(names, `no rule for ${key}`).toBeDefined()
+  })
+
+  it('adds no density class names: the attribute is the one entry point', () => {
+    expect([...prefs.keys()].some((sel) => /\.density-/.test(sel))).toBe(false)
   })
 
   it('every scope sets the same tokens, so switching it moves all of them', () => {

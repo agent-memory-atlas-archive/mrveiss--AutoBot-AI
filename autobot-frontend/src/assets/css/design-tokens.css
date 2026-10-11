@@ -525,7 +525,7 @@
   --yellow-50: #fefce8;
 
   /* Density tokens (#17564). Comfortable values; themes/preferences.css
-     redefines them per density scope ([data-layout-density], .density-*). */
+     redefines them per density scope ([data-layout-density]). */
   --spacing-unit: 0.25rem;
   --table-row-height: var(--tbl-row-h);
   --table-cell-py: var(--tbl-cell-py);
