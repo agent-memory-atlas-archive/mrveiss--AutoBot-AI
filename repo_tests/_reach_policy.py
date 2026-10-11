@@ -224,6 +224,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "one-content-digest-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
     "post-commit-seed-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -279,10 +284,20 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source under three roots, a subset of all tracked Python; the test-file share drifts.",
     ),
+    "embedding-model-literal-sites": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Production python under two roots, a subset of all tracked Python; the test-file share drifts.",
+    ),
     "chunker-private-hook-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Tracked .py under three roots, a subset of all tracked Python; the test-file share drifts.",
+    ),
+    "semantic-chunker-fork-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
     "import-hermeticity": (
         ABSOLUTE,
@@ -342,6 +357,13 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     "response-model-secret-scan": (ABSOLUTE, "SUBSET_DRIFTS", "Backend Python modules, against all tracked Python."),
     "router-auth-coverage": (ABSOLUTE, "NOT_PATHS", "Routers registered in `core_routers.py`, not files."),
     "slm-frontend-components": (ABSOLUTE, "SUBSET_DRIFTS", "One frontend's components, against all tracked `.vue`."),
+    "severity-enum-fork-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked Python under three roots against all tracked Python: the other roots (frontend "
+        "tooling, SLM, tests, docs scripts) grow independently, so a share of the whole sinks "
+        "with nothing wrong. The guard needs the roots reached, not a share of the repository.",
+    ),
     "slm-frontend-locale-keys": (
         ABSOLUTE,
         "NOT_PATHS",

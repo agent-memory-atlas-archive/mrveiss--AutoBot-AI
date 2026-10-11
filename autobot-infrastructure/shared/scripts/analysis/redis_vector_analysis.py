@@ -12,11 +12,15 @@ import asyncio
 import json
 import logging
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from autobot_shared.paths import project_root
-from constants import ServiceURLs
-from langchain_redis_arm import (
+from autobot_shared.network_constants import ServiceURLs
+# The sibling helper module lives beside this script; put its directory on the path so the import
+# resolves when the file is imported (pytest, tooling) as well as when it is run.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from langchain_redis_arm import (  # noqa: E402
     INSTALL_HINT,
     NOT_MEASURED,
     ModernArmUnavailable,

@@ -137,6 +137,10 @@ class CognitionSeeder:
         # production backend is ChromaDB today.
         self._client: "BaseClient" | None = None
         self._embed_model = None
+        # #18143: a seeder is a writer, so it embeds with the active model and records (model, dim) on the
+        # collections it creates; it refuses to append to a collection recorded in another space.
+        self._model_name: str | None = None
+        self._embed_dim: int | None = None
         self._initialized = False
         self._root_dir: Path = PATH.PROJECT_ROOT
 
@@ -147,13 +151,16 @@ class CognitionSeeder:
         try:
             from llama_index.embeddings.ollama import OllamaEmbedding
 
+            from autobot_shared.embedding_model import active_embedding_model
             from autobot_shared.ssot_config import get_ollama_url
             from knowledge.backends import get_default_client
 
             chromadb_path = self._root_dir / "data" / "chromadb"
             self._client = await asyncio.to_thread(get_default_client, db_path=str(chromadb_path))
             ollama_url = get_ollama_url()
-            self._embed_model = OllamaEmbedding(model_name="nomic-embed-text", base_url=ollama_url)
+            self._model_name = active_embedding_model()
+            self._embed_model = OllamaEmbedding(model_name=self._model_name, base_url=ollama_url)
+            self._embed_dim = len(await asyncio.to_thread(self._embed_model.get_text_embedding, "dimension probe"))
             self._initialized = True
             logger.info("CognitionSeeder initialized (chromadb_path=%s)", chromadb_path)
             return True
@@ -162,11 +169,21 @@ class CognitionSeeder:
             return False
 
     def _get_or_create_collection(self, name: str):
-        """Return (or create) a ChromaDB collection with cosine distance."""
-        return self._client.get_or_create_collection(
-            name=name,
-            metadata={"hnsw:space": "cosine"},
+        """Return (or create) a cosine collection recording its space; refuse one built in another (#18143)."""
+        from autobot_shared.embedding_provenance import (
+            EmbeddingMismatchError,
+            EmbeddingProvenance,
+            provenance_from_metadata,
+            provenance_to_metadata,
         )
+
+        space = EmbeddingProvenance(self._model_name, self._embed_dim) if self._model_name and self._embed_dim else None
+        meta = {"hnsw:space": "cosine", **(provenance_to_metadata(space) if space else {})}
+        coll = self._client.get_or_create_collection(name=name, metadata=meta)
+        recorded = provenance_from_metadata(getattr(coll, "metadata", None))
+        if space and recorded and recorded != space:
+            raise EmbeddingMismatchError(f"collection '{name}' is {recorded}, seeding with {space}; refused")
+        return coll
 
     def _upsert_chunk(
         self,

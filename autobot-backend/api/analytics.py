@@ -31,7 +31,6 @@ from fastapi import (
 from api.analytics_controller import (
     analytics_controller,
     analytics_state,
-    get_service_address,
 )
 from api.schemas_analytics import (
     AnalyticsClearStuckTasksResponse,
@@ -55,11 +54,12 @@ from api.schemas_analytics_collector import AnalyticsPerformanceMetricsResponse,
 from api.ws_security import open_authenticated_ws
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
+from autobot_shared.http_egress_guard import assert_egress_policy
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import RedisDatabase
+from autobot_shared.ssot_config import config
 from autobot_shared.status_enums import Severity
 from autobot_shared.time_utils import parse_utc_iso
-from constants.network_constants import NetworkConstants
 from constants.threshold_constants import TimingConstants
 from services.root_cause_analyzer import RootCauseAnalyzer
 from tasks.analytics_tasks import run_dashboard_analysis
@@ -177,6 +177,7 @@ async def _check_service(client, service_name: str, service_url: str) -> Tuple[s
     """Check connectivity for a single service (Issue #398: extracted)."""
     try:
         start_time = time.time()
+        await assert_egress_policy(f"{service_url}/health")  # SSOT origins; httpx does not follow redirects
         response = await client.get(f"{service_url}/health")
         response_time = time.time() - start_time
         return service_name, {
@@ -254,10 +255,7 @@ async def get_detailed_system_health(current_user: Dict = Depends(get_current_us
         detailed_health["analytics_health"]["redis_connectivity"][db_name] = status
 
     # Issue #370: Check service connectivity in parallel
-    services = {
-        "ollama": get_service_address("ollama", NetworkConstants.OLLAMA_PORT),
-        "frontend": get_service_address("frontend", NetworkConstants.FRONTEND_PORT),
-    }
+    services = {"ollama": config.ollama_url, "frontend": config.frontend_url}
 
     async with httpx.AsyncClient(timeout=5.0) as client:
         service_results = await asyncio.gather(

@@ -23,6 +23,7 @@ file, under-matching is the confident zero this guard exists to prevent.
   policy value imported from the egress modules (``instance_host_egress()``, ``VENDOR_API_EGRESS``,
   ``CONTENT_URL_EGRESS``). Not literal ``True``, not an arbitrary variable, not ``None``.
 - a raw call preceded, in the SAME function (nested defs excluded), by ``assert_egress_policy(<expr>)``
+  (``assert_public_egress(<expr>)`` for a user-supplied URL),
   where ``<expr>`` is the same expression as the request's URL argument. A module-level policy call
   never counts. It also needs redirects refused: a literal ``allow_redirects=False`` (aiohttp,
   requests) or no ``follow_redirects`` opt-in (httpx, whose default is off). ``urlopen`` can never
@@ -48,7 +49,8 @@ _QUICK = re.compile(
         + ("aiohttp", "httpx", "authlib", "requests", "urlopen", "get_json", "post_json")
     )
 )
-_POLICY_CALL = "assert_egress_policy"
+#: Raw-client pre-checks: server-chosen URLs use the first, user-/LLM-/document-supplied URLs the second.
+_POLICY_CALLS = frozenset({"assert_egress_policy", "assert_public_egress"})
 _CTORS = {
     "aiohttp.ClientSession": "session",
     "httpx.AsyncClient": "httpx",
@@ -291,7 +293,7 @@ def _raw_guarded(call: ast.Call, url: ast.expr | None, scope: ast.AST) -> bool:
         return False
     want = ast.dump(url)
     for node in _own_scope_nodes(scope):
-        if isinstance(node, ast.Call) and _canon(node.func, {}).split(".")[-1] == _POLICY_CALL:
+        if isinstance(node, ast.Call) and _canon(node.func, {}).split(".")[-1] in _POLICY_CALLS:
             arg = node.args[0] if node.args else None
             if arg is not None and node.lineno < call.lineno and ast.dump(arg) == want:
                 return True
