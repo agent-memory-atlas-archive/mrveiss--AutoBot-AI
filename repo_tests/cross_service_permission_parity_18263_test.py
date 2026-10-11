@@ -2,18 +2,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""Both services answer the same (role, scopes, DB grants, permission) table identically (#18263, #18264).
+"""Both services' REAL route dependencies answer one (role, DB grants, org, permission) table alike (#18263, #18264).
 
-Each service's REAL ``require_permission`` (the backend's ``auth_rbac``, the SLM's
-``services.auth``) is imported in its own subprocess, because the two services
-reuse top-level package names (``services``, ``user_management``, ``config``) and
-cannot share an interpreter. The probe drives every row through the dependency,
-with the deny-audit writer and the DB-grant loader stood in for, and reports one
-verdict per row plus how many denials were audited.
+Each service is imported in its own subprocess (they reuse top-level package names).
+The probe builds a FastAPI app whose routes depend on that service's own
+``require_permission`` -- the SLM's ``services.auth``, the backend's ``auth_rbac`` --
+and calls them over HTTP with a bearer token that SAME service mints
+(``auth_service.create_access_token`` / ``AuthenticationMiddleware.create_jwt_token``).
+So the caller is resolved by each service's own authentication (``get_current_user``
+/ ``get_user_from_request``), not injected; a service that dropped ``user_id`` or
+``org_id`` from its caller, read the role differently, or stopped wiring the shared
+gate would answer differently here. Only the deny-audit writer and the DB grant
+loader are stood in for; the loader's answer depends on the org it is asked for.
 
-The assertions: identical verdicts row for row; every 403 audited exactly once in
-both services; and a non-trivial mix, so a probe that answered 401 to everything
-could not pass as parity.
+API-key narrowing is not in this table: the backend accepts no user API keys
+(``api_key_scopes_are_enforced_16040_test``), so there is no backend row to compare.
 """
 
 import json
@@ -26,71 +29,91 @@ from repo_tests._paths import repo_root
 
 _ROOT = repo_root()
 
-_PROBE = r"""
-import asyncio, json, sys, types
+_COMMON = r"""
+import json, sys
+from unittest.mock import AsyncMock, patch
+from fastapi import Depends, FastAPI
+from fastapi.testclient import TestClient
 from autobot_shared.auth import permission_gate
 from autobot_shared.auth.permissions import Permission, Role
 
-module = __import__(sys.argv[1], fromlist=["require_permission"])
-gate = module._permission_gate
+ORG = "00000000-0000-0000-0000-0000000000d4"
+USER = "00000000-0000-0000-0000-0000000000c3"
 audited = []
 
 async def _audit(request, caller, permissions):
     audited.append(permissions)
 
-async def _db(user_id):
-    return ["knowledge.write", "admin.system", "allow_all"]
+async def _db(user_id, org_id):
+    # A system-role grant everywhere; a company-role grant only inside ORG (#18338).
+    return {"knowledge.write"} | ({"admin.system"} if str(org_id) == ORG else set())
 
-permission_gate.audit_permission_denied = _audit
-gate._wire_rbac = lambda: None
-gate._load_db_names = _db
-
-ROLES = [r.value for r in Role] + ["Admin", "bogus", "", None]
-SCOPES = {"session": None, "key-narrow": ["knowledge:read"], "key-admin": ["admin:*"], "key-legacy": "legacy"}
-USER_IDS = {"no-db": None, "db": "00000000-0000-0000-0000-0000000000c3"}
-REQUEST = types.SimpleNamespace(url=types.SimpleNamespace(path="/parity"), client=None, headers={})
-
-def _caller(role, scopes, user_id):
-    caller = {"sub": "parity"}
-    if role is not None:
-        caller["role"] = role
-    if user_id:
-        caller["user_id"] = user_id
-    if scopes == "legacy":
-        caller.update(api_key_id="k", scopes=[], legacy_full_scope=True)
-    elif scopes is not None:
-        caller.update(api_key_id="k", scopes=scopes)
-    return caller
-
-async def _verdict(caller, permission):
-    try:
-        await module.require_permission(permission)(request=REQUEST, caller=caller)
-        return "allow"
-    except Exception as exc:
-        return str(getattr(exc, "status_code", type(exc).__name__))
-
-async def main():
-    out = {}
-    for role in ROLES:
-        for sname, scopes in SCOPES.items():
-            for uname, uid in USER_IDS.items():
-                caller = _caller(role, scopes, uid)
+def run(binding, mint):
+    gate = binding._permission_gate
+    gate._wire_rbac, gate._load_db_names = (lambda: None), _db
+    permission_gate.audit_permission_denied = _audit
+    app = FastAPI()
+    for p in Permission:
+        app.add_api_route(f"/p/{p.value}", lambda: {}, dependencies=[Depends(binding.require_permission(p))])
+    client, out = TestClient(app), {}
+    for role in [r.value for r in Role] + ["Admin", "bogus"]:
+        for uname, uid in (("no-db", None), ("db", USER)):
+            for oname, org in (("no-org", None), ("org", ORG)):
+                headers = {"Authorization": "Bearer " + mint(role, uid, org)}
                 for p in Permission:
-                    out[f"{role}|{sname}|{uname}|{p.value}"] = await _verdict(caller, p)
+                    status = client.get(f"/p/{p.value}", headers=headers).status_code
+                    out[f"{role}|{uname}|{oname}|{p.value}"] = "allow" if status == 200 else str(status)
     out["__audited__"] = len(audited)
     print("PARITY:" + json.dumps(out, sort_keys=True))
-
-asyncio.run(main())
 """
 
-_SERVICES = {
-    "backend": ("autobot-backend", "auth_rbac"),
-    "slm": ("autobot-slm-backend", "services.auth"),
-}
+_SLM = r"""
+import services.auth as binding
+patch.object(binding, "is_jti_revoked", AsyncMock(return_value=False)).start()
+patch.object(binding, "is_token_revoked_by_password_change", AsyncMock(return_value=False)).start()
+
+import time
+
+def mint(role, user_id, org_id):
+    # iat backdated: jwt_core verifies with zero leeway, and a backward clock step refuses
+    # a fresh token as not-yet-valid (#18347). The probe measures the gate, not the clock.
+    claims = {"sub": "parity", "role": role, "admin": False, "iat": int(time.time()) - 30}
+    claims.update({k: v for k, v in (("user_id", user_id), ("org_id", org_id)) if v})
+    return binding.auth_service.create_access_token(data=claims)
+
+run(binding, mint)
+"""
+
+_BACKEND = r"""
+import datetime as _datetime
+import types
+import auth_middleware
+import auth_rbac as binding
+from auth_middleware import get_auth_middleware
+middleware = get_auth_middleware()
+
+class _Backdated(_datetime.datetime):
+    # create_jwt_token stamps iat from datetime.now(); backdated for the same reason as the SLM (#18347).
+    @classmethod
+    def now(cls, tz=None):
+        return _datetime.datetime.now(tz) - _datetime.timedelta(seconds=30)
+
+auth_middleware.datetime = types.SimpleNamespace(datetime=_Backdated, timezone=_datetime.timezone, timedelta=_datetime.timedelta)
+middleware.enable_auth = True  # the probe measures the gate, not the auth-disabled shortcut
+
+def mint(role, user_id, org_id):
+    data = {"username": "parity", "role": role}
+    data.update({k: v for k, v in (("user_id", user_id), ("org_id", org_id)) if v})
+    return middleware.create_jwt_token(data)
+
+run(binding, mint)
+"""
+
+_SERVICES = {"backend": ("autobot-backend", _BACKEND), "slm": ("autobot-slm-backend", _SLM)}
 
 
 def _probe(service: str) -> dict:
-    directory, module = _SERVICES[service]
+    directory, body = _SERVICES[service]
     env = dict(
         os.environ,
         PYTHONPATH=os.pathsep.join((str(_ROOT), str(_ROOT / directory))),
@@ -99,12 +122,12 @@ def _probe(service: str) -> dict:
         SLM_ENCRYPTION_KEY="parity-probe-encryption-key-0123456789ab",  # pragma: allowlist secret
     )
     result = subprocess.run(  # nosec B603  # fixed argv: this interpreter and the probe above
-        [sys.executable, "-c", _PROBE, module],
+        [sys.executable, "-c", _COMMON + body],
         cwd=str(_ROOT / directory),
         env=env,
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=600,
         check=False,
     )
     lines = [line for line in result.stdout.splitlines() if line.startswith("PARITY:")]
@@ -117,40 +140,41 @@ def verdicts() -> dict:
     return {service: _probe(service) for service in _SERVICES}
 
 
+def _rows(table: dict) -> dict:
+    return {k: v for k, v in table.items() if k != "__audited__"}
+
+
 def test_both_services_give_identical_verdicts(verdicts):
-    backend, slm = verdicts["backend"], verdicts["slm"]
-    differing = sorted(k for k in backend if k != "__audited__" and backend[k] != slm.get(k))
+    backend, slm = _rows(verdicts["backend"]), _rows(verdicts["slm"])
+    differing = sorted(k for k in backend if backend[k] != slm.get(k))
     assert backend.keys() == slm.keys()
-    assert differing == [], f"{len(differing)} rows differ, e.g. {differing[:5]}"
+    assert differing == [], f"{len(differing)} rows differ, e.g. {[(k, backend[k], slm[k]) for k in differing[:5]]}"
 
 
 def test_every_denial_is_audited_in_both_services(verdicts):
     for service, table in verdicts.items():
-        denials = sum(1 for k, v in table.items() if k != "__audited__" and v == "403")
+        denials = sum(1 for v in _rows(table).values() if v == "403")
         assert table["__audited__"] == denials, f"{service}: {denials} denials, {table['__audited__']} audited"
 
 
 def test_the_table_is_a_real_mix_not_a_uniform_answer(verdicts):
-    """Contrast: parity of a probe that refused everything would be meaningless."""
-    counts = {
-        v: sum(1 for k, x in verdicts["backend"].items() if k != "__audited__" and x == v) for v in ("allow", "403")
-    }
-    assert counts["allow"] > 100 and counts["403"] > 100, counts
+    """Contrast: parity of a probe that refused (or 401'd) everything would be meaningless."""
+    for service, table in verdicts.items():
+        values = list(_rows(table).values())
+        assert values.count("allow") > 100 and values.count("403") > 100 and "401" not in values, service
 
 
 @pytest.mark.parametrize(
     ("row", "expected"),
     [
-        ("user|session|no-db|chat.use", "allow"),
-        ("user|session|no-db|admin.system", "403"),
-        ("user|session|db|admin.system", "allow"),  # DB grant unioned in (#18259)
-        ("user|key-narrow|db|admin.system", "403"),  # key narrowing ANDed over a DB grant
-        ("admin|key-narrow|no-db|knowledge.read", "allow"),
-        ("admin|key-narrow|no-db|knowledge.write", "403"),
-        ("readonly|key-admin|no-db|admin.system", "403"),  # a key never exceeds its owner
-        ("Admin|session|no-db|chat.use", "403"),  # strict role reading
-        ("None|session|no-db|chat.use", "403"),  # no legacy admin-flag fallback
-        ("superadmin|session|no-db|admin.system", "403"),  # #13854: no granular permissions
+        ("user|no-db|no-org|chat.use", "allow"),
+        ("user|no-db|no-org|admin.system", "403"),
+        ("readonly|db|no-org|knowledge.write", "allow"),  # system-role DB grant, platform-wide (#18259)
+        ("user|db|no-org|admin.system", "403"),  # a company-role grant does not leave its company (#18338)
+        ("user|db|org|admin.system", "allow"),  # ... and applies inside it
+        ("user|no-db|org|admin.system", "403"),  # no user_id, no DB lookup
+        ("Admin|no-db|no-org|chat.use", "403"),  # strict role reading
+        ("superadmin|no-db|no-org|admin.system", "403"),  # #13854: no granular permissions
     ],
 )
 def test_pinned_rows(verdicts, row, expected):
