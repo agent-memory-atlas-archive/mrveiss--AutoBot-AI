@@ -23,6 +23,13 @@ from ``autobot-slm-backend/migrations/add_audit_logs_canonical_columns.py``.
 
 Idempotent: every step is guarded by ``has_column`` / ``has_index``.
 
+The two indexes are built ``CONCURRENTLY``, outside the migration transaction,
+so ``audit_logs`` keeps taking writes while they build. A concurrent build that
+fails leaves an INVALID index behind; :func:`_ensure_index` drops that one
+(an index, never row data) and builds it again.
+
+**Forward-only.** ``downgrade()`` is a no-op: see its docstring.
+
 Revision ID: 20261011_098
 Revises: 20260928_097
 Create Date: 2026-10-11
@@ -40,8 +47,6 @@ down_revision: Union[str, None] = "20260928_097"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-#: Dropped in reverse order by `downgrade`.
-_COLUMN_NAMES = ("category", "actor", "session_id", "resource_ref")
 _INDEXES = (("ix_audit_logs_category", ("category",)), ("idx_audit_actor_created", ("actor", "created_at")))
 
 
@@ -62,16 +67,36 @@ def upgrade() -> None:
         op.add_column("audit_logs", sa.Column("session_id", sa.String(255), nullable=True))
     if not has_column("audit_logs", "resource_ref"):
         op.add_column("audit_logs", sa.Column("resource_ref", sa.String(512), nullable=True))
-    for name, columns in _INDEXES:
-        if not has_index("audit_logs", name):
-            op.create_index(name, "audit_logs", list(columns))
+    # CREATE INDEX CONCURRENTLY cannot run inside a transaction block.
+    with op.get_context().autocommit_block():
+        for name, columns in _INDEXES:
+            _ensure_index(name, columns)
+
+
+def _index_is_invalid(name: str) -> bool:
+    """True when a failed concurrent build left *name* behind, unusable."""
+    row = op.get_bind().execute(
+        sa.text("SELECT NOT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = :n"),
+        {"n": name},
+    )
+    return bool(row.scalar())
+
+
+def _ensure_index(name: str, columns: tuple[str, ...]) -> None:
+    """Build *name* concurrently unless a valid copy already exists."""
+    if has_index("audit_logs", name):
+        if not _index_is_invalid(name):
+            return
+        op.drop_index(name, table_name="audit_logs", postgresql_concurrently=True)
+    op.create_index(name, "audit_logs", list(columns), postgresql_concurrently=True)
 
 
 def downgrade() -> None:
-    """Drop exactly what this migration added: the indexes, then the columns."""
-    for name, _columns in reversed(_INDEXES):
-        if has_index("audit_logs", name):
-            op.drop_index(name, table_name="audit_logs")
-    for name in reversed(_COLUMN_NAMES):
-        if has_column("audit_logs", name):
-            op.drop_column("audit_logs", name)
+    """No-op, on purpose: rolling back must not delete audit records (#17038).
+
+    Dropping ``category``, ``actor``, ``session_id`` or ``resource_ref`` would
+    destroy what every audit row written since the upgrade recorded in them --
+    a deletion path in the audit store, which only a human may approve. The
+    columns are additive (nullable, or a server default) and the indexes are
+    read aids, so code from before this revision runs unchanged beside them.
+    """

@@ -17,6 +17,12 @@ NO DATA LOSS: four additive columns. ``category`` is NOT NULL with DEFAULT
 'security' (a catalogue default on PostgreSQL 11+, no row rewrite); the other
 three are nullable. Idempotent via ``add_column_if_not_exists``.
 
+The two indexes are built ``CONCURRENTLY`` on an autocommit connection, after
+the columns commit, so ``audit_logs`` keeps taking writes while they build. An
+INVALID index left by a failed concurrent build is dropped (an index, never row
+data) and built again. Forward-only: there is no down path, and none may drop
+these columns -- that would delete audit records (#17038).
+
 TARGET_DB routes this to the user_management database (#14300), the only one
 that holds ``audit_logs``.
 
@@ -34,10 +40,31 @@ logger = logging.getLogger(__name__)
 
 TARGET_DB = TARGET_DB_USER_MANAGEMENT
 
+#: (index name, CREATE statement). CONCURRENTLY: no write lock on audit_logs.
 _INDEX_SQL = (
-    "CREATE INDEX IF NOT EXISTS ix_audit_logs_category ON audit_logs (category)",
-    "CREATE INDEX IF NOT EXISTS idx_audit_actor_created ON audit_logs (actor, created_at)",
+    (
+        "ix_audit_logs_category",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_audit_logs_category ON audit_logs (category)",
+    ),
+    (
+        "idx_audit_actor_created",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audit_actor_created ON audit_logs (actor, created_at)",
+    ),
 )
+_INVALID_INDEX_SQL = (
+    "SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = %s AND NOT i.indisvalid"
+)
+
+
+def build_indexes_concurrently(conn) -> None:
+    """Build the indexes outside any transaction; CONCURRENTLY refuses to run inside one."""
+    conn.autocommit = True
+    cursor = conn.cursor()
+    for name, create in _INDEX_SQL:
+        cursor.execute(_INVALID_INDEX_SQL, (name,))
+        if cursor.fetchone():
+            cursor.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {name}")  # nosec B608 -- name is a module constant
+        cursor.execute(create)
 
 
 def migrate(db_url: str) -> None:
@@ -51,11 +78,10 @@ def migrate(db_url: str) -> None:
     add_column_if_not_exists(cursor, "audit_logs", "actor", "VARCHAR(255)")
     add_column_if_not_exists(cursor, "audit_logs", "session_id", "VARCHAR(255)")
     add_column_if_not_exists(cursor, "audit_logs", "resource_ref", "VARCHAR(512)")
-    if table_exists(cursor, "audit_logs"):  # a fresh DB gets the indexes from create_all
-        for statement in _INDEX_SQL:
-            cursor.execute(statement)
-
+    has_table = table_exists(cursor, "audit_logs")  # a fresh DB gets the indexes from create_all
     conn.commit()
+    if has_table:
+        build_indexes_concurrently(conn)
     conn.close()
 
     logger.info("Migration complete: audit_logs carries category/actor/session_id/resource_ref")

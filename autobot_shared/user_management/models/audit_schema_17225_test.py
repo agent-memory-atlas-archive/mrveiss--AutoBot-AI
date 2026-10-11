@@ -89,3 +89,38 @@ def test_the_slm_migration_adds_exactly_the_model_columns() -> None:
     assert "add_audit_logs_canonical_columns" in (_ROOT / "autobot-slm-backend/migrations/runner.py").read_text(
         encoding="utf-8"
     )
+
+
+def _function(tree: ast.Module, name: str) -> ast.FunctionDef:
+    return next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+
+
+def test_the_backend_downgrade_drops_nothing() -> None:
+    """#17038: rolling back must not delete the audit records written into the new columns."""
+    body = _function(ast.parse(_BACKEND_MIGRATION.read_text(encoding="utf-8")), "downgrade").body
+    statements = [s for s in body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
+    assert statements == [], "downgrade() must stay a documented no-op"
+
+
+def test_the_backend_builds_its_indexes_concurrently_outside_the_transaction() -> None:
+    """A plain CREATE INDEX locks writes to audit_logs for the whole build."""
+    tree = ast.parse(_BACKEND_MIGRATION.read_text(encoding="utf-8"))
+    creates = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and getattr(n.func, "attr", "") in {"create_index", "drop_index"}
+    ]
+    assert creates, "control: the detector must find the index calls"
+    for call in creates:
+        flag = {k.arg: k.value for k in call.keywords}.get("postgresql_concurrently")
+        assert isinstance(flag, ast.Constant) and flag.value is True, ast.unparse(call)
+    upgrade = _function(tree, "upgrade")
+    blocks = [w for w in ast.walk(upgrade) if isinstance(w, ast.With)]
+    assert any("autocommit_block" in ast.unparse(w.items[0].context_expr) for w in blocks)
+
+
+def test_the_slm_builds_its_indexes_concurrently() -> None:
+    text = _SLM_MIGRATION.read_text(encoding="utf-8")
+    creates = [line for line in text.splitlines() if "CREATE INDEX" in line]
+    assert len(creates) == 2 and all("CREATE INDEX CONCURRENTLY IF NOT EXISTS" in line for line in creates)
+    assert "def downgrade" not in text and "DROP COLUMN" not in text.upper()
