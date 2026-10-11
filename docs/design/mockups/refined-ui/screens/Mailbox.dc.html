@@ -216,11 +216,9 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
     <a href="CompanyOS.dc.html">Company OS</a>
     <a href="Analytics.dc.html">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
-    <a href="ThemeManager.dc.html" data-tip="Small-language-model fleet admin — opens in a new tab" data-tip-pos="bottom" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
-    <a href="AdminUsers.dc.html" class="icon" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <button type="button" aria-label="Profile menu" data-tip="Profile settings" data-tip-pos="left" style="margin-left: 8px; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--brand-bg); font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand-fg); cursor: pointer">JD</button>
   </nav>
 
@@ -304,7 +302,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
       </div>
 
       <sc-if value="{{netErr}}" hint-placeholder-val="{{ false }}">
-        <div class="banner err" role="alert"><span class="pill bad" style="background: var(--surface); color: var(--bad-fg)">Sync error</span><span style="flex: 1 1 300px">Couldn't reach the mail connector (IMAP, imap.autobot-labs.example:993): authentication failed. The token in the vault expired at 10:31. Last synced 10:30.</span><button type="button" class="btn" onClick="{{retrySync}}">Retry now</button><a class="btn" href="CompanySecrets.dc.html">Open Secrets</a></div>
+        <div class="banner err" role="alert"><span class="pill bad" style="background: var(--surface); color: var(--bad-fg)">Sync error</span><span style="flex: 1 1 300px">Couldn't reach the mail connector (IMAP, autobot.example:993): authentication failed. The token in the vault expired at 10:31. Last synced 10:30.</span><button type="button" class="btn" onClick="{{retrySync}}">Retry now</button><a class="btn" href="CompanySecrets.dc.html">Open Secrets</a></div>
       </sc-if>
       <sc-if value="{{netOff}}" hint-placeholder-val="{{ false }}">
         <div class="banner off" role="status"><span class="pill warn" style="background: var(--surface)">Offline</span><span style="flex: 1 1 300px">You're offline. Showing mail cached at 10:41. New sends and approvals are queued and go out when the connection returns.</span><button type="button" class="btn" onClick="{{retrySync}}">Try again</button></div>
@@ -552,7 +550,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
               <div class="rc">
                 <label for="{{fl.id}}">{{fl.label}}</label>
                 <sc-for list="{{fl.chips}}" as="c" hint-placeholder-count="1">
-                  <span class="chip">{{c.addr}}<sc-if value="{{c.ext}}" hint-placeholder-val="{{ false }}"><span class="pill warn" data-tip="Outside autobot-labs.example — sending raises the risk tier" style="font-size: 10px; padding: 0 4px">external</span></sc-if><button type="button" aria-label="{{c.removeLabel}}" data-tip="{{c.removeLabel}}" onClick="{{c.remove}}"><svg class="ic" width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
+                  <span class="chip">{{c.addr}}<sc-if value="{{c.ext}}" hint-placeholder-val="{{ false }}"><span class="pill warn" data-tip="Outside autobot.example — sending raises the risk tier" style="font-size: 10px; padding: 0 4px">external</span></sc-if><button type="button" aria-label="{{c.removeLabel}}" data-tip="{{c.removeLabel}}" onClick="{{c.remove}}"><svg class="ic" width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
                 </sc-for>
                 <input id="{{fl.id}}" type="text" autocomplete="off" placeholder="name@domain, then Enter" value="{{fl.val}}" onInput="{{fl.onInput}}" onKeyDown="{{fl.onKey}}">
               </div>
@@ -759,7 +757,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
 <script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark","contrast","mono"],"default":"light"},"$preview":{"width":1440,"height":3000}}'>
 const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['contrast', 'High contrast'], ['mono', 'Monochrome']];
 const ME = 'ceo@example.com';
-const INTERNAL = ['autobot-labs.example', 'agents.autobot-labs.example', 'autobot.example', 'fleet.autobot.example', 'github.com'];
+const INTERNAL = ['autobot.example', 'autobot.example', 'autobot.example', 'fleet.autobot.example', 'github.com'];
 const LABELS = [['fleet', 'Fleet', 'i1'], ['github', 'GitHub', 'i2'], ['team', 'Team', 'i3'], ['security', 'Security', 'it3'], ['billing', 'Billing', 'it2']];
 const LBL = {};
 LABELS.forEach((l) => { LBL[l[0]] = l; });
@@ -1002,7 +1000,7 @@ class Component extends DCLogic {
   approve(m) {
     const off = this.st().net === 'offline';
     this.setDraft(m.id, 'sent');
-    const sentMsg = { id: 'a' + Date.now(), ord: -1, folder: 'sent', from: m.draft.agent, addr: m.draft.agent + '@agents.autobot-labs.example', agent: true, time: this.now(), unread: false, starred: false, labels: m.labels.slice(), subject: 'Re: ' + m.subject, snippet: 'Sent by ' + m.draft.agent + ' after your approval.', body: m.draft.body.split('\n').filter((x) => x.trim()) };
+    const sentMsg = { id: 'a' + Date.now(), ord: -1, folder: 'sent', from: m.draft.agent, addr: m.draft.agent + '@example.com', agent: true, time: this.now(), unread: false, starred: false, labels: m.labels.slice(), subject: 'Re: ' + m.subject, snippet: 'Sent by ' + m.draft.agent + ' after your approval.', body: m.draft.body.split('\n').filter((x) => x.trim()) };
     this.setState({ msgs: [sentMsg].concat(this.msgs()) });
     this.toast(off ? 'Approved · queued until you are back online' : 'Approved · ' + m.draft.agent + ' sent the reply');
   }

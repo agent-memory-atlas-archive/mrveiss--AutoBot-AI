@@ -167,7 +167,7 @@ onMounted(load)
         <div v-for="[provider, s] in providers" :key="provider" class="card provider-card">
           <div class="card-header">
             <span class="provider-name">{{ provider }}</span>
-            <BaseBadge :variant="s.success ? 'success' : 'danger'" size="sm">
+            <BaseBadge :variant="s.success ? 'success' : 'error'" size="sm">
               {{ s.success ? t('admin.pricing.statusOk') : t('admin.pricing.statusFailed') }}
             </BaseBadge>
           </div>

@@ -58,9 +58,6 @@ _NOT_ORCHESTRABLE_SINGLETONS = {
     # A systemd template unit: instantiated per bridge (`autobot-mcp-bridge@x`),
     # so there is no single instance for a registry entry to describe.
     "autobot-mcp-bridge@": "systemd template unit, instantiated per bridge",
-    # A deployment variant of autobot-backend, not a service in its own right —
-    # the two are never both running.
-    "autobot-backend-single-worker": "single-worker variant of autobot-backend",
 }
 
 

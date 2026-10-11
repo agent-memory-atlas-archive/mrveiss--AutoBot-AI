@@ -329,7 +329,7 @@ function handleMigrateClick() {
             @click="emit('close')"
           >{{ $t('fleet.decommissionModal.cancel') }}</button>
           <button
-            class="btn btn-danger"
+            class="btn btn-error"
             :disabled="!canDecommission"
             @click="handleDecommission"
           >{{ $t('fleet.decommissionModal.decommission') }}</button>
@@ -440,7 +440,7 @@ function handleMigrateClick() {
 /* Warning banner */
 .warning-banner {
   background: rgba(239, 68, 68, 0.1);
-  border: 1px solid var(--color-danger);
+  border: 1px solid var(--color-error);
   border-radius: var(--radius-md);
   padding: var(--spacing-3) var(--spacing-4);
   margin-bottom: var(--spacing-4);
@@ -449,7 +449,7 @@ function handleMigrateClick() {
 .warning-text {
   margin: 0 0 var(--spacing-1) 0;
   font-weight: 500;
-  color: var(--color-danger);
+  color: var(--color-error);
 }
 
 .warning-ip {
@@ -472,7 +472,7 @@ function handleMigrateClick() {
 }
 
 .role-section--danger {
-  border-left: 4px solid var(--color-danger);
+  border-left: 4px solid var(--color-error);
 }
 
 .role-section--warning {
@@ -491,7 +491,7 @@ function handleMigrateClick() {
 }
 
 .section-title--danger {
-  color: var(--color-danger);
+  color: var(--color-error);
 }
 
 .section-title--warning {
@@ -604,7 +604,7 @@ function handleMigrateClick() {
 }
 
 .status-block--error {
-  color: var(--color-danger);
+  color: var(--color-error);
   font-weight: 500;
 }
 
@@ -629,12 +629,12 @@ function handleMigrateClick() {
   color: white;
 }
 
-.btn-danger {
-  background: var(--color-danger);
+.btn-error {
+  background: var(--color-error);
   color: white;
 }
 
-.btn-danger:disabled {
+.btn-error:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

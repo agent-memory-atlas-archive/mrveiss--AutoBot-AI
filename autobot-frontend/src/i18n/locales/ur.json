@@ -4834,6 +4834,13 @@
   },
   "ui": {
     "themeToggle": {
+      "system": "سسٹم",
+      "highContrast": "اعلیٰ کنٹراسٹ",
+      "monochrome": "یک رنگی",
+      "accentThemeDescription": "تھیم کی ڈیفالٹ — تھیم کا اپنا بنیادی رنگ",
+      "baseThemeChanged": "بنیادی تھیم {name} میں تبدیل کر دی گئی",
+      "accentChanged": "ایکسنٹ رنگ {name} میں تبدیل کر دیا گیا",
+      "presetChanged": "تھیم پری سیٹ {name} میں تبدیل کر دیا گیا",
       "dark": "Dark",
       "light": "Light",
       "switchToDark": "Switch to dark mode",
@@ -4842,6 +4849,7 @@
       "selectTheme": "Select theme"
     },
     "preferences": {
+      "accentTheme": "تھیم",
       "fontSizeChanged": "Font size changed to {size}",
       "fontSizeOptions": "Font size options",
       "orange": "نارنجی",

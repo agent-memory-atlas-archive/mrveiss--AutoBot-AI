@@ -165,7 +165,7 @@ function skillCountLabel(agent: ExternalAgent): string {
 function statusClass(agent: ExternalAgent): string {
   if (!agent.enabled) return 'text-gray-400'
   if (agent.verified) return 'text-success-500'
-  if (agent.card_error) return 'text-danger-500'
+  if (agent.card_error) return 'text-error-500'
   return 'text-warning-500'
 }
 
@@ -209,7 +209,7 @@ onMounted(() => {
     <!-- Error banner -->
     <div
       v-if="registry.error"
-      class="p-3 bg-danger-900/30 border border-danger-700 rounded-lg text-danger-300 text-sm"
+      class="p-3 bg-error-900/30 border border-error-700 rounded-lg text-error-300 text-sm"
     >
       {{ registry.error }}
     </div>
@@ -264,7 +264,7 @@ onMounted(() => {
               <span :class="['font-medium', statusClass(agent)]">
                 {{ statusLabel(agent) }}
               </span>
-              <div v-if="agent.card_error" class="text-xs text-danger-400 mt-0.5">
+              <div v-if="agent.card_error" class="text-xs text-error-400 mt-0.5">
                 {{ agent.card_error }}
               </div>
             </td>
@@ -303,7 +303,7 @@ onMounted(() => {
                   {{ $t('externalAgentsView.edit') }}
                 </button>
                 <button
-                  class="text-xs text-danger-400 hover:text-danger-300"
+                  class="text-xs text-error-400 hover:text-error-300"
                   @click="deleteAgent(agent)"
                 >
                   {{ $t('externalAgentsView.delete') }}
@@ -386,7 +386,7 @@ onMounted(() => {
 
         <div
           v-if="saveError"
-          class="p-2 bg-danger-900/30 border border-danger-700 rounded-sm text-danger-300 text-xs"
+          class="p-2 bg-error-900/30 border border-error-700 rounded-sm text-error-300 text-xs"
         >
           {{ saveError }}
         </div>
@@ -464,7 +464,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div v-if="detailAgent.card_error" class="p-2 bg-danger-900/30 border border-danger-700 rounded-sm text-danger-300 text-xs">{{ $t('externalAgentsView.cardErrorValue0', { value0: detailAgent.card_error }) }}</div>
+          <div v-if="detailAgent.card_error" class="p-2 bg-error-900/30 border border-error-700 rounded-sm text-error-300 text-xs">{{ $t('externalAgentsView.cardErrorValue0', { value0: detailAgent.card_error }) }}</div>
 
           <div v-if="detailCardJson">
             <div class="text-xs text-gray-500 mb-1">{{ $t('externalAgentsView.agentCardJSON') }}</div>

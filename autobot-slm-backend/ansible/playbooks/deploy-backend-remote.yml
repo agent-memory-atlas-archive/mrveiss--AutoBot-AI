@@ -40,7 +40,6 @@
     # Server settings (Issue #858/#861)
     backend_host: "0.0.0.0"
     backend_port: 8443
-    backend_workers: 4
 
     # Celery worker settings (Issue #863)
     celery_concurrency: 4

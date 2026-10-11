@@ -83,8 +83,9 @@ def is_purpose_bound(claims: Mapping[str, Any]) -> bool:
     - it carries any :data:`NON_LOGIN_CLAIMS` member — ``aud``, ``device_id``,
       ``mfa_pending``, ``run_id``, ``scope``, ``service``;
     - it carries a ``token_type`` that is not ``login`` — e.g. the
-      ``token_type: device`` that ``services/device_token_service.py`` mints,
-      which none of the claims above would catch.
+      ``token_type: device`` once minted by the retired ``device_token_service``
+      (``services/device_jwt.py`` is the one device-JWT minter now), which none of the
+      claims above would catch.
     """
     if not NON_LOGIN_CLAIMS.isdisjoint(claims):
         return True

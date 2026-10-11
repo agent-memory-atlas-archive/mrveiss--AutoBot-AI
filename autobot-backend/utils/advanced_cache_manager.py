@@ -763,7 +763,7 @@ class AdvancedCacheManager:
             logger.error("Error managing cache size for %s: %s", data_type, e)
 
     # =========================================================================
-    # BACKWARD COMPATIBILITY METHODS (from backend/utils/cache_manager.py)
+    # BACKWARD COMPATIBILITY METHODS (from the retired utils/cache_manager.py)
     # =========================================================================
 
     async def simple_get(self, key: str) -> Any | None:
@@ -938,7 +938,7 @@ def get_knowledge_cache():
 
 class SimpleCacheManager:
     """
-    Backward compatibility wrapper for backend/utils/cache_manager.py.
+    Backward compatibility wrapper for the retired utils/cache_manager.py.
     Provides simple TTL-based caching API using AdvancedCacheManager backend.
     """
 
@@ -959,9 +959,8 @@ class SimpleCacheManager:
         return self._cache.redis_client is not None
 
     async def _ensure_redis_client(self):
-        """Ensure Redis client is initialized (backward compatibility)"""
-        # AdvancedCacheManager auto-initializes, so this is a no-op
-        # But we keep it for API compatibility
+        """Initialise the underlying async Redis client (idempotent, lock-guarded)."""
+        await self._cache._ensure_redis_client()
 
     async def get(self, key: str) -> Any | None:
         """Get cached value"""
@@ -1019,6 +1018,7 @@ class SimpleCacheManager:
         Get cache statistics.
         Backward compatibility for CacheManager.get_stats()
         """
+        await self._ensure_redis_client()
         if not self._cache.redis_client:
             return {"status": "disabled", "total_keys": 0}
 

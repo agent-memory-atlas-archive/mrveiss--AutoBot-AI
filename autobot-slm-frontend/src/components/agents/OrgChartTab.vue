@@ -252,7 +252,7 @@ onMounted(fetchTree)
 .badge-blue { background: var(--slm-blue-100); color: var(--slm-blue-600); }
 .badge-green { background: var(--slm-emerald-100); color: var(--slm-emerald-600); }
 .badge-gray { background: var(--slm-gray-100); color: var(--slm-gray-500); }
-.badge-red { background: var(--slm-red-100); color: var(--color-danger-600); }
+.badge-red { background: var(--slm-red-100); color: var(--color-error-600); }
 .badge-orange { background: var(--slm-orange-100); color: var(--slm-orange-600); }
 .agent-title { color: var(--text-secondary); font-size: var(--text-sm); margin: var(--spacing-1) 0 var(--spacing-4); }
 .capabilities { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--spacing-4); line-height: 1.5; }
@@ -280,7 +280,7 @@ h4 { font-size: var(--text-sm); font-weight: 600; margin: 0 0 var(--spacing-3) 0
 .delegation-time { font-size: 11px; color: var(--text-secondary); }
 .detail-panel.empty-state { display: flex; align-items: center; justify-content: center; min-height: 400px; color: var(--text-secondary); }
 .empty-state { color: var(--text-secondary); text-align: center; padding: var(--spacing-10); }
-.error-banner { background: var(--slm-red-100); border: 1px solid var(--color-danger-500); color: var(--slm-red-700); padding: var(--spacing-3) var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-4); display: flex; justify-content: space-between; align-items: center; }
+.error-banner { background: var(--slm-red-100); border: 1px solid var(--color-error-500); color: var(--slm-red-700); padding: var(--spacing-3) var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-4); display: flex; justify-content: space-between; align-items: center; }
 .error-inline { background: var(--slm-red-100); color: var(--slm-red-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-md); font-size: 13px; margin-bottom: var(--spacing-3); }
 .loading { text-align: center; color: var(--text-secondary); padding: 60px; }
 .detail-header { display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-2); }

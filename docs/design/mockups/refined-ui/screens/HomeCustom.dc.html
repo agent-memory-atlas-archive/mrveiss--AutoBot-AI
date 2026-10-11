@@ -164,12 +164,10 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
     <a href="Analytics.dc.html" class="adv">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
     <span class="sr" role="status" aria-live="polite">{{uiAnnounce}}</span>
-    <a href="ThemeManager.dc.html" class="adv" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon adv" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon adv" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
     <button type="button" class="uitog {{uiTogCls}}" onClick="{{toggleUi}}" aria-pressed="{{uiMinPressed}}" data-tip="Minimal interface — hide advanced features" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" class="iw"/><path d="M4 9h16M9 9v11"/><rect x="11.5" y="11.5" width="6" height="6" rx="1" class="i2"/></svg><span>Minimal</span></button>
-    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <button type="button" aria-label="Profile menu" data-tip="Profile menu" data-tip-pos="left" style="margin-left: 8px; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--brand-bg); font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand-fg); cursor: pointer">JD</button>
   </nav>
 
@@ -348,7 +346,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
         <p style="margin: 0; padding: 14px 16px 4px; font-size: 13px; color: var(--text2); line-height: 1.5">Drop more widgets in Customize layout → Add widget: Workflow Visualization and System Architecture.</p>
         <div class="row" style="font-size: 13.5px; border-bottom: 0"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="6" rx="1.5" class="i2"/><rect x="14" y="14" width="7" height="6" rx="1.5" class="i1"/><path d="M10 7h4v10"/></svg>Workflow Visualization</div>
         <div class="row" style="font-size: 13.5px; padding-top: 0"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1" class="i3"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/></svg>System Architecture</div>
-        <div class="adv" style="margin-top: auto; padding: 12px 16px 16px"><a href="SystemHealth.dc.html" style="font-size: 13px; font-weight: 500">Open System Health</a></div>
+        <div class="adv" style="margin-top: auto; padding: 12px 16px 16px"><a href="SystemHealth.dc.html" style="font-size: 13px; font-weight: 500" data-tip="Opens the SLM console (Service Lifecycle Manager)">Open System Health ↗</a></div>
         </sc-if>
 
         <sc-if value="{{w.isWorkflow}}" hint-placeholder-val="{{ false }}">

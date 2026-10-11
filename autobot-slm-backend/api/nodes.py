@@ -83,6 +83,7 @@ from services.code_status import get_latest_code_version as _get_latest_code_ver
 from services.code_status import reported_code_status as _reported_code_status
 from services.database import get_db
 from services.encryption import encrypt_data
+from services.node_events import create_node_event
 from services.reconciler import reconciler_service
 from services.ssh_utils import build_ssh_base_cmd
 
@@ -98,28 +99,6 @@ async def _broadcast_lifecycle_event(node_id: str, event_type: str, details: dic
         await ws_manager.send_node_lifecycle_event(node_id, event_type, details)
     except Exception as e:
         logger.debug("Failed to broadcast lifecycle event: %s", e)
-
-
-async def _create_node_event(
-    db: AsyncSession,
-    node_id: str,
-    event_type: EventType,
-    severity: EventSeverity,
-    message: str,
-    details: dict = None,
-) -> NodeEvent:
-    """Helper to create a node lifecycle event."""
-    event = NodeEvent(
-        event_id=str(uuid.uuid4())[:16],
-        node_id=node_id,
-        event_type=event_type.value,
-        severity=severity.value,
-        message=message,
-        details=details or {},
-    )
-    db.add(event)
-    await db.flush()  # Flush but don't commit - let caller handle transaction
-    return event
 
 
 async def _process_role_report(db: AsyncSession, node_id: str, role_report: dict) -> None:
@@ -163,7 +142,7 @@ async def _handle_enrollment_started(db: AsyncSession, node_id: str, ssh_passwor
     """
     auth_method_details = {"auth_method": "password" if ssh_password else "key"}
 
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.DEPLOYMENT_STARTED,
@@ -188,7 +167,7 @@ async def _handle_enrollment_failed(db: AsyncSession, node_id: str, message: str
     """
     error_details = {"error": message}
 
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.DEPLOYMENT_FAILED,
@@ -239,7 +218,7 @@ async def _handle_enrollment_completed(db: AsyncSession, node_id: str) -> dict:
         "status": node.status if node else None,
     }
 
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.DEPLOYMENT_COMPLETED,
@@ -342,7 +321,7 @@ async def _create_registration_event(
     if node_data.import_existing:
         event_msg = f"Existing node imported: {node.hostname} ({node.ip_address})"
 
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.STATE_CHANGE,
@@ -1641,7 +1620,7 @@ async def reenroll_node(
     node.status = NodeStatus.PENDING.value
     node.updated_at = datetime.now(timezone.utc)
 
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.STATUS_CHANGED,
@@ -2163,7 +2142,7 @@ async def _emit_reboot_event(db: AsyncSession, node_id: str, node) -> None:
 
     Persists the reboot-initiated event and broadcasts the lifecycle WebSocket message.
     """
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.MANUAL_ACTION,
@@ -2265,7 +2244,7 @@ async def acknowledge_remediation(
     await reconciler_service.reset_service_remediation_tracker(db, node_id)  # #16712: row-persisted
 
     # Create acknowledgment event
-    await _create_node_event(
+    await create_node_event(
         db,
         node_id,
         EventType.MANUAL_ACTION,

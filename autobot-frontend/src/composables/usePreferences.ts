@@ -64,10 +64,10 @@ export interface UserPreferences {
   reasoningEffort: ReasoningEffort
 }
 
-// Default preferences (Issue #9040: aligned with design-tokens.css electric blue default)
+// Default preferences (#18223: the `theme` accent, so the theme's own primary stands)
 const DEFAULT_PREFERENCES: UserPreferences = {
   fontSize: 'medium',
-  accentColor: 'blue',
+  accentColor: 'theme',
   layoutDensity: 'comfortable',
   voiceDisplayMode: 'sidepanel',
   language: 'en',
@@ -77,7 +77,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 
 // Reactive preferences state
 const fontSize = ref<FontSize>('medium')
-const accentColor = ref<AccentColor>('blue')
+const accentColor = ref<AccentColor>('theme')
 const layoutDensity = ref<LayoutDensity>('comfortable')
 const voiceDisplayMode = ref<VoiceDisplayMode>('sidepanel')
 const language = ref<string>('en')

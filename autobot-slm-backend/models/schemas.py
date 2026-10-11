@@ -932,31 +932,6 @@ class RestartAllServicesResponse(BaseModel):
     )
 
 
-class ServiceCategoryUpdate(BaseModel):
-    """Request to update service category."""
-
-    category: str = Field(..., pattern=r"^(autobot|system)\z")
-
-
-class FleetServiceStatus(BaseModel):
-    """Service status across the fleet."""
-
-    service_name: str
-    category: str = "system"  # autobot or system
-    nodes: List[Dict]  # [{node_id, hostname, status}]
-    running_count: int
-    stopped_count: int
-    failed_count: int
-    total_nodes: int
-
-
-class FleetServicesResponse(BaseModel):
-    """Aggregated service status across fleet."""
-
-    services: List[FleetServiceStatus]
-    total_services: int
-
-
 # =============================================================================
 # Maintenance Window Schemas
 # =============================================================================
