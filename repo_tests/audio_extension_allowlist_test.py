@@ -205,7 +205,7 @@ REACH = declare(
     # is [5737, 6137]. 5764 was 27 files from red, which the #17818 check calls
     # zero tolerance dressed as an allowance -- this PR's own new modules were
     # that ordinary growth. Mid-window, re-measured here, not carried (#15928).
-    floor=5937,
+    floor=6100,  # re-pinned mid-window (#18293): population 6600, window [5900, 6300]
     growth=400,
     skips=300,
     what="tracked python files",
