@@ -8,12 +8,6 @@ The tf-saturation denominator `tf + k1 * (1 - b + b * dl / avgdl)` lives once, i
 `autobot-backend/knowledge/search_components/bm25.py` (`bm25_tf_component`). The marker is
 the syntax shape `1 - X + X * ...`: a `+` whose left side is `1 - X`. Prose and comments
 that name the formula are not a definition.
-
-DEFERRED: `autobot_memory_graph/semantic_search.py` still carries its own copy because the
-queued `issue-18143-embedding-model-resolver` branch owns that file. The repoint is
-`HybridScorer.bm25_score` -> `bm25_score_terms(query, doc, avg, _BM25_K1, _BM25_B,
-lambda _t, tf: math.log(1 + 1 / (tf + 0.5)))`. The deferral is pinned: once the copy is
-gone the test fails until `_DEFERRED` is emptied, so the exemption cannot outlive the fork.
 """
 
 from __future__ import annotations
@@ -29,7 +23,7 @@ from repo_tests._reach import declare
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _CANONICAL = "autobot-backend/knowledge/search_components/bm25.py"
-_DEFERRED = ("autobot-backend/autobot_memory_graph/semantic_search.py",)
+_DEFERRED: tuple[str, ...] = ()
 
 
 def _is_one(node: ast.AST) -> bool:
