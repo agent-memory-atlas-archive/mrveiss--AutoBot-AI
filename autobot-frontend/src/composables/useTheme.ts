@@ -392,6 +392,40 @@ export function useTheme() {
   }
 
   /**
+   * i18n keys for the theme labels; render sites translate with t() (#14785).
+   * `themeLabels` stays as the untranslated default for non-Vue consumers.
+   */
+  const themeLabelKeys: Record<Theme, string> = {
+    dark: 'ui.themeToggle.dark',
+    light: 'ui.themeToggle.light',
+    contrast: 'ui.themeToggle.highContrast',
+    mono: 'ui.themeToggle.monochrome',
+    system: 'ui.themeToggle.system',
+  }
+
+  /**
+   * i18n keys for the accent labels (shared with the preferences panel)
+   */
+  const accentLabelKeys: Record<AccentColor, string> = {
+    theme: 'ui.preferences.accentTheme',
+    blue: 'ui.preferences.blue',
+    green: 'ui.preferences.green',
+    purple: 'ui.preferences.purple',
+    orange: 'ui.preferences.orange',
+    pink: 'ui.preferences.pink',
+    teal: 'ui.preferences.teal',
+    indigo: 'ui.preferences.indigo',
+    red: 'ui.preferences.red',
+  }
+
+  /**
+   * i18n keys for accent descriptions that are localised so far
+   */
+  const accentDescriptionKeys: Partial<Record<AccentColor, string>> = {
+    theme: 'ui.themeToggle.accentThemeDescription',
+  }
+
+  /**
    * Accent color labels for UI display
    */
   const accentLabels: Record<AccentColor, string> = {
@@ -478,6 +512,9 @@ export function useTheme() {
 
     /** Theme display labels */
     themeLabels,
+    themeLabelKeys,
+    accentLabelKeys,
+    accentDescriptionKeys,
 
     /** Accent color display labels */
     accentLabels,

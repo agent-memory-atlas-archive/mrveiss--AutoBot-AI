@@ -66,7 +66,7 @@
               type="button"
             >
               <Icon :name="getThemeIcon(themeOption)" size="sm" />
-              <span>{{ themeLabels[themeOption] }}</span>
+              <span>{{ t(themeLabelKeys[themeOption]) }}</span>
             </button>
           </div>
         </fieldset>
@@ -88,7 +88,7 @@
               type="button"
             >
               <span class="accent-swatch"></span>
-              <span class="accent-label">{{ accentLabels[colorOption] }}</span>
+              <span class="accent-label">{{ t(accentLabelKeys[colorOption]) }}</span>
             </button>
           </div>
         </fieldset>
@@ -105,13 +105,14 @@
 <script setup lang="ts">
 import { getThemeIcon } from '@/composables/themeIcons'
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTheme, type Theme, type ThemePreset, type AccentColor } from '@/composables/useTheme'
 import Icon from '@/components/ui/Icon.vue'
 import { createLogger } from '@/utils/debugUtils'
 
 const logger = createLogger('ThemePresetPicker')
+const { t } = useI18n()
 
-// Initialize theme composable
 const {
   preset,
   theme,
@@ -122,8 +123,8 @@ const {
   availablePresets,
   availableThemes,
   availableAccents,
-  themeLabels,
-  accentLabels,
+  themeLabelKeys,
+  accentLabelKeys,
   THEME_PRESETS,
 } = useTheme()
 
@@ -145,8 +146,7 @@ function announceChange(message: string): void {
  */
 function handleSelectPreset(presetKey: ThemePreset): void {
   setPreset(presetKey)
-  const presetName = THEME_PRESETS[presetKey].name
-  announceChange(`Theme preset changed to ${presetName}`)
+  announceChange(t('ui.themeToggle.presetChanged', { name: THEME_PRESETS[presetKey].name }))
   logger.debug(`Theme preset changed to: ${presetKey}`)
 }
 
@@ -155,7 +155,7 @@ function handleSelectPreset(presetKey: ThemePreset): void {
  */
 function handleSetTheme(themeOption: Theme): void {
   setTheme(themeOption)
-  announceChange(`Base theme changed to ${themeLabels[themeOption]}`)
+  announceChange(t('ui.themeToggle.baseThemeChanged', { name: t(themeLabelKeys[themeOption]) }))
   logger.debug(`Base theme changed to: ${themeOption}`)
 }
 
@@ -164,7 +164,7 @@ function handleSetTheme(themeOption: Theme): void {
  */
 function handleSetAccent(colorOption: AccentColor): void {
   setAccentColor(colorOption)
-  announceChange(`Accent color changed to ${accentLabels[colorOption]}`)
+  announceChange(t('ui.themeToggle.accentChanged', { name: t(accentLabelKeys[colorOption]) }))
   logger.debug(`Accent color changed to: ${colorOption}`)
 }
 

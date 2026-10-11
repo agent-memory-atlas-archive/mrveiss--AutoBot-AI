@@ -29,7 +29,7 @@
           :key="themeOption"
           :value="themeOption"
         >
-          {{ themeLabels[themeOption] }}
+          {{ t(themeLabelKeys[themeOption]) }}
         </option>
       </select>
       <Icon name="chevron-down" size="sm" class="theme-toggle__dropdown-icon" />
@@ -45,11 +45,11 @@
           { 'theme-toggle__btn--active': selectedTheme === themeOption }
         ]"
         :aria-pressed="selectedTheme === themeOption"
-        :title="themeLabels[themeOption]"
+        :title="t(themeLabelKeys[themeOption])"
         @click="setTheme(themeOption)"
       >
         <Icon :name="getThemeIcon(themeOption)" size="sm" />
-        <span v-if="!compact">{{ themeLabels[themeOption] }}</span>
+        <span v-if="!compact">{{ t(themeLabelKeys[themeOption]) }}</span>
       </button>
     </div>
 
@@ -100,7 +100,7 @@ withDefaults(defineProps<Props>(), {
 })
 
 const { t } = useI18n()
-const { theme, setTheme, toggleTheme, isDark, availableThemes, themeLabels } = useTheme()
+const { theme, setTheme, toggleTheme, isDark, availableThemes, themeLabelKeys } = useTheme()
 
 // Local state for v-model binding
 const selectedTheme = ref<Theme>(theme.value)
