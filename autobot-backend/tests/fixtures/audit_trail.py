@@ -5,14 +5,13 @@
 """An in-memory canonical audit trail for SecurityLayer tests (#17225 D6).
 
 Records what ``security_layer.emit_security`` is given and answers
-``security_layer.query_filtered`` through the real projection reader, so a test
-exercises the real filter and decode path without a Redis server.
+``security_layer.query_filtered`` with the real ``AuditFilter.matches``, newest
+first, skipping any member that is not a JSON object -- without a database.
 """
 
 import json
 from unittest.mock import patch
 
-from services.audit.projection import read_events
 from services.audit.taxonomy import AuditCategory, AuditEvent
 
 
@@ -34,11 +33,19 @@ class InMemoryAuditTrail:
         self.members.append(json.dumps(event.to_dict()))
         return True
 
-    async def zrevrangebyscore(self, key, high, low, start=0, num=None):
-        return list(reversed(self.members))[:num]
+    def _events(self) -> list[dict]:
+        events = []
+        for raw in reversed(self.members):
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+        return events
 
     async def query_filtered(self, flt, limit=100, offset=0):
-        return (await read_events(self, flt, max_scan=10_000))[offset : offset + limit]
+        return [e for e in self._events() if flt.matches(e)][offset : offset + limit]
 
     def patched(self):
         """Route SecurityLayer's audit writes and reads through this trail."""

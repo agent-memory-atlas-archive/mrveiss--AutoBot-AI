@@ -14,7 +14,7 @@ pinned so a new one is a deliberate, recorded act: route the record through
 A "writer" is a non-test module that
   * has a store-write call (`zadd`, `lpush`, ...) AND a string literal that starts with an audit
     key prefix, or
-  * constructs an audit ORM row (`AuditLog`, `WorkflowAuditLog`), or
+  * constructs an audit ORM row (`AuditLog`, `WorkflowAuditLog`) or calls `audit_row`, or
   * holds an `INSERT INTO <...>audit` SQL literal, or
   * opens a file in a write mode (`open`, `aiofiles.open`) whose path names "audit", or in a
     module that binds an audit path (`audit_base_path`, `audit_log_file`).
@@ -32,20 +32,25 @@ from repo_tests._reach import declare
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _CANONICAL = "autobot-backend/services/audit/projection.py"
+_SYSTEM_OF_RECORD = "autobot-backend/services/audit/store.py"
+_ROW_BUILDER = "autobot_shared/user_management/audit_rows.py"
 
 #: Module -> why it may write. Shrinks as the open decisions in AUDIT_SYSTEMS.md land.
 _KNOWN_WRITERS: dict[str, str] = {
     _CANONICAL: "canonical: the Redis projection of the audit trail",
+    _SYSTEM_OF_RECORD: "canonical: audit_logs rows, through audit_rows.audit_row (D1)",
+    _ROW_BUILDER: "the one constructor of an audit_logs row (D1)",
+    "autobot_shared/user_management/middleware/rbac_middleware.py": "audit_logs via audit_row (D1)",
+    "autobot_shared/user_management/organization_service.py": "audit_logs via audit_row (D1)",
+    "autobot_shared/user_management/team_service.py": "audit_logs via audit_row (D1)",
+    # Constructs AuditLog directly; routing it through audit_row edits a file #18267 rewrites.
+    "autobot-backend/user_management/services/user_service.py": "audit_logs, direct -- after #18267",
+    "autobot-slm-backend/user_management/services/user_service.py": "audit_logs, direct -- after #18267",
     "autobot-backend/services/workflow_permission_service.py": "workflow_audit_log (Postgres), undecided",
-    "autobot-backend/user_management/services/user_service.py": "audit_logs (Postgres), undecided -- see D1",
-    "autobot_shared/user_management/middleware/rbac_middleware.py": "audit_logs (Postgres), undecided -- see D1",
-    "autobot_shared/user_management/organization_service.py": "audit_logs (Postgres), undecided -- see D1",
-    "autobot_shared/user_management/team_service.py": "audit_logs (Postgres), undecided -- see D1",
     "autobot-backend/services/secrets_audit_store.py": "secrets_audit (SQLite), undecided",
     "autobot-backend/a2a/trust_score.py": "trust_audit (SQLite), undecided",
     "autobot-backend/security/enterprise/compliance_manager.py": "encrypted JSONL files, undecided",
-    "autobot-slm-backend/api/security.py": "SLM audit_logs, a separate service",
-    "autobot-slm-backend/user_management/services/user_service.py": "SLM audit_logs, a separate service",
+    "autobot-slm-backend/api/security.py": "SLM slm_node_audit_logs, a separate table",
     # Not an audit record: code-audit daemon state sharing the `audit:` prefix (D4, needs a key move).
     "autobot-backend/workers/audit_tasks.py": "daemon state, D4 pending a key move",
 }
@@ -60,9 +65,10 @@ _RETIRED = (
 _WRITE_VERBS = frozenset({"zadd", "lpush", "rpush", "xadd", "sadd", "hset", "setex", "set", "append"})
 _KEY_PREFIXES = ("audit:", "audit_log:", "autobot:event_log")
 _WRITE_MODES = ("a", "w", "ab", "wb", "a+", "w+")
-#: ORM rows that ARE audit records. A view class whose name merely ends in
+#: ORM rows that ARE audit records, and `audit_row`, the one constructor of an
+#: `audit_logs` row (#17225 D1). A view class whose name merely ends in
 #: "AuditLog" (KnowledgeAuditLog) is not one -- it records through the service.
-_AUDIT_ORM_CLASSES = ("WorkflowAuditLog", "AuditLog")
+_AUDIT_ORM_CLASSES = ("WorkflowAuditLog", "AuditLog", "audit_row")
 _PATH_WORDS = ("path", "file", "dir", "root")
 _AUDIT_INSERT = re.compile(r"\binsert\s+into\s+\w*audit", re.IGNORECASE)
 
@@ -168,6 +174,7 @@ def is_audit_writer(source: str) -> bool:
         ("reads an audit file", 'def f(self):\n    open(self.audit_log_file, "r")\n', False),
         ("appends to an unrelated file", 'def f():\n    open("out.txt", "a")\n', False),
         ("audit orm row", "def f(s):\n    s.add(AuditLog(action='x'))\n", True),
+        ("the shared row constructor", "def f(s):\n    s.add(audit_row(action='x', resource_type='r'))\n", True),
         ("a view class named like a row", "def f(r):\n    return KnowledgeAuditLog(r)\n", False),
         (
             "sql insert into an audit table",
@@ -279,3 +286,27 @@ def test_nothing_imports_a_retired_module() -> None:
     root = repo_root()
     hits = [rel for rel in REACH.examined(root) if _RETIRED_IMPORTS.search((root / rel).read_text(encoding="utf-8"))]
     assert not hits, f"#17225: {hits} still import a retired audit module; use services.audit.audit."
+
+
+#: Still construct `AuditLog(...)` themselves. The two user services are rewritten by #18267;
+#: routing them through `audit_row` follows its merge. The SLM API's `AuditLog` is its own
+#: `slm_node_audit_logs` model, not this table.
+_DIRECT_ROW_CONSTRUCTORS = frozenset(
+    {
+        _ROW_BUILDER,
+        "autobot-backend/user_management/services/user_service.py",
+        "autobot-slm-backend/user_management/services/user_service.py",
+        "autobot-slm-backend/api/security.py",
+    }
+)
+
+
+def test_audit_logs_rows_have_one_constructor() -> None:
+    """D1: one schema means one mapping onto it -- a new direct `AuditLog(...)` is a second one."""
+    root = repo_root()
+    direct = sorted(
+        rel
+        for rel in _writers()
+        if any(_is_call(n, name="AuditLog") for n in ast.walk(ast.parse((root / rel).read_text(encoding="utf-8"))))
+    )
+    assert set(direct) == _DIRECT_ROW_CONSTRUCTORS, f"#17225: build audit_logs rows with audit_rows.audit_row: {direct}"

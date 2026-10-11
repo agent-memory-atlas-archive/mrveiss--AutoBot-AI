@@ -106,6 +106,23 @@ class AuditEventType(str, Enum):
     EXPORT = "export"
 
 
+def event_from_dict(data: Dict[str, Any]) -> AuditEvent:
+    """The inverse of :meth:`AuditEvent.to_dict`."""
+    return AuditEvent(
+        category=AuditCategory(data["category"]),
+        action=data["action"],
+        actor_id=data.get("actor_id") or "system",
+        id=data["id"],
+        resource_type=data.get("resource_type"),
+        resource_id=data.get("resource_id"),
+        metadata=dict(data.get("metadata") or {}),
+        occurred_at=float(data["occurred_at"]),
+        ip_address=data.get("ip_address"),
+        session_id=data.get("session_id"),
+        outcome=data.get("outcome") or "success",
+    )
+
+
 def action_name(action: Any) -> str:
     """The stored action string for an enum member or a plain string."""
     return action.value if isinstance(action, Enum) else str(action)

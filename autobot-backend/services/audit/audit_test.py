@@ -16,8 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.audit import audit
-from services.audit.projection import UNIFIED_KEY, category_key, read_events
+from services.audit import audit, store
+from services.audit.projection import UNIFIED_KEY, category_key
 from services.audit.purge import purge_expired
 from services.audit.retention import RETENTION_DAYS, ttl_seconds
 from services.audit.taxonomy import AuditAction, AuditCategory, AuditEvent, AuditFilter, EventType
@@ -102,22 +102,30 @@ class TestCrossThreadHandOff:
             assert audit.emit(_event()) is False
 
 
-class TestProjectionWrite:
+def _redis_with_pipe():
+    pipe = MagicMock()
+    pipe.zadd = AsyncMock()
+    pipe.expire = AsyncMock()
+    pipe.execute = AsyncMock()
+    redis = MagicMock()
+    redis.pipeline.return_value.__aenter__ = AsyncMock(return_value=pipe)
+    redis.pipeline.return_value.__aexit__ = AsyncMock(return_value=False)
+    return redis, pipe
+
+
+class TestWritePath:
     @pytest.mark.asyncio
-    async def test_record_writes_unified_and_category_with_the_table_ttl(self) -> None:
-        pipe = MagicMock()
-        pipe.zadd = AsyncMock()
-        pipe.expire = AsyncMock()
-        pipe.execute = AsyncMock()
-        redis = MagicMock()
-        redis.pipeline.return_value.__aenter__ = AsyncMock(return_value=pipe)
-        redis.pipeline.return_value.__aexit__ = AsyncMock(return_value=False)
+    async def test_record_writes_the_row_then_the_projection_with_the_table_ttl(self) -> None:
+        redis, pipe = _redis_with_pipe()
+        insert = AsyncMock()
         ev = _event(category=AuditCategory.KNOWLEDGE)
         with (
+            patch.object(store, "insert_event", new=insert),
             patch.object(audit, "get_async_redis_client", new=AsyncMock(return_value=redis)),
             patch.object(audit, "_analyse_for_threats", new=AsyncMock()),
         ):
             await audit.record(ev)
+        insert.assert_awaited_once_with(ev)
         keys = [c.args[0] for c in pipe.zadd.call_args_list]
         assert keys == [UNIFIED_KEY, category_key(AuditCategory.KNOWLEDGE)]
         pipe.expire.assert_awaited_once_with(
@@ -125,36 +133,43 @@ class TestProjectionWrite:
         )
 
     @pytest.mark.asyncio
-    async def test_threat_analysis_runs_even_when_redis_is_down(self) -> None:
+    async def test_a_refused_row_is_counted_and_the_projection_still_written(self) -> None:
+        redis, pipe = _redis_with_pipe()
+        with (
+            patch.object(store, "insert_event", new=AsyncMock(side_effect=OSError("db down"))),
+            patch.object(audit, "record_audit_write_failure_safely") as counted,
+            patch.object(audit, "get_async_redis_client", new=AsyncMock(return_value=redis)),
+            patch.object(audit, "_analyse_for_threats", new=AsyncMock()),
+        ):
+            await audit.record(_event(action="denied.thing"))
+        counted.assert_called_once_with("denied.thing", "OSError")
+        assert pipe.zadd.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_threat_analysis_runs_even_when_storage_is_down(self) -> None:
         analyse = AsyncMock()
         with (
+            patch.object(store, "insert_event", new=AsyncMock(side_effect=OSError)),
             patch.object(audit, "get_async_redis_client", new=AsyncMock(return_value=None)),
             patch.object(audit, "_analyse_for_threats", new=analyse),
         ):
             await audit.record(_event())
         analyse.assert_awaited_once()
 
-
-def _stored(*events: AuditEvent) -> list[str]:
-    return [json.dumps(e.to_dict()) for e in events]
-
-
-class TestReadFilters:
     @pytest.mark.asyncio
-    async def test_one_query_answers_user_in_window_across_categories(self) -> None:
-        now = time.time()
-        redis = MagicMock()
-        redis.zrevrangebyscore = AsyncMock(
-            return_value=_stored(
-                _event(AuditCategory.SECURITY, "a", "u", now - 10),
-                _event(AuditCategory.KNOWLEDGE, "b", "u", now - 5),
-                _event(AuditCategory.COMPLIANCE, "c", "someone-else", now - 1),
-            )
-        )
-        got = await read_events(redis, AuditFilter(actor_id="u", from_ts=now - 60, to_ts=now), max_scan=50)
-        assert [e["action"] for e in got] == ["b", "a"], "newest first, only user u"
-        redis.zrevrangebyscore.assert_awaited_once_with(UNIFIED_KEY, now, now - 60, start=0, num=50)
+    async def test_the_projection_is_rebuilt_from_the_rows(self) -> None:
+        redis, pipe = _redis_with_pipe()
+        rows = [_event(action="a").to_dict(), _event(action="b").to_dict()]
+        with (
+            patch.object(store, "select_events", new=AsyncMock(return_value=rows)) as select,
+            patch.object(audit, "get_async_redis_client", new=AsyncMock(return_value=redis)),
+        ):
+            assert await audit.rebuild_projection(from_ts=0.0) == 2
+        assert select.call_args.args[0] == AuditFilter(from_ts=0.0)
+        assert pipe.zadd.await_count == 4
 
+
+class TestReadPath:
     def test_filter_fields_are_anded(self) -> None:
         ev = _event(resource_type="fact", resource_id="f1", metadata={"organization_id": "o1"}).to_dict()
         assert AuditFilter(resource_type="fact", resource_id="f1", metadata=(("organization_id", "o1"),)).matches(ev)
@@ -163,12 +178,56 @@ class TestReadFilters:
         assert AuditFilter(actions=frozenset({"x", "y"})).matches(ev)
         assert not AuditFilter(actions=frozenset({"y"})).matches(ev)
 
+    def test_one_query_answers_user_in_window_across_categories(self) -> None:
+        """ "Everything for user U in window W" is one statement on audit_logs, any category."""
+        from sqlalchemy.dialects import postgresql
+
+        clauses = store.where_clauses(AuditFilter(actor_id="u", from_ts=0.0, to_ts=60.0))
+        sql = " AND ".join(str(c.compile(dialect=postgresql.dialect())) for c in clauses)
+        assert "audit_logs.actor = " in sql
+        assert "audit_logs.created_at >= " in sql and "audit_logs.created_at <= " in sql
+        assert "category" not in sql
+
+    def test_every_filter_field_becomes_a_predicate(self) -> None:
+        flt = AuditFilter(
+            category=AuditCategory.KNOWLEDGE,
+            actions=frozenset({"share"}),
+            session_id="s",
+            outcome="denied",
+            resource_type="fact",
+            resource_id="f1",
+            metadata=(("organization_id", "o1"),),
+        )
+        assert len(store.where_clauses(flt)) == 7
+
+    def test_a_row_reads_back_as_the_event_it_was_written_from(self) -> None:
+        ev = _event(AuditCategory.COMPLIANCE, "user.login", "alice", at=1_700_000_000.0, resource_id="/api/x")
+        row = store._row_for(ev)
+        got = store.row_to_event(row)
+        assert {k: got[k] for k in ("id", "category", "action", "actor_id", "resource_id", "occurred_at")} == {
+            "id": ev.id,
+            "category": "compliance",
+            "action": "user.login",
+            "actor_id": "alice",
+            "resource_id": "/api/x",
+            "occurred_at": 1_700_000_000.0,
+        }
+
     @pytest.mark.asyncio
     async def test_an_unreachable_store_is_an_error_not_an_empty_trail(self) -> None:
         """#13258: "nothing recorded" and "cannot tell you" must not both be []."""
-        with patch.object(audit, "get_async_redis_client", new=AsyncMock(return_value=None)):
+        with patch.object(store, "select_events", new=AsyncMock(side_effect=OSError("db down"))):
             with pytest.raises(audit.AuditStoreUnavailable):
                 await audit.query(actor_id="u")
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_count_is_none_not_zero(self) -> None:
+        with patch.object(store, "count_events", new=AsyncMock(side_effect=OSError)):
+            assert await audit.count_since(0.0) is None
+
+
+def _stored(*events: AuditEvent) -> list[str]:
+    return [json.dumps(e.to_dict()) for e in events]
 
 
 def _purge_redis(unified: list[str]) -> MagicMock:

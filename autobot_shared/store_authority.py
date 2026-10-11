@@ -178,6 +178,21 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "four tables stay, empty, for the cascade-delete-safety reason #16464 fixed, "
         "independent of whether anything writes to them.",
     ),
+    "audit_trail": Concept(
+        name="audit_trail",
+        system_of_record=Store.POSTGRES,
+        projections=(Store.REDIS,),
+        write_sites=(
+            "autobot-backend/services/audit/store.py",
+            "autobot-backend/services/audit/projection.py",
+            "autobot_shared/user_management/audit_rows.py",
+        ),
+        rebuilt_by="services.audit.audit.rebuild_projection() replays audit_logs rows into the "
+        "audit:unified and audit:category:* sorted sets; nothing reads those keys as an answer.",
+        note="#17225 D1: the owner chose to extend the existing audit_logs table rather than add "
+        "a second Postgres audit table. Every audit_logs row is built by audit_rows.audit_row, "
+        "whether the canonical service or a shared RBAC/org/team writer records it.",
+    ),
     "verbatim_memory": Concept(
         name="verbatim_memory",
         system_of_record=Store.CHROMADB,
@@ -287,19 +302,6 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "here rather than a projection, which this registry requires justifying (#17450). "
         "It is single-store, so the dual-store guard was never going to surface it: it "
         "belongs by judgement, not because a detector found it.",
-    ),
-    "audit_trail": Concept(
-        name="audit_trail",
-        system_of_record=Store.REDIS,
-        projections=(),
-        write_sites=("autobot-backend/services/audit/projection.py",),
-        rebuilt_by="Nothing rebuilds it. A lost audit:unified key loses the audit trail.",
-        note="NOT a deliberate exception -- a declared inadequacy (#17225). Every audit producer "
-        "(services.audit.audit, the audit_logger adapter, SecurityLayer) now records here, so this "
-        "is the one audit trail, but a Redis sorted set is not a compliance record. The owner "
-        "decided (D1) that a Postgres table is the system of record with Redis as its projection; "
-        "that flips this entry to POSTGRES. Which table -- a new audit_event or the existing "
-        "audit_logs -- is open on #17225. Declared so the gap is visible to the registry.",
     ),
     "pre_auth_lockout": Concept(
         name="pre_auth_lockout",

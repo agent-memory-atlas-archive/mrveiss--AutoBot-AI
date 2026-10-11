@@ -24,9 +24,11 @@ from typing import Any, Dict, List
 
 from autobot_shared.async_compat import fire_and_forget_threadsafe
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.monitoring.metrics.audit import record_audit_write_failure_safely
 from autobot_shared.redis_client import get_async_redis_client
 from autobot_shared.redis_write import run_redis_write
-from services.audit.projection import count_events, read_events, write_event
+from services.audit import store
+from services.audit.projection import write_event
 from services.audit.purge import PurgeResult, purge_expired
 from services.audit.taxonomy import (  # noqa: F401 -- re-exported vocabulary
     AuditAction,
@@ -36,12 +38,10 @@ from services.audit.taxonomy import (  # noqa: F401 -- re-exported vocabulary
     AuditFilter,
     EventType,
     action_name,
+    event_from_dict,
 )
 
 logger = get_logger(__name__)
-
-#: Upper bound on members scanned per query before in-memory filtering (#8302).
-DEFAULT_MAX_SCAN = 10_000
 
 #: The serving loop, captured the first time a record is made on it, so a
 #: producer on a thread with no loop of its own can hand its write over.
@@ -70,17 +70,32 @@ async def _analyse_for_threats(event: AuditEvent) -> None:
 
 
 async def record(event: AuditEvent) -> None:
-    """Persist one audit event.
+    """Persist one audit event: the ``audit_logs`` row first, then the Redis projection.
 
     #13562: this is also where the bus feeds ``ThreatDetectionEngine``. Analysis
     runs BEFORE the write and never depends on it: a detector that only sees the
     events storage accepted is blindest exactly when the platform is degraded.
+    The projection is written even when the row is refused, so the event is not
+    lost outright -- the loss of the durable copy is logged and counted.
     """
     _remember_loop()
     await _analyse_for_threats(event)
+    await _persist(event)
+    await _project(event)
+
+
+async def _persist(event: AuditEvent) -> None:
+    try:
+        await store.insert_event(event)
+    except Exception as exc:  # noqa: BLE001 -- counted below; an audit write must not raise
+        logger.error("audit: system-of-record write failed for %s: %s", event.action, type(exc).__name__)
+        record_audit_write_failure_safely(event.action, type(exc).__name__)
+
+
+async def _project(event: AuditEvent) -> None:
     redis = await get_async_redis_client(database="main")
     if redis is None:
-        logger.error("audit: Redis unavailable, event dropped: %s/%s", event.category.value, event.action)
+        logger.warning("audit: Redis unavailable, projection skipped: %s/%s", event.category.value, event.action)
         return
     await write_event(redis, event)
 
@@ -121,19 +136,16 @@ class AuditStoreUnavailable(RuntimeError):
     """The audit trail could not be read -- distinct from "nothing was recorded"."""
 
 
-async def query_filtered(
-    flt: AuditFilter, limit: int = 100, offset: int = 0, max_scan: int = DEFAULT_MAX_SCAN
-) -> List[Dict[str, Any]]:
-    """Every event matching *flt*, newest first, paginated.
+async def query_filtered(flt: AuditFilter, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    """Every event matching *flt*, newest first, paginated, from the system of record.
 
     Raises :class:`AuditStoreUnavailable` when the store cannot be reached: an
     unreadable audit trail must never read as an empty one (#13258).
     """
-    redis = await get_async_redis_client(database="main")
-    if redis is None:
-        raise AuditStoreUnavailable("the audit trail cannot be read: Redis is unavailable")
-    events = await read_events(redis, flt, max_scan)
-    return events[offset : offset + limit]
+    try:
+        return await store.select_events(flt, limit, offset)
+    except Exception as exc:  # noqa: BLE001 -- re-raised as the one "cannot read" signal
+        raise AuditStoreUnavailable(f"the audit trail cannot be read: {type(exc).__name__}") from exc
 
 
 async def query(
@@ -144,11 +156,10 @@ async def query(
     to_ts: float | None = None,
     limit: int = 100,
     offset: int = 0,
-    max_scan: int = DEFAULT_MAX_SCAN,
 ) -> List[Dict[str, Any]]:
     """Query audit events; "everything for user U in window W" is ``query(actor_id=U, ...)``."""
     flt = AuditFilter(category=category, actor_id=actor_id, action=action, from_ts=from_ts, to_ts=to_ts)
-    return await query_filtered(flt, limit=limit, offset=offset, max_scan=max_scan)
+    return await query_filtered(flt, limit=limit, offset=offset)
 
 
 async def query_events(
@@ -173,14 +184,28 @@ async def query_events(
 
 async def count_since(from_ts: float) -> int | None:
     """Events recorded since *from_ts*; ``None`` when the store cannot be reached."""
+    try:
+        return await store.count_events(from_ts)
+    except Exception as exc:  # noqa: BLE001 -- None is the "unreachable" answer
+        logger.warning("audit: cannot count records: %s", type(exc).__name__)
+        return None
+
+
+async def rebuild_projection(from_ts: float, limit: int = 10_000) -> int:
+    """Re-project up to *limit* rows recorded since *from_ts* from ``audit_logs`` into Redis."""
     redis = await get_async_redis_client(database="main")
     if redis is None:
-        return None
-    return await count_events(redis, from_ts)
+        raise AuditStoreUnavailable("the projection cannot be rebuilt: Redis is unavailable")
+    events = await store.select_events(AuditFilter(from_ts=from_ts), limit, 0)
+    for event in events:
+        await write_event(redis, event_from_dict(event))
+    return len(events)
 
 
 async def apply_retention(cap_days: int | None = None, dry_run: bool = False) -> PurgeResult:
-    """Apply the retention table (``retention.py``) -- the one purge path (D5)."""
+    """Apply the retention table to the Redis projection -- the one purge path (D5).
+
+    The ``audit_logs`` rows are not purged here (see ``store.py``)."""
     redis = await get_async_redis_client(database="main")
     if redis is None:
         logger.warning("audit: Redis unavailable, retention not applied")
