@@ -84,13 +84,23 @@ def _forking_detectors(source: str) -> list[str]:
     return bad
 
 
+MIN_FILES_SCANNED = 300  # the two trees hold far more; a scan of ~0 files is a broken glob
+MIN_DETECTORS_SEEN = 2  # backend registry + scripts registry, each still defines the thin wrapper
+
+
 def test_no_second_decision_body_in_tree() -> None:
-    offenders = []
+    offenders, scanned, seen = [], 0, 0
     for root in _SCAN:
         for path in (_ROOT / root).rglob("*.py"):
+            scanned += 1
             text = path.read_text(encoding="utf-8")
-            if "_detect_deployment_mode" in text and _forking_detectors(text):
+            if "_detect_deployment_mode" not in text:
+                continue
+            seen += 1
+            if _forking_detectors(text):
                 offenders.append(str(path.relative_to(_ROOT)))
+    assert scanned >= MIN_FILES_SCANNED, scanned
+    assert seen >= MIN_DETECTORS_SEEN, seen
     assert not offenders, offenders
 
 
