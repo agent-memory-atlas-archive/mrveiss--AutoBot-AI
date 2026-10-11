@@ -165,9 +165,8 @@ async def repair_session(
 
     Returns 0 when the session needed no repair, or its legacy transcript
     has nothing to backfill from. Sessions with NO turns in ``chat_sessions``
-    are not repaired here (``load_session`` is empty): their LLM context is
-    served read-only by ``legacy_transcripts``, and moving them is a #17038
-    proposal, not a repair.
+    are not repaired here (``load_session`` is empty): they start with no
+    prior context until an approved #17038 backfill moves their turns in.
 
     Not concurrency-safe: this is a plain read-modify-write over
     ``load_session``/``save_session`` with no lock. Run it only against a

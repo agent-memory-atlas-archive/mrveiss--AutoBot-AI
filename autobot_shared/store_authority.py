@@ -260,11 +260,11 @@ STORE_AUTHORITY: dict[str, Concept] = {
         # Empty on purpose and pinned by the #18293 guard: nothing writes here any more.
         write_sites=(),
         rebuilt_by="Nothing rebuilds it and nothing writes it. Retired by #18293 in favour of "
-        "chat_sessions; read only by chat_history/legacy_transcripts.py for sessions that have "
-        "no turns in chat_sessions, and by the #13293 repair path.",
+        "chat_sessions. No request path reads it -- ownership of a legacy file cannot be "
+        "proven -- only the human-run #13293 repair and an approved #17038 backfill.",
         note="NOT an authority for any new turn -- a frozen legacy source. Its files predate "
-        "#18293 and stay readable until a human approves their disposition through the "
-        "#17038 review queue (backfill into chat_sessions, then retire); no agent moves them.",
+        "#18293 and are kept until a human approves their disposition through the #17038 "
+        "review queue (backfill into chat_sessions, then retire); no agent moves them.",
     ),
     "auth_signing_key": Concept(
         name="auth_signing_key",

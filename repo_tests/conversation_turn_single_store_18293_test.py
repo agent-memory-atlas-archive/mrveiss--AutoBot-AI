@@ -364,3 +364,50 @@ def test_only_an_approved_proposal_removes_a_legacy_transcript() -> None:
         if "remove_legacy_transcript" in src and _calls(src, "remove_legacy_transcript")
     }
     assert callers == {"autobot-backend/services/legacy_transcript_disposal_action.py"}, callers
+
+
+_CONTENT_READER = "read_legacy_transcript_pairs"
+_REPAIR_TOOL = "autobot-backend/chat_history/session_reply_backfill.py"
+_LEGACY_MODULE = "autobot-backend/chat_history/legacy_transcripts.py"
+
+
+def _imports_module(source: str, dotted: str) -> bool:
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom) and node.module == dotted:
+            return True
+        if isinstance(node, ast.Import) and any(alias.name == dotted for alias in node.names):
+            return True
+    return False
+
+
+def _opening_functions(source: str) -> set[str]:
+    """Functions in *source* that open a file -- the legacy module may have exactly one."""
+    return {
+        fn.name
+        for fn in ast.walk(ast.parse(source))
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(isinstance(n, ast.Call) and _called_name(n) == "open" for n in ast.walk(fn))
+    }
+
+
+def test_the_reader_matchers_see_a_read_and_an_import() -> None:
+    assert _calls("pairs = await read_legacy_transcript_pairs(sid)\n", _CONTENT_READER)
+    assert _imports_module(
+        "from chat_history.session_reply_backfill import repair_session\n", "chat_history.session_reply_backfill"
+    )
+    assert not _imports_module("import chat_history\n", "chat_history.session_reply_backfill")
+    assert _opening_functions("async def r(p):\n    async with aiofiles.open(p) as f:\n        pass\n") == {"r"}
+
+
+def test_no_request_path_reads_a_legacy_transcript() -> None:
+    """Ownership of a legacy file cannot be proven, so only human-run/approved tooling reads one (#18293)."""
+    population = _population()
+    readers = {rel for rel, src in population.items() if _CONTENT_READER in src and _calls(src, _CONTENT_READER)}
+    assert readers == {_REPAIR_TOOL}, f"#18293: legacy transcript content read outside the repair tool: {readers}"
+    importers = {
+        rel
+        for rel, src in population.items()
+        if "session_reply_backfill" in src and _imports_module(src, "chat_history.session_reply_backfill")
+    }
+    assert not importers, f"#18293: the human-run repair tool is imported by production code: {importers}"
+    assert _opening_functions(population[_LEGACY_MODULE]) == {_CONTENT_READER}

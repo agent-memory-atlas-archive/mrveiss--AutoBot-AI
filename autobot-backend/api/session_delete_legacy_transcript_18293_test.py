@@ -14,7 +14,8 @@ records the caller as owner" can be MANUFACTURED --
 Nothing here stubs an ownership ``reason`` or a recorded owner. The real
 ``SessionOwnershipValidator`` decides (enforced mode, an in-memory Redis), a real
 ``ChatHistoryManager`` writes session files under ``tmp_path``, and the real
-``create_session`` / ``save_chat_by_id`` / ``delete_session`` bodies run. Stubbed:
+``create_session`` / ``save_chat_by_id`` / ``delete_session`` bodies and the chat
+workflow's own ``_load_conversation_history`` run. Stubbed:
 the authenticated identity, the side services a delete also cleans up (terminal,
 KB, files, events, audit), and the one Postgres write that records a proposal.
 """
@@ -32,6 +33,7 @@ import api.legacy_transcript_disposal as disposal
 from api.schemas_chat import SessionCreate
 from autobot_shared.ssot_config import config
 from chat_history import ChatHistoryManager
+from chat_workflow.conversation import ConversationHandlerMixin
 from security.session_ownership import SessionOwnershipValidator
 from services.feature_flags import EnforcementMode
 
@@ -104,6 +106,8 @@ class _World:
         for name in ("log_chat_event", "audit_record", "log_request_context"):
             monkeypatch.setattr(chat_sessions, name, MagicMock())
         monkeypatch.setattr(chat_api, "log_request_context", MagicMock())
+        # the workflow builds its own manager; give it this backend's store, nothing else
+        monkeypatch.setattr("chat_history.ChatHistoryManager", lambda: self.history)
 
         async def _propose(session_id, requested_by, why):
             self.proposals.append((session_id, requested_by))
@@ -131,10 +135,19 @@ class _World:
     async def create(self, session_id: str):
         return await chat_sessions.create_session.__wrapped__(SessionCreate(id=session_id), self.request())
 
-    async def save(self, session_id: str, ownership: dict):
-        data = {"data": {"messages": [{"sender": "user", "text": "hi"}]}}
+    async def save(self, session_id: str, ownership: dict, messages: list | None = None):
+        data = {"data": {"messages": messages or [{"sender": "user", "text": "hi"}]}}
         save = chat_api.save_chat_by_id.__wrapped__
         return await save(session_id, {"username": self.caller}, data, self.request(), ownership)
+
+    async def context(self, session_id: str) -> list:
+        """The LLM context the real chat workflow would load for *session_id* (no cache)."""
+
+        class _Workflow(ConversationHandlerMixin):
+            redis_client = None
+            conversation_history_ttl = 60
+
+        return await _Workflow()._load_conversation_history(session_id)
 
     async def delete(self, session_id: str, ownership: dict):
         body = chat_sessions.delete_session.__wrapped__
@@ -218,3 +231,27 @@ async def test_deleting_a_legacy_only_session_is_a_404_with_a_proposal(world) ->
     assert "approval-1" in str(raised.value)
     assert transcript.exists() and world.proposals == [(LEGACY_ID, ALICE)]
     chat_sessions._cleanup_terminal_sessions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_claimed_legacy_only_session_gets_empty_llm_context(world) -> None:
+    """A claimer must not be handed another user's legacy conversation as context."""
+    transcript = world.write_legacy(LEGACY_ID)
+    claim = await world.ownership(LEGACY_ID)
+    assert claim["reason"] == "legacy_migration"
+
+    assert await world.context(LEGACY_ID) == []
+    assert transcript.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_normal_sessions_context_is_its_own_turns(world) -> None:
+    await world.create(OWN_ID)
+    ownership = await world.ownership(OWN_ID)
+    turns = [
+        {"sender": "user", "text": "what is uptime?", "messageType": "default"},
+        {"sender": "assistant", "text": "Up 3 days.", "messageType": "response"},
+    ]
+    await world.save(OWN_ID, ownership, turns)
+
+    assert await world.context(OWN_ID) == [{"user": "what is uptime?", "assistant": "Up 3 days."}]

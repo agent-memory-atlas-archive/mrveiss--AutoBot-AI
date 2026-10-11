@@ -10,14 +10,14 @@ Until #18293 every chat turn was also appended to
 there any more; ``store_authority`` declares the directory as
 ``legacy_conversation_transcripts`` with no write sites.
 
-The files that exist stay readable, because some sessions have turns ONLY there
-(they predate #13214, and #13293's repair was never run for them). Two readers
-remain, both here so the location has one home:
-
-* :func:`load_legacy_context_pairs` -- the LLM-context fallback for a session
-  that has no completed turns in ``chat_sessions``.
-* :func:`read_legacy_transcript_pairs` -- the full history, for the #13293
-  repair path (``chat_history/session_reply_backfill.py``).
+The files that exist are kept, because some sessions have turns ONLY there
+(they predate #13214, and #13293's repair was never run for them). No request
+path reads them: ownership of a legacy file cannot be proven from current state,
+so neither the LLM context nor any API serves its content. The one content reader,
+:func:`read_legacy_transcript_pairs`, serves human-run or human-approved tooling
+only -- the #13293 repair (``chat_history/session_reply_backfill.py``, a CLI) and
+the #17038 backfill a human approves. ``repo_tests/conversation_turn_single_store_18293_test.py``
+pins that. :func:`legacy_transcript_file` is an existence check, never a read.
 
 Moving these files into ``chat_sessions`` and retiring the directory is a data
 move: it is proposed through the #17038 review queue, never done by code here.
@@ -32,7 +32,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List
 
 import aiofiles
 
@@ -41,10 +41,6 @@ from autobot_shared.security.path_validator import validate_relative_path
 from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 
 logger = get_logger(__name__)
-
-#: Sessions whose LLM context has already been served from a legacy file in
-#: this process -- so the fallback is logged once per session, not per load.
-_LOGGED_SESSIONS: Set[str] = set()
 
 
 def _pairs_from_transcript(transcript: object) -> List[Dict[str, str]]:
@@ -122,19 +118,3 @@ async def read_legacy_transcript_pairs(
     except json.JSONDecodeError:
         logger.warning("Malformed legacy transcript file %s -- ignoring it", path)
         return []
-
-
-async def load_legacy_context_pairs(
-    session_id: str, limit: int, transcript_dir: str | Path | None = None
-) -> List[Dict[str, str]]:
-    """The last *limit* legacy exchanges, for a session ``chat_sessions`` has no turns for."""
-    pairs = (await read_legacy_transcript_pairs(session_id, transcript_dir))[-limit:] if limit > 0 else []
-    if pairs and session_id not in _LOGGED_SESSIONS:
-        _LOGGED_SESSIONS.add(session_id)
-        logger.info(
-            "LLM context for session %s served from the legacy transcript file (%d exchanges): "
-            "it has no turns in chat_sessions. Disposition pending in the #17038 review queue (#18293).",
-            session_id,
-            len(pairs),
-        )
-    return pairs

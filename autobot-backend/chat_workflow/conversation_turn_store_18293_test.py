@@ -11,14 +11,12 @@ so "no file was written" is checked against the exact place the old code wrote t
 """
 
 import json
-import logging
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock
 
 import pytest
 
 import chat_history
-import chat_history.legacy_transcripts as legacy
 from autobot_shared.ssot_config import config
 from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 from chat_workflow.conversation import ConversationHandlerMixin
@@ -60,7 +58,6 @@ def _bytes(path) -> bytes:
 def _isolated_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(config.path, "legacy_transcripts_dir", str(tmp_path / "data" / "conversation_transcripts"))
-    monkeypatch.setattr(legacy, "_LOGGED_SESSIONS", set())
 
 
 @pytest.mark.asyncio
@@ -75,19 +72,14 @@ async def test_context_is_projected_from_chat_sessions(monkeypatch, tmp_path) ->
 
 
 @pytest.mark.asyncio
-async def test_a_session_with_turns_only_in_a_legacy_file_stays_readable(monkeypatch, tmp_path, caplog) -> None:
+async def test_a_session_with_turns_only_in_a_legacy_file_gets_no_context(monkeypatch, tmp_path) -> None:
+    """Ownership of a legacy file cannot be proven, so it is never served as context."""
     path = _write_legacy(tmp_path, [{"user": "old q", "assistant": "old a"}])
     before = _bytes(path)
     _fake_chat_history(monkeypatch, [])
-    handler = _Handler()
 
-    with caplog.at_level(logging.INFO):
-        first = await handler._load_conversation_history(SESSION)
-        second = await handler._load_conversation_history(SESSION)
-
-    assert first == second == [{"user": "old q", "assistant": "old a"}]
+    assert await _Handler()._load_conversation_history(SESSION) == []
     assert _bytes(path) == before
-    assert sum("legacy transcript file" in r.getMessage() for r in caplog.records) == 1
 
 
 @pytest.mark.asyncio
@@ -108,7 +100,7 @@ async def test_a_warm_cache_is_served_without_reading_chat_sessions(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_legacy_context_is_never_written_into_the_cache(monkeypatch, tmp_path) -> None:
+async def test_an_empty_session_writes_nothing_into_the_cache(monkeypatch, tmp_path) -> None:
     _write_legacy(tmp_path, [{"user": "old q", "assistant": "old a"}])
     _fake_chat_history(monkeypatch, [])
     redis = AsyncMock()

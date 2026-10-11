@@ -11,6 +11,12 @@ system of record for conversation turns (#18293): read through
 This module writes no durable copy of a turn. The completed turn reaches
 ``chat_sessions`` through ``ChatWorkflowManager._persist_workflow_messages``
 (and ``LLMHandlerMixin._save_to_chat_history`` for terminal interpretations).
+
+It never reads the retired legacy transcripts: ownership of a legacy file cannot
+be proven from current state, and an ownerless session id is granted to whoever
+asks (``legacy_migration``), so serving one as context would hand another user's
+conversation to a claimer. A session with no turns in ``chat_sessions`` starts
+with no prior context until an approved #17038 backfill moves its legacy turns in.
 """
 
 import asyncio
@@ -66,7 +72,7 @@ class ConversationHandlerMixin:
         """The session's completed exchanges from chat_sessions, or None if it cannot be read.
 
         None (an unreadable session) is kept apart from ``[]`` (a session with no
-        completed turns): only the second may fall back to a legacy transcript.
+        completed turns) so the first is logged as the error it is.
         """
         from chat_history import ChatHistoryManager
         from chat_history.turn_projection import LLM_CONTEXT_TURN_LIMIT, project_turn_pairs
@@ -78,26 +84,16 @@ class ConversationHandlerMixin:
             return None
         return project_turn_pairs(messages, LLM_CONTEXT_TURN_LIMIT)
 
-    async def _load_legacy_context(self, session_id: str) -> List[Dict[str, str]]:
-        """READ-ONLY fallback for a session whose turns exist only in a legacy transcript (#18293)."""
-        from chat_history.legacy_transcripts import load_legacy_context_pairs
-        from chat_history.turn_projection import LLM_CONTEXT_TURN_LIMIT
-
-        return await load_legacy_context_pairs(session_id, LLM_CONTEXT_TURN_LIMIT)
-
     async def _load_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
-        """LLM context: the Redis cache, else projected from chat_sessions, else a legacy file."""
+        """LLM context: the Redis cache, else projected from chat_sessions, else nothing (#18293)."""
         try:
             redis_history = await self._try_redis_history(session_id)
             if redis_history is not None:
                 return redis_history
 
             history = await self._project_from_chat_sessions(session_id)
-            if history is None:
-                return []
             if not history:
-                # Never cached: chat:conversation:* is a projection of chat_sessions only.
-                return await self._load_legacy_context(session_id)
+                return []  # unreadable, or no completed turns: never a legacy transcript
 
             if self.redis_client is not None:
                 fire_and_forget(
