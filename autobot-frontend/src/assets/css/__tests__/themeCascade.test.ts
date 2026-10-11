@@ -95,3 +95,53 @@ describe('the theme accent (#18223)', () => {
     expect(key).toContain(':not([data-accent])')
   })
 })
+
+describe('links keep a cue that is not colour (WCAG 1.4.1, #18223)', () => {
+  it('the Refined link colour equals the text colour, so base.css underlines body-text links', () => {
+    const tokens = read('assets/css/design-tokens.css')
+    const colour = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)?.[1]
+    // The reason the underline is needed: if this ever differs, revisit the rule.
+    expect(colour('--link')).toBe(colour('--text'))
+    const base = read('assets/base.css')
+    const rule = /a:not\(\[class\]\),[^{]*\{([^}]*)\}/.exec(base)?.[1] ?? ''
+    expect(rule).toMatch(/text-decoration:\s*underline/)
+  })
+
+  it('hover uses the handoff link-hover colour', () => {
+    expect(read('assets/base.css')).toMatch(/a:not\(\[class\]\):hover[^{]*\{[^}]*--text-link-hover/)
+  })
+})
+
+describe('ember does not repaint contrast or mono (#18223)', () => {
+  // The selector list of the ember rule that sets the surface, text and border tokens
+  // for the light/no-theme case. Evaluated against a real <html>, not pattern-matched.
+  const ember = rules(read('assets/css/themes/ember.css'))
+  const surfaceSelector = [...ember].find(([, names]) => names.has('--bg-primary') && names.has('--text-primary'))?.[0] ?? ''
+
+  const matches = (theme: string | null, variant = 'ember'): boolean => {
+    const root = document.documentElement
+    root.setAttribute('data-theme-variant', variant)
+    if (theme) root.setAttribute('data-theme', theme)
+    else root.removeAttribute('data-theme')
+    const hit = root.matches(surfaceSelector)
+    root.removeAttribute('data-theme')
+    root.removeAttribute('data-theme-variant')
+    return hit
+  }
+
+  it('found the ember surface rule (control: an empty selector would match nothing)', () => {
+    expect(surfaceSelector).toContain('data-theme-variant="ember"')
+  })
+
+  it.each(['contrast', 'mono'])('does not match under %s', (theme) => {
+    expect(matches(theme)).toBe(false)
+  })
+
+  it.each([null, 'light'])('still matches ember on %s', (theme) => {
+    expect(matches(theme)).toBe(true)
+  })
+
+  it('does not match without the ember variant', () => {
+    expect(matches('light', 'default')).toBe(false)
+  })
+})

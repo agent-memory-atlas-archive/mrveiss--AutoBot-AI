@@ -26,7 +26,7 @@ Because the bridge is `var()` only, one value per theme feeds both vocabularies:
 
 ## Themes
 
-`data-theme` on `<html>`: `light` (Refined default), `dark`, `contrast` (high contrast, 2px borders), `mono`
+`data-theme` on `<html>`: `light` (the Refined default, and the first-run theme; the handoff does not say to follow the OS), `dark`, `contrast` (high contrast, 2px borders), `mono`
 (monochrome). `useTheme` also accepts `system`, which resolves to `light` or `dark`. `contrast` and `mono` are
 light-based: `themes/light.css` supplies their non-colour-name tokens (charts, code syntax, badges, scrollbars).
 
@@ -114,15 +114,22 @@ All declared once in `design-tokens.css`; none has an existing equivalent except
 - **`[data-ui="minimal"]` / `.adv` / `.only-min` rules.** They are behaviour, not tokens; they belong to step 2 (shell, UI-mode toggle).
 - **The CSS-only `[data-tip]` tooltip.** The handoff says the app uses the shared Tooltip primitive (#14779) with the `--tooltip-*` tokens, which are folded.
 - **Fonts (IBM Plex Sans / Mono).** Not loaded in step 1: that changes layout metrics, which this step must not.
-- **`--color-primary` is not `--primary`.** `--color-primary` is owned by the accent presets (`data-accent`, default `blue`), which override whatever a theme sets, so mapping the Refined navy onto it would have no effect on `light`/`dark`. `--primary` is added as its own name and used by Refined components from step 3. Making the Refined ink the default primary means a default accent of "theme" (no `data-accent` override): an owner decision, not made here.
+- **`--color-primary` vs `--primary`.** `--color-primary` is owned by the accent presets (`data-accent`). The default
+  accent is now `theme`, which sets no `data-accent`, so in `light` and `dark` `refined-map.css` points
+  `--color-primary*` (and `--text-on-primary`, since the dark ink is pale) at the Refined ink; choosing a preset
+  (blue, green, ...) sets `data-accent` and wins as before. `contrast` and `mono` keep the ink whatever the accent.
+  The Refined `--primary` itself is still its own name for components built on it.
 - **Status colours (`--color-success`, `--color-warning`, `--color-error`, `--color-info`).** These are solid fills used with `--text-on-*`; the Refined `--ok-*`/`--warn-*`/`--bad-*`/`--info-*` are background/foreground pill pairs. Different roles, so both exist.
-- **`--text-link` follows the Refined ink.** The Refined link colour equals the text colour, so a link needs a non-colour cue. Existing views keep whatever underline they have; adding one is a per-section change (step 5).
+- **`--text-link` follows the Refined ink, and body-text links are underlined.** The handoff's `--link` equals `--text`
+  (hover `--link-h`, coral), so colour alone no longer marks a link (WCAG 1.4.1). `base.css` underlines unclassed
+  anchors and `.prose` / `.message-text` links at rest and uses `--text-link-hover` on hover; classed anchors (nav,
+  buttons, cards) style themselves.
 - **Shadows.** Refined has none. The existing `--shadow-*` are untouched until the primitives (step 3).
 - **`prefers-color-scheme` fallbacks in `dark.css` / `light.css`** keep their literal legacy palette: they apply only before `useTheme` sets `data-theme` (first paint), and now match `:root:not([data-theme])` so they cannot override `contrast`/`mono`.
 
 ## Known limits
 
-- `[data-theme-variant="ember"]` is more specific than `refined-map.css`, so it still overrides the surface, text and border names under any theme, including `contrast` and `mono`. Ember is an opt-in variant (it was the default for every user before #18161).
+- Ember is an opt-in variant (it was the default for every user before #18161). Its light/no-theme surface rule excludes `contrast` and `mono`, so those win; a cascade test evaluates the selector against a real `<html>`.
 
 ## SLM frontend
 

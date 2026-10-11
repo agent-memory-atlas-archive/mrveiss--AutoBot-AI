@@ -83,7 +83,11 @@
 /* ----------------------------------------------------------------------------
    2. SEMANTIC TOKENS — LIGHT (apricot linen)
 ---------------------------------------------------------------------------- */
-[data-theme-variant="ember"]:root,
+/* The bare :root branch is "no theme chosen yet", which is light. It must not reach
+   contrast or mono: those are accessibility and corporate themes the user picked,
+   and a variant that repainted their surfaces, text and borders would defeat them.
+   :where() keeps the specificity (0,2,0) the dark block below relies on. */
+[data-theme-variant="ember"]:root:where(:not([data-theme="contrast"], [data-theme="mono"])),
 [data-theme-variant="ember"][data-theme="light"] {
   color-scheme: light;
 
