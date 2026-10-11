@@ -98,6 +98,8 @@ def _never_internal(origin: str) -> bool:
         ip = ipaddress.ip_address(host)
     except ValueError:
         return False  # a DNS name: not resolved here (#18199)
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped  # ::ffff:169.254.169.254 is not is_link_local until unwrapped
     return ip.is_link_local or ip.is_unspecified or ip in _ALWAYS_REFUSED_HOSTS
 
 

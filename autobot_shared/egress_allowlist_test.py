@@ -341,7 +341,19 @@ def _patched_ssot(monkeypatch, hosts):
     monkeypatch.setattr(ssot, "config", fake)
 
 
-@pytest.mark.parametrize("host", ["169.254.169.254", "169.254.7.7", "[fe80::1]", "[fd00:ec2::254]", "0.0.0.0", "[::]"])
+@pytest.mark.parametrize(
+    "host",
+    [
+        "169.254.169.254",
+        "169.254.7.7",
+        "[fe80::1]",
+        "[fd00:ec2::254]",
+        "0.0.0.0",
+        "[::]",
+        "[::ffff:169.254.169.254]",
+        "[::ffff:0.0.0.0]",
+    ],
+)
 def test_link_local_metadata_and_unspecified_config_hosts_are_dropped(monkeypatch, host):
     log = MagicMock()
     monkeypatch.setattr(al, "logger", log)
