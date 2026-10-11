@@ -126,7 +126,6 @@ SERVER_CALLED = (
     "wss://10.0.0.1:6080",  # the websockify call vnc_proxy makes
     "http://10.0.0.2:6080",  # vm.browser + port.vnc
     "wss://10.0.0.2:6080",
-    "http://10.0.0.3:9090",  # ServiceURLs.PROMETHEUS_API
     "http://10.0.0.3:9093",  # ServiceURLs.ALERTMANAGER_API
 )
 _PROM = SimpleNamespace(PROMETHEUS_API="http://10.0.0.3:9090", ALERTMANAGER_API="http://10.0.0.3:9093")
@@ -449,3 +448,8 @@ async def test_apply_egress_guard_none_is_no_guard_and_junk_is_a_type_error():
             await apply_egress_guard("http://10.1.2.3/x", junk)
     with pytest.raises(EgressBlockedError):
         await apply_egress_guard("http://10.1.2.3/x", False)
+
+
+@pytest.mark.asyncio
+async def test_prometheus_is_not_allowlisted_pending_18326(server_called):
+    assert not await al.is_internal_origin("http://10.0.0.3:9090/api/v1/query")

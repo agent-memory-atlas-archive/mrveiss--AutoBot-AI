@@ -11,6 +11,7 @@
   "autobot-backend/ai_hardware_accelerator.py": 2,
   "autobot-backend/api/browser_mcp.py": 2,
   "autobot-backend/api/http_client_mcp.py": 1,
+  "autobot-backend/api/monitoring.py": 2,
   "autobot-backend/api/npu_workers.py": 4,
   "autobot-backend/api/vnc_proxy.py": 1,
   "autobot-backend/chat_workflow/llm_handler.py": 2,

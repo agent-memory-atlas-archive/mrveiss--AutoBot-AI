@@ -109,12 +109,6 @@ async def _vnc_proxy_assets(n, base):
     await vnc_proxy.proxy_vnc_assets("desktop", "app.js", current_user={})
 
 
-async def _prometheus(n, base):
-    n.monkeypatch.setattr(monitoring, "_PROMETHEUS_URL", base)
-    n.session.request.return_value.json = AsyncMock(return_value={"status": "error"})
-    await monitoring._query_prometheus_instant("up")
-
-
 async def _alertmanager(n, base):
     n.monkeypatch.setattr(monitoring, "ServiceURLs", SimpleNamespace(ALERTMANAGER_API=base))
     n.monkeypatch.setitem(monitoring._alertmanager_cache, "timestamp", 0)
@@ -157,7 +151,6 @@ SITES = [
     pytest.param(_vnc_proxy_status, id="vnc_proxy_status"),
     pytest.param(_vnc_proxy_client, id="vnc_proxy_client"),
     pytest.param(_vnc_proxy_assets, id="vnc_proxy_assets"),
-    pytest.param(_prometheus, id="monitoring_prometheus"),
     pytest.param(_alertmanager, id="monitoring_alertmanager"),
     pytest.param(_analytics_health, id="analytics_health"),
     pytest.param(_npu_health, id="npu_workers_health"),

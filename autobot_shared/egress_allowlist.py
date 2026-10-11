@@ -149,8 +149,8 @@ def _server_called_urls() -> list[str]:
     to a human. These are here because server code requests them: ``api/analytics.py`` health check
     (frontend), ``api/vnc_proxy.py`` ``VNC_ENDPOINTS`` HTTP and websockify calls (``vm.main`` and
     ``vm.browser`` on ``port.vnc``; the websockify call is ``wss://``, so both schemes), and
-    ``api/monitoring.py`` Prometheus / Alertmanager queries (``ServiceURLs.PROMETHEUS_API`` /
-    ``ALERTMANAGER_API``).
+    ``api/monitoring.py`` Alertmanager queries (``ServiceURLs.ALERTMANAGER_API``). Prometheus is deliberately
+    absent: its host is derived two ways (``vm.main`` vs ``REDIS_VM_IP``), pending #18326.
     """
     from autobot_shared.network_constants import ServiceURLs
     from autobot_shared.ssot_config import config
@@ -162,7 +162,6 @@ def _server_called_urls() -> list[str]:
             for host in (config.vm.main, config.vm.browser)
             for scheme in ("http", "wss")
         ),
-        ServiceURLs.PROMETHEUS_API,
         ServiceURLs.ALERTMANAGER_API,
     ]
 

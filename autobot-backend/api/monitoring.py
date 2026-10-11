@@ -85,7 +85,7 @@ logger = get_logger(__name__)
 
 # Prometheus server URL — loaded once at import time via SSOT config (Issue #1283)
 _ssot = get_config()
-_PROMETHEUS_URL = ServiceURLs.PROMETHEUS_API  # the allowlisted SSOT origin (#17576)
+_PROMETHEUS_URL = f"http://{_ssot.vm.main}:{_ssot.port.prometheus}"
 
 
 # External API status (extracted from monitoring_compat.py, Issue #1283)
@@ -111,12 +111,12 @@ async def _query_prometheus_instant(query: str) -> float | None:
     """
     try:
         http_client = get_http_client()
+        # pending #18326: two Prometheus host derivations; guard once one SSOT home exists
         async with http_client.tracked_request(
             "GET",
             f"{_PROMETHEUS_URL}/api/v1/query",
             params={"query": query},
             timeout=aiohttp.ClientTimeout(total=10),
-            guard_egress=EGRESS_POLICY,
         ) as response:
             if response.status != 200:
                 logger.warning("Prometheus instant query failed: %s", response.status)
@@ -159,12 +159,12 @@ async def _query_prometheus_range(
     try:
         http_client = get_http_client()
         params = {"query": query, "start": to_rfc3339(start), "end": to_rfc3339(end), "step": step}
+        # pending #18326: two Prometheus host derivations; guard once one SSOT home exists
         async with http_client.tracked_request(
             "GET",
             f"{_PROMETHEUS_URL}/api/v1/query_range",
             params=params,
             timeout=aiohttp.ClientTimeout(total=30),
-            guard_egress=EGRESS_POLICY,
         ) as response:
             if response.status != 200:
                 logger.warning("Prometheus range query failed: %s", response.status)
