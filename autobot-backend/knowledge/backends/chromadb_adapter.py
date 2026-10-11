@@ -177,7 +177,12 @@ class ChromaDBCollection(BaseCollection):
         creation and stay in force), so they are left out of the request, not dropped from the collection."""
         merged = {k: v for k, v in {**self.metadata, **metadata}.items() if not k.startswith("hnsw:")}
         self._raw.modify(metadata=merged)
-        self.metadata = {**self.metadata, **metadata}
+        self.metadata = merged
+
+    @property
+    def configuration(self) -> Any:
+        """ChromaDB's collection configuration, where the HNSW settings stay in force after a modify."""
+        return getattr(self._raw, "configuration", None)
 
 
 class ChromaDBClient(BaseClient):

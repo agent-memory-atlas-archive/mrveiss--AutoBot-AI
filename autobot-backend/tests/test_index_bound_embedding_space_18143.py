@@ -191,7 +191,13 @@ async def test_an_approved_stamp_records_the_space_keeps_existing_metadata_and_t
     session, audit = await _run(tmp_path, client, _approval(768))
 
     meta = client.get_collection("autobot_docs").metadata
-    assert meta["keep"] == "me" and meta["hnsw:space"] == "cosine"  # merged, not replaced
+    assert meta["keep"] == "me"
+    assert "hnsw:space" not in meta  # as on real ChromaDB: a modify cannot carry it ...
+    from knowledge.backends.hnsw_params import hnsw_params
+
+    assert (
+        hnsw_params(client.get_collection("autobot_docs"))["space"] == "cosine"
+    )  # ... and the space is still reported  # merged, not replaced
     searcher = _searcher(meta)
     space = searcher._recorded_space()  # the recorded path: no probe, no warning
     assert (space.model_name, space.dim) == ("m", 768)
@@ -216,3 +222,19 @@ def test_the_stamp_action_is_registered_with_its_proposer() -> None:
     register_stamp_action()
     assert is_registered_action(ACTION)
     assert registered_action_proposers()[ACTION] == PROPOSED_BY
+
+
+def test_hnsw_params_reads_the_configuration_before_the_metadata() -> None:
+    from knowledge.backends.hnsw_params import hnsw_params
+
+    chroma_like = MagicMock(
+        metadata={"keep": "me"},
+        configuration={"hnsw": {"space": "cosine", "ef_construction": 200, "max_neighbors": 16}},
+    )
+    assert hnsw_params(chroma_like) == {"space": "cosine", "construction_ef": 200, "search_ef": "default", "M": 16}
+    legacy = MagicMock(metadata={"hnsw:space": "l2"}, configuration=None, spec=["metadata", "configuration"])
+    assert hnsw_params(legacy)["space"] == "l2"
+    assert (
+        hnsw_params(MagicMock(metadata={}, configuration=None, spec=["metadata", "configuration"]))["space"]
+        == "unknown"
+    )
