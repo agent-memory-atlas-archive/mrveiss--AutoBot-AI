@@ -3721,6 +3721,7 @@ before summarizing.
         seam gate holds matching tools BEFORE they execute — the correct
         pre-execution stage. Backend decides; the frontend only calls the endpoints.
         """
+        from chat_workflow.approval_baseline import with_baseline_categories
         from chat_workflow.session_role import (
             CHAT_APPROVAL_GATE_ENABLED,
             SessionRoleService,
@@ -3741,9 +3742,8 @@ before summarizing.
         # goal chain L4 reads on their behalf (#13687).
         context = apply_work_item(context, await SessionWorkItemService().get_work_item(session_id))
         if CHAT_APPROVAL_GATE_ENABLED:
-            categories = await svc.get_approval_categories(session_id)
-            if categories:
-                context = {**(context or {}), "requires_approval_before": categories}
+            # #18294: all categories gated by default; only the SLM setting relaxes one.
+            context = await with_baseline_categories(context, await svc.get_approval_categories(session_id))
         return context
 
     async def process_message_stream(
