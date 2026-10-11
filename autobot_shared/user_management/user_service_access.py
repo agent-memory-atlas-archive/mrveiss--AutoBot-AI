@@ -19,11 +19,12 @@ import uuid
 from sqlalchemy import select
 
 from autobot_shared.time_utils import now_utc
+from autobot_shared.user_management.grant_scope import encode_grant, grants_in_scope
 from autobot_shared.user_management.login_eligibility import login_refusal
 from autobot_shared.user_management.models.audit import AuditAction, AuditResourceType
 from autobot_shared.user_management.models.role import Role, UserRole
 from autobot_shared.user_management.models.user import UserCore
-from autobot_shared.user_management.role_permission_query import user_permission_names_query
+from autobot_shared.user_management.role_permission_query import user_grant_rows_query
 from autobot_shared.user_management.user_service_base import UserServiceBase
 
 
@@ -161,7 +162,12 @@ class UserAccessMixin(UserServiceBase):
         )
         return list(result.scalars().all())
 
-    async def get_user_permissions(self, user_id: uuid.UUID) -> set[str]:
-        """All permission names granted to a user through their roles, in one query (#18259)."""
-        result = await self.session.execute(user_permission_names_query(user_id))
-        return set(result.scalars().all())
+    async def get_user_permission_grants(self, user_id: uuid.UUID) -> set[str]:
+        """Every scoped grant the user holds through their roles, encoded for the cache (#18259, #18338)."""
+        rows = (await self.session.execute(user_grant_rows_query(user_id))).all()
+        grants = (encode_grant(name, org_id, is_system) for name, org_id, is_system in rows)
+        return {grant for grant in grants if grant is not None}
+
+    async def get_user_permissions(self, user_id: uuid.UUID, org_id: uuid.UUID | None = None) -> set[str]:
+        """Permission names the user holds acting in *org_id*: platform grants, plus that org's (#18338)."""
+        return grants_in_scope(await self.get_user_permission_grants(user_id), org_id)

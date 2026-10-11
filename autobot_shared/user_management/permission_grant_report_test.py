@@ -32,11 +32,18 @@ async def _seed(db):
 async def test_report_lists_every_role_with_permissions_and_its_new_grant(grant_db):
     await _seed(grant_db)
     changes = await report.build_grant_change_report(grant_db.session)
-    summary = {c.role_name: (c.granted, c.revoked, c.users_holding, c.is_system) for c in changes}
+    summary = {c.role_name: (c.granted, c.revoked, c.users_holding, c.scope) for c in changes}
     assert summary == {
-        "admin": (("secrets:system:read", "users:read", "users:write"), (), 2, True),
-        "auditor": (("audit:read",), (), 1, False),
+        "admin": (("secrets:system:read", "users:read", "users:write"), (), 2, "platform"),
+        "auditor": (("audit:read",), (), 1, f"org:{_ORG}"),
     }
+
+
+async def test_a_role_with_no_scope_is_not_a_change(grant_db):
+    """#18338: no company and not a system role grants nothing after the fix either."""
+    await grant_db.add_role("custom", ["admin.system"], is_system=False)
+    await grant_db.add_user("u9", ["custom"])
+    assert await report.build_grant_change_report(grant_db.session) == []
 
 
 async def test_report_new_grant_matches_the_fixed_user_query(grant_db):
@@ -44,7 +51,8 @@ async def test_report_new_grant_matches_the_fixed_user_query(grant_db):
     await _seed(grant_db)
     changes = {c.role_name: set(c.granted) for c in await report.build_grant_change_report(grant_db.session)}
     service = _Bound(grant_db.session, TenantContext())
-    assert await service.get_user_permissions(grant_db.users["u2"]) == changes["admin"] | changes["auditor"]
+    assert await service.get_user_permissions(grant_db.users["u2"]) == changes["admin"]
+    assert await service.get_user_permissions(grant_db.users["u2"], _ORG) == changes["admin"] | changes["auditor"]
 
 
 async def test_report_writes_nothing(grant_db):
@@ -64,9 +72,9 @@ def test_legacy_grant_is_empty_whatever_the_rows():
 
 
 def test_format_report_lists_role_and_permissions():
-    change = report.RoleGrantChange("r1", "admin", None, True, 2, ("users:read",), ())
+    change = report.RoleGrantChange("r1", "admin", None, True, "platform", 2, ("users:read",), ())
     text = report.format_report([change])
-    assert "role admin (r1, system, 2 user(s))" in text and "    + users:read" in text
+    assert "role admin (r1, grants apply: platform, 2 user(s))" in text and "    + users:read" in text
 
 
 def test_cli_refuses_without_the_url_variable(monkeypatch, capsys):
@@ -76,7 +84,7 @@ def test_cli_refuses_without_the_url_variable(monkeypatch, capsys):
 
 
 def test_cli_emits_json(monkeypatch, capsys):
-    change = report.RoleGrantChange("r1", "admin", None, True, 1, ("users:read",), ())
+    change = report.RoleGrantChange("r1", "admin", None, True, "platform", 1, ("users:read",), ())
 
     async def fake(url):
         assert url == "sqlite+aiosqlite:///:memory:"

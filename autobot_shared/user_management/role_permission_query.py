@@ -10,8 +10,12 @@ user holding a role with at least one ``role_permissions`` row raised, and the
 RBAC middleware turned that into an empty (deny-all) permission set.
 
 Both the fixed ``get_user_permissions`` and the operator's grant-change report
-(``permission_grant_report``) build their statements here, so the report shows
-exactly what the fix grants and cannot drift from it.
+(``permission_grant_report``) build their statements and the grant scope here, so
+the report shows exactly what the fix grants and cannot drift from it.
+
+Grants are scoped (#18338): a system role's grants apply platform-wide, a company
+role's only inside its company (``grant_scope``). The RBAC cache holds the encoded
+grants per user (``encode_grant``) and filters them per request (``grants_in_scope``).
 
 The statements are Core selects over the mapped classes' own tables rather than
 ORM entity selects. An ORM select configures every mapper in the registry, and
@@ -36,13 +40,13 @@ _USER_ROLES = UserRole.__table__
 _GRANT_JOIN = _ROLE_PERMISSIONS.join(_PERMISSIONS, _PERMISSIONS.c.id == _ROLE_PERMISSIONS.c.permission_id)
 
 
-def user_permission_names_query(user_id: uuid.UUID) -> Select:
-    """Distinct permission names granted to *user_id* through all of their roles.
-
-    One statement: user_roles -> role_permissions -> permissions.
-    """
-    joined = _USER_ROLES.join(_GRANT_JOIN, _ROLE_PERMISSIONS.c.role_id == _USER_ROLES.c.role_id)
-    return select(_PERMISSIONS.c.name).select_from(joined).where(_USER_ROLES.c.user_id == user_id).distinct()
+def user_grant_rows_query(user_id: uuid.UUID) -> Select:
+    """(permission name, role org_id, role is_system) for every role grant *user_id* holds. One statement."""
+    joined = _USER_ROLES.join(_ROLES, _ROLES.c.id == _USER_ROLES.c.role_id).join(
+        _GRANT_JOIN, _ROLE_PERMISSIONS.c.role_id == _ROLES.c.id
+    )
+    columns = (_PERMISSIONS.c.name, _ROLES.c.org_id, _ROLES.c.is_system)
+    return select(*columns).select_from(joined).where(_USER_ROLES.c.user_id == user_id).distinct()
 
 
 def role_grant_rows_query() -> Select:

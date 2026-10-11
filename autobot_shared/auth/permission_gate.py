@@ -78,9 +78,9 @@ class PermissionGate:
         self._wire_rbac = wire_rbac
         self._load_db_names = load_db_names or default_db_loader
 
-    async def _wired_db_names(self, user_id: uuid.UUID) -> Iterable[str]:
+    async def _wired_db_names(self, user_id: uuid.UUID, org_id: uuid.UUID | None) -> Iterable[str]:
         self._wire_rbac()
-        return await self._load_db_names(user_id)
+        return await self._load_db_names(user_id, org_id)
 
     def require_permission(self, permission: Permission) -> Callable:
         """Dependency factory: the caller must hold *permission*. Returns the caller."""

@@ -84,7 +84,16 @@ class TestEvaluate:
         loader = AsyncMock(return_value=["knowledge.write"])
         caller = {"role": "readonly", "user_id": str(_UID)}
         assert await evaluate_permission(caller, Permission.KNOWLEDGE_WRITE, loader)
-        loader.assert_awaited_once_with(_UID)
+        loader.assert_awaited_once_with(_UID, None)
+
+    async def test_the_loader_is_asked_for_the_callers_org(self):
+        """#18338: company-role grants are looked up for the org the caller acts in."""
+        org = "00000000-0000-0000-0000-0000000000c9"
+        loader = AsyncMock(return_value=[])
+        await evaluate_permission(
+            {"role": "readonly", "user_id": str(_UID), "org_id": org}, Permission.API_WRITE, loader
+        )
+        loader.assert_awaited_once_with(_UID, uuid.UUID(org))
 
     async def test_a_caller_without_a_user_id_is_never_looked_up(self):
         loader = AsyncMock(return_value=["knowledge.write"])

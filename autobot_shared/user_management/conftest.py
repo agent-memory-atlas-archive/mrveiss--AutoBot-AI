@@ -28,11 +28,14 @@ class GrantDb:
     roles: dict[str, uuid.UUID] = field(default_factory=dict)
     users: dict[str, uuid.UUID] = field(default_factory=dict)
 
-    async def add_role(self, name: str, permissions: list[str], org_id: uuid.UUID | None = None) -> uuid.UUID:
-        """Insert a role granting *permissions* (each created if new)."""
+    async def add_role(
+        self, name: str, permissions: list[str], org_id: uuid.UUID | None = None, is_system: bool | None = None
+    ) -> uuid.UUID:
+        """Insert a role granting *permissions* (each created if new); system unless it has an org."""
         role_id = uuid.uuid4()
+        system = org_id is None if is_system is None else is_system
         await self.session.execute(
-            Role.__table__.insert().values(id=role_id, name=name, org_id=org_id, is_system=org_id is None, priority=0)
+            Role.__table__.insert().values(id=role_id, name=name, org_id=org_id, is_system=system, priority=0)
         )
         for perm_name in permissions:
             perm_id = await self._permission_id(perm_name)

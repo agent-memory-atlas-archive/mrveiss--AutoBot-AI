@@ -8,7 +8,9 @@ Before #18259 the DB-backed RBAC path raised for any user holding a role with at
 least one ``role_permissions`` row, and the middleware returned an empty set
 (deny-all). A role with no rows also granted nothing. So the legacy effective
 grant of EVERY role on that path is the empty set, and the fix grants exactly
-the role's rows. This module computes old vs new per role and permission so the
+the role's rows, in the role's scope (#18338): a system role's platform-wide, a
+company role's only to callers acting in that company. A role with neither grants
+nothing and is not listed. This module computes old vs new per role and permission so the
 newly granted set is reviewed per deployment before the fix is deployed.
 
 Only meaningful where the service runs with ``postgres_enabled``: without it the
@@ -34,6 +36,7 @@ from typing import Any, Iterable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from autobot_shared.user_management.grant_scope import grant_scope
 from autobot_shared.user_management.role_permission_query import role_grant_rows_query
 
 DEFAULT_URL_ENV = "AUTOBOT_GRANT_REPORT_DATABASE_URL"
@@ -47,6 +50,7 @@ class RoleGrantChange:
     role_name: str
     org_id: str | None
     is_system: bool
+    scope: str
     users_holding: int
     granted: tuple[str, ...]
     revoked: tuple[str, ...]
@@ -74,6 +78,7 @@ def _group_rows(rows: Iterable[Any]) -> dict[str, dict[str, Any]]:
                 "role_name": row.role_name,
                 "org_id": str(row.org_id) if row.org_id is not None else None,
                 "is_system": bool(row.is_system),
+                "scope": grant_scope(row.org_id, bool(row.is_system)),
                 "users_holding": int(row.users_holding),
                 "permissions": [],
             },
@@ -83,8 +88,12 @@ def _group_rows(rows: Iterable[Any]) -> dict[str, dict[str, Any]]:
 
 
 def _change_for(role_id: str, entry: dict[str, Any]) -> RoleGrantChange | None:
-    """The role's change, or None when legacy and fixed grants agree."""
-    new = frozenset(entry["permissions"])
+    """The role's change, or None when legacy and fixed grants agree.
+
+    A role whose grants have no scope (no company, not a system role) grants nothing
+    after the fix either, so it is not a change (#18338).
+    """
+    new = frozenset(entry["permissions"]) if entry["scope"] else frozenset()
     old = legacy_effective_grant(entry["permissions"])
     if old == new:
         return None
@@ -93,6 +102,7 @@ def _change_for(role_id: str, entry: dict[str, Any]) -> RoleGrantChange | None:
         role_name=entry["role_name"],
         org_id=entry["org_id"],
         is_system=entry["is_system"],
+        scope=entry["scope"],
         users_holding=entry["users_holding"],
         granted=tuple(sorted(new - old)),
         revoked=tuple(sorted(old - new)),
@@ -115,8 +125,10 @@ def format_report(changes: list[RoleGrantChange]) -> str:
         return "No role's effective permission set changes with the #18259 fix.\n"
     lines = [f"{len(changes)} role(s) change effective permissions with the #18259 fix:"]
     for change in changes:
-        scope = "system" if change.is_system else f"org {change.org_id}"
-        lines.append(f"- role {change.role_name} ({change.role_id}, {scope}, {change.users_holding} user(s))")
+        lines.append(
+            f"- role {change.role_name} ({change.role_id}, grants apply: {change.scope}, "
+            f"{change.users_holding} user(s))"
+        )
         lines.extend(f"    + {name}" for name in change.granted)
         lines.extend(f"    - {name}" for name in change.revoked)
     return "\n".join(lines) + "\n"
