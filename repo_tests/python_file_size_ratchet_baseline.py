@@ -232,11 +232,11 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/knowledge/categories.py": 965,
     "autobot-backend/knowledge/collections.py": 728,
     "autobot-backend/knowledge/connectors/base.py": 663,
-    "autobot-backend/knowledge/connectors/credential_store.py": 778,  # #16444: rotate() validates the merged bundle
+    "autobot-backend/knowledge/connectors/credential_store.py": 768,  # #16444: rotate() validates the merged bundle
     "autobot-backend/knowledge/connectors/gdrive.py": 702,
     "autobot-backend/knowledge/connectors/gitlab.py": 873,
     "autobot-backend/knowledge/connectors/onedrive.py": 642,
-    "autobot-backend/knowledge/connectors/tests/test_credential_store.py": 1043,
+    "autobot-backend/knowledge/connectors/tests/test_credential_store.py": 1021,
     "autobot-backend/knowledge/facts.py": 1783,
     "autobot-backend/knowledge/ownership.py": 757,
     "autobot-backend/knowledge/pipeline/cognifiers/cognifiers_test.py": 806,
