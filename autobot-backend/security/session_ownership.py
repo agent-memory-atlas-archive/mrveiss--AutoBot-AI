@@ -504,7 +504,7 @@ class SessionOwnershipValidator:
         an unknown owner is not "unowned", and claiming it would hand the session
         to the caller.
         """
-        return await read_owner(session_id, request)
+        return await read_owner(session_id, request) or None
 
     async def _owner_when_cache_is_empty(
         self, session_id: str, username: str, user_data: Dict, request: Request

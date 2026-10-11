@@ -62,11 +62,12 @@ def require_posture(posture: object) -> SessionPosture:
     return posture
 
 
-async def read_owner(session_id: str, request: Request) -> str | None:
-    """The durable owner: None only when none is recorded. Every failure to learn it denies (#14033).
+async def read_owner(session_id: str, request: Request, username: str | None = None) -> str | None:
+    """The durable owner as recorded: None when none is. Every failure to learn it denies (#14033).
 
     A raising lookup, no manager, or a recorded owner that is not a string is an unknown owner, and
     an unknown owner is never "unowned" -- claiming it would hand the session to the caller.
+    An empty string is returned as recorded: STRICT denies it, DEFAULT reads it as unowned.
     """
     from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415
 
@@ -74,22 +75,17 @@ async def read_owner(session_id: str, request: Request) -> str | None:
         owner = await get_chat_history_manager(request).get_session_owner(session_id)
     except Exception as exc:
         logger.warning("Could not read the durable owner of session %s...: %s", session_id[:8], exc)
-        raise deny_unreadable_owner(session_id, None) from None
+        raise deny_unreadable_owner(session_id, username) from None
     if owner is not None and not isinstance(owner, str):
         logger.warning("Session %s... records a non-string owner (%s)", session_id[:8], type(owner).__name__)
-        raise deny_unreadable_owner(session_id, None)
-    return owner or None
+        raise deny_unreadable_owner(session_id, username)
+    return owner
 
 
 async def _strict_owner_check(session_id: str, user_data: Dict, request: Request) -> Dict:
     """Admin passes; otherwise the recorded owner must be the caller. Unowned is legacy-allowed."""
-    from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415
-
     username = user_data.get("username")
-    try:
-        owner = await get_chat_history_manager(request).get_session_owner(session_id)
-    except Exception:  # any lookup failure, typed (SessionOwnerUnreadable) or not, is an unknown owner
-        raise deny_unreadable_owner(session_id, username) from None
+    owner = await read_owner(session_id, request, username)
     if owner is None:
         logger.info("Session %s... has no owner - allowing access (legacy session)", session_id[:8])
         return {"authorized": True, "user_data": user_data, "reason": "legacy_unowned"}

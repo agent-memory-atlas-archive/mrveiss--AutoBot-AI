@@ -119,6 +119,7 @@ CASES = [
         new_default=DENY,
     ),
     _case("owner recorded as a non-name", file=NONSTR, old_strict=DENY, old_default=ALLOW, new_default=DENY),
+    _case("owner recorded as empty", file="", old_strict=DENY, old_default=ALLOW),
 ]
 
 
