@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import ast
 import itertools
+from pathlib import Path
 
 import pytest
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from autobot_shared.service_registry_core import DeploymentMode as M
 from autobot_shared.service_registry_core import detect_deployment_mode
@@ -84,7 +86,20 @@ def _forking_detectors(source: str) -> list[str]:
     return bad
 
 
-MIN_FILES_SCANNED = 300  # the two trees hold far more; a scan of ~0 files is a broken glob
+def _scanned_files(root: Path) -> list[str]:
+    """Every .py file under the scanned trees; empty on a tree that lacks them."""
+    return sorted(str(p.relative_to(root)) for r in _SCAN if (root / r).is_dir() for p in (root / r).rglob("*.py"))
+
+
+#: Files the no-second-decision-body sweep reads -- a scan of ~0 files is a broken glob.
+#: Migrated from a hand-rolled ``MIN_FILES_SCANNED = 300`` (#16147); pinned mid-window.
+SCAN_REACH = declare(
+    "deployment-mode-detector-scan",
+    discover=_scanned_files,
+    floor=4676,  # measured: 4751 files, window [4601, 4751]
+    growth=150,
+    what="python files scanned for a second deployment-mode decision body",
+)
 MIN_DETECTORS_SEEN = 2  # backend registry + scripts registry, each still defines the thin wrapper
 
 
@@ -99,7 +114,7 @@ def test_no_second_decision_body_in_tree() -> None:
             seen += 1
             if _forking_detectors(text):
                 offenders.append(str(path.relative_to(_ROOT)))
-    assert scanned >= MIN_FILES_SCANNED, scanned
+    assert scanned >= SCAN_REACH.floor and len(SCAN_REACH.examined(_ROOT)) >= SCAN_REACH.floor, scanned
     assert seen >= MIN_DETECTORS_SEEN, seen
     assert not offenders, offenders
 

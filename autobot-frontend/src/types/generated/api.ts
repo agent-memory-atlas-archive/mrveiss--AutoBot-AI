@@ -85978,6 +85978,8 @@ export interface components {
         /**
          * OAuthBundleStripPreviewResponse
          * @description Dry run. ``outcomes``: outcome -> {provider -> count}; ``stripped`` means 'would be stripped'.
+         *
+         *     ``bundle_ids``: outcome -> record ids of the stored OAuth bundles (ids, never values).
          */
         OAuthBundleStripPreviewResponse: {
             /** Outcomes */
@@ -85986,8 +85988,8 @@ export interface components {
                     [key: string]: number;
                 };
             };
-            /** Secret Ids */
-            secret_ids: {
+            /** Bundle Ids */
+            bundle_ids: {
                 [key: string]: string[];
             };
         } & {

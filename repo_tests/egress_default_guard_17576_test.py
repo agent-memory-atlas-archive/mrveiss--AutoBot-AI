@@ -98,9 +98,22 @@ REACH = declare(
     roots=("autobot-", "autobot_shared/", "debug/", "plugins/", "scripts/", "pipeline-scripts/"),
 )
 
+
+def _outbound_call_sites(root: Path) -> list[str]:
+    """One id per outbound call SITE (detected + declared), so the population is the site total."""
+    return [f"{p}#{i}" for p, c in census_by_path(root).items() for i in range(c["detected"] + c["declared"])]
+
+
 #: Outbound call SITES (not files) the sweep must find -- the files floor alone cannot see a detector
-#: that lost a client kind but still finds one call per file.
-SITE_FLOOR = 400
+#: that lost a client kind but still finds one call per file. Migrated from a hand-rolled
+#: ``SITE_FLOOR = 400`` (#16147); pinned mid-window from the measured population.
+SITES = declare(
+    "egress-default-outbound-call-sites",
+    discover=_outbound_call_sites,
+    floor=443,  # measured: 473 sites, window [413, 473]
+    growth=60,
+    what="outbound HTTP call sites (detected + declared) in the egress sweep",
+)
 
 
 def unguarded_counts(root: Path) -> dict[str, int]:
@@ -297,7 +310,7 @@ def test_the_sweep_reaches_a_known_outbound_caller() -> None:
 
 def test_the_sweep_population_floors() -> None:
     assert len(REACH.examined(repo_root())) >= REACH.floor
-    assert _site_total(repo_root()) >= SITE_FLOOR, "the detector found implausibly few outbound calls"
+    assert len(SITES.examined(repo_root())) >= SITES.floor, "the detector found implausibly few outbound calls"
 
 
 # --- the ratchet --------------------------------------------------------------

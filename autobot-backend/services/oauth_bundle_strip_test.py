@@ -12,6 +12,7 @@ import pytest
 
 import api.admin_oauth_bundle_strip as proposer
 from api.schemas_oauth_bundle_strip import OAuthBundleStripRequest
+from autobot_shared.eventually import eventually
 from autobot_shared.leader_lease import LeaderLease
 from knowledge.connectors import oauth_flow
 from knowledge.connectors.credential_store import _refresh_lock_key
@@ -252,10 +253,10 @@ async def test_cancellation_waits_for_the_writing_thread_before_the_lease_is_rel
 
     svc.update_secret = _slow_update
     task = asyncio.ensure_future(oauth_bundle_strip.strip_all(svc, "approver"))
-    while not started.is_set():
-        await asyncio.sleep(0.01)
+    await eventually(started.is_set, watch=task)
     task.cancel()
-    await asyncio.sleep(0.05)
+    for _ in range(10):  # let the cancellation reach the task's shielded wait; no fixed interval
+        await asyncio.sleep(0)
     assert key in locks.held  # still held while the thread is mid-write
     proceed.set()
     with pytest.raises(asyncio.CancelledError):

@@ -42,7 +42,7 @@ register_strip_action()
 async def preview_oauth_bundle_strip(current_user: dict = Depends(get_current_user)):
     """Dry run: how many bundles per provider would be stripped, skipped or are already clean."""
     report = await oauth_bundle_strip.preview(get_secrets_service(), current_user.get("username") or "admin")
-    return OAuthBundleStripPreviewResponse(outcomes=report.summary(), secret_ids=report.secret_ids)
+    return OAuthBundleStripPreviewResponse(outcomes=report.summary(), bundle_ids=report.secret_ids)
 
 
 @router.post(

@@ -84,6 +84,16 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "Workflow files are a subset of tracked YAML; compose, ansible and filter files grow at "
         "their own rate, so a share of all YAML would sink with nothing wrong.",
     ),
+    "deployment-mode-detector-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python files under two of the tracked trees, a subset of all tracked Python; the other trees drift.",
+    ),
+    "egress-default-outbound-call-sites": (
+        ABSOLUTE,
+        "NOT_PATHS",
+        "Call sites, not paths: one id per detected or declared outbound call in the egress sweep.",
+    ),
     "egress-default-outbound-call-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

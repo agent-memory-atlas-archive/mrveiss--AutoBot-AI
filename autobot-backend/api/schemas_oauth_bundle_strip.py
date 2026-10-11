@@ -8,10 +8,13 @@ from pydantic import BaseModel, Field
 
 
 class OAuthBundleStripPreviewResponse(BaseModel):
-    """Dry run. ``outcomes``: outcome -> {provider -> count}; ``stripped`` means 'would be stripped'."""
+    """Dry run. ``outcomes``: outcome -> {provider -> count}; ``stripped`` means 'would be stripped'.
+
+    ``bundle_ids``: outcome -> record ids of the stored OAuth bundles (ids, never values).
+    """
 
     outcomes: dict[str, dict[str, int]]
-    secret_ids: dict[str, list[str]]
+    bundle_ids: dict[str, list[str]]
 
 
 class OAuthBundleStripRequest(BaseModel):
