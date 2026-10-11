@@ -75,6 +75,45 @@ def test_ssot_set_contains_the_configured_service_origins():
     assert al.normalize_origin(f"http://{config.vm.chromadb}:{config.port.chromadb}") in origins
 
 
+@pytest.mark.parametrize("name", ["chrome_cdp_url", "vnc_url", "frontend_url", "websocket_url", "redis_url"])
+def test_non_node_to_node_origins_are_not_internal(name):
+    """CDP / VNC / frontend / websocket / redis are not node-to-node HTTP targets (#17576 review)."""
+    origin = al.normalize_origin(getattr(config, name))
+    own = {
+        al.normalize_origin(getattr(config, n)) for n in ("backend_url", "ollama_url", "aistack_url", "npu_worker_url")
+    }
+    if origin in own:  # single-host layouts may share an origin with a legitimate service; only distinct ones count
+        pytest.skip(f"{name} shares an origin with an allowlisted service in this layout")
+    assert origin not in al.static_internal_origins()
+
+
+def test_cdp_vnc_frontend_origins_are_dropped_with_distinct_ports(monkeypatch):
+    from types import SimpleNamespace
+
+    fake = SimpleNamespace(
+        backend_url="http://10.0.0.1:8001",
+        ollama_url="http://10.0.0.1:11434",
+        aistack_url="http://10.0.0.1:8080",
+        npu_worker_url="http://10.0.0.1:8081",
+        tts_worker_url="http://10.0.0.1:8083",
+        browser_service_url="http://10.0.0.1:3000",
+        slm_url="http://10.0.0.1:8000",
+        chrome_cdp_url="http://10.0.0.1:9222",
+        vnc_url="http://10.0.0.1:6080/vnc.html",
+        frontend_url="http://10.0.0.1:5173",
+        websocket_url="ws://10.0.0.1:8001/api/ws",
+        vm=SimpleNamespace(chromadb="10.0.0.1"),
+        port=SimpleNamespace(chromadb=8100),
+    )
+    import autobot_shared.ssot_config as ssot
+
+    monkeypatch.setattr(ssot, "config", fake)
+    origins = al.static_internal_origins()
+    assert "http://10.0.0.1:8100" in origins and len(origins) == 8
+    for dropped in ("http://10.0.0.1:9222", "http://10.0.0.1:6080", "http://10.0.0.1:5173", "ws://10.0.0.1:8001"):
+        assert dropped not in origins
+
+
 def test_redis_url_is_not_an_http_origin():
     assert al.normalize_origin(config.redis_url) not in al.static_internal_origins()
 
@@ -88,6 +127,10 @@ def manager(monkeypatch):
     session = MagicMock()
     session.request = AsyncMock(return_value="response")
     monkeypatch.setattr(mgr, "get_session", AsyncMock(return_value=session))
+    # request() hands the active-request slot to the caller; restore the counters so a shared
+    # manager instance does not leak this module's in-flight count into later tests.
+    for attr in ("_active_requests", "_request_count", "_error_count"):
+        monkeypatch.setattr(mgr, attr, getattr(mgr, attr))
     return mgr, session
 
 
@@ -185,6 +228,19 @@ async def test_provider_origins_are_allowed_and_cached_for_the_ttl(pinned_intern
 
 
 @pytest.mark.asyncio
+async def test_slow_provider_is_abandoned_after_the_timeout(pinned_internal, monkeypatch):
+    import asyncio
+
+    async def slow():
+        await asyncio.sleep(5)
+        return ["http://10.9.9.9:1"]
+
+    monkeypatch.setattr(al, "EGRESS_PROVIDER_TIMEOUT_S", 0.05)
+    al.register_internal_origin_provider(slow)
+    assert await al.internal_origins() == al.static_internal_origins()
+
+
+@pytest.mark.asyncio
 async def test_provider_exception_leaves_the_static_set_intact(pinned_internal, caplog):
     al.register_internal_origin_provider(AsyncMock(side_effect=RuntimeError("db down")))
     assert await al.internal_origins() == {"http://127.0.0.1:8001", "http://127.0.0.1:11434"}
@@ -192,8 +248,72 @@ async def test_provider_exception_leaves_the_static_set_intact(pinned_internal, 
     await assert_egress_policy("http://127.0.0.1:8001/x")
 
 
+# --- parser differentials (#17576 review, HIGH) -----------------------------
+
+_DIFFERENTIAL_URLS = [
+    "http://169.254.169.254\\@127.0.0.1:8001/",
+    "http://169.254.169.254:80\\@127.0.0.1:8001/",
+    "http://127.0.0.1:8001\\@169.254.169.254/",
+    "http://evil.example@127.0.0.1:8001/",
+    "http://u" + ":p@127.0.0.1:8001/",
+    "http://127.0.0.1:8001@169.254.169.254/",
+    "http://127.0.0.1\t:8001/",
+    "http://127.0.0.1:8001\n/",
+    "http://127.0.0.1\r\n:8001/",
+    "http://127.0.0.%31:8001/",
+    "http://127.0.0.1%2e:8001/",
+    "http://127.0.0.1:08001/",
+    "http://127.0.0.1:8001 @169.254.169.254/",
+    "http://\u2460\u2467.0.0.1:8001/",
+]
+
+
+@pytest.mark.parametrize("url", _DIFFERENTIAL_URLS, ids=lambda u: repr(u)[:40])
+def test_ambiguous_urls_are_not_internal_and_fall_through(url, pinned_internal):
+    assert al.strict_origin(url) is None
+
+
+@pytest.mark.asyncio
+async def test_metadata_differential_probe_is_refused_under_policy(pinned_internal):
+    with pytest.raises(EgressBlockedError):
+        await assert_egress_policy("http://169.254.169.254\\@127.0.0.1:8001/")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1:8001/a?b=c#d",
+        "HTTP://127.0.0.1:8001",
+        "http://[::1]:8001/x",
+        "http://localhost:8001/",
+        "https://svc.internal/x",
+    ],
+)
+def test_accepted_internal_urls_parse_identically_in_every_client_stack(url):
+    import httpx
+    import yarl
+    from urllib3.util import parse_url
+
+    origin = al.strict_origin(url)
+    assert origin is not None
+    host_port = origin.split("://", 1)[1]
+    u3 = parse_url(url)
+    yu = yarl.URL(url)
+    hx = httpx.URL(url)
+    default = {"http": 80, "https": 443}[origin.split(":", 1)[0]]
+    expected = {(h.strip("[]"), p) for h, p in [_split(host_port)]}
+    for host, port in ((u3.host, u3.port), (yu.host, yu.explicit_port or yu.port), (hx.host, hx.port or default)):
+        assert (host.strip("[]").lower(), port or default) in expected, (url, host, port)
+
+
+def _split(host_port: str):
+    host, _, port = host_port.rpartition(":")
+    return host, int(port)
+
+
 def test_ttl_constant_is_env_backed_and_registered():
     from autobot_shared.env_registry import REGISTRY
 
     spec = REGISTRY["AUTOBOT_EGRESS_INTERNAL_ORIGINS_TTL_S"]
     assert spec.default == 60 and spec.type is int
+    assert REGISTRY["AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S"].default == 5

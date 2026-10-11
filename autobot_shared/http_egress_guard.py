@@ -55,6 +55,10 @@ class _EgressPolicy:
 #: ``guard_egress=EGRESS_POLICY`` (#17576 AC4): an origin on the internal
 #: allowlist (:mod:`autobot_shared.egress_allowlist`) bypasses the check;
 #: anything else must be a public address (``allow_private=False``).
+#:
+#: **ONLY for server-chosen URLs** (from the SSOT or operator configuration). A URL a user, an LLM
+#: or a document supplied must use ``guard_egress=False`` (public-only, no internal trust), or the
+#: requester can aim the server at its own services.
 EGRESS_POLICY = _EgressPolicy()
 
 

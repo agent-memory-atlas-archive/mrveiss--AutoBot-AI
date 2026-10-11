@@ -32,6 +32,7 @@ from repo_tests._egress_default import outbound_sites, scan_paths
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
+from autobot_shared.declared_egress import DECLARED_EGRESS
 from tools.lint._scan_helpers import tracked_paths
 
 BASELINE_FILE = Path(__file__).with_name("egress_unguarded_baseline_17576.json")
@@ -60,15 +61,28 @@ def scoped_paths(root: Path) -> list[str]:
         return []
 
 
+def census_by_path(root: Path) -> dict[str, dict[str, int]]:
+    """Path -> ``{detected, declared}``: AST-detected calls plus declared library-mediated egress."""
+    census = {p: {"detected": len(sites), "declared": 0} for p, sites in scan_paths(root, scoped_paths(root)).items()}
+    for entry in DECLARED_EGRESS:
+        if not (root / entry.path).is_file():
+            continue  # an empty/other tree: the declared entry is not part of ITS census
+        census.setdefault(entry.path, {"detected": 0, "declared": 0})["declared"] += 1
+    return census
+
+
 def _files_with_outbound_calls(root: Path) -> list[str]:
-    return sorted(scan_paths(root, scoped_paths(root)))
+    try:
+        return sorted(census_by_path(root))
+    except FileNotFoundError:
+        return []
 
 
 def _site_total(root: Path) -> int:
-    return sum(len(sites) for sites in scan_paths(root, scoped_paths(root)).values())
+    return sum(c["detected"] + c["declared"] for c in census_by_path(root).values())
 
 
-#: Measured on origin/main at 497f439b46: 474 outbound calls in 185 files. ``roots`` lists every
+#: Measured on origin/main at 497f439b46: 468 outbound calls in 186 files plus 2 declared (baseline 454 unguarded in 175 paths). ``roots`` lists every
 #: top-level tree the sweep reaches; a new top-level tree with an outbound call fails the scope check
 #: loudly (widen it) rather than being swept silently outside the declared scope.
 REACH = declare(
@@ -110,20 +124,82 @@ def ratchet_verdict(found: dict[str, int], baseline: dict[str, int]) -> tuple[li
 
 # --- the instrument, before any count it produces is read --------------------
 
+_POLICY_IMPORT = "from autobot_shared.http_egress_guard import EGRESS_POLICY, assert_egress_policy\n"
+_CONNECTOR_IMPORT = (
+    "from knowledge.connectors.base import VENDOR_API_EGRESS, CONTENT_URL_EGRESS, instance_host_egress\n"
+)
+
 _FIXTURES_UNGUARDED = {
     "manager": "async def f(u):\n    return await get_http_client().tracked_request('GET', u)\n",
     "manager-none": "async def f(u):\n    return await http_client.get_json(u, guard_egress=None)\n",
+    "manager-true": "async def f(u):\n    return await http_client.get_json(u, guard_egress=True)\n",
+    "manager-variable": "async def f(u, g):\n    return await http_client.get_json(u, guard_egress=g)\n",
+    "manager-kwargs": "async def f(u, **kw):\n    return await http_client.get_json(u, **kw)\n",
+    "manager-shadowed-policy": "VENDOR_API_EGRESS = True\nasync def f(u):\n    return await http_client.get_json(u, guard_egress=VENDOR_API_EGRESS)\n",
+    "manager-bound": "async def f(u):\n    c = get_http_client()\n    return await c.get(u)\n",
     "session": "import aiohttp\nasync def f(session, u):\n    return await session.get(u)\n",
+    "session-with": "import aiohttp\nasync def f(u):\n    async with aiohttp.ClientSession() as http:\n        return await http.post(u)\n",
+    "session-from-import": (
+        "from aiohttp import ClientSession as CS\nasync def f(u):\n    s = CS()\n    return await s.get(u)\n"
+    ),
+    "session-tracked": (
+        "async def f(u):\n    async with get_http_client().tracked_session() as sess:\n        return await sess.get(u)\n"
+    ),
     "httpx": "import httpx\nasync def f(u):\n    return await httpx.AsyncClient().get(u)\n",
+    "httpx-with": "import httpx\nasync def f(u):\n    async with httpx.AsyncClient() as ac:\n        return await ac.get(u)\n",
+    "httpx-module-call": "import httpx\ndef f(u):\n    return httpx.get(u)\n",
     "requests": "import requests\ndef f(u):\n    return requests.get(u)\n",
+    "requests-alias": "import requests as r\ndef f(u):\n    return r.post(u)\n",
+    "requests-session": "import requests\ndef f(u):\n    s = requests.Session()\n    return s.get(u)\n",
+    "requests-from-import": "from requests import get as g\ndef f(u):\n    return g(u)\n",
     "urllib": "import urllib.request\ndef f(u):\n    return urllib.request.urlopen(u)\n",
+    "urllib-alias": "from urllib.request import urlopen as uo\ndef f(u):\n    return uo(u)\n",
+    "getattr": "import aiohttp\nasync def f(session, u):\n    return await getattr(session, 'get')(u)\n",
+    "partial": "import aiohttp, functools\nasync def f(session, u):\n    return functools.partial(session.get, u)\n",
+    "bound-method": "import aiohttp\nasync def f(session, u):\n    g = session.get\n    return await g(u)\n",
+    "raw-policy-other-url": (
+        _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy('https://x.test')\n"
+        "    return await session.get(u)\n"
+    ),
+    "raw-policy-nested-def": (
+        _POLICY_IMPORT
+        + "import aiohttp\nasync def f(session, u):\n    async def g():\n        await assert_egress_policy(u)\n"
+        "    return await session.get(u)\n"
+    ),
+    "raw-policy-module-level": (
+        _POLICY_IMPORT + "import aiohttp\nasync def a(u):\n    await assert_egress_policy(u)\n"
+        "async def b(session, u):\n    return await session.get(u)\n"
+    ),
+    "raw-policy-after": (
+        _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    r = await session.get(u)\n"
+        "    await assert_egress_policy(u)\n    return r\n"
+    ),
 }
 
 _FIXTURES_GUARDED = {
-    "manager-bool": "async def f(u):\n    return await get_http_client().tracked_request('GET', u, guard_egress=False)\n",
-    "manager-policy": "async def f(u):\n    return await http_client.post_json(u, guard_egress=EGRESS_POLICY)\n",
+    "manager-false": "async def f(u):\n    return await get_http_client().tracked_request('GET', u, guard_egress=False)\n",
+    "manager-policy": (
+        _POLICY_IMPORT + "async def f(u):\n    return await http_client.post_json(u, guard_egress=EGRESS_POLICY)\n"
+    ),
+    "manager-vendor": (
+        _CONNECTOR_IMPORT
+        + "async def f(u):\n    return await http_client.get_json(u, guard_egress=VENDOR_API_EGRESS)\n"
+    ),
+    "manager-content": (
+        _CONNECTOR_IMPORT
+        + "async def f(u):\n    return await http_client.get_json(u, guard_egress=CONTENT_URL_EGRESS)\n"
+    ),
+    "manager-instance": (
+        _CONNECTOR_IMPORT
+        + "async def f(u):\n    return await http_client.get_json(u, guard_egress=instance_host_egress())\n"
+    ),
     "raw-after-policy": (
-        "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n    return await session.get(u)\n"
+        _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n"
+        "    return await session.get(u)\n"
+    ),
+    "raw-after-policy-request": (
+        _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n"
+        "    return await session.request('GET', u)\n"
     ),
 }
 
@@ -140,17 +216,18 @@ def test_guarded_forms_count_as_guarded(name: str) -> None:
     assert len(sites) == 1 and sites[0].guarded, f"{name}: {sites}"
 
 
-def test_policy_call_in_another_function_does_not_guard_a_raw_call() -> None:
-    src = (
-        "import aiohttp\nasync def a(u):\n    await assert_egress_policy(u)\n"
-        "async def b(session, u):\n    return await session.get(u)\n"
-    )
-    assert [s.guarded for s in outbound_sites(src)] == [False]
+def test_known_live_misses_are_now_found() -> None:
+    """The review's three live misses: an aliased session under ``with`` and an httpx client."""
+    found = scan_paths(repo_root(), ["autobot-backend/api/provider_auth.py", "autobot-backend/content_reach/_http.py"])
+    assert {s.lineno for s in found["autobot-backend/api/provider_auth.py"]} >= {449, 527}
+    assert 68 in {s.lineno for s in found["autobot-backend/content_reach/_http.py"]}
 
 
-def test_policy_call_after_the_raw_call_does_not_guard_it() -> None:
-    src = "import aiohttp\nasync def f(session, u):\n    r = await session.get(u)\n    await assert_egress_policy(u)\n    return r\n"
-    assert [s.guarded for s in outbound_sites(src)] == [False]
+def test_declared_registry_is_part_of_the_census() -> None:
+    census = census_by_path(repo_root())
+    for entry in DECLARED_EGRESS:
+        assert census[entry.path]["declared"] >= 1, entry
+    assert sum(c["declared"] for c in census.values()) == len(DECLARED_EGRESS)
 
 
 def test_the_sweep_reaches_a_known_outbound_caller() -> None:

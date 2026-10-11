@@ -48,3 +48,17 @@ register_env_var(
         component="security",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S",
+        type=int,
+        default=5,
+        description=(
+            "Seconds one internal-origin provider may run before it is abandoned for this refresh "
+            "(#17576). A provider that times out or raises is logged and skipped; the static SSOT "
+            "origins still apply."
+        ),
+        component="security",
+    )
+)

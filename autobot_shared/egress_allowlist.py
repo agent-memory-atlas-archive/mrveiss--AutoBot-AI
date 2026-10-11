@@ -18,6 +18,20 @@ different service, possibly a different trust domain, so it is NOT internal.
 to match against it, so the two sides cannot disagree about case, default ports
 or IPv6 brackets.
 
+**Only for server-chosen URLs.** ``EGRESS_POLICY`` (which consults this set) is for URLs the server
+picked itself -- from the SSOT or operator configuration. A URL a user, an LLM or a document supplied
+must use ``guard_egress=False`` (public-only, no internal trust): trusting an internal origin there
+would let the requester aim the server at its own services.
+
+**Residual, stated rather than discovered (#18199).** Matching compares origin *strings* and does not
+resolve DNS. A DNS-named config host is trusted wherever the name resolves at request time.
+
+**Strict URLs only.** The bypass is granted only to a URL whose raw ``scheme://host[:port]`` prefix
+equals the parsed origin textually, with no userinfo, backslash, whitespace, control or
+percent-encoded character in the authority (:func:`strict_origin`). ``urlparse`` and the HTTP clients
+(urllib3, yarl, httpx) disagree about a backslash before an `@` in the authority; anything
+not strictly shaped is not internal and falls through to the public-only check.
+
 Static origins come from the SSOT (:data:`autobot_shared.ssot_config.config`).
 Dynamic origins (e.g. SLM-managed nodes) arrive through providers registered
 with :func:`register_internal_origin_provider`; their result is cached for
@@ -27,17 +41,22 @@ static set.
 
 from __future__ import annotations
 
-import logging
+import asyncio
+import re
 import time
 from typing import Awaitable, Callable, Iterable, Optional
 from urllib.parse import urlparse
 
 from autobot_shared.env_utils import env_int
+from autobot_shared.logging_manager import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 #: Seconds a provider-derived origin set is reused before providers run again.
 EGRESS_INTERNAL_ORIGINS_TTL_S: int = env_int("AUTOBOT_EGRESS_INTERNAL_ORIGINS_TTL_S", 60)
+
+#: Seconds one provider may take before it is abandoned for this refresh (static origins still apply).
+EGRESS_PROVIDER_TIMEOUT_S: int = env_int("AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S", 5)
 
 _DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443}
 
@@ -73,32 +92,26 @@ def _normalized(urls: Iterable[object]) -> frozenset[str]:
 
 
 def _ssot_service_urls() -> list[str]:
-    """Service URLs the SSOT declares as internal (found by reading ``ssot_config``).
+    """Node-to-node HTTP targets the SSOT declares (found by reading ``AutoBotConfig`` in ssot_config.py).
 
-    Every ``*_url`` service property on ``AutoBotConfig`` (``backend_url``,
-    ``frontend_url``, ``ollama_url``, ``aistack_url``, ``npu_worker_url``,
-    ``tts_worker_url``, ``browser_service_url``, ``chrome_cdp_url``, ``vnc_url``,
-    ``slm_url``, ``websocket_url``) plus ChromaDB, which has no URL property and
-    is built from ``vm.chromadb`` + ``port.chromadb``.
+    ``backend_url``, ``ollama_url``, ``aistack_url``, ``npu_worker_url``, ``tts_worker_url``,
+    ``browser_service_url`` and ``slm_url`` are URL properties; ChromaDB has none and is built from
+    ``vm.chromadb`` + ``port.chromadb``.
 
-    ``redis_url`` is deliberately absent: it is a ``redis://`` endpoint, never
-    the target of HTTP egress, and :func:`normalize_origin` has no default port
-    for that scheme.
+    Deliberately absent: ``redis_url`` (``redis://``, never HTTP egress), ``chrome_cdp_url`` (Playwright
+    ``connect_over_cdp`` only -- allowlisting it would expose CDP ``/json/*`` control), ``vnc_url`` (a link
+    for a human), ``websocket_url`` (handed to clients) and ``frontend_url`` (a validator label).
     """
     from autobot_shared.ssot_config import config
 
     names = (
         "backend_url",
-        "frontend_url",
         "ollama_url",
         "aistack_url",
         "npu_worker_url",
         "tts_worker_url",
         "browser_service_url",
-        "chrome_cdp_url",
-        "vnc_url",
         "slm_url",
-        "websocket_url",
     )
     urls = [getattr(config, name, "") for name in names]
     urls.append(f"http://{config.vm.chromadb}:{config.port.chromadb}")
@@ -129,7 +142,7 @@ async def _provider_origins() -> frozenset[str]:
     found: set[str] = set()
     for provider in list(_providers):
         try:
-            found |= _normalized(await provider())
+            found |= _normalized(await asyncio.wait_for(provider(), EGRESS_PROVIDER_TIMEOUT_S))
         except Exception:
             logger.warning("Internal-origin provider %r failed; static origins only", provider, exc_info=True)
     result = frozenset(found)
@@ -142,9 +155,31 @@ async def internal_origins() -> frozenset[str]:
     return static_internal_origins() | await _provider_origins()
 
 
-async def is_internal_origin(url: str) -> bool:
-    """True when *url*'s exact origin is in :func:`internal_origins`."""
+_UNSAFE_AUTHORITY = re.compile(r"[\\@%\s\x00-\x1f\x7f]|[^\x00-\x7f]")
+
+
+def strict_origin(url: object) -> Optional[str]:
+    """:func:`normalize_origin` of *url*, but only when every HTTP parser would read it the same way.
+
+    ``None`` for a URL with userinfo, a backslash, whitespace/control/non-ASCII or percent-encoded
+    characters in the authority, or whose raw ``scheme://authority`` text differs from the parsed origin
+    (e.g. a zero-padded port).
+    """
     origin = normalize_origin(url)
+    if origin is None or not isinstance(url, str):
+        return None
+    scheme, sep, rest = url.partition("://")
+    authority = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if not sep or _UNSAFE_AUTHORITY.search(authority) or _UNSAFE_AUTHORITY.search(scheme):
+        return None
+    raw = f"{scheme}://{authority}".lower()
+    default_port = _DEFAULT_PORTS.get(scheme.lower())
+    return origin if raw == origin or (default_port and raw + f":{default_port}" == origin) else None
+
+
+async def is_internal_origin(url: str) -> bool:
+    """True when *url* is strictly shaped and its exact origin is in :func:`internal_origins`."""
+    origin = strict_origin(url)
     return origin is not None and origin in await internal_origins()
 
 
