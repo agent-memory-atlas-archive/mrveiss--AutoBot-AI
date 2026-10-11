@@ -17,8 +17,19 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
-from api import analytics_reporting, mcp_registry, npu_workers, playwright, service_monitor, vnc_mcp, vnc_proxy
+from api import (
+    analytics,
+    analytics_reporting,
+    mcp_registry,
+    monitoring,
+    npu_workers,
+    playwright,
+    service_monitor,
+    vnc_mcp,
+    vnc_proxy,
+)
 from autobot_shared import egress_allowlist as al
 from autobot_shared.http_client_manager import HTTPClientManager
 from autobot_shared.http_egress_guard import EgressBlockedError
@@ -53,7 +64,7 @@ def net(monkeypatch):
     monkeypatch.setattr(
         socket, "getaddrinfo", lambda host, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, 0))]
     )
-    for module in (analytics_reporting, mcp_registry, playwright, service_monitor, vnc_mcp, vnc_proxy):
+    for module in (analytics_reporting, mcp_registry, monitoring, playwright, service_monitor, vnc_mcp, vnc_proxy):
         monkeypatch.setattr(module, "get_http_client", lambda: mgr)
     return SimpleNamespace(session=session, monkeypatch=monkeypatch)
 
@@ -83,6 +94,40 @@ async def _vnc_proxy(n, base):
     await vnc_proxy.record_observation("desktop", "click", {})
 
 
+async def _vnc_proxy_status(n, base):
+    n.monkeypatch.setattr(vnc_proxy, "VNC_ENDPOINTS", {"desktop": base})
+    await vnc_proxy.get_vnc_status("desktop", current_user={})
+
+
+async def _vnc_proxy_client(n, base):
+    n.monkeypatch.setattr(vnc_proxy, "VNC_ENDPOINTS", {"desktop": base})
+    await vnc_proxy.get_vnc_client("desktop", current_user={})
+
+
+async def _vnc_proxy_assets(n, base):
+    n.monkeypatch.setattr(vnc_proxy, "VNC_ENDPOINTS", {"desktop": base})
+    await vnc_proxy.proxy_vnc_assets("desktop", "app.js", current_user={})
+
+
+async def _prometheus(n, base):
+    n.monkeypatch.setattr(monitoring, "_PROMETHEUS_URL", base)
+    n.session.request.return_value.json = AsyncMock(return_value={"status": "error"})
+    await monitoring._query_prometheus_instant("up")
+
+
+async def _alertmanager(n, base):
+    n.monkeypatch.setattr(monitoring, "ServiceURLs", SimpleNamespace(ALERTMANAGER_API=base))
+    n.monkeypatch.setitem(monitoring._alertmanager_cache, "timestamp", 0)
+    await monitoring._fetch_alertmanager_alerts()
+
+
+async def _analytics_health(n, base):
+    client = MagicMock()
+    client.get = AsyncMock(return_value=MagicMock(status_code=200))
+    n.session.request = client.get
+    await analytics._check_service(client, "frontend", base)
+
+
 async def _service_monitor(n, base):
     await service_monitor._check_http_health(f"{base}/health")
 
@@ -109,6 +154,12 @@ SITES = [
     pytest.param(_vnc_mcp, id="vnc_mcp"),
     pytest.param(_vnc_proxy, id="vnc_proxy"),
     pytest.param(_service_monitor, id="service_monitor"),
+    pytest.param(_vnc_proxy_status, id="vnc_proxy_status"),
+    pytest.param(_vnc_proxy_client, id="vnc_proxy_client"),
+    pytest.param(_vnc_proxy_assets, id="vnc_proxy_assets"),
+    pytest.param(_prometheus, id="monitoring_prometheus"),
+    pytest.param(_alertmanager, id="monitoring_alertmanager"),
+    pytest.param(_analytics_health, id="analytics_health"),
     pytest.param(_npu_health, id="npu_workers_health"),
 ]
 
@@ -117,7 +168,7 @@ async def _drive(site, n, base):
     """Run *site*; a refusal that the endpoint surfaces is fine, anything else is not."""
     try:
         await site(n, base)
-    except EgressBlockedError:
+    except (EgressBlockedError, HTTPException):
         pass
 
 
