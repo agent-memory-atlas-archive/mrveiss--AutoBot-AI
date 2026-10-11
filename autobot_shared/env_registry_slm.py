@@ -416,3 +416,17 @@ register_env_var(
         component="slm",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_SYNC_RESTART_TIMEOUT_S",
+        type=int,
+        default=60,
+        description=(
+            "Seconds the code-sync orchestrator waits for one `sudo -n systemctl restart` "
+            "over SSH before recording the restart as failed "
+            "(autobot-slm-backend/services/post_sync_runner.py, #17455)."
+        ),
+        component="slm",
+    )
+)

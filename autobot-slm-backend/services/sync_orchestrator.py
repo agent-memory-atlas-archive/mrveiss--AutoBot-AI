@@ -11,6 +11,7 @@ Orchestrates code distribution from code-source through SLM to fleet nodes.
 import asyncio
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Tuple
@@ -22,7 +23,8 @@ from autobot_shared.ssot_config import config
 from models.database import CodeSource, Node, NodeRole, Role, RoleStatus
 from services.database import db_service
 from services.deploy_artifacts import rsync_artifact_excludes
-from services.service_restart import run_systemctl_over_ssh
+from services.post_sync_recorder import ActionOutcome, RunContext
+from services.post_sync_runner import restart_ssh_base, restart_units, run_post_sync_command
 from services.ssh_utils import _ssh_key_usable, build_ssh_base_cmd
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,6 @@ CODE_CACHE_DIR = Path(os.environ.get("SLM_CODE_CACHE", "/var/lib/slm/code-cache"
 # be able to raise it without editing code.
 POST_SYNC_TIMEOUT_S = env_int("AUTOBOT_SYNC_POST_CMD_TIMEOUT_S", 300)
 SSH_KEY_PATH = config.path.ssh_key_path  # canonical inter-node key (#12429)
-_RESTART_TIMEOUT_S = 60  # literal kept as-is: unifying the three restart timeouts is the owner decision on #17455
 
 
 class SyncOrchestrator:
@@ -202,61 +203,39 @@ class SyncOrchestrator:
         except Exception as e:
             return False, f"Sync error: {e}"
 
-    async def _run_post_sync_command(self, ctx: SyncNodeContext) -> tuple[bool, str]:
+    async def _run_post_sync_command(self, ctx: SyncNodeContext, rec: RunContext | None = None) -> ActionOutcome:
         """
-        Execute post-sync command on remote node.
+        Execute post-sync command on remote node; the outcome is recorded (#17455).
 
         Helper for sync_node_role (Issue #665).
 
-        #14275: returns success rather than None. This never inspected
-        `proc.returncode`, so a failing `pip install` — permission denied, a
-        missing venv, an unresolvable constraint — was logged at WARNING and the
-        caller carried on to restart the service and mark the role synced. The
-        sync reported success while the dependencies it was meant to install had
-        not been installed, which is the failure this whole path exists to avoid.
+        #14275: the outcome carries success. A failing `pip install` -- permission
+        denied, a missing venv, an unresolvable constraint -- must stop the caller
+        before it restarts the service and marks the role synced.
         """
         if not ctx.post_sync_cmd:
-            return True, ""
+            now = datetime.now(timezone.utc)
+            return ActionOutcome(True, None, "", None, now, now)
+        ssh_cmd = build_ssh_base_cmd(ctx.node_ip, ctx.node_user, ctx.node_port, SSH_KEY_PATH)
+        return await run_post_sync_command(ssh_cmd, ctx.post_sync_cmd, POST_SYNC_TIMEOUT_S, rec)
 
-        try:
-            ssh_cmd = build_ssh_base_cmd(ctx.node_ip, ctx.node_user, ctx.node_port, SSH_KEY_PATH)
-            ssh_cmd.append(ctx.post_sync_cmd)
-
-            proc = await asyncio.create_subprocess_exec(
-                *ssh_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=POST_SYNC_TIMEOUT_S)
-            if proc.returncode != 0:
-                tail = (stdout or b"").decode("utf-8", errors="replace").strip()[-800:]
-                logger.error("Post-sync command exited %s: %s", proc.returncode, tail)
-                return False, f"post-sync command failed (exit {proc.returncode}): {tail}"
-            return True, ""
-        except Exception as e:
-            logger.error("Post-sync command failed: %s", e)
-            return False, f"post-sync command failed: {e}"
-
-    async def _restart_systemd_service(self, ctx: SyncNodeContext, node_id: str, restart: bool) -> None:
+    async def _restart_systemd_service(
+        self, ctx: SyncNodeContext, node_id: str, restart: bool, rec: RunContext | None = None
+    ) -> ActionOutcome | None:
         """
-        Restart systemd service on remote node if configured.
+        Restart systemd service on remote node if configured; None when nothing was asked.
 
-        Helper for sync_node_role (Issue #665).
+        Helper for sync_node_role (Issue #665). #17455: `sudo -n`, a failure is recorded.
         """
         if not (restart and ctx.auto_restart and ctx.systemd_service):
-            return
-        try:
-            await run_systemctl_over_ssh(
-                build_ssh_base_cmd(ctx.node_ip, ctx.node_user, ctx.node_port, SSH_KEY_PATH),
-                "restart",
-                ctx.systemd_service,  # #16025: >1 unit, one call
-                use_noninteractive_sudo=False,  # no -n: unification is pending the owner decision on #17455
-                timeout=_RESTART_TIMEOUT_S,
-                merge_stderr=True,
-            )
+            return None
+        ssh_base = restart_ssh_base(ctx.node_ip, ctx.node_user, ctx.node_port)
+        outcome = await restart_units(ssh_base, ctx.systemd_service, rec)
+        if outcome.success:
             logger.info("Restarted %s on %s", " ".join(ctx.systemd_service), node_id)
-        except Exception as e:
-            logger.warning("Service restart failed: %s", e)
+        else:
+            logger.warning("Service restart failed: %s", outcome.error)
+        return outcome
 
     async def _update_node_role_record(self, node_id: str, role_name: str, commit: str) -> None:
         """
@@ -588,6 +567,7 @@ class SyncOrchestrator:
         role_name: str,
         commit: str,
         restart: bool = True,
+        run_id: str | None = None,
     ) -> Tuple[bool, str]:
         """
         Sync a specific role to a node.
@@ -597,6 +577,7 @@ class SyncOrchestrator:
             role_name: Role to sync
             commit: Commit hash to sync
             restart: Whether to restart service after sync
+            run_id: Groups this sync's post_sync_action_runs rows (#17455); default a fresh uuid4 hex
 
         Returns:
             Tuple of (success, message)
@@ -624,11 +605,12 @@ class SyncOrchestrator:
         # half-installed dependency set is worse than leaving the running process
         # alone with new files on disk, and marking the role synced would record a
         # commit whose dependencies were never installed.
-        post_sync_ok, post_sync_msg = await self._run_post_sync_command(ctx)
-        if not post_sync_ok:
-            return False, post_sync_msg
+        rec = RunContext(run_id or uuid.uuid4().hex, node_id, role_name)
+        post_sync = await self._run_post_sync_command(ctx, rec)
+        if not post_sync.success:
+            return False, f"post-sync command failed ({post_sync.error}): {post_sync.output_tail}"
 
-        await self._restart_systemd_service(ctx, node_id, restart)
+        await self._restart_systemd_service(ctx, node_id, restart, rec)
 
         # Update database record
         await self._update_node_role_record(node_id, role_name, commit)

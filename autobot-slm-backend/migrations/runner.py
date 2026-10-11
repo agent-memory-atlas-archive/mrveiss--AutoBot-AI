@@ -80,6 +80,8 @@ MIGRATIONS = [
     "widen_systemd_service_to_sequence",
     # Issue #15495: per-node LLM hardware capability profile (RAM/VRAM/GPU/NPU).
     "add_node_capability_profiles_table",
+    # Issue #17455: one row per post-sync command/restart a code sync executed.
+    "add_post_sync_action_runs_table",
 ]
 
 

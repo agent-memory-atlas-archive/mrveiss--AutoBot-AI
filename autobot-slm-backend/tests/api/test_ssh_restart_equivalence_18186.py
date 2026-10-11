@@ -120,37 +120,40 @@ def usable_key(monkeypatch, tmp_path):
     return key
 
 
-async def test_orchestrator_argv_has_no_dash_n_one_call_all_units_and_literal_60(monkeypatch, orch_logger, usable_key):
+async def test_orchestrator_argv_has_sudo_n_batchmode_one_call_all_units_env_backed_60_17455(
+    monkeypatch, orch_logger, usable_key
+):
+    """#17455 (owner decision 2026-10-10) re-pins #18186's zero-change argv: `sudo -n`, `BatchMode=yes`."""
     run = _Runner(monkeypatch)
     await sync_orchestrator.SyncOrchestrator()._restart_systemd_service(_ctx(), "n1", True)
     assert run.argv == [
-        "ssh",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        "-o",
-        "ConnectTimeout=10",
-        "-p",
-        "2222",
-        "-i",
-        str(usable_key),
+        *_FULL_SSH_PREFIX[:-1],
         "svc@node.example.test",
-        "sudo systemctl restart -- a.service b.service",
+        "sudo -n systemctl restart -- a.service b.service",
     ]
     assert run.kwargs == {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.STDOUT}
     assert run.timeout == 60
 
 
-async def test_orchestrator_swallows_a_nonzero_exit_and_logs_restarted(monkeypatch, orch_logger, usable_key):
-    _Runner(monkeypatch, rc=1)
-    assert await sync_orchestrator.SyncOrchestrator()._restart_systemd_service(_ctx(), "n1", True) is None
-    orch_logger.info.assert_called_once_with("Restarted %s on %s", "a.service b.service", "n1")
-    orch_logger.warning.assert_not_called()
+async def test_orchestrator_records_a_nonzero_exit_as_a_failure_not_restarted_17455(
+    monkeypatch, orch_logger, usable_key
+):
+    """#17455: a non-zero exit used to log "Restarted"; it is now a failed outcome and a warning."""
+    _Runner(monkeypatch, rc=1, out=b"sudo: a password is required")
+    outcome = await sync_orchestrator.SyncOrchestrator()._restart_systemd_service(_ctx(), "n1", True)
+    assert (outcome.success, outcome.exit_code, outcome.error) == (False, 1, "exit 1")
+    assert "password is required" in outcome.output_tail
+    orch_logger.info.assert_not_called()
+    orch_logger.warning.assert_called_once_with("Service restart failed: %s", "exit 1")
 
 
 @pytest.mark.parametrize("failure", [{"timeout": True}, {"spawn_error": OSError("no ssh")}])
-async def test_orchestrator_turns_a_timeout_or_error_into_one_warning(monkeypatch, orch_logger, usable_key, failure):
+async def test_orchestrator_turns_a_timeout_or_error_into_a_failed_outcome_and_one_warning(
+    monkeypatch, orch_logger, usable_key, failure
+):
     _Runner(monkeypatch, **failure)
-    assert await sync_orchestrator.SyncOrchestrator()._restart_systemd_service(_ctx(), "n1", True) is None
+    outcome = await sync_orchestrator.SyncOrchestrator()._restart_systemd_service(_ctx(), "n1", True)
+    assert (outcome.success, outcome.exit_code) == (False, None)  # #17455: returned, not swallowed
     assert orch_logger.warning.call_count == 1
     assert orch_logger.warning.call_args.args[0] == "Service restart failed: %s"
     orch_logger.info.assert_not_called()

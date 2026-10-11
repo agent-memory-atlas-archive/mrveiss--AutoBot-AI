@@ -374,10 +374,12 @@ def test_the_venv_rule_examined_something():
 # ---------------------------------------------------------------------------
 
 
-def _post_sync_source() -> str:
-    source = _ORCHESTRATOR.read_text(encoding="utf-8")
-    start = source.index("async def _run_post_sync_command")
-    return source[start : source.index("\n    async def ", start + 10)]
+_RUNNER = _ORCHESTRATOR.parent / "post_sync_runner.py"
+
+
+def _runner_function(name: str) -> ast.AsyncFunctionDef:
+    tree = ast.parse(_RUNNER.read_text(encoding="utf-8"))
+    return next(n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == name)
 
 
 def test_the_post_sync_runner_branches_on_the_return_code():
@@ -385,35 +387,39 @@ def test_the_post_sync_runner_branches_on_the_return_code():
 
     Three earlier attempts in this file checked that the module text contained
     the right identifiers, and each survived a mutation that kept the words and
-    removed the behaviour — `if proc.returncode != 0:` → `if False:` leaves both
-    "returncode" and "return False" in the source. Executing the function is not
-    an option here: this suite's conftest stubs `services.*`, so the class is a
-    MagicMock and cannot be awaited.
+    removed the behaviour. Executing the function is not an option here: this
+    suite's conftest stubs `services.*`, so the class is a MagicMock.
 
-    So: find the `if` whose test actually reads `.returncode`, and require it to
-    return a falsy first element.
+    #17455 moved the runner out of `sync_orchestrator.py` into
+    `services/post_sync_runner.py`: `_spawn_and_wait` must hand back
+    `proc.returncode`, and `_post_sync_outcome` must branch on it and return a
+    failed outcome (`_failed(...)`, success False) -- not fall through to success.
     """
-    tree = ast.parse(_ORCHESTRATOR.read_text(encoding="utf-8"))
-    func = next(n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == "_run_post_sync_command")
+    spawn = _runner_function("_spawn_and_wait")
+    assert any(
+        isinstance(n, ast.Return)
+        and any(isinstance(sub, ast.Attribute) and sub.attr == "returncode" for sub in ast.walk(n))
+        for n in ast.walk(spawn)
+    ), "_spawn_and_wait does not return proc.returncode"
 
+    func = _runner_function("_post_sync_outcome")
     guards = [
         node
         for node in ast.walk(func)
         if isinstance(node, ast.If)
-        and any(isinstance(sub, ast.Attribute) and sub.attr == "returncode" for sub in ast.walk(node.test))
+        and any(isinstance(sub, ast.Name) and sub.id == "code" for sub in ast.walk(node.test))
     ]
-    assert guards, "nothing in _run_post_sync_command branches on proc.returncode"
+    assert guards, "nothing in _post_sync_outcome branches on the exit code"
 
-    returns_false = [
+    reports_failure = [
         node
         for guard in guards
         for node in ast.walk(guard)
         if isinstance(node, ast.Return)
-        and isinstance(node.value, ast.Tuple)
-        and isinstance(node.value.elts[0], ast.Constant)
-        and node.value.elts[0].value is False
+        and isinstance(node.value, ast.Call)
+        and getattr(node.value.func, "id", None) == "_failed"
     ]
-    assert returns_false, "the returncode guard does not report failure"
+    assert reports_failure, "the exit-code guard does not report failure"
 
 
 def test_a_failed_post_sync_stops_before_restart_and_before_marking_synced():
@@ -421,8 +427,8 @@ def test_a_failed_post_sync_stops_before_restart_and_before_marking_synced():
     running process alone, and recording the commit as synced would claim an
     update that did not happen."""
     source = _ORCHESTRATOR.read_text(encoding="utf-8")
-    call = source.index("await self._run_post_sync_command(ctx)")
-    restart = source.index("_restart_systemd_service(ctx, node_id, restart)", call)
+    call = source.index("await self._run_post_sync_command(ctx, rec)")
+    restart = source.index("_restart_systemd_service(ctx, node_id, restart, rec)", call)
     between = source[call:restart]
 
     assert "return False" in between, "a failed post-sync does not stop the sync"
