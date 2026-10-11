@@ -563,7 +563,7 @@ class DocIndexerService:
             )
 
             effective = await get_org_knowledge_config_service().get_effective(self._org_id)
-            embed_model_name = effective.embedding_model or "nomic-embed-text"
+            embed_model_name = effective.embedding_model  # org override, else ssot; empty fails init (#18143)
             self.embedding_model_name = embed_model_name
 
             # Embed model is created first so the collection guard can probe the

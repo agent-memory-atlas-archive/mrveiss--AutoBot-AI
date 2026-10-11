@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Set
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.status_enums import Severity
 
 logger = get_logger(__name__)
 
@@ -39,14 +40,10 @@ _ASYNC_DEF_PATTERN_RE = re.compile(r"async\s+def\s+\w+.*?(?=async\s+def|\Z)", re
 _SYNC_REDIS_CALL_RE = re.compile(r"(?<!await\s)redis\.(get|set|hget|hset)\(")
 
 
-class OptimizationSeverity(Enum):
-    """Severity levels for optimization suggestions."""
-
-    INFO = "info"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+#: An exact subset of the canonical ladder, so an alias rather than a class (#18098).
+#: Breakdowns that used to iterate this enum iterate `Severity.finding_ladder()` so the
+#: wire keeps its five keys.
+OptimizationSeverity = Severity
 
 
 class OptimizationType(Enum):

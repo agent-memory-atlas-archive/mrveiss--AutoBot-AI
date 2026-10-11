@@ -161,6 +161,17 @@ class Severity(Enum):
         )
 
     @classmethod
+    def finding_ladder(cls) -> tuple["Severity", ...]:
+        """The five rungs a code-analysis finding is graded on, ascending.
+
+        INFO, LOW, MEDIUM, HIGH, CRITICAL. Severity breakdowns that were keyed
+        by a five-member fork (``PerformanceSeverity`` and its siblings, #18098)
+        iterate this rather than the enum, so aliasing the fork to the
+        canonical did not grow a shipped response from five keys to ten.
+        """
+        return (cls.INFO, cls.LOW, cls.MEDIUM, cls.HIGH, cls.CRITICAL)
+
+    @classmethod
     def from_score(cls, score: float) -> "Severity":
         """
         Convert numeric score (0.0-1.0) to severity level.

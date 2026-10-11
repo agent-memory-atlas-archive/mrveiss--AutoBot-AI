@@ -102,7 +102,10 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "fact:* hashes and their indexes; the ChromaDB vectors are rebuilt by re-embedding "
         "the row content (background_vectorization reconciles what is missing).",
         note="Redis with RDB snapshots was the only durable home a fact had, and #12733 lost 43 of "
-        "them. The row is the fact; the hash is a read cache and the vector is an index.",
+        "them. The row is the fact; the hash is a read cache and the vector is an index. The "
+        "content_hash:<h> dedup index (and the content_hash column) is derived from "
+        "autobot_shared.content_digest.fact_dedup_key alone (#15722): a projection rebuilt from a "
+        "differently-computed key is not the same projection.",
     ),
     "identity_and_rbac": Concept(
         name="identity_and_rbac",

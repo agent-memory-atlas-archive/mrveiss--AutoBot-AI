@@ -36,7 +36,9 @@ from api.ws_security import enforce_ws_desktop_auth, enforce_ws_origin
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY, assert_egress_policy
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.ssot_config import config
 from autobot_shared.websocket_subprotocol import accept_websocket
 from constants.network_constants import NetworkConstants
 from security.vnc_rfb_auth import VncAuthError
@@ -168,12 +170,13 @@ async def record_observation(vnc_type: str, observation_type: str, data: Metadat
         }
 
         # Post to VNC MCP bridge (non-blocking) using singleton HTTP client
-        backend_url = f"http://{NetworkConstants.MAIN_MACHINE_IP}:{NetworkConstants.BACKEND_PORT}"
+        backend_url = config.backend_url
         http_client = get_http_client()
         async with await http_client.post(
             f"{backend_url}/api/vnc/observations/{vnc_type}",
             json=observation,
             timeout=aiohttp.ClientTimeout(total=1),
+            guard_egress=EGRESS_POLICY,
         ):
             pass  # Just fire and forget, we don't need the response
     except Exception as e:
@@ -333,7 +336,7 @@ async def get_vnc_client(vnc_type: str, current_user: dict = Depends(get_current
 
     try:
         http_client = get_http_client()
-        async with await http_client.get(f"{endpoint}/vnc.html") as response:
+        async with await http_client.get(f"{endpoint}/vnc.html", guard_egress=EGRESS_POLICY) as response:
             if response.status == 200:
                 content = await response.read()
                 return Response(
@@ -378,7 +381,7 @@ async def proxy_vnc_assets(vnc_type: str, path: str, current_user: dict = Depend
 
     try:
         http_client = get_http_client()
-        async with await http_client.get(f"{endpoint}/{path}") as response:
+        async with await http_client.get(f"{endpoint}/{path}", guard_egress=EGRESS_POLICY) as response:
             if response.status == 200:
                 content = await response.read()
 
@@ -463,6 +466,8 @@ async def websocket_proxy(websocket: WebSocket, vnc_type: str):
     )
 
     try:
+        # Pre-check only: aiohttp's ws_connect cannot refuse a redirect, so this site stays baselined (#17576).
+        await assert_egress_policy(ws_url)
         http_client = get_http_client()
         # Issue #12119: tracked_session() keeps this VNC WebSocket counted as an
         # in-flight request for its full (potentially hours-long) lifetime, so a
@@ -508,7 +513,9 @@ async def get_vnc_status(vnc_type: str, current_user: dict = Depends(get_current
 
     try:
         http_client = get_http_client()
-        async with await http_client.get(f"{endpoint}/vnc.html", timeout=aiohttp.ClientTimeout(total=5)) as response:
+        async with await http_client.get(
+            f"{endpoint}/vnc.html", timeout=aiohttp.ClientTimeout(total=5), guard_egress=EGRESS_POLICY
+        ) as response:
             accessible = response.status == 200
             return {
                 "vnc_type": vnc_type,

@@ -10,13 +10,13 @@ store, retrieve, update, delete, and vectorization.
 """
 
 import asyncio
-import hashlib
 import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from autobot_shared.content_digest import fact_dedup_key
 from autobot_shared.logging_manager import get_logger
 from knowledge.fact_projection import FactProjectionMixin
 from knowledge.fact_sharing import FactSharingMixin
@@ -600,7 +600,7 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
 
         # Store content hash for deduplication
         hash_source = hash_content if hash_content is not None else content
-        content_hash = hashlib.sha256(hash_source.encode("utf-8")).hexdigest()[:16]
+        content_hash = fact_dedup_key(hash_source)
         await asyncio.to_thread(self.redis_client.set, "content_hash:%s" % content_hash, fact_id)
 
         # Store unique_key mapping if provided
@@ -1150,9 +1150,9 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
         design decision rather than a fix here.
         """
         if old_content:
-            old_hash = hashlib.sha256(old_content.encode("utf-8")).hexdigest()[:16]
+            old_hash = fact_dedup_key(old_content)
             await asyncio.to_thread(self.redis_client.delete, "content_hash:%s" % old_hash)
-        new_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()[:16]
+        new_hash = fact_dedup_key(new_content)
         await asyncio.to_thread(self.redis_client.set, "content_hash:%s" % new_hash, fact_id)
 
     async def update_fact(self, fact_id: str, content: str = None, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -1235,7 +1235,7 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
             metadata: Fact metadata for unique key cleanup
         """
         if content:
-            content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+            content_hash = fact_dedup_key(content)
             await asyncio.to_thread(self.redis_client.delete, "content_hash:%s" % content_hash)
 
         unique_key = metadata.get("unique_key")

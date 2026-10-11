@@ -146,6 +146,11 @@ def project_root() -> Path:
     return resolve_project_root(Path(__file__).resolve())
 
 
+def chromadb_data_dir() -> Path:
+    """The local ChromaDB store, ``<project root>/data/chromadb``: the one spelling of that directory (#18143)."""
+    return project_root() / "data" / "chromadb"
+
+
 def resolve_project_root(start: Path) -> Path:
     """The resolution itself, walking upward from *start*.
 

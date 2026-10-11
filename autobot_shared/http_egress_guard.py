@@ -27,20 +27,26 @@ class EgressBlockedError(aiohttp.ClientError, ValueError):
     """
 
 
-async def _assert_egress_allowed(url: str, *, allow_private: bool) -> None:
+async def _assert_egress_allowed(url: str, *, allow_private: bool, private_network_hint: bool = True) -> None:
     """Refuse a URL that outbound connector traffic must not reach (#13625).
 
     Imported lazily so ``http_client`` keeps its stdlib+aiohttp dependency
-    surface for callers that never opt in.
+    surface for callers that never opt in. *private_network_hint* names the
+    ``AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS`` setting in the message; pass ``False`` where that setting
+    has no effect (:data:`EGRESS_POLICY` and :func:`assert_public_egress` hard-code public-only).
     """
     from autobot_shared.url_safety import is_public_url_async
 
-    if not await is_public_url_async(url, allow_private=allow_private):
-        raise EgressBlockedError(
-            f"Refusing outbound request to a disallowed address: {url!r}. "
+    if await is_public_url_async(url, allow_private=allow_private):
+        return
+    if private_network_hint:
+        advice = (
             "If this is a self-hosted instance on a private network, set "
             "AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS=true."
         )
+    else:
+        advice = "The target is not public and not on the SSOT internal-origin allowlist."
+    raise EgressBlockedError(f"Refusing outbound request to a disallowed address: {url!r}. {advice}")
 
 
 class _EgressPolicy:
@@ -73,7 +79,17 @@ async def assert_egress_policy(url: str) -> None:
 
     if await is_internal_origin(url):
         return
-    await _assert_egress_allowed(url, allow_private=False)
+    await _assert_egress_allowed(url, allow_private=False, private_network_hint=False)
+
+
+async def assert_public_egress(url: str) -> None:
+    """Public-only check for a raw client sending to a user-, LLM- or document-supplied *url*.
+
+    The raw-client counterpart of ``guard_egress=False``: no internal-origin trust, so an
+    internal service URL the requester supplies is refused. Raises :class:`EgressBlockedError`.
+    Like :func:`assert_egress_policy` it does not police redirects -- the caller disables them.
+    """
+    await _assert_egress_allowed(url, allow_private=False, private_network_hint=False)
 
 
 async def apply_egress_guard(url: str, guard: "bool | None | _EgressPolicy") -> None:

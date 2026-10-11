@@ -12,11 +12,15 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 import time
 
 from autobot_shared.paths import project_root
-from constants import ServiceURLs
-from langchain_redis_arm import INSTALL_HINT, NOT_MEASURED, ModernArmUnavailable, load_redis_vector_store
+from autobot_shared.network_constants import ServiceURLs
+# The sibling helper module lives beside this script; put its directory on the path so the import
+# resolves when the file is imported (pytest, tooling) as well as when it is run.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from langchain_redis_arm import INSTALL_HINT, NOT_MEASURED, ModernArmUnavailable, load_redis_vector_store # noqa: E402
 
 # DB number from redis-databases.yaml SSOT (#2806): knowledge = 1
 _DB_KNOWLEDGE = int(os.getenv("AUTOBOT_REDIS_DB_KNOWLEDGE", "1"))
