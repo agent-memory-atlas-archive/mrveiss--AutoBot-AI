@@ -68,19 +68,23 @@ def test_match_tool_name_resolves_an_alias_to_the_gated_tool():
     assert match_tool_name("list_dir", SENSITIVE_TOOLS) is None
 
 
-#: Mutating tools the approval plane does not gate. Pinned so closing or widening the gap is a
-#: visible edit; changing SENSITIVE_TOOLS is an approval-policy decision, not part of #18294.
-_APPROVAL_GAP = frozenset(
-    {
-        "click", "compose", "create_file", "delegate", "evaluate", "fill", "insert_database",
-        "manage_service", "navigate", "rename_file", "run_shell", "select", "set_redis_value",
-        "start_process", "stop_process",
-    }
-)  # fmt: skip
+def test_no_mutating_tool_escapes_the_approval_plane():
+    """#18294 (owner decision 2026-10-11): every mutating tool is gated by a category."""
+    assert approval_gap_tools() == frozenset()
 
 
-def test_the_approval_gap_is_exactly_the_documented_set():
-    assert approval_gap_tools() == _APPROVAL_GAP
+def test_every_mutating_tool_is_reachable_through_a_declared_category():
+    from autobot_shared.tool_catalogue import APPROVAL_CATEGORY_TOOLS
+
+    for tool in tools_with(ToolEffect.MUTATING):
+        assert any(
+            match_tool_name(tool, tools, word_boundary=True) for tools in APPROVAL_CATEGORY_TOOLS.values()
+        ), f"{tool} is mutating but no approval category names it"
+
+
+def test_no_read_or_poll_tool_is_approval_gated():
+    for tool in tools_with(ToolEffect.READ | ToolEffect.POLL):
+        assert match_tool_name(tool, SENSITIVE_TOOLS) is None, tool
 
 
 def test_repetition_guard_pollable_tools_derive_from_the_catalogue():
@@ -129,3 +133,48 @@ def test_every_tool_the_sandbox_policy_and_guard_reference_is_catalogued():
     named = tp.SENSITIVE_TOOLS | tp.CODEEXEC_INJECTABLE_TOOLS | tp.CODEEXEC_READONLY_TOOLS | rg.POLLABLE_TOOLS
     assert named, "empty reference set"
     assert all(tool_effect(t) is not None for t in named), sorted(t for t in named if tool_effect(t) is None)
+
+
+def test_config_guard_and_artifact_capture_derive_the_file_writing_tools():
+    from autobot_shared import config_guard
+    from autobot_shared.tool_catalogue import tools_with_all
+    from tools.parallel import executor
+
+    expected = tools_with_all(ToolEffect.WRITE | ToolEffect.FILE_TARGET)
+    assert config_guard.WRITE_TOOLS == expected == executor._FILE_MODIFYING_TOOLS
+    assert {
+        "write_file",
+        "edit_file",
+        "multi_edit",
+        "apply_patch",
+        "create_file",
+        "delete_file",
+        "move_file",
+    } <= expected
+    assert not expected & tools_with(ToolEffect.READ), "a read tool leaked into the write set"
+
+
+def test_fact_forcing_edit_tools_are_the_in_place_editors():
+    from autobot_shared import fact_forcing_guard
+
+    assert fact_forcing_guard.EDIT_TOOLS == tools_with(ToolEffect.IN_PLACE_EDIT)
+    assert fact_forcing_guard.EDIT_TOOLS == {"edit_file", "write_file", "multi_edit", "apply_patch", "delete_file"}
+    assert "create_file" not in fact_forcing_guard.EDIT_TOOLS  # a pure creator has nothing to read first
+
+
+def test_verifier_risk_classes_come_from_the_catalogue_atoms():
+    from autobot_shared import pre_action_verifier_guard as v
+
+    assert v._DEPLOY_TOOLS == {"deploy", "ansible", "docker", "kubectl", "helm", "terraform"}
+    assert v._NETWORK_TOOLS == {"http_post", "http_put", "http_patch", "http_delete", "send_request"}
+    assert v._EXEC_TOOLS == {
+        "bash",
+        "shell",
+        "execute_command",
+        "run_command",
+        "terminal",
+        "system_exec",
+        "code_interpreter",
+    }
+    assert {"write_file", "git_push", "git_reset", "remove_directory", "create_file", "multi_edit"} <= v._MUTATE_TOOLS
+    assert v.threshold_for_tool("read_file") == v.THRESHOLD_DEFAULT

@@ -58,12 +58,28 @@ SYSTEM_EXEC_TOOLS = ("system_exec",)
 TERMINAL_TOOLS = ("terminal",)
 CONTAINER_ORCH_TOOLS = ("docker", "kubectl", "terraform")
 DEPLOY_TOOLS = ("deploy", "ansible", "helm")
-FILE_WRITE_TOOLS = ("write_file", "edit_file", "move_file", "copy_file", "create_directory")
+# #18294: create_file/rename_file joined the atom (they were mutating but gated by no plane).
+FILE_WRITE_TOOLS = (
+    "write_file",
+    "edit_file",
+    "move_file",
+    "copy_file",
+    "create_directory",
+    "create_file",
+    "rename_file",
+    "multi_edit",
+    "apply_patch",
+)
 FILE_DELETE_TOOLS = ("delete_file", "remove_directory")
 GIT_PUSH_TOOLS = ("git_push", "git_commit", "git_merge", "git_rebase", "git_force_push")
 GIT_RESET_TOOLS = ("git_reset",)
 HTTP_WRITE_TOOLS = ("http_post", "http_put", "http_patch", "http_delete", "send_request")
 CODE_EXEC_TOOLS = ("code_interpreter",)
+# #18294: owner decision 2026-10-11 -- every mutating tool is gated by a category.
+PROCESS_EXEC_TOOLS = ("run_shell", "start_process", "stop_process", "manage_service")
+DATA_WRITE_TOOLS = ("set_redis_value", "insert_database")
+BROWSER_ACTION_TOOLS = ("navigate", "click", "fill", "select", "evaluate")
+DELEGATION_TOOLS = ("compose", "delegate")
 
 # --- composed catalogues (each reproduces its former literal exactly) ------
 
@@ -83,6 +99,10 @@ SENSITIVE_TOOLS = frozenset(
     + GIT_RESET_TOOLS
     + HTTP_WRITE_TOOLS
     + CODE_EXEC_TOOLS
+    + PROCESS_EXEC_TOOLS
+    + DATA_WRITE_TOOLS
+    + BROWSER_ACTION_TOOLS
+    + DELEGATION_TOOLS
 )
 
 #: Work-item approval categories → the tools that constitute each action (seam gate).
@@ -118,7 +138,7 @@ APPROVAL_CATEGORY_TOOLS = {
     # operations" to reach write_file would silently change the meaning of every
     # work item that already declared it.
     "writing files": FILE_WRITE_TOOLS,
-    "executing code": SYSTEM_EXEC_TOOLS + TERMINAL_TOOLS + CODE_EXEC_TOOLS,
+    "executing code": SYSTEM_EXEC_TOOLS + TERMINAL_TOOLS + CODE_EXEC_TOOLS + PROCESS_EXEC_TOOLS,
     # Overlaps "publishing" on the bare `deploy` atom, harmlessly: a tool
     # reachable through two categories is gateable by either, and the seam takes
     # the first declared match. ansible/helm were reachable through neither.
@@ -127,6 +147,10 @@ APPROVAL_CATEGORY_TOOLS = {
     # Deliberately its own category rather than an addition to "pushing commits",
     # which excludes it on purpose because a reset is not a push.
     "discarding local changes": GIT_RESET_TOOLS,
+    # #18294: the three classes of mutating tool no category reached.
+    "writing data": DATA_WRITE_TOOLS,
+    "browser actions": BROWSER_ACTION_TOOLS,
+    "delegating work": DELEGATION_TOOLS,
 }
 
 
@@ -147,6 +171,9 @@ class ApprovalCategory(str, Enum):
     EXECUTING_CODE = "executing code"
     DEPLOYING_INFRASTRUCTURE = "deploying infrastructure"
     DISCARDING_LOCAL_CHANGES = "discarding local changes"
+    WRITING_DATA = "writing data"
+    BROWSER_ACTIONS = "browser actions"
+    DELEGATING_WORK = "delegating work"
 
 
 _VALID_APPROVAL_CATEGORIES = frozenset(c.value for c in ApprovalCategory)
@@ -178,6 +205,8 @@ class ToolEffect(Flag):
     POLL = 32  #: effect-free and meant to be re-issued until something changes
     ISOLATED_READ = 64  #: READ that touches no local resource (sandbox-safe default)
     DESTRUCTIVE = 128  #: discards data that cannot be recovered by re-running
+    FILE_TARGET = 256  #: operates on a file path named in its arguments
+    IN_PLACE_EDIT = 512  #: edits or deletes the content of an existing file
 
     #: Any effect that is not a pure read: the class that must serialise and be vetted.
     MUTATING = WRITE | STATE | EXEC | DELEGATE
@@ -205,12 +234,11 @@ TOOL_EFFECTS: "dict[str, ToolEffect]" = {
     **_entries(GIT_RESET_TOOLS, _E.WRITE | _E.DESTRUCTIVE),
     **_entries(HTTP_WRITE_TOOLS, _E.WRITE),
     **_entries(CODE_EXEC_TOOLS, _E.EXEC | _E.STATE),
-    # Classified before #18294 only by the parallel analyzer / sandbox policy.
-    **_entries(("create_file", "rename_file", "set_redis_value", "insert_database"), _E.WRITE),
-    **_entries(("manage_service", "start_process", "stop_process", "run_shell"), _E.EXEC | _E.STATE),
-    **_entries(("navigate", "click", "fill", "select"), _E.STATE),
+    **_entries(DATA_WRITE_TOOLS, _E.WRITE),
+    **_entries(PROCESS_EXEC_TOOLS, _E.EXEC | _E.STATE),
+    **_entries(BROWSER_ACTION_TOOLS, _E.STATE),
     "evaluate": _E.EXEC | _E.STATE,
-    **_entries(("compose", "delegate"), _E.DELEGATE),
+    **_entries(DELEGATION_TOOLS, _E.DELEGATE),
     **_entries(
         ("read_file", "grep_search", "file_search", "list_directory", "query_database", "get_redis_value"),
         _E.READ,
@@ -219,6 +247,15 @@ TOOL_EFFECTS: "dict[str, ToolEffect]" = {
     **_entries(("web_search", "scrape_url", "map_site", "extract_structured_data"), _E.READ | _E.ISOLATED_READ),
     **_entries(("sleep", "wait", "poll", "check_status"), _E.POLL),
 }
+
+#: Tools whose arguments name a file path (artifact capture, config guard, fact-forcing).
+_FILE_PATH_TOOLS = tuple(t for t in FILE_WRITE_TOOLS if not t.endswith("_directory")) + ("delete_file", "read_file")
+#: Tools that edit or delete the content of an EXISTING file in place (pure creators excluded).
+_IN_PLACE_EDIT_TOOLS = ("edit_file", "write_file", "multi_edit", "apply_patch", "delete_file")
+for _tool in _FILE_PATH_TOOLS:
+    TOOL_EFFECTS[_tool] |= _E.FILE_TARGET
+for _tool in _IN_PLACE_EDIT_TOOLS:
+    TOOL_EFFECTS[_tool] |= _E.IN_PLACE_EDIT
 
 #: Alternative spellings -> canonical name (so a tool named either way is
 #: classified identically; before #18294 each site knew only one spelling).
@@ -250,6 +287,11 @@ def tools_with(effect: ToolEffect, *, include_aliases: bool = True) -> "frozense
     if include_aliases:
         names |= {a for a, c in TOOL_ALIASES.items() if c in names}
     return frozenset(names)
+
+
+def tools_with_all(effect: ToolEffect) -> "frozenset[str]":
+    """Every tool name carrying ALL the flags in *effect* (``tools_with`` is any-of)."""
+    return frozenset(t for t, e in TOOL_EFFECTS.items() if e & effect == effect)
 
 
 def approval_gap_tools() -> "frozenset[str]":

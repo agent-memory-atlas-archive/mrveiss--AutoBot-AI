@@ -34,15 +34,22 @@ _CATALOGUE = "autobot_shared/tool_catalogue.py"
 _MIN_HITS = 3
 _WRAPPERS = {"frozenset", "set", "tuple", "list"}
 
-#: Pre-#18294 tables in OTHER policy planes (artifact capture, config guard, fact-forcing,
-#: pre-action verifier, ...). Each is a candidate to derive from the catalogue; none is new.
-_GRANDFATHERED: dict[str, int] = {
-    "autobot-backend/async_chat_workflow.py": 1,
-    "autobot-backend/chat_workflow/tool_handler.py": 2,
-    "autobot-backend/tools/parallel/executor.py": 1,
-    "autobot_shared/config_guard.py": 1,
-    "autobot_shared/fact_forcing_guard.py": 1,
-    "autobot_shared/pre_action_verifier_guard.py": 4,
+#: Pre-#18294 effect tables awaiting derivation. EMPTY since #18294: the seven that existed now
+#: derive from the catalogue. A new entry here is a regression of the fork, not a deferral.
+_GRANDFATHERED: dict[str, int] = {}
+
+#: Tables that name tools but do NOT classify what a tool does to the world, with the reason.
+#: ``(count, reason)`` per file; a count above it fails, and an entry that no longer matches fails.
+_NOT_AN_EFFECT_TABLE: dict[str, tuple[int, str]] = {
+    "autobot-backend/async_chat_workflow.py": (
+        1,
+        "TERMINAL_KEYWORDS are words matched against the USER's message to classify intent; they are not tool names",
+    ),
+    "autobot-backend/chat_workflow/tool_handler.py": (
+        2,
+        "WEB_RESEARCH_TOOL_NAMES and the _handlers map route a tool to its web_fetch handler (dispatch), "
+        "which says where a call goes, not what it does",
+    ),
 }
 
 
@@ -135,18 +142,27 @@ def _tables_by_file() -> dict[str, int]:
     return found
 
 
+def _allowed(rel: str) -> int:
+    return _GRANDFATHERED.get(rel, 0) + _NOT_AN_EFFECT_TABLE.get(rel, (0, ""))[0]
+
+
 def test_no_module_outside_the_catalogue_grows_a_tool_effect_table() -> None:
-    new = {f: n for f, n in _tables_by_file().items() if n > _GRANDFATHERED.get(f, 0)}
+    new = {f: n for f, n in _tables_by_file().items() if n > _allowed(f)}
     assert not new, (
         f"#18294: {new} define a tool-name classification table. Declare the tool's effect in "
         f"{_CATALOGUE} (TOOL_EFFECTS) and derive the set with tools_with()/has_effect()."
     )
 
 
-def test_the_grandfather_map_only_shrinks() -> None:
+def test_nothing_is_grandfathered() -> None:
+    assert _GRANDFATHERED == {}, "#18294: derive the table from the catalogue instead of grandfathering it"
+
+
+def test_every_exemption_still_matches_a_table_and_states_a_reason() -> None:
     found = _tables_by_file()
-    stale = {f: n for f, n in _GRANDFATHERED.items() if found.get(f, 0) < n}
-    assert not stale, f"#18294: grandfathered tables are gone or fewer; lower/remove these entries: {stale}"
+    stale = {f: n for f, (n, _) in _NOT_AN_EFFECT_TABLE.items() if found.get(f, 0) != n}
+    assert not stale, f"#18294: exemptions that no longer match what the scan finds: {stale}"
+    assert all(reason.strip() for _, reason in _NOT_AN_EFFECT_TABLE.values())
 
 
 def test_the_scan_reaches_the_four_sites_this_issue_unified() -> None:
