@@ -12,7 +12,7 @@
 #
 # This wrapper hardcodes the exact ports and process pattern the platform's
 # own tooling already used before this fix (run_agent.sh,
-# deployment/deploy_hybrid.sh, ansible/fix-backend-deadlock.sh) and takes no
+# deployment/deploy_hybrid.sh, ansible/fix-backend-worker-deadlock.yml) and takes no
 # attacker-influenced argument that reaches lsof/kill/pkill as free text --
 # every subcommand is a fixed literal, validated before use; anything else
 # is refused with a non-zero exit.
@@ -96,7 +96,7 @@ case "$1" in
         [ "$#" -eq 2 ] || usage
         require_valid_port_name "$2"
         port="$(port_for "$2")"
-        # Read-only; matches ansible/fix-backend-deadlock.sh's SYN_SENT check.
+        # Read-only; matches ansible/fix-backend-worker-deadlock.yml's SYN_SENT check.
         "${LSOF}" -i ":${port}" -n 2>/dev/null || true
         ;;
     kill-uvicorn)

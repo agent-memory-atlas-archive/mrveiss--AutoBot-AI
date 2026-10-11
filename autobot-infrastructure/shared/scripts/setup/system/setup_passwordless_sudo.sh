@@ -48,7 +48,7 @@
 #  - the remaining grants name autobot-cleanup-port's exact subcommands, the
 #    only operations the platform's own automation invokes: port cleanup
 #    (run_agent.sh, deployment/deploy_hybrid.sh), a TLS-port diagnostic
-#    (ansible/fix-backend-deadlock.sh) and uvicorn process cleanup
+#    (the SYN_SENT check of ansible/fix-backend-worker-deadlock.yml) and uvicorn process cleanup
 #    (run_agent.sh).
 
 set -euo pipefail
