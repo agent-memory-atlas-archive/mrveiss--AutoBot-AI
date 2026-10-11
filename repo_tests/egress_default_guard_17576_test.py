@@ -113,6 +113,7 @@ SITES = declare(
     floor=443,  # measured: 473 sites, window [413, 473]
     growth=60,
     what="outbound HTTP call sites (detected + declared) in the egress sweep",
+    roots=("autobot-", "autobot_shared/", "debug/", "plugins/", "scripts/", "pipeline-scripts/"),
 )
 
 

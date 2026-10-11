@@ -190,6 +190,15 @@ _DECLARED_SCOPES = {
         "libs",
     ),
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
+    "deployment-mode-detector-scan": ("autobot-backend/", "autobot-infrastructure/"),
+    "egress-default-outbound-call-sites": (
+        "autobot-",
+        "autobot_shared/",
+        "debug/",
+        "plugins/",
+        "scripts/",
+        "pipeline-scripts/",
+    ),
     "egress-default-outbound-call-sweep": (
         "autobot-",
         "autobot_shared/",

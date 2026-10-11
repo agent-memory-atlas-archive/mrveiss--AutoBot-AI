@@ -99,6 +99,7 @@ SCAN_REACH = declare(
     floor=4676,  # measured: 4751 files, window [4601, 4751]
     growth=150,
     what="python files scanned for a second deployment-mode decision body",
+    roots=("autobot-backend/", "autobot-infrastructure/"),
 )
 MIN_DETECTORS_SEEN = 2  # backend registry + scripts registry, each still defines the thin wrapper
 
