@@ -151,9 +151,10 @@ async def _cleanup_knowledge_base_facts(request: Request, session_id: str) -> di
 
 async def _cleanup_conversation_transcript(session_id: str) -> dict:
     """
-    Clean up conversation transcript file from data/conversation_transcripts/.
+    Remove the session's legacy transcript file, if one exists (#18293).
 
-    This removes the duplicate transcript storage used by ChatWorkflowManager.
+    Nothing writes these files any more; a user deleting their session takes
+    its legacy copy with it.
 
     Args:
         session_id: Chat session ID being deleted
@@ -164,6 +165,7 @@ async def _cleanup_conversation_transcript(session_id: str) -> dict:
     import os
 
     from autobot_shared.security.path_validator import validate_relative_path
+    from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS
     from constants.path_constants import PATH
 
     result = {"transcript_deleted": False, "error": None}
@@ -174,13 +176,13 @@ async def _cleanup_conversation_transcript(session_id: str) -> dict:
 
         transcript_path = validate_relative_path(
             f"{session_id}.json",
-            PATH.DATA_DIR / "conversation_transcripts",
+            PATH.DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS,
         )
 
         # CodeQL py/path-injection only credits a realpath + startswith(root + os.sep) guard in the
         # sink's own scope (#16229, #16236); validate_relative_path above stays the real validator.
         # The one name this adds a refusal for resolves to the directory itself, which os.remove refuses too.
-        root = os.path.realpath(str(PATH.DATA_DIR / "conversation_transcripts"))
+        root = os.path.realpath(str(PATH.DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS))
         real = os.path.realpath(str(transcript_path))
         if not real.startswith(root + os.sep):
             raise ValueError("Invalid session ID")

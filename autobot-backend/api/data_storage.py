@@ -36,6 +36,7 @@ from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.path_http import require_contained_relative_path
 from autobot_shared.security.path_validator import validate_relative_path
+from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS
 from utils.catalog_http_exceptions import raise_server_error
 
 router = APIRouter(prefix="/data-storage", tags=["Data Storage"])
@@ -145,7 +146,7 @@ def _get_cleanable_categories() -> list[dict]:
     return [
         {
             "name": "Conversation Transcripts",
-            "path": "conversation_transcripts",
+            "path": LEGACY_CONVERSATION_TRANSCRIPTS,
             "description": "Saved conversation history transcripts",
         },
         {
@@ -510,7 +511,7 @@ async def delete_conversation(
         files_deleted = []
         errors = []
 
-        transcripts_base = DATA_DIR / "conversation_transcripts"
+        transcripts_base = DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS
         transcript_path = validate_relative_path(f"{conversation_id}.json", transcripts_base)
         if transcript_path.exists():
             try:
@@ -556,7 +557,7 @@ async def delete_conversation(
 async def get_conversations_summary():
     """Get summary of stored conversations."""
     try:
-        transcripts_dir = DATA_DIR / "conversation_transcripts"
+        transcripts_dir = DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS
         chats_dir = DATA_DIR / "chats"
 
         transcripts_size, transcripts_count = get_dir_size(transcripts_dir)
