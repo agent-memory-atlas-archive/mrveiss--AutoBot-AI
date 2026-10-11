@@ -41,3 +41,52 @@ async def _assert_egress_allowed(url: str, *, allow_private: bool) -> None:
             "If this is a self-hosted instance on a private network, set "
             "AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS=true."
         )
+
+
+class _EgressPolicy:
+    """Type of :data:`EGRESS_POLICY` — a singleton sentinel, never constructed elsewhere."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "EGRESS_POLICY"
+
+
+#: ``guard_egress=EGRESS_POLICY`` (#17576 AC4): an origin on the internal
+#: allowlist (:mod:`autobot_shared.egress_allowlist`) bypasses the check;
+#: anything else must be a public address (``allow_private=False``).
+#:
+#: **ONLY for server-chosen URLs** (from the SSOT or operator configuration). A URL a user, an LLM
+#: or a document supplied must use ``guard_egress=False`` (public-only, no internal trust), or the
+#: requester can aim the server at its own services.
+EGRESS_POLICY = _EgressPolicy()
+
+
+async def assert_egress_policy(url: str) -> None:
+    """Apply :data:`EGRESS_POLICY` to *url*; raise :class:`EgressBlockedError` if refused.
+
+    For raw clients (aiohttp, httpx, requests, urllib) that do not go through
+    ``HTTPClientManager.request``: call it before the request. It does not
+    police redirects — a raw caller must disable them itself.
+    """
+    from autobot_shared.egress_allowlist import is_internal_origin
+
+    if await is_internal_origin(url):
+        return
+    await _assert_egress_allowed(url, allow_private=False)
+
+
+async def apply_egress_guard(url: str, guard: "bool | None | _EgressPolicy") -> None:
+    """Apply a ``guard_egress`` value: ``None`` (no guard), ``True``/``False`` or :data:`EGRESS_POLICY`.
+
+    Anything else raises ``TypeError`` -- a truthy string or object must not silently pick
+    ``allow_private``.
+    """
+    if guard is None:
+        return
+    if guard is EGRESS_POLICY:
+        await assert_egress_policy(url)
+    elif guard is True or guard is False:
+        await _assert_egress_allowed(url, allow_private=guard)
+    else:
+        raise TypeError(f"guard_egress must be None, a bool or EGRESS_POLICY, not {guard!r}")
