@@ -69,19 +69,19 @@ ON_ADDED_EVENTS = {
 #: These eleven entries are the ONLY content change in this refactor, pinned by name. They land in the
 #: caller's inline `migrations` filter AND its `on.push.paths` (the two lists must agree), and nowhere
 #: else. Re-derived from commit 3006cacbb8 of the preserved branch `wip-17822-filter-guard`.
-ISSUE_17822_ENTRIES = (
-    "autobot-backend/services/*secret*.py",
-    "autobot-backend/services/credential_*.py",
-    "autobot-backend/services/orphan_repair*.py",
-    "autobot-backend/services/provider_key_vault.py",
-    "autobot-backend/api/**",
-    "autobot_shared/secrets_envelope.py",
-    "autobot_shared/status_enums.py",
-    "autobot_shared/time_utils.py",
-    "autobot_shared/auth/device_capabilities.py",
-    "autobot_shared/secrets_vault.py",
-    "autobot_shared/legacy_secret_keys.py",
+#: The pinned set lives in DATA, not in this module: `fixtures/issue_17822_migration_gate_entries.json`.
+#: Two reasons. The glob-declaration census (#15900) reads every quoted glob in `repo_tests/*.py`
+#: as a guard reading that tree, and these are workflow-filter values, not reads; and a second
+#: copy in Python would be a second home for the eleven. The file is independent of the workflow
+#: it asserts on, so deleting an entry from the workflow YAML still fails the pin; it is also
+#: separate from `pre_15360_changes_jobs.json`, which `python -m` regenerates from a git ref and
+#: would silently rewrite the expectation.
+ISSUE_17822_ENTRIES = tuple(
+    json.loads(
+        (Path(__file__).parent / "fixtures" / "issue_17822_migration_gate_entries.json").read_text(encoding="utf-8")
+    )
 )
+assert len(ISSUE_17822_ENTRIES) == 11, "the pinned #17822 set is eleven entries; an emptied fixture would pin nothing"
 ISSUE_17822_WORKFLOW = "migration-gate"
 EVENTS = ("push", "pull_request", "merge_group", "schedule", "workflow_dispatch")
 MG_SHA = "merge-group-base-sha"  # a stand-in value; only its presence or absence is compared
