@@ -39,6 +39,7 @@ from autobot_shared.service_registry_core import (
     DeploymentMode,
     ServiceHealth,
     build_base_url,
+    detect_deployment_mode,
     join_service_path,
     parse_deployment_mode,
 )
@@ -148,30 +149,13 @@ class ServiceRegistry:
 
     def _detect_deployment_mode(self) -> DeploymentMode:
         """Detect current deployment mode"""
-        # Check for explicit mode setting
-        mode = config.get("deployment.mode", "").lower()
-        if mode:
-            parsed = parse_deployment_mode(mode, self.logger, "deployment.mode")
-            if parsed:
-                return parsed
-
-        # Auto-detect based on environment
-        # DEFAULT BEHAVIOR: Local + Docker hybrid (backend on host, services in containers)
-        if os.path.exists("/.dockerenv"):
-            # Running inside container
-            if config.get("deployment.kubernetes.service_host", False):
-                return DeploymentMode.KUBERNETES
-            elif config.get("deployment.distributed", False):
-                return DeploymentMode.DISTRIBUTED
-            else:
-                return DeploymentMode.DOCKER_LOCAL
-        else:
-            # Running on host - DEFAULT: Local with Docker services
-            if config.get("deployment.mode") == "distributed":
-                return DeploymentMode.DISTRIBUTED
-            else:
-                # Default hybrid mode: backend/frontend on localhost, services in Docker
-                return DeploymentMode.LOCAL
+        explicit = parse_deployment_mode(config.get("deployment.mode", "").lower(), self.logger, "deployment.mode")
+        return detect_deployment_mode(
+            explicit,
+            in_container=os.path.exists("/.dockerenv"),
+            kubernetes=bool(config.get("deployment.kubernetes.service_host", False)),
+            distributed=bool(config.get("deployment.distributed", False)),
+        )
 
     def _load_default_services(self):
         """Load default service configurations from unified config"""

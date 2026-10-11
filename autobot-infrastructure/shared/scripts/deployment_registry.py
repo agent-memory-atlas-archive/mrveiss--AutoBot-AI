@@ -63,6 +63,7 @@ from autobot_shared.service_registry_core import (  # noqa: E402 - follows the s
     SERVICE_DEFINITIONS,
     DeploymentMode,
     ServiceHealth,
+    detect_deployment_mode,
     join_service_path,
     parse_deployment_mode,
 )
@@ -94,10 +95,10 @@ class ServiceRegistry:
     @staticmethod
     def _detect_deployment_mode() -> DeploymentMode:
         """Detect deployment mode from env, falling back to container heuristic."""
-        parsed = parse_deployment_mode(os.environ.get("AUTOBOT_DEPLOYMENT_MODE", ""), logger, "AUTOBOT_DEPLOYMENT_MODE")
-        if parsed:
-            return parsed
-        return DeploymentMode.DOCKER_LOCAL if os.path.exists("/.dockerenv") else DeploymentMode.LOCAL
+        explicit = parse_deployment_mode(os.environ.get("AUTOBOT_DEPLOYMENT_MODE", ""), logger, "AUTOBOT_DEPLOYMENT_MODE")
+        return detect_deployment_mode(
+            explicit, in_container=os.path.exists("/.dockerenv"), kubernetes=False, distributed=False
+        )
 
     @staticmethod
     def _probe(url: str, timeout: float = 5.0) -> bool:

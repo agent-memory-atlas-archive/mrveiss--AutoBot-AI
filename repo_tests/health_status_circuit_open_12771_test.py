@@ -11,11 +11,12 @@ is actually bound there (it imported a `ServiceStatus` that never existed).
 from __future__ import annotations
 
 import ast
-from pathlib import Path
+
+from repo_tests._paths import repo_root
 
 from autobot_shared.status_enums import HealthStatus
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = repo_root()
 _REGISTRY = _ROOT / "autobot-backend/utils/service_registry.py"
 _MONITOR = _ROOT / "autobot-infrastructure/shared/scripts/monitor_services.py"
 

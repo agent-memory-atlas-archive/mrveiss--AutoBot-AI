@@ -17,7 +17,8 @@ What is here, and only this:
   single source).
 * ``build_base_url`` / ``join_service_path`` -- the URL construction.
 * ``ServiceHealth`` -- the health-state shape.
-* ``DeploymentMode`` / ``parse_deployment_mode`` -- the deployment-mode vocabulary.
+* ``DeploymentMode`` / ``parse_deployment_mode`` / ``detect_deployment_mode`` -- the
+  deployment-mode vocabulary and the single detection decision.
 
 What deliberately is NOT here: runtime discovery, circuit breaking and host patterns
 (backend-only), and the urllib probe (scripts-only).
@@ -55,6 +56,24 @@ def parse_deployment_mode(raw: str, log: logging.Logger, source: str) -> Optiona
     except ValueError:
         log.warning("Invalid deployment mode from %s: %s", source, raw)
         return None
+
+
+def detect_deployment_mode(
+    explicit: Optional[DeploymentMode], in_container: bool, kubernetes: bool, distributed: bool
+) -> DeploymentMode:
+    """The one deployment-mode decision; callers only gather the signals (#12771).
+
+    An explicit, valid mode wins. Otherwise a container resolves to KUBERNETES, then
+    DISTRIBUTED, else DOCKER_LOCAL; a bare host is LOCAL. The deploy scripts have no
+    cluster signals and pass ``kubernetes=False, distributed=False``.
+    """
+    if explicit:
+        return explicit
+    if not in_container:
+        return DeploymentMode.LOCAL
+    if kubernetes:
+        return DeploymentMode.KUBERNETES
+    return DeploymentMode.DISTRIBUTED if distributed else DeploymentMode.DOCKER_LOCAL
 
 
 @dataclass(frozen=True)
