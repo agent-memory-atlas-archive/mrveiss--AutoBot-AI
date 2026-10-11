@@ -74,15 +74,19 @@ class UserLifecycleMixin(UserServiceBase):
         user.updated_at = now_utc()
         await self.session.flush()
 
+        details = await self._revoke_old_sessions(user_id, user.username, current_token)
+        await self._audit_log(AuditAction.PASSWORD_CHANGED, AuditResourceType.USER, user_id, details)
+        return True
+
+    async def _revoke_old_sessions(self, user_id: uuid.UUID, username: str, current_token: str | None) -> dict:
+        """Revoke sessions opened with the old password; return the audit details."""
         invalidated_count = await self.invalidate_other_sessions(user_id, current_token)
-        epoch = await set_password_epoch(user.username)
-        details = {
+        epoch = await set_password_epoch(username)
+        return {
             "method": "user_initiated",
             "sessions_revoked_from": epoch,
             "sessions_invalidated": invalidated_count,
         }
-        await self._audit_log(AuditAction.PASSWORD_CHANGED, AuditResourceType.USER, user_id, details)
-        return True
 
     async def _set_active(self, user_id: uuid.UUID, active: bool) -> bool:
         """Set ``is_active`` and audit it; raises ``UserNotFoundError``."""
