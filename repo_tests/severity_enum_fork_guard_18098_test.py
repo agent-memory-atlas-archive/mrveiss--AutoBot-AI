@@ -55,30 +55,16 @@ SEVERITY_SUBSET_PROBE = frozenset({"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"})
 #: `frontend_analysis_lib.py`) became an alias.
 SCANNED_ROOTS = ("autobot-backend", "autobot_shared", "autobot-infrastructure")
 
-#: Exact subsets that are NOT aliased, because something builds a wire list by ITERATING
-#: their members. Only `OptimizationPriority` remains: the four `*Severity` forks that did
-#: the same (`PerformanceSeverity`, `OptimizationSeverity`, `SecuritySeverity`,
-#: `TestPatternSeverity`) became aliases, and every site that iterated them iterates
-#: `Severity.finding_ladder()` instead, so the five-key shape is unchanged (#18098; wire
-#: pinned in `autobot-backend/code_intelligence/finding_ladder_wire_18098_test.py`).
-#:
-#: `OptimizationPriority` carries `info`, which the canonical urgency `Priority` has no
-#: member for, so it cannot be aliased without a canonical change (see its reason below).
-PENDING_A_WIRE_DECISION = {
-    "autobot-backend/code_intelligence/llm_pattern_analysis/types.py::OptimizationPriority": (
-        "autobot-backend/code_intelligence/llm_pattern_analyzer.py"
-    ),
-}
+#: Exact subsets that are NOT aliased because something builds a wire list by ITERATING their
+#: members. Empty now: the four `*Severity` forks alias `Severity` and iterate
+#: `Severity.finding_ladder()`, and `OptimizationPriority` aliases `Severity` and emits
+#: `reversed(Severity.finding_ladder())` (#18098; wire pinned in
+#: `autobot-backend/code_intelligence/finding_ladder_wire_18098_test.py`). The dicts stay so a
+#: future held-back fork is recorded with a reason, and every test below still checks them.
+PENDING_A_WIRE_DECISION: dict[str, str] = {}
 
 #: Why each pending fork is held back. Keys must equal `PENDING_A_WIRE_DECISION`'s.
-PENDING_REASONS = {
-    "autobot-backend/code_intelligence/llm_pattern_analysis/types.py::OptimizationPriority": (
-        "BLOCKED on the canonical Priority: it has no `info` member (it is low/normal/medium/high/"
-        "critical/urgent), so `OptimizationPriority.INFO` (recommendation_engine.py) would raise "
-        "AttributeError and the emitted `get_optimization_priorities()` list (llm_pattern_analyzer.py) "
-        "would lose `info` and gain `normal`/`urgent`; needs an owner decision (#18098)"
-    ),
-}
+PENDING_REASONS: dict[str, str] = {}
 
 #: Enums the value probe flags that are a genuinely different vocabulary, not a rival
 #: ladder. Only enums the probe actually flags belong here: an entry it does not flag is
@@ -91,15 +77,11 @@ DISTINCT_VOCABULARIES = {
 }
 
 #: Flagged by the value probe and NOT aliased, each with the concrete reason. `KnowledgePriority`
-#: and `MaintenancePriority` were aliased to the canonical `Priority` and left this list.
+#: and `MaintenancePriority` were aliased to the canonical `Priority`, and `WorkItemPriority` is
+#: derived from it (pinned in `llc/tests/test_work_item_priority_derived_18098.py`); they left this list.
 UNCLASSIFIED_VALUE_MATCHES = {
     "autobot-backend/api/knowledge_grounding_models.py::ReviewTicketPriority": (
         "file owned by issue-18086-claim-models (#18098); analysed SAFE to alias to Priority"
-    ),
-    "autobot-backend/llc/models/enums.py::WorkItemPriority": (
-        "BLOCKED (#18098): (str, Enum) persisted through a 4-label Postgres enum; aliasing widens "
-        "the API (work_items.py, agent_tools.py) to accept normal/urgent, which the database rejects, "
-        "and loses the str mixin that json.dumps(default=str) in portability.py relies on"
     ),
 }
 

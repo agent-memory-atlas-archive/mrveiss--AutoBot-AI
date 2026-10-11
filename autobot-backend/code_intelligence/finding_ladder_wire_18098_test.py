@@ -143,3 +143,20 @@ def test_test_pattern_distribution_and_levels_are_byte_identical(tmp_path):
     assert result.severity_distribution == OLD_COUNTS
     assert list(result.severity_distribution) == OLD_ORDER
     assert tpa.get_test_severity_levels() == OLD_ORDER
+
+
+def test_optimization_priority_is_the_canonical_and_keeps_its_wire_order():
+    """Old enum declared CRITICAL first; the emitted list must stay critical-first."""
+    from code_intelligence.llm_pattern_analysis.types import OptimizationPriority
+    from code_intelligence.llm_pattern_analyzer import get_optimization_priorities
+
+    assert OptimizationPriority is Severity
+    assert get_optimization_priorities() == ["critical", "high", "medium", "low", "info"]
+
+
+def test_optimization_priority_sort_order_is_unchanged():
+    from code_intelligence.llm_pattern_analysis.recommendation_engine import RecommendationEngine
+
+    recs = [SimpleNamespace(priority=p) for p in (Severity.INFO, Severity.CRITICAL, Severity.LOW, Severity.HIGH)]
+    ordered = RecommendationEngine._sort_by_priority(recs)
+    assert [r.priority.value for r in ordered] == ["critical", "high", "low", "info"]
