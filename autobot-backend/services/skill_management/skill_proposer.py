@@ -15,6 +15,7 @@ import asyncio
 from typing import Dict, List
 
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.slm_rest_url import rest_url
 from autobot_shared.ssot_config import config
@@ -144,11 +145,12 @@ class SkillProposer:
             slm_url = self.slm_client._ws_url.replace("ws://", "http://").replace("wss://", "https://")
             proposal_url = rest_url(slm_url, "/api/skills/propose")
 
-            async with self.http_client.post(
+            async with await self.http_client.post(
                 proposal_url,
                 json=payload,
                 timeout=config.timeout.llm_call,
                 ssl=False,  # Self-signed certs in dev
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 if response.status != 200:
                     text = await response.text()
@@ -166,11 +168,12 @@ class SkillProposer:
         try:
             slm_url = config.slm_url
 
-            async with self.http_client.post(
+            async with await self.http_client.post(
                 rest_url(slm_url, "/api/skills/propose"),
                 json=payload,
                 timeout=config.timeout.llm_call,
                 ssl=False,
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 if response.status != 200:
                     text = await response.text()

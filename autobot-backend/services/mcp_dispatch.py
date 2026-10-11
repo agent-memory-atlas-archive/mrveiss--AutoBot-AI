@@ -30,6 +30,7 @@ import aiohttp
 
 from autobot_shared.auth.permissions import ROLE_PERMISSIONS, Role, role_value
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.logging_manager import get_logger
 from constants.network_constants import NetworkConstants
 
@@ -109,6 +110,7 @@ class MCPDispatcher:
             async with await http_client.get(
                 f"{backend_url}/api/mcp/tools",
                 timeout=aiohttp.ClientTimeout(total=5),
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 if response.status != 200:
                     logger.warning(
@@ -423,6 +425,7 @@ class MCPDispatcher:
                 endpoint,
                 json={"arguments": arguments},
                 timeout=aiohttp.ClientTimeout(total=30),
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 if response.status == 200:
                     result = await response.json()

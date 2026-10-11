@@ -33,9 +33,11 @@ import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from autobot_shared.auth.jwt_core import encode_jwt
+from autobot_shared.http_egress_guard import assert_egress_policy
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from constants.ttl_constants import TTL_5_MINUTES
+from services.slm_deployments import SLMDeploymentsMixin
 
 logger = get_logger(__name__)
 
@@ -332,7 +334,7 @@ class AgentConfigCache:
         logger.debug("Cleared agent config cache")
 
 
-class SLMClient:
+class SLMClient(SLMDeploymentsMixin):
     """HTTP and WebSocket client for SLM server communication."""
 
     def __init__(
@@ -449,7 +451,8 @@ class SLMClient:
             session = await self._get_session()
             url = self._rest_url("/api/agents")
 
-            async with session.get(url) as response:
+            await assert_egress_policy(url)
+            async with session.get(url, allow_redirects=False) as response:
                 if response.status == 200:
                     data = await response.json()
                     agents = data.get("agents", [])
@@ -493,7 +496,8 @@ class SLMClient:
             session = await self._get_session()
             url = self._rest_url(f"/api/agents/{agent_id}/llm")
 
-            async with session.get(url) as response:
+            await assert_egress_policy(url)
+            async with session.get(url, allow_redirects=False) as response:
                 if response.status == 200:
                     config = await response.json()
                     logger.debug("Fetched LLM config for agent %s", agent_id)
@@ -592,6 +596,8 @@ class SLMClient:
                 self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
                 logger.info("Reconnecting to WebSocket in %.1fs", self._reconnect_delay)
 
+    # pending #18256: its websockets.connect is unguarded -- the ws(s):// origin of config.slm_url is not on the
+    # egress allowlist (only the http(s) origin is).
     async def _ws_connect_and_listen(self) -> None:
         """Connect to WebSocket and listen for events.
 
@@ -785,76 +791,6 @@ class SLMClient:
         """
         return self._ws_connected
 
-    # -------------------------------------------------------------------------
-    # Deployment API methods (Issue #3407)
-    # -------------------------------------------------------------------------
-
-    async def create_deployment(self, payload: dict) -> dict:
-        """
-        Create a new deployment via POST /api/deployments.
-
-        Args:
-            payload: Dict with node_id, roles, and optional extra_data.
-
-        Returns:
-            Raw SLM response dict with deployment_id, node_id, status, etc.
-
-        Raises:
-            aiohttp.ClientResponseError: On non-2xx HTTP responses.
-        """
-        session = await self._get_session()
-        url = self._rest_url("/api/deployments")
-        async with session.post(url, json=payload) as response:
-            response.raise_for_status()
-            data = await response.json()
-        logger.info(
-            "SLM deployment created: %s on node %s",
-            data.get("deployment_id"),
-            data.get("node_id"),
-        )
-        return data
-
-    async def get_deployment(self, deployment_id: str) -> dict:
-        """
-        Fetch a deployment by ID via GET /api/deployments/{deployment_id}.
-
-        Args:
-            deployment_id: SLM deployment identifier.
-
-        Returns:
-            Raw SLM response dict.
-
-        Raises:
-            aiohttp.ClientResponseError: On non-2xx HTTP responses.
-        """
-        session = await self._get_session()
-        url = self._rest_url(f"/api/deployments/{deployment_id}")
-        async with session.get(url) as response:
-            response.raise_for_status()
-            return await response.json()
-
-    async def list_deployments(self, node_id: str | None = None) -> dict:
-        """
-        List deployments via GET /api/deployments, optionally filtered by node.
-
-        Args:
-            node_id: Optional node identifier filter.
-
-        Returns:
-            Raw SLM response dict with a ``deployments`` key.
-
-        Raises:
-            aiohttp.ClientResponseError: On non-2xx HTTP responses.
-        """
-        session = await self._get_session()
-        params = {}
-        if node_id is not None:
-            params["node_id"] = node_id
-        url = self._rest_url("/api/deployments")
-        async with session.get(url, params=params) as response:
-            response.raise_for_status()
-            return await response.json()
-
 
 # Module-level singleton instance
 _slm_client: SLMClient | None = None
@@ -965,7 +901,8 @@ async def _fetch_from_slm(service_name: str) -> str | None:
         session = await client._get_session()
         url = client._rest_url(f"/api/discover/{service_name}")
 
-        async with session.get(url) as response:
+        await assert_egress_policy(url)
+        async with session.get(url, allow_redirects=False) as response:
             if response.status == 200:
                 data = await response.json()
                 return data.get("url")
