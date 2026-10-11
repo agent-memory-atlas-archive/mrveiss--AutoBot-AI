@@ -194,20 +194,33 @@ async def test_default_posture_equals_the_old_canonical_verdict_except_the_unrea
     assert await _verdict(SessionPosture.DEFAULT) == c["new_default"]
 
 
+def _is_lookup_failure(case_id: str) -> bool:
+    """The rows whose owner lookup fails -- selected by name so a reordered CASES cannot swap them."""
+    return "unreadable" in case_id or "lookup breaks" in case_id or "non-name" in case_id
+
+
+def _row(case_id: str) -> dict:
+    """The CASES row named *case_id*, as a fresh dict."""
+    return dict(next(p.values[0] for p in CASES if p.id == case_id))
+
+
+_LOOKUP_FAILURE_IDS = [p.id for p in CASES if _is_lookup_failure(p.id)]
+
+
 def test_the_only_intended_deltas_are_the_owner_lookup_failures() -> None:
     ids = {p.id: p.values[0] for p in CASES}
     default = sorted(i for i, c in ids.items() if c["old_default"] != c["new_default"])
     strict = sorted(i for i, c in ids.items() if c["old_strict"] != c["new_strict"])
-    failures = sorted(i for i in ids if "unreadable" in i or "lookup breaks" in i or "non-name" in i)
+    failures = sorted(i for i in ids if _is_lookup_failure(i))
     assert default == failures
     assert strict == ["owner lookup breaks (not the typed error)", "owner lookup breaks, log_only"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("posture", list(SessionPosture))
-@pytest.mark.parametrize("index", [11, 12, 13, 14, 15])
-async def test_an_owner_lookup_failure_is_denied_and_the_session_is_not_claimed(monkeypatch, posture, index) -> None:
-    case = dict(CASES[index].values[0])
+@pytest.mark.parametrize("case_id", _LOOKUP_FAILURE_IDS)
+async def test_an_owner_lookup_failure_is_denied_and_the_session_is_not_claimed(monkeypatch, posture, case_id) -> None:
+    case = _row(case_id)
     redis = _drive(monkeypatch, case)
     assert await _verdict(posture) == DENY
     redis.set.assert_not_awaited()
@@ -215,11 +228,16 @@ async def test_an_owner_lookup_failure_is_denied_and_the_session_is_not_claimed(
 
 @pytest.mark.asyncio
 async def test_contrast_a_genuinely_unowned_session_is_still_allowed_under_both(monkeypatch) -> None:
-    redis = _drive(monkeypatch, dict(CASES[10].values[0]))
+    redis = _drive(monkeypatch, _row("unowned everywhere"))
     assert await _verdict(SessionPosture.STRICT) == ALLOW
     redis.set.assert_not_awaited()  # strict never claims
     assert await _verdict(SessionPosture.DEFAULT) == ALLOW
     redis.set.assert_awaited()  # default claims it for the caller
+
+
+def test_the_lookup_failure_selection_is_not_vacuous() -> None:
+    """Five failure rows today; a filter that matched nothing would make the test above vacuous."""
+    assert len(_LOOKUP_FAILURE_IDS) == 5
 
 
 def test_the_posture_is_not_a_client_controllable_parameter() -> None:
