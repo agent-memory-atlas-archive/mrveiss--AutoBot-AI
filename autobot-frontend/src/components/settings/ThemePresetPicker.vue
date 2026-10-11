@@ -538,7 +538,7 @@ function handleSetAccent(colorOption: AccentColor): void {
   box-shadow: var(--shadow-sm);
 }
 
-/* Accent swatch colors */
+[data-accent="theme"] .accent-swatch { background: var(--primary); } /* accent swatch colors; "theme" is the Refined ink */
 [data-accent="blue"] .accent-swatch {
   background: #3b82f6;
 }

@@ -27,7 +27,7 @@ import { THEME_PRESETS, type ThemePreset } from './themePresets'
 /** The built-in themes a `data-theme` attribute can carry (#18223). `contrast`
  * (high contrast) and `mono` (monochrome) are light-based accessibility and
  * corporate themes; css/themes/{contrast,mono}.css style them. */
-export const EFFECTIVE_THEMES = ['dark', 'light', 'contrast', 'mono'] as const
+export const EFFECTIVE_THEMES = ['light', 'dark', 'contrast', 'mono'] as const
 export type EffectiveTheme = (typeof EFFECTIVE_THEMES)[number]
 
 /** Available theme options: the built-ins plus `system`, which follows the OS
@@ -41,12 +41,12 @@ export function colorSchemeFor(theme: EffectiveTheme): 'dark' | 'light' {
 }
 
 /** Available accent color options */
-export type AccentColor = 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'teal' | 'indigo' | 'red'
+export type AccentColor = 'theme' | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'teal' | 'indigo' | 'red'
 
 /** The accents accents.css defines, at runtime. #18066: this list existed twice
  * in this module (`validAccents` and `availableAccents`), so a ninth accent had
  * to be added in two places or picker and validator would disagree. */
-export const ACCENT_COLORS: readonly AccentColor[] = ['blue', 'green', 'purple', 'orange', 'pink', 'teal', 'indigo', 'red'] as const
+export const ACCENT_COLORS: readonly AccentColor[] = ['theme', 'blue', 'green', 'purple', 'orange', 'pink', 'teal', 'indigo', 'red'] as const
 
 export type { ThemePreset, ThemePresetConfig } from './themePresets'
 export { THEME_PRESETS } from './themePresets'
@@ -57,8 +57,11 @@ const ACCENT_STORAGE_KEY = 'autobot-accent-color'
 const PRESET_STORAGE_KEY = 'autobot-theme-preset'
 
 /** Default values when no preference is set */
-const DEFAULT_THEME: Theme = 'dark'
-const DEFAULT_ACCENT: AccentColor = 'blue'
+// The Refined handoff names Light the default (#18223). Nothing there says to follow the
+// OS on first run, so a fresh install is light; `system` stays selectable.
+const DEFAULT_THEME: Theme = 'light'
+// `theme` = no accent preset: the theme's own primary colour stands (#18223).
+const DEFAULT_ACCENT: AccentColor = 'theme'
 const DEFAULT_PRESET: ThemePreset = 'auto'
 
 /** Global reactive state (singleton pattern) */
@@ -94,6 +97,12 @@ function applyTheme(theme: Theme): void {
  * Applies the accent color to the document root element
  */
 function applyAccentColor(accent: AccentColor): void {
+  // `theme` sets no attribute, so no accents.css rule applies and the theme's own
+  // primary (css/themes/refined-map.css) stands.
+  if (accent === 'theme') {
+    document.documentElement.removeAttribute('data-accent')
+    return
+  }
   document.documentElement.setAttribute('data-accent', accent)
 }
 
@@ -386,6 +395,7 @@ export function useTheme() {
    * Accent color labels for UI display
    */
   const accentLabels: Record<AccentColor, string> = {
+    theme: 'Theme',
     blue: 'Blue',
     green: 'Green',
     purple: 'Purple',
@@ -400,6 +410,7 @@ export function useTheme() {
    * Accent color descriptions
    */
   const accentDescriptions: Record<AccentColor, string> = {
+    theme: "Theme default — the theme's own primary colour",
     blue: 'Electric Blue — Technical Precision',
     green: 'Emerald — Growth & Success',
     purple: 'Violet — Creative & Premium',

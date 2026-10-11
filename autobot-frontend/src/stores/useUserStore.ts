@@ -70,7 +70,7 @@ export const useUserStore = defineStore('user', () => {
   const currentUser = ref<UserProfile | null>(null)
 
   const defaultPreferences: UserPreferences = {
-    theme: 'auto',
+    theme: 'light',
     language: 'en',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     notifications: {

@@ -78,3 +78,20 @@ describe('ember palette scope (#18161)', () => {
     expect(hits.length).toBe(1)
   })
 })
+
+describe('the theme accent (#18223)', () => {
+  const map = rules(read('assets/css/themes/refined-map.css'))
+  const key = ':root[data-theme="light"]:not([data-accent]), :root[data-theme="dark"]:not([data-accent])'
+
+  it('light and dark take the Refined ink as the primary when no accent is chosen', () => {
+    const names = map.get(key)
+    expect(names, 'no rule for the theme accent').toBeDefined()
+    expect(names).toContain('--color-primary')
+    // The ink is pale in dark, so text on it must follow the theme, not stay white.
+    expect(names).toContain('--text-on-primary')
+  })
+
+  it('the rule only applies while no accent preset is set', () => {
+    expect(key).toContain(':not([data-accent])')
+  })
+})

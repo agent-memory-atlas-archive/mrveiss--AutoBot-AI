@@ -44,7 +44,7 @@ export const THEME_PRESETS: Record<ThemePreset, ThemePresetConfig> = {
     name: 'Auto',
     description: 'Follows system preference',
     theme: 'system',
-    accentColor: 'blue',
+    accentColor: 'theme',
   },
   'catppuccin-mocha': {
     name: 'Catppuccin Mocha',

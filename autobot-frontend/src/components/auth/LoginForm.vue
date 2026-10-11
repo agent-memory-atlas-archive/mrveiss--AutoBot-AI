@@ -220,7 +220,7 @@ async function handleLogin() {
           : u.username,
         role: (u.role as Role) || DEFAULT_ROLE,
         preferences: {
-          theme: 'auto',
+          theme: 'light',
           language: 'en',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           notifications: { email: true, browser: true, sound: false },

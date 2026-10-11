@@ -59,3 +59,21 @@
   --color-focus-ring: var(--focus);
   --color-accent: var(--accent);
 }
+
+/* The `theme` accent, the default (#18223): useTheme sets no data-accent, so no
+   accents.css rule applies and the theme's own primary stands. The Refined ink is
+   navy in light and a pale ink in dark, hence text on it is --on-primary and not the
+   fixed white of --text-on-primary. Choosing an accent preset sets data-accent and
+   this block stops matching; contrast and mono (their own files) keep the ink
+   whatever the accent. */
+:root[data-theme="light"]:not([data-accent]),
+:root[data-theme="dark"]:not([data-accent]) {
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-h);
+  --color-primary-active: var(--primary-h);
+  --color-primary-light: color-mix(in srgb, var(--primary) 60%, var(--surface));
+  --color-primary-dark: var(--primary-h);
+  --color-primary-bg: color-mix(in srgb, var(--primary) 10%, transparent);
+  --color-primary-bg-hover: color-mix(in srgb, var(--primary) 15%, transparent);
+  --text-on-primary: var(--on-primary);
+}
