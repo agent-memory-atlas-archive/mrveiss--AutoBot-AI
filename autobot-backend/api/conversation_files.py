@@ -42,10 +42,10 @@ from api.schemas_knowledge import (
     MCPToolCallRequest,
 )
 from auth_middleware import check_admin_permission, get_auth_middleware
-from autobot_shared.auth.permissions import is_admin_role
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
-from security.session_owner_errors import SessionOwnerUnreadable
+from security.session_ownership import validate_session_ownership
+from security.session_posture import SessionPosture
 from security_layer import SecurityLayer
 from utils.catalog_http_exceptions import raise_internal_error, raise_invalid_input, raise_not_found
 
@@ -105,7 +105,7 @@ async def _authorize_file_operation(request: Request, session_id: str, operation
     if not has_permission:
         raise HTTPException(status_code=403, detail=f"Insufficient permissions for file {operation}")
     request.state.user = user_data
-    await validate_session_ownership(request, session_id, user_data)
+    await validate_session_ownership(session_id, request, posture=SessionPosture.STRICT)
     return user_data
 
 
@@ -142,120 +142,6 @@ def get_conversation_file_manager(request: Request):
     Returns None if not yet initialized (startup phase).
     """
     return getattr(request.app.state, "conversation_file_manager", None)
-
-
-def get_chat_history_manager(request: Request):
-    """Get chat history manager from app state for session validation"""
-    return request.app.state.chat_history_manager
-
-
-def _validate_user_role(user_data: Dict) -> str:
-    """
-    Validate user has an assigned role.
-
-    Issue #620: Extracted from validate_session_ownership for function length reduction.
-
-    Args:
-        user_data: Authenticated user data from auth middleware
-
-    Returns:
-        str: The user's role
-
-    Raises:
-        HTTPException: 403 if no role assigned
-    """
-    user_role = user_data.get("role")
-    if not user_role:
-        raise HTTPException(status_code=403, detail="User role not assigned - access denied")
-    return user_role
-
-
-def _check_admin_access(user_data: Dict, session_id: str) -> bool:
-    """
-    Check if user has admin access to bypass ownership validation.
-
-    Issue #620: Extracted from validate_session_ownership for function length reduction.
-
-    Args:
-        user_data: Authenticated user data from auth middleware
-        session_id: Conversation session ID
-
-    Returns:
-        bool: True if admin access granted, False otherwise
-    """
-    user_role = user_data.get("role")
-    if is_admin_role(user_role):
-        logger.debug("Admin user %s accessing session %s", user_data.get("username"), session_id)
-        return True
-    return False
-
-
-async def _verify_session_owner(chat_history_manager, session_id: str, current_user: str) -> bool:
-    """
-    Verify current user matches session owner.
-
-    Issue #620: Extracted from validate_session_ownership for function length reduction.
-
-    Args:
-        chat_history_manager: Chat history manager instance
-        session_id: Conversation session ID
-        current_user: Username of current user
-
-    Returns:
-        bool: True if ownership verified
-
-    Raises:
-        HTTPException: 403 if user doesn't own session
-    """
-    try:
-        session_owner = await chat_history_manager.get_session_owner(session_id)
-    except SessionOwnerUnreadable:
-        # #14033: a read failure is not evidence of absent ownership.
-        logger.warning("Ownership unreadable for session %s - denying %s", session_id, current_user)
-        raise HTTPException(status_code=403, detail="Cannot verify session ownership") from None
-    # A genuinely unowned session predates ownership tracking (#14026).
-    if session_owner is None:
-        logger.info("Session %s has no owner - allowing access (legacy session)", session_id)
-        return True
-
-    # Verify current user matches session owner
-    if session_owner != current_user:
-        logger.warning("Access denied: %s wanted session %s owned by %s", current_user, session_id, session_owner)
-        raise HTTPException(status_code=403, detail="Access denied: You do not own this session")
-
-    logger.debug("User %s validated as owner of session %s", current_user, session_id)
-    return True
-
-
-async def validate_session_ownership(request: Request, session_id: str, user_data: Dict) -> bool:
-    """
-    Validate that the authenticated user owns the conversation session.
-
-    Issue #620: Refactored using Extract Method pattern.
-
-    Args:
-        request: FastAPI request object
-        session_id: Conversation session ID
-        user_data: Authenticated user data from auth middleware
-
-    Returns:
-        bool: True if user owns session, raises HTTPException otherwise
-    """
-    try:
-        _validate_user_role(user_data)
-
-        if _check_admin_access(user_data, session_id):
-            return True
-
-        chat_history_manager = get_chat_history_manager(request)
-        current_user = user_data.get("username")
-        return await _verify_session_owner(chat_history_manager, session_id, current_user)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Session ownership validation error: %s", e)
-        raise_internal_error("Failed to validate session ownership")
 
 
 def is_safe_file(filename: str) -> bool:
@@ -624,7 +510,7 @@ async def preview_conversation_file(request: Request, session_id: str, file_id: 
 
     try:
         # Validate session ownership
-        await validate_session_ownership(request, session_id, user_data)
+        await validate_session_ownership(session_id, request, posture=SessionPosture.STRICT)
 
         # Get conversation file manager
         file_manager = get_conversation_file_manager(request)

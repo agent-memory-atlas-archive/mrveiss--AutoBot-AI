@@ -44,8 +44,8 @@ not an auth boundary — the caller is logged in — so a missing check reads as
 endpoint.
 
 **Canonical enforcement:** [`autobot-backend/security/session_ownership.py`](../../autobot-backend/security/session_ownership.py)
-— `build_owner_metadata` (:34) the one owner stamper · `validate_session_ownership` (:775)
-the one read-side gate · `validate_ownership` (:613).
+— `build_owner_metadata` (:36) the one owner stamper · `validate_session_ownership` (:745) the one read-side gate · `validate_ownership` (:583).
+Two postures, one validator (#14016): the contract is the docstring of [`security/session_posture.py`](../../autobot-backend/security/session_posture.py). A failed durable owner lookup denies under both and claims nothing: "unknown" is never "unowned" (#14033).
 
 **Invariants**
 - Redis keys are `chat:session:{session_id}` — **not** namespaced by user. Key
@@ -53,7 +53,7 @@ the one read-side gate · `validate_ownership` (:613).
 - Owner identity is `metadata.owner` = **username**, never a user id. A diff comparing
   against `user_id` is comparing the wrong field.
 - Redis is a TTL cache; the session file's `metadata.owner` is the record of truth. An absent Redis record means
-  "not cached", never "unowned" — `_owner_when_cache_is_empty` (:539) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
+  "not cached", never "unowned" — [`session_ownership.py`](../../autobot-backend/security/session_ownership.py) `_owner_when_cache_is_empty` (:509) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
 - Undetermined enforcement policy degrades, in
   [`security/enforcement_mode.py`](../../autobot-backend/security/enforcement_mode.py), to
   `DEGRADED_ENFORCEMENT_MODE` (:53) and never to `disabled`: checks still run and violations
@@ -63,7 +63,7 @@ the one read-side gate · `validate_ownership` (:613).
   allow-and-audit in both, deliberately. A degraded route reporting the chosen `reason` is a finding.
 - Only two legitimate fast-path bypasses exist, in
   [`security/session_ownership.py`](../../autobot-backend/security/session_ownership.py) —
-  `_resolve_fast_paths` (:480): global auth disabled, and enforcement explicitly `disabled`.
+  `_resolve_fast_paths` (:459): global auth disabled, and enforcement explicitly `disabled`.
   A third one added in a diff is a finding.
 - Creating over an existing session id is a 409, identical for "owned by someone else" and
   "no recorded owner" — a 403 on the first would confirm who owns it (#14012).
