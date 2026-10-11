@@ -46,7 +46,7 @@ def test_standalone_agent_uses_the_configured_node_id(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("path", [_AGENT, _MIRROR], ids=["canonical", "mirror"])
-def test_agent_reads_the_key_through_the_shared_constant(path):
+def test_agent_reads_the_key_through_the_one_reader(path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     imported = {
         a.name
@@ -55,11 +55,16 @@ def test_agent_reads_the_key_through_the_shared_constant(path):
         for a in n.names
     }
     literals = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == _KEY_NAME]
-    attributes = [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == "INTERNAL_KEY_ENV"]
+    reader_calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "internal_api_key"
+    ]
+    env_name = [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == "INTERNAL_KEY_ENV"]
 
     assert "node_proxy" in imported
-    assert attributes
-    assert literals == []
+    assert reader_calls, "the agent must call node_proxy.internal_api_key() (#17856 row 13a)"
+    assert env_name == [] and literals == [], "the agent must not read the key's env var itself"
 
 
 def test_agent_and_mirror_stay_byte_identical():

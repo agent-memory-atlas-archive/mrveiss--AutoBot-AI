@@ -126,7 +126,7 @@ class SLMAgent:
         # every request via the session default headers. Empty -> the server
         # rejects our heartbeats 401 and the fleet Service table never
         # populates, so warn loudly.
-        self._internal_api_key = os.environ.get(node_proxy.INTERNAL_KEY_ENV, "")
+        self._internal_api_key = node_proxy.internal_api_key()
         if not self._internal_api_key:
             logger.warning("AUTOBOT_INTERNAL_API_KEY not set — heartbeats will be rejected 401 (#11450)")
 
