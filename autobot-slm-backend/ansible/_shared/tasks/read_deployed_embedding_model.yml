@@ -19,7 +19,8 @@
   ansible.builtin.shell:
     cmd: |
       for f in {{ deployed_embedding_env_files | join(' ') }}; do
-        v=$(grep -m1 -oP '^AUTOBOT_EMBEDDING_MODEL=\K.*' "$f" 2>/dev/null)
+        v=$(grep -m1 -E '^(export[[:space:]]+)?AUTOBOT_EMBEDDING_MODEL=' "$f" 2>/dev/null \
+          | sed -E "s/^(export[[:space:]]+)?AUTOBOT_EMBEDDING_MODEL=//; s/\r\$//; s/^[\"']//; s/[\"']\$//")
         if [ -n "$v" ]; then echo "$v"; break; fi
       done
       true
