@@ -13,9 +13,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, create_autospec, patch
 
-import docker
 import pytest
-from docker.models.containers import ContainerCollection
+
+# The docker SDK is a declared CI dependency (requirements-ci/utilities.txt); a guard in
+# repo_tests/container_hardening_single_source_17267_test.py fails if it stops being
+# declared, so this skip can only fire in a local interpreter that lacks the SDK, never
+# silently in CI.
+docker = pytest.importorskip("docker", reason="docker SDK not installed in this interpreter")
+ContainerCollection = pytest.importorskip("docker.models.containers").ContainerCollection
 
 import services.execution.docker_backend as db
 from services.execution.base_backend import ExecutionTask, ResourceLimits

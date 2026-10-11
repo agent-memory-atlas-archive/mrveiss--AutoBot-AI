@@ -285,3 +285,17 @@ def test_each_hardened_client_calls_the_builder(rel: str) -> None:
 
 def test_the_canonical_module_does_build_them() -> None:
     assert builds_hardening_inline((repo_root() / _CANONICAL).read_text(encoding="utf-8"))
+
+
+def test_ci_declares_the_docker_sdk_the_run_kwarg_pins_need() -> None:
+    """The run-kwarg pins skip only where the docker SDK is absent; CI must always have it.
+
+    ``autobot-backend/tests/test_execution_hardening_pin_17267.py`` checks every run site's
+    kwargs against docker-py's accepted set. It skips in an interpreter without the SDK, so
+    this asserts CI installs it, which keeps that skip from ever firing in CI.
+    """
+    text = (repo_root() / "requirements-ci" / "utilities.txt").read_text(encoding="utf-8")
+    declared = [ln.split("#", 1)[0].strip() for ln in text.splitlines()]
+    assert any(
+        ln.lower().startswith("docker") and not ln.lower().startswith("docker-") for ln in declared if ln
+    ), "requirements-ci/utilities.txt no longer declares the docker SDK; the #17267 run-kwarg pins would skip in CI"
