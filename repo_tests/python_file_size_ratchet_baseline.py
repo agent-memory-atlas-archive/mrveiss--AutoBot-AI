@@ -412,8 +412,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/tests/unit/knowledge/connectors/test_web_crawler.py": 655,
     "autobot-backend/tests/utils/gpu_optimization/test_gpu_detection.py": 718,
     "autobot-backend/tools/tool_registry.py": 959,
-    # #15772: SAVEPOINT insert call, race handled in user_service_conflict.py
-    "autobot-backend/user_management/services/user_service.py": 900,
     "autobot-backend/utils/advanced_cache_manager.py": 1213,
     "autobot-backend/utils/claude_api_integration.py": 917,
     "autobot-backend/utils/distributed_service_discovery.py": 684,
@@ -489,7 +487,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/tests/services/test_sso_service.py": 1258,
     "autobot-slm-backend/tests/test_cleanup_never_destroys_data_14856.py": 981,
     "autobot-slm-backend/user_management/services/sso_service.py": 778,
-    "autobot-slm-backend/user_management/services/user_service.py": 863,
     "autobot_shared/env_registry.py": 1215,  # #13602: +1 sibling import, -14 registration
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 616,

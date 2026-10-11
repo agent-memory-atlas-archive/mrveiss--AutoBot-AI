@@ -2,15 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""Exceptions raised by ``UserService`` (split out of ``user_service.py``, #15736).
+"""Exceptions raised by ``UserService``, shared by both backends (#15068).
 
-``user_service.py`` is a grandfathered oversized file (#14236) that may not
-grow, so ``DuplicateUserError`` gaining a structured ``field`` attribute here
-— rather than a docstring-only class inline in that file — is what keeps the
-change from pushing it over its recorded ceiling. ``user_service.py``
-re-exports every name below so existing ``from
-user_management.services.user_service import DuplicateUserError``-style
-imports keep working unchanged.
+Split out of the backend's ``user_service.py`` in #15736, when
+``DuplicateUserError`` gained a structured ``field``. The SLM's copy defined the
+same four classes inline without ``field``; this superset is now the only
+definition, so a caller in either service can name the conflicting field
+without echoing the value back.
 """
 
 from __future__ import annotations
