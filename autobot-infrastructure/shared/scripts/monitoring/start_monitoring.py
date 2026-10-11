@@ -35,9 +35,10 @@ from typing import Optional
 project_root = Path(__file__).resolve().parents[4]
 backend_root = Path(__file__).resolve().parents[4] / "autobot-backend"
 monitoring_dir = Path(__file__).resolve().parent
+# Own dir first so it ends up LAST of the three: nothing beside the launcher may shadow the backend.
+sys.path.insert(0, str(monitoring_dir))  # the sibling monitoring_backends module
 sys.path.insert(0, str(backend_root))
 sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(monitoring_dir))  # the sibling monitoring_backends module
 
 from autobot_shared.async_compat import fire_and_forget  # noqa: E402
 from constants.threshold_constants import CategoryDefaults, TimingConstants
@@ -463,8 +464,8 @@ async def _handle_test_command(manager: PerformanceMonitoringManager) -> None:
     logger.info("Component tests completed")
 
 
-async def main(default_backend: str = BACKEND_PERFORMANCE):
-    """Main function for performance monitoring management (Issue #315: refactored)."""
+def _build_parser(default_backend: str) -> argparse.ArgumentParser:
+    """Command-line interface: the command, the backend to drive, and run options."""
     parser = argparse.ArgumentParser(description="AutoBot Performance Monitoring")
     parser.add_argument(
         "--backend",
@@ -480,8 +481,52 @@ async def main(default_backend: str = BACKEND_PERFORMANCE):
     parser.add_argument("--config", type=str, help="Configuration file path")
     parser.add_argument("--daemon", action="store_true", help="Run as daemon")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
+    return parser
 
-    args = parser.parse_args()
+
+def _load_config_file(manager: PerformanceMonitoringManager, config_path: Optional[str]) -> None:
+    """Merge a JSON configuration file into the manager's config, if one was given and exists."""
+    if not (config_path and os.path.exists(config_path)):
+        return
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            manager.config.update(json.load(f))
+            logger.info("Configuration loaded from %s", config_path)
+    except Exception as e:
+        logger.error("Failed to load configuration: %s", e)
+
+
+async def _handle_stop_command(manager: PerformanceMonitoringManager) -> None:
+    """Handle stop command."""
+    if not await manager.stop_monitoring():
+        logger.error("Failed to stop monitoring")
+        sys.exit(1)
+    logger.info("Monitoring stopped successfully")
+
+
+async def _handle_benchmark_command(manager: PerformanceMonitoringManager) -> None:
+    """Handle benchmark command."""
+    await manager.initialize()
+    logger.info(json.dumps(await manager.run_benchmark_suite(), indent=2, default=str))
+
+
+async def _dispatch(manager: PerformanceMonitoringManager, args: argparse.Namespace) -> None:
+    """Run the parsed command against the manager."""
+    if args.command == "start":
+        await _handle_start_command(manager, args.daemon)
+    elif args.command == "stop":
+        await _handle_stop_command(manager)
+    elif args.command == "status":
+        logger.info(json.dumps(manager.get_status_report(), indent=2))
+    elif args.command == "benchmark":
+        await _handle_benchmark_command(manager)
+    elif args.command == "test":
+        await _handle_test_command(manager)
+
+
+async def main(default_backend: str = BACKEND_PERFORMANCE):
+    """Main function for performance monitoring management (Issue #315: refactored)."""
+    args = _build_parser(default_backend).parse_args()
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -489,36 +534,10 @@ async def main(default_backend: str = BACKEND_PERFORMANCE):
     backend = load_backend(args.backend)
     configure_logging(backend)
     manager = PerformanceMonitoringManager(backend)
-
-    # Load configuration if provided
-    if args.config and os.path.exists(args.config):
-        try:
-            with open(args.config, "r", encoding="utf-8") as f:
-                manager.config.update(json.load(f))
-                logger.info("Configuration loaded from %s", args.config)
-        except Exception as e:
-            logger.error("Failed to load configuration: %s", e)
+    _load_config_file(manager, args.config)
 
     try:
-        if args.command == "start":
-            await _handle_start_command(manager, args.daemon)
-
-        elif args.command == "stop":
-            if not await manager.stop_monitoring():
-                logger.error("Failed to stop monitoring")
-                sys.exit(1)
-            logger.info("Monitoring stopped successfully")
-
-        elif args.command == "status":
-            logger.info(json.dumps(manager.get_status_report(), indent=2))
-
-        elif args.command == "benchmark":
-            await manager.initialize()
-            logger.info(json.dumps(await manager.run_benchmark_suite(), indent=2, default=str))
-
-        elif args.command == "test":
-            await _handle_test_command(manager)
-
+        await _dispatch(manager, args)
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
         if manager.monitoring_active:
