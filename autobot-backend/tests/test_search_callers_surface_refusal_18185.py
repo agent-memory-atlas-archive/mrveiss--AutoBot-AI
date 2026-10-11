@@ -131,4 +131,5 @@ async def test_connectivity_test_reports_failed_not_success():
     with patch.object(mod, "get_npu_search_engine", AsyncMock(return_value=engine)):
         out = await mod.test_npu_connectivity()
     assert out["connectivity"] == "failed"
-    assert out["fallback_available"] is False and out["error"] == REFUSED.error
+    assert out["fallback_available"] is False and out["error"] == mod.REFUSED_SEARCH_ERROR
+    assert REFUSED.error not in out["error"]  # the internal reason stays in the log, not the response

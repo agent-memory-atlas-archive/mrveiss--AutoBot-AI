@@ -184,7 +184,8 @@ def strip_one_sync(svc, secret_id: str, actor: str, report: StripReport) -> str 
         report.add(outcome, label, secret_id)
         return None
     if not _write_verified(svc, secret_id, secret["value"], creds, actor):
-        logger.error("OAuth bundle strip verification failed; original restored (secret %s)", secret_id)
+        bundle_ref = secret_id  # a record id, never the value
+        logger.error("OAuth bundle strip verification failed; original restored (bundle %s)", bundle_ref)
         report.add(VERIFY_FAILED, label, secret_id)
         return None
     report.add(STRIPPED, label, secret_id)
@@ -248,7 +249,8 @@ async def strip_all(svc, actor: str, report: StripReport | None = None) -> Strip
         try:
             await _strip_under_lease(svc, secret_id, actor, report)
         except Exception:
-            logger.exception("OAuth bundle strip failed for one bundle (secret %s)", secret_id)
+            bundle_ref = secret_id  # a record id, never the value
+            logger.exception("OAuth bundle strip failed for one bundle (bundle %s)", bundle_ref)
             report.add(ERROR, UNKNOWN_PROVIDER, secret_id)
         except BaseException:
             report.add(INTERRUPTED, UNKNOWN_PROVIDER, secret_id)

@@ -116,7 +116,10 @@ async def mirror_credential_to_vault(sqlite_id: str, owner_id: str, value: str, 
             await mirror_in_session(session, sqlite_id, owner_id, value, root_key, name=name, secret_type=secret_type)
             await session.commit()
     except Exception as exc:  # dual-write must never break the canonical SQLite write
-        logger.warning("Envelope mirror failed for credential %s (owner %s): %s", sqlite_id, owner_id, exc)
+        # The exception text is not logged: a mirror failure can echo the value it was writing.
+        logger.warning(
+            "Envelope mirror failed for credential %s (owner %s): %s", sqlite_id, owner_id, type(exc).__name__
+        )
 
 
 async def delete_credential_from_vault(sqlite_id: str, owner_id: str) -> None:

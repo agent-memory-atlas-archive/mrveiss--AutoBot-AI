@@ -336,13 +336,17 @@ async def test_npu_connectivity():
         return _connectivity_failure(e)
 
 
+#: What a client is told when the index's embedding space is refused; the reason itself is logged.
+REFUSED_SEARCH_ERROR = "Search refused: the index's embedding model is unavailable"
+
+
 def _connectivity_failure(exc: Exception) -> dict:
     """A failed connectivity test. A refused query space has no fallback by design (#18185); for any
     other failure whether one exists is not determined, so ``fallback_available`` is None."""
     refused = isinstance(exc, EmbeddingUnavailableError)
     return {
         "connectivity": "failed",
-        "error": str(exc) if refused else "Internal server error",
+        "error": REFUSED_SEARCH_ERROR if refused else "Internal server error",
         "fallback_available": False if refused else None,
         "timestamp": time.time(),
     }
