@@ -11,8 +11,8 @@ context names this action:
 
 The proposer (``api.admin_oauth_bundle_strip``) cannot execute it. Approving it
 runs :func:`execute_oauth_bundle_strip` through ``services.approval_execution``.
-The handler refuses to run without a ``backup_reference`` (the owner-approved
-procedure's step 2) and re-evaluates every bundle at execution time, so a
+The handler refuses to run unless :func:`verify_backup` confirms the
+``backup_reference`` (the owner-approved procedure's step 2), and re-evaluates every bundle at execution time, so a
 provider that lost its operator config between proposal and approval is skipped,
 not stripped. The outcome -- counts per provider, never values -- lands as an
 ApprovalComment and an audit entry (#17038 rule 3).
@@ -44,6 +44,40 @@ def _comment_body(report: oauth_bundle_strip.StripReport, *, completed: bool) ->
     return (
         f"OAuth bundle strip {state}: {parts}. Bundles not stripped or in doubt: {residual}. "
         "Still to do by the operator: one forced refresh per provider."
+    )
+
+
+NO_VERIFIABLE_BACKUP = "no verifiable secrets-store backup (#18281)"
+
+
+def verify_backup(reference: str) -> bool:
+    """Whether *reference* names a real, existing backup of the secrets store.
+
+    There is no secrets-store backup mechanism to check against yet (#18281), so
+    this verifies nothing and returns False: the strip fails closed and cannot
+    execute on unverified text. When #18281 lands, this is the one seam to wire
+    to it. There is deliberately no flag or setting that skips this check.
+    """
+    return False
+
+
+async def _write_refusal(approval: "Approval", session: "AsyncSession", reason: str) -> None:
+    """Record a refused execution (comment + audit) so the trail shows why nothing ran."""
+    session.add(
+        ApprovalComment(
+            approval_id=approval.id,
+            author="system",
+            author_type="system",
+            body=f"OAuth bundle strip REFUSED, no bundle was touched: {reason}.",
+        )
+    )
+    await session.commit()
+    await audit_log(
+        "oauth_bundle.strip_app_credentials",
+        result="refused",
+        user_id=approval.decided_by_user,
+        resource="connector_oauth_token",
+        details={"approval_id": str(approval.id), "reason": reason},
     )
 
 
@@ -81,6 +115,9 @@ async def execute_oauth_bundle_strip(approval: "Approval", session: "AsyncSessio
     context = approval.context or {}
     if not str(context.get("backup_reference") or "").strip():
         raise ValueError(f"approval {approval.id} names no backup_reference -- refusing to rewrite credentials")
+    if not verify_backup(str(context["backup_reference"]).strip()):
+        await _write_refusal(approval, session, NO_VERIFIABLE_BACKUP)
+        raise ValueError(f"approval {approval.id}: {NO_VERIFIABLE_BACKUP} -- refusing to rewrite credentials")
     report = oauth_bundle_strip.StripReport()
     completed = False
     try:

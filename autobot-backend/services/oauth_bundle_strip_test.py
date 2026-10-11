@@ -87,6 +87,12 @@ def locks(monkeypatch):
 
 
 @pytest.fixture
+def backup_verified(monkeypatch):
+    """The seam patched to True: stands in for a future #18281 verifier."""
+    monkeypatch.setattr(oauth_bundle_strip_action, "verify_backup", lambda reference: True)
+
+
+@pytest.fixture
 def configured(monkeypatch):
     """google is configured; microsoft is not."""
     real = oauth_flow.resolve_client_credentials
@@ -220,7 +226,9 @@ class _Interrupt(BaseException):
     pass
 
 
-async def test_an_interruption_halfway_still_writes_the_trail_for_the_partial_run(configured, monkeypatch):
+async def test_an_interruption_halfway_still_writes_the_trail_for_the_partial_run(
+    configured, backup_verified, monkeypatch
+):
     svc = _svc(**{"s-third": json.dumps(_LEGACY)})
     monkeypatch.setattr("services.secrets_service.get_secrets_service", lambda: svc)
     audited, session = [], _FakeSession()
@@ -288,7 +296,7 @@ async def _noop():
     return None
 
 
-async def test_propose_then_approve_runs_the_strip_and_audits(configured, monkeypatch):
+async def test_propose_then_approve_runs_the_strip_and_audits(configured, backup_verified, monkeypatch):
     svc = _svc()
     monkeypatch.setattr("services.secrets_service.get_secrets_service", lambda: svc)
     monkeypatch.setattr(ApprovalGateService, "_notify", lambda self, event, approval: _noop())
@@ -327,3 +335,38 @@ def test_action_is_registered_with_its_proposer():
     assert approval_execution.registered_action_proposers()[oauth_bundle_strip_action.ACTION] == (
         "api.admin_oauth_bundle_strip"
     )
+
+
+async def test_unverifiable_backup_refuses_execution_records_why_and_touches_nothing(configured, monkeypatch):
+    """Fail closed (#18281): a non-empty reference is not a backup."""
+    svc = _svc()
+    monkeypatch.setattr("services.secrets_service.get_secrets_service", lambda: svc)
+    audited, session = [], _FakeSession()
+
+    async def _audit(op, **kw):
+        audited.append(kw)
+
+    monkeypatch.setattr(oauth_bundle_strip_action, "audit_log", _audit)
+    approval = Approval(context={"backup_reference": "snap-looks-real"}, id=uuid.uuid4(), decided_by_user="human")
+    with pytest.raises(ValueError, match="18281"):
+        await oauth_bundle_strip_action.execute_oauth_bundle_strip(approval, session)
+    assert svc.writes == [] and json.loads(svc.rows["s-legacy"])["client_secret"] == _SECRET
+    assert "no verifiable secrets-store backup (#18281)" in session.added[0].body
+    assert audited[0]["result"] == "refused"
+
+
+async def test_the_same_request_runs_once_the_seam_verifies(configured, backup_verified, monkeypatch):
+    svc = _svc()
+    monkeypatch.setattr("services.secrets_service.get_secrets_service", lambda: svc)
+
+    async def _audit(op, **kw):
+        return None
+
+    monkeypatch.setattr(oauth_bundle_strip_action, "audit_log", _audit)
+    approval = Approval(context={"backup_reference": "snap-looks-real"}, id=uuid.uuid4(), decided_by_user="human")
+    await oauth_bundle_strip_action.execute_oauth_bundle_strip(approval, _FakeSession())
+    assert svc.writes == ["s-legacy"]
+
+
+def test_the_seam_has_no_verifier_yet_and_no_bypass():
+    assert oauth_bundle_strip_action.verify_backup("anything") is False
