@@ -27,6 +27,9 @@ Features:
 
 Usage:
     python init_memory_graph_redis.py [--migrate] [--validate] [--benchmark] [--rollback]
+
+    --migrate reads the legacy transcripts relative to the working directory, so run it
+    from the backend's working directory (#18293).
 """
 
 import argparse
@@ -45,7 +48,7 @@ from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 
 from autobot_shared.paths import project_root
-from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS
+from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 from constants.network_constants import NetworkConstants
 
 # #14517: the log path was a shell placeholder in a plain string literal. Python
@@ -885,7 +888,8 @@ def _execute_memory_graph_phases(initializer: MemoryGraphInitializer, args) -> b
         logger.info("PHASE 3: Conversation Migration")
         logger.info("=" * 80)
 
-        transcript_dir = project_root() / "data" / LEGACY_CONVERSATION_TRANSCRIPTS
+        # #18293: run from the backend's working directory -- that is where the legacy transcripts are.
+        transcript_dir = legacy_conversation_transcripts_dir()
         migration_stats = initializer.migrate_conversations(transcript_dir)
         logger.info("\nMigration Results:")
         logger.info(json.dumps(migration_stats, indent=2))

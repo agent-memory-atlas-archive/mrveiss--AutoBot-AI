@@ -18,7 +18,7 @@ import pytest
 
 import chat_history
 import chat_history.legacy_transcripts as legacy
-from chat_history.legacy_transcripts import LEGACY_TRANSCRIPT_DIR
+from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 from chat_workflow.conversation import ConversationHandlerMixin
 from chat_workflow.models import WorkflowSession
 
@@ -42,7 +42,8 @@ def _fake_chat_history(monkeypatch, messages: List[Dict[str, Any]] | Exception) 
 
 
 def _write_legacy(root, exchanges: List[Dict[str, str]]):
-    directory = root / LEGACY_TRANSCRIPT_DIR
+    directory = legacy_conversation_transcripts_dir()
+    assert directory == (root / "data" / "conversation_transcripts").resolve()
     directory.mkdir(parents=True)
     path = directory / f"{SESSION}.json"
     path.write_text(json.dumps({"session_id": SESSION, "messages": exchanges}), encoding="utf-8")

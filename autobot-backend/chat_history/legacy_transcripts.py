@@ -31,13 +31,9 @@ from typing import Dict, List, Set
 import aiofiles
 
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS
+from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 
 logger = get_logger(__name__)
-
-#: Where the retired writer put the files: relative to the backend's working
-#: directory, exactly as ``ChatWorkflowManager.transcript_dir`` spelled it.
-LEGACY_TRANSCRIPT_DIR = str(Path("data") / LEGACY_CONVERSATION_TRANSCRIPTS)
 
 #: Sessions whose LLM context has already been served from a legacy file in
 #: this process -- so the fallback is logged once per session, not per load.
@@ -56,15 +52,25 @@ def _pairs_from_transcript(transcript: object) -> List[Dict[str, str]]:
     ]
 
 
+def _transcript_path(session_id: str, transcript_dir: str | Path | None) -> Path | None:
+    """The file for *session_id*, or None for an id that could leave the directory."""
+    if not session_id or any(part in session_id for part in ("/", "\\", "..")):
+        return None
+    base = Path(transcript_dir) if transcript_dir is not None else legacy_conversation_transcripts_dir()
+    return base / f"{session_id}.json"
+
+
 async def read_legacy_transcript_pairs(
-    session_id: str, transcript_dir: str = LEGACY_TRANSCRIPT_DIR
+    session_id: str, transcript_dir: str | Path | None = None
 ) -> List[Dict[str, str]]:
     """Every exchange in *session_id*'s legacy transcript, or ``[]`` when there is none.
 
     Missing, unreadable and malformed files all read as ``[]`` -- a legacy file
     is never repaired, renamed or rewritten from here.
     """
-    path = Path(transcript_dir) / f"{session_id}.json"
+    path = _transcript_path(session_id, transcript_dir)
+    if path is None:
+        return []
     try:
         async with aiofiles.open(path, "r", encoding="utf-8") as f:
             content = await f.read()
@@ -81,7 +87,7 @@ async def read_legacy_transcript_pairs(
 
 
 async def load_legacy_context_pairs(
-    session_id: str, limit: int, transcript_dir: str = LEGACY_TRANSCRIPT_DIR
+    session_id: str, limit: int, transcript_dir: str | Path | None = None
 ) -> List[Dict[str, str]]:
     """The last *limit* legacy exchanges, for a session ``chat_sessions`` has no turns for."""
     pairs = (await read_legacy_transcript_pairs(session_id, transcript_dir))[-limit:] if limit > 0 else []

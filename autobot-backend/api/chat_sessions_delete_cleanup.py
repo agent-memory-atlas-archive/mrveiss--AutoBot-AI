@@ -154,7 +154,9 @@ async def _cleanup_conversation_transcript(session_id: str) -> dict:
     Remove the session's legacy transcript file, if one exists (#18293).
 
     Nothing writes these files any more; a user deleting their session takes
-    its legacy copy with it.
+    its legacy copy with it. The directory is the one the retired writer used
+    (``legacy_conversation_transcripts_dir``) -- this used to look under the
+    project root's ``data/``, where no transcript ever was, so it deleted nothing.
 
     Args:
         session_id: Chat session ID being deleted
@@ -165,8 +167,7 @@ async def _cleanup_conversation_transcript(session_id: str) -> dict:
     import os
 
     from autobot_shared.security.path_validator import validate_relative_path
-    from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS
-    from constants.path_constants import PATH
+    from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 
     result = {"transcript_deleted": False, "error": None}
 
@@ -174,15 +175,13 @@ async def _cleanup_conversation_transcript(session_id: str) -> dict:
         if "/" in session_id or "\\" in session_id or ".." in session_id:
             raise ValueError("Invalid session ID")
 
-        transcript_path = validate_relative_path(
-            f"{session_id}.json",
-            PATH.DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS,
-        )
+        transcripts_dir = legacy_conversation_transcripts_dir()
+        transcript_path = validate_relative_path(f"{session_id}.json", transcripts_dir)
 
         # CodeQL py/path-injection only credits a realpath + startswith(root + os.sep) guard in the
         # sink's own scope (#16229, #16236); validate_relative_path above stays the real validator.
         # The one name this adds a refusal for resolves to the directory itself, which os.remove refuses too.
-        root = os.path.realpath(str(PATH.DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS))
+        root = os.path.realpath(str(transcripts_dir))
         real = os.path.realpath(str(transcript_path))
         if not real.startswith(root + os.sep):
             raise ValueError("Invalid session ID")

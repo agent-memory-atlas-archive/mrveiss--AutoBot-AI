@@ -9,11 +9,15 @@ to ``data/conversation_transcripts/{id}.json`` -- and the two diverged (#13214).
 The transcript store is now ``legacy_conversation_transcripts`` in
 ``autobot_shared/store_authority.py``: read-only, no write sites. Three checks:
 
-1. **One home for the location.** A path literal naming the directory appears
-   only in ``store_authority.py``; everything else joins
-   ``LEGACY_CONVERSATION_TRANSCRIPTS`` onto its own data root.
+1. **One home for the location, resolved once.** A path literal naming the
+   directory appears only in ``store_authority.py``, and only there is
+   ``LEGACY_CONVERSATION_TRANSCRIPTS`` joined onto a root with ``/``; everything
+   else calls ``legacy_conversation_transcripts_dir()``. Joining the name onto
+   a data root of one's own is how the data-storage view and session-delete
+   cleanup came to look under the project root's ``data/``, where the writer
+   never wrote.
 2. **Nothing writes under it.** No function that names the location (the
-   constant, ``LEGACY_TRANSCRIPT_DIR``, a ``transcript_dir`` or the literal) also
+   constant, the resolver, a ``transcript_dir`` or the literal) also
    makes a file-creating call: ``open`` in a write/append mode, ``write_text``,
    ``write_bytes``, ``json.dump``, ``mkdir``/``makedirs``, ``rename``, ``touch``,
    ``shutil.copy*``/``move``.
@@ -46,7 +50,9 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 _ROOTS = ("autobot-backend", "autobot_shared", "autobot-infrastructure")
 _HOME = "autobot_shared/store_authority.py"
 _LITERAL = re.compile(rf"(^|[/\\]){re.escape(LEGACY_CONVERSATION_TRANSCRIPTS)}($|[/\\])")
-_LOCATION_NAMES = frozenset({"LEGACY_CONVERSATION_TRANSCRIPTS", "LEGACY_TRANSCRIPT_DIR", "transcript_dir"})
+_LOCATION_NAMES = frozenset(
+    {"LEGACY_CONVERSATION_TRANSCRIPTS", "legacy_conversation_transcripts_dir", "transcript_dir"}
+)
 _WRITE_CALLS = frozenset(
     {"write_text", "write_bytes", "dump", "mkdir", "makedirs", "rename", "touch", "copy", "copy2", "copyfile", "move"}
 )
@@ -109,6 +115,21 @@ def path_literals(source: str) -> list[int]:
         and isinstance(node.value, str)
         and id(node) not in skip
         and _LITERAL.search(node.value)
+    ]
+
+
+def name_joins(source: str) -> list[int]:
+    """Lines where ``LEGACY_CONVERSATION_TRANSCRIPTS`` is joined onto a root with ``/``."""
+    return [
+        node.lineno
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Div)
+        and any(
+            (isinstance(side, ast.Name) and side.id == "LEGACY_CONVERSATION_TRANSCRIPTS")
+            or (isinstance(side, ast.Attribute) and side.attr == "LEGACY_CONVERSATION_TRANSCRIPTS")
+            for side in (node.left, node.right)
+        )
     ]
 
 
@@ -186,7 +207,8 @@ class Mixin:
             await f.write(payload)
 """
 _LEGACY_READER = """
-async def read(session_id, transcript_dir=LEGACY_TRANSCRIPT_DIR):
+async def read(session_id, transcript_dir=None):
+    transcript_dir = transcript_dir or legacy_conversation_transcripts_dir()
     async with aiofiles.open(Path(transcript_dir) / f"{session_id}.json", "r", encoding="utf-8") as f:
         return await f.read()
 """
@@ -223,6 +245,19 @@ def test_the_literal_matcher_sees_paths_not_prose(source: str, expected: list[in
     assert path_literals(source) == expected
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("d = PATH.DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS\n", [1]),
+        ("d = root / store_authority.LEGACY_CONVERSATION_TRANSCRIPTS / 'x.json'\n", [1]),
+        ("d = legacy_conversation_transcripts_dir() / 'x.json'\n", []),
+        ("ok = path == LEGACY_CONVERSATION_TRANSCRIPTS\n", []),
+    ],
+)
+def test_the_join_matcher_sees_a_root_of_ones_own(source: str, expected: list[int]) -> None:
+    assert name_joins(source) == expected
+
+
 def test_the_cache_matcher_needs_the_key_and_a_redis_write() -> None:
     writer = "k = f'{REDIS_KEY.CHAT_CONVERSATION_PREFIX}{s}'\nawait self.redis_client.set(k, v)\n"
     assert writes_llm_context_cache(writer)
@@ -242,6 +277,15 @@ def test_the_location_has_one_home() -> None:
     assert set(homes) == {_HOME}, (
         f"#18293: the legacy transcript location is spelled as a path outside {_HOME}: {homes}. "
         "Import LEGACY_CONVERSATION_TRANSCRIPTS instead."
+    )
+
+
+def test_the_location_is_resolved_in_one_place() -> None:
+    candidates = {rel: src for rel, src in _population().items() if "LEGACY_CONVERSATION_TRANSCRIPTS" in src}
+    joins = {rel: lines for rel, src in candidates.items() if (lines := name_joins(src))}
+    assert set(joins) == {_HOME}, (
+        f"#18293: {joins} join the legacy directory name onto a root of their own. Call "
+        "legacy_conversation_transcripts_dir(): it resolves where the retired writer actually wrote."
     )
 
 

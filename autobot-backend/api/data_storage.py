@@ -18,6 +18,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.data_storage_categories import category_dir, get_cleanable_categories, get_protected_categories
 from api.schemas_system import (
     CleanupResult,
     StorageCategory,
@@ -36,7 +37,7 @@ from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.path_http import require_contained_relative_path
 from autobot_shared.security.path_validator import validate_relative_path
-from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS
+from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS, legacy_conversation_transcripts_dir
 from utils.catalog_http_exceptions import raise_server_error
 
 router = APIRouter(prefix="/data-storage", tags=["Data Storage"])
@@ -49,8 +50,11 @@ DATA_DIR = Path(__file__).parent.parent.parent / "data"
 def _safe_data_path(user_segment: str) -> Path:
     """Resolve a user-supplied path segment under DATA_DIR safely.
 
-    Uses shared path validator (#1721).
+    Uses shared path validator (#1721). The legacy transcript category is the one
+    that lives outside DATA_DIR (#18293).
     """
+    if user_segment == LEGACY_CONVERSATION_TRANSCRIPTS:
+        return category_dir(DATA_DIR, user_segment)
     return require_contained_relative_path(user_segment, DATA_DIR)
 
 
@@ -85,103 +89,6 @@ def get_dir_size(path: Path) -> tuple[int, int]:
     return total_size, file_count
 
 
-# =============================================================================
-# Storage Category Definitions (Issue #665)
-# =============================================================================
-
-
-def _get_protected_categories() -> list[dict]:
-    """
-    Get protected storage categories (cannot be cleaned up).
-
-    Issue #665: Extracted from get_storage_categories to reduce function length.
-    These are critical system data stores that should not be modified.
-    """
-    return [
-        {
-            "name": "ChromaDB Vectors",
-            "path": "chromadb",
-            "description": "Vector embeddings database for semantic search",
-        },
-        {
-            "name": "Knowledge Base ChromaDB",
-            "path": "chromadb_kb",
-            "description": "Knowledge base vector embeddings",
-        },
-        {
-            "name": "Knowledge Files",
-            "path": "knowledge",
-            "description": "Knowledge base configuration files",
-        },
-        {
-            "name": "Knowledge Base Data",
-            "path": "knowledge_base",
-            "description": "Knowledge base documents and embeddings",
-        },
-        {
-            "name": "System Knowledge",
-            "path": "system_knowledge",
-            "description": "System procedures, workflows, and tools",
-        },
-        {
-            "name": "Memory Storage",
-            "path": "memory",
-            "description": "Agent memory and context storage",
-        },
-        {
-            "name": "MCP Tools",
-            "path": "mcp_tools",
-            "description": "MCP tool configurations",
-        },
-    ]
-
-
-def _get_cleanable_categories() -> list[dict]:
-    """
-    Get cleanable storage categories (can be manually cleaned up).
-
-    Issue #665: Extracted from get_storage_categories to reduce function length.
-    These are user data and reports that can be safely removed.
-    """
-    return [
-        {
-            "name": "Conversation Transcripts",
-            "path": LEGACY_CONVERSATION_TRANSCRIPTS,
-            "description": "Saved conversation history transcripts",
-        },
-        {
-            "name": "Chat Sessions",
-            "path": "chats",
-            "description": "Chat sessions and terminal transcripts",
-        },
-        {
-            "name": "Conversation Files",
-            "path": "conversation_files",
-            "description": "Files attached to conversations",
-        },
-        {
-            "name": "Anti-Pattern Reports",
-            "path": "anti_pattern_reports",
-            "description": "Code anti-pattern detection reports",
-        },
-        {
-            "name": "Reports",
-            "path": "reports",
-            "description": "Generated analysis reports",
-        },
-        {
-            "name": "File Manager Root",
-            "path": "file_manager_root",
-            "description": "File manager sandbox root directory",
-        },
-        {
-            "name": "Security Data",
-            "path": "security",
-            "description": "Security scan results and configurations",
-        },
-    ]
-
-
 def _build_storage_category(cat_def: dict, can_cleanup: bool) -> StorageCategory:
     """
     Build a StorageCategory from a category definition.
@@ -195,7 +102,7 @@ def _build_storage_category(cat_def: dict, can_cleanup: bool) -> StorageCategory
     Returns:
         StorageCategory with computed size and file count
     """
-    dir_path = DATA_DIR / cat_def["path"]
+    dir_path = category_dir(DATA_DIR, cat_def["path"])
     size_bytes, file_count = get_dir_size(dir_path)
 
     return StorageCategory(
@@ -220,11 +127,11 @@ def get_storage_categories() -> list[StorageCategory]:
     result = []
 
     # Add protected categories (can_cleanup=False)
-    for cat_def in _get_protected_categories():
+    for cat_def in get_protected_categories():
         result.append(_build_storage_category(cat_def, can_cleanup=False))
 
     # Add cleanable categories (can_cleanup=True)
-    for cat_def in _get_cleanable_categories():
+    for cat_def in get_cleanable_categories():
         result.append(_build_storage_category(cat_def, can_cleanup=True))
 
     return result
@@ -511,7 +418,7 @@ async def delete_conversation(
         files_deleted = []
         errors = []
 
-        transcripts_base = DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS
+        transcripts_base = legacy_conversation_transcripts_dir()
         transcript_path = validate_relative_path(f"{conversation_id}.json", transcripts_base)
         if transcript_path.exists():
             try:
@@ -557,7 +464,7 @@ async def delete_conversation(
 async def get_conversations_summary():
     """Get summary of stored conversations."""
     try:
-        transcripts_dir = DATA_DIR / LEGACY_CONVERSATION_TRANSCRIPTS
+        transcripts_dir = legacy_conversation_transcripts_dir()
         chats_dir = DATA_DIR / "chats"
 
         transcripts_size, transcripts_count = get_dir_size(transcripts_dir)

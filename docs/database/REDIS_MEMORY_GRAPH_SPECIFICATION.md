@@ -564,6 +564,14 @@ def search_entities_paginated(query, page=1, page_size=20):
 
 ### 8.1 Existing Data Analysis
 
+> **Status (#18293):** `data/conversation_transcripts/` is a legacy, read-only store and
+> nothing writes to it. Chat sessions (`chat_history`, the `chat_sessions` concept in
+> `autobot_shared/store_authority.py`) are the system of record for every conversation turn.
+> The transcripts are declared there as `legacy_conversation_transcripts`, with no write
+> sites, and are located only by `legacy_conversation_transcripts_dir()`, which resolves
+> under the backend's working directory rather than the project root's `data/`. Moving or
+> disposing of the existing files goes through the #17038 review queue.
+
 **Current State:**
 - 5 conversation transcripts in `data/conversation_transcripts/`
 - Format: JSON files with message arrays
@@ -776,9 +784,10 @@ if __name__ == "__main__":
 
 ### 8.3 Backward Compatibility
 
-**Dual-Write Strategy:**
-- Keep original transcript files in `data/conversation_transcripts/`
-- New conversations written to both formats for 6 months
+**Dual-Write Strategy (superseded by #18293 -- no second durable copy of a turn is written;
+chat sessions are the system of record, see `autobot_shared/store_authority.py`):**
+- Keep original transcript files in `data/conversation_transcripts/` (legacy, read-only)
+- ~~New conversations written to both formats for 6 months~~
 - Migration flag in entity metadata: `"migrated_from": "transcript"`
 - Gradual transition to memory graph as primary storage
 

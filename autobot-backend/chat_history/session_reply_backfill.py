@@ -43,7 +43,7 @@ import asyncio
 from typing import Any, Callable, Dict, List, Tuple
 
 from autobot_shared.logging_manager import get_logger
-from chat_history.legacy_transcripts import LEGACY_TRANSCRIPT_DIR, read_legacy_transcript_pairs
+from chat_history.legacy_transcripts import read_legacy_transcript_pairs
 
 logger = get_logger(__name__)
 
@@ -153,7 +153,7 @@ def _build_backfilled_assistant_message(chat_mgr, text: str) -> Dict[str, Any]:
 async def repair_session(
     session_id: str,
     chat_mgr,
-    transcript_dir: str = LEGACY_TRANSCRIPT_DIR,
+    transcript_dir: str | None = None,
 ) -> int:
     """Backfill missing assistant turns for one session. Returns count repaired.
 

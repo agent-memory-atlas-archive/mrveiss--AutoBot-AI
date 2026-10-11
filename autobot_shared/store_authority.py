@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Tuple
 
 
@@ -80,11 +81,23 @@ class Concept:
 
 _FACTS = "autobot-backend/knowledge/facts.py"
 
-#: Where the retired per-turn transcript store lives, relative to a data
-#: directory (#18293). The ONE copy of the location: every reader joins it onto
-#: its own data root, and ``repo_tests/conversation_turn_single_store_18293_test.py``
-#: fails a write under it. Declared beside its concept, below.
+#: Directory name of the retired per-turn transcript store (#18293). Never join
+#: it onto a data root yourself -- call :func:`legacy_conversation_transcripts_dir`.
+#: ``repo_tests/conversation_turn_single_store_18293_test.py`` fails a write under it.
 LEGACY_CONVERSATION_TRANSCRIPTS = "conversation_transcripts"
+
+
+def legacy_conversation_transcripts_dir() -> Path:
+    """The ONE resolution of the legacy transcript directory, absolute (#18293).
+
+    Resolved exactly as the retired writer resolved it: ``data/conversation_transcripts``
+    relative to the process working directory, which for the backend service is its
+    own code directory. That is NOT ``PATH.DATA_DIR`` (the project root's ``data/``),
+    where readers used to look and where nothing was ever written. Call it from the
+    backend's working directory -- a script elsewhere must ``cd`` there first.
+    """
+    return Path.cwd().resolve() / "data" / LEGACY_CONVERSATION_TRANSCRIPTS
+
 
 #: Keyed by concept name. Ordered by store so a reader can see, in one pass,
 #: which concepts share an authority.

@@ -700,6 +700,14 @@ The system maintains full backward compatibility:
 
 **Objective**: Migrate existing conversations to entities
 
+> **Status (#18293):** `data/conversation_transcripts/` is a legacy, read-only store and
+> nothing writes to it. Chat sessions (`chat_history`, the `chat_sessions` concept in
+> `autobot_shared/store_authority.py`) are the system of record for every conversation turn.
+> The transcripts are declared there as `legacy_conversation_transcripts`, with no write
+> sites, and are located only by `legacy_conversation_transcripts_dir()`, which resolves
+> under the backend's working directory rather than the project root's `data/`. Moving or
+> disposing of the existing files goes through the #17038 review queue.
+
 **Tasks**:
 1. Create migration script: `scripts/migrate_chat_to_memory_graph.py`
 2. Extract conversation entities from `data/conversation_transcripts/*.json`
