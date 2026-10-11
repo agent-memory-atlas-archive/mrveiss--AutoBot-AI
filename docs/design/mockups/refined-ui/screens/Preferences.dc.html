@@ -174,12 +174,10 @@ fieldset{border:0;margin:0;padding:0}
     <a href="Analytics.dc.html" class="adv">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
     <span class="sr" role="status" aria-live="polite">{{uiAnnounce}}</span>
-    <a href="ThemeManager.dc.html" class="adv" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon adv" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon adv" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
     <button type="button" class="uitog {{uiTogCls}}" onClick="{{toggleUi}}" aria-pressed="{{uiMinPressed}}" data-tip="Minimal interface — hide advanced features" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" class="iw"/><path d="M4 9h16M9 9v11"/><rect x="11.5" y="11.5" width="6" height="6" rx="1" class="i2"/></svg><span>Minimal</span></button>
-    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <a href="Preferences.dc.html" class="avlink on" aria-current="page" aria-label="Profile settings, Jane Doe" data-tip="Profile settings" data-tip-pos="bottom">JD</a>
   </nav>
 
@@ -213,7 +211,7 @@ fieldset{border:0;margin:0;padding:0}
       <p class="sect">Control</p>
       <a href="#"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z" class="it1"/><path d="M9 12l2 2 4-4"/></svg>Privacy</a>
       <a href="#" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h12l-3 4 3 4H5" class="i3"/></svg>Feature Flags <span class="pill idle" style="margin-left: auto" data-tip="Requires admin role" data-tip-pos="right">admin</span></a>
-      <a href="LlmConfig.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" class="it2"/><rect x="9" y="9" width="6" height="6" class="i3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>LLM Configuration <span class="pill idle" style="margin-left: auto" data-tip="Managed in SLM Admin — opens in a separate console" data-tip-pos="right">SLM ↗</span></a>
+      <a href="AdminUsers.dc.html" class="adv" data-tip="Server-wide settings live in the SLM console" data-tip-pos="right"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" class="it2"/><rect x="9" y="9" width="6" height="6" class="i3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>Platform settings (SLM) ↗</a>
     </aside>
 
     <main style="flex: 999 1 520px; min-width: 0; box-sizing: border-box; padding: 24px clamp(16px, 2.5vw, 32px) 40px; display: flex; flex-direction: column; gap: 20px">
@@ -355,7 +353,7 @@ fieldset{border:0;margin:0;padding:0}
                 </div>
                 <span class="tn">Northwind Corporate <span class="pill info {{cOrgA.sel}}" style="margin-left: auto">Selected</span></span>
                 <span class="td">Organization brand theme, based on Monochrome</span>
-                <span class="dep" data-tip="Installed by your administrator from SLM Admin → Themes, version 1.2">Deployed via SLM · v1.2</span>
+                <span class="dep" data-tip="Installed by your administrator from SLM › Settings › Themes, version 1.2">Deployed via SLM · v1.2</span>
               </button>
 
               <button type="button" class="tcard {{cOrgB.cls}}" aria-pressed="{{cOrgB.pressed}}" onClick="{{cOrgB.pick}}">
@@ -365,13 +363,13 @@ fieldset{border:0;margin:0;padding:0}
                 </div>
                 <span class="tn">Northwind Night <span class="pill info {{cOrgB.sel}}" style="margin-left: auto">Selected</span></span>
                 <span class="td">Organization night theme, based on Dark</span>
-                <span class="dep" data-tip="Installed by your administrator from SLM Admin → Themes, version 1.2">Deployed via SLM · v1.2</span>
+                <span class="dep" data-tip="Installed by your administrator from SLM › Settings › Themes, version 1.2">Deployed via SLM · v1.2</span>
               </button>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 8px; background: var(--info-bg); color: var(--info-fg); border: var(--pill-b); font-size: 13px">
               <svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" class="iw"/><path d="M12 11v6M12 7.5v.5"/></svg>
-              <span style="flex: 1 1 260px">Administrators install and deploy themes in <strong>SLM Admin → Themes</strong>.</span>
-              <a href="ThemeManager.dc.html" style="font-weight: 600">Open SLM Themes ↗</a>
+              <span style="flex: 1 1 260px">Administrators install and deploy themes in the SLM console.</span>
+              <a href="ThemeManager.dc.html" style="font-weight: 600" data-tip="Opens the SLM console (Service Lifecycle Manager)">SLM › Settings › Themes ↗</a>
             </div>
           </div>
 

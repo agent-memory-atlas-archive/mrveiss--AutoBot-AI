@@ -153,12 +153,10 @@ body{margin:0}
     <a href="Analytics.dc.html" class="adv">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
     <span class="sr" role="status" aria-live="polite">{{uiAnnounce}}</span>
-    <a href="ThemeManager.dc.html" class="adv" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px" data-tip="Small language model administration — opens separate console" data-tip-pos="bottom">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon adv" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon adv" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
     <button type="button" class="uitog {{uiTogCls}}" onClick="{{toggleUi}}" aria-pressed="{{uiMinPressed}}" data-tip="Minimal interface — hide advanced features" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" class="iw"/><path d="M4 9h16M9 9v11"/><rect x="11.5" y="11.5" width="6" height="6" rx="1" class="i2"/></svg><span>Minimal</span></button>
-    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <a href="Preferences.dc.html" class="avlink on" aria-current="page" aria-label="Profile settings, Jane Doe" data-tip="Profile settings" data-tip-pos="left">JD</a>
   </nav>
 
@@ -191,7 +189,7 @@ body{margin:0}
       <p class="sect">Control</p>
       <a href="#"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z" class="it1"/><path d="M9 12l2 2 4-4"/></svg>Privacy</a>
       <a href="#" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h12l-3 4 3 4H5" class="i3"/></svg>Feature Flags <span class="pill idle" style="margin-left: auto" data-tip="Requires admin role" data-tip-pos="right">admin</span></a>
-      <a href="LlmConfig.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" class="it2"/><rect x="9" y="9" width="6" height="6" class="i3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>LLM Configuration <span class="pill idle" style="margin-left: auto" data-tip="Opens in the SLM Admin console" data-tip-pos="right">SLM ↗</span></a>
+      <a href="AdminUsers.dc.html" class="adv" data-tip="Server-wide settings live in the SLM console" data-tip-pos="right"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" class="it2"/><rect x="9" y="9" width="6" height="6" class="i3"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>Platform settings (SLM) ↗</a>
       <div class="only-min minnote" style="margin: 16px 10px 0; padding-top: 12px; border-top: var(--bw) solid var(--line)"><span>Showing essentials</span><button type="button" class="linkbtn" onClick="{{showAll}}">Show all features</button></div>
     </aside>
 
@@ -254,7 +252,7 @@ body{margin:0}
       </section>
 
       <section class="card" aria-labelledby="org">
-        <div class="ch"><span class="tile"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l8-4 8 4v12z" class="it2"/><path d="M9 20v-6h6v6"/></svg></span><h2 id="org">Organization connectors <span tabindex="0" data-tip="Managed by your administrator — requires admin role to change">(read-only)</span></h2><a href="AdminUsers.dc.html" class="btn sm adv">Ask an admin</a></div>
+        <div class="ch"><span class="tile"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l8-4 8 4v12z" class="it2"/><path d="M9 20v-6h6v6"/></svg></span><h2 id="org">Organization connectors <span tabindex="0" data-tip="Managed by your administrator — requires admin role to change">(read-only)</span></h2><button type="button" class="btn sm adv" data-tip="Sends a request to your administrators — organization connectors are managed in the SLM console" data-tip-pos="left">Ask an admin</button></div>
         <div class="row"><span class="dot d-ok" aria-hidden="true"></span><span style="flex-grow: 1; font-size: 13.5px">Org <span tabindex="0" data-tip="Shared outgoing mail server used when you have no personal SMTP">SMTP relay</span> · mail.autobot.example</span><span class="pill ok" tabindex="0" data-tip="Responding normally — last health check passed" data-tip-pos="left">Healthy</span></div>
         <div class="row"><span class="dot d-ok" aria-hidden="true"></span><span style="flex-grow: 1; font-size: 13.5px">Confluence knowledge connector</span><span class="pill ok" tabindex="0" data-tip="Responding normally — last health check passed" data-tip-pos="left">Healthy</span></div>
         <div class="row"><span class="dot d-warn" aria-hidden="true"></span><span style="flex-grow: 1; font-size: 13.5px">Org <span tabindex="0" data-tip="Model Context Protocol server — exposes tools to agents and chats">MCP</span>: fleet-ops (Ansible inventory)</span><span class="pill warn" tabindex="0" data-tip="Degraded — working but with reduced capacity; some tools may fail" data-tip-pos="left">Degraded — 1 node unreachable</span></div>
@@ -267,7 +265,7 @@ body{margin:0}
 const DEFS = [
   { id: 'gh', icon: 'icGh', name: 'GitHub', kind: 'Code hosting · OAuth app', on: true, scope: 'Personal',
     desc: 'Lets code agents read repositories, open pull requests and comment on issues as you.',
-    acct: '@jdoe', since: '12 Feb 2026', sync: '6 min ago',
+    acct: '@example-org', since: '12 Feb 2026', sync: '6 min ago',
     perms: [['Read repositories', 1], ['Open pull requests', 1], ['Push to default branch', 0]] },
   { id: 'tg', icon: 'icTg', name: 'Telegram', kind: 'Messaging · AutoBot bot', on: true, scope: 'Personal',
     desc: 'Chat with AutoBot, receive alerts and approve requests from the linked chat.',
@@ -279,7 +277,7 @@ const DEFS = [
     perms: [['Send email as you', 0], ['Read sent folder', 0]] },
   { id: 'gd', icon: 'icDrive', name: 'Google Drive', kind: 'Files · OAuth', on: true, scope: 'Personal', warn: 'Token expires in 3 days. Reconnect to keep Knowledge sync running.',
     desc: 'Index selected folders into your personal knowledge base.',
-    acct: 'jdoe@example.com', since: '20 Aug 2026', sync: '1 h ago · 3 folders',
+    acct: 'jdoe@…', since: '20 Aug 2026', sync: '1 h ago · 3 folders',
     perms: [['Read selected folders', 1], ['Create files', 0], ['Share files', 0]] },
   { id: 'mcp1', icon: 'icMcp', name: 'MCP: home-assistant', kind: 'MCP server · user-level · stdio', on: true, scope: 'User MCP',
     desc: 'Exposes 14 tools to your chats. Tool calls that change state require confirmation.',
