@@ -118,3 +118,18 @@ async def test_admin_conversation_delete_refuses_a_legacy_transcript(legacy_dir)
 
     assert raised.value.status_code == 403
     assert transcript.exists()
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    ["../escape", "a/b", "a\\b", "", "x" * 256, "name with space", "nul\x00byte", "dot.json", "~root"],
+)
+def test_an_id_outside_the_store_alphabet_never_names_a_file(legacy_dir, session_id) -> None:
+    """Allowlist fullmatch before the join, normpath containment after it (CodeQL py/path-injection)."""
+    _write(legacy_dir)
+    assert legacy_transcript_file(session_id) is None
+
+
+def test_every_id_shape_the_store_accepts_still_resolves(legacy_dir) -> None:
+    for session_id in ("5f0c9a5e-1b2c-4d3e-8f90-0a1b2c3d4e5f", "session_12", "test-session-ab_1", "x" * 200):
+        assert legacy_transcript_file(_write(legacy_dir, session_id).stem) == legacy_dir / f"{session_id}.json"

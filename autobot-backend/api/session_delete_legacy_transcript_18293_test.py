@@ -92,8 +92,16 @@ class _World:
         self._wire(monkeypatch)
 
     def _wire(self, monkeypatch) -> None:
-        auth = SimpleNamespace(enable_auth=True, get_user_from_request=lambda _r: {"username": self.caller})
-        for module in ("security.session_ownership", "api.chat_sessions"):
+        # Identity per request: whoever ``self.caller`` names. Every module that asks the auth
+        # middleware for the user is pointed here -- since #18258 the validator asks through
+        # ``security.session_posture.authenticated_user``, so missing that one namespace
+        # silently authenticated every request as the dev-mode default user.
+        auth = SimpleNamespace(
+            enable_auth=True,
+            get_user_from_request=lambda _r: {"username": self.caller, "role": "user"},
+            security_layer=MagicMock(),
+        )
+        for module in ("security.session_posture", "security.session_ownership", "api.chat_sessions"):
             monkeypatch.setattr(f"{module}.get_auth_middleware", lambda: auth)
         for target in ("utils.chat_utils", "api.chat_sessions", "api.chat"):
             monkeypatch.setattr(f"{target}.get_chat_history_manager", lambda _r: self.history)
@@ -255,3 +263,20 @@ async def test_a_normal_sessions_context_is_its_own_turns(world) -> None:
     await world.save(OWN_ID, ownership, turns)
 
     assert await world.context(OWN_ID) == [{"user": "what is uptime?", "assistant": "Up 3 days."}]
+
+
+def test_the_routes_driven_here_use_the_default_posture() -> None:
+    """The harness runs ``SessionOwnershipValidator`` -- the DEFAULT posture's body (#18258).
+
+    That is only the right validator if the delete and save routes really take DEFAULT; a route
+    moved to STRICT would make these tests exercise a decision production no longer makes.
+    """
+    import inspect
+
+    from security.session_ownership import validate_session_ownership
+
+    delete_dep = inspect.signature(chat_sessions.delete_session).parameters["ownership"].default.dependency
+    assert delete_dep is validate_session_ownership
+    for route in (chat_api.save_chat_by_id, chat_api.delete_chat_by_id):
+        assert inspect.signature(route).parameters["ownership"].default.dependency is chat_api.validate_chat_ownership
+    assert "STRICT" not in inspect.getsource(chat_api.validate_chat_ownership)

@@ -31,6 +31,7 @@ state, so every delete only proposes (``api/legacy_transcript_disposal.py``).
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from typing import Dict, List
 
@@ -41,6 +42,11 @@ from autobot_shared.security.path_validator import validate_relative_path
 from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 
 logger = get_logger(__name__)
+
+#: The session-id alphabet the chat store accepts: ``utils.chat_utils.validate_chat_session_id``
+#: admits UUIDs, UUID-with-suffix and ``[a-zA-Z0-9_-]+`` ids, all inside this set, capped at
+#: 255 characters. Anything else cannot name a legacy transcript the writer created.
+_SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,255}")
 
 
 def _pairs_from_transcript(transcript: object) -> List[Dict[str, str]]:
@@ -56,9 +62,19 @@ def _pairs_from_transcript(transcript: object) -> List[Dict[str, str]]:
 
 
 def legacy_transcript_file(session_id: str) -> Path | None:
-    """The existing legacy transcript of *session_id*, or None (none, or an unsafe id)."""
-    path = _transcript_path(session_id, None)
-    return path if path is not None and path.is_file() else None
+    """The existing legacy transcript of *session_id*, or None (none, or an unsafe id).
+
+    The allowlist and the normpath containment check are repeated HERE, in the sink's own
+    scope, because that is where CodeQL's py/path-injection looks for them; the checks in
+    ``_transcript_path`` stay as well.
+    """
+    if _transcript_path(session_id, None) is None or not _SESSION_ID.fullmatch(session_id):
+        return None
+    root = os.path.normpath(str(legacy_conversation_transcripts_dir()))
+    joined = os.path.normpath(os.path.join(root, f"{session_id}.json"))
+    if not joined.startswith(root + os.sep):
+        return None
+    return Path(joined) if os.path.isfile(joined) else None
 
 
 async def remove_legacy_transcript(session_id: str) -> dict:
@@ -87,11 +103,22 @@ async def remove_legacy_transcript(session_id: str) -> dict:
 
 
 def _transcript_path(session_id: str, transcript_dir: str | Path | None) -> Path | None:
-    """The file for *session_id*, or None for an id that could leave the directory."""
+    """The file for *session_id*, or None for an id that could leave the directory.
+
+    Three checks, each kept: the traversal-character refusal, an allowlist ``fullmatch``
+    BEFORE the join, and a ``normpath`` + ``startswith(root + os.sep)`` containment check
+    on the joined path -- the shape CodeQL's py/path-injection credits at the sink.
+    """
     if not session_id or any(part in session_id for part in ("/", "\\", "..")):
         return None
+    if not _SESSION_ID.fullmatch(session_id):
+        return None
     base = Path(transcript_dir) if transcript_dir is not None else legacy_conversation_transcripts_dir()
-    return base / f"{session_id}.json"
+    root = os.path.normpath(str(base))
+    joined = os.path.normpath(os.path.join(root, f"{session_id}.json"))
+    if not joined.startswith(root + os.sep):
+        return None
+    return Path(joined)
 
 
 async def read_legacy_transcript_pairs(
