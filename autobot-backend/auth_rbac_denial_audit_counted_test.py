@@ -12,6 +12,11 @@ appends a JSON line to a file and swallowed any write failure. A full disk, a
 permissions change or a rotated-away directory dropped every record on that path
 while requests kept returning correct 403s.
 
+#18263 retired the two permission-denial entry points: a permission denial now
+goes through the shared gate and the shared RBAC audit writer, whose loss counter
+is #14750's. ``require_role``'s denial (``_deny_role_access``) still audits through
+``SecurityLayer.audit_log`` and is what remains under test here.
+
 These drive the real denial path with a real write failure and assert the
 counter moved. Deliberately not "the audit call was made" and not "nothing
 raised" — the unfixed code satisfied both.
@@ -60,40 +65,6 @@ def _request(path: str = "/api/analytics/report"):
     return request
 
 
-@pytest.mark.parametrize(
-    "deny,args",
-    [
-        ("_deny_permission_access", ("analytics:view",)),
-        ("_deny_any_permission_access", (["analytics:view", "analytics:export"],)),
-    ],
-)
-def test_a_failed_denial_audit_write_increments_the_counter(tmp_path, deny, args):
-    """Both file-backed denial entry points, since only instrumenting one is the bug."""
-    from fastapi import HTTPException
-
-    import auth_rbac
-
-    unwritable = tmp_path / "audit-log-is-a-directory"
-    unwritable.mkdir()
-
-    before = _counter_value("permission_denied", _EXPECTED_ERROR)
-
-    with patch.object(auth_rbac, "_get_security_layer", return_value=_layer_writing_to(unwritable)):
-        with pytest.raises(HTTPException) as raised:
-            getattr(auth_rbac, deny)({"username": "someone", "role": "viewer"}, *args, _request())
-
-    # The denial itself must still be a clean 403 — counting the loss must not
-    # turn an audit problem into a request failure.
-    assert raised.value.status_code == 403
-
-    after = _counter_value("permission_denied", _EXPECTED_ERROR)
-    assert after == before + 1, (
-        "the denial audit write failed and nothing counted it — the record is "
-        f"lost and indistinguishable from one that was written ({_COUNTER} did "
-        f"not move: {before} -> {after}) (#14843)"
-    )
-
-
 def test_a_successful_denial_audit_writes_the_record_and_counts_nothing(tmp_path):
     """Negative control: the counter must measure loss, not denials.
 
@@ -105,26 +76,22 @@ def test_a_successful_denial_audit_writes_the_record_and_counts_nothing(tmp_path
     import auth_rbac
 
     audit_file = tmp_path / "audit.log"
-    before = _counter_value("permission_denied", _EXPECTED_ERROR)
+    before = _counter_value("role_denied", _EXPECTED_ERROR)
 
     with patch.object(auth_rbac, "_get_security_layer", return_value=_layer_writing_to(audit_file)):
         with pytest.raises(HTTPException):
-            auth_rbac._deny_permission_access({"username": "someone", "role": "viewer"}, "analytics:view", _request())
+            auth_rbac._deny_role_access({"username": "someone", "role": "viewer"}, ["admin"], "viewer", _request())
 
     written = audit_file.read_text(encoding="utf-8")
-    assert "permission_denied" in written, "the record was not written at all"
-    assert "analytics:view" in written
+    assert "role_denied" in written, "the record was not written at all"
+    assert "viewer" in written
 
-    after = _counter_value("permission_denied", _EXPECTED_ERROR)
+    after = _counter_value("role_denied", _EXPECTED_ERROR)
     assert after == before, "a record that WAS written must not be counted as lost"
 
 
 def test_a_role_denial_write_failure_is_counted_under_its_own_action(tmp_path):
-    """The third entry point in the same file audits ``role_denied``.
-
-    Its records go down the identical swallow, so a counter keyed only to
-    ``permission_denied`` would leave that loss invisible.
-    """
+    """The role-denial entry point audits ``role_denied`` down the file-backed swallow."""
     from fastapi import HTTPException
 
     import auth_rbac

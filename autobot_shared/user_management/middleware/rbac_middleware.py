@@ -377,8 +377,12 @@ async def _emit_permission_denied_audit(
     org_id: uuid.UUID | None = None,
     ip_address: str | None = None,
     user_agent: str | None = None,
+    subject: str | None = None,
 ) -> None:
     """Persist a permission-denied event to the audit trail (#12925).
+
+    *subject* is the caller's name when it carries no user UUID (an SLM session or
+    key, #18263); it is recorded in the details so such a denial still names someone.
 
     Ported from autobot-slm-backend, which has recorded denials since GH #6511
     while this backend recorded nothing — a 403 left no user, permission, path
@@ -400,7 +404,7 @@ async def _emit_permission_denied_audit(
                 action=AuditAction.PERMISSION_DENIED,
                 resource_type=AuditResourceType.ENDPOINT,
                 outcome="denied",
-                details={"permission": permission, "path": path},
+                details={"permission": permission, "path": path, **({"subject": subject} if subject else {})},
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
