@@ -284,6 +284,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source under three roots, a subset of all tracked Python; the test-file share drifts.",
     ),
+    "embedding-model-literal-sites": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Production python under two roots, a subset of all tracked Python; the test-file share drifts.",
+    ),
     "chunker-private-hook-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
