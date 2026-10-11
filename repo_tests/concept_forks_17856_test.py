@@ -10,6 +10,7 @@
 | unverified JWT claims decoder       | `autobot_shared/auth/jwt_core.py`              |
 | node lifecycle event writer         | `autobot-slm-backend/services/node_events.py`  |
 | RS256 jti denylist Redis key prefix | `autobot_shared/auth/jwt_core.py`              |
+| workflow shared memory              | `orchestration/workflow_memory.py`; the async `autobot_shared` copy is retired |
 | TTL cache manager class             | `utils/advanced_cache_manager.py` (`SimpleCacheManager`); `utils/cache_manager.py` is retired |
 
 Each detector reads the syntax tree, so prose naming a concept is not a definition. The
@@ -92,6 +93,7 @@ def _defines_class(name: str):
 #: Concept key -> (matcher, files that may define it). An empty tuple means the concept is retired.
 _CLASS_CONCEPTS: dict[str, tuple] = {
     "cache_manager_class": (_defines_class("CacheManager"), ()),
+    "workflow_memory_class": (_defines_class("WorkflowMemory"), ("autobot-backend/orchestration/workflow_memory.py",)),
 }
 
 
@@ -122,6 +124,11 @@ _CLASS_CONCEPTS: dict[str, tuple] = {
             _CLASS_CONCEPTS["cache_manager_class"][0],
             "class CacheManager:\n    pass\n",
             "from utils.advanced_cache_manager import cache_manager\n",
+        ),
+        (
+            _CLASS_CONCEPTS["workflow_memory_class"][0],
+            "class WorkflowMemory:\n    pass\n",
+            "from orchestration.workflow_memory import WorkflowMemory\n",
         ),
     ],
 )

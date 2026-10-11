@@ -42,13 +42,12 @@ exclude = [
     "autobot-backend/code_analysis/.*",
 ]
 
-# redis_client / workflow_memory / message_bus use a dual async/sync
+# redis_client / message_bus use a dual async/sync
 # dispatch pattern whose overloads aren't modeled in type stubs.
 # Fix tracked in GH#7105.
 [[tool.mypy.overrides]]
 module = [
     "autobot_shared.redis_client",
-    "autobot_shared.workflow_memory",
     "autobot_shared.message_bus",
 ]
 ignore_errors = true
