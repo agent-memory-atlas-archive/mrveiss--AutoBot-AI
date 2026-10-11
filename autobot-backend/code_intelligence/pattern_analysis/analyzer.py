@@ -14,7 +14,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from autobot_shared.embedding_model import active_embedding_model
 from autobot_shared.logging_manager import get_logger
 from utils.io_executor import get_analytics_executor
 
@@ -59,6 +58,12 @@ try:
     EMBEDDING_CACHE_AVAILABLE = True
 except ImportError:
     EMBEDDING_CACHE_AVAILABLE = False
+
+# Issue #12407: Real embedding model used by the canonical
+# ``services.npu_client.generate_embedding_with_fallback`` helper. Mirrors
+# ``DEFAULT_EMBEDDING_MODEL`` in analytics_infrastructure.py / the
+# ``embedding_model`` default in cross_language_patterns/detector.py.
+EMBEDDING_MODEL = "nomic-embed-text"
 
 
 class CodePatternAnalyzer:
@@ -1003,10 +1008,9 @@ class CodePatternAnalyzer:
             Embedding vector (real if embedding infra is available, hash-based
             pseudo-embedding only as a last-resort fallback).
         """
-        model = active_embedding_model()
         if EMBEDDING_CACHE_AVAILABLE and self._embedding_cache is not None:
             try:
-                cached = await self._embedding_cache.get(code, model=model)
+                cached = await self._embedding_cache.get(code, model=EMBEDDING_MODEL)
                 if cached:
                     return cached
             except Exception as e:
@@ -1022,13 +1026,13 @@ class CodePatternAnalyzer:
             try:
                 from services.npu_client import generate_embedding_with_fallback
 
-                embedding = await generate_embedding_with_fallback(code, model_name=model)
+                embedding = await generate_embedding_with_fallback(code, model_name=EMBEDDING_MODEL)
             except Exception as e:
                 logger.warning("Embedding generation failed, using hash fallback: %s", e)
 
             if embedding:
                 try:
-                    await self._embedding_cache.put(code, embedding, model=model)
+                    await self._embedding_cache.put(code, embedding, model=EMBEDDING_MODEL)
                 except Exception as e:
                     logger.warning("Embedding cache write failed, returning the embedding anyway: %s", e)
                 return embedding
@@ -1048,9 +1052,9 @@ class CodePatternAnalyzer:
         callers get a well-shaped vector when embedding infrastructure is
         unavailable, never as a substitute for one (#12407, #13437).
         """
-        from autobot_shared.content_digest import content_digest
+        import hashlib
 
-        hash_bytes = bytes.fromhex(content_digest(code))
+        hash_bytes = hashlib.sha256(code.encode()).digest()
         # 768 dimensions to match nomic-embed-text.
         return [(hash_bytes[i % 32] - 128) / 128.0 for i in range(768)]
 

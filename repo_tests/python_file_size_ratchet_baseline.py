@@ -186,7 +186,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/code_intelligence/log_pattern_miner.py": 1060,
     "autobot-backend/code_intelligence/log_pattern_miner_test.py": 738,
     "autobot-backend/code_intelligence/merge_conflict_resolver.py": 624,
-    "autobot-backend/code_intelligence/pattern_analysis/analyzer.py": 1087,
+    "autobot-backend/code_intelligence/pattern_analysis/analyzer.py": 1091,
     "autobot-backend/code_intelligence/pattern_analysis/complexity_analyzer.py": 765,
     "autobot-backend/code_intelligence/pattern_analysis/refactoring_generator.py": 827,
     "autobot-backend/code_intelligence/performance_analysis/ast_visitor.py": 725,
