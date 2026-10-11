@@ -29,6 +29,7 @@ from knowledge.backends.base import (
     Where,
     WhereDocument,
 )
+from knowledge.backends.hnsw_params import configuration_from_metadata
 
 
 def _cosine_distance(a: Sequence[float], b: Sequence[float]) -> float:
@@ -83,6 +84,8 @@ class InMemoryCollection(BaseCollection):
     def __init__(self, name: str, metadata: Metadata | None = None) -> None:
         self.name = name
         self.metadata = metadata or {}
+        # Like ChromaDB: ``hnsw:*`` creation metadata is held as configuration too, and stays in force.
+        self.configuration = configuration_from_metadata(self.metadata)
         # Parallel dicts keyed by id — keeps add/upsert/update O(1).
         self._documents: Dict[str, str | None] = {}
         self._metadatas: Dict[str, Metadata | None] = {}
@@ -295,6 +298,11 @@ class InMemoryCollection(BaseCollection):
             "metadatas": [self._metadatas[_id] for _id in ids],
             "embeddings": [self._embeddings[_id] for _id in ids],
         }
+
+    def modify_metadata(self, metadata: Metadata) -> None:
+        """Mirror ChromaDB: ``hnsw:*`` leaves ``metadata`` on a modify; the configuration keeps it in force."""
+        merged = {**self.metadata, **metadata}
+        self.metadata = {k: v for k, v in merged.items() if not k.startswith("hnsw:")}
 
 
 class InMemoryClient(BaseClient):

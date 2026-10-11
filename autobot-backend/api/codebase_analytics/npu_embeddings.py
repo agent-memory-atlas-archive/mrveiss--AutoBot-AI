@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
+from autobot_shared.embedding_model import active_npu_worker_model
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
@@ -32,8 +33,8 @@ logger = get_logger(__name__)
 # CONFIGURATION
 # =============================================================================
 
-# Model used for embeddings (must match NPU worker config)
-EMBEDDING_MODEL = "nomic-embed-text"
+# #18143: this path rebuilds the codebase collection wholesale (drop + create), so it is a writer of a
+# NEW index and embeds with the active model, read at call time; nothing here queries a stored index.
 
 # Batch size for NPU worker requests (larger = more efficient GPU utilization)
 NPU_BATCH_SIZE = 100
@@ -287,7 +288,7 @@ async def _generate_npu_embeddings(
         for i in range(0, total_docs, batch_size):
             batch_docs = documents[i : i + batch_size]
 
-            result = await client.generate_embeddings(batch_docs, model_name=EMBEDDING_MODEL, use_cache=True)
+            result = await client.generate_embeddings(batch_docs, model_name=active_npu_worker_model(), use_cache=True)
 
             if result is None or len(result.embeddings) != len(batch_docs):
                 logger.warning("NPU batch returned incomplete results at index %d", i)
