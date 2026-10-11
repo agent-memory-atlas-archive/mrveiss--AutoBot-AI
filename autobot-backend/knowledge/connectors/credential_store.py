@@ -557,7 +557,13 @@ class ConnectorCredentialStore:
         from knowledge.connectors import oauth_flow
 
         token_url, client_id, client_secret = self._resolve_app_credentials(creds)
-        token_response = await oauth_flow.refresh_access_token(token_url, client_id, client_secret, refresh_token)
+        token_response = await oauth_flow.refresh_access_token(
+            token_url,
+            client_id,
+            client_secret,
+            refresh_token,
+            provider=oauth_flow.find_provider(creds.get("provider")),
+        )
         creds["access_token"] = token_response["access_token"]
         # #13626: ``expires_in`` is RECOMMENDED, not REQUIRED, on a refresh
         # response (RFC 6749 §5.1) and several providers omit it. Writing None
@@ -672,11 +678,7 @@ class ConnectorCredentialStore:
         connection breaks and the remaining legacy bundles stay discoverable.
         Raises ValueError when neither source has the credentials.
         """
-        stored = (
-            creds.get("token_url", ""),
-            creds.get("client_id", ""),
-            creds.get("client_secret", ""),
-        )
+        stored = (creds.get("token_url", ""), creds.get("client_id", ""), creds.get("client_secret", ""))
         provider = None
         resolved = None
         if creds.get("provider"):

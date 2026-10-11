@@ -1,0 +1,81 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""Wires the OAuth-bundle strip (#13630) behind an approved cleanup request (#17038).
+
+A proposal is an ordinary approval-gate request (``destructive_action``) whose
+context names this action:
+
+    {"action": "oauth_bundle_strip_app_credentials", "backup_reference": "..."}
+
+The proposer (``api.admin_oauth_bundle_strip``) cannot execute it. Approving it
+runs :func:`execute_oauth_bundle_strip` through ``services.approval_execution``.
+The handler refuses to run without a ``backup_reference`` (the owner-approved
+procedure's step 2) and re-evaluates every bundle at execution time, so a
+provider that lost its operator config between proposal and approval is skipped,
+not stripped. The outcome -- counts per provider, never values -- lands as an
+ApprovalComment and an audit entry (#17038 rule 3).
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from models.approval import ApprovalComment
+from services import oauth_bundle_strip
+from services.approval_execution import register_post_approval_action
+from services.audit_logger import audit_log
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from models.approval import Approval
+
+ACTION = "oauth_bundle_strip_app_credentials"
+PROPOSED_BY = "api.admin_oauth_bundle_strip"
+
+
+def _comment_body(report: oauth_bundle_strip.StripReport) -> str:
+    residual = report.count(oauth_bundle_strip.SKIPPED_UNCONFIGURED) + report.count(oauth_bundle_strip.VERIFY_FAILED)
+    return (
+        f"OAuth bundle strip: {report.count(oauth_bundle_strip.STRIPPED)} stripped, "
+        f"{report.count(oauth_bundle_strip.CLEAN)} already clean, "
+        f"{report.count(oauth_bundle_strip.SKIPPED_UNCONFIGURED)} skipped (provider not configured), "
+        f"{report.count(oauth_bundle_strip.VERIFY_FAILED)} failed verification (original restored), "
+        f"{report.count(oauth_bundle_strip.UNREADABLE)} unreadable. "
+        f"Bundles still holding the app credentials: {residual}. "
+        "Still to do by the operator: one forced refresh per provider."
+    )
+
+
+async def execute_oauth_bundle_strip(approval: "Approval", session: "AsyncSession") -> None:
+    """Strip the legacy app-credential copies once a human has approved."""
+    from services.secrets_service import get_secrets_service
+
+    context = approval.context or {}
+    if not str(context.get("backup_reference") or "").strip():
+        raise ValueError(f"approval {approval.id} names no backup_reference -- refusing to rewrite credentials")
+    actor = approval.decided_by_user or "approval-executor"
+
+    report = await oauth_bundle_strip.strip_all(get_secrets_service(), actor)
+
+    session.add(
+        ApprovalComment(approval_id=approval.id, author="system", author_type="system", body=_comment_body(report))
+    )
+    await session.commit()
+    await audit_log(
+        "oauth_bundle.strip_app_credentials",
+        result="success" if not report.count(oauth_bundle_strip.VERIFY_FAILED) else "failed",
+        user_id=approval.decided_by_user,
+        resource="connector_oauth_token",
+        details={"approval_id": str(approval.id), "outcomes": report.summary(), "secret_ids": report.secret_ids},
+    )
+
+
+def register_strip_action() -> None:
+    """Idempotent registration of the executor, with its declared proposer."""
+    register_post_approval_action(ACTION, execute_oauth_bundle_strip, proposed_by=PROPOSED_BY)
+
+
+__all__ = ["ACTION", "PROPOSED_BY", "execute_oauth_bundle_strip", "register_strip_action"]

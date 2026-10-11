@@ -63,7 +63,7 @@ def _capture_refresh(monkeypatch):
 
     seen = {}
 
-    async def _fake(token_url, client_id, client_secret, refresh_token):
+    async def _fake(token_url, client_id, client_secret, refresh_token, **_kw):
         seen.update(client_id=client_id, client_secret=client_secret)
         return {"access_token": "new", "expires_in": 3600}
 

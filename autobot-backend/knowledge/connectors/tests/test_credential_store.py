@@ -331,7 +331,7 @@ async def test_get_access_token_refreshes_when_expired(monkeypatch):
 
     from knowledge.connectors import oauth_flow
 
-    async def _fake_refresh(token_url, client_id, client_secret, refresh_token):
+    async def _fake_refresh(token_url, client_id, client_secret, refresh_token, **_kw):
         assert refresh_token == "rt-old"
         return {"access_token": "new", "refresh_token": "rt-new", "expires_in": 3600}
 
@@ -384,7 +384,7 @@ async def test_refresh_without_expires_in_reuses_the_reported_lifetime(monkeypat
 
     from knowledge.connectors import oauth_flow
 
-    async def _refresh_without_expiry(token_url, client_id, client_secret, refresh_token):
+    async def _refresh_without_expiry(token_url, client_id, client_secret, refresh_token, **_kw):
         return {"access_token": "new"}  # no expires_in — the provider omitted it
 
     monkeypatch.setattr(oauth_flow, "refresh_access_token", _refresh_without_expiry)
@@ -423,7 +423,7 @@ async def test_refresh_without_expires_in_does_not_refresh_again_next_call(monke
 
     calls = []
 
-    async def _refresh_without_expiry(token_url, client_id, client_secret, refresh_token):
+    async def _refresh_without_expiry(token_url, client_id, client_secret, refresh_token, **_kw):
         calls.append(refresh_token)
         return {"access_token": "new"}
 
@@ -491,7 +491,7 @@ async def test_legacy_bundle_without_stored_lifetime_self_heals(monkeypatch):
 
     from knowledge.connectors import oauth_flow
 
-    async def _refresh_reporting_expiry(token_url, client_id, client_secret, refresh_token):
+    async def _refresh_reporting_expiry(token_url, client_id, client_secret, refresh_token, **_kw):
         return {"access_token": "new", "expires_in": 7200}
 
     monkeypatch.setattr(oauth_flow, "refresh_access_token", _refresh_reporting_expiry)
@@ -528,7 +528,7 @@ async def test_malformed_expires_in_falls_back_and_keeps_the_stored_lifetime(bad
 
     from knowledge.connectors import oauth_flow
 
-    async def _refresh_malformed(token_url, client_id, client_secret, refresh_token):
+    async def _refresh_malformed(token_url, client_id, client_secret, refresh_token, **_kw):
         return {"access_token": "new", "expires_in": bad_expires_in}
 
     monkeypatch.setattr(oauth_flow, "refresh_access_token", _refresh_malformed)
@@ -700,7 +700,7 @@ async def test_concurrent_refresh_calls_the_token_endpoint_once(monkeypatch):
 
     calls = []
 
-    async def _slow_refresh(token_url, client_id, client_secret, refresh_token):
+    async def _slow_refresh(token_url, client_id, client_secret, refresh_token, **_kw):
         calls.append(refresh_token)
         await asyncio.sleep(0.05)  # hold the lease long enough for the loser to queue
         return {"access_token": "new", "refresh_token": "rt-new", "expires_in": 3600}
