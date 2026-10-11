@@ -23,6 +23,7 @@ import pytest
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
+from tools.lint._comment_syntax import code_lines
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ANSIBLE = "autobot-slm-backend/ansible"
@@ -48,15 +49,11 @@ def _defines_backend_workers(text: str) -> bool:
 
 def _ai_stack_port_literals(text: str) -> list[str]:
     """Lines that restate the AI-stack port as a number instead of referencing `ai_stack_port`."""
-    return [
-        line.strip()
-        for line in text.splitlines()
-        if not line.lstrip().startswith("#") and _AI_PORT_LITERAL.search(line)
-    ]
+    return [line.strip() for _lineno, line in code_lines(text, name="x.yml") if _AI_PORT_LITERAL.search(line)]
 
 
 def _references_single_worker_unit(text: str) -> bool:
-    return any(_SINGLE_UNIT_REF.search(line) and not line.lstrip().startswith("#") for line in text.splitlines())
+    return any(_SINGLE_UNIT_REF.search(line) for _lineno, line in code_lines(text, name="x.yml"))
 
 
 @pytest.mark.parametrize(

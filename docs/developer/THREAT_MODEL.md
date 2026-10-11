@@ -121,7 +121,7 @@ response, a log line, an issue, a PR comment — is already redacted.
   (`is_jti_revoked` (:132) in [`token_denylist.py`](../../autobot-slm-backend/services/token_denylist.py)) or the password-epoch check can't run because Redis errored,
   `decode_token_async` denies the token (401) instead of reading "could not check" as "not revoked" — a Redis outage takes SLM login down, including the backend admin path reached through the proxy (#16374).
 - The RS256 authority-token path fails CLOSED the same way (#16412): [`rs256_denylist.py`](../../autobot-slm-backend/services/rs256_denylist.py)
-  `is_rs256_jti_revoked` (:91) raises on a Redis error rather than reporting "not revoked"; its caller
+  `is_rs256_jti_revoked` (:89) raises on a Redis error rather than reporting "not revoked"; its caller
   [`jwks_verifier.py`](../../autobot-slm-backend/services/jwks_verifier.py) `verify_authority_token` (:218) denies the token (401) at both call sites; the write side stays best-effort.
 - The shared password-epoch helper fails CLOSED in both services (#16411, #16422, owner decisions): a Redis error, or a non-integer stored
   marker or `iat`, raises `RevocationCheckUnavailable` (a `ConnectionError`), which the SLM denies as above and [`auth_revocation.py`](../../autobot-backend/auth_revocation.py) denies with 401; an `except` reading it as "not revoked" is a fail-open.

@@ -123,7 +123,7 @@ _ENUMERATOR = re.compile(r"tracked_paths|ls-files|rglob\(|os\.walk\(|\.iterdir\(
 #:
 #: The window this must sit in is now asserted in one place rather than reconstructed from two
 #: assertions in different tests -- see `_window_complaint` (#17818).
-MIN_GUARDS_EXAMINED = 170
+MIN_GUARDS_EXAMINED = 209
 
 #: Members that MATCH `_ENUMERATOR` and scan nothing of the tree (#17870).
 #:

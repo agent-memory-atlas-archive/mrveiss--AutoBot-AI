@@ -98,8 +98,13 @@ jobs:
           git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" -- \
             'autobot-slm-frontend/**/*.vue' 'autobot-slm-frontend/**/*.css' \
             | sed -e 's|^autobot-slm-frontend/||' > changed-slm.txt || true
+          # contract.css is the token DEFINITION site and is excluded here, not only by the
+          # kit config's ignoreFiles: the lint step passes --config-basedir (the user
+          # frontend), and stylelint resolves relative ignoreFiles globs against that base,
+          # so the kit's own ignore never matches ../libs/... paths.
           git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" -- \
             'libs/autobot-ui/**/*.vue' 'libs/autobot-ui/**/*.css' \
+            ':!libs/autobot-ui/src/tokens/contract.css' \
             | sed -e 's|^|../|' > changed-libs.txt || true
           libs_count=$(wc -l < changed-libs.txt | tr -d ' ')
           echo "libs_count=${libs_count:-0}" >> "$GITHUB_OUTPUT"
