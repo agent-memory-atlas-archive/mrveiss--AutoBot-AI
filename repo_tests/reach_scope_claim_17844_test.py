@@ -34,6 +34,7 @@ import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_g
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.embedding_model_preserved_15502_test as _embedding_render_guard  # noqa: F401 -- registers its scope
+import repo_tests.infra_scripts_no_backend_imports_18288_test as _infra_backend_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
 import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_parse_guard  # noqa: F401 -- registers its scope
 import repo_tests.migration_gate_filter_covers_what_its_tests_import_test as _migration_gate_guard  # noqa: F401 -- registers its scope
@@ -191,6 +192,7 @@ _DECLARED_SCOPES = {
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "infra-backend-import-scan": ("autobot-infrastructure",),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),
     "model-tier-map-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "embedding-model-render-sites": ("autobot-slm-backend/ansible",),
