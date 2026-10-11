@@ -453,3 +453,27 @@ async def test_apply_egress_guard_none_is_no_guard_and_junk_is_a_type_error():
 @pytest.mark.asyncio
 async def test_prometheus_is_not_allowlisted_pending_18326(server_called):
     assert not await al.is_internal_origin("http://10.0.0.3:9090/api/v1/query")
+
+
+# --- the refusal message names a setting only where the setting applies -------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("guard", [EGRESS_POLICY, "public_only_raw"])
+async def test_policy_and_public_only_refusals_do_not_advertise_the_private_network_setting(pinned_internal, guard):
+    with pytest.raises(EgressBlockedError) as refused:
+        if guard is EGRESS_POLICY:
+            await assert_egress_policy("http://10.1.2.3:8001/x")
+        else:
+            await assert_public_egress("http://10.1.2.3:8001/x")
+    assert "AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS" not in str(refused.value)
+    assert "not on the SSOT internal-origin allowlist" in str(refused.value)
+
+
+@pytest.mark.asyncio
+async def test_bool_guard_refusal_keeps_the_private_network_hint():
+    from autobot_shared.http_egress_guard import apply_egress_guard
+
+    with pytest.raises(EgressBlockedError) as refused:
+        await apply_egress_guard("http://10.1.2.3:8001/x", False)
+    assert "AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS=true" in str(refused.value)
