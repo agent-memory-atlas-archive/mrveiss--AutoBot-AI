@@ -14,8 +14,8 @@ Redaction rules
 ---------------
 * Field **names are always preserved**; only *values* are masked.
 * Only names that *end with* a credential noun are masked (suffix, not
-  substring), so ``tokenizers_parallelism`` stays readable and ``jwt_secret``
-  is caught.
+  substring; ``pin``/``passcode`` as whole tokens, #18194), so ``tokenizers_parallelism``
+  stays readable and ``jwt_secret`` is caught.
 * URL-shaped fields keep scheme/host/port/path and lose only the **userinfo**
   password (``postgresql://user:pw@host/db``): exempting them would leak, masking
   them wholesale would destroy the diagnostic.
@@ -29,7 +29,8 @@ on -- a credential sitting in prose, not behind a named field.
 
 Canonical redactor (#17336, #17337)
 -----------------------------------
-This is THE module that decides whether a name is a credential: one shared
+This is THE module that decides whether a name is a credential (the vocabulary and matcher
+live in its sibling ``secret_redaction_vocabulary``, re-exported here): one shared
 vocabulary (:data:`CREDENTIAL_SUFFIXES` + :data:`AUTHORIZATION_TERMS` +
 :data:`BROAD_ONLY_STEMS`) and two explicitly named matching policies,
 :class:`MatchPolicy`.  ``PRECISE`` (suffix) keeps diagnostics readable and is for
@@ -46,123 +47,71 @@ the problem, and add a new detector there rather than starting another (#16688).
 
 from __future__ import annotations
 
+import datetime as dt
+import decimal
 import math
 import re
+import uuid
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, ClassVar, Dict, FrozenSet, Iterable, Mapping, Tuple
+from typing import Any, Callable, ClassVar, Dict, FrozenSet, Iterable, Mapping, Optional, Tuple
 from urllib.parse import quote, unquote_plus, urlsplit, urlunsplit
 
-# Masked stand-in for a populated credential value; fixed width so it never discloses the secret's length.
-REDACTED_PLACEHOLDER = "**********"
-
-# A field is credential-shaped when its name equals one of these nouns or ends
-# with ``_<noun>``.  Suffix matching avoids false positives on names that merely
-# contain the noun (``tokenizers_parallelism``, ``llm_key_rotation_grace_secs``).
-# Plurals are listed explicitly: a future ``api_keys: dict`` must not fail open.
-CREDENTIAL_SUFFIXES: Tuple[str, ...] = (
-    "secret",
-    "secrets",
-    "key",
-    "keys",
-    "token",
-    "tokens",
-    "password",
-    "passwords",
-    "passwd",
-    "pass",
-    "passphrase",
-    "credential",
-    "credentials",
-    "salt",
-    "dsn",
-    "signature",
-    "pem",
-    "cert",
-    "seed",
+from autobot_shared.secret_redaction_vocabulary import (
+    AUTHORIZATION_TERMS,
+    BROAD_FRAGMENTS,
+    BROAD_ONLY_STEMS,
+    CREDENTIAL_SUFFIXES,
+    LOCATION_SUFFIXES,
+    QUANTITY_PREFIXES,
+    QUANTITY_SUFFIXES,
+    WHOLE_TOKEN_NOUNS,
+    MatchPolicy,
+    is_endpoint_name,
+    is_quantity_field,
+    matches_vocabulary,
 )
 
-# Names ending in these are locations pointing *at* a credential, not the credential itself.
-# ``tls_key_path``/``service_key_file`` must stay visible so an operator can tell which file
-# was loaded.  ``_url`` is deliberately NOT here — see URL_SUFFIXES.
-LOCATION_SUFFIXES: Tuple[str, ...] = ("_path", "_file", "_dir", "_id")
+# The vocabulary lives in ``secret_redaction_vocabulary`` (same canonical module, split for size);
+# every public name it defined here before is re-exported so no import breaks.
+__all__ = [
+    "AUTHORIZATION_TERMS",
+    "BROAD_FRAGMENTS",
+    "BROAD_ONLY_STEMS",
+    "CREDENTIAL_SUFFIXES",
+    "ContentMatch",
+    "LEGACY_EXPORT_KEY_NAMES",
+    "LOCATION_SUFFIXES",
+    "LOG_MASK",
+    "MatchPolicy",
+    "QUANTITY_PREFIXES",
+    "QUANTITY_SUFFIXES",
+    "REDACTED_PLACEHOLDER",
+    "RedactedReprMixin",
+    "URL_SUFFIXES",
+    "WHOLE_TOKEN_NOUNS",
+    "is_credential_entry",
+    "is_credential_field",
+    "is_quantity_field",
+    "is_url_field",
+    "redact_content",
+    "redact_mapping",
+    "redact_nested",
+    "redact_schemeless_userinfo",
+    "redact_text",
+    "redact_url_credentials",
+    "redact_url_userinfo",
+    "redact_value",
+    "scan_content_for_credentials",
+]
+
+# Masked stand-in for a populated credential value.  Fixed width so the mask
+# never discloses the length of the real secret.
+REDACTED_PLACEHOLDER = "**********"
+
 
 # Names ending in these hold a connection string.  They are redacted in-place
 # (userinfo only) rather than exempted or fully masked.
 URL_SUFFIXES: Tuple[str, ...] = ("_url", "_uri", "_dsn")
-
-
-# Authorization terms: not field-name *suffixes* (``use_auth`` is a flag, so PRECISE must not mask it) but a
-# substring of a header/key name under BROAD (``x_auth``, ``Authorization``, ``bearer_token``). In the shared
-# vocabulary so the log/event/snapshot redactors stop carrying their own copy (#17337).
-AUTHORIZATION_TERMS: Tuple[str, ...] = ("auth", "authorization", "bearer")
-
-# Stems that only make sense as a substring (``private_key``, ``privatekey``);
-# as a suffix they would mask ``is_private`` style names PRECISE keeps readable.
-BROAD_ONLY_STEMS: Tuple[str, ...] = ("private",)
-
-#: Every noun BROAD matches.  Deduplicated, order-stable.
-BROAD_FRAGMENTS: Tuple[str, ...] = tuple(dict.fromkeys(CREDENTIAL_SUFFIXES + AUTHORIZATION_TERMS + BROAD_ONLY_STEMS))
-
-
-# A COUNT or LIMIT of a credential noun (``max_tokens``, ``token_count``, ``key_length``) is a number,
-# not a credential -- but ONLY the template export and the API config readout (``redact_nested`` for
-# GET /config and /current, unredacted before #18193) act on that (``exempt_counts=True``); every other
-# caller keeps masking it. Deliberately tight:
-#   * a prefix form needs the REMAINDER to be a PLURAL noun (``max_tokens``, ``num_api_keys``);
-#     ``max_token_secret`` and ``max_password`` stay masked;
-#   * a suffix form needs the remainder to END in a noun and the name to END in the quantity word;
-#     ``token_count_secret`` stays masked.
-# Under such a name any NON-number value is masked by every caller (#17336).
-QUANTITY_PREFIXES: Tuple[str, ...] = (
-    "max_",
-    "min_",
-    "num_",
-    "total_",
-    "input_",
-    "output_",
-    "prompt_",
-    "completion_",
-    "cached_",
-)
-QUANTITY_SUFFIXES: Tuple[str, ...] = ("_count", "_limit", "_len", "_length", "_size")
-_PLURAL_NOUNS: Tuple[str, ...] = ("secrets", "keys", "tokens", "passwords", "credentials")
-
-
-def _ends_with_noun(text: str, nouns: Tuple[str, ...]) -> bool:
-    return any(text == n or text.endswith(f"_{n}") for n in nouns)
-
-
-def is_quantity_field(name: str) -> bool:
-    """True when ``name`` is a count/limit of a credential noun, not a credential."""
-    lowered = (name or "").lower().replace("-", "_")
-    for prefix in QUANTITY_PREFIXES:
-        if lowered.startswith(prefix) and _ends_with_noun(lowered[len(prefix) :], _PLURAL_NOUNS):
-            return True
-    for suffix in QUANTITY_SUFFIXES:
-        if lowered.endswith(suffix) and _ends_with_noun(lowered[: -len(suffix)], CREDENTIAL_SUFFIXES):
-            return True
-    return False
-
-
-class MatchPolicy(Enum):
-    """How a name is compared against the shared credential vocabulary (#17336).
-
-    ``PRECISE`` -- the name equals a noun or ends with ``_<noun>``; location
-    suffixes are exempt.  Over-masking destroys a diagnostic (SSOT config
-    ``__repr__``), so false positives are the cost to avoid.
-
-    ``BROAD`` -- a noun appears anywhere in the lowercased name with ``_``/``-``
-    stripped; no location exemption.  Over-masking a log line, extra-vars
-    mapping, event payload or stored snapshot is free, a leaked secret is not.
-    """
-
-    PRECISE = "precise"
-    BROAD = "broad"
-
-
-def _normalized(name: str) -> str:
-    return name.lower().replace("_", "").replace("-", "")
 
 
 def _is_plain_number(value: Any) -> bool:
@@ -184,7 +133,7 @@ def is_credential_field(name: str, policy: MatchPolicy = MatchPolicy.PRECISE) ->
     ``policy`` is validated, never defaulted by a fallthrough: an unknown value
     raises rather than silently selecting the weaker rule.
     """
-    return _matches_vocabulary(name, policy)
+    return matches_vocabulary(name, policy)
 
 
 def is_credential_entry(
@@ -211,21 +160,7 @@ def is_credential_entry(
             return True
         if exempt_counts:
             return False
-    return _matches_vocabulary(name, policy)
-
-
-def _matches_vocabulary(name: str, policy: MatchPolicy) -> bool:
-    if not isinstance(policy, MatchPolicy):
-        raise TypeError(f"policy must be a MatchPolicy, got {policy!r}")
-    if not name:
-        return False
-    if policy is MatchPolicy.BROAD:
-        flat = _normalized(name)
-        return any(fragment in flat for fragment in BROAD_FRAGMENTS)
-    lowered = name.lower()
-    if lowered.endswith(LOCATION_SUFFIXES):
-        return False
-    return any(lowered == suffix or lowered.endswith(f"_{suffix}") for suffix in CREDENTIAL_SUFFIXES)
+    return matches_vocabulary(name, policy)
 
 
 def is_url_field(name: str) -> bool:
@@ -290,6 +225,36 @@ def redact_url_credentials(url: str, policy: MatchPolicy = MatchPolicy.PRECISE) 
     return urlunsplit(reparsed._replace(query=new_query))
 
 
+# A whole value shaped ``user:password@host[:port][/path]`` with NO ``scheme://`` (a bare DSN, proxy or
+# endpoint). Whole-value, never inside prose: ``note: a@b.com`` has whitespace and does not match.
+# ``name@host.com`` has no colon and ``host:port`` no ``@``, so neither matches (#18206).  Like ``urlsplit``,
+# the password ends at the LAST ``@``, so it may hold ``@``, ``/`` and ``#``; both regexes are linear.
+_SCHEMELESS_USER_RE = re.compile(r"(?P<user>[^\s:/@?#]+):(?P<pw>\S+)")
+_SCHEMELESS_HOST_RE = re.compile(r"(?P<host>\[[0-9A-Fa-f:.]+\]|[^\s/@?#:\[\]]+)(?P<port>:\d{1,5})?(?P<rest>[/?#]\S*)?")
+# URI schemes with no ``//`` authority whose ``scheme:addr@host`` is an address, not userinfo.
+_NO_AUTHORITY_SCHEMES = frozenset({"mailto", "sip", "sips", "xmpp", "tel", "urn", "news", "acct"})
+
+
+def redact_schemeless_userinfo(value: str) -> str:
+    """Mask the password of a bare ``user:password@host[:port]`` value, keeping user, host, port (#18206).
+
+    ``user:pw@host:<port>`` becomes ``user:**********@host:<port>``; the password may hold ``@ / #`` and the
+    host may be a bracketed IPv6 literal.  Ordinary emails, ``host:port`` pairs, ``mailto:`` style addresses,
+    scheme URLs (handled by :func:`redact_url_userinfo`), a Windows ``C:\\x@y`` path and any value with
+    whitespace come back unchanged.
+    """
+    m = _SCHEMELESS_USER_RE.fullmatch(value)
+    if m is None or m["user"].lower() in _NO_AUTHORITY_SCHEMES or m["pw"].startswith("//"):
+        return value
+    if len(m["user"]) == 1 and m["pw"].startswith("\\"):
+        return value
+    password, at, tail = m["pw"].rpartition("@")
+    host = _SCHEMELESS_HOST_RE.fullmatch(tail) if at and password else None
+    if host is None:
+        return value
+    return f"{m['user']}:{REDACTED_PLACEHOLDER}@{host['host']}{host['port'] or ''}{host['rest'] or ''}"
+
+
 def redact_value(name: str, value: Any) -> Any:
     """Mask ``value`` when ``name`` is credential-shaped and the value is set."""
     if value is None or value == "":
@@ -297,9 +262,9 @@ def redact_value(name: str, value: Any) -> Any:
     # URL handling runs first: a ``*_dsn`` name matches both rule sets, and
     # in-place userinfo redaction is strictly more diagnosable than a full mask.
     if is_url_field(name) and isinstance(value, str):
-        return redact_url_userinfo(value, mask_username=is_credential_entry(name, value))
+        return redact_schemeless_userinfo(redact_url_userinfo(value, mask_username=is_credential_entry(name, value)))
     if not is_credential_entry(name, value):
-        return value
+        return redact_schemeless_userinfo(value) if isinstance(value, str) else value
     return REDACTED_PLACEHOLDER
 
 
@@ -371,45 +336,84 @@ def redact_mapping(mapping: Mapping[str, Any]) -> Dict[str, Any]:
     return {k: (LOG_MASK if is_credential_entry(k, v, MatchPolicy.BROAD) else v) for k, v in mapping.items()}
 
 
-_SCALARS = (bool, int, float)
+# Leaf types that pass through under an ordinary name; anything else (``bytes`` included) fails closed.
+_SCALARS = (bool, int, float, dt.datetime, dt.date, dt.time, dt.timedelta, uuid.UUID, decimal.Decimal)
 
 
-def _redact_nested_leaf(name: str, value: Any, policy: MatchPolicy) -> Any:
+@dataclass(frozen=True)
+class _NestedOptions:
+    """What one :func:`redact_nested` walk carries down: policy, count rule, extra string scan."""
+
+    policy: MatchPolicy
+    exempt_counts: bool
+    extra_scan: Optional[Callable[[str], str]]
+    mask_credential_urls: bool = False
+
+
+def _redact_string_leaf(name: str, value: str, opts: _NestedOptions) -> str:
+    """A non-empty string leaf of :func:`redact_nested`: URL scrub, credential mask, or content scan."""
+    cred = is_credential_entry(name, value, opts.policy, exempt_counts=opts.exempt_counts)
+    url = "://" in value and not any(c.isspace() for c in value)
+    if cred and (not url or opts.mask_credential_urls or not is_endpoint_name(name, opts.policy)):
+        return REDACTED_PLACEHOLDER  # a URL under a credential name that is not an endpoint is masked whole
+    if url:
+        out = redact_url_credentials(redact_url_userinfo(value, mask_username=True), opts.policy)
+    else:
+        out = redact_content(redact_schemeless_userinfo(value))
+    return opts.extra_scan(out) if opts.extra_scan else out
+
+
+def _redact_nested_leaf(name: str, value: Any, opts: _NestedOptions) -> Any:
     """One non-container leaf of :func:`redact_nested` (#18193)."""
     if value is None or value == "":
         return value
-    cred = is_credential_entry(name, value, policy, exempt_counts=True)
-    if not isinstance(value, str):
-        return value if isinstance(value, _SCALARS) and not cred else REDACTED_PLACEHOLDER  # unknown type: closed
-    url = "://" in value and not any(c.isspace() for c in value)
-    if cred and not (url and is_url_field(name)):
-        return REDACTED_PLACEHOLDER  # a URL-shaped value under a credential name (webhook secret) is masked whole
-    if url:
-        return redact_url_credentials(redact_url_userinfo(value, mask_username=True), policy)
-    return redact_content(value)
+    if isinstance(value, str):
+        return _redact_string_leaf(name, value, opts)
+    cred = is_credential_entry(name, value, opts.policy, exempt_counts=opts.exempt_counts)
+    return value if isinstance(value, _SCALARS) and not cred else REDACTED_PLACEHOLDER  # unknown type: closed
 
 
-def redact_nested(value: Any, policy: MatchPolicy = MatchPolicy.BROAD, name: str = "") -> Any:
-    """Copy of ``value`` with credentials masked at any depth, for API response bodies (#18193).
-
-    Walks dicts, lists, tuples and sets (a set comes back as a list), masking like :func:`redact_value`
-    (``REDACTED_PLACEHOLDER``): a set value, or a non-empty container, under a credential name is masked
-    whole -- except under a URL-shaped name (``db_url``), where a URL keeps its host and loses ALL userinfo
-    (the user part too: a key can sit there) and credential query params. A URL string under any other
-    name is scrubbed the same way; other strings go through :func:`redact_content` (``sk-...``, JWTs,
-    inline ``user:pass@``), so ordinary text is byte-identical. Keys, order, bool and numbers are
-    unchanged; an unknown non-scalar type fails closed. List items inherit their parent's name.
-    ``BROAD`` (also for query params): over-masking costs a field, a leak costs a secret.
-    ``exempt_counts=True`` keeps ``max_tokens=4096`` a number (GET /config and /current returned it before).
-    """
+def _walk_nested(value: Any, name: str, opts: _NestedOptions) -> Any:
     if isinstance(value, (Mapping, list, tuple, set, frozenset)):
-        if value and is_credential_entry(name, value, policy, exempt_counts=True):
+        if value and is_credential_entry(name, value, opts.policy, exempt_counts=opts.exempt_counts):
             return REDACTED_PLACEHOLDER
         if isinstance(value, Mapping):
-            return {k: redact_nested(v, policy, str(k)) for k, v in value.items()}
-        items = [redact_nested(v, policy, name) for v in value]
+            return {k: _walk_nested(v, str(k), opts) for k, v in value.items()}
+        items = [_walk_nested(v, name, opts) for v in value]
         return tuple(items) if isinstance(value, tuple) else items
-    return _redact_nested_leaf(name, value, policy)
+    return _redact_nested_leaf(name, value, opts)
+
+
+def redact_nested(
+    value: Any,
+    policy: MatchPolicy = MatchPolicy.BROAD,
+    name: str = "",
+    *,
+    exempt_counts: bool = True,
+    extra_scan: Optional[Callable[[str], str]] = None,
+    mask_credential_urls: bool = False,
+) -> Any:
+    """Copy of ``value`` with credentials masked at any depth: THE recursive mapping redactor (#18193, #18205).
+
+    Walks dicts, lists, tuples and sets (a set comes back as a list). Masks like :func:`redact_value`
+    (``REDACTED_PLACEHOLDER``, fixed width, never a fragment of the secret): a set value under a credential name, of
+    any type, and a non-empty container under one, is masked whole -- except under a URL-shaped name (``db_url``),
+    where a URL keeps its host and loses ALL userinfo (the user part too) and credential query params. A URL string
+    under any other name is scrubbed the same way; other strings go through :func:`redact_content`, so ``sk-...``,
+    JWTs and inline ``user:pass@`` are masked and ordinary text is byte-identical. Keys, order, bool, numbers,
+    date/time values, ``UUID`` and ``Decimal`` are unchanged; any other type (``bytes``) fails closed. List items
+    inherit their parent's name. ``BROAD`` (also for query params): a response is read by any caller, so
+    over-masking costs a field and a leak costs a secret.
+
+    ``exempt_counts=True`` (default) keeps ``max_tokens=4096`` a number: GET /config and /current returned
+    it before, so no existing caller's masked set shrinks.  A caller that always masked counts passes
+    ``False`` (``credential_redaction.redact_dict``).  ``extra_scan`` runs over every string left
+    unmasked, for a caller with its own content patterns on top of :func:`redact_content`.
+    ``mask_credential_urls=True`` masks EVERY credential-named string whole, a URL included
+    (``credential_redaction.redact_dict``, whose masked set never shrinks); by default a URL under an
+    endpoint-shaped name (``token_url``, ``auth_url``, ``oauth_token_url``) keeps its host.
+    """
+    return _walk_nested(value, name, _NestedOptions(policy, exempt_counts, extra_scan, mask_credential_urls))
 
 
 # ---------------------------------------------------------------------------
