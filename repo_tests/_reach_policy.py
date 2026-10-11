@@ -73,6 +73,17 @@ REASON_CODES = frozenset(
 #: `reach_declarations_test` fails on a new one that does not -- so the pattern cannot be
 #: re-added without someone writing down why (#17914 AC4).
 ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
+    "migration-gate-test-import-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "One test directory's Python, against all tracked Python; the rest of the suite grows at its own rate.",
+    ),
+    "paths-filter-workflow-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow files are a subset of tracked YAML; compose, ansible and filter files grow at "
+        "their own rate, so a share of all YAML would sink with nothing wrong.",
+    ),
     "ansible-apt-repo-budget-override-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

@@ -70,6 +70,7 @@ on:
       # the job green on a linter nothing had executed.
       - 'scripts/lint-conventions.sh'
       - '.github/workflows/code-quality.yml'
+      - '.github/workflows/_changes.yml'
       # #15608: the shared filter file and the complement shim publishing the
       # same required context. Editing either must run the REAL gate, not the
       # shim reporting green over its own change.
@@ -107,29 +108,23 @@ jobs:
     # context would report FAILED on every draft -- worse than no gate.
     # Gate the expensive jobs, never the cheap thing others read.
     name: Detect changed paths
-    runs-on: ubuntu-latest
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
-        id: filter
-        with:
-          # #14054: dorny/paths-filter errors on an event it does not
-          # recognise unless `base` is given, and a failed `changes` job
-          # skips every job that needs it -- i.e. the required context
-          # never reports and the queue deadlocks. Empty on push/PR, so
-          # their existing behaviour is unchanged.
-          base: ${{ github.event.merge_group.base_sha || '' }}
-          # #15608: the path set is defined ONCE in
-          # .github/filters/code-quality-paths.yml and read by reference from
-          # both halves of the required-context pair -- this gate and the
-          # complement shim in code-quality-required-context.yml. A second
-          # inline copy is how the two sides drift apart, and the drift
-          # direction is silent: a shim that believes nothing changed while
-          # this gate believes otherwise publishes `code-quality` green for an
-          # audit that never ran.
-          filters: .github/filters/code-quality-paths.yml
+    uses: ./.github/workflows/_changes.yml
+    with:
+      # #14054: dorny/paths-filter errors on an event it does not
+      # recognise unless `base` is given, and a failed `changes` job
+      # skips every job that needs it -- i.e. the required context
+      # never reports and the queue deadlocks. Empty on push/PR, so
+      # their existing behaviour is unchanged.
+      merge_group_base: true
+      # #15608: the path set is defined ONCE in
+      # .github/filters/code-quality-paths.yml and read by reference from
+      # both halves of the required-context pair -- this gate and the
+      # complement shim in code-quality-required-context.yml. A second
+      # inline copy is how the two sides drift apart, and the drift
+      # direction is silent: a shim that believes nothing changed while
+      # this gate believes otherwise publishes `code-quality` green for an
+      # audit that never ran.
+      filters: .github/filters/code-quality-paths.yml
 
   code-quality:
     needs: changes
