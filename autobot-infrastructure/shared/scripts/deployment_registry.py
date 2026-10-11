@@ -29,6 +29,13 @@ Since #12771 the service table, URL construction, health-state shape and
 and ports/hosts come from `ssot_config` through it. What stays here is what only the
 scripts do: the urllib/TCP probe, env-driven mode detection and `populate_services`.
 
+Env contract (#12771): hosts and ports resolve through `ssot_config`, so they follow the
+SSOT's env names and `.env`. Six of the seven former `AUTOBOT_<NAME>_HOST` names are SSOT
+aliases and behave as before (BACKEND, FRONTEND, REDIS, OLLAMA, AI_STACK, NPU_WORKER).
+MIGRATION: `AUTOBOT_PLAYWRIGHT_VNC_HOST` is no longer read; set `AUTOBOT_BROWSER_SERVICE_HOST`
+(its SSOT name; nothing in the repo set the old one). The unset-host default is now
+`127.0.0.1` where it was `localhost`.
+
 Two divergences are preserved deliberately rather than flattened:
 
 * `_SERVICE_DEFS` had two shapes -- a 2-tuple in `backup_manager.py` and a 3-tuple
