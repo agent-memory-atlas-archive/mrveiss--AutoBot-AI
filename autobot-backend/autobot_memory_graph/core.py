@@ -212,7 +212,11 @@ class Config:
 
     @property
     def embedding_model(self) -> str:
-        """The active embedding model, read at call time; no stored vectors are written here (#18143)."""
+        """The active embedding model, read from the ssot each time this property is accessed (#18143).
+
+        ``AutoBotMemoryGraphCore.embedding_model_name`` copies it once, at construction, so a core built before a
+        model change keeps the earlier name. No stored vectors are written here, so nothing is left in another space.
+        """
         from autobot_shared.embedding_model import active_embedding_model
 
         return active_embedding_model()

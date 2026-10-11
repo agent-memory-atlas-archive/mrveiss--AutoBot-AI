@@ -15,6 +15,7 @@ import re
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from autobot_shared.logging_manager import get_llm_logger
+from autobot_shared.paths import chromadb_data_dir
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.ssot_config import get_ollama_url
 from constants.path_constants import PATH
@@ -36,7 +37,13 @@ def _warn_unrecorded_once(collection: str, model: str, dim: int) -> None:
     if collection in _WARNED:
         return
     _WARNED.add(collection)
-    logger.warning("Collection '%s': unrecorded space, dimension-matched (%s, %d-d) (#18143)", collection, model, dim)
+    logger.warning(
+        "Collection '%s': unrecorded space, dimension-matched: dimension match only, model unverified "
+        "(assumed %s, %d-d) (#18143)",
+        collection,
+        model,
+        dim,
+    )
     from services.knowledge.collection_space_proposal import schedule_stamp_proposal
 
     schedule_stamp_proposal(collection, model, dim)
@@ -100,7 +107,7 @@ class DocumentationSearcher:
             from knowledge.backends import get_default_client
 
             # Initialize ChromaDB via pluggable backend seam (#5062, #5194).
-            chromadb_path = PROJECT_ROOT / "data" / "chromadb"
+            chromadb_path = chromadb_data_dir()
             self._client = get_default_client(db_path=str(chromadb_path))
 
             # Get documentation collection (don't create if not exists)

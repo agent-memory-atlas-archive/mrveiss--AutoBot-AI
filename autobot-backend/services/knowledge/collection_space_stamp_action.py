@@ -9,7 +9,8 @@ names this action. Nothing stamps a collection until a human approves it. On app
 
 * re-reads the collection and one stored vector's dimension, and REFUSES if that no longer equals the
   dimension the proposal named, or if the collection now records a different space;
-* merges (model, dim) into the existing metadata through ``BaseCollection.modify_metadata`` -- never a replace;
+* merges (model, dim) into the existing metadata through ``BaseCollection.modify_metadata``, never a replace.
+  The model is INFERRED from a dimension match, not observed; the proposal and the comment both say so;
 * reads the metadata back and fails loudly unless the space is recorded;
 * leaves an ApprovalComment and an audit entry either way.
 """
@@ -20,7 +21,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from autobot_shared.embedding_provenance import EmbeddingProvenance, provenance_from_metadata, provenance_to_metadata
-from constants.path_constants import PATH
+from autobot_shared.paths import chromadb_data_dir
 from models.approval import ApprovalComment
 from services.approval_execution import register_post_approval_action
 from services.audit_logger import audit_log
@@ -37,7 +38,7 @@ PROPOSED_BY = "services.knowledge.collection_space_proposal"
 def _open_collection(name: str):
     from knowledge.backends import get_default_client
 
-    return get_default_client(db_path=str(PATH.PROJECT_ROOT / "data" / "chromadb")).get_collection(name)
+    return get_default_client(db_path=str(chromadb_data_dir())).get_collection(name)
 
 
 def _stored_dim(collection) -> int | None:
@@ -83,7 +84,10 @@ async def execute_stamp(approval: "Approval", session: "AsyncSession") -> None:
             approval, session, f"Stamp REFUSED, nothing was written: {refusal}.", "refused", reason=refusal
         )
         return
-    body = f"Recorded embedding space ({want.model_name}, {want.dim}-d) on '{name}'; existing metadata kept."
+    body = (
+        f"Recorded embedding space ({want.model_name}, {want.dim}-d) on '{name}'; existing metadata kept. "
+        "The model was INFERRED from a dimension match, not observed (dimension match only, model unverified)."
+    )
     await _write_trail(approval, session, body, "success", model=want.model_name, dim=want.dim)
 
 

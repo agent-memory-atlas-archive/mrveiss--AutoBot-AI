@@ -42,10 +42,14 @@ async def propose_stamp(collection: str, model: str, dim: int) -> bool:
             if any((a.context or {}).get("collection") == collection for a in pending.scalars().all()):
                 return True
             await ApprovalGateService(session).create_approval(
-                title=f"Record embedding space on collection '{collection}'",
+                title=f"Record INFERRED embedding space on '{collection}' (dimension match only, model unverified)",
                 approval_type=ApprovalType.DESTRUCTIVE_ACTION.value,
                 requested_by_agent=REQUESTER,
-                description=f"Writes ({model}, {dim}-d) into the collection's metadata; existing keys are kept.",
+                description=(
+                    f"The model '{model}' is INFERRED from a {dim}-d dimension match, not observed: the collection "
+                    "records no model, and another model of the same dimension would match too. Approving writes "
+                    f"({model}, {dim}-d) into its metadata as the recorded fact; existing keys are kept."
+                ),
                 context={"action": ACTION, "collection": collection, "model": model, "dim": dim},
             )
             return True
