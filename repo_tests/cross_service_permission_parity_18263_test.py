@@ -18,13 +18,13 @@ could not pass as parity.
 
 import json
 import os
-import pathlib
 import subprocess  # nosec B404  # runs this repo's own probe under the test interpreter
 import sys
 
 import pytest
+from repo_tests._paths import repo_root
 
-_ROOT = pathlib.Path(__file__).resolve().parents[1]
+_ROOT = repo_root()
 
 _PROBE = r"""
 import asyncio, json, sys, types
