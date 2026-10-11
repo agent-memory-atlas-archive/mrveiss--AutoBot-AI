@@ -73,6 +73,12 @@ REASON_CODES = frozenset(
 #: `reach_declarations_test` fails on a new one that does not -- so the pattern cannot be
 #: re-added without someone writing down why (#17914 AC4).
 ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
+    "egress-default-outbound-call-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Files making outbound HTTP calls are a small subset of tracked python; the other ~6000 "
+        "files grow independently, so a share of them sinks with nothing wrong with the sweep.",
+    ),
     "ansible-apt-repo-budget-override-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
