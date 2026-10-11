@@ -11,6 +11,7 @@
 | node lifecycle event writer         | `autobot-slm-backend/services/node_events.py`  |
 | RS256 jti denylist Redis key prefix | `autobot_shared/auth/jwt_core.py`              |
 | device JWT minter                   | `services/device_jwt.py`; `services/device_token_service.py` is retired |
+| fleet services aggregation + models | `autobot-slm-backend/api/orchestration.py`; `api/services.py` `/fleet/services` only delegates |
 | workflow shared memory              | `orchestration/workflow_memory.py`; the async `autobot_shared` copy is retired |
 | TTL cache manager class             | `utils/advanced_cache_manager.py` (`SimpleCacheManager`); `utils/cache_manager.py` is retired |
 
@@ -103,10 +104,23 @@ def _defines_function(*names: str):
     return probe
 
 
+def _constructs(name: str):
+    """Matcher: True when `source` calls `name(...)`, i.e. builds the aggregate, not just imports it."""
+
+    def probe(source: str) -> bool:
+        return any(_callee(c) == name for c in _calls(ast.parse(source)))
+
+    return probe
+
+
+_FLEET_HOME = "autobot-slm-backend/api/orchestration.py"
+
 #: Concept key -> (matcher, files that may define it). An empty tuple means the concept is retired.
-_RETIRED_CONCEPTS: dict[str, tuple] = {
+_SINGLE_HOME_CONCEPTS: dict[str, tuple] = {
     "cache_manager_class": (_defines_class("CacheManager"), ()),
     "device_token_minter": (_defines_function("create_device_jwt", "verify_device_jwt"), ()),
+    "fleet_services_aggregation": (_constructs("FleetServiceStatus"), (_FLEET_HOME,)),
+    "fleet_services_models": (_defines_class("FleetServiceStatus"), (_FLEET_HOME,)),
     "workflow_memory_class": (_defines_class("WorkflowMemory"), ("autobot-backend/orchestration/workflow_memory.py",)),
 }
 
@@ -135,17 +149,27 @@ _RETIRED_CONCEPTS: dict[str, tuple] = {
             "from autobot_shared.auth.jwt_core import RS256_DENYLIST_PREFIX\n",
         ),
         (
-            _RETIRED_CONCEPTS["cache_manager_class"][0],
+            _SINGLE_HOME_CONCEPTS["cache_manager_class"][0],
             "class CacheManager:\n    pass\n",
             "from utils.advanced_cache_manager import cache_manager\n",
         ),
         (
-            _RETIRED_CONCEPTS["device_token_minter"][0],
+            _SINGLE_HOME_CONCEPTS["device_token_minter"][0],
             "def create_device_jwt(device_id, user_id):\n    pass\n",
             "from services.device_jwt import mint_device_jwt\n",
         ),
         (
-            _RETIRED_CONCEPTS["workflow_memory_class"][0],
+            _SINGLE_HOME_CONCEPTS["fleet_services_aggregation"][0],
+            "x = FleetServiceStatus(service_name='a')\n",
+            "from api.orchestration import FleetServiceStatus\n",
+        ),
+        (
+            _SINGLE_HOME_CONCEPTS["fleet_services_models"][0],
+            "class FleetServiceStatus(BaseModel):\n    pass\n",
+            "from api.orchestration import FleetServiceStatus\n",
+        ),
+        (
+            _SINGLE_HOME_CONCEPTS["workflow_memory_class"][0],
             "class WorkflowMemory:\n    pass\n",
             "from orchestration.workflow_memory import WorkflowMemory\n",
         ),
@@ -181,7 +205,7 @@ REACH = declare(
 
 @functools.lru_cache(maxsize=1)
 def _homes() -> dict[str, tuple[str, ...]]:
-    found: dict[str, list[str]] = {k: [] for k in ("retention", "decoder", "writer", "prefix", *_RETIRED_CONCEPTS)}
+    found: dict[str, list[str]] = {k: [] for k in ("retention", "decoder", "writer", "prefix", *_SINGLE_HOME_CONCEPTS)}
     root = repo_root()
     for rel in REACH.examined(root):
         source = (root / rel).read_text(encoding="utf-8")
@@ -190,7 +214,7 @@ def _homes() -> dict[str, tuple[str, ...]]:
             ("decoder", _decodes_jwt_payload),
             ("writer", _defines_node_event_writer),
             ("prefix", _spells_denylist_prefix),
-            *((key, probe) for key, (probe, _homes_ok) in _RETIRED_CONCEPTS.items()),
+            *((key, probe) for key, (probe, _homes_ok) in _SINGLE_HOME_CONCEPTS.items()),
         ):
             if probe(source):
                 found[key].append(rel)
@@ -212,9 +236,9 @@ def test_each_concept_is_defined_in_exactly_its_one_home(key: str, home: str) ->
     ), f"#17856: {key} is defined in {list(_homes()[key])}; it lives once in {home}. Import it instead of copying it."
 
 
-@pytest.mark.parametrize("key", sorted(_RETIRED_CONCEPTS))
+@pytest.mark.parametrize("key", sorted(_SINGLE_HOME_CONCEPTS))
 def test_a_retired_or_single_home_class_is_defined_only_where_allowed(key: str) -> None:
-    allowed = _RETIRED_CONCEPTS[key][1]
+    allowed = _SINGLE_HOME_CONCEPTS[key][1]
     assert _homes()[key] == allowed, (
         f"#17856: {key} is defined in {list(_homes()[key])}; allowed: {list(allowed)}. "
         "Use the canonical implementation instead of re-adding the copy."
