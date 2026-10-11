@@ -252,35 +252,33 @@ async def _post_token(
     pre-resolved public IP so the token POST cannot be DNS-rebound to a private
     address between validation and connect. The session owns and closes it.
 
-    Issue #12979 — deliberately NOT converted to the shared pooled client.
-    A connector is a *session*-level object: the pooled ``HTTPClientManager``
-    owns one shared ``TCPConnector`` for all callers and ``session.request()``
-    accepts no per-request connector override. Routing this call through the
-    pool would silently drop the caller's pinned connector and reopen the
-    DNS-rebinding hole closed in #12278, so the per-request session here buys
-    a security property that connection reuse cannot replace.
+    Issue #12979 — deliberately NOT the shared pooled client: a connector is
+    session-level and the pool accepts no per-request override, so pooling would
+    drop the pinned connector and reopen the DNS-rebinding hole closed in #12278.
     """
     timeout = aiohttp.ClientTimeout(total=_TOKEN_REQUEST_TIMEOUT)
-    session_kwargs: dict = {"timeout": timeout}
-    if connector is not None:
-        session_kwargs["connector"] = connector
+    session_kwargs: dict = {"timeout": timeout, **({"connector": connector} if connector is not None else {})}
     try:
         async with aiohttp.ClientSession(**session_kwargs) as session:
-            body_kwarg = _request_body(provider, payload)
-            async with session.post(
-                token_url,
-                **body_kwarg,
-                headers={"Accept": "application/json", **(headers or {})},
-                allow_redirects=False,
-            ) as resp:
-                body = await resp.json(content_type=None)
-                if resp.status >= 400:
-                    # Token endpoints return {"error": "...", "error_description": "..."}.
-                    detail = body.get("error_description") or body.get("error") or "unknown error"
-                    raise RuntimeError("token endpoint returned HTTP %d: %s" % (resp.status, detail))
-                return _unwrap_envelope(body, provider)
+            return await _send_token_request(session, token_url, payload, provider, headers)
     except aiohttp.ClientError as exc:
         raise RuntimeError("token endpoint request failed: %s" % exc) from exc
+
+
+async def _send_token_request(session, token_url: str, payload: dict, provider, headers: dict | None) -> dict:
+    """POST one token request on *session*; return the unwrapped token object."""
+    async with session.post(
+        token_url,
+        **_request_body(provider, payload),
+        headers={"Accept": "application/json", **(headers or {})},
+        allow_redirects=False,
+    ) as resp:
+        body = await resp.json(content_type=None)
+        if resp.status >= 400:
+            # Token endpoints return {"error": "...", "error_description": "..."}.
+            detail = body.get("error_description") or body.get("error") or "unknown error"
+            raise RuntimeError("token endpoint returned HTTP %d: %s" % (resp.status, detail))
+        return _unwrap_envelope(body, provider)
 
 
 async def exchange_code(
@@ -338,10 +336,7 @@ async def refresh_access_token(
         "client_id": client_id,
         "client_secret": client_secret,
     }
-    if provider is None:
-        return await _post_token(token_url, payload, connector=connector)
     payload, headers = _apply_client_auth(provider, payload, client_id, client_secret)
-    payload = _rename_params(payload, provider.refresh_param_names)
-    return await _post_token(
-        provider.refresh_url or token_url, payload, connector=connector, provider=provider, headers=headers
-    )
+    payload = _rename_params(payload, provider.refresh_param_names if provider else None)
+    url = (provider.refresh_url if provider else "") or token_url
+    return await _post_token(url, payload, connector=connector, provider=provider, headers=headers)

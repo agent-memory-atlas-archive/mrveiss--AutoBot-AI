@@ -11,7 +11,9 @@ import pytest
 
 import api.admin_oauth_bundle_strip as proposer
 from api.schemas_oauth_bundle_strip import OAuthBundleStripRequest
+from autobot_shared.leader_lease import LeaderLease
 from knowledge.connectors import oauth_flow
+from knowledge.connectors.credential_store import _refresh_lock_key
 from models.approval import Approval, ApprovalComment
 from services import approval_execution, oauth_bundle_strip, oauth_bundle_strip_action
 from services.approval_gate_service import ApprovalGateService
@@ -49,6 +51,39 @@ class _FakeSvc:
             value = json.dumps({**json.loads(value), "access_token": "tampered"})
         self.rows[secret_id] = value
         return True
+
+
+class _Locks:
+    """In-memory stand-in for the Redis lease: exclusive per key, like SET NX."""
+
+    def __init__(self):
+        self.held: dict[str, str] = {}
+
+    def acquire(self, key: str, holder: str) -> bool:
+        if key in self.held:
+            return False
+        self.held[key] = holder
+        return True
+
+    def release(self, key: str, holder: str) -> None:
+        if self.held.get(key) == holder:
+            del self.held[key]
+
+
+@pytest.fixture(autouse=True)
+def locks(monkeypatch):
+    """Every test runs with the real lease factory over an in-memory exclusive lock."""
+    state = _Locks()
+
+    async def _acquire(self, *a, **k):
+        return state.acquire(self.key, self.worker_id)
+
+    async def _release(self, *a, **k):
+        state.release(self.key, self.worker_id)
+
+    monkeypatch.setattr(LeaderLease, "update_leadership", _acquire)
+    monkeypatch.setattr(LeaderLease, "release", _release)
+    return state
 
 
 @pytest.fixture
@@ -112,6 +147,111 @@ async def test_digest_mismatch_restores_the_original(configured):
     report = await oauth_bundle_strip.strip_all(svc, "approver")
     assert svc.rows["s-legacy"] == original
     assert report.count(oauth_bundle_strip.VERIFY_FAILED) == 1
+
+
+async def test_bundle_whose_refresh_lease_is_held_is_skipped_not_stripped(configured, locks):
+    svc = _svc()
+    locks.acquire(_refresh_lock_key("s-legacy"), "refresher")
+    report = await oauth_bundle_strip.strip_all(svc, "approver")
+    assert report.summary()["lease_unavailable"] == {"unknown": 1}
+    assert json.loads(svc.rows["s-legacy"])["client_secret"] == _SECRET and svc.writes == []
+
+
+async def test_a_refresh_landing_between_the_strips_read_and_write_is_never_overwritten(configured, locks):
+    """The #13627 lost-update race: a rotating provider's old refresh token is dead after a refresh.
+
+    The refresh lands right after the strip's read. It can only write if it can take
+    the per-credential lease; the strip must be holding it, so the refresh waits and
+    runs afterwards against the CURRENT bundle. Without the lease the refresh lands
+    mid-strip and the strip then writes its stale read over the new tokens.
+    """
+    svc = _svc()
+    key = _refresh_lock_key("s-legacy")
+    refreshed = {"access_token": "at-2", "refresh_token": "rt-2"}
+    state = {"done": False, "blocked": 0}
+
+    def _try_refresh():
+        if state["done"]:
+            return
+        if not locks.acquire(key, "refresher"):
+            state["blocked"] += 1
+            return
+        current = json.loads(svc.rows["s-legacy"])
+        svc.rows["s-legacy"] = json.dumps({**current, **refreshed})
+        locks.release(key, "refresher")
+        state["done"] = True
+
+    real_get = svc.get_secret
+    first_read = []
+
+    def _get(secret_id=None, **kw):
+        row = real_get(secret_id=secret_id, **kw)
+        if secret_id == "s-legacy" and not first_read:
+            first_read.append(1)
+            _try_refresh()  # lands between the strip's read and its write
+        return row
+
+    svc.get_secret = _get
+    await oauth_bundle_strip.strip_all(svc, "approver")
+    _try_refresh()  # a blocked refresh retries once the lease is free
+    final = json.loads(svc.rows["s-legacy"])
+    assert state["done"] and state["blocked"] == 1
+    assert final["access_token"] == "at-2" and final["refresh_token"] == "rt-2"
+    assert "client_secret" not in final
+
+
+async def test_one_bundle_failing_is_recorded_and_the_rest_are_still_processed(configured):
+    svc = _svc(**{"s-boom": json.dumps(_LEGACY)})
+    real_update = svc.update_secret
+
+    def _update(secret_id, **kw):
+        if secret_id == "s-boom":
+            raise OSError("disk")
+        return real_update(secret_id, **kw)
+
+    svc.update_secret = _update
+    report = await oauth_bundle_strip.strip_all(svc, "approver")
+    assert report.secret_ids["error"] == ["s-boom"]
+    assert report.secret_ids["stripped"] == ["s-legacy"]
+    assert json.loads(svc.rows["s-boom"])["client_secret"] == _SECRET  # restored
+
+
+class _Interrupt(BaseException):
+    pass
+
+
+async def test_an_interruption_halfway_still_writes_the_trail_for_the_partial_run(configured, monkeypatch):
+    svc = _svc(**{"s-third": json.dumps(_LEGACY)})
+    monkeypatch.setattr("services.secrets_service.get_secrets_service", lambda: svc)
+    audited, session = [], _FakeSession()
+
+    async def _audit(op, **kw):
+        audited.append(kw)
+
+    monkeypatch.setattr(oauth_bundle_strip_action, "audit_log", _audit)
+    real_strip = oauth_bundle_strip.strip_one_sync
+
+    def _strip(svc_, secret_id, actor, report):
+        if secret_id == "s-third":
+            raise _Interrupt()
+        return real_strip(svc_, secret_id, actor, report)
+
+    monkeypatch.setattr(oauth_bundle_strip, "strip_one_sync", _strip)
+    approval = Approval(context={"backup_reference": "snap"}, id=uuid.uuid4(), decided_by_user="human")
+    with pytest.raises(_Interrupt):
+        await oauth_bundle_strip_action.execute_oauth_bundle_strip(approval, session)
+    body = session.added[0].body
+    assert "INTERRUPTED" in body and "1 stripped" in body and "1 interrupted" in body
+    assert audited[0]["result"] == "failed" and audited[0]["details"]["completed"] is False
+    assert audited[0]["details"]["secret_ids"]["interrupted"] == ["s-third"]
+
+
+async def test_digest_covers_every_field_but_the_app_credentials():
+    base = json.loads(json.dumps(_LEGACY))
+    digest = oauth_bundle_strip.token_digest(base)
+    assert oauth_bundle_strip.token_digest({**base, "client_secret": "other"}) == digest  # pragma: allowlist secret
+    assert oauth_bundle_strip.token_digest({**base, "id_token": "x"}) != digest  # a field outside the old fixed four
+    assert oauth_bundle_strip.token_digest({**base, "scope": "other"}) != digest
 
 
 class _FakeSession:

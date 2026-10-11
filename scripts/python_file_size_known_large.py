@@ -227,7 +227,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/knowledge/categories.py": 965,
     "autobot-backend/knowledge/collections.py": 728,
     "autobot-backend/knowledge/connectors/base.py": 663,
-    "autobot-backend/knowledge/connectors/credential_store.py": 776,  # #16444: rotate() validates the merged bundle
+    "autobot-backend/knowledge/connectors/credential_store.py": 768,  # #16444: rotate() validates the merged bundle
     "autobot-backend/knowledge/connectors/gdrive.py": 702,
     "autobot-backend/knowledge/connectors/gitlab.py": 873,
     "autobot-backend/knowledge/connectors/onedrive.py": 642,

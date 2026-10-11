@@ -36,16 +36,41 @@ ACTION = "oauth_bundle_strip_app_credentials"
 PROPOSED_BY = "api.admin_oauth_bundle_strip"
 
 
-def _comment_body(report: oauth_bundle_strip.StripReport) -> str:
-    residual = report.count(oauth_bundle_strip.SKIPPED_UNCONFIGURED) + report.count(oauth_bundle_strip.VERIFY_FAILED)
+def _comment_body(report: oauth_bundle_strip.StripReport, *, completed: bool) -> str:
+    s = oauth_bundle_strip
+    residual = sum(report.count(o) for o in s.NOT_CLEAN_OUTCOMES)
+    parts = ", ".join(f"{report.count(o)} {o}" for o in (s.STRIPPED, s.CLEAN, *s.NOT_CLEAN_OUTCOMES, s.UNREADABLE))
+    state = "completed" if completed else "INTERRUPTED -- partial run"
     return (
-        f"OAuth bundle strip: {report.count(oauth_bundle_strip.STRIPPED)} stripped, "
-        f"{report.count(oauth_bundle_strip.CLEAN)} already clean, "
-        f"{report.count(oauth_bundle_strip.SKIPPED_UNCONFIGURED)} skipped (provider not configured), "
-        f"{report.count(oauth_bundle_strip.VERIFY_FAILED)} failed verification (original restored), "
-        f"{report.count(oauth_bundle_strip.UNREADABLE)} unreadable. "
-        f"Bundles still holding the app credentials: {residual}. "
+        f"OAuth bundle strip {state}: {parts}. Bundles not stripped or in doubt: {residual}. "
         "Still to do by the operator: one forced refresh per provider."
+    )
+
+
+async def _write_trail(approval: "Approval", session: "AsyncSession", report, *, completed: bool) -> None:
+    """The durable record (ApprovalComment + audit entry). Runs in a ``finally``, so a partial run is accounted for."""
+    s = oauth_bundle_strip
+    session.add(
+        ApprovalComment(
+            approval_id=approval.id,
+            author="system",
+            author_type="system",
+            body=_comment_body(report, completed=completed),
+        )
+    )
+    await session.commit()
+    clean_run = completed and not (report.count(s.VERIFY_FAILED) or report.count(s.ERROR))
+    await audit_log(
+        "oauth_bundle.strip_app_credentials",
+        result="success" if clean_run else "failed",
+        user_id=approval.decided_by_user,
+        resource="connector_oauth_token",
+        details={
+            "approval_id": str(approval.id),
+            "completed": completed,
+            "outcomes": report.summary(),
+            "secret_ids": report.secret_ids,
+        },
     )
 
 
@@ -56,21 +81,15 @@ async def execute_oauth_bundle_strip(approval: "Approval", session: "AsyncSessio
     context = approval.context or {}
     if not str(context.get("backup_reference") or "").strip():
         raise ValueError(f"approval {approval.id} names no backup_reference -- refusing to rewrite credentials")
-    actor = approval.decided_by_user or "approval-executor"
-
-    report = await oauth_bundle_strip.strip_all(get_secrets_service(), actor)
-
-    session.add(
-        ApprovalComment(approval_id=approval.id, author="system", author_type="system", body=_comment_body(report))
-    )
-    await session.commit()
-    await audit_log(
-        "oauth_bundle.strip_app_credentials",
-        result="success" if not report.count(oauth_bundle_strip.VERIFY_FAILED) else "failed",
-        user_id=approval.decided_by_user,
-        resource="connector_oauth_token",
-        details={"approval_id": str(approval.id), "outcomes": report.summary(), "secret_ids": report.secret_ids},
-    )
+    report = oauth_bundle_strip.StripReport()
+    completed = False
+    try:
+        await oauth_bundle_strip.strip_all(
+            get_secrets_service(), approval.decided_by_user or "approval-executor", report
+        )
+        completed = True
+    finally:
+        await _write_trail(approval, session, report, completed=completed)
 
 
 def register_strip_action() -> None:

@@ -17,8 +17,13 @@ Safety properties of the strip, per bundle:
   * only ``client_id`` / ``client_secret`` are removed; every other field is kept;
   * a bundle whose provider has no operator config is SKIPPED -- stripping it would
     break its refresh (the fallback copy is all it has);
-  * a SHA-256 of ``{access_token, refresh_token, provider, token_url}`` is compared
-    before and after, and the original value is restored on any mismatch;
+  * each bundle is rewritten under the SAME per-credential refresh lease a token
+    refresh takes (#13627), read and verified under it, so a refresh can never land
+    between the strip's read and write and be overwritten with stale tokens; a bundle
+    whose lease cannot be taken is skipped and recorded, never stripped unlocked;
+  * a SHA-256 of every field except the app credentials is compared before and
+    after, and the original value is restored (under the lease) on any mismatch;
+  * every bundle gets a recorded outcome, including ``error`` and ``interrupted``;
   * no secret value, and no provider name outside the known registry, is returned
     or logged -- results are ids and counts.
 """
@@ -37,8 +42,6 @@ from services.credential_write import mirror_credential_to_vault
 logger = get_logger(__name__)
 
 APP_CREDENTIAL_KEYS = ("client_id", "client_secret")
-#: The fields whose hash must be identical before and after the strip.
-TOKEN_FIELDS = ("access_token", "refresh_token", "provider", "token_url")
 UNKNOWN_PROVIDER = "unknown"
 
 # Outcomes of one bundle.
@@ -49,6 +52,9 @@ STRIPPED, CLEAN, SKIPPED_UNCONFIGURED, UNREADABLE, VERIFY_FAILED = (
     "unreadable",
     "verify_failed",
 )
+LEASE_UNAVAILABLE, ERROR, INTERRUPTED = "lease_unavailable", "error", "interrupted"
+#: Outcomes that leave a bundle still holding the app credentials or in doubt.
+NOT_CLEAN_OUTCOMES = (SKIPPED_UNCONFIGURED, VERIFY_FAILED, LEASE_UNAVAILABLE, ERROR, INTERRUPTED)
 
 
 @dataclass
@@ -71,8 +77,13 @@ class StripReport:
 
 
 def token_digest(creds: dict) -> str:
-    """SHA-256 over the token-bearing fields, so before/after can be compared without values."""
-    material = json.dumps({k: creds.get(k) for k in TOKEN_FIELDS}, sort_keys=True, ensure_ascii=False)
+    """SHA-256 over EVERY field but the app credentials, so before/after compare without values.
+
+    A new token-bearing field (id_token, a rotated extra) is covered by default
+    rather than by someone remembering to add it to a list.
+    """
+    kept = {k: v for k, v in creds.items() if k not in APP_CREDENTIAL_KEYS}
+    material = json.dumps(kept, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -134,46 +145,87 @@ def preview_sync(svc, accessed_by: str) -> StripReport:
     return report
 
 
+def _stripped_value(creds: dict) -> str:
+    return json.dumps({k: v for k, v in creds.items() if k not in APP_CREDENTIAL_KEYS}, ensure_ascii=False)
+
+
 def _write_verified(svc, secret_id: str, original: str, creds: dict, actor: str) -> bool:
-    """Write the stripped bundle, verify the token digest, restore the original on mismatch."""
+    """Write the stripped bundle, verify the digest, restore the original on mismatch or error.
+
+    MUST run under the credential's refresh lease: ``original`` and ``creds`` were
+    read under it, and the restore is only safe because nothing else can have
+    written in between.
+    """
     before = token_digest(creds)
-    stripped = {k: v for k, v in creds.items() if k not in APP_CREDENTIAL_KEYS}
-    svc.update_secret(secret_id=secret_id, value=json.dumps(stripped, ensure_ascii=False), updated_by=actor)
-    _, after = _read_bundle(svc, secret_id, actor)
-    if after is not None and token_digest(after) == before and not any(k in after for k in APP_CREDENTIAL_KEYS):
-        return True
+    try:
+        svc.update_secret(secret_id=secret_id, value=_stripped_value(creds), updated_by=actor)
+        _, after = _read_bundle(svc, secret_id, actor)
+        if after is not None and token_digest(after) == before and not any(k in after for k in APP_CREDENTIAL_KEYS):
+            return True
+    except Exception:
+        svc.update_secret(secret_id=secret_id, value=original, updated_by=actor)
+        raise
     svc.update_secret(secret_id=secret_id, value=original, updated_by=actor)
     return False
 
 
 def strip_one_sync(svc, secret_id: str, actor: str, report: StripReport) -> str | None:
-    """Strip one bundle; returns the new value to mirror to the vault, or None."""
+    """Strip one bundle (caller holds its lease); returns the new value to mirror, or None."""
     outcome, label, secret, creds = _classify(svc, secret_id, actor)
     if outcome:
         report.add(outcome, label, secret_id)
         return None
-    original = secret["value"]
-    if not _write_verified(svc, secret_id, original, creds, actor):
+    if not _write_verified(svc, secret_id, secret["value"], creds, actor):
         logger.error("OAuth bundle strip verification failed; original restored (secret %s)", secret_id)
         report.add(VERIFY_FAILED, label, secret_id)
         return None
     report.add(STRIPPED, label, secret_id)
-    return json.dumps({k: v for k, v in creds.items() if k not in APP_CREDENTIAL_KEYS}, ensure_ascii=False)
+    return _stripped_value(creds)
 
 
 async def preview(svc, accessed_by: str) -> StripReport:
     return await asyncio.get_running_loop().run_in_executor(None, preview_sync, svc, accessed_by)
 
 
-async def strip_all(svc, actor: str) -> StripReport:
-    """Strip every legacy bundle whose provider is configured. Run ONLY after human approval."""
+async def _strip_under_lease(svc, secret_id: str, actor: str, report: StripReport) -> str | None:
+    """Take the shared refresh lease, strip under it, release. No lease -> skip and record."""
+    from knowledge.connectors.credential_store import _release_quietly, refresh_lease
+
+    lease = refresh_lease(secret_id)
+    if not await lease.update_leadership():
+        report.add(LEASE_UNAVAILABLE, UNKNOWN_PROVIDER, secret_id)
+        return None
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, strip_one_sync, svc, secret_id, actor, report)
+    finally:
+        await _release_quietly(lease)
+
+
+async def _mirror(svc, secret_id: str, new_value: str) -> None:
+    secret = await asyncio.get_running_loop().run_in_executor(None, svc.get_secret, secret_id)
+    await mirror_credential_to_vault(secret_id, (secret or {}).get("created_by") or "", new_value)
+
+
+async def strip_all(svc, actor: str, report: StripReport | None = None) -> StripReport:
+    """Strip every legacy bundle whose provider is configured. Run ONLY after human approval.
+
+    Records into *report* as it goes, so a caller that passes its own report still
+    holds the partial trail when this raises. One bundle's failure is recorded and
+    the loop continues; an interruption (cancellation) records the in-flight bundle
+    as ``interrupted`` and re-raises.
+    """
     from knowledge.connectors.credential_store import _vault_write_enabled
 
-    loop = asyncio.get_running_loop()
-    report = StripReport()
-    for secret_id in await loop.run_in_executor(None, _list_bundle_ids, svc):
-        new_value = await loop.run_in_executor(None, strip_one_sync, svc, secret_id, actor, report)
-        if new_value is not None and _vault_write_enabled():
-            secret = await loop.run_in_executor(None, svc.get_secret, secret_id)
-            await mirror_credential_to_vault(secret_id, (secret or {}).get("created_by") or "", new_value)
+    report = report if report is not None else StripReport()
+    for secret_id in await asyncio.get_running_loop().run_in_executor(None, _list_bundle_ids, svc):
+        try:
+            new_value = await _strip_under_lease(svc, secret_id, actor, report)
+            if new_value is not None and _vault_write_enabled():
+                await _mirror(svc, secret_id, new_value)
+        except Exception:
+            logger.exception("OAuth bundle strip failed for one bundle (secret %s)", secret_id)
+            report.add(ERROR, UNKNOWN_PROVIDER, secret_id)
+        except BaseException:
+            report.add(INTERRUPTED, UNKNOWN_PROVIDER, secret_id)
+            raise
     return report

@@ -57,7 +57,9 @@ async def _exchange(provider):
 
 
 async def test_every_registered_provider_posts_the_pre_change_request():
+    assert len(oauth_flow.OAUTH_PROVIDERS) >= 3, "an empty registry would make this loop pass vacuously"
     for provider in oauth_flow.OAUTH_PROVIDERS.values():
+        assert provider.token_endpoint_auth_method == "client_secret_post" and provider.token_request_encoding == "form"
         _Capture.posts.clear()
         await _exchange(provider)
         await oauth_flow.refresh_access_token(provider.token_url, "cid", "csec", "rt", provider=provider)
@@ -79,6 +81,14 @@ async def test_every_registered_provider_posts_the_pre_change_request():
         ]
         assert xkw["headers"] == rkw["headers"] == {"Accept": "application/json"}
         assert "json" not in xkw and xkw["allow_redirects"] is False
+
+
+async def test_the_golden_comparison_can_fail():
+    """Contrast case: a deviating provider must NOT produce the golden request."""
+    _Capture.posts.clear()
+    await _exchange(_provider(token_endpoint_auth_method="client_secret_basic", token_request_encoding="json"))
+    _, kw = _Capture.posts[0]
+    assert "data" not in kw and "Authorization" in kw["headers"]
 
 
 async def test_separate_refresh_url_applies_to_refresh_only():
