@@ -42,7 +42,7 @@ MONITORING_DIR = repo_root() / "autobot-infrastructure" / "shared" / "scripts" /
 
 #: Floors. A discovery-based guard that finds nothing reports a clean run having asserted
 #: nothing, which is the failure mode #15826 catalogues across this repo's tree scanners.
-MIN_SCRIPTS = 2
+MIN_SCRIPTS = 1
 MIN_REQUIREMENTS_CHECKED = 3
 
 

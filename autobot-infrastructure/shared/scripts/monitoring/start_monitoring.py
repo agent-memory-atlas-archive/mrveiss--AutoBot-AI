@@ -9,8 +9,7 @@ Comprehensive performance monitoring system initialization and management.
 
 One launcher for both monitoring backends (#17906). ``--backend performance`` (the default) drives
 ``utils.performance_monitor``; ``--backend hardware`` drives ``utils.hardware_metrics`` and keeps the
-hardware launcher's log file and benchmark location. ``start_hardware_monitoring.py`` is a thin
-entry point that selects the hardware backend and runs this module.
+retired ``start_hardware_monitoring.py``'s log file and benchmark location.
 """
 
 import argparse

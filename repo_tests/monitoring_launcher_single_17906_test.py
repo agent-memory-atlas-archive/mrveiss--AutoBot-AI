@@ -6,7 +6,7 @@
 
 ``start_monitoring.py`` and ``start_hardware_monitoring.py`` each carried their own manager, optimization
 loop and dashboard loop; a fix to one (#14129) never reached the other (#15643). The logic now lives once in
-``start_monitoring.py``; ``start_hardware_monitoring.py`` is an entry point that selects its hardware backend.
+``start_monitoring.py``; the hardware behaviour is its ``--backend hardware`` flag, and the second file is gone.
 
 Two checks: the loops are DEFINED once (syntax tree, so prose naming them is not a definition), and the hardware
 backend is actually TAKEN -- the launcher is run against stub monitors and the hardware ones are the ones called.
@@ -26,9 +26,9 @@ from repo_tests._paths import repo_root
 
 MONITORING_DIR = repo_root() / "autobot-infrastructure" / "shared" / "scripts" / "monitoring"
 LAUNCHER = MONITORING_DIR / "start_monitoring.py"
-ENTRY_POINT = MONITORING_DIR / "start_hardware_monitoring.py"
+RETIRED_LAUNCHER = MONITORING_DIR / "start_hardware_monitoring.py"
 MARKERS = ("_periodic_optimization_loop", "_dashboard_update_loop")
-MIN_SCRIPTS = 2  # the launcher and the hardware entry point; a vanished directory must fail, not pass empty
+MIN_SCRIPTS = 1  # the one launcher; a vanished directory must fail, not pass empty
 
 
 def _defined(source: str) -> set[str]:
@@ -61,12 +61,6 @@ def test_the_loops_are_defined_in_exactly_one_launcher() -> None:
         f"#17906: {sorted(owners)} define the monitoring loops; they live once in {LAUNCHER.name}. "
         "Select behaviour with a backend, do not copy the manager."
     )
-
-
-def test_the_hardware_entry_point_selects_the_backend_and_runs_the_launcher() -> None:
-    tree = ast.parse(ENTRY_POINT.read_text(encoding="utf-8"))
-    strings = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-    assert {"--backend", "hardware", "start_monitoring.py"} <= strings
 
 
 def _stub(name: str, **attrs: object) -> types.ModuleType:
@@ -163,3 +157,14 @@ def test_an_unknown_backend_is_refused(launcher) -> None:
     module, _ = launcher
     with pytest.raises(ValueError, match="unknown monitoring backend"):
         module.load_backend("phase9")
+
+
+def test_the_hardware_launcher_is_a_flag_on_the_one_launcher(launcher, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The retired file is gone, and ``--backend hardware`` on the command line selects the hardware backend."""
+    module, _ = launcher
+    assert not RETIRED_LAUNCHER.exists(), f"{RETIRED_LAUNCHER.name} is back; use start_monitoring.py --backend hardware"
+    seen: list[str] = []
+    monkeypatch.setattr(module, "configure_logging", lambda backend: seen.append(backend.name))
+    monkeypatch.setattr(sys, "argv", [LAUNCHER.name, "--backend", "hardware", "status"])
+    asyncio.run(module.main())
+    assert seen == ["hardware"]
