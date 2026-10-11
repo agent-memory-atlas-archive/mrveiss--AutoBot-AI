@@ -75,13 +75,11 @@ from code_intelligence.anti_pattern_detector import (
 )
 from code_intelligence.performance_analyzer import (
     PerformanceAnalyzer,
-    PerformanceSeverity,
     get_performance_issue_types,
 )
 from code_intelligence.redis_optimizer import OptimizationSeverity, RedisOptimizer
 from code_intelligence.security import (
     SecurityAnalyzer,
-    SecuritySeverity,
     get_vulnerability_types,
 )
 from code_intelligence.shared.process_offload import run_directory_scan, run_isolated
@@ -1046,7 +1044,7 @@ async def scan_redis_file(
                 "optimizations": [r.to_dict() for r in results],
                 "total_findings": len(results),
                 "severity_breakdown": {
-                    sev.value: len([r for r in results if r.severity == sev]) for sev in OptimizationSeverity
+                    sev.value: len([r for r in results if r.severity == sev]) for sev in Severity.finding_ladder()
                 },
             },
         )
@@ -1173,7 +1171,7 @@ async def _run_redis_health_analysis(path: str) -> Dict[str, Any]:
         "total_optimizations": len(results),
         "files_with_issues": len(set(r.file_path for r in results)),
         "severity_breakdown": {
-            sev.value: len([r for r in results if r.severity == sev]) for sev in OptimizationSeverity
+            sev.value: len([r for r in results if r.severity == sev]) for sev in Severity.finding_ladder()
         },
         "category_breakdown": optimizer.get_summary().get("by_type", {}),
     }
@@ -1283,7 +1281,7 @@ async def security_scan_file(
                 "total_findings": len(results),
                 "by_type": by_type,
                 "severity_counts": {
-                    sev.value: len([r for r in results if r.severity == sev]) for sev in SecuritySeverity
+                    sev.value: len([r for r in results if r.severity == sev]) for sev in Severity.finding_ladder()
                 },
             },
         )
@@ -1536,7 +1534,7 @@ async def performance_scan_file(
                 "total_findings": len(results),
                 "by_type": by_type,
                 "severity_counts": {
-                    sev.value: len([r for r in results if r.severity == sev]) for sev in PerformanceSeverity
+                    sev.value: len([r for r in results if r.severity == sev]) for sev in Severity.finding_ladder()
                 },
             },
         )

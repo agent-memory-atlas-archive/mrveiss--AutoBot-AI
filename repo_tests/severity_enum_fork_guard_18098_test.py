@@ -55,58 +55,29 @@ SEVERITY_SUBSET_PROBE = frozenset({"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"})
 #: `frontend_analysis_lib.py`) became an alias.
 SCANNED_ROOTS = ("autobot-backend", "autobot_shared", "autobot-infrastructure")
 
-#: Exact subsets that are NOT aliased, because something builds an API or report dict
-#: key set by ITERATING their members. The sites, by file and the enum each iterates --
-#: deliberately not by line, per #15877:
+#: Exact subsets that are NOT aliased, because something builds a wire list by ITERATING
+#: their members. Only `OptimizationPriority` remains: the four `*Severity` forks that did
+#: the same (`PerformanceSeverity`, `OptimizationSeverity`, `SecuritySeverity`,
+#: `TestPatternSeverity`) became aliases, and every site that iterated them iterates
+#: `Severity.finding_ladder()` instead, so the five-key shape is unchanged (#18098; wire
+#: pinned in `autobot-backend/code_intelligence/finding_ladder_wire_18098_test.py`).
 #:
-#:   api/code_intelligence.py        `for sev in OptimizationSeverity` (twice),
-#:                                   `for sev in SecuritySeverity`,
-#:                                   `for sev in PerformanceSeverity`
-#:   code_intelligence/testing_pattern_analyzer.py   `for s in TestPatternSeverity`
-#:   code_intelligence/llm_pattern_analyzer.py       `for priority in OptimizationPriority`
-#:
-#: Aliasing these to the ten-rung canonical grows those responses from five keys to ten,
-#: against a frontend type that is deliberately the narrow five --
-#: `CODE_INTELLIGENCE_SEVERITIES` in `autobot-frontend/src/types/codeIntelligence.ts`,
-#: where a value the generated `Severity` does not carry fails to compile. Each is a
-#: wire-format decision, not a refactor: #18098's "no serialized value changes, each is a
-#: drop-in migration" does not hold for them. `Severity.score_ladder()` is the mechanism
-#: if they migrate.
-#:
-#: `OptimizationPriority` also ranks urgency rather than severity, which is a second
-#: question to answer before folding it in.
+#: `OptimizationPriority` carries `info`, which the canonical urgency `Priority` has no
+#: member for, so it cannot be aliased without a canonical change (see its reason below).
 PENDING_A_WIRE_DECISION = {
     "autobot-backend/code_intelligence/llm_pattern_analysis/types.py::OptimizationPriority": (
         "autobot-backend/code_intelligence/llm_pattern_analyzer.py"
     ),
-    "autobot-backend/code_intelligence/performance_analysis/types.py::PerformanceSeverity": (
-        "autobot-backend/api/code_intelligence.py"
-    ),
-    "autobot-backend/code_intelligence/redis_optimizer.py::OptimizationSeverity": (
-        "autobot-backend/api/code_intelligence.py"
-    ),
-    "autobot-backend/code_intelligence/security/constants.py::SecuritySeverity": (
-        "autobot-backend/api/code_intelligence.py"
-    ),
-    "autobot-backend/code_intelligence/testing_pattern_analyzer.py::TestPatternSeverity": (
-        "autobot-backend/code_intelligence/testing_pattern_analyzer.py"
-    ),
 }
 
 #: Why each pending fork is held back. Keys must equal `PENDING_A_WIRE_DECISION`'s.
-_FINDING_LADDER_WAIT = (
-    "alias via Severity.finding_ladder() (5 rungs, wire byte-identical) after #18132 merges "
-    "(status_enums.py owned by issue-18132-deploy-helpers)"
-)
 PENDING_REASONS = {
     "autobot-backend/code_intelligence/llm_pattern_analysis/types.py::OptimizationPriority": (
-        "owner decision on #18098: urgency vs severity concept, and member order is on the wire "
-        "(llm_pattern_analyzer.py:413)"
+        "BLOCKED on the canonical Priority: it has no `info` member (it is low/normal/medium/high/"
+        "critical/urgent), so `OptimizationPriority.INFO` (recommendation_engine.py) would raise "
+        "AttributeError and the emitted `get_optimization_priorities()` list (llm_pattern_analyzer.py) "
+        "would lose `info` and gain `normal`/`urgent`; needs an owner decision (#18098)"
     ),
-    "autobot-backend/code_intelligence/performance_analysis/types.py::PerformanceSeverity": _FINDING_LADDER_WAIT,
-    "autobot-backend/code_intelligence/redis_optimizer.py::OptimizationSeverity": _FINDING_LADDER_WAIT,
-    "autobot-backend/code_intelligence/security/constants.py::SecuritySeverity": _FINDING_LADDER_WAIT,
-    "autobot-backend/code_intelligence/testing_pattern_analyzer.py::TestPatternSeverity": _FINDING_LADDER_WAIT,
 }
 
 #: Enums the value probe flags that are a genuinely different vocabulary, not a rival
@@ -119,16 +90,17 @@ DISTINCT_VOCABULARIES = {
     ),
 }
 
-#: Flagged by the value probe on its first run and NOT yet classified as a fork or as a
-#: distinct vocabulary. Listed so the guard passes today and fails if one silently changes
-#: or a seventh appears, but this is a finding for the owner, not a ruling: four are
-#: *Priority* enums (the urgency-vs-severity question already open for `OptimizationPriority`)
-#: and `ThreatLevel` documents itself as "Threat severity levels", so it may be a plain fork.
+#: Flagged by the value probe and NOT aliased, each with the concrete reason. `KnowledgePriority`
+#: and `MaintenancePriority` were aliased to the canonical `Priority` and left this list.
 UNCLASSIFIED_VALUE_MATCHES = {
-    "autobot-backend/api/knowledge_grounding_models.py::ReviewTicketPriority": "priority; urgency vs severity",
-    "autobot-backend/llc/models/enums.py::WorkItemPriority": "priority; urgency vs severity",
-    "autobot-backend/services/analytics_service.py::MaintenancePriority": "priority; urgency vs severity",
-    "autobot-backend/temporal_knowledge_manager.py::KnowledgePriority": "priority; urgency vs severity",
+    "autobot-backend/api/knowledge_grounding_models.py::ReviewTicketPriority": (
+        "file owned by issue-18086-claim-models (#18098); analysed SAFE to alias to Priority"
+    ),
+    "autobot-backend/llc/models/enums.py::WorkItemPriority": (
+        "BLOCKED (#18098): (str, Enum) persisted through a 4-label Postgres enum; aliasing widens "
+        "the API (work_items.py, agent_tools.py) to accept normal/urgent, which the database rejects, "
+        "and loses the str mixin that json.dumps(default=str) in portability.py relies on"
+    ),
 }
 
 #: Named non-forks that overlap the canonical with a non-canonical tail, so the value probe
