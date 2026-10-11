@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 class SyncNodeContext:
-    """Context object for sync_node_role operation.
+    """Context object for sync_role_files operation.
 
-    Helper for sync_node_role (Issue #665).
+    Helper for sync_role_files (Issue #665).
     """
 
     def __init__(self):
@@ -64,7 +64,7 @@ class SyncOrchestrator:
         """
         Get node and role information from database.
 
-        Helper for sync_node_role (Issue #665).
+        Helper for sync_role_files (Issue #665).
 
         Returns:
             Tuple of (success, message, context) where context contains node/role info.
@@ -101,7 +101,7 @@ class SyncOrchestrator:
         """
         Build SSH options string for rsync.
 
-        Helper for sync_node_role (Issue #665).
+        Helper for sync_role_files (Issue #665).
         """
         ssh_opts = (
             "ssh -o StrictHostKeyChecking=accept-new "
@@ -123,7 +123,7 @@ class SyncOrchestrator:
         """
         Rsync a single source path to the target node.
 
-        Helper for sync_node_role (Issue #665).
+        Helper for sync_role_files (Issue #665).
         """
         src = cache_path / source_path.rstrip("/")
         if not src.exists():
@@ -198,7 +198,7 @@ class SyncOrchestrator:
         """
         Update or create NodeRole record in database.
 
-        Helper for sync_node_role (Issue #665).
+        Helper for sync_role_files (Issue #665).
         """
         async with db_service.session() as db:
             role_result = await db.execute(

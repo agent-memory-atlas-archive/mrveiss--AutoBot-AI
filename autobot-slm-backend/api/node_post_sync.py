@@ -31,13 +31,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api._post_sync_plan import _RESTART_LAST_UNITS, ordered_post_sync_plan
 from api.roles import PostSyncAction, _classify_post_sync
+from autobot_shared.async_compat import fire_and_forget
 from models.database import Node, NodeRole, Role, RoleStatus
 from models.post_sync_action_run import PostSyncActionRun
 from models.post_sync_schemas import NodePostSyncResponse, NodeRoleSyncResult, PostSyncRunResponse
 from services.auth import get_current_user
 from services.database import db_service, get_db
-from services.post_sync_plan_runner import NodeConn, PlanResult, execute_plan
+from services.post_sync_plan_runner import NodeConn, PlanResult, execute_plan, issue_deferred, record_issued
 from services.post_sync_recorder import RunContext
+from services.service_restart import wait_for_response_flush
 from services.sync_orchestrator import get_sync_orchestrator
 
 logger = logging.getLogger(__name__)
@@ -97,21 +99,47 @@ async def _sync_role_files(orchestrator, node_id: str, role_names: List[str], co
 
 
 async def sync_node_roles(
-    node_id: str, role_names: List[str], commit: str, restart: bool, run_id: str
+    node_id: str, role_names: List[str], commit: str, restart: bool, run_id: str, host_id: str | None = None
 ) -> NodeSyncOutcome:
-    """File sync per role, then ONE ordered plan for the node; versions recorded only if it did not abort."""
+    """File sync per role, then ONE ordered plan for the node; versions recorded only if it did not abort.
+
+    On the SLM host (``host_id``) the self-killing restart is NOT sent here: versions are recorded
+    and committed first, then an *issued* row is committed, and the restart is returned in
+    ``outcome.plan.deferred`` for ``schedule_self_restarts`` to send after the response.
+    """
     orchestrator = get_sync_orchestrator()
     outcome = NodeSyncOutcome(node_id)
     outcome.roles, synced, conn = await _sync_role_files(orchestrator, node_id, role_names, commit)
     if not synced:
         return outcome
     plan = ordered_post_sync_plan(build_node_actions(await _load_roles(synced), restart))
-    outcome.plan = await execute_plan(plan, conn, RunContext(run_id, node_id, ""), _RESTART_LAST_UNITS)
+    defer = _RESTART_LAST_UNITS if node_id == host_id else ()
+    outcome.plan = await execute_plan(plan, conn, RunContext(run_id, node_id, ""), defer)
     if outcome.plan.aborted:
         return outcome
     for name in synced:
         await orchestrator.record_role_synced(node_id, name, commit)
+    await record_issued(outcome.plan)  # after the versions: nothing is left to lose when the restart lands
     return outcome
+
+
+async def _slm_host_node_id() -> str | None:
+    """The node this SLM runs on: ``code_sync._get_local_slm_node_id`` (IP match on ``external_url``)."""
+    from api.code_sync import _get_local_slm_node_id  # lazy: code_sync is its one home
+
+    return await _get_local_slm_node_id()
+
+
+async def _issue_after_flush(pending: list) -> None:
+    await wait_for_response_flush()  # the same #816 flush wait the deferred SLM restarts use
+    await issue_deferred(pending)
+
+
+def schedule_self_restarts(outcomes: List[NodeSyncOutcome]) -> None:
+    """Send every held-back self-restart AFTER the response, once all nodes are done (#17455)."""
+    pending = [d for o in outcomes for d in o.plan.deferred]
+    if pending:
+        fire_and_forget(_issue_after_flush(pending), name="post-sync-self-restart")
 
 
 def _failure_message(outcome: NodeSyncOutcome) -> str:
@@ -153,7 +181,9 @@ async def sync_node_post_sync_plan(
         return NodePostSyncResponse(
             success=True, message="No ACTIVE roles on this node", node_id=node_id, run_id=run_id
         )
-    return _node_response(await sync_node_roles(node_id, names, commit, restart, run_id), commit, run_id)
+    outcome = await sync_node_roles(node_id, names, commit, restart, run_id, await _slm_host_node_id())
+    schedule_self_restarts([outcome])
+    return _node_response(outcome, commit, run_id)
 
 
 def _node_response(outcome: NodeSyncOutcome, commit: str, run_id: str) -> NodePostSyncResponse:
@@ -181,14 +211,18 @@ async def sync_role_on_nodes(node_roles: list, role_name: str, commit: str, rest
     always had, plus the run's recorded rows.
     """
     run_id = uuid.uuid4().hex
-    results, success_count, actions = [], 0, []
-    for nr in node_roles:
-        outcome = await sync_node_roles(nr.node_id, [role_name], commit, restart, run_id)
+    host_id = await _slm_host_node_id()
+    ordered = sorted(node_roles, key=lambda nr: nr.node_id == host_id)  # the SLM host LAST (stable)
+    results, success_count, actions, outcomes = [], 0, [], []
+    for nr in ordered:
+        outcome = await sync_node_roles(nr.node_id, [role_name], commit, restart, run_id, host_id)
+        outcomes.append(outcome)
         ok = _outcome_ok(outcome)
         message = f"Synced {role_name} to {nr.node_id}" if ok else _role_failure_message(outcome)
         results.append({"node_id": nr.node_id, "success": ok, "message": message})
         success_count += ok
         actions.extend(outcome.plan.rows)
+    schedule_self_restarts(outcomes)  # only now: every other node is done and every row committed
     return results, success_count, run_id, actions
 
 

@@ -31,8 +31,9 @@ from autobot_shared.ssot_config import config
 # MagicMocks, and `models.database` with them. Load the three modules under test for real, the
 # way test_restart_all_session_lifetime_15611.py does, so the sites run their own code.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-_real_orm = importlib.import_module("_real_orm_import")
-SLM_ROOT, import_modules_with_real_orm = _real_orm.SLM_ROOT, _real_orm.import_modules_with_real_orm
+_orm = importlib.import_module("_real_orm_import")  # a sibling helper, not on the package path
+SLM_ROOT = _orm.SLM_ROOT
+import_modules_with_real_orm = _orm.import_modules_with_real_orm
 
 service_restart, post_sync_runner, node_post_sync, roles = import_modules_with_real_orm(
     ("services.post_sync_runner", "api.node_post_sync", "api.roles"),

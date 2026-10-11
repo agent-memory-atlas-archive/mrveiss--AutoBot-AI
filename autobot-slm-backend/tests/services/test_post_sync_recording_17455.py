@@ -7,18 +7,21 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
-from _real_orm_import import SLM_ROOT, import_modules_with_real_orm  # noqa: E402
+_orm = importlib.import_module("_real_orm_import")  # a sibling helper in tests/api, not on the package path
+SLM_ROOT = _orm.SLM_ROOT
 
-service_restart, recorder, runner = import_modules_with_real_orm(
-    ("services.post_sync_recorder", "services.post_sync_runner"),
+service_restart, recorder, runner, plan_runner = _orm.import_modules_with_real_orm(
+    ("services.post_sync_recorder", "services.post_sync_runner", "services.post_sync_plan_runner"),
     path_loaded={
         "services.service_restart": SLM_ROOT / "services" / "service_restart.py",
     },
@@ -101,3 +104,26 @@ async def test_without_a_run_context_nothing_is_recorded(monkeypatch, recorded):
     _fake_ssh(monkeypatch)
     assert (await runner.restart_units(_base(), ["a.service"])).success
     recorded.assert_not_called()
+
+
+async def test_a_deferred_self_restart_that_is_refused_records_a_failure_not_an_endless_issued(monkeypatch, recorded):
+    """#17455: if `sudo -n` refuses the self-restart the process survives; the row must not stay "issued"."""
+    _fake_ssh(monkeypatch, rc=1, out=b"sudo: a password is required")
+    action = SimpleNamespace(role_name="r", systemd_service="autobot-slm-backend")
+    conn = plan_runner.NodeConn("n1", "node.example.test", "svc", 22)
+    await plan_runner.issue_deferred([plan_runner.DeferredRestart(action, conn, _REC)])
+    outcome = recorded.call_args.args[5]
+    assert (outcome.success, outcome.exit_code) == (False, 1)
+    assert "password is required" in outcome.output_tail
+
+
+async def test_the_issued_row_is_success_unknown_and_written_for_every_deferred_restart(monkeypatch):
+    mock = AsyncMock(return_value={"label": "x"})
+    monkeypatch.setattr(plan_runner, "record_action_run", mock)
+    action = SimpleNamespace(role_name="r", systemd_service="autobot-slm-backend")
+    conn = plan_runner.NodeConn("n1", "node.example.test", "svc", 22)
+    result = plan_runner.PlanResult(deferred=[plan_runner.DeferredRestart(action, conn, _REC)])
+    await plan_runner.record_issued(result)
+    out = mock.call_args.args[5]
+    assert (out.success, out.exit_code) == (None, None) and "issued" in out.error
+    assert result.rows == [{"label": "x"}]

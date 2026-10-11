@@ -403,13 +403,19 @@ def test_the_post_sync_runner_branches_on_the_return_code():
     ), "_spawn_and_wait does not return proc.returncode"
 
     func = _runner_function("_post_sync_outcome")
-    guards = [
-        node
-        for node in ast.walk(func)
-        if isinstance(node, ast.If)
-        and any(isinstance(sub, ast.Name) and sub.id == "code" for sub in ast.walk(node.test))
-    ]
-    assert guards, "nothing in _post_sync_outcome branches on the exit code"
+
+    def _is_code_not_zero(test: ast.AST) -> bool:
+        return (
+            isinstance(test, ast.Compare)
+            and isinstance(test.left, ast.Name)
+            and test.left.id == "code"
+            and isinstance(test.ops[0], ast.NotEq)
+            and isinstance(test.comparators[0], ast.Constant)
+            and test.comparators[0].value == 0
+        )
+
+    guards = [node for node in ast.walk(func) if isinstance(node, ast.If) and _is_code_not_zero(node.test)]
+    assert guards, "_post_sync_outcome has no `if code != 0:` branch"
 
     reports_failure = [
         node
@@ -432,7 +438,7 @@ def test_a_failed_post_sync_stops_before_restart_and_before_marking_synced():
     `record_role_synced` when the plan aborted.
     """
     runner = (_ORCHESTRATOR.parent / "post_sync_plan_runner.py").read_text(encoding="utf-8")
-    failure = runner.index("result.aborted = True")
+    failure = runner.index("result.aborted, result.deferred = True, []")
     assert "break" in runner[failure : failure + 200], "a failed non-restart action does not stop the plan"
 
     node = (_ORCHESTRATOR.parents[1] / "api" / "node_post_sync.py").read_text(encoding="utf-8")

@@ -12,6 +12,7 @@ recorder. The orchestrator and the database are fakes.
 from __future__ import annotations
 
 import ast
+import importlib
 import re
 import sys
 from datetime import datetime, timezone
@@ -20,17 +21,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-
-pytest.importorskip("fastapi")
-
-from fastapi import Depends, FastAPI, status  # noqa: E402
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import Depends, FastAPI, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _real_orm_import import SLM_ROOT, import_modules_with_real_orm  # noqa: E402
+_orm = importlib.import_module("_real_orm_import")  # a sibling helper, not on the package path
+SLM_ROOT = _orm.SLM_ROOT
 
-_loaded = import_modules_with_real_orm(
+_loaded = _orm.import_modules_with_real_orm(
     ("services.post_sync_recorder", "services.post_sync_plan_runner", "api.node_post_sync"),
     path_loaded={
         "services.service_restart": SLM_ROOT / "services" / "service_restart.py",
@@ -67,8 +66,8 @@ class _World:
     def __init__(self, monkeypatch, fail=()):
         self.events: list[tuple] = []
         self.orch = SimpleNamespace(
-            sync_role_files=AsyncMock(return_value=(True, "OK", _CTX)),
-            record_role_synced=AsyncMock(),
+            sync_role_files=AsyncMock(side_effect=self._files),
+            record_role_synced=AsyncMock(side_effect=self._versioned),
         )
         self.fail = set(fail)
         monkeypatch.setattr(node_post_sync, "get_sync_orchestrator", lambda: self.orch)
@@ -76,6 +75,13 @@ class _World:
         monkeypatch.setattr(plan_runner, "run_post_sync_command", self._command)
         monkeypatch.setattr(plan_runner, "restart_units", self._restart)
         monkeypatch.setattr(plan_runner, "record_action_run", self._record)
+
+    async def _files(self, node_id, role_name, commit):
+        self.events.append(("files", node_id))
+        return True, "OK", SimpleNamespace(node_ip=f"{node_id}.example.test", node_user="svc", node_port=22)
+
+    async def _versioned(self, node_id, role_name, commit):
+        self.events.append(("versioned", node_id, role_name))
 
     def _row(self, label, ok):
         return {"label": label, "category": "x", "success": ok, "error": None if ok else "exit 1"}
@@ -86,7 +92,7 @@ class _World:
         return _outcome(ok, {**self._row(label, ok), "category": category})
 
     async def _restart(self, ssh_base, units, rec=None):
-        self.events.append(("restart", " ".join(units)))
+        self.events.append(("restart", " ".join(units), ssh_base[-1]))
         ok = " ".join(units) not in self.fail
         return _outcome(ok, {**self._row("Restart " + " ".join(units), ok), "category": "restart"})
 
@@ -103,27 +109,51 @@ def _restarts(events):
     return [e[1] for e in events if e[0] == "restart"]
 
 
-async def _sync(world, restart=True, names=None):
+async def _sync(world, restart=True, names=None, host_id=None):
     names = names or [r.name for r in _ROLES]
-    return await node_post_sync.sync_node_roles("n1", names, "c1", restart, "run1")
+    return await node_post_sync.sync_node_roles("n1", names, "c1", restart, "run1", host_id)
 
 
 async def test_node_plan_is_node_major_with_ollama_once_chromadb_first_and_slm_backend_last(monkeypatch):
     world = _World(monkeypatch)
     outcome = await _sync(world)
-    kinds = [e[0] if e[0] == "restart" else e[1] for e in world.events if e[0] != "record"]
+    kinds = [e[0] if e[0] == "restart" else e[1] for e in world.events if e[0] in ("restart", "command")]
     assert kinds[:2] == ["install", "schema"] and set(kinds[2:]) == {"restart"}
     assert _restarts(world.events) == ["ollama", "autobot-chromadb", "autobot-ai-stack", "autobot-slm-backend"]
     assert not outcome.plan.aborted
     assert world.orch.record_role_synced.await_count == len(_ROLES)
 
 
-async def test_records_are_committed_before_the_slm_backend_restart_is_issued(monkeypatch):
+async def test_records_and_versions_are_committed_before_the_slm_backend_restart_is_issued(monkeypatch):
     world = _World(monkeypatch)
-    await _sync(world)
-    last = world.events[-2:]
-    assert last[0][0] == "record" and last[0][1:] == ("restart", "autobot-slm-backend", None)  # issued: success unknown
-    assert last[1] == ("restart", "autobot-slm-backend")
+    monkeypatch.setattr(node_post_sync, "wait_for_response_flush", AsyncMock())
+    outcome = await _sync(world, host_id="n1")
+    assert "autobot-slm-backend" not in _restarts(world.events)  # held back: not sent during the sync
+    assert [e[0] for e in world.events[-2:]] == ["versioned", "record"]
+    assert world.events[-1][1:] == ("restart", "autobot-slm-backend", None)  # issued: success unknown
+    assert any(r["success"] is None for r in outcome.plan.rows)  # the issued row is in the response
+    await node_post_sync._issue_after_flush(outcome.plan.deferred)
+    assert world.events[-1][:2] == ("restart", "autobot-slm-backend")
+    assert [e[0] for e in world.events].index("versioned") < len(world.events) - 1
+
+
+async def test_role_sync_puts_the_slm_host_last_and_defers_its_restart_until_every_node_is_done(monkeypatch):
+    world = _World(monkeypatch)
+    sent = []
+    monkeypatch.setattr(node_post_sync, "_slm_host_node_id", AsyncMock(return_value="host"))
+    monkeypatch.setattr(node_post_sync, "fire_and_forget", lambda coro, name: sent.append(coro))
+    monkeypatch.setattr(node_post_sync, "wait_for_response_flush", AsyncMock())
+    node_roles = [SimpleNamespace(node_id=n) for n in ("host", "n2", "n3")]  # the host is FIRST in the input
+    results, ok_count, run_id, actions = await node_post_sync.sync_role_on_nodes(
+        node_roles, "autobot-slm-backend", "c1", True
+    )
+    assert [r["node_id"] for r in results] == ["n2", "n3", "host"] and ok_count == 3
+    synced = [e[1] for e in world.events if e[0] == "versioned"]
+    assert synced == ["n2", "n3", "host"]
+    assert [e[2] for e in world.events if e[0] == "restart"] == ["svc@n2.example.test", "svc@n3.example.test"]
+    assert len(sent) == 1  # one deferred task, scheduled only after the loop
+    await sent[0]
+    assert world.events[-1] == ("restart", "autobot-slm-backend", "svc@host.example.test")
 
 
 async def test_a_failed_install_aborts_the_node_with_no_restart_and_no_version_recorded(monkeypatch):
@@ -162,6 +192,7 @@ async def test_a_role_whose_files_fail_is_reported_and_left_out_of_the_plan(monk
 
 async def test_role_sync_goes_through_the_same_plan_with_one_run_id_across_nodes(monkeypatch):
     world = _World(monkeypatch)
+    monkeypatch.setattr(node_post_sync, "_slm_host_node_id", AsyncMock(return_value=None))
     node_roles = [SimpleNamespace(node_id="n1"), SimpleNamespace(node_id="n2")]
     results, ok_count, run_id, actions = await node_post_sync.sync_role_on_nodes(
         node_roles, "autobot-ai-stack", "c1", True

@@ -305,6 +305,11 @@ async def _load_services(db: AsyncSession, node_id: str, service_names: list) ->
     return [by_name[name] for name in service_names if name in by_name]
 
 
+async def wait_for_response_flush() -> None:
+    """Let the HTTP response flush before a restart that may kill this process (#816, #17455)."""
+    await asyncio.sleep(_RESPONSE_FLUSH_DELAY_SECONDS)
+
+
 async def restart_slm_services(node_id: str, service_names: list) -> None:
     """Restart the deferred SLM services on *node_id*, owning the session used.
 
@@ -317,7 +322,7 @@ async def restart_slm_services(node_id: str, service_names: list) -> None:
         node_id: Node whose SLM services are being restarted
         service_names: Service names, in the order they must be restarted
     """
-    await asyncio.sleep(_RESPONSE_FLUSH_DELAY_SECONDS)  # let the response flush (#816)
+    await wait_for_response_flush()  # #816
 
     from services.database import db_service
 
