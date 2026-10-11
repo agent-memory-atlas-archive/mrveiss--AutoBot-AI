@@ -58,11 +58,6 @@ _PENDING_18230 = "pending-#18230: open PR #18230 edits this file (same-file rule
 
 PENDING: dict[str, str] = {
     _P + "analysis/npu_performance_measurement.py": _PENDING_18230,
-    _P
-    + "monitor_services.py": (
-        "pending-#18287: open PR #18287 replaces its utils.service_registry import with the "
-        "scripts' own registry; remove this entry when it merges"
-    ),
     _P + "verify_knowledge_consistency.py": _PENDING_18230,
 }
 
