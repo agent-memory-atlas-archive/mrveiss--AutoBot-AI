@@ -27,7 +27,7 @@ from api.schemas_knowledge import (
     SearchPerformanceAnalyticsResponse,
 )
 from api.system_health import register_singleton_probe
-from autobot_shared.embedding_model import raise_if_embedding_refused
+from autobot_shared.embedding_model import EmbeddingUnavailableError, raise_if_embedding_refused
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_llm_logger
 
@@ -333,12 +333,19 @@ async def test_npu_connectivity():
 
     except Exception as e:
         logger.warning("NPU connectivity test failed: %s", e)
-        return {
-            "connectivity": "failed",
-            "error": "Internal server error",
-            "fallback_available": True,
-            "timestamp": time.time(),
-        }
+        return _connectivity_failure(e)
+
+
+def _connectivity_failure(exc: Exception) -> dict:
+    """A failed connectivity test. A refused query space has no fallback by design (#18185); for any
+    other failure whether one exists is not determined, so ``fallback_available`` is None."""
+    refused = isinstance(exc, EmbeddingUnavailableError)
+    return {
+        "connectivity": "failed",
+        "error": str(exc) if refused else "Internal server error",
+        "fallback_available": False if refused else None,
+        "timestamp": time.time(),
+    }
 
 
 def _evaluate_device_timing(

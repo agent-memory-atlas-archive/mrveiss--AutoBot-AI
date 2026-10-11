@@ -38,7 +38,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/agents/llm_failsafe_agent.py": 815,
     "autobot-backend/agents/machine_aware_system_knowledge_manager.py": 848,
     "autobot-backend/agents/man_page_knowledge_integrator.py": 696,
-    "autobot-backend/agents/npu_code_search_agent.py": 1339,  # #16173: extracted helpers
+    "autobot-backend/agents/npu_code_search_agent.py": 1334,  # #16173: extracted helpers
     "autobot-backend/agents/overseer/step_executor_agent.py": 650,
     "autobot-backend/agents/rag_agent.py": 602,
     "autobot-backend/agents/security_scanner_agent.py": 663,
@@ -79,7 +79,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/chat.py": 2778,
     "autobot-backend/api/chat_sessions.py": 1953,
     "autobot-backend/api/code_intelligence.py": 2156,
-    "autobot-backend/api/code_search.py": 924,
+    "autobot-backend/api/code_search.py": 922,
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,
     "autobot-backend/api/codebase_analytics/api_endpoint_scanner.py": 1444,
     "autobot-backend/api/codebase_analytics/chromadb_storage.py": 1389,  # #18055: split to problem_storage.py
@@ -282,7 +282,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/monitoring/alertmanager_webhook_test.py": 782,
     "autobot-backend/multimodal_processor/multimodal_integration_test.py": 633,
     "autobot-backend/multimodal_processor/processor.py": 774,
-    "autobot-backend/npu_semantic_search.py": 1604,
+    "autobot-backend/npu_semantic_search.py": 1531,
     # 984 -> 978 (#14039): the single-use _build_slm_ssl_context wrapper was
     # inlined onto autobot_shared.tls.get_internal_tls_context, its only body.
     "autobot-backend/orchestration/dag_executor.py": 978,
