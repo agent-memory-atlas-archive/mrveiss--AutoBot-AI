@@ -208,8 +208,14 @@ class Config:
         self.redis_db = DATABASE_MAPPING["memory"]  # DB 0 — required for RediSearch FT.* (#9943)
         self.index_prefix = "autobot:entities"
         self.relations_prefix = "autobot:relations"
-        self.embedding_model = "nomic-embed-text"
         self.embedding_dimensions = 768
+
+    @property
+    def embedding_model(self) -> str:
+        """The active embedding model, read at call time; no stored vectors are written here (#18143)."""
+        from autobot_shared.embedding_model import active_embedding_model
+
+        return active_embedding_model()
 
 
 config = Config()

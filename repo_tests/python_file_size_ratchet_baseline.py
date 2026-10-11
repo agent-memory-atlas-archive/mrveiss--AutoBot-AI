@@ -166,7 +166,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,
     "autobot-backend/chat_workflow/workflow_plan_approval_test.py": 624,
     "autobot-backend/circuit_breaker.py": 689,
-    "autobot-backend/code_intelligence/analytics_infrastructure.py": 808,
+    "autobot-backend/code_intelligence/analytics_infrastructure.py": 805,
     "autobot-backend/code_intelligence/anti_pattern_detection/analyzer.py": 772,
     "autobot-backend/code_intelligence/bug_predictor.py": 1501,
     "autobot-backend/code_intelligence/bug_predictor_test.py": 759,
