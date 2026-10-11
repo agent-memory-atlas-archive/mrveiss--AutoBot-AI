@@ -13,8 +13,8 @@ canonical file and asserts that
 * each of the nine names is assigned exactly once at module level;
 * every recorded mirror equals the tier it mirrors;
 * no TypeScript or Vue source under `autobot-frontend/src` holds a local-model string literal;
-* the divergences the owner has not yet ruled on are listed in `KNOWN_DIVERGENCES` and still
-  diverge, so resolving one forces its entry to be removed rather than lingering;
+* `complete.yaml` names no model at all (owner decision 2026-10-10: its model sections were dead
+  and are deleted), with a contrast fixture proving the scan sees a model key when one exists;
 * no backend module grows a hand-written tier map: a dict literal with two or more values that
   are canonical local model names. Readers use the constants, so none exists today.
 
@@ -184,54 +184,57 @@ def test_env_registry_hand_copied_defaults_equal_the_ssot() -> None:
     assert got == {name: _canonical()[const] for name, const in _ENV_MIRRORS.items()}
 
 
-# --- (c) known divergences, pending owner decisions ------------------------
+# --- (c) complete.yaml names no model --------------------------------------
 
-_PENDING = "pending the #15502 owner decision"
-#: `(file, dotted path)` -> `(value held today, what it diverges from, reason)`.
-KNOWN_DIVERGENCES: dict[tuple[str, str], tuple[str, str, str]] = {
-    **{
-        (_COMPLETE_YAML, f"llm.models.{role}"): (value, "no canonical tier", f"{_PENDING}; owned by issue-17599")
-        for role, value in (
-            ("rag", "gemma3:270m"),
-            ("chat", "llama3.2:1b-instruct-q4_K_M"),
-            ("classification", "gemma3:270m"),
-        )
-    },
-    **{
-        (_COMPLETE_YAML, f"agents.{role}.model"): (
-            "llama3.2:1b-instruct-q4_K_M",
-            "no canonical tier",
-            f"{_PENDING}; owned by issue-17599",
-        )
-        for role in ("kb_librarian", "research", "chat", "system_commands", "security_scanner", "code_analysis")
-    },
-    (_COMPLETE_YAML, "agent_global.default_model"): (
-        "llama3.2:1b-instruct-q4_K_M",
-        "no canonical tier",
-        f"{_PENDING}; owned by issue-17599",
-    ),
-}
+_MODEL_KEYS = frozenset(
+    {"model", "models", "default_model", "fallback_models", "emergency_fallback_model", "simple", "complex"}
+)
 
 
-def _dig(doc: Any, dotted: str) -> Any:
-    for part in dotted.split("."):
-        doc = doc[part]
-    return doc
+def _model_key_paths(doc: Any, prefix: str = "") -> list[str]:
+    """Dotted paths of every model-bearing key (a string, or a non-empty list / mapping of them)."""
+    found: list[str] = []
+    if isinstance(doc, dict):
+        for key, val in doc.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key in _MODEL_KEYS and val:
+                found.append(path)
+            else:
+                found.extend(_model_key_paths(val, path))
+    elif isinstance(doc, list):
+        for idx, val in enumerate(doc):
+            found.extend(_model_key_paths(val, f"{prefix}[{idx}]"))
+    return found
 
 
 def _ai_stack_value(role: str) -> str:
     return {v: val for v, val, _ in _ai_stack_vars()}[f"ai_{role}_model"]
 
 
-@pytest.mark.parametrize(("file", "path"), sorted(KNOWN_DIVERGENCES))
-def test_a_known_divergence_still_diverges(file: str, path: str) -> None:
-    """Stale entry: once a value is reconciled, the entry must be deleted, not left to rot."""
-    value, _against, reason = KNOWN_DIVERGENCES[file, path]
-    live = _dig(_load_yaml(file), path)
-    assert (
-        live == value
-    ), f"{file}:{path} is now {live!r}, not the recorded {value!r}; update or remove the entry ({reason})"
-    assert live not in _local_models(), f"{file}:{path} now names a canonical model; remove this entry"
+def test_complete_yaml_names_no_model() -> None:
+    """The tier map is the only model authority; complete.yaml carries no model selection (#15502)."""
+    doc = _load_yaml(_COMPLETE_YAML)
+    # Scoped to the LLM-selection subtrees: knowledge_base.*.chunking.model is a sentence-embedding
+    # model for chunking, not a tier model, and is not part of the tier map.
+    llm_selection = {k: doc[k] for k in ("llm", "agents", "agent_global")}
+    assert _model_key_paths(llm_selection) == []
+
+
+def test_the_model_key_scan_sees_a_model_when_one_exists() -> None:
+    """Contrast fixture: a complete.yaml-shaped doc that still names models is reported."""
+    doc = {
+        "llm": {"models": {"rag": "x"}, "tiered_routing": {"models": {"simple": "y"}}, "fallback_models": ["z"]},
+        "agents": {"chat": {"enabled": True, "model": "w"}},
+        "agent_global": {"default_model": "v"},
+    }
+    assert sorted(_model_key_paths(doc)) == [
+        "agent_global.default_model",
+        "agents.chat.model",
+        "llm.fallback_models",
+        "llm.models",
+        "llm.tiered_routing.models",
+    ]
+    assert _model_key_paths({"llm": {"embedding": {"dimensions": 768}}}) == []
 
 
 _KB_ROLES = ("kb_librarian", "knowledge_extraction", "knowledge_retrieval")
@@ -495,3 +498,57 @@ def test_the_pull_list_finder_sees_a_nested_loop_and_ignores_other_tasks() -> No
         }
     ]
     assert _pull_loops(play) == [["a", "b"]]
+
+
+# --- (f) the backend env template and its vars file are pinned mirrors ------
+
+_BACKEND_ENV_TEMPLATE = "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2"
+_BACKEND_ENV_VARS = "autobot-slm-backend/ansible/playbooks/vars/backend-env.yml"
+_BACKEND_ROLE_DEFAULTS = "autobot-slm-backend/ansible/roles/backend/defaults/main.yml"
+#: Ansible var -> the tier constant its inline default must equal.
+_BACKEND_VAR_TIER = {
+    "backend_llm_model": "DEFAULT_LLM_MODEL",
+    "backend_routing_model": "ROUTING_MODEL",
+    "backend_classification_model": "CLASSIFICATION_MODEL",
+    "backend_light_model": "LIGHT_PROCESSING_MODEL",
+    "backend_instruction_model": "INSTRUCTION_MODEL",
+    "backend_system_model": "SYSTEM_MODEL",
+    "backend_embedding_model": "DEFAULT_EMBEDDING_MODEL",
+}
+_TEMPLATE_DEFAULT = re.compile(r"^AUTOBOT_\w+_MODEL=\{\{ (\w+) \| default\('([^']+)'\) \}\}$", re.M)
+_VARS_DEFAULT = re.compile(r"^(\w+): \"\{\{ lookup\('env', '\w+'\) \| default\('([^']+)', true\) \}\}\"$", re.M)
+
+
+def _template_defaults(text: str) -> list[tuple[str, str]]:
+    return _TEMPLATE_DEFAULT.findall(text)
+
+
+def test_backend_env_template_inline_defaults_equal_their_tier() -> None:
+    pairs = _template_defaults(_read(_BACKEND_ENV_TEMPLATE))
+    assert len(pairs) >= 12, "the scan found almost nothing: the template line shape changed"
+    bad = [(v, d) for v, d in pairs if d != _canonical()[_BACKEND_VAR_TIER[v]]]
+    assert bad == [], f"#15502: {_BACKEND_ENV_TEMPLATE} defaults diverge from the tier map: {bad}"
+
+
+def test_backend_env_template_kb_roles_and_embedding_use_their_own_tier() -> None:
+    """The KB roles are INSTRUCTION-tier (not LIGHT) and the embedding alias is not a chat model."""
+    got = {
+        m.group(1): m.group(2)
+        for m in re.finditer(r"^AUTOBOT_(\w+)_MODEL=\{\{ (\w+) \|", _read(_BACKEND_ENV_TEMPLATE), re.M)
+    }
+    for role in ("KB_LIBRARIAN", "KNOWLEDGE_EXTRACTION", "KNOWLEDGE_RETRIEVAL"):
+        assert got[role] == "backend_instruction_model", role
+    assert got["EMBEDDING"] == "backend_embedding_model"
+
+
+def test_backend_env_vars_file_and_role_default_equal_their_tier() -> None:
+    found = dict(_VARS_DEFAULT.findall(_read(_BACKEND_ENV_VARS)))
+    assert set(found) == set(_BACKEND_VAR_TIER), f"unexpected model vars: {sorted(found)}"
+    assert {v: found[v] for v in found} == {v: _canonical()[t] for v, t in _BACKEND_VAR_TIER.items()}
+    role = _load_yaml(_BACKEND_ROLE_DEFAULTS)
+    assert role["backend_llm_model"] == _canonical()["DEFAULT_LLM_MODEL"]
+
+
+def test_the_template_scan_flags_a_diverging_default_and_ignores_a_plain_var() -> None:
+    drift = "AUTOBOT_RAG_MODEL={{ backend_instruction_model | default('phi3:mini') }}\nAUTOBOT_X_MODEL={{ v }}\n"
+    assert _template_defaults(drift) == [("backend_instruction_model", "phi3:mini")]

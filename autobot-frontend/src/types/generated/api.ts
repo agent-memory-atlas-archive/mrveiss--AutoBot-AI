@@ -10544,7 +10544,7 @@ export interface paths {
         };
         /**
          * Get Current Llm
-         * @description Get current LLM model and configuration.
+         * @description Get the current LLM model and provider.
          *
          *     Issue #744: Requires authenticated user.
          */
@@ -80844,10 +80844,6 @@ export interface components {
             model: string;
             /** Provider */
             provider: string;
-            /** Config */
-            config: {
-                [key: string]: unknown;
-            };
         } & {
             [key: string]: unknown;
         };
