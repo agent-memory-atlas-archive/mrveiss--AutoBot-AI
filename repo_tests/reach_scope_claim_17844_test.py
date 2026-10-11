@@ -31,6 +31,7 @@ from pathlib import Path
 import pytest
 import repo_tests.ansible_concept_forks_17856_test as _ansible_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.anti_pattern_type_emitted_18189_test as _anti_pattern_guard  # noqa: F401 -- registers its scope
+import repo_tests.chat_history_async_calls_awaited_18316_test as _chat_async_guard  # noqa: F401 -- registers its scope
 import repo_tests.chat_single_delete_implementation_18316_test as _chat_delete_guard  # noqa: F401 -- registers its scope
 import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
 import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
@@ -181,6 +182,7 @@ _DECLARED_SCOPES = {
     "migration-gate-test-import-sweep": ("autobot-backend/tests/migrations",),
     "paths-filter-workflow-sweep": (".github/workflows",),
     "anti-pattern-type-emitters": ("autobot-backend/code_analysis", "autobot-backend/code_intelligence"),
+    "chat-history-async-calls-awaited": ("autobot-backend/api",),
     "chat-single-delete-implementation": ("autobot-backend/api",),
     "conversation-turn-single-store": ("autobot-backend", "autobot_shared", "autobot-infrastructure"),
     "credential-field-name-only-callers": (

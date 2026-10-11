@@ -153,6 +153,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "front matter and never removed, so the processed share sinks with nothing wrong, and a "
         "fraction of the whole would fire on that drift rather than on a guard going blind.",
     ),
+    "chat-history-async-calls-awaited": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test modules under `autobot-backend/api`, the same population and the same test "
+        "drift as `chat-single-delete-implementation` (#18316).",
+    ),
     "chat-single-delete-implementation": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
