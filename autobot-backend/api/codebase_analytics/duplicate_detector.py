@@ -18,7 +18,6 @@ Issue #554: Enhanced with Vector/Redis/LLM infrastructure:
 - LLM embeddings for detecting semantically similar code patterns
 """
 
-import hashlib
 import os
 import re
 import threading
@@ -28,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
+from autobot_shared.content_digest import content_digest
 from autobot_shared.env_utils import env_int
 from autobot_shared.logging_manager import get_logger
 from utils.file_categorization import (
@@ -209,7 +209,7 @@ def _normalize_code(content: str) -> str:
 
 def _compute_hash(content: str) -> str:
     """Compute SHA-256 hash of content."""
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return content_digest(content)
 
 
 def _extract_code_blocks(file_path: str, content: str) -> List[CodeBlock]:
