@@ -95,32 +95,93 @@ def test_exactly_one_definition_and_it_is_the_canonical_module() -> None:
 _FILE_ROUTES = "autobot-backend/api/conversation_files.py"
 
 
-def _calls_without_strict(source: str) -> list[int]:
-    """Lines of `validate_session_ownership(...)` calls that do not pass `posture=SessionPosture.STRICT`."""
+def _is_ref(node: ast.AST) -> bool:
+    return (isinstance(node, ast.Name) and node.id == _NAME) or (isinstance(node, ast.Attribute) and node.attr == _NAME)
+
+
+def _is_strict_call(node: ast.AST) -> bool:
+    """A call of the validator (bare or `mod.`-qualified) that passes `posture=SessionPosture.STRICT`."""
+    return (
+        isinstance(node, ast.Call)
+        and _is_ref(node.func)
+        and any(kw.arg == "posture" and ast.unparse(kw.value) == "SessionPosture.STRICT" for kw in node.keywords)
+    )
+
+
+def _refs_not_strict(source: str) -> list[int]:
+    """Lines of EVERY reference to the validator that is not a STRICT call: a plain or attribute call,
+    a `Depends(validate_session_ownership)`, or any bare mention. Imports are not references."""
+    tree = ast.parse(source)
+    allowed = {id(n.func) for n in ast.walk(tree) if _is_strict_call(n)}
+    return sorted(n.lineno for n in ast.walk(tree) if _is_ref(n) and id(n) not in allowed)
+
+
+def _is_route(fn: ast.AST) -> bool:
+    return isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+        isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and getattr(d.func.value, "id", "") == "router"
+        for d in fn.decorator_list
+    )
+
+
+def _routes_without_check(source: str) -> list[str]:
+    """@router handlers that reach neither `_authorize_file_operation` nor a STRICT validator call."""
     bad = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == _NAME:
-            strict = any(
-                kw.arg == "posture" and ast.unparse(kw.value) == "SessionPosture.STRICT" for kw in node.keywords
-            )
-            if not strict:
-                bad.append(node.lineno)
+    for fn in ast.walk(ast.parse(source)):
+        if not _is_route(fn):
+            continue
+        reached = any(
+            _is_strict_call(n) or (isinstance(n, ast.Name) and n.id == "_authorize_file_operation")
+            for n in ast.walk(fn)
+        )
+        if not reached:
+            bad.append(fn.name)
     return bad
+
+
+_STRICT_CALL = "validate_session_ownership(s, r, posture=SessionPosture.STRICT)"
 
 
 @pytest.mark.parametrize(
     ("label", "source", "expected"),
     [
-        ("strict", "validate_session_ownership(s, r, posture=SessionPosture.STRICT)\n", []),
+        ("strict", f"{_STRICT_CALL}\n", []),
+        ("strict through a module", "m.validate_session_ownership(s, r, posture=SessionPosture.STRICT)\n", []),
         ("default", "validate_session_ownership(s, r)\n", [1]),
         ("another posture", "validate_session_ownership(s, r, posture=SessionPosture.DEFAULT)\n", [1]),
+        ("a Depends form", "def f(o=Depends(validate_session_ownership)):\n    pass\n", [1]),
+        ("an attribute call", "m.validate_session_ownership(s, r)\n", [1]),
+        ("a bare mention", "x = validate_session_ownership\n", [1]),
+        ("an import only", "from security.session_ownership import validate_session_ownership\n", []),
     ],
 )
-def test_the_strict_call_matcher_tells_strict_from_not(label: str, source: str, expected: list[int]) -> None:
-    assert _calls_without_strict(source) == expected, label
+def test_the_reference_matcher_flags_every_non_strict_use(label: str, source: str, expected: list[int]) -> None:
+    assert _refs_not_strict(source) == expected, label
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "expected"),
+    [
+        (
+            "authorized helper",
+            "@router.get('/x')\nasync def h(r, s):\n    await _authorize_file_operation(r, s, 'v')\n",
+            [],
+        ),
+        ("strict call", f"@router.get('/x')\nasync def h(r, s):\n    await {_STRICT_CALL}\n", []),
+        ("no check at all", "@router.get('/x')\nasync def h(r, s):\n    return 1\n", ["h"]),
+        (
+            "a default call is not a check",
+            "@router.get('/x')\nasync def h(r, s):\n    await validate_session_ownership(s, r)\n",
+            ["h"],
+        ),
+        ("a non-route needs none", "async def helper(r, s):\n    return 1\n", []),
+    ],
+)
+def test_the_route_matcher_finds_a_handler_with_no_check(label: str, source: str, expected: list[str]) -> None:
+    assert _routes_without_check(source) == expected, label
 
 
 def test_every_file_route_check_runs_under_the_strict_posture() -> None:
     source = (repo_root() / _FILE_ROUTES).read_text(encoding="utf-8")
     assert _NAME in source, "the file routes no longer reach the validator at all"
-    assert _calls_without_strict(source) == []
+    assert _refs_not_strict(source) == []
+    assert _routes_without_check(source) == []
