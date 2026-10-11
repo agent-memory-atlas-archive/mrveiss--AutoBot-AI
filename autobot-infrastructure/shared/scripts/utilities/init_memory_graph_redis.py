@@ -28,8 +28,8 @@ Features:
 Usage:
     python init_memory_graph_redis.py [--migrate] [--validate] [--benchmark] [--rollback]
 
-    --migrate reads the legacy transcripts relative to the working directory, so run it
-    from the backend's working directory (#18293).
+    --migrate reads the legacy transcripts from AUTOBOT_LEGACY_TRANSCRIPTS_DIR (SSOT config,
+    relative to AUTOBOT_BASE_DIR) -- the same directory the backend resolves (#18293).
 """
 
 import argparse
@@ -888,7 +888,7 @@ def _execute_memory_graph_phases(initializer: MemoryGraphInitializer, args) -> b
         logger.info("PHASE 3: Conversation Migration")
         logger.info("=" * 80)
 
-        # #18293: run from the backend's working directory -- that is where the legacy transcripts are.
+        # #18293: SSOT-config location, the same one the backend reads.
         transcript_dir = legacy_conversation_transcripts_dir()
         migration_stats = initializer.migrate_conversations(transcript_dir)
         logger.info("\nMigration Results:")

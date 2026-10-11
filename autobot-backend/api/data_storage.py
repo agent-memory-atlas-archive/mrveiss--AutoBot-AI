@@ -18,7 +18,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.data_storage_categories import category_dir, get_cleanable_categories, get_protected_categories
+from api.data_storage_categories import (
+    LEGACY_TRANSCRIPTS_CATEGORY,
+    category_dir,
+    get_cleanable_categories,
+    get_protected_categories,
+)
 from api.schemas_system import (
     CleanupResult,
     StorageCategory,
@@ -37,7 +42,8 @@ from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.path_http import require_contained_relative_path
 from autobot_shared.security.path_validator import validate_relative_path
-from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS, legacy_conversation_transcripts_dir
+from autobot_shared.store_authority import legacy_conversation_transcripts_dir
+from chat_history.legacy_transcripts import legacy_transcript_file
 from utils.catalog_http_exceptions import raise_server_error
 
 router = APIRouter(prefix="/data-storage", tags=["Data Storage"])
@@ -53,7 +59,7 @@ def _safe_data_path(user_segment: str) -> Path:
     Uses shared path validator (#1721). The legacy transcript category is the one
     that lives outside DATA_DIR (#18293).
     """
-    if user_segment == LEGACY_CONVERSATION_TRANSCRIPTS:
+    if user_segment == LEGACY_TRANSCRIPTS_CATEGORY:
         return category_dir(DATA_DIR, user_segment)
     return require_contained_relative_path(user_segment, DATA_DIR)
 
@@ -418,14 +424,14 @@ async def delete_conversation(
         files_deleted = []
         errors = []
 
-        transcripts_base = legacy_conversation_transcripts_dir()
-        transcript_path = validate_relative_path(f"{conversation_id}.json", transcripts_base)
-        if transcript_path.exists():
-            try:
-                transcript_path.unlink()
-                files_deleted.append(str(transcript_path.name))
-            except (OSError, PermissionError):
-                errors.append("Error deleting transcript")
+        # #18293: a legacy transcript is protected exactly like its bulk category -- its
+        # disposal goes through the #17038 review queue, never through this route.
+        if legacy_transcript_file(conversation_id) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Conversation '{conversation_id}' has a protected legacy transcript; "
+                "its removal goes through the approval queue",
+            )
 
         chats_dir = DATA_DIR / "chats"
         for suffix in ["_chat.json", "_terminal_transcript.txt"]:

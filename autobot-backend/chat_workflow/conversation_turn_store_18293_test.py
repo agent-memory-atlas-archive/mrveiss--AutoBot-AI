@@ -4,9 +4,10 @@
 # Author: mrveiss
 """LLM context is a projection of chat_sessions; the transcript store is read-only (#18293).
 
-Every test runs from a ``tmp_path`` working directory, which is where the retired
-writer resolved its relative ``data/conversation_transcripts`` path -- so "no file
-was written" is checked against the exact place the old code wrote to.
+Every test runs from a ``tmp_path`` working directory -- where the retired writer
+resolved its relative ``data/conversation_transcripts`` path -- with the SSOT
+location (``config.path.legacy_transcripts_dir``) pointed at that same directory,
+so "no file was written" is checked against the exact place the old code wrote to.
 """
 
 import json
@@ -18,6 +19,7 @@ import pytest
 
 import chat_history
 import chat_history.legacy_transcripts as legacy
+from autobot_shared.ssot_config import config
 from autobot_shared.store_authority import legacy_conversation_transcripts_dir
 from chat_workflow.conversation import ConversationHandlerMixin
 from chat_workflow.models import WorkflowSession
@@ -57,6 +59,7 @@ def _bytes(path) -> bytes:
 @pytest.fixture(autouse=True)
 def _isolated_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config.path, "legacy_transcripts_dir", str(tmp_path / "data" / "conversation_transcripts"))
     monkeypatch.setattr(legacy, "_LOGGED_SESSIONS", set())
 
 

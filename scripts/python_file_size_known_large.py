@@ -77,7 +77,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/browser_mcp.py": 1340,
     "autobot-backend/api/cache_management.py": 779,
     "autobot-backend/api/chat.py": 2778,
-    "autobot-backend/api/chat_sessions.py": 1953,
+    "autobot-backend/api/chat_sessions.py": 1941,  # #18293: delete-and-verify moved out
     "autobot-backend/api/code_intelligence.py": 2156,
     "autobot-backend/api/code_search.py": 924,
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,

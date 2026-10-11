@@ -12,12 +12,16 @@ is PROTECTED: bulk cleanup cannot remove sessions whose turns exist only there.
 
 from pathlib import Path
 
-from autobot_shared.store_authority import LEGACY_CONVERSATION_TRANSCRIPTS, legacy_conversation_transcripts_dir
+from autobot_shared.store_authority import legacy_conversation_transcripts_dir
+
+#: The category id of the legacy transcripts -- the store_authority concept name, not
+#: a directory: the directory comes from SSOT config (#18293).
+LEGACY_TRANSCRIPTS_CATEGORY = "legacy_conversation_transcripts"
 
 
 def category_dir(data_dir: Path, category_path: str) -> Path:
     """The directory holding *category_path*'s files."""
-    if category_path == LEGACY_CONVERSATION_TRANSCRIPTS:
+    if category_path == LEGACY_TRANSCRIPTS_CATEGORY:
         return legacy_conversation_transcripts_dir()
     return data_dir / category_path
 
@@ -73,7 +77,7 @@ def get_protected_categories() -> list[dict]:
         {
             # #18293: read-only legacy store; disposal goes through the #17038 review queue.
             "name": "Conversation Transcripts (legacy)",
-            "path": LEGACY_CONVERSATION_TRANSCRIPTS,
+            "path": LEGACY_TRANSCRIPTS_CATEGORY,
             "description": "Legacy chat transcripts, read-only; chat sessions are the system of record",
         },
     ]

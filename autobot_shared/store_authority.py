@@ -81,22 +81,23 @@ class Concept:
 
 _FACTS = "autobot-backend/knowledge/facts.py"
 
-#: Directory name of the retired per-turn transcript store (#18293). Never join
-#: it onto a data root yourself -- call :func:`legacy_conversation_transcripts_dir`.
-#: ``repo_tests/conversation_turn_single_store_18293_test.py`` fails a write under it.
-LEGACY_CONVERSATION_TRANSCRIPTS = "conversation_transcripts"
-
 
 def legacy_conversation_transcripts_dir() -> Path:
     """The ONE resolution of the legacy transcript directory, absolute (#18293).
 
-    Resolved exactly as the retired writer resolved it: ``data/conversation_transcripts``
-    relative to the process working directory, which for the backend service is its
-    own code directory. That is NOT ``PATH.DATA_DIR`` (the project root's ``data/``),
-    where readers used to look and where nothing was ever written. Call it from the
-    backend's working directory -- a script elsewhere must ``cd`` there first.
+    Read from SSOT config: ``config.path.legacy_transcripts_dir``
+    (``AUTOBOT_LEGACY_TRANSCRIPTS_DIR``), relative to ``base_dir`` unless absolute.
+    The default, ``data/conversation_transcripts`` under ``base_dir``, is where the
+    retired writer put the files: it resolved that path against its working
+    directory, and on an Ansible install ``AUTOBOT_BASE_DIR`` IS the backend's code
+    and working directory. It is not ``data_dir``/``PATH.DATA_DIR``, where readers
+    used to look and nothing was ever written. No working-directory dependence: a
+    script run from anywhere resolves the same directory as the service.
+    ``repo_tests/conversation_turn_single_store_18293_test.py`` fails a write under it.
     """
-    return Path.cwd().resolve() / "data" / LEGACY_CONVERSATION_TRANSCRIPTS
+    from autobot_shared.ssot_config import config
+
+    return config.path.resolve(config.path.legacy_transcripts_dir).resolve()
 
 
 #: Keyed by concept name. Ordered by store so a reader can see, in one pass,
