@@ -10,6 +10,10 @@ Comprehensive performance monitoring system initialization and management.
 One launcher for both monitoring backends (#17906). ``--backend performance`` (the default) drives
 ``utils.performance_monitor``; ``--backend hardware`` drives ``utils.hardware_metrics`` and keeps the
 retired ``start_hardware_monitoring.py``'s log file and benchmark location.
+
+A backend tool (#18288): it drives backend monitors, so it puts the backend on its own path. Run it
+from anywhere as ``python3 autobot-infrastructure/shared/scripts/monitoring/start_monitoring.py
+[--backend hardware] <command>``; no PYTHONPATH is needed.
 """
 
 import argparse
@@ -25,26 +29,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
-from autobot_shared.async_compat import fire_and_forget
-
-# Add autobot-backend to Python path so the `constants.*` and `utils.*` imports
-# below resolve regardless of the caller's working directory. The previous
-# `Path(__file__).parent.parent.parent` landed on autobot-infrastructure/shared/,
-# which has neither a `constants` nor a `utils` package, so every import below
-# raised at module import time and this script could not start at all (#15643).
-# The same fix start_hardware_monitoring.py got in #14129; one launcher now means
-# it is fixed once (#17906).
+# Two roots, kept apart on purpose (#15643). `backend_root` is the IMPORT root for the backend's
+# `constants.*` and `utils.*`; `project_root` is the repository root, which is both the import root
+# for `autobot_shared` (#18288: the script used to need it on the caller's PYTHONPATH) and the DATA
+# root for `logs/` and `reports/`. `Path(__file__).parent.parent.parent` once landed on
+# autobot-infrastructure/shared/ and the script could not start at all (#15643, #14129).
+project_root = Path(__file__).resolve().parents[4]
 backend_root = Path(__file__).resolve().parents[4] / "autobot-backend"
 sys.path.insert(0, str(backend_root))
+sys.path.insert(0, str(project_root))
 
-# The REPOSITORY root, kept separate from the import root on purpose (#15643).
-# `project_root` previously meant autobot-infrastructure/shared -- not the project
-# root at all -- and was used both for sys.path and for the data directories
-# below. Pointing one name at autobot-backend would have silently moved logs and
-# reports under the backend. They belong beside the repo's other `logs/` and
-# `reports/` trees, which .gitignore already lists.
-project_root = Path(__file__).resolve().parents[4]
-
+from autobot_shared.async_compat import fire_and_forget  # noqa: E402
 from constants.threshold_constants import CategoryDefaults, TimingConstants
 from utils.gpu_acceleration_optimizer import (
     benchmark_gpu,

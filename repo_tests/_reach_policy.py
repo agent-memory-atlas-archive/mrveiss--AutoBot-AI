@@ -222,6 +222,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "One frontend's components, against all tracked `.vue`.",
     ),
+    "infra-backend-import-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python under the infrastructure tree, against all tracked Python; the backend grows independently.",
+    ),
     "kb-admin-read-bypass": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
