@@ -43,7 +43,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/agents/llm_failsafe_agent.py": 815,
     "autobot-backend/agents/machine_aware_system_knowledge_manager.py": 848,
     "autobot-backend/agents/man_page_knowledge_integrator.py": 696,
-    "autobot-backend/agents/npu_code_search_agent.py": 1346,  # #16173: extracted helpers
+    "autobot-backend/agents/npu_code_search_agent.py": 1334,  # #16173: extracted helpers
     "autobot-backend/agents/overseer/step_executor_agent.py": 650,
     "autobot-backend/agents/rag_agent.py": 602,
     "autobot-backend/agents/security_scanner_agent.py": 663,
@@ -84,7 +84,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/chat.py": 2778,
     "autobot-backend/api/chat_sessions.py": 1953,
     "autobot-backend/api/code_intelligence.py": 2156,
-    "autobot-backend/api/code_search.py": 924,
+    "autobot-backend/api/code_search.py": 922,
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,
     "autobot-backend/api/codebase_analytics/api_endpoint_scanner.py": 1444,
     "autobot-backend/api/codebase_analytics/chromadb_storage.py": 1389,  # #18055: split to problem_storage.py
@@ -133,7 +133,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/provider_auth.py": 646,
     "autobot-backend/api/redis_mcp/tools.py": 669,
     "autobot-backend/api/rum.py": 604,
-    "autobot-backend/api/schemas_agent.py": 2225,
+    "autobot-backend/api/schemas_agent.py": 2224,
     "autobot-backend/api/schemas_analytics.py": 3543,
     "autobot-backend/api/schemas_chat.py": 702,
     "autobot-backend/api/schemas_code.py": 3265,
@@ -154,7 +154,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/auth_middleware.py": 1088,  # #16457: bearer parsing moved to websocket_subprotocol.py
     "autobot-backend/autobot_memory_graph/property_graph.py": 630,
     "autobot-backend/autobot_memory_graph/relations.py": 641,
-    "autobot-backend/autobot_memory_graph/semantic_search.py": 717,
+    "autobot-backend/autobot_memory_graph/semantic_search.py": 716,
     "autobot-backend/benchmarks/benchmark_belief_state.py": 742,
     "autobot-backend/chat_history/context_overflow.py": 845,
     "autobot-backend/chat_history/session.py": 939,
@@ -232,11 +232,11 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/knowledge/categories.py": 965,
     "autobot-backend/knowledge/collections.py": 728,
     "autobot-backend/knowledge/connectors/base.py": 663,
-    "autobot-backend/knowledge/connectors/credential_store.py": 778,  # #16444: rotate() validates the merged bundle
+    "autobot-backend/knowledge/connectors/credential_store.py": 768,  # #16444: rotate() validates the merged bundle
     "autobot-backend/knowledge/connectors/gdrive.py": 702,
     "autobot-backend/knowledge/connectors/gitlab.py": 873,
     "autobot-backend/knowledge/connectors/onedrive.py": 642,
-    "autobot-backend/knowledge/connectors/tests/test_credential_store.py": 1043,
+    "autobot-backend/knowledge/connectors/tests/test_credential_store.py": 1021,
     "autobot-backend/knowledge/facts.py": 1783,
     "autobot-backend/knowledge/ownership.py": 757,
     "autobot-backend/knowledge/pipeline/cognifiers/cognifiers_test.py": 806,
@@ -287,7 +287,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/monitoring/alertmanager_webhook_test.py": 782,
     "autobot-backend/multimodal_processor/multimodal_integration_test.py": 633,
     "autobot-backend/multimodal_processor/processor.py": 774,
-    "autobot-backend/npu_semantic_search.py": 1647,
+    "autobot-backend/npu_semantic_search.py": 1531,
     # 984 -> 978 (#14039): the single-use _build_slm_ssl_context wrapper was
     # inlined onto autobot_shared.tls.get_internal_tls_context, its only body.
     "autobot-backend/orchestration/dag_executor.py": 978,
@@ -412,8 +412,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/tests/unit/knowledge/connectors/test_web_crawler.py": 655,
     "autobot-backend/tests/utils/gpu_optimization/test_gpu_detection.py": 718,
     "autobot-backend/tools/tool_registry.py": 959,
-    # #15772: SAVEPOINT insert call, race handled in user_service_conflict.py
-    "autobot-backend/user_management/services/user_service.py": 900,
     "autobot-backend/utils/advanced_cache_manager.py": 1213,
     "autobot-backend/utils/claude_api_integration.py": 917,
     "autobot-backend/utils/distributed_service_discovery.py": 684,
@@ -489,7 +487,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/tests/services/test_sso_service.py": 1258,
     "autobot-slm-backend/tests/test_cleanup_never_destroys_data_14856.py": 981,
     "autobot-slm-backend/user_management/services/sso_service.py": 778,
-    "autobot-slm-backend/user_management/services/user_service.py": 863,
     "autobot_shared/env_registry.py": 1215,  # #13602: +1 sibling import, -14 registration
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 616,

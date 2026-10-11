@@ -28,40 +28,32 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Dict, List
 
 import aiohttp
 import yaml
 
 from autobot_shared.http_client import get_http_client
-from autobot_shared.ssot_config import config as ssot_config
+from autobot_shared.service_registry_core import (
+    SERVICE_DEFINITIONS,
+    DeploymentMode,
+    ServiceHealth,
+    build_base_url,
+    detect_deployment_mode,
+    join_service_path,
+    parse_deployment_mode,
+)
 
 # Import unified configuration system - NO HARDCODED VALUES
 from config.manager import get_config_manager
 
 config = get_config_manager()
 from autobot_shared.logging_manager import get_logger
-from constants.api_constants import PATH_API_HEALTH, PATH_HEALTH, PATH_OLLAMA_TAGS
+from autobot_shared.status_enums import HealthStatus
+from constants.api_constants import PATH_HEALTH
 
-
-class RegistryServiceStatus(Enum):
-    """Service health status"""
-
-    HEALTHY = "healthy"
-    UNHEALTHY = "unhealthy"
-    UNKNOWN = "unknown"
-    CIRCUIT_OPEN = "circuit_open"
-
-
-class DeploymentMode(Enum):
-    """Deployment mode detection"""
-
-    LOCAL = "local"  # Single machine, no containers
-    DOCKER_LOCAL = "docker_local"  # Docker Compose on single machine
-    DISTRIBUTED = "distributed"  # Services across multiple machines
-    KUBERNETES = "kubernetes"  # Kubernetes deployment
-    CLOUD = "cloud"  # Cloud-managed services
+# Alias of the canonical enum (#12771): same members, same identity.
+RegistryServiceStatus = HealthStatus
 
 
 @dataclass
@@ -78,17 +70,6 @@ class ServiceConfig:
     retries: int = None  # Will use config
     circuit_breaker_threshold: int = None  # Will use config
     circuit_breaker_timeout: int = None  # Will use config
-
-
-@dataclass
-class ServiceHealth:
-    """Service health state"""
-
-    status: RegistryServiceStatus
-    last_check: float
-    failure_count: int = 0
-    circuit_open_until: float = 0
-    response_time: float = 0
 
 
 class ServiceRegistry:
@@ -113,45 +94,12 @@ class ServiceRegistry:
         if cls._cached_default_services is not None:
             return cls._cached_default_services
         cls._cached_default_services = {
-            "redis": {
-                "port": ssot_config.port.redis,
-                "health_endpoint": "/",
-                "schemes": {
-                    "local": "redis",
-                    "docker": "redis",
-                    "distributed": "redis",
-                },
-            },
-            "ai-stack": {
-                "port": ssot_config.port.aistack,
-                "health_endpoint": PATH_HEALTH,
-                "schemes": {"local": "http", "docker": "http", "distributed": "http"},
-            },
-            "npu-worker": {
-                "port": ssot_config.port.npu,
-                "health_endpoint": PATH_HEALTH,
-                "schemes": {"local": "http", "docker": "http", "distributed": "http"},
-            },
-            "backend": {
-                "port": ssot_config.port.backend,
-                "health_endpoint": PATH_API_HEALTH,
-                "schemes": {"local": "http", "docker": "http", "distributed": "http"},
-            },
-            "frontend": {
-                "port": ssot_config.port.frontend,
-                "health_endpoint": "/",
-                "schemes": {"local": "http", "docker": "http", "distributed": "http"},
-            },
-            "playwright-vnc": {
-                "port": ssot_config.port.browser,
-                "health_endpoint": PATH_HEALTH,
-                "schemes": {"local": "http", "docker": "http", "distributed": "http"},
-            },
-            "ollama": {
-                "port": ssot_config.port.ollama,
-                "health_endpoint": PATH_OLLAMA_TAGS,
-                "schemes": {"local": "http", "docker": "http", "distributed": "http"},
-            },
+            name: {
+                "port": d.port,
+                "health_endpoint": d.health_path,
+                "schemes": {"local": d.scheme, "docker": d.scheme, "distributed": d.scheme},
+            }
+            for name, d in SERVICE_DEFINITIONS.items()
         }
         return cls._cached_default_services
 
@@ -165,13 +113,7 @@ class ServiceRegistry:
             DeploymentMode.LOCAL: {
                 # DEFAULT HYBRID: Backend/frontend on localhost, Docker services on localhost ports
                 "default": config.get("infrastructure.defaults.localhost"),
-                "redis": ssot_config.vm.redis,
-                "backend": ssot_config.vm.main,
-                "frontend": ssot_config.vm.frontend,
-                "ai-stack": ssot_config.vm.aistack,
-                "npu-worker": ssot_config.vm.npu,
-                "playwright-vnc": ssot_config.vm.browser,
-                "ollama": ssot_config.vm.ollama,
+                **{name: d.host for name, d in SERVICE_DEFINITIONS.items()},
                 "lmstudio": "localhost",
             },
             DeploymentMode.DOCKER_LOCAL: {
@@ -207,31 +149,13 @@ class ServiceRegistry:
 
     def _detect_deployment_mode(self) -> DeploymentMode:
         """Detect current deployment mode"""
-        # Check for explicit mode setting
-        mode = config.get("deployment.mode", "").lower()
-        if mode:
-            try:
-                return DeploymentMode(mode)
-            except ValueError:
-                self.logger.warning("Invalid deployment mode: %s", mode)
-
-        # Auto-detect based on environment
-        # DEFAULT BEHAVIOR: Local + Docker hybrid (backend on host, services in containers)
-        if os.path.exists("/.dockerenv"):
-            # Running inside container
-            if config.get("deployment.kubernetes.service_host", False):
-                return DeploymentMode.KUBERNETES
-            elif config.get("deployment.distributed", False):
-                return DeploymentMode.DISTRIBUTED
-            else:
-                return DeploymentMode.DOCKER_LOCAL
-        else:
-            # Running on host - DEFAULT: Local with Docker services
-            if config.get("deployment.mode") == "distributed":
-                return DeploymentMode.DISTRIBUTED
-            else:
-                # Default hybrid mode: backend/frontend on localhost, services in Docker
-                return DeploymentMode.LOCAL
+        explicit = parse_deployment_mode(config.get("deployment.mode", "").lower(), self.logger, "deployment.mode")
+        return detect_deployment_mode(
+            explicit,
+            in_container=os.path.exists("/.dockerenv"),
+            kubernetes=bool(config.get("deployment.kubernetes.service_host", False)),
+            distributed=bool(config.get("deployment.distributed", False)),
+        )
 
     def _load_default_services(self):
         """Load default service configurations from unified config"""
@@ -357,15 +281,8 @@ class ServiceRegistry:
 
         service = self.services[service_name]
 
-        # Construct URL
-        base_url = f"{service.scheme}://{service.host}:{service.port}"
-
-        # Add service path and requested path
-        full_path = f"{service.path.rstrip('/')}{path}" if path else service.path
-        if full_path and not full_path.startswith("/"):
-            full_path = f"/{full_path}"
-
-        return f"{base_url}{full_path}"
+        base_url = build_base_url(service.scheme, service.host, service.port)
+        return join_service_path(base_url, service.path, path)
 
     def get_service_config(self, service_name: str) -> ServiceConfig | None:
         """Get service configuration"""

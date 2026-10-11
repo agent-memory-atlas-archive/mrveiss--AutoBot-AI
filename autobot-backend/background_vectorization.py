@@ -17,10 +17,10 @@ import time
 from datetime import datetime, timezone
 
 from autobot_shared.async_compat import fire_and_forget
+from autobot_shared.embedding_model import active_embedding_model
 from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.missing_dep import MissingDep as _MissingDep
-from autobot_shared.ssot_config import DEFAULT_EMBEDDING_MODEL
 from constants.threshold_constants import TimingConstants
 from knowledge.vector_membership import vectorized_ids
 
@@ -74,7 +74,7 @@ class BackgroundVectorizer:
         self._checks_run = 0
         self.last_check_at: datetime | None = None
         # Embedding model used (from config or default)
-        self.embedding_model = DEFAULT_EMBEDDING_MODEL
+        self.embedding_model = active_embedding_model()
 
     async def _track_embedding_usage(
         self,

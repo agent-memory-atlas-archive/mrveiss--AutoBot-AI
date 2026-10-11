@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Tuple
 
 import aiohttp
 
+from autobot_shared.embedding_model import active_embedding_model, npu_worker_model_name
 from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_logger
@@ -221,7 +222,7 @@ class NPUClient:
     async def generate_embeddings(
         self,
         texts: List[str],
-        model_name: str = "nomic-embed-text",
+        model_name: str | None = None,
         use_cache: bool = True,
     ) -> EmbeddingResult | None:
         """
@@ -237,13 +238,14 @@ class NPUClient:
         """
         if not texts:
             return None
+        model_name = model_name or active_embedding_model()
 
         try:
             session = await self._get_session()
             async with session.post(
                 f"{self.base_url}/embedding/generate",
                 json=texts,
-                params={"model_name": model_name, "use_cache": str(use_cache).lower()},
+                params={"model_name": npu_worker_model_name(model_name), "use_cache": str(use_cache).lower()},
                 timeout=aiohttp.ClientTimeout(total=BATCH_TIMEOUT),
             ) as response:
                 if response.status == 200:
@@ -264,7 +266,7 @@ class NPUClient:
 
         return None
 
-    async def generate_embedding(self, text: str, model_name: str = "nomic-embed-text") -> List[float] | None:
+    async def generate_embedding(self, text: str, model_name: str | None = None) -> List[float] | None:
         """
         Generate single embedding using NPU worker.
 
@@ -400,7 +402,7 @@ async def _try_ollama_embedding(text: str, model_name: str, ollama_url: str) -> 
 # Embedding generation with automatic fallback
 async def generate_embedding_with_fallback(
     text: str,
-    model_name: str = "nomic-embed-text",
+    model_name: str | None = None,
     ollama_host: str = None,
     ollama_port: str = None,
     max_attempts: int = 1,
@@ -431,6 +433,7 @@ async def generate_embedding_with_fallback(
     """
     client = get_npu_client()
     max_attempts = max(1, max_attempts)
+    model_name = model_name or active_embedding_model()
 
     # Fallback to Ollama - use SSOT config for defaults
     # config.port.ollama is the canonical path for the port (MVA-1454 / 6c0726ec1).
@@ -484,7 +487,7 @@ async def generate_embedding_with_fallback(
 
 
 async def generate_embeddings_batch_with_fallback(
-    texts: List[str], model_name: str = "nomic-embed-text", max_concurrent: int = 5
+    texts: List[str], model_name: str | None = None, max_concurrent: int = 5
 ) -> List[List[float] | None]:
     """
     Generate embeddings for multiple texts with fallback.
@@ -495,6 +498,7 @@ async def generate_embeddings_batch_with_fallback(
     if not texts:
         return []
 
+    model_name = model_name or active_embedding_model()
     client = get_npu_client()
 
     # Try NPU worker batch endpoint first

@@ -99,6 +99,25 @@ class SemanticChunkerBase(ABC):
         """Compute sentence embeddings. Implementation is hardware-specific."""
 
     # ------------------------------------------------------------------
+    # Public embedding API -- the deliberate entry points for callers that
+    # need this chunker's own vectors (#18185). Never reach for the hooks.
+    # ------------------------------------------------------------------
+
+    async def load_embedding_model(self) -> None:
+        """Load the embedding model now (idempotent)."""
+        await self._initialize_model()
+
+    async def embed_sentences(self, sentences: List[str]) -> np.ndarray:
+        """Embed `sentences` with this chunker's model (async)."""
+        return await self._compute_embeddings(sentences)
+
+    def embed_sentences_sync(self, sentences: List[str]) -> np.ndarray:
+        """Embed `sentences` from synchronous code without blocking a running loop (#7469)."""
+        from autobot_shared.async_compat import run_or_schedule
+
+        return run_or_schedule(self._compute_embeddings(sentences))
+
+    # ------------------------------------------------------------------
     # Shared pipeline
     # ------------------------------------------------------------------
 

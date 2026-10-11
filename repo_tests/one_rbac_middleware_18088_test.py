@@ -169,7 +169,7 @@ def test_each_shim_re_exports_every_name_its_call_sites_import(rel: str) -> None
     missing = REQUIRED_EXPORTS - _imported_names(_tree(rel))
     assert not missing, (
         f"#18088: {rel} does not re-export {sorted(missing)}. Call sites import these "
-        "(api/secrets.py, api/envelope_secrets.py, user_management/services/user_service.py, "
+        "(api/secrets.py, api/envelope_secrets.py, "
         "and the cache-invalidation test); omitting one breaks them at runtime, not here."
     )
 

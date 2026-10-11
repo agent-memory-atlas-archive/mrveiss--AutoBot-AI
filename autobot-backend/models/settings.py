@@ -83,7 +83,7 @@ telemetry_settings = config.telemetry
 # --------------------------------------------------------------------------
 CONSOLIDATED_INTO = {
     "llm.default_llm": "autobot_shared.ssot_config.LLMConfig.provider",
-    "llm.orchestrator_llm": "autobot_shared.ssot_config.LLMConfig.orchestrator_model",
+    "llm.orchestrator_llm": "autobot_shared.ssot_config.LLMConfig.planning_model",
     "llm.task_llm": "autobot_shared.ssot_config.LLMConfig.provider",
     "llm.ollama_host": "autobot_shared.ssot_config.VMConfig.ollama",
     "llm.ollama_port": "autobot_shared.ssot_config.PortConfig.ollama",

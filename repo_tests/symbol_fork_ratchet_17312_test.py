@@ -253,6 +253,32 @@ def test_no_new_fork_clusters() -> None:
     )
 
 
+def _stale_entries(current: set[str], baseline: list[str]) -> list[str]:
+    """Baseline names that are no longer a fork cluster in *current*."""
+    return sorted(set(baseline) - current)
+
+
+def test_no_stale_baseline_entries() -> None:
+    """The other direction of the ratchet, against the REAL tree (#18088).
+
+    `test_a_stale_baseline_entry_fails_the_default_check` proves the detector can
+    see staleness on a monkeypatched baseline; nothing ran that check against the
+    tree itself, and no workflow runs the CLI. So `RBACMiddleware` and
+    `require_all_permissions` stayed listed after #18159 removed their second
+    definition, tolerating whatever took those names next.
+    """
+    current = set(detector.find_clusters(detector.tracked_python_files())[0])
+    assert _stale_entries(current, ["ANameNobodyDefinesTwice"]) == [
+        "ANameNobodyDefinesTwice"
+    ], "contrast: a name that is not a cluster must read as stale, or a pass below proves nothing"
+    assert _stale_entries(current, sorted(current)) == [], "contrast: the live population is never stale"
+    stale = _stale_entries(current, BASELINE["clusters"])
+    assert not stale, (
+        f"{len(stale)} baseline entry(ies) are no longer fork clusters: {stale[:10]}. "
+        "Delete them from repo_tests/symbol_fork_baseline.json — the list only shrinks (#17312)."
+    )
+
+
 def test_the_mandatory_ansible_mirror_is_excluded_and_the_exclusion_is_load_bearing() -> None:
     """A path nobody may deduplicate must not be in a ratchet's population (#16401).
 

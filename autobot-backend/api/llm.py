@@ -174,15 +174,15 @@ async def get_available_llm_models(
 async def get_current_llm(
     current_user: dict = Depends(get_current_user),
 ):
-    """Get current LLM model and configuration.
+    """Get the current LLM model and provider.
 
     Issue #744: Requires authenticated user.
     """
     try:
-        # #18193: model and provider only (the tree is admin-only on GET /config); `config` stays
-        # in the schema for the generated TS type but is always empty.  #18215: the ACTIVE selection.
+        # #18193: model and provider only (the tree is admin-only on GET /config).
+        # #18215: the ACTIVE selection.  #15502: the response is slimmed to exactly these two fields.
         provider, model = resolve_active_llm(ConfigService.get_llm_config())
-        return {"model": model, "provider": provider, "config": {}}
+        return {"model": model, "provider": provider}
     except Exception as e:
         logger.error("Error getting current LLM: %s", str(e))
         raise HTTPException(status_code=500, detail="Error getting current LLM")

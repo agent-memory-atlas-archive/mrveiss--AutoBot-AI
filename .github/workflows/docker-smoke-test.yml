@@ -46,20 +46,14 @@ jobs:
     # context would report FAILED on every draft -- worse than no gate.
     # Gate the expensive jobs, never the cheap thing others read.
     name: Detect changed paths (docker smoke)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      docker: ${{ steps.filter.outputs.docker }}
-    steps:
-      - uses: actions/checkout@v7
+    uses: ./.github/workflows/_changes.yml
+    with:
       # Pull requests only: on `push` the base is the previous commit and on
       # `schedule` there is no diff at all, so the filter would be meaningless.
       # Both of those events keep running the smoke test unconditionally below.
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
-        id: filter
-        if: github.event_name == 'pull_request'
-        with:
-          filters: .github/filters/docker-paths.yml
+      pr_only: true
+      timeout_minutes: 10
+      filters: .github/filters/docker-paths.yml
 
   smoke-test:
     needs: changes
