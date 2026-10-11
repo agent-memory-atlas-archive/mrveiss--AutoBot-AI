@@ -43,6 +43,7 @@ import pytest
 # entirely, matching the module ``analyzer.py``'s local
 # ``from services.npu_client import ...`` actually resolves via sys.modules.
 import services.npu_client as npu_client_module  # noqa: E402
+from autobot_shared.embedding_model import active_embedding_model
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +101,25 @@ class TestGenerateEmbeddingUsesCanonicalHelper:
         ) as mocked:
             result = await analyzer._generate_embedding(code)
 
-        mocked.assert_awaited_once_with(code, model_name=pa.analyzer.EMBEDDING_MODEL)
-        assert pa.analyzer.EMBEDDING_MODEL == "nomic-embed-text"
+        mocked.assert_awaited_once_with(code, model_name=active_embedding_model())
         assert result == FAKE_EMBEDDING
+
+    async def test_generator_and_cache_key_share_the_configured_model(self, pa, analyzer):
+        """#15722: one resolver names the model for both the generator and the cache key."""
+        with (
+            patch.object(pa.analyzer, "active_embedding_model", return_value="other-model"),
+            patch.object(analyzer._embedding_cache, "get", new=AsyncMock(return_value=None)) as mock_get,
+            patch.object(analyzer._embedding_cache, "put", new=AsyncMock()),
+            patch.object(
+                npu_client_module,
+                "generate_embedding_with_fallback",
+                new=AsyncMock(return_value=FAKE_EMBEDDING),
+            ) as mocked,
+        ):
+            await analyzer._generate_embedding("def z(): pass")
+
+        mock_get.assert_awaited_once_with("def z(): pass", model="other-model")
+        mocked.assert_awaited_once_with("def z(): pass", model_name="other-model")
 
     async def test_does_not_fall_through_to_hash_embedding_on_success(self, pa, analyzer):
         code = "def bar(): return 2"
@@ -137,8 +154,8 @@ class TestGenerateEmbeddingReusesCache:
         ):
             result = await analyzer._generate_embedding(code)
 
-        mock_get.assert_awaited_once_with(code, model=pa.analyzer.EMBEDDING_MODEL)
-        mock_put.assert_awaited_once_with(code, FAKE_EMBEDDING, model=pa.analyzer.EMBEDDING_MODEL)
+        mock_get.assert_awaited_once_with(code, model=active_embedding_model())
+        mock_put.assert_awaited_once_with(code, FAKE_EMBEDDING, model=active_embedding_model())
         assert result == FAKE_EMBEDDING
 
     async def test_cache_hit_skips_generation_call(self, pa, analyzer):
