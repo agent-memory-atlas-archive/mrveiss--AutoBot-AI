@@ -17,9 +17,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from _real_orm_import import SLM_ROOT, import_modules_with_real_orm  # noqa: E402
 
-service_restart, recorder, runner, sync_orchestrator = import_modules_with_real_orm(
-    ("services.post_sync_recorder", "services.post_sync_runner", "services.sync_orchestrator"),
-    path_loaded={"services.service_restart": SLM_ROOT / "services" / "service_restart.py"},
+service_restart, recorder, runner = import_modules_with_real_orm(
+    ("services.post_sync_recorder", "services.post_sync_runner"),
+    path_loaded={
+        "services.service_restart": SLM_ROOT / "services" / "service_restart.py",
+    },
 )
 
 _REC = recorder.RunContext("run1", "n1", "autobot-backend")
@@ -72,56 +74,30 @@ def recorded(monkeypatch):
     return mock
 
 
-def _ctx(cmd=None, units=("a.service",)):
-    ctx = sync_orchestrator.SyncNodeContext()
-    ctx.node_ip, ctx.auto_restart, ctx.systemd_service, ctx.post_sync_cmd = "node.example.test", True, list(units), cmd
-    return ctx
+def _base():
+    return runner.restart_ssh_base("node.example.test", "svc", 22)
 
 
 async def test_a_failed_restart_is_recorded(monkeypatch, recorded):
     _fake_ssh(monkeypatch, rc=1, out=b"Failed to restart a.service")
-    await sync_orchestrator.SyncOrchestrator()._restart_systemd_service(_ctx(), "n1", True, _REC)
-    (rec, category, label, command, units, outcome), _ = recorded.call_args
+    outcome = await runner.restart_units(_base(), ["a.service"], _REC)
+    (rec, category, label, command, units, recorded_outcome), _ = recorded.call_args
     assert (category, label, units) == ("restart", "Restart a.service", "a.service")
     assert command == "sudo -n systemctl restart -- a.service"
-    assert (outcome.success, outcome.exit_code) == (False, 1)
+    assert (recorded_outcome.success, recorded_outcome.exit_code) == (False, 1)
+    assert outcome.success is False
 
 
 async def test_a_failed_post_sync_command_is_recorded_and_reported(monkeypatch, recorded):
     _fake_ssh(monkeypatch, rc=2, out=b"pip: no matching distribution")
-    outcome = await sync_orchestrator.SyncOrchestrator()._run_post_sync_command(_ctx("pip install x"), _REC)
+    outcome = await runner.run_post_sync_command(_base(), "pip install x", 5, _REC, "Install deps", "install")
     assert (outcome.success, outcome.exit_code) == (False, 2)
     assert "no matching distribution" in outcome.output_tail
     args = recorded.call_args.args
-    assert (args[1], args[3]) == ("post_sync", "pip install x")
+    assert (args[1], args[2], args[3]) == ("install", "Install deps", "pip install x")
 
 
-async def test_no_post_sync_command_records_nothing(monkeypatch, recorded):
-    outcome = await sync_orchestrator.SyncOrchestrator()._run_post_sync_command(_ctx(None), _REC)
-    assert outcome.success
+async def test_without_a_run_context_nothing_is_recorded(monkeypatch, recorded):
+    _fake_ssh(monkeypatch)
+    assert (await runner.restart_units(_base(), ["a.service"])).success
     recorded.assert_not_called()
-
-
-@pytest.mark.parametrize(("given", "expect_default"), [(None, True), ("fixedrun", False)])
-async def test_sync_node_role_run_id_is_optional_and_defaults_to_uuid4_hex(
-    tmp_path, monkeypatch, given, expect_default
-):
-    orch = sync_orchestrator.SyncOrchestrator.__new__(sync_orchestrator.SyncOrchestrator)
-    orch.cache_dir = tmp_path
-    (tmp_path / "c1").mkdir()
-    seen = {}
-
-    async def _post(ctx, rec=None):
-        seen["rec"] = rec
-        return _outcome()
-
-    ctx = _ctx()
-    ctx.source_paths = []
-    monkeypatch.setattr(orch, "_get_node_and_role_info", AsyncMock(return_value=(True, "OK", ctx)))
-    monkeypatch.setattr(orch, "_run_post_sync_command", _post)
-    monkeypatch.setattr(orch, "_restart_systemd_service", AsyncMock())
-    monkeypatch.setattr(orch, "_update_node_role_record", AsyncMock())
-    ok, _ = await orch.sync_node_role("n1", "autobot-backend", "c1", True, **({"run_id": given} if given else {}))
-    assert ok
-    run_id = seen["rec"].run_id
-    assert (len(run_id) == 32 and int(run_id, 16) >= 0) if expect_default else run_id == "fixedrun"

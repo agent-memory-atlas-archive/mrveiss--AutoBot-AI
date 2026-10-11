@@ -425,10 +425,17 @@ def test_the_post_sync_runner_branches_on_the_return_code():
 def test_a_failed_post_sync_stops_before_restart_and_before_marking_synced():
     """Restarting into a half-installed dependency set is worse than leaving the
     running process alone, and recording the commit as synced would claim an
-    update that did not happen."""
-    source = _ORCHESTRATOR.read_text(encoding="utf-8")
-    call = source.index("await self._run_post_sync_command(ctx, rec)")
-    restart = source.index("_restart_systemd_service(ctx, node_id, restart, rec)", call)
-    between = source[call:restart]
+    update that did not happen.
 
-    assert "return False" in between, "a failed post-sync does not stop the sync"
+    #17455 moved this decision: `execute_plan` stops at the first failed non-restart
+    action (so no restart follows), and `sync_node_roles` returns before
+    `record_role_synced` when the plan aborted.
+    """
+    runner = (_ORCHESTRATOR.parent / "post_sync_plan_runner.py").read_text(encoding="utf-8")
+    failure = runner.index("result.aborted = True")
+    assert "break" in runner[failure : failure + 200], "a failed non-restart action does not stop the plan"
+
+    node = (_ORCHESTRATOR.parents[1] / "api" / "node_post_sync.py").read_text(encoding="utf-8")
+    guard = node.index("if outcome.plan.aborted:")
+    marked = node.index("record_role_synced", guard)
+    assert "return outcome" in node[guard:marked], "an aborted plan still marks the roles synced"

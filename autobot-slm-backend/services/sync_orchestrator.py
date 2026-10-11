@@ -11,7 +11,6 @@ Orchestrates code distribution from code-source through SLM to fleet nodes.
 import asyncio
 import logging
 import os
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Tuple
@@ -23,9 +22,8 @@ from autobot_shared.ssot_config import config
 from models.database import CodeSource, Node, NodeRole, Role, RoleStatus
 from services.database import db_service
 from services.deploy_artifacts import rsync_artifact_excludes
-from services.post_sync_recorder import ActionOutcome, RunContext
-from services.post_sync_runner import restart_ssh_base, restart_units, run_post_sync_command
-from services.ssh_utils import _ssh_key_usable, build_ssh_base_cmd
+from services.post_sync_timeouts import POST_SYNC_TIMEOUT_S
+from services.ssh_utils import _ssh_key_usable
 
 logger = logging.getLogger(__name__)
 
@@ -48,17 +46,10 @@ class SyncNodeContext:
 
 
 # Code cache directory
-from autobot_shared.env_utils import env_int
 from autobot_shared.git_probe import start_git
 
 CODE_CACHE_DIR = Path(os.environ.get("SLM_CODE_CACHE", "/var/lib/slm/code-cache"))
 
-# #14275: seconds a post-sync command may run before it is abandoned. Was a
-# literal 300 at each call site; hoisted to an env-backed module constant because
-# the shape of the work behind it varies — a `pip install` on a slow link takes
-# far longer than a service restart, and an operator hitting the ceiling should
-# be able to raise it without editing code.
-POST_SYNC_TIMEOUT_S = env_int("AUTOBOT_SYNC_POST_CMD_TIMEOUT_S", 300)
 SSH_KEY_PATH = config.path.ssh_key_path  # canonical inter-node key (#12429)
 
 
@@ -202,40 +193,6 @@ class SyncOrchestrator:
             return False, f"Sync timed out for {source_path}"
         except Exception as e:
             return False, f"Sync error: {e}"
-
-    async def _run_post_sync_command(self, ctx: SyncNodeContext, rec: RunContext | None = None) -> ActionOutcome:
-        """
-        Execute post-sync command on remote node; the outcome is recorded (#17455).
-
-        Helper for sync_node_role (Issue #665).
-
-        #14275: the outcome carries success. A failing `pip install` -- permission
-        denied, a missing venv, an unresolvable constraint -- must stop the caller
-        before it restarts the service and marks the role synced.
-        """
-        if not ctx.post_sync_cmd:
-            now = datetime.now(timezone.utc)
-            return ActionOutcome(True, None, "", None, now, now)
-        ssh_cmd = build_ssh_base_cmd(ctx.node_ip, ctx.node_user, ctx.node_port, SSH_KEY_PATH)
-        return await run_post_sync_command(ssh_cmd, ctx.post_sync_cmd, POST_SYNC_TIMEOUT_S, rec)
-
-    async def _restart_systemd_service(
-        self, ctx: SyncNodeContext, node_id: str, restart: bool, rec: RunContext | None = None
-    ) -> ActionOutcome | None:
-        """
-        Restart systemd service on remote node if configured; None when nothing was asked.
-
-        Helper for sync_node_role (Issue #665). #17455: `sudo -n`, a failure is recorded.
-        """
-        if not (restart and ctx.auto_restart and ctx.systemd_service):
-            return None
-        ssh_base = restart_ssh_base(ctx.node_ip, ctx.node_user, ctx.node_port)
-        outcome = await restart_units(ssh_base, ctx.systemd_service, rec)
-        if outcome.success:
-            logger.info("Restarted %s on %s", " ".join(ctx.systemd_service), node_id)
-        else:
-            logger.warning("Service restart failed: %s", outcome.error)
-        return outcome
 
     async def _update_node_role_record(self, node_id: str, role_name: str, commit: str) -> None:
         """
@@ -561,62 +518,35 @@ class SyncOrchestrator:
             )
         return await self._run_rsync(rsync_cmd, commit, node_info["node_ip"], cache_path)
 
-    async def sync_node_role(
-        self,
-        node_id: str,
-        role_name: str,
-        commit: str,
-        restart: bool = True,
-        run_id: str | None = None,
-    ) -> Tuple[bool, str]:
+    async def sync_role_files(
+        self, node_id: str, role_name: str, commit: str
+    ) -> Tuple[bool, str, SyncNodeContext | None]:
         """
-        Sync a specific role to a node.
+        Rsync a role's source paths to a node (Issue #665); post-sync work is NOT done here.
 
-        Args:
-            node_id: Target node ID
-            role_name: Role to sync
-            commit: Commit hash to sync
-            restart: Whether to restart service after sync
-            run_id: Groups this sync's post_sync_action_runs rows (#17455); default a fresh uuid4 hex
-
-        Returns:
-            Tuple of (success, message)
+        #17455: post-sync commands and restarts run once per node, as one ordered plan
+        (api/node_post_sync.py -> services/post_sync_plan_runner.py), so there is a
+        single execution path. Returns (success, message, context).
         """
-        # Get node and role info from database
         success, msg, ctx = await self._get_node_and_role_info(node_id, role_name)
         if not success:
-            return False, msg
+            return False, msg, None
 
-        # Check cache exists
         cache_path = self.cache_dir / commit
         if not cache_path.exists():
-            return False, f"Commit not cached: {commit}"
+            return False, f"Commit not cached: {commit}", None
 
-        # Sync each source path
         ssh_opts = self._build_ssh_options(ctx.node_port)
         for source_path in ctx.source_paths:
             success, msg = await self._rsync_source_path(cache_path, source_path, ssh_opts, ctx)
             if not success:
-                return False, msg
+                return False, msg, None
+        return True, "OK", ctx
 
-        # Run post-sync command and restart service.
-        #
-        # #14275: a failed post-sync stops the sync here. Restarting into a
-        # half-installed dependency set is worse than leaving the running process
-        # alone with new files on disk, and marking the role synced would record a
-        # commit whose dependencies were never installed.
-        rec = RunContext(run_id or uuid.uuid4().hex, node_id, role_name)
-        post_sync = await self._run_post_sync_command(ctx, rec)
-        if not post_sync.success:
-            return False, f"post-sync command failed ({post_sync.error}): {post_sync.output_tail}"
-
-        await self._restart_systemd_service(ctx, node_id, restart, rec)
-
-        # Update database record
+    async def record_role_synced(self, node_id: str, role_name: str, commit: str) -> None:
+        """Record *commit* as the role's version on the node, once its post-sync plan succeeded."""
         await self._update_node_role_record(node_id, role_name, commit)
-
         logger.info("Synced %s to %s (commit: %s)", role_name, node_id, commit[:12])
-        return True, f"Synced {role_name} to {node_id}"
 
 
 # Singleton

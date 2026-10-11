@@ -18,20 +18,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Sequence
 
-from autobot_shared.env_utils import env_int
 from services.post_sync_recorder import OUTPUT_TAIL_MAX, ActionOutcome, RunContext, record_action_run
+from services.post_sync_timeouts import RESTART_TIMEOUT_S
 from services.service_restart import build_service_ssh_base_cmd, run_systemctl_over_ssh, systemctl_remote_command
+from services.unit_names import validate_unit_name
 
 logger = logging.getLogger(__name__)
-
-# Seconds one `sudo -n systemctl restart` may take before it is recorded as failed.
-# Was a literal 60 in sync_orchestrator; env-backed because a heavy unit on a slow
-# node legitimately takes longer.
-RESTART_TIMEOUT_S = env_int("AUTOBOT_SYNC_RESTART_TIMEOUT_S", 60)
 
 
 def restart_ssh_base(node_ip: str, node_user: str, node_port: int) -> list:
@@ -75,15 +72,20 @@ async def _post_sync_outcome(ssh_base: list, command: str, timeout: float) -> Ac
 
 
 async def run_post_sync_command(
-    ssh_base: list, command: str, timeout: float, rec: RunContext | None = None, label: str = "Post-sync command"
+    ssh_base: list,
+    command: str,
+    timeout: float,
+    rec: RunContext | None = None,
+    label: str = "Post-sync command",
+    category: str = "post_sync",
 ) -> ActionOutcome:
     """Run *command* on the node; a non-zero exit, timeout or spawn error is a failed outcome."""
     outcome = await _post_sync_outcome(ssh_base, command, timeout)
     if not outcome.success:
         logger.error("Post-sync command failed (%s): %s", outcome.error, outcome.output_tail)
-    if rec is not None:
-        await record_action_run(rec, "post_sync", label, command, None, outcome)
-    return outcome
+    if rec is None:
+        return outcome
+    return replace(outcome, row=await record_action_run(rec, category, label, command, None, outcome))
 
 
 async def _restart_outcome(ssh_base: list, units: Sequence[str]) -> ActionOutcome:
@@ -107,18 +109,36 @@ async def _restart_outcome(ssh_base: list, units: Sequence[str]) -> ActionOutcom
     return ActionOutcome(True, res.returncode, tail, None, started, _now())
 
 
-def _recorded_restart_command(units: Sequence[str]) -> str:
-    """The exact remote line (validated, quoted) for the audit row; a rejected unit is named as such (#18359)."""
+def units_are_valid(units: Sequence[str]) -> bool:
+    """True when every unit passes `validate_unit_name`; an invalid one is recorded as a failure, never run (#18359)."""
     try:
-        return systemctl_remote_command("restart", units, use_noninteractive_sudo=True)
+        for unit in units:
+            validate_unit_name(unit)
     except ValueError:
+        return False
+    return True
+
+
+def recorded_restart_command(units: Sequence[str]) -> str:
+    """The exact remote line (validated, quoted) for the audit row; a rejected unit is named as such (#18359)."""
+    if not units_are_valid(units):
         return "systemctl restart (rejected: invalid unit name)"
+    return systemctl_remote_command("restart", units, use_noninteractive_sudo=True)
 
 
 async def restart_units(ssh_base: list, units: Sequence[str], rec: RunContext | None = None) -> ActionOutcome:
-    """`sudo -n systemctl restart -- <units>` in one call; an invalid unit or any other failure is a failed outcome."""
+    """`sudo -n systemctl restart <units>` in one call; every failure mode is a failed outcome.
+
+    A failed restart is recorded and logged as a warning; it is the caller's choice whether it
+    fails the sync (#17455 decision 3: it does not).
+    """
     outcome = await _restart_outcome(ssh_base, units)
     joined = " ".join(units)
-    if rec is not None:
-        await record_action_run(rec, "restart", f"Restart {joined}", _recorded_restart_command(units), joined, outcome)
-    return outcome
+    if outcome.success:
+        logger.info("Restarted %s", joined)
+    else:
+        logger.warning("Service restart failed: %s", outcome.error)
+    if rec is None:
+        return outcome
+    command = recorded_restart_command(units)
+    return replace(outcome, row=await record_action_run(rec, "restart", f"Restart {joined}", command, joined, outcome))

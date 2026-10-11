@@ -43,7 +43,7 @@ def migrate(db_url: str) -> None:
             started_at TIMESTAMPTZ NOT NULL,
             finished_at TIMESTAMPTZ NOT NULL,
             exit_code INTEGER,
-            success BOOLEAN NOT NULL,
+            success BOOLEAN,
             output_tail TEXT NOT NULL DEFAULT '',
             error TEXT
         )

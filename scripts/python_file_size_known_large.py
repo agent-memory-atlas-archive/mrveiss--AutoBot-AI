@@ -432,7 +432,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
     "autobot-slm-backend/ansible/roles/slm_agent/files/slm/agent/agent.py": 630,
     "autobot-slm-backend/api/code_source.py": 719,
-    "autobot-slm-backend/api/code_sync.py": 5860,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
+    "autobot-slm-backend/api/code_sync.py": 5829,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 724,
     "autobot-slm-backend/api/monitoring.py": 1087,
@@ -469,7 +469,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/services/replication.py": 828,
     "autobot-slm-backend/services/role_registry.py": 713,
     "autobot-slm-backend/services/service_orchestrator.py": 919,
-    "autobot-slm-backend/services/sync_orchestrator.py": 631,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
     "autobot-slm-backend/tests/api/test_drift_resolve.py": 606,

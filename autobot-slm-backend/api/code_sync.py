@@ -4291,40 +4291,6 @@ async def _get_role_nodes(db: AsyncSession, role_name: str, node_ids: List[str] 
     return role_result.scalars().all()
 
 
-async def _sync_nodes_for_role(
-    orchestrator, node_roles: List[NodeRole], role_name: str, commit: str, restart: bool
-) -> tuple[List[dict], int]:
-    """Sync each node and return results with success count.
-
-    Helper for sync_role (Issue #665).
-
-    Args:
-        orchestrator: Sync orchestrator instance
-        node_roles: List of NodeRole records to sync
-        role_name: Role being synced
-        commit: Commit hash to sync
-        restart: Whether to restart services after sync
-
-    Returns:
-        Tuple of (results list, success count)
-    """
-    results = []
-    success_count = 0
-
-    for nr in node_roles:
-        ok, msg = await orchestrator.sync_node_role(
-            node_id=nr.node_id,
-            role_name=role_name,
-            commit=commit,
-            restart=restart,
-        )
-        results.append({"node_id": nr.node_id, "success": ok, "message": msg})
-        if ok:
-            success_count += 1
-
-    return results, success_count
-
-
 @router.post("/roles/{role_name}/sync")
 async def sync_role(
     role_name: str,
@@ -4354,9 +4320,10 @@ async def sync_role(
             "nodes_synced": 0,
         }
 
-    # Sync each node
-    orchestrator = get_sync_orchestrator()
-    results, success_count = await _sync_nodes_for_role(orchestrator, node_roles, role_name, commit, restart)
+    # Sync each node through the same plan path as POST /nodes/{node_id}/sync (#17455)
+    from api.node_post_sync import sync_role_on_nodes
+
+    results, success_count, run_id, actions = await sync_role_on_nodes(node_roles, role_name, commit, restart)
 
     logger.info(
         "Role sync complete: %s - %d/%d successful",
@@ -4372,6 +4339,8 @@ async def sync_role(
         "commit": commit,
         "nodes_synced": success_count,
         "results": results,
+        "run_id": run_id,
+        "actions": actions,
     }
 
 

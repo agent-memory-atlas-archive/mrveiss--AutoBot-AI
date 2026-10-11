@@ -37,6 +37,6 @@ class PostSyncActionRun(Base):
     started_at = Column(DateTime(timezone=True), nullable=False)
     finished_at = Column(DateTime(timezone=True), nullable=False)
     exit_code = Column(Integer, nullable=True)  # NULL: no exit status (timeout, spawn error)
-    success = Column(Boolean, nullable=False)
+    success = Column(Boolean, nullable=True)  # NULL: issued, outcome unknown (the self-killing slm-backend restart)
     output_tail = Column(Text, nullable=False, default="")
     error = Column(Text, nullable=True)
