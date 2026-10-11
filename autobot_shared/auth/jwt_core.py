@@ -54,6 +54,8 @@ Usage (slm-backend — HS256 unchanged)::
     data   = decode_jwt(token, secret=settings.secret_key)
 """
 
+import base64
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
@@ -67,6 +69,11 @@ logger = logging.getLogger(__name__)
 _ALGORITHM = "HS256"
 _ALGORITHM_RS256 = "RS256"
 _ALLOWED_ALGORITHMS = frozenset({"HS256", "RS256"})
+
+#: Redis key prefix of the cross-service RS256 jti denylist (#17856): autobot-backend
+#: writes it, the SLM backend reads it. Live entries are stored under this exact
+#: value, so changing it orphans them.
+RS256_DENYLIST_PREFIX = "auth:rs256:jti:denylist:"
 
 
 class JWTDecodeError(Exception):
@@ -328,6 +335,29 @@ def decode_jwt_no_verify_exp(
         )
     except InvalidTokenError as exc:
         raise JWTDecodeError(f"JWT token is invalid: {exc}") from exc
+
+
+def decode_jwt_claims_unverified(token: str) -> Dict[str, Any]:
+    """Decode the payload of a compact JWS WITHOUT verifying its signature.
+
+    The one unverified-claims decoder (#17856). Nothing may key trust or
+    authority on the result; it is for audit, logging and defence-in-depth
+    cross-checks only. Raises ``ValueError`` whose message completes the
+    sentence "<token name> ..." so callers keep their own error contract.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("is not a well-formed JWT")
+    payload_b64 = parts[1]
+    payload_b64 += "=" * (-len(payload_b64) % 4)  # restore base64url padding
+    try:
+        raw = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
+        claims = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(f"payload is undecodable: {exc}") from exc
+    if not isinstance(claims, dict):
+        raise ValueError("payload is not a JSON object")
+    return claims
 
 
 def decode_jwt_or_none(

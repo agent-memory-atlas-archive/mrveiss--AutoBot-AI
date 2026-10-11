@@ -47,6 +47,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
+from autobot_shared.auth.jwt_core import decode_jwt_claims_unverified
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
@@ -556,22 +557,10 @@ def _decode_jwt_claims(id_token: str) -> dict[str, Any]:
     still rests on the TLS-authenticated token endpoint; this is defence-in-depth
     against a swapped-audience / wrong-issuer token, not a trust anchor.
     """
-    import base64
-    import json
-
-    parts = id_token.split(".")
-    if len(parts) != 3:
-        raise ProviderAuthError("id_token is not a well-formed JWT")
-    payload_b64 = parts[1]
-    payload_b64 += "=" * (-len(payload_b64) % 4)  # restore base64url padding
     try:
-        raw = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
-        claims = json.loads(raw.decode("utf-8"))
-    except Exception as exc:
-        raise ProviderAuthError(f"id_token payload is undecodable: {exc}") from exc
-    if not isinstance(claims, dict):
-        raise ProviderAuthError("id_token payload is not a JSON object")
-    return claims
+        return decode_jwt_claims_unverified(id_token)
+    except ValueError as exc:
+        raise ProviderAuthError(f"id_token {exc}") from exc
 
 
 def validate_token_response(resp: dict, *, provider_name: str, client_id: str) -> None:

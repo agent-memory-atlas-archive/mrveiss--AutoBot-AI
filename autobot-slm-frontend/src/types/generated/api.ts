@@ -2270,10 +2270,10 @@ export interface paths {
         };
         /**
          * Get Fleet Services
-         * @description Get aggregated service status across all nodes.
+         * @description Deprecated alias of ``GET /orchestration/fleet/services`` (#17856).
          *
-         *     This is the canonical endpoint for fleet-wide service status.
-         *     Consolidated from Issue #850 orchestration unification.
+         *     One implementation lives in ``api.orchestration``; this route only delegates so the SLM
+         *     frontend keeps working until it calls the public path, after which this returns 410.
          */
         get: operations["get_fleet_services_api_fleet_services_get"];
         put?: never;
@@ -2299,12 +2299,7 @@ export interface paths {
         head?: never;
         /**
          * Update Service Category
-         * @description Update the category for a service across all nodes.
-         *
-         *     This is an admin override - manually categorize a service as
-         *     'autobot' or 'system' across all nodes that have it.
-         *
-         *     Canonical endpoint for fleet-wide category updates (Issue #850).
+         * @description Deprecated alias of ``PATCH /orchestration/fleet/services/{name}/category`` (#17856).
          */
         patch: operations["update_service_category_api_fleet_services__service_name__category_patch"];
         trace?: never;
@@ -9078,6 +9073,40 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * FleetServiceStatus
+         * @description Aggregated fleet service status.
+         */
+        FleetServiceStatus: {
+            /** Category */
+            category: string;
+            /** Failed Count */
+            failed_count: number;
+            /** Nodes */
+            nodes: components["schemas"]["FleetServiceNodeStatus"][];
+            /** Running Count */
+            running_count: number;
+            /** Service Name */
+            service_name: string;
+            /** Stopped Count */
+            stopped_count: number;
+            /** Total Nodes */
+            total_nodes: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * FleetServicesResponse
+         * @description Response for fleet services listing.
+         */
+        FleetServicesResponse: {
+            /** Services */
+            services: components["schemas"]["FleetServiceStatus"][];
+            /** Total Services */
+            total_services: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * FleetStatusResponse
          * @description Fleet-wide service status response.
          */
@@ -14121,40 +14150,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * FleetServiceStatus
-         * @description Aggregated fleet service status.
-         */
-        api__orchestration__FleetServiceStatus: {
-            /** Category */
-            category: string;
-            /** Failed Count */
-            failed_count: number;
-            /** Nodes */
-            nodes: components["schemas"]["FleetServiceNodeStatus"][];
-            /** Running Count */
-            running_count: number;
-            /** Service Name */
-            service_name: string;
-            /** Stopped Count */
-            stopped_count: number;
-            /** Total Nodes */
-            total_nodes: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * FleetServicesResponse
-         * @description Response for fleet services listing.
-         */
-        api__orchestration__FleetServicesResponse: {
-            /** Services */
-            services: components["schemas"]["api__orchestration__FleetServiceStatus"][];
-            /** Total Services */
-            total_services: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * ServiceActionResponse
          * @description Response for a service action.
          */
@@ -14334,45 +14329,6 @@ export interface components {
             updated_at: string;
             /** Username */
             username: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * FleetServiceStatus
-         * @description Service status across the fleet.
-         */
-        models__schemas__FleetServiceStatus: {
-            /**
-             * Category
-             * @default system
-             */
-            category: string;
-            /** Failed Count */
-            failed_count: number;
-            /** Nodes */
-            nodes: {
-                [key: string]: unknown;
-            }[];
-            /** Running Count */
-            running_count: number;
-            /** Service Name */
-            service_name: string;
-            /** Stopped Count */
-            stopped_count: number;
-            /** Total Nodes */
-            total_nodes: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * FleetServicesResponse
-         * @description Aggregated service status across fleet.
-         */
-        models__schemas__FleetServicesResponse: {
-            /** Services */
-            services: components["schemas"]["models__schemas__FleetServiceStatus"][];
-            /** Total Services */
-            total_services: number;
         } & {
             [key: string]: unknown;
         };
@@ -18208,7 +18164,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["models__schemas__FleetServicesResponse"];
+                    "application/json": components["schemas"]["FleetServicesResponse"];
                 };
             };
         };
@@ -21682,7 +21638,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__orchestration__FleetServicesResponse"];
+                    "application/json": components["schemas"]["FleetServicesResponse"];
                 };
             };
         };

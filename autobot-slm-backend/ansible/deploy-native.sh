@@ -20,7 +20,7 @@ _PROJECT_ROOT="$SCRIPT_DIR"
 while [ "$_PROJECT_ROOT" != "/" ] && [ ! -f "$_PROJECT_ROOT/.env" ]; do
     _PROJECT_ROOT="$(dirname "$_PROJECT_ROOT")"
 done
-source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true
+source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true; : "${AUTOBOT_AI_STACK_PORT:?ssot-config.sh not loaded — AUTOBOT_AI_STACK_PORT unset}"
 CONFIG_SCRIPT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 if [[ -f "${CONFIG_SCRIPT_DIR}/config/load_config.sh" ]]; then
     export PATH="$HOME/bin:$PATH"  # Ensure yq is available
@@ -130,7 +130,7 @@ show_deployment_plan() {
     log "INFO" ""
     log "INFO" "VM4 (${AUTOBOT_AI_STACK_HOST:-localhost}) - autobot-aistack:"
     log "INFO" "  • Python 3.11 runtime environment"
-    log "INFO" "  • AI Stack service (port 8080)"
+    log "INFO" "  • AI Stack service (port ${AUTOBOT_AI_STACK_PORT})"
     log "INFO" "  • Ollama LLM server (port 11434)"
     log "INFO" "  • SystemD services: autobot-ai-stack, ollama"
     log "INFO" ""
@@ -187,7 +187,7 @@ AUTOBOT_REDIS_PASSWORD=${redis_password}
 AUTOBOT_REDIS_USERNAME=${redis_username}
 
 AUTOBOT_AI_STACK_HOST=${AUTOBOT_AI_STACK_HOST:-localhost}
-AUTOBOT_AI_STACK_PORT=8080
+AUTOBOT_AI_STACK_PORT=${AUTOBOT_AI_STACK_PORT}
 
 AUTOBOT_NPU_WORKER_HOST=${AUTOBOT_AI_STACK_HOST:-localhost}
 AUTOBOT_NPU_WORKER_PORT=8081
@@ -232,7 +232,7 @@ validate_deployment() {
         "${AUTOBOT_FRONTEND_HOST:-localhost}:80|Frontend"
         "${AUTOBOT_REDIS_HOST:-localhost}:6379|Redis Stack"
         "${AUTOBOT_REDIS_HOST:-localhost}:8002|RedisInsight"
-        "${AUTOBOT_AI_STACK_HOST:-localhost}:8080|AI Stack"
+        "${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}|AI Stack"
         "${AUTOBOT_AI_STACK_HOST:-localhost}:8081|NPU Worker"
         "${AUTOBOT_AI_STACK_HOST:-localhost}:11434|Ollama"
         "${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}:3000|Browser Service"
@@ -297,7 +297,7 @@ show_summary() {
     log "INFO" "  NPU Worker:   http://${AUTOBOT_NPU_WORKER_HOST:-localhost}:8081"
     log "INFO" "  Redis:        redis://${AUTOBOT_REDIS_HOST:-localhost}:6379"
     log "INFO" "  RedisInsight: http://${AUTOBOT_REDIS_HOST:-localhost}:8002"
-    log "INFO" "  AI Stack:     http://${AUTOBOT_AI_STACK_HOST:-localhost}:8080"
+    log "INFO" "  AI Stack:     http://${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}"
     log "INFO" "  Ollama:       http://${AUTOBOT_AI_STACK_HOST:-localhost}:11434"
     log "INFO" "  Browser:      http://${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}:3000"
     log "INFO" ""

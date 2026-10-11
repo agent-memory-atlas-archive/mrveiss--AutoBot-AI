@@ -624,16 +624,12 @@ async def get_fleet_services(
 
     Issue #850: Moved from /fleet/services to /orchestration/fleet/services.
     """
-    # Get all services grouped by name
     query = select(Service).order_by(Service.service_name)
     result = await db.execute(query)
     all_services = result.scalars().all()
 
-    # Get node info for hostname lookup
     nodes_result = await db.execute(select(Node))
     nodes = {n.node_id: n for n in nodes_result.scalars().all()}
-
-    # Aggregate by service name
     service_map: Dict[str, dict] = {}
     for svc in all_services:
         if svc.service_name not in service_map:
@@ -647,6 +643,8 @@ async def get_fleet_services(
                 node_id=svc.node_id,
                 hostname=node.hostname if node else "unknown",
                 status=svc.status,
+                ip_address=node.ip_address if node else None,
+                port=svc.port,
             )
         )
 

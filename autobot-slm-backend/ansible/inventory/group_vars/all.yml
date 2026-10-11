@@ -15,6 +15,16 @@
 autobot_ssh_key_path: "/etc/autobot/ssh/autobot_key"
 
 # ==========================================
+# AI STACK PORT (#17856)
+# ==========================================
+# The ONE ansible literal for the AI-stack port. Every other home (inventory, role defaults,
+# playbook vars, backend.env) references `ai_stack_port`; none restates 8080. 11434 is the
+# Ollama port, a different service. Mirrors backend ssot_config.port.aistack
+# (AUTOBOT_AI_STACK_PORT); ansible cannot import that pydantic default, so the two literals are
+# kept equal by repo_tests/ansible_concept_forks_17856_test.py.
+ai_stack_port: 8080
+
+# ==========================================
 # AUTOBOT APPLICATION CONFIGURATION
 # ==========================================
 

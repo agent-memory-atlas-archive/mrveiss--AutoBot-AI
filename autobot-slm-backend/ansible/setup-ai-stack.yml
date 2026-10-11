@@ -81,7 +81,7 @@
 
     - name: Check AI Stack API health
       uri:
-        url: "http://{{ ansible_host }}:{{ ai_stack_port | default(8080) }}/health"
+        url: "http://{{ ansible_host }}:{{ ai_stack_port }}/health"
         status_code: [200, 404]
         timeout: 5
       register: ai_stack_check
@@ -97,7 +97,7 @@
           ChromaDB: {{ 'Running' if chromadb_check.status | default(0) == 200 else 'Starting' }}
           ChromaDB URL: http://{{ ansible_host }}:{{ chromadb_port }}
           AI Stack API: {{ 'Running' if ai_stack_check.status | default(0) == 200 else 'Starting' }}
-          AI Stack URL: http://{{ ansible_host }}:{{ ai_stack_port | default(8080) }}
+          AI Stack URL: http://{{ ansible_host }}:{{ ai_stack_port }}
           Ollama: Remote on {{ ollama_host }}:{{ ollama_port }}
           Data: {{ chromadb_data_dir }}
           ═══════════════════════════════════════════════════════════════

@@ -46,7 +46,6 @@ all:
     redis_host: "{{ hostvars['autobot-database']['ansible_host'] }}"
     redis_port: 6379
     ai_stack_host: "{{ hostvars['autobot-aiml']['ansible_host'] }}"
-    ai_stack_port: 8080
     browser_host: "{{ hostvars['autobot-browser']['ansible_host'] }}"
     browser_port: 3000
 
@@ -201,7 +200,6 @@ all:
             gpu_passthrough: true
       vars:
         # AI/ML-specific configuration
-        ai_stack_port: 8080
         ollama_port: 11434
         # TTS Worker: the port lives in roles/tts-worker/defaults/main.yml as
         # `tts_port` (8083). #17782 removed a `tts_worker_port: 8082` here -- no
