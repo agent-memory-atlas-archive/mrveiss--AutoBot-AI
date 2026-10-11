@@ -11,7 +11,7 @@ ceiling, a grandfathered ratchet whose file "may not grow" past it, so the
 one line ``_perform_all_session_cleanup`` needs to call this module's new
 ``_cleanup_chat_knowledge_context`` had no room. Moving the six pre-existing
 ``_cleanup_knowledge_base_facts``/``_cleanup_conversation_transcript`` (the
-latter now ``chat_history.legacy_transcripts.remove_legacy_transcript``, #18293) and
+latter retired by #18293: a session delete now only proposes its removal) and
 their small helpers (#620's Extract-Method split) out here first --
 unchanged -- shrinks
 ``chat_sessions.py`` enough to lower that ceiling instead of raising it, and

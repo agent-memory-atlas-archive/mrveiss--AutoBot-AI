@@ -791,6 +791,9 @@ async def _reject_session_id_collision(chat_history_manager, session_id: str, us
         logger.warning("Could not check session %s for collision, refusing create: %s", session_id, exc)
         raise _session_id_taken_error()
     if existing is None:
+        if legacy_transcript_file(session_id) is not None:  # #18293: a legacy-only id is never taken over
+            logger.warning("Refusing create over legacy transcript id %s", session_id)
+            raise _session_id_taken_error()
         return
 
     owner = ((existing.get("metadata") or {}) if isinstance(existing, dict) else {}).get("owner")
@@ -1139,9 +1142,8 @@ from api.chat_sessions_delete_cleanup import _cleanup_chat_knowledge_context, _c
 from api.legacy_transcript_disposal import (  # #18293: delete first, owner-verified transcript removal
     delete_session_or_refer,
     dispose_session_transcript,
-    is_verified_owner,
-    read_durable_owner,
 )
+from chat_history.legacy_transcripts import legacy_transcript_file
 
 
 async def _perform_all_session_cleanup(
@@ -1150,14 +1152,13 @@ async def _perform_all_session_cleanup(
     file_action: str,
     parsed_file_options: dict,
     *,
-    owner_verified: bool = False,
     requested_by: str | None = None,
 ) -> tuple[dict, dict, dict, dict, dict]:
     """Perform all cleanup operations for session deletion -- only AFTER the session is deleted.
 
     Issue #665: Extracted from delete_session to reduce function complexity.
-    #18293: *owner_verified* / *requested_by* decide the legacy transcript's fate
-    (``api/legacy_transcript_disposal.py``); the default never removes it.
+    #18293: a legacy transcript is never removed here -- *requested_by* is recorded
+    on the #17038 proposal raised for it (``api/legacy_transcript_disposal.py``).
 
     Args:
         request: FastAPI request object with app state
@@ -1178,10 +1179,8 @@ async def _perform_all_session_cleanup(
     # Clean up knowledge base facts
     kb_cleanup_result = await _cleanup_knowledge_base_facts(request, session_id)
 
-    # Legacy transcript: removed for its verified owner, otherwise kept and proposed (#18293, #17038)
-    transcript_cleanup_result = await dispose_session_transcript(
-        session_id, owner_verified=owner_verified, requested_by=requested_by
-    )
+    # Legacy transcript: always kept, and proposed for #17038 review (#18293)
+    transcript_cleanup_result = await dispose_session_transcript(session_id, requested_by=requested_by)
 
     # Clean up the chat-knowledge context (#16490)
     knowledge_context_result = await _cleanup_chat_knowledge_context(request, session_id)
@@ -1263,8 +1262,7 @@ async def delete_session(
 
     # Issue #4260: Get message count before deletion for SESSION_DESTROY hook
     message_count = await chat_history_manager.get_session_message_count(session_id)
-    # #18293: the owner on the session FILE, read before it is gone; then delete, then clean up.
-    durable_owner = await read_durable_owner(chat_history_manager, session_id)
+    # #18293: delete first, then clean up -- a missing session is a 404 with nothing touched.
     requested_by = (ownership.get("user_data") or {}).get("username")
     await delete_session_or_refer(chat_history_manager, session_id, requested_by)
     file_result, terminal_result, kb_result, transcript_result, knowledge_context_result = (
@@ -1273,7 +1271,6 @@ async def delete_session(
             session_id,
             file_action,
             parsed_file_options,
-            owner_verified=is_verified_owner(ownership, durable_owner),
             requested_by=requested_by,
         )
     )

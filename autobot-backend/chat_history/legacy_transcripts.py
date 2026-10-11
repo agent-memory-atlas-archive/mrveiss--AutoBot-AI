@@ -22,10 +22,10 @@ remain, both here so the location has one home:
 Moving these files into ``chat_sessions`` and retiring the directory is a data
 move: it is proposed through the #17038 review queue, never done by code here.
 Nothing in this module opens a file for writing. :func:`remove_legacy_transcript`
-is the one removal, and it has exactly two callers, each of which decides first:
-the session's verified owner deleting their own session
-(``api/legacy_transcript_disposal.py``), and an APPROVED #17038 proposal
-(``services/legacy_transcript_disposal_action.py``).
+is the one removal, and it has exactly one caller: the executor of an APPROVED
+#17038 proposal (``services/legacy_transcript_disposal_action.py``). A session
+delete never calls it -- ownership of a legacy file cannot be proven from current
+state, so every delete only proposes (``api/legacy_transcript_disposal.py``).
 """
 
 import asyncio
@@ -66,11 +66,11 @@ def legacy_transcript_file(session_id: str) -> Path | None:
 
 
 async def remove_legacy_transcript(session_id: str) -> dict:
-    """Unlink *session_id*'s legacy transcript. The caller has ALREADY decided it may.
+    """Unlink *session_id*'s legacy transcript -- ONLY after a human approved it (#17038).
 
-    Only for an owner-verified session delete or an approved #17038 proposal (module
-    docstring). Path-validated twice: the shared validator, then the realpath
-    containment check CodeQL credits in the sink's own scope (#16229, #16236).
+    The approved-proposal executor is the one caller (module docstring). Path-validated
+    twice: the shared validator, then the realpath containment check CodeQL credits
+    in the sink's own scope (#16229, #16236).
     """
     result: dict = {"transcript_deleted": False, "error": None}
     try:

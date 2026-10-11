@@ -4,14 +4,13 @@
 # Author: mrveiss
 """Executes an APPROVED proposal to remove one legacy transcript (#18293, #17038).
 
-A session's legacy transcript is removed on delete only when the caller is the
-session's verified owner. Every other delete -- a session claimed as unowned
-(``legacy_migration``), an admin or shared grant, a session that exists only in
-the legacy store -- leaves the file on disk and raises a proposal instead
-(``api/legacy_transcript_disposal.py``): an ordinary approval gate,
-``approval_type=destructive_action``, whose context names this action::
+A session delete never removes a legacy transcript: whoever deletes, and however
+their ownership was established, the file stays on disk and a proposal is raised
+(``api/legacy_transcript_disposal.py``) -- an ordinary approval gate,
+``approval_type=destructive_action``, whose context names this action and the
+user who asked, so the approver sees who wants it gone::
 
-    {"action": "legacy_transcript_delete", "session_id": "..."}
+    {"action": "legacy_transcript_delete", "session_id": "...", "requested_by": "..."}
 
 Approving it runs :func:`execute_legacy_transcript_delete` through the generic
 ``services.approval_execution`` registry. The outcome is never silent: it lands

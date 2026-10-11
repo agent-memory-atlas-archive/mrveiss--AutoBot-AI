@@ -305,3 +305,62 @@ def test_the_legacy_store_is_declared_read_only() -> None:
     legacy = STORE_AUTHORITY["legacy_conversation_transcripts"]
     assert legacy.write_sites == ()
     assert "#17038" in legacy.note
+
+
+_ENV_KEY = "AUTOBOT_LEGACY_TRANSCRIPTS_DIR"
+_ANSIBLE_ENV = "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2"
+_ANSIBLE_UNIT = "autobot-slm-backend/ansible/roles/backend/templates/autobot-backend.service.j2"
+_COMPOSE = "docker-compose.yml"
+_DOCKERFILE = "docker/backend/Dockerfile"
+
+
+def _setting(text: str, key: str) -> str | None:
+    """The value a template assigns to *key* (``KEY=v`` or ``- KEY=${KEY:-v}``), else None."""
+    match = re.search(rf"^\s*(?:-\s*)?{re.escape(key)}=(.+?)\s*$", text, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1)
+    default = re.fullmatch(rf"\$\{{{re.escape(key)}:-(.+)\}}", value)
+    return default.group(1) if default else value
+
+
+def test_the_template_reader_sees_a_pin_and_its_absence() -> None:
+    assert _setting("A=1\nAUTOBOT_LEGACY_TRANSCRIPTS_DIR={{ d }}/x\n", _ENV_KEY) == "{{ d }}/x"
+    assert (
+        _setting("      - AUTOBOT_LEGACY_TRANSCRIPTS_DIR=${AUTOBOT_LEGACY_TRANSCRIPTS_DIR:-/app/x}\n", _ENV_KEY)
+        == "/app/x"
+    )
+    assert _setting("AUTOBOT_DATA_DIR=/var/lib/autobot\n", _ENV_KEY) is None
+
+
+def _read(rel: str) -> str:
+    return (repo_root() / rel).read_text(encoding="utf-8")
+
+
+def test_the_ansible_env_pins_the_location_under_the_service_working_directory() -> None:
+    """Pinned, not inferred from base_dir: the old writer wrote under the unit's WorkingDirectory."""
+    workdir = _setting(_read(_ANSIBLE_UNIT), "WorkingDirectory")
+    assert workdir, f"{_ANSIBLE_UNIT} no longer sets WorkingDirectory"
+    assert _setting(_read(_ANSIBLE_ENV), _ENV_KEY) == f"{workdir}/data/conversation_transcripts"
+
+
+def test_the_compose_backend_pins_the_location_under_the_image_workdir() -> None:
+    workdirs = re.findall(r"^WORKDIR\s+(\S+)", _read(_DOCKERFILE), re.MULTILINE)
+    assert workdirs, f"{_DOCKERFILE} sets no WORKDIR"
+    assert _setting(_read(_COMPOSE), _ENV_KEY) == f"{workdirs[-1]}/data/conversation_transcripts"
+
+
+def _calls(source: str, name: str) -> bool:
+    return any(isinstance(n, ast.Call) and _called_name(n) == name for n in ast.walk(ast.parse(source)))
+
+
+def test_only_an_approved_proposal_removes_a_legacy_transcript() -> None:
+    """A session delete never removes one: ownership of a legacy file cannot be proven (#18293)."""
+    assert _calls("await remove_legacy_transcript(sid)\n", "remove_legacy_transcript")
+    assert not _calls("from x import remove_legacy_transcript\n", "remove_legacy_transcript")
+    callers = {
+        rel
+        for rel, src in _population().items()
+        if "remove_legacy_transcript" in src and _calls(src, "remove_legacy_transcript")
+    }
+    assert callers == {"autobot-backend/services/legacy_transcript_disposal_action.py"}, callers

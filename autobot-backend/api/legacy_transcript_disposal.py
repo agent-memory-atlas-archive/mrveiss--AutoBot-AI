@@ -2,33 +2,32 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""What a session delete may do to the session's legacy transcript (#18293, #17038).
+"""What a session delete may do to the session's legacy transcript: nothing (#18293, #17038).
 
 ``DELETE /chat/sessions/{id}`` used to remove the transcript before it knew the
 session existed, and ``validate_session_ownership`` hands an ownerless session to
-whoever asks (``reason="legacy_migration"``) -- so any user could delete another
-user's legacy transcript by id. Now:
+whoever asks (``reason="legacy_migration"``). A later attempt allowed removal for
+the session's "verified owner"; review showed that owner can be manufactured two
+ways -- creating a session over a legacy-only id, or a claim followed by a save
+that stamps ``metadata.owner`` on the file. Ownership of a legacy transcript cannot
+be proven from current state, so the rule is now:
 
 * the chat session is deleted FIRST; a session that does not exist in
   ``chat_sessions`` is a 404 and nothing else is touched
   (:func:`delete_session_or_refer`);
-* the transcript is removed only when the caller is the session's VERIFIED owner:
-  ownership resolved as ``owner_match`` AND the durable owner recorded on the
-  session itself is the caller (:func:`is_verified_owner`). A Redis-only owner
-  record is not enough -- a claim of an unowned session writes one;
-* every other case leaves the file on disk and raises a #17038 proposal
-  (:func:`propose_transcript_disposal`), executed only if a human approves
-  (``services/legacy_transcript_disposal_action.py``).
+* a session delete NEVER removes a legacy transcript. When one exists it stays on
+  disk and a #17038 proposal records who asked (:func:`propose_transcript_disposal`);
+  only a human's approval removes it (``services/legacy_transcript_disposal_action.py``);
+* creating a session over a legacy-only id is refused with 409
+  (``api/chat_sessions._reject_session_id_collision``).
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
 from sqlalchemy import select
 
 from autobot_shared.logging_manager import get_logger
-from chat_history.legacy_transcripts import legacy_transcript_file, remove_legacy_transcript
+from chat_history.legacy_transcripts import legacy_transcript_file
 from services.legacy_transcript_disposal_action import ACTION, register_disposal_action
 
 logger = get_logger(__name__)
@@ -36,23 +35,6 @@ logger = get_logger(__name__)
 # Registered at import, like api/admin_orphan_storage.py: the handler must be in
 # place before any approve() can reach a proposal this module raised.
 register_disposal_action()
-
-
-def is_verified_owner(ownership: Dict[str, Any] | None, durable_owner: str | None) -> bool:
-    """True only for ``owner_match`` by the user the session file itself names as owner."""
-    ownership = ownership or {}
-    username = (ownership.get("user_data") or {}).get("username")
-    return ownership.get("reason") == "owner_match" and bool(username) and durable_owner == username
-
-
-async def read_durable_owner(chat_history_manager, session_id: str) -> str | None:
-    """The owner recorded on the session file, read BEFORE the session is deleted."""
-    try:
-        owner = await chat_history_manager.get_session_owner(session_id)
-    except Exception as exc:
-        logger.warning("Could not read the durable owner of session %s: %s", session_id, exc)
-        return None
-    return owner if isinstance(owner, str) and owner else None
 
 
 async def _pending_proposal_id(db, session_id: str) -> str | None:
@@ -82,7 +64,7 @@ async def propose_transcript_disposal(session_id: str, requested_by: str | None,
             approval_type=ApprovalType.DESTRUCTIVE_ACTION.value,
             description=why,
             requested_by_agent=requested_by,
-            context={"action": ACTION, "session_id": session_id},
+            context={"action": ACTION, "session_id": session_id, "requested_by": requested_by},
         )
     return str(approval.id)
 
@@ -96,15 +78,14 @@ async def _refer(session_id: str, requested_by: str | None, why: str) -> str | N
         return None
 
 
-async def dispose_session_transcript(session_id: str, *, owner_verified: bool, requested_by: str | None) -> dict:
-    """Remove the transcript for its verified owner; otherwise leave it and propose."""
+async def dispose_session_transcript(session_id: str, *, requested_by: str | None) -> dict:
+    """Never remove: keep the session's legacy transcript and propose its disposal (#17038)."""
     if legacy_transcript_file(session_id) is None:
         return {"transcript_deleted": False, "proposal_id": None, "error": None}
-    if owner_verified:
-        return {**await remove_legacy_transcript(session_id), "proposal_id": None}
-    why = "Session deleted by a caller who is not its recorded owner; the legacy transcript was kept."
+    why = "The chat session was deleted; its legacy transcript was kept for review."
     proposal_id = await _refer(session_id, requested_by, why)
-    return {"transcript_deleted": False, "proposal_id": proposal_id, "error": None}
+    error = None if proposal_id else "the transcript was kept, but its review proposal could not be recorded"
+    return {"transcript_deleted": False, "proposal_id": proposal_id, "error": error}
 
 
 async def delete_session_or_refer(chat_history_manager, session_id: str, requested_by: str | None) -> None:
