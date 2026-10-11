@@ -340,64 +340,6 @@ class AutoBotSemanticChunker(SemanticChunkerBase):
             return self._create_fallback_embeddings(len(sentences))
 
     # ------------------------------------------------------------------
-    # Synchronous model loading (blocking fallback paths)
-    # ------------------------------------------------------------------
-
-    def _sync_try_fallback_models(self, device: str) -> None:
-        """Try loading fallback models synchronously."""
-        from sentence_transformers import SentenceTransformer
-
-        self._embedding_model = SentenceTransformer("all-mpnet-base-v2")
-
-        if device == "cuda":
-            try:
-                import torch
-
-                has_meta_tensors = any(p.device.type == "meta" for p in self._embedding_model.parameters())
-                if has_meta_tensors:
-                    self._embedding_model = self._embedding_model.to_empty(device=device)
-                else:
-                    self._embedding_model = self._embedding_model.to(device)
-            except Exception as device_error:
-                logger.warning("Failed to move model to GPU: %s, using CPU", device_error)
-                device = "cpu"
-                # Reference `torch` to satisfy linters about unused import in the try block.
-                _ = torch
-
-        logger.warning("Fallback to all-mpnet-base-v2 embedding model on %s", device)
-
-    def _sync_initialize_model(self) -> None:
-        """Synchronous model initialization for non-async fallback paths (blocking)."""
-        if self._embedding_model is not None:
-            return
-
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            device = self._detect_device()
-            self._embedding_model = SentenceTransformer(self.embedding_model_name, device=device)
-
-            actual_device = next(self._embedding_model.parameters()).device
-            logger.info(
-                "Embedding model '%s' loaded on device: %s",
-                self.embedding_model_name,
-                actual_device,
-            )
-
-            self._embedding_model = self._apply_gpu_precision(self._embedding_model, device)
-
-        except Exception as e:
-            logger.error("Failed to load embedding model %s: %s", self.embedding_model_name, e)
-            try:
-                import torch
-
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                self._sync_try_fallback_models(device)
-            except Exception as fallback_error:
-                logger.error("Failed to load fallback model: %s", fallback_error)
-                raise RuntimeError("Could not initialize any embedding model")
-
-    # ------------------------------------------------------------------
     # Coherence scoring (CPU-only utility — not on hot chunk_text path)
     # ------------------------------------------------------------------
 

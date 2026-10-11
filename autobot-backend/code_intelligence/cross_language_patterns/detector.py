@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Tuple
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_mixin import AsyncRedisClientLockedMixin
 from autobot_shared.ssot_constants import TTL_1_HOUR
+from knowledge.index_embedding_space import index_embedding_space
 
 from .extractors import PythonPatternExtractor, TypeScriptPatternExtractor
 from .models import (
@@ -105,7 +106,6 @@ class CrossLanguagePatternDetector(AsyncRedisClientLockedMixin):
         project_root: str | None = None,
         use_llm: bool = True,
         use_cache: bool = True,
-        embedding_model: str = "nomic-embed-text",
         source_id: str | None = None,
     ):
         """
@@ -115,7 +115,6 @@ class CrossLanguagePatternDetector(AsyncRedisClientLockedMixin):
             project_root: Root directory to analyze
             use_llm: Whether to use LLM for semantic analysis
             use_cache: Whether to use Redis caching
-            embedding_model: Model to use for embeddings (Ollama)
             source_id: Code source this analysis is scoped to (Issue #12356).
                 Folded into the ChromaDB pattern metadata/query filter and the
                 embedding-cache key so one project can never read another
@@ -125,7 +124,8 @@ class CrossLanguagePatternDetector(AsyncRedisClientLockedMixin):
         self.project_root = Path(project_root) if project_root else Path.cwd()
         self.use_llm = use_llm
         self.use_cache = use_cache
-        self.embedding_model = embedding_model
+        space = index_embedding_space(PATTERNS_COLLECTION)  # #18143: the index's model, not the active one
+        self.embedding_model = space.model_id
         # Issue #12356: scope tag for chroma metadata/query and embedding cache.
         self.source_id = source_id
         self._source_tag = source_id or "default"
@@ -133,7 +133,7 @@ class CrossLanguagePatternDetector(AsyncRedisClientLockedMixin):
         # #12251 model-folding trick) so cache reads never cross project
         # boundaries even if a detector instance is reused across sources. The
         # real embedding request below still uses ``self.embedding_model``.
-        self._embedding_cache_model = f"{embedding_model}::src::{self._source_tag}"
+        self._embedding_cache_model = f"{space.space_id}::src::{self._source_tag}"
 
         # Initialize extractors
         self.python_extractor = PythonPatternExtractor()

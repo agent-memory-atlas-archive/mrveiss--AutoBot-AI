@@ -29,7 +29,6 @@ from api.schemas_analytics import CodeAnalysisRequest, CommunicationPattern
 from autobot_shared.endpoint_normalization import collapse_dynamic_segments
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import RedisDatabase, get_async_redis_client
-from autobot_shared.ssot_config import config as _ssot
 from constants import PATH
 from constants.threshold_constants import TimingConstants
 from type_defs.common import Metadata
@@ -51,28 +50,6 @@ CODE_INDEXING_ANALYSIS_TYPES = {"full", "incremental"}
 # After normalization these should stay well under the cap, but it acts as a
 # last-resort safety net against truly novel path shapes.
 MAX_API_FREQUENCY_ENTRIES = 2000
-
-
-# Simple service address function using configuration
-_SERVICE_HOST_MAP = {
-    "backend": lambda: _ssot.vm.main,
-    "frontend": lambda: _ssot.vm.frontend,
-    "redis": lambda: _ssot.vm.redis,
-    "ollama": lambda: _ssot.vm.ollama,
-    "npu_worker": lambda: _ssot.vm.npu,
-    "ai_stack": lambda: _ssot.vm.aistack,
-    "browser": lambda: _ssot.vm.browser,
-    "browser_service": lambda: _ssot.vm.browser,
-}
-
-
-def get_service_address(service_name: str, port: int, protocol: str = "http") -> str:
-    """Get standardized service address from config helper"""
-    try:
-        host = _SERVICE_HOST_MAP[service_name]()
-    except (KeyError, Exception):
-        host = "localhost"
-    return f"{protocol}://{host}:{port}"
 
 
 # Global analytics state management (shared with analytics.py)

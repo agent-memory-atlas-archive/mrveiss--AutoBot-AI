@@ -34,6 +34,23 @@ _UNIFIED_UNREPRODUCIBLE = (
     "written by accelerated_embedding_generation, whose output is the NPU worker's model or MiniLM through "
     "an untrained projection re-randomised at every process start, so no query can be put in its space (#18217)"
 )
+# The code-intelligence collections are written and queried by the same class with the text accessor, so
+# the build path names the model: nomic-embed-text, 768-d (the hash fallback of the pattern analyzer is
+# 768-d for the same reason). Their names are the rows; the model literal lives here and nowhere else (#18143).
+PATTERN_MODEL = "nomic-embed-text"
+PATTERN_DIM = 768
+PATTERN_INDEXES = (
+    "code_patterns",
+    "cross_language_patterns",
+    "code_analysis_vectors",
+    "config_pattern_vectors",
+    "duplicate_code_vectors",
+    "bug_pattern_vectors",
+    "code_review_patterns",
+    "anti_pattern_vectors",
+    "performance_analysis_vectors",
+    "security_analysis_vectors",
+)
 ACCELERATOR_COLLECTIONS = (
     "autobot_text_embeddings",
     "autobot_image_embeddings",
@@ -63,6 +80,7 @@ def index_spaces() -> dict[str, IndexSpace]:
     from code_embedding_generator import CODEBERT_EMBEDDING_DIM, CODEBERT_MODEL_NAME
 
     spaces = {name: IndexSpace(None, None, _UNIFIED_UNREPRODUCIBLE) for name in ACCELERATOR_COLLECTIONS}
+    spaces.update({name: IndexSpace(PATTERN_MODEL, PATTERN_DIM) for name in PATTERN_INDEXES})
     spaces[HYBRID_FAISS_INDEX] = IndexSpace(None, None, _FAISS_UNRECORDED)
     spaces[CODE_INDEX] = IndexSpace(CODEBERT_MODEL_NAME, CODEBERT_EMBEDDING_DIM, accessor="code_embedding_generator")
     return spaces
@@ -98,3 +116,13 @@ async def embed_in_index_space(text: str, index: str) -> np.ndarray:
         raise EmbeddingUnavailableError(f"model '{space.model_id}' of index '{index}' produced no vector; refused")
     require_query_dim(index, vector)
     return np.asarray(vector, dtype=np.float32)
+
+
+class CollectionEmbeddingSpace:
+    """Mixin for a class whose ``_collection_name`` is an index in the table: its model is the index's (#18143)."""
+
+    _collection_name: str
+
+    @property
+    def _embedding_space(self) -> IndexSpace:
+        return index_embedding_space(self._collection_name)

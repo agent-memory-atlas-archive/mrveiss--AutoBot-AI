@@ -5,16 +5,19 @@
 """EGRESS_POLICY: internal-origin allowlist, manager mode, raw-client entry point (#17576, AC4)."""
 
 import socket
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from autobot_shared import egress_allowlist as al
+from autobot_shared import network_constants as _nc
 from autobot_shared.http_client_manager import HTTPClientManager
 from autobot_shared.http_egress_guard import (
     EGRESS_POLICY,
     EgressBlockedError,
     assert_egress_policy,
+    assert_public_egress,
 )
 from autobot_shared.ssot_config import config
 
@@ -75,9 +78,9 @@ def test_ssot_set_contains_the_configured_service_origins():
     assert al.normalize_origin(f"http://{config.vm.chromadb}:{config.port.chromadb}") in origins
 
 
-@pytest.mark.parametrize("name", ["chrome_cdp_url", "vnc_url", "frontend_url", "websocket_url", "redis_url"])
+@pytest.mark.parametrize("name", ["chrome_cdp_url", "websocket_url", "redis_url"])
 def test_non_node_to_node_origins_are_not_internal(name):
-    """CDP / VNC / frontend / websocket / redis are not node-to-node HTTP targets (#17576 review)."""
+    """CDP / websocket / redis are not node-to-node HTTP targets (#17576 review)."""
     origin = al.normalize_origin(getattr(config, name))
     own = {
         al.normalize_origin(getattr(config, n)) for n in ("backend_url", "ollama_url", "aistack_url", "npu_worker_url")
@@ -87,9 +90,7 @@ def test_non_node_to_node_origins_are_not_internal(name):
     assert origin not in al.static_internal_origins()
 
 
-def test_cdp_vnc_frontend_origins_are_dropped_with_distinct_ports(monkeypatch):
-    from types import SimpleNamespace
-
+def test_cdp_and_websocket_origins_are_dropped_with_distinct_ports(monkeypatch):
     fake = SimpleNamespace(
         backend_url="http://10.0.0.1:8001",
         ollama_url="http://10.0.0.1:11434",
@@ -102,16 +103,62 @@ def test_cdp_vnc_frontend_origins_are_dropped_with_distinct_ports(monkeypatch):
         vnc_url="http://10.0.0.1:6080/vnc.html",
         frontend_url="http://10.0.0.1:5173",
         websocket_url="ws://10.0.0.1:8001/api/ws",
-        vm=SimpleNamespace(chromadb="10.0.0.1"),
-        port=SimpleNamespace(chromadb=8100),
+        vm=SimpleNamespace(chromadb="10.0.0.1", main="10.0.0.1", browser="10.0.0.2"),
+        port=SimpleNamespace(chromadb=8100, vnc=6080),
     )
     import autobot_shared.ssot_config as ssot
 
     monkeypatch.setattr(ssot, "config", fake)
+    monkeypatch.setattr(_nc, "ServiceURLs", _PROM)
     origins = al.static_internal_origins()
-    assert "http://10.0.0.1:8100" in origins and len(origins) == 8
-    for dropped in ("http://10.0.0.1:9222", "http://10.0.0.1:6080", "http://10.0.0.1:5173", "ws://10.0.0.1:8001"):
+    assert "http://10.0.0.1:8100" in origins and len(origins) == 8 + len(SERVER_CALLED)
+    for dropped in ("http://10.0.0.1:9222", "ws://10.0.0.1:8001"):
         assert dropped not in origins
+    assert set(SERVER_CALLED) <= origins
+    assert "http://10.0.0.1:6080/vnc.html" not in origins  # the human link, not the origin
+
+
+# --- server-called origins (#17576 slice 2): frontend, VNC, Prometheus, Alertmanager ---------------------
+
+SERVER_CALLED = (
+    "http://10.0.0.1:5173",  # config.frontend_url
+    "http://10.0.0.1:6080",  # vm.main + port.vnc
+    "wss://10.0.0.1:6080",  # the websockify call vnc_proxy makes
+    "http://10.0.0.2:6080",  # vm.browser + port.vnc
+    "wss://10.0.0.2:6080",
+    "http://10.0.0.3:9093",  # ServiceURLs.ALERTMANAGER_API
+)
+_PROM = SimpleNamespace(PROMETHEUS_API="http://10.0.0.3:9090", ALERTMANAGER_API="http://10.0.0.3:9093")
+
+
+@pytest.fixture
+def server_called(monkeypatch):
+    fake = SimpleNamespace(
+        frontend_url="http://10.0.0.1:5173",
+        vm=SimpleNamespace(main="10.0.0.1", browser="10.0.0.2"),
+        port=SimpleNamespace(vnc=6080),
+    )
+    import autobot_shared.ssot_config as ssot
+
+    monkeypatch.setattr(ssot, "config", fake)
+    monkeypatch.setattr(_nc, "ServiceURLs", _PROM)
+    monkeypatch.setattr(al, "_ssot_service_urls", al._server_called_urls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", SERVER_CALLED)
+async def test_server_called_origin_is_internal_exactly(server_called, origin):
+    assert await al.is_internal_origin(origin + "/x")
+    scheme, _, rest = origin.partition("://")
+    host, _, port = rest.rpartition(":")
+    assert not await al.is_internal_origin(f"{scheme}://{host}:{int(port) + 1}/x")  # same host, another port
+    assert not await al.is_internal_origin(f"{scheme}://10.9.9.9:{port}/x")  # another host, same port
+
+
+@pytest.mark.asyncio
+async def test_chrome_cdp_and_vnc_link_stay_out(server_called):
+    assert not await al.is_internal_origin("http://10.0.0.1:9222/json")
+    assert not await al.is_internal_origin("ws://10.0.0.1:8001/api/ws")
 
 
 def test_redis_url_is_not_an_http_origin():
@@ -203,6 +250,17 @@ async def test_assert_egress_policy_matches_manager_mode(pinned_internal, monkey
     for url in ("http://10.1.2.3/x", "http://127.0.0.1:9999/x", "http://169.254.169.254/latest"):
         with pytest.raises(EgressBlockedError):
             await assert_egress_policy(url)
+
+
+@pytest.mark.asyncio
+async def test_assert_public_egress_refuses_an_internal_origin_that_policy_allows(pinned_internal, monkeypatch):
+    await assert_egress_policy("http://127.0.0.1:8001/x")
+    with pytest.raises(EgressBlockedError):
+        await assert_public_egress("http://127.0.0.1:8001/x")
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda host, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, 0))]
+    )
+    await assert_public_egress("https://api.example.test/v1")
 
 
 # --- providers and the TTL cache --------------------------------------------
@@ -323,8 +381,6 @@ def test_ttl_constant_is_env_backed_and_registered():
 
 
 def _patched_ssot(monkeypatch, hosts):
-    from types import SimpleNamespace
-
     urls = {
         n: f"http://{h}:8001" for n, h in zip(("backend_url", "ollama_url", "aistack_url", "npu_worker_url"), hosts)
     }
@@ -332,13 +388,17 @@ def _patched_ssot(monkeypatch, hosts):
         tts_worker_url="http://127.0.0.1:1",
         browser_service_url="http://127.0.0.1:2",
         slm_url="http://127.0.0.1:3",
-        vm=SimpleNamespace(chromadb="127.0.0.1"),
-        port=SimpleNamespace(chromadb=4),
+        frontend_url="http://127.0.0.1:5",
+        vm=SimpleNamespace(chromadb="127.0.0.1", main="127.0.0.1", browser="127.0.0.1"),
+        port=SimpleNamespace(chromadb=4, vnc=6),
         **urls,
     )
     import autobot_shared.ssot_config as ssot
 
     monkeypatch.setattr(ssot, "config", fake)
+    monkeypatch.setattr(
+        _nc, "ServiceURLs", SimpleNamespace(PROMETHEUS_API="http://127.0.0.1:7", ALERTMANAGER_API="http://127.0.0.1:8")
+    )
 
 
 @pytest.mark.parametrize(
@@ -388,3 +448,32 @@ async def test_apply_egress_guard_none_is_no_guard_and_junk_is_a_type_error():
             await apply_egress_guard("http://10.1.2.3/x", junk)
     with pytest.raises(EgressBlockedError):
         await apply_egress_guard("http://10.1.2.3/x", False)
+
+
+@pytest.mark.asyncio
+async def test_prometheus_is_not_allowlisted_pending_18326(server_called):
+    assert not await al.is_internal_origin("http://10.0.0.3:9090/api/v1/query")
+
+
+# --- the refusal message names a setting only where the setting applies -------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("guard", [EGRESS_POLICY, "public_only_raw"])
+async def test_policy_and_public_only_refusals_do_not_advertise_the_private_network_setting(pinned_internal, guard):
+    with pytest.raises(EgressBlockedError) as refused:
+        if guard is EGRESS_POLICY:
+            await assert_egress_policy("http://10.1.2.3:8001/x")
+        else:
+            await assert_public_egress("http://10.1.2.3:8001/x")
+    assert "AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS" not in str(refused.value)
+    assert "not on the SSOT internal-origin allowlist" in str(refused.value)
+
+
+@pytest.mark.asyncio
+async def test_bool_guard_refusal_keeps_the_private_network_hint():
+    from autobot_shared.http_egress_guard import apply_egress_guard
+
+    with pytest.raises(EgressBlockedError) as refused:
+        await apply_egress_guard("http://10.1.2.3:8001/x", False)
+    assert "AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS=true" in str(refused.value)
