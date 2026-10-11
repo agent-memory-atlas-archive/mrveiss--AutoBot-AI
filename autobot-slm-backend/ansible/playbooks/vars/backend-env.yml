@@ -29,6 +29,7 @@ backend_classification_model: "{{ lookup('env', 'AUTOBOT_CLASSIFICATION_MODEL') 
 backend_light_model: "{{ lookup('env', 'AUTOBOT_LIGHT_PROCESSING_MODEL') | default('phi3:mini', true) }}"
 backend_instruction_model: "{{ lookup('env', 'AUTOBOT_INSTRUCTION_MODEL') | default('mistral:7b-instruct', true) }}"
 backend_system_model: "{{ lookup('env', 'AUTOBOT_SYSTEM_MODEL') | default('dolphin-llama3:8b', true) }}"
+backend_embedding_model: "{{ lookup('env', 'AUTOBOT_EMBEDDING_MODEL') | default('nomic-embed-text:latest', true) }}"
 # AI Stack connection (#4087: derive from inventory SSOT — same pattern as redis_host/frontend_host)
 # co-located (single-host): backend_ai_stack_host stays 127.0.0.1
 # distributed (fleet):      backend_ai_stack_host is set from ai_stack_host in production.yml

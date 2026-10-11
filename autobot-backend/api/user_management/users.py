@@ -39,6 +39,7 @@ from api.user_management.dependencies import (
 from autobot_shared.auth.permissions import is_admin_role
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.models.pagination import PaginationParams
+from autobot_shared.user_management.user_service_errors import DuplicateUserError, UserNotFoundError
 from user_management.schemas import (
     UserCreate,
     UserListResponse,
@@ -46,10 +47,6 @@ from user_management.schemas import (
     UserUpdate,
 )
 from user_management.services import TenantContext, UserService
-from user_management.services.user_service import (
-    DuplicateUserError,
-    UserNotFoundError,
-)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 logger = get_logger(__name__)

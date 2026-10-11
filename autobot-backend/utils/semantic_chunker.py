@@ -339,15 +339,8 @@ class AutoBotSemanticChunker(SemanticChunkerBase):
             logger.error("Error computing sentence embeddings: %s", e)
             return self._create_fallback_embeddings(len(sentences))
 
-    # Backwards-compatible alias: `npu_semantic_search._generate_embedding_gpu_fallback`
-    # still imports and calls `_compute_sentence_embeddings_async` directly.
-    async def _compute_sentence_embeddings_async(self, sentences: List[str]) -> np.ndarray:
-        return await self._compute_embeddings(sentences)
-
     # ------------------------------------------------------------------
-    # Synchronous entry points — kept for two live external callers:
-    #   autobot-backend/npu_semantic_search.py:521  (CPU final fallback)
-    #   autobot-infrastructure/.../npu_performance_measurement.py:187/192
+    # Synchronous model loading (blocking fallback paths)
     # ------------------------------------------------------------------
 
     def _sync_try_fallback_models(self, device: str) -> None:
@@ -404,23 +397,6 @@ class AutoBotSemanticChunker(SemanticChunkerBase):
                 logger.error("Failed to load fallback model: %s", fallback_error)
                 raise RuntimeError("Could not initialize any embedding model")
 
-    def _compute_sentence_embeddings(self, sentences: List[str]) -> np.ndarray:
-        """Synchronous embedding wrapper for backward compatibility.
-
-        Live callers: `npu_semantic_search._generate_fallback_embedding` and
-        `autobot-infrastructure/.../npu_performance_measurement.py`.
-
-        #7469: previously this had a hand-rolled try-loop / sync-fallback
-        pattern that BLOCKED the event loop on the in-async path
-        (running encoder synchronously inline). Migrated to the shared
-        ``run_or_schedule`` helper which uses a threadpool detour in
-        the in-async case — same final result, doesn't block the loop.
-        Caller still sees the same return shape.
-        """
-        from autobot_shared.async_compat import run_or_schedule
-
-        return run_or_schedule(self._compute_sentence_embeddings_async(sentences))
-
     # ------------------------------------------------------------------
     # Coherence scoring (CPU-only utility — not on hot chunk_text path)
     # ------------------------------------------------------------------
@@ -431,7 +407,7 @@ class AutoBotSemanticChunker(SemanticChunkerBase):
             return 1.0
 
         try:
-            embeddings = await self._compute_sentence_embeddings_async(sentences)
+            embeddings = await self._compute_embeddings(sentences)
             if len(embeddings) <= 1:
                 return 1.0
 

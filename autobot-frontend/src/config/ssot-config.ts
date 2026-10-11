@@ -109,16 +109,6 @@ export const PORT_DEFAULTS = {
 } as const satisfies PortConfig;
 
 /**
- * LLM model configuration.
- */
-export interface LLMConfig {
-  defaultModel: string;
-  embeddingModel: string;
-  provider: string;
-  timeout: number;
-}
-
-/**
  * Timeout configuration (in milliseconds).
  */
 export interface TimeoutConfig {
@@ -271,7 +261,6 @@ export interface AutoBotConfig {
   // Sub-configurations
   vm: VMConfig;
   port: PortConfig;
-  llm: LLMConfig;
   timeout: TimeoutConfig;
   vnc: VNCConfig;
   feature: FeatureConfig;
@@ -437,14 +426,6 @@ function buildConfig(): AutoBotConfig {
     slmAdmin: getEnvNumber('VITE_SLM_ADMIN_PORT', PORT_DEFAULTS.slmAdmin),
   };
 
-  // LLM configuration
-  const llm: LLMConfig = {
-    defaultModel: getEnv('VITE_LLM_DEFAULT_MODEL', 'qwen3.5:9b'),  // Quality tier (#2553)
-    embeddingModel: getEnv('VITE_LLM_EMBEDDING_MODEL', 'nomic-embed-text:latest'),
-    provider: getEnv('VITE_LLM_PROVIDER', 'ollama'),
-    timeout: getEnvNumber('VITE_LLM_TIMEOUT', 30000),
-  };
-
   // Timeout configuration (all in milliseconds)
   const timeout: TimeoutConfig = {
     api: getEnvNumber('VITE_API_TIMEOUT', 60000),
@@ -491,7 +472,6 @@ function buildConfig(): AutoBotConfig {
   const configObj: AutoBotConfig = {
     vm,
     port,
-    llm,
     timeout,
     vnc,
     feature,
@@ -718,7 +698,6 @@ export function getBackendUrl(): string {
   // VITE_BACKEND_HOST/VITE_BACKEND_PORT is deliberately ignored here (#12339).
   return '';
 }
-
 
 /**
  * Get the API base path for the autobot backend.

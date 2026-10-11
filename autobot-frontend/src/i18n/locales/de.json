@@ -1286,7 +1286,10 @@
         "envVarRecommendations": "Empfehlungen für Umgebungsvariablen",
         "sampleHardcodedValues": "Beispiel für hartcodierte Werte",
         "noHardcodedValues": "Es wurden keine hartcodierten Umgebungswerte gefunden. Ihre Konfiguration sieht sauber aus!",
-        "noData": "Es liegen keine Umweltanalysedaten vor."
+        "noData": "Es liegen keine Umweltanalysedaten vor.",
+        "modelHint": "Modell: {model}",
+        "modelLoading": "wird geladen …",
+        "modelServerDefault": "Server-Standard"
       },
       "ownership": {
         "title": "Code-Besitzanalyse",

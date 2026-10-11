@@ -56,33 +56,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # by this script: deployment_mode).
 
 
-class DeploymentMode(Enum):
-    """Deployment modes (mirrors backend utils/service_registry.py)."""
+# #18132: these were defined in six scripts with six distinct class bodies -- one
+# copied class, each copy trimmed to what its script used. The union now lives in
+# deployment_registry.py beside this file.
+from deployment_registry import (  # noqa: E402
+    DeploymentMode,
+    ServiceRegistry,
+)
 
-    LOCAL = "local"
-    DOCKER_LOCAL = "docker_local"
-    DISTRIBUTED = "distributed"
-    KUBERNETES = "kubernetes"
-    CLOUD = "cloud"
 
-
-class ServiceRegistry:
-    """Env-driven standalone stand-in for the backend ServiceRegistry."""
-
-    def __init__(self):
-        """Initialize registry from environment."""
-        self.deployment_mode = self._detect_deployment_mode()
-
-    @staticmethod
-    def _detect_deployment_mode() -> DeploymentMode:
-        """Detect deployment mode from env, falling back to container heuristic."""
-        mode = os.environ.get("AUTOBOT_DEPLOYMENT_MODE", "").lower()
-        if mode:
-            try:
-                return DeploymentMode(mode)
-            except ValueError:
-                logger.warning("Invalid AUTOBOT_DEPLOYMENT_MODE: %s", mode)
-        return DeploymentMode.DOCKER_LOCAL if os.path.exists("/.dockerenv") else DeploymentMode.LOCAL
 
 
 _registry: Optional[ServiceRegistry] = None

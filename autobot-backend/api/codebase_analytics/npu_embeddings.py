@@ -200,7 +200,7 @@ async def _get_semantic_chunker():
                 from utils.semantic_chunker import get_semantic_chunker
 
                 _semantic_chunker_cache = get_semantic_chunker()
-                await _semantic_chunker_cache._initialize_model()
+                await _semantic_chunker_cache.load_embedding_model()
                 logger.info("Initialized semantic chunker for fallback embeddings")
             except Exception as e:
                 logger.warning("Failed to initialize semantic chunker: %s", e)
@@ -229,7 +229,7 @@ async def _generate_fallback_embeddings(
 
         try:
             # Use async batch embedding method
-            batch_embeddings = await chunker._compute_sentence_embeddings_async(batch_docs)
+            batch_embeddings = await chunker.embed_sentences(batch_docs)
 
             # Convert numpy arrays to lists
             for emb in batch_embeddings:

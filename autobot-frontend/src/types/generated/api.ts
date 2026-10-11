@@ -10544,7 +10544,7 @@ export interface paths {
         };
         /**
          * Get Current Llm
-         * @description Get current LLM model and configuration.
+         * @description Get the current LLM model and provider.
          *
          *     Issue #744: Requires authenticated user.
          */
@@ -18981,6 +18981,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/oauth-bundle-strip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Oauth Bundle Strip
+         * @description Dry run: how many bundles per provider would be stripped, skipped or are already clean.
+         */
+        get: operations["preview_oauth_bundle_strip_api_admin_oauth_bundle_strip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/oauth-bundle-strip/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Oauth Bundle Strip
+         * @description Propose the strip -- a request, not an execution. ``backup_reference`` is required.
+         */
+        post: operations["propose_oauth_bundle_strip_api_admin_oauth_bundle_strip_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/analytics/dashboard/overview": {
         parameters: {
             query?: never;
@@ -21464,6 +21504,26 @@ export interface paths {
          *     Issue #12330: Scoped to the selected source's cached analysis.
          */
         get: operations["export_env_analysis_api_analytics_codebase_env_analysis_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/codebase/env-analysis/default-model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Env Analysis Default Model
+         * @description The model the AI false-positive filter uses when the caller names none.
+         */
+        get: operations["get_env_analysis_default_model_api_analytics_codebase_env_analysis_default_model_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38224,9 +38284,7 @@ export interface paths {
         put?: never;
         /**
          * Search Code
-         * @description Search through indexed code.
-         *
-         *     Supports multiple search types:
+         * @description Search through indexed code. Supports multiple search types:
          *     - semantic: AI-powered semantic similarity search (NPU-accelerated when available)
          *     - exact: Exact string matching
          *     - regex: Regular expression search
@@ -38343,7 +38401,6 @@ export interface paths {
         /**
          * Find Code Duplicates
          * @description Find potential code duplicates and similar patterns for refactoring opportunities.
-         *
          *     Issue #665: Refactored from 85 lines to use extracted helper methods.
          *     Issue #380: Uses module-level constant for patterns.
          *
@@ -39633,7 +39690,6 @@ export interface paths {
         /**
          * Natural Language Search
          * @description Search codebase using natural language queries.
-         *
          *     Issue #665: Refactored to use extracted helper functions.
          *
          *     Examples:
@@ -80844,10 +80900,6 @@ export interface components {
             model: string;
             /** Provider */
             provider: string;
-            /** Config */
-            config: {
-                [key: string]: unknown;
-            };
         } & {
             [key: string]: unknown;
         };
@@ -85920,6 +85972,49 @@ export interface components {
             authorize_url: string;
             /** State */
             state: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * OAuthBundleStripPreviewResponse
+         * @description Dry run. ``outcomes``: outcome -> {provider -> count}; ``stripped`` means 'would be stripped'.
+         *
+         *     ``bundle_ids``: outcome -> record ids of the stored OAuth bundles (ids, never values).
+         */
+        OAuthBundleStripPreviewResponse: {
+            /** Outcomes */
+            outcomes: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Bundle Ids */
+            bundle_ids: {
+                [key: string]: string[];
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * OAuthBundleStripRequest
+         * @description Propose the strip. A backup reference (snapshot / export id) is mandatory.
+         */
+        OAuthBundleStripRequest: {
+            /** Backup Reference */
+            backup_reference: string;
+            /** Reason */
+            reason?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** OAuthBundleStripRequestResponse */
+        OAuthBundleStripRequestResponse: {
+            /** Approval Id */
+            approval_id: string;
+            /** Status */
+            status: string;
+            /** Action */
+            action: string;
         } & {
             [key: string]: unknown;
         };
@@ -129475,6 +129570,59 @@ export interface operations {
             };
         };
     };
+    preview_oauth_bundle_strip_api_admin_oauth_bundle_strip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthBundleStripPreviewResponse"];
+                };
+            };
+        };
+    };
+    propose_oauth_bundle_strip_api_admin_oauth_bundle_strip_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthBundleStripRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthBundleStripRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_dashboard_overview_api_analytics_dashboard_overview_get: {
         parameters: {
             query?: never;
@@ -132452,6 +132600,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_env_analysis_default_model_api_analytics_codebase_env_analysis_default_model_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

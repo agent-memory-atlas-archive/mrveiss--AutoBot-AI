@@ -460,10 +460,10 @@ async def _ensure_admin_user():
     import os
     import secrets
 
+    from autobot_shared.user_management.user_service_errors import DuplicateUserError
     from services.auth import auth_service
     from user_management.database import get_slm_session
     from user_management.services import TenantContext, UserService
-    from user_management.services.user_service import DuplicateUserError
 
     env_password = os.getenv("SLM_ADMIN_PASSWORD", "")
 

@@ -22,6 +22,7 @@ from agents.npu_code_search_agent import (
     index_project,
     search_codebase,
 )
+from api.embedding_refusal import reraise_http_or_refusal
 from api.schemas_code import (
     CodeAnalyticsRequest,
     CodeSearchCacheClearResultResponse,
@@ -211,10 +212,7 @@ async def index_codebase(request: CodeSearchIndexRequest):
     error_code_prefix="CODE_SEARCH",
 )
 async def search_code(request: CodeSearchRequest):
-    """
-    Search through indexed code.
-
-    Supports multiple search types:
+    """Search through indexed code. Supports multiple search types:
     - semantic: AI-powered semantic similarity search (NPU-accelerated when available)
     - exact: Exact string matching
     - regex: Regular expression search
@@ -272,6 +270,7 @@ async def search_code(request: CodeSearchRequest):
         )
 
     except Exception as e:
+        reraise_http_or_refusal(e)  # 400 stays 400; a refused query space is a 503 with its reason (#18185)
         logger.error("Search endpoint error: %s", e)
         raise HTTPException(status_code=500, detail="Search failed")
 
@@ -762,9 +761,7 @@ async def analyze_declarations(request: CodeAnalyticsRequest):
     error_code_prefix="CODE_SEARCH",
 )
 async def find_code_duplicates(request: CodeAnalyticsRequest):
-    """
-    Find potential code duplicates and similar patterns for refactoring opportunities.
-
+    """Find potential code duplicates and similar patterns for refactoring opportunities.
     Issue #665: Refactored from 85 lines to use extracted helper methods.
     Issue #380: Uses module-level constant for patterns.
 
@@ -796,6 +793,7 @@ async def find_code_duplicates(request: CodeAnalyticsRequest):
         )
 
     except Exception as e:
+        reraise_http_or_refusal(e)
         logger.error("Duplicate detection error: %s", e)
         raise HTTPException(status_code=500, detail="Duplicate detection failed")
 

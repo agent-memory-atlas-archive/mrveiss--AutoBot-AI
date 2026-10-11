@@ -73,6 +73,33 @@ REASON_CODES = frozenset(
 #: `reach_declarations_test` fails on a new one that does not -- so the pattern cannot be
 #: re-added without someone writing down why (#17914 AC4).
 ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
+    "migration-gate-test-import-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "One test directory's Python, against all tracked Python; the rest of the suite grows at its own rate.",
+    ),
+    "paths-filter-workflow-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow files are a subset of tracked YAML; compose, ansible and filter files grow at "
+        "their own rate, so a share of all YAML would sink with nothing wrong.",
+    ),
+    "deployment-mode-detector-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python files under two of the tracked trees, a subset of all tracked Python; the other trees drift.",
+    ),
+    "egress-default-outbound-call-sites": (
+        ABSOLUTE,
+        "NOT_PATHS",
+        "Call sites, not paths: one id per detected or declared outbound call in the egress sweep.",
+    ),
+    "egress-default-outbound-call-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Files making outbound HTTP calls are a small subset of tracked python; the other ~6000 "
+        "files grow independently, so a share of them sinks with nothing wrong with the sweep.",
+    ),
     "ansible-apt-repo-budget-override-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -212,6 +239,31 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
     ),
+    "oauth-bundle-app-secret-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
+    "model-tier-map-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "embedding-model-render-sites": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked ansible yml/yaml files, of which only those naming a template that carries the variable are parsed.",
+    ),
+    "frontend-model-literal-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Frontend ts and vue source, excluding tests and generated types, against all tracked frontend files.",
+    ),
+    "chunker-private-hook-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked .py under three roots, a subset of all tracked Python; the test-file share drifts.",
+    ),
     "import-hermeticity": (
         ABSOLUTE,
         "NOT_PATHS",
@@ -221,6 +273,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "One frontend's components, against all tracked `.vue`.",
+    ),
+    "infra-backend-import-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python under the infrastructure tree, against all tracked Python; the backend grows independently.",
     ),
     "kb-admin-read-bypass": (
         ABSOLUTE,
