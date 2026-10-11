@@ -13,7 +13,15 @@
   a global admin is allowed, everyone else must be the recorded owner, and there are no shared or
   org grants. An unowned (pre-ownership) session is allowed and is NOT claimed.
 
-Any failure to look the owner up denies under both postures (#14033), with 403 and nothing claimed.
+Any failure of the durable owner lookup denies under both postures (#14033), with 403 and nothing
+claimed: ``SessionOwnerUnreadable``, any other exception, a missing chat-history manager, and a
+recorded owner that is not a string alike. "Unknown" is never "unowned"; an ``except`` that returns
+``None`` from that lookup is a fail-open. The Redis ownership cache is not covered: a Redis error
+there only sends the check on to the durable lookup.
+
+``posture`` is hidden from FastAPI, so a client can never choose it, and it must be a
+``SessionPosture`` -- anything else is a ``TypeError``, never a silent ``DEFAULT``. A new private
+ownership validator beside this one is a finding.
 
 Its own module because ``session_ownership.py`` is at its recorded size ceiling (#14236).
 """

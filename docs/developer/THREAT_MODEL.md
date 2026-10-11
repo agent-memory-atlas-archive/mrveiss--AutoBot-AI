@@ -44,10 +44,8 @@ not an auth boundary — the caller is logged in — so a missing check reads as
 endpoint.
 
 **Canonical enforcement:** [`autobot-backend/security/session_ownership.py`](../../autobot-backend/security/session_ownership.py)
-— `build_owner_metadata` (:36) the one owner stamper · `validate_session_ownership` (:752)
-the one read-side gate · `validate_ownership` (:590). There is no second validator: the
-conversation-file routes call the same function with `SessionPosture.STRICT`
-([`security/session_posture.py`](../../autobot-backend/security/session_posture.py)).
+— `build_owner_metadata` (:36) the one owner stamper · `validate_session_ownership` (:745) the one read-side gate · `validate_ownership` (:583).
+Two postures, one validator (#14016): the contract is the docstring of [`security/session_posture.py`](../../autobot-backend/security/session_posture.py). A failed durable owner lookup denies under both and claims nothing: "unknown" is never "unowned" (#14033).
 
 **Invariants**
 - Redis keys are `chat:session:{session_id}` — **not** namespaced by user. Key
@@ -55,20 +53,7 @@ conversation-file routes call the same function with `SessionPosture.STRICT`
 - Owner identity is `metadata.owner` = **username**, never a user id. A diff comparing
   against `user_id` is comparing the wrong field.
 - Redis is a TTL cache; the session file's `metadata.owner` is the record of truth. An absent Redis record means
-  "not cached", never "unowned" — `_owner_when_cache_is_empty` (:516) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
-- One validator, two named postures (#14016). `DEFAULT` is the flag-aware chat posture (fast paths,
-  `log_only` rollout, org-admin and shared-session grants, legacy claim of an unowned session).
-  `STRICT` is the conversation-file posture: no flag or fast path, a role is required, a global
-  admin is allowed, everyone else must be the recorded owner, no shared or org grants, and an
-  unowned session is allowed but not claimed. `posture` is hidden from FastAPI, so a client can
-  never choose it. A new private ownership validator beside it is a finding.
-- Any failure of the **durable owner lookup** (the session file read, `_durable_owner`) denies with 403
-  under **both** postures, and nothing is claimed (#14033): `SessionOwnerUnreadable`, any other
-  exception, a missing chat-history manager, and a recorded owner that is not a string alike.
-  "Unknown" is never "unowned"; an `except` that returns `None` from that lookup is a fail-open.
-  The Redis ownership cache is not covered: `get_session_owner` returns `None` on a Redis error, which
-  only sends the check on to the durable lookup. `posture` must be a `SessionPosture`; anything else
-  is a `TypeError`, never a silent `DEFAULT`.
+  "not cached", never "unowned" — [`session_ownership.py`](../../autobot-backend/security/session_ownership.py) `_owner_when_cache_is_empty` (:509) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
 - Undetermined enforcement policy degrades, in
   [`security/enforcement_mode.py`](../../autobot-backend/security/enforcement_mode.py), to
   `DEGRADED_ENFORCEMENT_MODE` (:53) and never to `disabled`: checks still run and violations
@@ -78,7 +63,7 @@ conversation-file routes call the same function with `SessionPosture.STRICT`
   allow-and-audit in both, deliberately. A degraded route reporting the chosen `reason` is a finding.
 - Only two legitimate fast-path bypasses exist, in
   [`security/session_ownership.py`](../../autobot-backend/security/session_ownership.py) —
-  `_resolve_fast_paths` (:480): global auth disabled, and enforcement explicitly `disabled`.
+  `_resolve_fast_paths` (:459): global auth disabled, and enforcement explicitly `disabled`.
   A third one added in a diff is a finding.
 - Creating over an existing session id is a 409, identical for "owned by someone else" and
   "no recorded owner" — a 403 on the first would confirm who owns it (#14012).
