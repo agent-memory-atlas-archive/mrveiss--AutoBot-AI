@@ -7,7 +7,7 @@ Anonymized per research-skill rule — source identity lives only in the chat re
 
 ### What It Is
 A vendor that trains its own text/image/video models sells them through a free-tier
-OpenAI-compatible gateway and publishes ~28 public repos. Most are model cards,
+chat-completions-compatible gateway and publishes ~28 public repos. Most are model cards,
 paper landing pages or integration "skills" for third-party agents. The one with real
 engineering substance is an **agent harness**: TypeScript/Node 24, pnpm monorepo, Apache-2.0,
 ~107 stars, self-described *developer preview (pre-alpha)*, macOS-only local checks,
