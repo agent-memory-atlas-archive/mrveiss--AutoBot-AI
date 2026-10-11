@@ -76,6 +76,16 @@ async def assert_egress_policy(url: str) -> None:
     await _assert_egress_allowed(url, allow_private=False)
 
 
+async def assert_public_egress(url: str) -> None:
+    """Public-only check for a raw client sending to a user-, LLM- or document-supplied *url*.
+
+    The raw-client counterpart of ``guard_egress=False``: no internal-origin trust, so an
+    internal service URL the requester supplies is refused. Raises :class:`EgressBlockedError`.
+    Like :func:`assert_egress_policy` it does not police redirects -- the caller disables them.
+    """
+    await _assert_egress_allowed(url, allow_private=False)
+
+
 async def apply_egress_guard(url: str, guard: "bool | None | _EgressPolicy") -> None:
     """Apply a ``guard_egress`` value: ``None`` (no guard), ``True``/``False`` or :data:`EGRESS_POLICY`.
 

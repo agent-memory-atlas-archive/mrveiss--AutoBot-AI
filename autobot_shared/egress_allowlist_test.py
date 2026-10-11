@@ -15,6 +15,7 @@ from autobot_shared.http_egress_guard import (
     EGRESS_POLICY,
     EgressBlockedError,
     assert_egress_policy,
+    assert_public_egress,
 )
 from autobot_shared.ssot_config import config
 
@@ -203,6 +204,17 @@ async def test_assert_egress_policy_matches_manager_mode(pinned_internal, monkey
     for url in ("http://10.1.2.3/x", "http://127.0.0.1:9999/x", "http://169.254.169.254/latest"):
         with pytest.raises(EgressBlockedError):
             await assert_egress_policy(url)
+
+
+@pytest.mark.asyncio
+async def test_assert_public_egress_refuses_an_internal_origin_that_policy_allows(pinned_internal, monkeypatch):
+    await assert_egress_policy("http://127.0.0.1:8001/x")
+    with pytest.raises(EgressBlockedError):
+        await assert_public_egress("http://127.0.0.1:8001/x")
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda host, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, 0))]
+    )
+    await assert_public_egress("https://api.example.test/v1")
 
 
 # --- providers and the TTL cache --------------------------------------------
