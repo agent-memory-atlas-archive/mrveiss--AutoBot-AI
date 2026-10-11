@@ -17,9 +17,10 @@ store has its own unrelated `delete_session` and is not matched.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
-_API = Path(__file__).resolve().parent.parent / "autobot-backend" / "api"
+from repo_tests._paths import repo_root
+
+_API = repo_root() / "autobot-backend" / "api"
 _CANONICAL = "chat_sessions.py"
 _MIN_FILES_SCANNED = 100
 
