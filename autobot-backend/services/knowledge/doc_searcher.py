@@ -28,6 +28,20 @@ logger = get_llm_logger("doc_searcher")
 PROJECT_ROOT = PATH.PROJECT_ROOT
 
 
+_WARNED: set[str] = set()
+
+
+def _warn_unrecorded_once(collection: str, model: str, dim: int) -> None:
+    """Warn once per process that ``collection`` is searched on a dimension match, and propose a stamp."""
+    if collection in _WARNED:
+        return
+    _WARNED.add(collection)
+    logger.warning("Collection '%s': unrecorded space, dimension-matched (%s, %d-d) (#18143)", collection, model, dim)
+    from services.knowledge.collection_space_proposal import schedule_stamp_proposal
+
+    schedule_stamp_proposal(collection, model, dim)
+
+
 class DocumentationSearcher:
     """
     Searches indexed AutoBot documentation for relevant context.
@@ -119,17 +133,45 @@ class DocumentationSearcher:
             return False
 
     def _recorded_space(self):
-        """The (model, dim) the collection was built with, or None when it records none (search refused)."""
+        """The (model, dim) the collection records, else the active model if it matches the stored dimension.
+
+        Neither -> None and the search is refused. An unrecorded collection is searched on a dimension match
+        alone (warned once, and a stamp is PROPOSED for a human to approve); it is never stamped here (#18143).
+        """
         from autobot_shared.embedding_provenance import provenance_from_metadata
 
-        space = provenance_from_metadata(getattr(self._collection, "metadata", None))
-        if space is None:
+        recorded = provenance_from_metadata(getattr(self._collection, "metadata", None))
+        return recorded or self._dimension_matched_space()
+
+    def _stored_dim(self) -> int | None:
+        """Dimension of one stored vector, read-only; None when the collection is empty or unreadable."""
+        try:
+            embs = self._collection.peek(limit=1).get("embeddings")
+            return len(embs[0]) if embs is not None and len(embs) > 0 and embs[0] is not None else None
+        except Exception as exc:
+            logger.error("Could not read a stored vector of '%s': %s", self.collection_name, exc)
+            return None
+
+    def _dimension_matched_space(self):
+        """The active model as the collection's space, only when its vectors have the stored dimension."""
+        from llama_index.embeddings.ollama import OllamaEmbedding
+
+        from autobot_shared.embedding_model import active_embedding_model
+        from autobot_shared.embedding_provenance import EmbeddingProvenance
+
+        stored, model = self._stored_dim(), active_embedding_model()
+        probe = OllamaEmbedding(model_name=model, base_url=get_ollama_url()).get_text_embedding("dimension probe")
+        if stored is None or len(probe) != stored:
             logger.error(
-                "Documentation collection '%s' records no embedding model, so a query cannot be put in its "
-                "space; search refused until it is re-indexed (#18143)",
+                "Documentation collection '%s' records no embedding model and its stored dimension (%s) does "
+                "not match the active model (%d-d); search refused until it is re-indexed (#18143)",
                 self.collection_name,
+                stored,
+                len(probe),
             )
-        return space
+            return None
+        _warn_unrecorded_once(self.collection_name, model, stored)
+        return EmbeddingProvenance(model, stored)
 
     def is_documentation_query(self, query: str) -> bool:
         """

@@ -88,8 +88,52 @@ def test_the_doc_searcher_takes_the_space_the_collection_records(active_changed)
     assert (space.model_name, space.dim) == ("mxbai-embed-large", 1024)
 
 
-def test_the_doc_searcher_refuses_a_collection_that_records_no_space() -> None:
-    assert _searcher({"hnsw:space": "cosine"})._recorded_space() is None
+def _unrecorded(stored_dim: int | None, probe_dim: int):
+    """A searcher whose collection records no space, stores ``stored_dim``-d vectors, active model gives probe_dim."""
+    import sys
+    import types
+
+    from services.knowledge import doc_searcher
+
+    searcher = _searcher({"hnsw:space": "cosine"})
+    embs = None if stored_dim is None else [[0.0] * stored_dim]
+    searcher._collection.peek.return_value = {"embeddings": embs}
+    fake = types.ModuleType("llama_index.embeddings.ollama")
+    fake.OllamaEmbedding = lambda **kw: MagicMock(get_text_embedding=lambda t: [0.0] * probe_dim)
+    doc_searcher._WARNED.clear()
+    return searcher, patch.dict(sys.modules, {"llama_index.embeddings.ollama": fake})
+
+
+def test_an_unrecorded_collection_with_a_matching_dimension_is_searched_warns_and_proposes(caplog) -> None:
+    searcher, modules = _unrecorded(768, 768)
+    with modules, patch("services.knowledge.collection_space_proposal.schedule_stamp_proposal") as propose:
+        space = searcher._recorded_space()
+        searcher._recorded_space()  # a second init in the same process does not warn or propose again
+    assert space.dim == 768 and space.model_name
+    propose.assert_called_once_with("autobot_docs", space.model_name, 768)
+    assert caplog.text.count("unrecorded space, dimension-matched") == 1
+
+
+def test_an_unrecorded_collection_with_a_different_dimension_or_empty_is_refused() -> None:
+    for stored, probe in ((384, 768), (None, 768)):
+        searcher, modules = _unrecorded(stored, probe)
+        with modules, patch("services.knowledge.collection_space_proposal.schedule_stamp_proposal") as propose:
+            assert searcher._recorded_space() is None
+        propose.assert_not_called()
+
+
+async def test_the_stamp_proposal_is_reused_when_one_is_pending_and_never_writes_the_collection() -> None:
+    from services.knowledge import collection_space_proposal as csp
+
+    existing = MagicMock(context={"collection": "autobot_docs"})
+    session = MagicMock(execute=AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: [existing]))))
+    factory = MagicMock(return_value=MagicMock(__aenter__=AsyncMock(return_value=session), __aexit__=AsyncMock()))
+    with (
+        patch.object(csp, "get_async_session_factory", return_value=factory),
+        patch.object(csp, "ApprovalService") as service,
+    ):
+        assert await csp.propose_stamp("autobot_docs", "m", 768) is True
+    service.return_value.request_approval.assert_not_called()
 
 
 def test_the_cognition_seeder_refuses_a_collection_recorded_in_another_space() -> None:
