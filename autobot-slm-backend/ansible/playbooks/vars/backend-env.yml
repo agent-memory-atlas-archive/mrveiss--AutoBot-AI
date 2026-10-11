@@ -35,7 +35,7 @@ backend_system_model: "{{ lookup('env', 'AUTOBOT_SYSTEM_MODEL') | default('dolph
 # co-located (single-host): backend_ai_stack_host stays 127.0.0.1
 # distributed (fleet):      backend_ai_stack_host is set from ai_stack_host in production.yml
 backend_ai_stack_host: "{{ ai_stack_host | default('127.0.0.1') }}"
-backend_ai_stack_port: "{{ ai_stack_port | default(8080) }}"
+backend_ai_stack_port: "{{ ai_stack_port }}"
 
 # ChromaDB connection (#4087: always co-located with AI Stack — derive from backend_ai_stack_host)
 # WSL2 override in roles/backend/tasks/main.yml adjusts both vars together when WSL2 is detected.

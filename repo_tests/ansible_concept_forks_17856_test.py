@@ -6,8 +6,8 @@
 
 | Setting          | The one authority                                                        |
 |------------------|--------------------------------------------------------------------------|
-| backend_workers  | `roles/backend/defaults` (4) + `group_vars/slm.yml` (1); never a play-level vars file |
-| ai_stack_port    | 8080 -- 11434 is the Ollama port, a different service                    |
+| backend_workers  | `roles/backend/defaults` (4) + `group_vars/slm.yml` (1); the deadlock playbook may force 1 |
+| ai_stack_port    | `inventory/group_vars/all.yml` (8080); 11434 is Ollama, a different service |
 | single-worker unit | none: the canonical backend unit renders with `backend_workers=1`      |
 
 The detectors read text line by line against a contrast fixture, so prose that names a setting
@@ -29,24 +29,30 @@ _ANSIBLE = "autobot-slm-backend/ansible"
 _AI_STACK_PORT = "8080"
 _SUFFIXES = (".yml", ".yaml", ".j2", ".sh")
 
-_WORKERS_KEY = re.compile(r"^backend_workers\s*:")
-_AI_PORT_ASSIGN = re.compile(r"^\s*ai_stack_port\s*:\s*[\"']?(\d+)[\"']?\s*(?:#.*)?$|AUTOBOT_AI_STACK_PORT=(\d+)\s*$")
+_WORKERS_KEY = re.compile(r"^\s*backend_workers\s*:\s*\S")
+_AI_PORT_LITERAL = re.compile(
+    r"^\s*(?:backend_)?ai_stack_port\s*:\s*[\"']?\d+"  # yaml: ai_stack_port: 8080
+    r"|^\s*ai_stack\s*:\s*[\"']?\d+"  # yaml: ports.ai_stack: 8080
+    r"|\bai_stack_port\s*\|\s*default\(\s*\d+"  # jinja fallback: ai_stack_port | default(8080)
+    r"|AI_STACK_PORT=[\"']?\d+"  # shell / env: AUTOBOT_AI_STACK_PORT=8080
+    r"|AI_STACK_PORT:-\d+"  # shell fallback
+    r"|AI_STACK_HOST[^\"\n]*\}:8080\b"  # shell: ${AUTOBOT_AI_STACK_HOST:-localhost}:8080
+)
 _SINGLE_UNIT_REF = re.compile(r"single-worker\.service\.j2")
 
 
 def _defines_backend_workers(text: str) -> bool:
-    """True when a vars file assigns `backend_workers` at its top level (comments don't count)."""
+    """True when a yaml line assigns `backend_workers` (at any indent; comments don't count)."""
     return any(_WORKERS_KEY.match(line) for line in text.splitlines())
 
 
-def _wrong_ai_stack_ports(text: str) -> list[str]:
-    """Literal AI-stack port assignments that are not 8080."""
-    bad = []
-    for line in text.splitlines():
-        m = _AI_PORT_ASSIGN.search(line)
-        if m and (m.group(1) or m.group(2)) != _AI_STACK_PORT:
-            bad.append(line.strip())
-    return bad
+def _ai_stack_port_literals(text: str) -> list[str]:
+    """Lines that restate the AI-stack port as a number instead of referencing `ai_stack_port`."""
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#") and _AI_PORT_LITERAL.search(line)
+    ]
 
 
 def _references_single_worker_unit(text: str) -> bool:
@@ -62,11 +68,30 @@ def _references_single_worker_unit(text: str) -> bool:
             "# backend_workers is not set here\nx: 1\n",
         ),
         (
-            lambda t: bool(_wrong_ai_stack_ports(t)),
-            '    ai_stack_port: "11434"\n',
-            '    ai_stack_port: "8080"\n# ollama_port: 11434\n',
+            _defines_backend_workers,
+            "  vars:\n    backend_workers: 4\n",
+            "  vars:\n    backend_workers_note: 4\n# backend_workers: 4\n",
         ),
-        (lambda t: bool(_wrong_ai_stack_ports(t)), "AUTOBOT_AI_STACK_PORT=11434\n", "AUTOBOT_AI_STACK_PORT=8080\n"),
+        (
+            lambda t: bool(_ai_stack_port_literals(t)),
+            '    ai_stack_port: "8080"\n',
+            '    ai_stack_port: "{{ ai_stack_port }}"\n# ai_stack_port: 8080\nollama_port: 11434\n',
+        ),
+        (
+            lambda t: bool(_ai_stack_port_literals(t)),
+            "url: http://h:{{ ai_stack_port | default(8080) }}/health\n",
+            "url: http://h:{{ ai_stack_port }}/health\n",
+        ),
+        (
+            lambda t: bool(_ai_stack_port_literals(t)),
+            "AUTOBOT_AI_STACK_PORT=8080\n",
+            "AUTOBOT_AI_STACK_PORT=${AUTOBOT_AI_STACK_PORT}\n",
+        ),
+        (
+            lambda t: bool(_ai_stack_port_literals(t)),
+            'check "${AUTOBOT_AI_STACK_HOST:-localhost}:8080"\n',
+            'check "${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}"\n',
+        ),
         (
             _references_single_worker_unit,
             "    src: templates/autobot-backend-single-worker.service.j2\n",
@@ -111,9 +136,22 @@ def test_no_play_level_vars_file_sets_backend_workers() -> None:
     ), f"#17856: {offenders} shadow roles/backend/defaults and group_vars/slm.yml; delete the line."
 
 
-def test_every_literal_ai_stack_port_is_8080() -> None:
-    offenders = {r: b for r, t in _texts().items() if (b := _wrong_ai_stack_ports(t))}
-    assert offenders == {}, f"#17856: AI-stack port is {_AI_STACK_PORT} (11434 is Ollama): {offenders}"
+_AI_PORT_HOME = f"{_ANSIBLE}/inventory/group_vars/all.yml"
+_SSOT_DEFAULT = re.compile(r"aistack:\s*int\s*=\s*Field\(default=(\d+),\s*alias=\"AUTOBOT_AI_STACK_PORT\"")
+
+
+def test_the_ai_stack_port_is_a_number_in_exactly_one_ansible_file() -> None:
+    homes = {r: b for r, t in _texts().items() if (b := _ai_stack_port_literals(t))}
+    assert list(homes) == [_AI_PORT_HOME], f"#17856: the port is restated in {sorted(homes)}; reference ai_stack_port."
+    assert homes[_AI_PORT_HOME] == [f"ai_stack_port: {_AI_STACK_PORT}"]
+
+
+def test_the_ansible_port_equals_the_runtime_ssot_default() -> None:
+    """The two literals cannot be one without new machinery, so a test keeps them equal."""
+    source = (repo_root() / "autobot_shared/ssot_config.py").read_text(encoding="utf-8")
+    match = _SSOT_DEFAULT.search(source)
+    assert match is not None, "ssot_config.port.aistack field not found; update this guard"
+    assert match.group(1) == _AI_STACK_PORT
 
 
 def test_no_single_worker_unit_template_or_reference_remains() -> None:

@@ -204,7 +204,7 @@ validate_deployment() {
     fi
 
     # AI/ML services check
-    if curl -s -f "http://${AUTOBOT_AI_STACK_HOST:-localhost}:8080/health" > /dev/null; then
+    if curl -s -f "http://${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}/health" > /dev/null; then
         success "AI Stack service is healthy"
     else
         warn "AI Stack service health check failed"
@@ -234,7 +234,7 @@ show_summary() {
     log "INFO" "  Backend API: http://${AUTOBOT_BACKEND_HOST:-localhost}:8001"
     log "INFO" "  Redis:       redis://${AUTOBOT_REDIS_HOST:-localhost}:6379"
     log "INFO" "  RedisInsight: http://${AUTOBOT_REDIS_HOST:-localhost}:8002"
-    log "INFO" "  AI Stack:    http://${AUTOBOT_AI_STACK_HOST:-localhost}:8080"
+    log "INFO" "  AI Stack:    http://${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}"
     log "INFO" "  NPU Worker:  http://${AUTOBOT_NPU_WORKER_HOST:-localhost}:8081"
     log "INFO" "  Browser:     http://${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}:3000"
     log "INFO" "  VNC Server:  vnc://${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}:5901"

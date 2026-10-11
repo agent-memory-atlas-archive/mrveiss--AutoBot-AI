@@ -27,7 +27,6 @@
     npu_host: "{{ infrastructure.hosts.npu }}"
     npu_port: "8081"
     ai_stack_host: "{{ infrastructure.hosts.backend }}"
-    ai_stack_port: "8080"
 
   tasks:
     - name: "Fix | Frontend port 5173 → 443"
