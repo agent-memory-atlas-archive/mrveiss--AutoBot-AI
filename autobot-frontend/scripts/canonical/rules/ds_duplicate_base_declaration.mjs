@@ -1,6 +1,6 @@
 // Copyright 2025-2026 mrveiss
 // SPDX-License-Identifier: Apache-2.0
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 
 import { makeDiagnostic } from "../diagnostic.mjs";
@@ -171,6 +171,29 @@ export function surplus(list) {
   return extra;
 }
 
+//: `check` is called once per stylesheet and each call compared against ALL of them,
+//: so a run re-parsed the whole tree N times (3.3s for 19 files). The sites are now
+//: computed once per tree and reused until a stylesheet's size or mtime changes.
+const sitesCache = new Map();
+
+async function signature(dir) {
+  const parts = [];
+  for (const file of await cssFilesUnder(dir)) {
+    const info = await stat(file);
+    parts.push(`${file}:${info.size}:${info.mtimeMs}`);
+  }
+  return parts.join("|");
+}
+
+async function cachedBaseSites(dir) {
+  const sig = await signature(dir);
+  const hit = sitesCache.get(dir);
+  if (hit && hit.sig === sig) return hit.sites;
+  const sites = await baseSites(dir);
+  sitesCache.set(dir, { sig, sites });
+  return sites;
+}
+
 export async function check(filePath) {
   let own;
   try {
@@ -180,7 +203,7 @@ export async function check(filePath) {
   }
   if (WAIVER.test(own)) return [];
   const root = assetsRootFor(filePath);
-  const sites = await baseSites(root);
+  const sites = await cachedBaseSites(root);
   const out = [];
   for (const [name, list] of sites) {
     if (list.length < 2) continue;

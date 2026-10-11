@@ -43,6 +43,8 @@ describe("frontend canonical-check runner", () => {
   });
 });
 
+const WHOLE_TREE_MS = 60_000;
+
 describe("--all walks the TARGETS trees (#17571)", () => {
   it("reports violations the whole tree contains, not zero", () => {
     // Before this change --all satisfied the "pass something" check and then
@@ -53,7 +55,9 @@ describe("--all walks the TARGETS trees (#17571)", () => {
     const found = JSON.parse(r.stdout);
     expect(Array.isArray(found)).toBe(true);
     expect(found.length).toBeGreaterThan(0);
-  });
+    // A whole-tree run reads every source file of both apps (the unloaded-stylesheet
+    // rule builds the import graph), so the default 5s is not the budget (#17613).
+  }, WHOLE_TREE_MS);
 
   it("refuses to report a clean run when nothing matched", async () => {
     const { collectTargetFiles } = await import("../registry.mjs");
@@ -165,7 +169,7 @@ describe("the unloaded-authority rule (#14785)", () => {
     // to canonical-audit.yml lands green rather than reddening main on arrival.
     const r = run("--all");
     expect(r.status).toBe(0);
-  });
+  }, WHOLE_TREE_MS);
 });
 
 describe("a run that inspects nothing is refused, not reported clean (#17608 review)", () => {
