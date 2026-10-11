@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 import requests
 
-from constants import ServiceURLs
+from autobot_shared.network_constants import ServiceURLs
 
 
 def test_gui_chat():
