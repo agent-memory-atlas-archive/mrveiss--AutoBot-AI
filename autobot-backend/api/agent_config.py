@@ -175,7 +175,7 @@ DEFAULT_AGENT_CONFIGS = {
     "kb_librarian": {
         "name": "Knowledge Base Librarian",
         "description": "Manages knowledge base operations including document ingestion, search, and retrieval. Invoked by AsyncChatWorkflow when knowledge patterns detected ('according to', 'based on documents'). Uses LlamaIndex for indexing.",
-        "default_model": LIGHT_TIER_MODEL,
+        "default_model": INSTRUCTION_TIER_MODEL,
         "provider": "ollama",
         "enabled": True,
         "priority": 2,
@@ -227,7 +227,7 @@ DEFAULT_AGENT_CONFIGS = {
     "knowledge_extraction": {
         "name": "Knowledge Extraction Agent",
         "description": "Extracts structured entities and relationships from unstructured text. Invoked by kb_librarian during document ingestion. Feeds data to graph_entity_extractor for knowledge graphs.",
-        "default_model": LIGHT_TIER_MODEL,
+        "default_model": INSTRUCTION_TIER_MODEL,
         "provider": "ollama",
         "enabled": True,
         "priority": 2,
@@ -244,7 +244,7 @@ DEFAULT_AGENT_CONFIGS = {
     "knowledge_retrieval": {
         "name": "Knowledge Retrieval Agent",
         "description": "Fast semantic search using vector embeddings. Invoked by AgentRouter for knowledge queries. Primary agent for KNOWLEDGE_PATTERNS, often paired with RAG for synthesis.",
-        "default_model": LIGHT_TIER_MODEL,
+        "default_model": INSTRUCTION_TIER_MODEL,
         "provider": "ollama",
         "enabled": True,
         "priority": 2,
