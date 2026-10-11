@@ -46,7 +46,7 @@ logger = get_logger(__name__)
 # 6-tier model mapping (#2553) — all defaults from SSOT constants.
 
 # Routing tier — orchestrator only, no tool use
-ROUTING_TIER_MODEL = config.routing_model
+ROUTING_TIER_MODEL = config.routing_model or config.llm.orchestrator_model  # #15502: never ""
 # Classification tier — intent detection
 CLASSIFICATION_TIER_MODEL = config.classification_model
 # Light processing tier — extraction, formatting, lightweight tasks
@@ -56,7 +56,7 @@ INSTRUCTION_TIER_MODEL = config.instruction_model
 # System/uncensored tier — system commands, security tasks
 SYSTEM_TIER_MODEL = config.system_model
 # Quality tier — user-facing chat, research, code analysis
-QUALITY_TIER_MODEL = config.misc.default_llm_model or config.default_agent_model
+QUALITY_TIER_MODEL = config.misc.default_llm_model or config.default_agent_model or config.llm.default_model
 
 router = APIRouter()
 

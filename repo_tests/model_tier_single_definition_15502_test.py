@@ -315,8 +315,27 @@ def test_no_module_hand_writes_a_tier_map() -> None:
 # --- (e) the frontend holds no model literal --------------------------------
 
 _FRONTEND_SRC = "autobot-frontend/src"
-#: A local-model tag as a family name followed by `:`; hosted catalogue ids (`gpt-...`) are out of scope.
-_MODEL_TAG = re.compile(r"\b(?:qwen|llama|gemma|phi|mistral|dolphin|nomic)[\w.\-]*:")
+_CONTEXT_WINDOW = "autobot-frontend/src/composables/chat/useContextWindow.ts"
+_FAMILIES = "qwen|llama|gemma|phi|mistral|dolphin|nomic"
+#: A local model name: a family followed by `:tag` anywhere in a literal, or a whole literal that is a
+#: tagless name (`nomic-embed-text`). Hosted catalogue ids (`gpt-...`) are out of scope, and no
+#: underscore is allowed in the tagless shape so `llama_index` is not a model.
+_MODEL_TAG = re.compile(rf"\b(?:{_FAMILIES})[\w.\-]*:|^(?:{_FAMILIES})[A-Za-z0-9.\-]*$")
+#: `(file, literal)` -> why it is not a model *choice*. Every entry needs a reason; a stale one fails.
+FRONTEND_LITERAL_ALLOWLIST: dict[tuple[str, str], str] = {
+    **{
+        (
+            _CONTEXT_WINDOW,
+            family,
+        ): "family prefix keying the fallback context-window size table; matching only, never a model choice or default"
+        for family in ("llama3", "llama3.1", "llama3.2", "mistral", "gemma", "gemma2", "qwen", "phi3")
+    },
+    (
+        "autobot-frontend/src/components/admin/NpuWorkerPairConfirmDialog.stories.ts",
+        "gemma-3-4b",
+    ): "Storybook fixture data, not shipped",
+    ("autobot-frontend/src/components/chat/MessageItem.stories.ts", "llama3"): "Storybook fixture data, not shipped",
+}
 _TS_TOKEN = re.compile(r"""//[^\n]*|/\*.*?\*/|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`""", re.S)
 _VUE_TOKEN = re.compile(r"""/\*.*?\*/|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`""", re.S)
 
@@ -373,6 +392,23 @@ def test_a_frontend_model_literal_is_flagged_and_a_lookalike_is_not() -> None:
     assert _model_literals("const hosted = 'gpt-3.5-turbo'", models) == []
 
 
+def test_a_tagless_model_name_is_flagged_and_prose_is_not() -> None:
+    models = _local_models()
+    assert _model_literals("const m = 'nomic-embed-text'", models) == ["nomic-embed-text"]
+    assert _model_literals('const m = "llama3.2"', models) == ["llama3.2"]
+    assert _model_literals("const t = 'llama_index'", models) == []
+    assert _model_literals("const t = 'Phi is a letter'", models) == []
+
+
+def test_every_frontend_allowlist_entry_is_still_needed_and_has_a_reason() -> None:
+    models = _local_models()
+    for (rel, literal), reason in FRONTEND_LITERAL_ALLOWLIST.items():
+        assert reason.strip(), (rel, literal)
+        assert literal in _model_literals(
+            _read(rel), models, vue=rel.endswith(".vue")
+        ), f"stale allowlist entry {rel}: {literal}"
+
+
 def test_the_frontend_scan_is_not_vacuous() -> None:
     population = REACH_FRONTEND.examined(repo_root())
     assert "autobot-frontend/src/config/ssot-config.ts" in population
@@ -385,7 +421,12 @@ def test_frontend_holds_no_model_literal() -> None:
     models = _local_models()
     found = {}
     for rel in REACH_FRONTEND.examined(repo_root()):
-        if hits := _model_literals(_read(rel), models, vue=rel.endswith(".vue")):
+        hits = [
+            h
+            for h in _model_literals(_read(rel), models, vue=rel.endswith(".vue"))
+            if (rel, h) not in FRONTEND_LITERAL_ALLOWLIST
+        ]
+        if hits:
             found[rel] = hits
     assert not found, f"#15502: the frontend hardcodes model name(s) {found}; fetch them from the backend"
 

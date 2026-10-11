@@ -39,6 +39,12 @@
   no_log: true
   tags: ['backend', 'env']
 
+- name: "Backend | Keep the deployed embedding model (#15502)"
+  ansible.builtin.include_tasks: ../../../_shared/tasks/read_deployed_embedding_model.yml
+  vars:
+    deployed_embedding_env_files: ["{{ backend_env_dest }}"]
+  tags: ['backend', 'env']
+
 - name: "Backend | Render .env from template (#12871)"
   ansible.builtin.template:
     src: backend.env.j2
