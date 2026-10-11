@@ -79,7 +79,6 @@ UNDEFINED_CSS_VAR_NAMES: dict[str, int] = {
     "--color-warning-darker": 3,
     "--errmon-y": 1,
     "--font-size-md": 7,
-    "--indigo-800": 1,
     "--ring-primary": 4,
     "--shadow-error": 1,
     "--shadow-success": 1,
@@ -115,4 +114,4 @@ UNDEFINED_CSS_VAR_NAMES: dict[str, int] = {
 }
 
 #: Frozen total, asserted separately so a per-name edit cannot drift it unseen.
-TOTAL_SITES = 134
+TOTAL_SITES = 133
