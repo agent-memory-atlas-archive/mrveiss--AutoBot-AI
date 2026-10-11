@@ -30,6 +30,7 @@ from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
+from knowledge.index_embedding_space import CollectionEmbeddingSpace
 
 logger = get_logger(__name__)
 
@@ -38,7 +39,6 @@ logger = get_logger(__name__)
 # ``generate_embeddings_batch_with_fallback``). No duplicate branching here.
 
 # Default configuration
-DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 DEFAULT_CACHE_TTL = 3600  # 1 hour
 DEFAULT_EMBEDDING_CACHE_SIZE = 500
 DEFAULT_REDIS_DATABASE = "analytics"
@@ -104,7 +104,7 @@ class InfrastructureMetrics:
         return result
 
 
-class AnalyticsInfrastructureMixin:
+class AnalyticsInfrastructureMixin(CollectionEmbeddingSpace):
     """
     Mixin class providing shared analytics infrastructure.
 
@@ -135,7 +135,6 @@ class AnalyticsInfrastructureMixin:
         collection_name: str = "code_analysis_vectors",
         use_llm: bool = True,
         use_cache: bool = True,
-        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         cache_ttl: int = DEFAULT_CACHE_TTL,
         redis_database: str = DEFAULT_REDIS_DATABASE,
         embedding_cache_size: int = DEFAULT_EMBEDDING_CACHE_SIZE,
@@ -147,7 +146,6 @@ class AnalyticsInfrastructureMixin:
             collection_name: Name for ChromaDB collection
             use_llm: Whether to use LLM for embeddings/analysis
             use_cache: Whether to use Redis caching
-            embedding_model: Ollama model for embeddings
             cache_ttl: TTL for cached results in seconds
             redis_database: Redis database name
             embedding_cache_size: Max entries in embedding cache (default 500)
@@ -166,7 +164,6 @@ class AnalyticsInfrastructureMixin:
         self._collection_name = collection_name
         self._use_llm = use_llm
         self._use_cache = use_cache
-        self._embedding_model = embedding_model
         self._cache_ttl = cache_ttl
         self._redis_database = redis_database
         self._embedding_cache_size = embedding_cache_size
@@ -269,7 +266,7 @@ class AnalyticsInfrastructureMixin:
 
         cache = await self._get_embedding_cache()
         if cache:
-            cached = await cache.get(text, model=self._embedding_model)
+            cached = await cache.get(text, model=self._embedding_space.space_id)
             if cached:
                 self._metrics.cache_hits += 1
                 return cached
@@ -278,7 +275,7 @@ class AnalyticsInfrastructureMixin:
         try:
             from services.npu_client import generate_embedding_with_fallback
 
-            embedding = await generate_embedding_with_fallback(text, model_name=self._embedding_model)
+            embedding = await generate_embedding_with_fallback(text, model_name=self._embedding_space.model_id)
         except Exception as e:
             logger.warning("Embedding generation failed: %s", e)
             self._metrics.add_error(f"Embedding generation failed: {e}")
@@ -288,7 +285,7 @@ class AnalyticsInfrastructureMixin:
             self._metrics.embeddings_generated += 1
             self._metrics.llm_requests += 1
             if cache:
-                await cache.put(text, embedding, model=self._embedding_model)
+                await cache.put(text, embedding, model=self._embedding_space.space_id)
             return embedding
 
         return None
@@ -316,7 +313,7 @@ class AnalyticsInfrastructureMixin:
 
             results = await generate_embeddings_batch_with_fallback(
                 texts,
-                model_name=self._embedding_model,
+                model_name=self._embedding_space.model_id,
                 max_concurrent=max_concurrent,
             )
         except Exception as e:

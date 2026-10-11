@@ -19,7 +19,6 @@ Related Issues: #228 (LLM-Powered Code Generation)
 import ast
 import asyncio
 import difflib
-import hashlib
 import json
 import re
 import time
@@ -46,6 +45,7 @@ from api.schemas_analytics import (
     RefactoringType,
 )
 from auth_middleware import check_admin_permission
+from autobot_shared.content_digest import content_digest
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import RedisDatabase, get_async_redis_client
@@ -448,7 +448,7 @@ class CodeGenerationEngine:
 
     def _generate_version_id(self, code: str) -> str:
         """Generate unique version ID from code content"""
-        content_hash = hashlib.sha256(code.encode()).hexdigest()[:12]
+        content_hash = content_digest(code, width=12)
         timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
         return f"v_{timestamp}_{content_hash}"
 

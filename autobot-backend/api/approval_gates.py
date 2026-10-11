@@ -33,9 +33,11 @@ from autobot_shared.models.pagination import PaginationParams
 from models.approval import ApprovalStatus, ApprovalType
 from services.approval_execution import is_registered_action
 from services.approval_gate_service import ApprovalGateService
+from services.knowledge.collection_space_stamp_action import register_stamp_action
 
 logger = get_logger(__name__)
 router = APIRouter()
+register_stamp_action()  # registered with the router so the handler exists before any approve()
 
 
 # -- Helpers -----------------------------------------------------------

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.status_enums import Severity
 from code_intelligence.llm_pattern_analysis.calculators import (
     CostCalculator,
     TokenTracker,
@@ -410,7 +411,7 @@ def get_optimization_categories() -> List[str]:
 
 def get_optimization_priorities() -> List[str]:
     """Get all optimization priority values."""
-    return [priority.value for priority in OptimizationPriority]
+    return [priority.value for priority in reversed(Severity.finding_ladder())]
 
 
 def get_cache_opportunity_types() -> List[str]:

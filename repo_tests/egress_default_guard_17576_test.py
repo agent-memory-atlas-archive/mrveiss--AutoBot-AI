@@ -266,6 +266,11 @@ _FIXTURES_GUARDED = {
         _POLICY_IMPORT + "import requests\nasync def f(u):\n    await assert_egress_policy(u)\n"
         "    return requests.get(u, allow_redirects=False)\n"
     ),
+    "public-only-raw-session": (
+        "import aiohttp\nfrom autobot_shared.http_egress_guard import assert_public_egress\n"
+        "async def f(u):\n    await assert_public_egress(u)\n"
+        "    async with aiohttp.ClientSession() as s:\n        return await s.get(u, allow_redirects=False)\n"
+    ),
     "websocket": (
         _POLICY_IMPORT + "import websockets\nasync def f(u):\n    await assert_egress_policy(u)\n"
         "    return websockets.connect(u)\n"
@@ -292,7 +297,8 @@ def test_guarded_forms_count_as_guarded(name: str) -> None:
 def test_known_live_misses_are_now_found() -> None:
     """The review's three live misses: an aliased session under ``with`` and an httpx client."""
     found = scan_paths(repo_root(), ["autobot-backend/api/provider_auth.py", "autobot-backend/content_reach/_http.py"])
-    assert {s.lineno for s in found["autobot-backend/api/provider_auth.py"]} >= {449, 527}
+    # By kind, not line number: a line pin breaks on every unrelated edit to the file (#17576).
+    assert [s.kind for s in found["autobot-backend/api/provider_auth.py"]] == ["session", "session"]
     assert 68 in {s.lineno for s in found["autobot-backend/content_reach/_http.py"]}
 
 
@@ -339,8 +345,8 @@ def test_unguarded_outbound_calls_only_go_down() -> None:
     assert not worse, (
         "Outbound HTTP call(s) without an egress policy (#17576, rule 8). Pass "
         "guard_egress=EGRESS_POLICY (autobot_shared.http_egress_guard) on the manager call, or "
-        "`await assert_egress_policy(url)` before a raw client call. Do NOT raise the baseline.\n  "
-        + "\n  ".join(worse)
+        "`await assert_egress_policy(url)` before a raw client call (a user-, LLM- or document-supplied URL: "
+        "guard_egress=False, or `await assert_public_egress(url)`). Do NOT raise the baseline.\n  " + "\n  ".join(worse)
     )
     assert not better, (
         "Unguarded calls were removed but the baseline still records them. Lower the entries in "

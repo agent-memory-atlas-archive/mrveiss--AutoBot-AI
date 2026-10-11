@@ -9,12 +9,12 @@ Issue #244: Models for representing patterns, matches, and analysis results
 across Python and TypeScript/JavaScript codebases.
 """
 
-import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List
 
+from autobot_shared.content_digest import content_digest
 from autobot_shared.status_enums import Severity
 
 
@@ -157,7 +157,7 @@ class CrossLanguagePattern:
     def content_hash(self) -> str:
         """Generate hash of pattern content for deduplication."""
         content = f"{self.normalized_representation}:{self.pattern_type.value}"
-        return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+        return content_digest(content, width=16)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""

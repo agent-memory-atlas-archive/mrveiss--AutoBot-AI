@@ -22,7 +22,6 @@ DELETE /api/llm-auth/{provider_name}       — revoke / delete stored tokens
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from typing import Any, List, Optional
@@ -31,11 +30,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.provider_auth_poll_limit import device_poll_key, load_and_check_poll_state, record_poll
 from api.user_management.dependencies import get_db_session
 from auth_middleware import check_admin_permission, get_current_user
 from autobot_shared.env_utils import env_int
+from autobot_shared.http_egress_guard import assert_public_egress
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.redis_client import client_get, client_getdel, client_setex, get_redis_client
+from autobot_shared.redis_client import client_getdel, client_setex, get_redis_client
 from autobot_shared.url_safety import get_oauth_allowed_hosts, require_allowlisted_https
 from llm_shared.provider_auth import (
     _vault_read_dual,
@@ -128,21 +129,6 @@ _OAUTH_STATE_PREFIX = "llm-auth:oauth:state:"
 
 def _state_key(state: str) -> str:
     return "%s%s" % (_OAUTH_STATE_PREFIX, state)
-
-
-# Device-code poll limiter (#11061): honor RFC-8628 server-side — reject polls
-# faster than the current interval, back off +5s on ``slow_down``, and cap total
-# attempts per device_code. All overridable via env.
-_DEVICE_POLL_MIN_INTERVAL = env_int("AUTOBOT_DEVICE_POLL_MIN_INTERVAL_SECONDS", 5)
-_DEVICE_POLL_BACKOFF = env_int("AUTOBOT_DEVICE_POLL_BACKOFF_SECONDS", 5)
-_DEVICE_POLL_MAX_ATTEMPTS = env_int("AUTOBOT_DEVICE_POLL_MAX_ATTEMPTS", 360)
-_DEVICE_POLL_WINDOW = env_int("AUTOBOT_DEVICE_POLL_WINDOW_SECONDS", 1800)
-_DEVICE_POLL_PREFIX = "llm-auth:device:poll:"
-
-
-def _device_poll_key(device_code: str) -> str:
-    # Hash the device_code so the raw grant secret never becomes a Redis key.
-    return "%s%s" % (_DEVICE_POLL_PREFIX, hashlib.sha256(device_code.encode("utf-8")).hexdigest())
 
 
 # Redis single-use-state helpers (client_setex / client_getdel / client_get)
@@ -437,15 +423,14 @@ async def device_initiate(
 
     # Validate outbound URL before any HTTP call — prevents SSRF via device_authorization_url.
     _validate_outbound_url(req.device_authorization_url)
-    connector = await _pinned_connector(req.device_authorization_url)  # finding #2: resolve-once + IP pin
-
     timeout = aiohttp.ClientTimeout(total=30.0)
     payload = {"client_id": req.client_id, "scope": req.scope}
     try:
+        await assert_public_egress(req.device_authorization_url)  # user-supplied: public-only (#17576)
+        connector = await _pinned_connector(req.device_authorization_url)  # finding #2: resolve-once + IP pin
         async with aiohttp.ClientSession(timeout=timeout, connector=connector) as http:
-            # SSRF mitigated: device_authorization_url passed _validate_outbound_url()
-            # (https + host allowlist + port pin) and connector pins the pre-resolved
-            # public IP (defeats DNS-rebind); redirects disabled. (#12278)
+            # SSRF: URL passed _validate_outbound_url() + assert_public_egress(); the connector pins the
+            # pre-resolved public IP (defeats DNS-rebind); redirects disabled. (#12278, #17576)
             async with http.post(
                 req.device_authorization_url,
                 data=payload,
@@ -495,35 +480,22 @@ async def device_poll(
     # total attempts BEFORE hitting the provider. Best-effort — skipped if Redis
     # is unavailable so the flow still works in degraded mode.
     redis = get_redis_client(database="main")
-    poll_key = _device_poll_key(req.device_code)
+    poll_key = device_poll_key(req.device_code)
     now = time.time()
-    poll_state = {"interval": _DEVICE_POLL_MIN_INTERVAL, "count": 0, "last_ts": 0.0}
-    if redis is not None:
-        raw = await client_get(redis, poll_key)
-        if raw:
-            poll_state = json.loads(raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw)
-        if poll_state["count"] >= _DEVICE_POLL_MAX_ATTEMPTS:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="device-code polling attempts exhausted"
-            )
-        if now - poll_state["last_ts"] < poll_state["interval"]:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="polling too fast; honor the device-code interval",
-            )
+    poll_state = await load_and_check_poll_state(redis, poll_key, now)
 
     payload = {
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "device_code": req.device_code,
         "client_id": req.client_id,
     }
-    connector = await _pinned_connector(req.token_url)  # finding #2: resolve-once + IP pin
     timeout = aiohttp.ClientTimeout(total=30.0)
     try:
+        await assert_public_egress(req.token_url)  # user-supplied: public-only (#17576)
+        connector = await _pinned_connector(req.token_url)  # finding #2: resolve-once + IP pin
         async with aiohttp.ClientSession(timeout=timeout, connector=connector) as http:
-            # SSRF mitigated: token_url passed _validate_outbound_url() (https + host
-            # allowlist + port pin) and connector pins the pre-resolved public IP
-            # (defeats DNS-rebind); redirects disabled. (#12278)
+            # SSRF: URL passed _validate_outbound_url() + assert_public_egress(); the connector pins the
+            # pre-resolved public IP (defeats DNS-rebind); redirects disabled. (#12278, #17576)
             async with http.post(
                 req.token_url,
                 data=payload,
@@ -538,17 +510,7 @@ async def device_poll(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     error = data.get("error")
-    # Update the limiter: on slow_down, back off (+5s, RFC-8628); on a still-pending
-    # grant persist the new state; on a terminal outcome clear it.
-    if redis is not None:
-        if error == "slow_down":
-            poll_state["interval"] += _DEVICE_POLL_BACKOFF
-        poll_state["count"] += 1
-        poll_state["last_ts"] = now
-        if error in ("authorization_pending", "slow_down"):
-            await client_setex(redis, poll_key, _DEVICE_POLL_WINDOW, json.dumps(poll_state))
-        else:
-            await client_getdel(redis, poll_key)
+    await record_poll(redis, poll_key, poll_state, now, error)
 
     if error in ("authorization_pending", "slow_down"):
         return OAuthInitiateResponse(provider_name=req.provider_name, stored=False)
