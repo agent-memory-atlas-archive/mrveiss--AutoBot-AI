@@ -44,7 +44,7 @@
    tidiness: a derived token such as --spacing-md: var(--spacing-4) is resolved
    where it is declared (:root), so changing --spacing-unit or --spacing-4 in a
    subtree does not move it. The derived names are therefore restated here, and
-   a test (densityScope.test.ts) fails if one scope drops a name.
+   a test (themeCascade.test.ts) fails if one scope drops a name.
 
    #18161: the --spacing-xs..2xl overrides in the retired styles/theme.css never
    applied, because design-tokens.css declared the same names later at equal

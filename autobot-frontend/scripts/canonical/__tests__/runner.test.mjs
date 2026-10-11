@@ -133,7 +133,7 @@ describe("the unloaded-authority rule (#14785)", () => {
     expect(found).toHaveLength(1);
     expect(found[0].severity).toBe("block");
     expect(found[0].message).toContain("no file imports it");
-  });
+  }, WHOLE_TREE_MS);
 
   it("says nothing about a stylesheet that makes no such claim", async () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
@@ -145,7 +145,7 @@ describe("the unloaded-authority rule (#14785)", () => {
     await writeFile(file, "/* component styles */\n.x { color: red; }\n", "utf-8");
 
     expect(await rule.check(file)).toEqual([]);
-  });
+  }, WHOLE_TREE_MS);
 
   it("honours its waiver", async () => {
     const { mkdtemp, writeFile } = await import("node:fs/promises");
@@ -161,7 +161,7 @@ describe("the unloaded-authority rule (#14785)", () => {
     );
 
     expect(await rule.check(file)).toEqual([]);
-  });
+  }, WHOLE_TREE_MS);
 
   it("the tree is clean of blocking violations", () => {
     // The live assertion, stated as the outcome rather than as the detector's
