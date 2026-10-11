@@ -42,6 +42,7 @@ static set.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
 import time
 from typing import Awaitable, Callable, Iterable, Optional
@@ -87,8 +88,28 @@ def normalize_origin(url: object) -> Optional[str]:
     return f"{scheme}://{f'[{host}]' if ':' in host else host}:{port}"
 
 
+_ALWAYS_REFUSED_HOSTS = frozenset(ipaddress.ip_address(h) for h in ("169.254.169.254", "fd00:ec2::254"))
+
+
+def _never_internal(origin: str) -> bool:
+    """True for a literal link-local, cloud-metadata or unspecified host (loopback stays: single-host default)."""
+    host = origin.split("://", 1)[1].rsplit(":", 1)[0].strip("[]")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a DNS name: not resolved here (#18199)
+    return ip.is_link_local or ip.is_unspecified or ip in _ALWAYS_REFUSED_HOSTS
+
+
 def _normalized(urls: Iterable[object]) -> frozenset[str]:
-    return frozenset(o for o in (normalize_origin(u) for u in urls) if o)
+    """Normalised origins of *urls*, minus any literal host that must never be trusted as internal."""
+    kept = set()
+    for origin in filter(None, (normalize_origin(u) for u in urls)):
+        if _never_internal(origin):
+            logger.warning("Dropping internal-origin %s: link-local / metadata / unspecified host", origin)
+        else:
+            kept.add(origin)
+    return frozenset(kept)
 
 
 def _ssot_service_urls() -> list[str]:

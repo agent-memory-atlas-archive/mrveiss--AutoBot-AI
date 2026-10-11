@@ -317,3 +317,62 @@ def test_ttl_constant_is_env_backed_and_registered():
     spec = REGISTRY["AUTOBOT_EGRESS_INTERNAL_ORIGINS_TTL_S"]
     assert spec.default == 60 and spec.type is int
     assert REGISTRY["AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S"].default == 5
+
+
+# --- never-internal hosts (#17576 review) ------------------------------------
+
+
+def _patched_ssot(monkeypatch, hosts):
+    from types import SimpleNamespace
+
+    urls = {
+        n: f"http://{h}:8001" for n, h in zip(("backend_url", "ollama_url", "aistack_url", "npu_worker_url"), hosts)
+    }
+    fake = SimpleNamespace(
+        tts_worker_url="http://127.0.0.1:1",
+        browser_service_url="http://127.0.0.1:2",
+        slm_url="http://127.0.0.1:3",
+        vm=SimpleNamespace(chromadb="127.0.0.1"),
+        port=SimpleNamespace(chromadb=4),
+        **urls,
+    )
+    import autobot_shared.ssot_config as ssot
+
+    monkeypatch.setattr(ssot, "config", fake)
+
+
+@pytest.mark.parametrize("host", ["169.254.169.254", "169.254.7.7", "[fe80::1]", "[fd00:ec2::254]", "0.0.0.0", "[::]"])
+def test_link_local_metadata_and_unspecified_config_hosts_are_dropped(monkeypatch, host):
+    log = MagicMock()
+    monkeypatch.setattr(al, "logger", log)
+    _patched_ssot(monkeypatch, [host, "127.0.0.1", "127.0.0.1", "127.0.0.1"])
+    origins = al.static_internal_origins()
+    assert not any(host.strip("[]") in o for o in origins)
+    assert "http://127.0.0.1:8001" in origins, "loopback must stay internal (single-host default)"
+    log.warning.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_provider_cannot_smuggle_a_metadata_origin(monkeypatch, pinned_internal):
+    provider = AsyncMock(return_value=["http://169.254.169.254:80", "http://[fe80::1]:8000", "http://10.9.9.9:8095"])
+    al.register_internal_origin_provider(provider)
+    origins = await al.internal_origins()
+    assert "http://10.9.9.9:8095" in origins
+    assert not [o for o in origins if "169.254" in o or "fe80" in o]
+    with pytest.raises(EgressBlockedError):
+        await assert_egress_policy("http://169.254.169.254/latest/meta-data/")
+
+
+# --- apply_egress_guard accepts only None / bool / EGRESS_POLICY (L1) ----------
+
+
+@pytest.mark.asyncio
+async def test_apply_egress_guard_none_is_no_guard_and_junk_is_a_type_error():
+    from autobot_shared.http_egress_guard import apply_egress_guard
+
+    await apply_egress_guard("http://10.1.2.3/x", None)  # no guard: nothing raised
+    for junk in ("yes", 1, object(), []):
+        with pytest.raises(TypeError):
+            await apply_egress_guard("http://10.1.2.3/x", junk)
+    with pytest.raises(EgressBlockedError):
+        await apply_egress_guard("http://10.1.2.3/x", False)

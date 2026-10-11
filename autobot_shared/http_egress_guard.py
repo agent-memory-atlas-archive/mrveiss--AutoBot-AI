@@ -76,9 +76,17 @@ async def assert_egress_policy(url: str) -> None:
     await _assert_egress_allowed(url, allow_private=False)
 
 
-async def apply_egress_guard(url: str, guard: "bool | _EgressPolicy") -> None:
-    """Dispatch a non-``None`` ``guard_egress`` value: the policy sentinel or a bool."""
+async def apply_egress_guard(url: str, guard: "bool | None | _EgressPolicy") -> None:
+    """Apply a ``guard_egress`` value: ``None`` (no guard), ``True``/``False`` or :data:`EGRESS_POLICY`.
+
+    Anything else raises ``TypeError`` -- a truthy string or object must not silently pick
+    ``allow_private``.
+    """
+    if guard is None:
+        return
     if guard is EGRESS_POLICY:
         await assert_egress_policy(url)
+    elif guard is True or guard is False:
+        await _assert_egress_allowed(url, allow_private=guard)
     else:
-        await _assert_egress_allowed(url, allow_private=bool(guard))
+        raise TypeError(f"guard_egress must be None, a bool or EGRESS_POLICY, not {guard!r}")

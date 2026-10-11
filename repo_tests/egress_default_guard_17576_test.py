@@ -9,8 +9,11 @@ five-file population, so a call site it was not told about was invisible. This g
 **enumerates**: every tracked non-test ``*.py`` is swept by ``repo_tests/_egress_default.py`` and
 each outbound call is classified guarded or unguarded.
 
-Guarded means a ``guard_egress=`` that is not a literal ``None`` on a manager call, or an earlier
-``assert_egress_policy`` in the same function for a raw client. The unguarded population as of
+Guarded means, on a manager call, ``guard_egress=`` of ``EGRESS_POLICY``, the literal ``False`` or a
+canonical policy value from the egress modules (never ``True``, ``None`` or an arbitrary variable); on
+a raw client, an earlier ``assert_egress_policy(<the request's URL>)`` in the same function AND
+redirects refused (literal ``allow_redirects=False``; httpx unless it opts in; a websocket handshake;
+never ``urlopen``). The unguarded population as of
 today is recorded in ``egress_unguarded_baseline_17576.json`` (path -> count). The ratchet runs in
 both directions: a count above its baseline, or a new path, fails; a count *below* its baseline also
 fails, with the instruction to lower it, so the baseline only drops and never carries slack.
@@ -35,6 +38,7 @@ from repo_tests._reach import declare
 from autobot_shared.declared_egress import DECLARED_EGRESS
 from tools.lint._scan_helpers import tracked_paths
 
+UNPARSED = "(UNPARSED)"
 BASELINE_FILE = Path(__file__).with_name("egress_unguarded_baseline_17576.json")
 
 #: Implementations of the guard itself -- they construct and drive the session on purpose.
@@ -102,7 +106,8 @@ SITE_FLOOR = 400
 def unguarded_counts(root: Path) -> dict[str, int]:
     """Path -> number of outbound calls with no egress policy, for paths with at least one."""
     counts = {p: sum(1 for s in sites if not s.guarded) for p, sites in scan_paths(root, scoped_paths(root)).items()}
-    return {p: n for p, n in counts.items() if n}
+    # an unparsable file has no sites, which would read as clean: surface it as one unguarded entry
+    return {p: n or 1 if UNPARSED in p else n for p, n in counts.items() if n or UNPARSED in p}
 
 
 def load_baseline() -> dict[str, int]:
@@ -157,6 +162,40 @@ _FIXTURES_UNGUARDED = {
     "getattr": "import aiohttp\nasync def f(session, u):\n    return await getattr(session, 'get')(u)\n",
     "partial": "import aiohttp, functools\nasync def f(session, u):\n    return functools.partial(session.get, u)\n",
     "bound-method": "import aiohttp\nasync def f(session, u):\n    g = session.get\n    return await g(u)\n",
+    "raw-policy-redirects-default": (
+        _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n"
+        "    return await session.get(u)\n"
+    ),
+    "raw-policy-redirects-true": (
+        _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n"
+        "    return await session.get(u, allow_redirects=True)\n"
+    ),
+    "requests-policy-redirects-default": (
+        _POLICY_IMPORT + "import requests\nasync def f(u):\n    await assert_egress_policy(u)\n"
+        "    return requests.get(u)\n"
+    ),
+    "httpx-follow-redirects-true": (
+        _POLICY_IMPORT + "import httpx\nasync def f(u):\n    await assert_egress_policy(u)\n"
+        "    return httpx.get(u, follow_redirects=True)\n"
+    ),
+    "httpx-client-follows-redirects": (
+        _POLICY_IMPORT + "import httpx\nasync def f(u):\n    await assert_egress_policy(u)\n"
+        "    async with httpx.AsyncClient(follow_redirects=True) as ac:\n        return await ac.get(u)\n"
+    ),
+    "urlopen-policy-never-guards": (
+        _POLICY_IMPORT + "import urllib.request\ndef f(u):\n    await assert_egress_policy(u)\n"
+        "    return urllib.request.urlopen(u)\n"
+    ),
+    "websocket": "import websockets\nasync def f(u):\n    return websockets.connect(u)\n",
+    "websocket-alias": "from websockets.asyncio.client import connect as wsc\nasync def f(u):\n    return wsc(u)\n",
+    "websocket-client-attr": "import websockets.client\nasync def f(u):\n    return websockets.client.connect(u)\n",
+    "attr-policy-from-base-module": (
+        "from knowledge.connectors import base as g\n"
+        "async def f(u):\n    return await http_client.get_json(u, guard_egress=g.VENDOR_API_EGRESS)\n"
+    ),
+    "attr-policy-unbound-receiver": (
+        "async def f(u):\n    return await http_client.get_json(u, guard_egress=other.EGRESS_POLICY)\n"
+    ),
     "raw-policy-other-url": (
         _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy('https://x.test')\n"
         "    return await session.get(u)\n"
@@ -195,11 +234,31 @@ _FIXTURES_GUARDED = {
     ),
     "raw-after-policy": (
         _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n"
-        "    return await session.get(u)\n"
+        "    return await session.get(u, allow_redirects=False)\n"
     ),
     "raw-after-policy-request": (
         _POLICY_IMPORT + "import aiohttp\nasync def f(session, u):\n    await assert_egress_policy(u)\n"
-        "    return await session.request('GET', u)\n"
+        "    return await session.request('GET', u, allow_redirects=False)\n"
+    ),
+    "httpx-default-no-redirect": (
+        _POLICY_IMPORT + "import httpx\nasync def f(c, u):\n    await assert_egress_policy(u)\n"
+        "    async with httpx.AsyncClient() as ac:\n        return await ac.get(u)\n"
+    ),
+    "httpx-explicit-false": (
+        _POLICY_IMPORT + "import httpx\ndef f(u):\n    await assert_egress_policy(u)\n"
+        "    return httpx.get(u, follow_redirects=False)\n"
+    ),
+    "requests-no-redirect": (
+        _POLICY_IMPORT + "import requests\nasync def f(u):\n    await assert_egress_policy(u)\n"
+        "    return requests.get(u, allow_redirects=False)\n"
+    ),
+    "websocket": (
+        _POLICY_IMPORT + "import websockets\nasync def f(u):\n    await assert_egress_policy(u)\n"
+        "    return websockets.connect(u)\n"
+    ),
+    "attr-policy-from-egress-module": (
+        "from autobot_shared import http_egress_guard as g\n"
+        "async def f(u):\n    return await http_client.get_json(u, guard_egress=g.EGRESS_POLICY)\n"
     ),
 }
 
@@ -242,6 +301,17 @@ def test_the_sweep_population_floors() -> None:
 
 
 # --- the ratchet --------------------------------------------------------------
+
+
+def test_no_unparsable_file_hides_in_the_census_or_baseline() -> None:
+    bad = [p for p in list(unguarded_counts(repo_root())) + list(load_baseline()) if UNPARSED in p]
+    assert not bad, f"file(s) the detector could not parse -- an unparsed file reads as clean, fix the source: {bad}"
+
+
+def test_unparsed_file_is_surfaced_not_dropped(tmp_path: Path) -> None:
+    (tmp_path / "broken.py").write_text("import requests\ndef f(:\n", encoding="utf-8")
+    counts = {p: 1 for p in scan_paths(tmp_path, ["broken.py"])}
+    assert list(counts) == ["broken.py (UNPARSED)"]
 
 
 def test_baseline_is_well_formed() -> None:

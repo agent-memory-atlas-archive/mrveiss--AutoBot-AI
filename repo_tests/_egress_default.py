@@ -24,7 +24,9 @@ file, under-matching is the confident zero this guard exists to prevent.
   ``CONTENT_URL_EGRESS``). Not literal ``True``, not an arbitrary variable, not ``None``.
 - a raw call preceded, in the SAME function (nested defs excluded), by ``assert_egress_policy(<expr>)``
   where ``<expr>`` is the same expression as the request's URL argument. A module-level policy call
-  never counts.
+  never counts. It also needs redirects refused: a literal ``allow_redirects=False`` (aiohttp,
+  requests) or no ``follow_redirects`` opt-in (httpx, whose default is off). ``urlopen`` can never
+  be guarded this way; a websocket handshake is not redirected.
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ _CTORS = {
 #: Canonical policy values and the module leaf names they may be imported from.
 _POLICY_VALUES = {"EGRESS_POLICY", "VENDOR_API_EGRESS", "CONTENT_URL_EGRESS", "instance_host_egress"}
 _POLICY_MODULES = {"base", "egress", "http_egress_guard"}
+_EGRESS_MODULES = {"egress", "http_egress_guard"}
 _URL_AT_1 = {"request", "tracked_request", "stream"}
 
 
@@ -73,6 +76,7 @@ class _Ctx(NamedTuple):
     bound: dict[str, str]  # unparsed receiver -> client kind
     methods: dict[str, tuple[str, str]]  # name bound to ``recv.verb`` -> (recv, verb)
     policies: frozenset[str]  # local names that are canonical policy values
+    redirecting: frozenset[str]  # httpx clients constructed with follow_redirects other than literal False
     aiohttp_text: bool
 
 
@@ -121,9 +125,21 @@ def _ctor_kind(expr: ast.expr | None, aliases: dict[str, str]) -> str | None:
     return "manager" if canon.split(".")[-1] == "get_http_client" else None
 
 
-def _bindings(tree: ast.AST, aliases: dict[str, str]) -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
+def _follows_redirects(value: ast.expr | None) -> bool:
+    """A constructor call carrying ``follow_redirects=`` that is not the literal ``False``."""
+    inner = value.value if isinstance(value, ast.Await) else value
+    return isinstance(inner, ast.Call) and any(
+        kw.arg == "follow_redirects" and not (isinstance(kw.value, ast.Constant) and kw.value.value is False)
+        for kw in inner.keywords
+    )
+
+
+def _bindings(
+    tree: ast.AST, aliases: dict[str, str]
+) -> tuple[dict[str, str], dict[str, tuple[str, str]], frozenset[str]]:
     bound: dict[str, str] = {}
     methods: dict[str, tuple[str, str]] = {}
+    redirecting: set[str] = set()
     for node in ast.walk(tree):
         pairs: list[tuple[ast.expr | None, ast.expr | None]] = []
         if isinstance(node, (ast.With, ast.AsyncWith)):
@@ -138,16 +154,18 @@ def _bindings(tree: ast.AST, aliases: dict[str, str]) -> tuple[dict[str, str], d
             kind = _ctor_kind(value.value if isinstance(value, ast.Await) else value, aliases)
             if kind:
                 bound[ast.unparse(target)] = kind
+                if _follows_redirects(value):
+                    redirecting.add(ast.unparse(target))
             elif isinstance(value, ast.Attribute) and value.attr in _VERBS | _MANAGER_ONLY:
                 methods[ast.unparse(target)] = (ast.unparse(value.value), value.attr)
-    return bound, methods
+    return bound, methods, frozenset(redirecting)
 
 
 def _build_ctx(tree: ast.AST, source: str) -> _Ctx:
     aliases, policies = _import_maps(tree)
-    bound, methods = _bindings(tree, aliases)
+    bound, methods, redirecting = _bindings(tree, aliases)
     text = "aiohttp" in source or "tracked_session" in source or "http_client" in source
-    return _Ctx(aliases, bound, methods, policies, text)
+    return _Ctx(aliases, bound, methods, policies, redirecting, text)
 
 
 def _str_const(node: ast.expr | None) -> str | None:
@@ -178,6 +196,8 @@ def _kind(call: ast.Call, req: _Req | None, ctx: _Ctx) -> str | None:
     head, _, verb = canon.rpartition(".")
     if canon == "urllib.request.urlopen":
         return "urllib"
+    if canon.startswith("websockets.") and verb == "connect":
+        return "websocket"
     if head in ("requests", "httpx") and verb in _VERBS:
         return head
     if req is None or (req.verb not in _VERBS and req.verb not in _MANAGER_ONLY):
@@ -222,7 +242,10 @@ def _accepted_policy(value: ast.expr, ctx: _Ctx) -> bool:
         value = value.func
     if isinstance(value, ast.Name):
         return value.id in ctx.policies
-    return isinstance(value, ast.Attribute) and value.attr in _POLICY_VALUES
+    if isinstance(value, ast.Attribute) and value.attr in _POLICY_VALUES:
+        # ``<x>.NAME`` only when x is bound by import to an egress module, not any module named ``base``.
+        return _canon(value.value, ctx.aliases).split(".")[-1] in _EGRESS_MODULES
+    return False
 
 
 def _manager_guarded(call: ast.Call, ctx: _Ctx) -> bool:
@@ -237,6 +260,29 @@ def _own_scope_nodes(scope: ast.AST) -> Iterator[ast.AST]:
         yield node
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
             stack.extend(ast.iter_child_nodes(node))
+
+
+def _literal_false(call: ast.Call, name: str) -> bool:
+    return any(
+        kw.arg == name and isinstance(kw.value, ast.Constant) and kw.value.value is False for kw in call.keywords
+    )
+
+
+def _redirects_refused(kind: str, call: ast.Call, req: _Req | None, ctx: _Ctx) -> bool:
+    """True when a raw call cannot follow a redirect past the pre-check (#17576 review).
+
+    aiohttp and requests follow redirects by default, so only a literal ``allow_redirects=False``
+    counts. httpx does not follow by default: refused unless the call or its client opts in.
+    ``urlopen`` has no switch at all. A websocket handshake is not followed.
+    """
+    if kind == "websocket":
+        return True
+    if kind == "httpx":
+        opted_in = any(kw.arg == "follow_redirects" for kw in call.keywords)
+        if opted_in:
+            return _literal_false(call, "follow_redirects")
+        return (req.recv if req else "") not in ctx.redirecting
+    return kind in ("session", "requests") and _literal_false(call, "allow_redirects")
 
 
 def _raw_guarded(call: ast.Call, url: ast.expr | None, scope: ast.AST) -> bool:
@@ -271,7 +317,10 @@ def outbound_sites(source: str) -> tuple[Site, ...]:
         kind = _kind(call, req, ctx)
         if kind is None:
             continue
-        guarded = _manager_guarded(call, ctx) if kind == "manager" else _raw_guarded(call, _url_arg(call, req), scope)
+        if kind == "manager":
+            guarded = _manager_guarded(call, ctx)
+        else:
+            guarded = _redirects_refused(kind, call, req, ctx) and _raw_guarded(call, _url_arg(call, req), scope)
         sites.append(Site(call.lineno, kind, guarded))
     return tuple(sorted(sites))
 
