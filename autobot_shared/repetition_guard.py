@@ -30,6 +30,7 @@ concurrent across sessions.
 from typing import Any, Dict, Optional, Tuple
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.tool_catalogue import ToolEffect, tools_with
 
 logger = get_logger(__name__)
 
@@ -40,7 +41,7 @@ STAGNATION_STATE_KEY = "_stagnation_guard"
 # Tools whose whole purpose is to be re-issued until something changes. A
 # changing result already exempts them via the pair key; this covers the case
 # where the result is legitimately identical between polls.
-POLLABLE_TOOLS = frozenset({"sleep", "wait", "poll", "check_status"})
+POLLABLE_TOOLS = tools_with(ToolEffect.POLL)  # declared once in tool_catalogue (#18294)
 
 
 def _canonical_args(tool_call: Dict[str, Any]) -> Any:

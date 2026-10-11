@@ -111,11 +111,12 @@
 # nowhere (the role has no templates/ dir); the drifted near-copy at
 # ansible/templates/systemd/ was unreferenced and is deleted. Vars map the
 # canonical template onto this role's install layout.
+# #17856: the unit comes from roles/backend unit_only -- the one template path, which also owns
+# the worker count (role default). This role only maps its own install layout onto the vars.
 - name: Create systemd service files
-  template:
-    src: ../../backend/templates/autobot-backend.service.j2
-    dest: /etc/systemd/system/autobot-backend.service
-    mode: '0644'
+  ansible.builtin.include_role:
+    name: backend
+    tasks_from: unit_only
   vars:
     backend_user: autobot
     backend_group: autobot
@@ -124,10 +125,12 @@
     backend_log_dir: /opt/autobot/logs
     backend_host: "0.0.0.0"
     backend_port: 8001
-    backend_workers: 4
-  notify:
-    - reload systemd
-    - restart backend services
+
+- name: Restart backend services when the unit changed
+  ansible.builtin.debug:
+    msg: "systemd unit changed; restarting backend services"
+  changed_when: _backend_units_rendered.changed | default(false)
+  notify: restart backend services
 
 - name: Enable and start backend services
   systemd:

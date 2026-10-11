@@ -73,41 +73,41 @@
                     <!-- Hostname -->
                     <div class="sm:col-span-1">
                       <label for="hostname" class="block text-sm font-medium text-gray-700 mb-1">
-                        {{ $t('addNodeModal.hostname') }} <span class="text-danger-500" aria-hidden="true">*</span>
+                        {{ $t('addNodeModal.hostname') }} <span class="text-error-500" aria-hidden="true">*</span>
                         <span class="sr-only">{{ $t('addNodeModal.required') }}</span>
                       </label>
                       <input
                         v-model="formData.hostname"
                         type="text"
                         id="hostname"
-                        :class="['input', { 'border-danger-500 focus:ring-danger-500 focus:border-danger-500': errors.hostname }]"
+                        :class="['input', { 'border-error-500 focus:ring-error-500 focus:border-error-500': errors.hostname }]"
                         :placeholder="$t('addNodeModal.placeholderHostname')"
                         aria-required="true"
                         :aria-invalid="!!errors.hostname"
                         :aria-describedby="errors.hostname ? 'hostname-error' : undefined"
                         @blur="validateField('hostname')"
                       />
-                      <p v-if="errors.hostname" id="hostname-error" class="mt-1 text-xs text-danger-500" role="alert">{{ errors.hostname }}</p>
+                      <p v-if="errors.hostname" id="hostname-error" class="mt-1 text-xs text-error-500" role="alert">{{ errors.hostname }}</p>
                     </div>
 
                     <!-- IP Address -->
                     <div class="sm:col-span-1">
                       <label for="ip_address" class="block text-sm font-medium text-gray-700 mb-1">
-                        {{ $t('addNodeModal.iPAddress') }} <span class="text-danger-500" aria-hidden="true">*</span>
+                        {{ $t('addNodeModal.iPAddress') }} <span class="text-error-500" aria-hidden="true">*</span>
                         <span class="sr-only">{{ $t('addNodeModal.required') }}</span>
                       </label>
                       <input
                         v-model="formData.ip_address"
                         type="text"
                         id="ip_address"
-                        :class="['input', { 'border-danger-500 focus:ring-danger-500 focus:border-danger-500': errors.ip_address }]"
+                        :class="['input', { 'border-error-500 focus:ring-error-500 focus:border-error-500': errors.ip_address }]"
                         :placeholder="$t('addNodeModal.placeholderIpAddress')"
                         aria-required="true"
                         :aria-invalid="!!errors.ip_address"
                         :aria-describedby="errors.ip_address ? 'ip-error' : undefined"
                         @blur="validateField('ip_address')"
                       />
-                      <p v-if="errors.ip_address" id="ip-error" class="mt-1 text-xs text-danger-500" role="alert">{{ errors.ip_address }}</p>
+                      <p v-if="errors.ip_address" id="ip-error" class="mt-1 text-xs text-error-500" role="alert">{{ errors.ip_address }}</p>
                     </div>
 
                     <!-- SSH Port -->
@@ -196,7 +196,7 @@
                       <!-- SSH User -->
                       <div>
                         <label for="ssh_user" class="block text-sm font-medium text-gray-700 mb-1">
-                          {{ $t('addNodeModal.username') }} <span class="text-danger-500" aria-hidden="true">*</span>
+                          {{ $t('addNodeModal.username') }} <span class="text-error-500" aria-hidden="true">*</span>
                           <span class="sr-only">{{ $t('addNodeModal.required') }}</span>
                         </label>
                         <input
@@ -213,7 +213,7 @@
                       <div>
                         <label for="ssh_password" class="block text-sm font-medium text-gray-700 mb-1">
                           {{ $t('addNodeModal.password') }}
-                          <span v-if="!isEditMode || needsCredentialsForEdit" class="text-danger-500" aria-hidden="true">*</span>
+                          <span v-if="!isEditMode || needsCredentialsForEdit" class="text-error-500" aria-hidden="true">*</span>
                           <span v-if="!isEditMode || needsCredentialsForEdit" class="sr-only">{{ $t('addNodeModal.required') }}</span>
                           <span v-else class="text-gray-400 text-xs ml-1">{{ $t('addNodeModal.optional') }}</span>
                         </label>
@@ -222,7 +222,7 @@
                             v-model="formData.ssh_password"
                             :type="showPassword ? 'text' : 'password'"
                             id="ssh_password"
-                            :class="['input pr-10', { 'border-danger-500 focus:ring-danger-500 focus:border-danger-500': errors.ssh_password }]"
+                            :class="['input pr-10', { 'border-error-500 focus:ring-error-500 focus:border-error-500': errors.ssh_password }]"
                             :placeholder="isEditMode && !needsCredentialsForEdit ? $t('addNodeModal.placeholderLeaveEmptyForEdit') : $t('addNodeModal.placeholderEnterPassword')"
                             :aria-required="!isEditMode || needsCredentialsForEdit ? 'true' : undefined"
                             :aria-invalid="!!errors.ssh_password"
@@ -245,7 +245,7 @@
                             </svg>
                           </button>
                         </div>
-                        <p v-if="errors.ssh_password" id="password-error" class="mt-1 text-xs text-danger-500" role="alert">{{ errors.ssh_password }}</p>
+                        <p v-if="errors.ssh_password" id="password-error" class="mt-1 text-xs text-error-500" role="alert">{{ errors.ssh_password }}</p>
                       </div>
                     </div>
 
@@ -265,7 +265,7 @@
                     <!-- SSH User -->
                     <div>
                       <label for="ssh_user_pki" class="block text-sm font-medium text-gray-700 mb-1">
-                        {{ $t('addNodeModal.username') }} <span class="text-danger-500" aria-hidden="true">*</span>
+                        {{ $t('addNodeModal.username') }} <span class="text-error-500" aria-hidden="true">*</span>
                         <span class="sr-only">{{ $t('addNodeModal.required') }}</span>
                       </label>
                       <input
@@ -326,13 +326,13 @@
                         v-model="formData.ssh_key"
                         id="ssh_key"
                         rows="5"
-                        :class="['input font-mono text-xs', { 'border-danger-500 focus:ring-danger-500 focus:border-danger-500': errors.ssh_key }]"
+                        :class="['input font-mono text-xs', { 'border-error-500 focus:ring-error-500 focus:border-error-500': errors.ssh_key }]"
                         :placeholder="$t('addNodeModal.sshKeyPemHint')"
                         :aria-invalid="!!errors.ssh_key"
                         :aria-describedby="errors.ssh_key ? 'ssh-key-error' : undefined"
                         @blur="validateField('ssh_key')"
                       ></textarea>
-                      <p v-if="errors.ssh_key" id="ssh-key-error" class="mt-1 text-xs text-danger-500" role="alert">{{ errors.ssh_key }}</p>
+                      <p v-if="errors.ssh_key" id="ssh-key-error" class="mt-1 text-xs text-error-500" role="alert">{{ errors.ssh_key }}</p>
                     </div>
                   </div>
                 </fieldset>
@@ -370,7 +370,7 @@
                       </div>
                     </label>
                   </div>
-                  <p v-if="errors.roles" class="text-xs text-danger-500" role="alert">{{ errors.roles }}</p>
+                  <p v-if="errors.roles" class="text-xs text-error-500" role="alert">{{ errors.roles }}</p>
 
                   <!-- Selected Roles Details -->
                   <div v-if="selectedRolesDetails.length > 0" class="p-3 bg-gray-50 rounded-lg" role="status">
@@ -519,7 +519,7 @@
                     <input
                       type="checkbox"
                       v-model="replaceConfirmed"
-                      class="mt-0.5 w-4 h-4 text-danger-500 border-gray-300 rounded-sm focus:ring-danger-500"
+                      class="mt-0.5 w-4 h-4 text-error-500 border-gray-300 rounded-sm focus:ring-error-500"
                     />
                     <div>
                       <span class="text-sm text-gray-700 font-medium">
@@ -628,7 +628,7 @@
                   :disabled="!canSubmit || isSubmitting"
                   :class="[
                     'btn flex items-center gap-2',
-                    isReplaceMode ? 'btn-danger' : 'btn-primary'
+                    isReplaceMode ? 'btn-error' : 'btn-primary'
                   ]"
                 >
                   <svg v-if="isSubmitting" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">

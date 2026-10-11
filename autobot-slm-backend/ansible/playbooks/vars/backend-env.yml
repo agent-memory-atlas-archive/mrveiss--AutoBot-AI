@@ -6,6 +6,9 @@
 # Shared backend .env template variables (#2727)
 # Used by both deploy-backend-env.yml and update-all-nodes.yml
 # to avoid duplication and keep vars in sync.
+# backend_workers is deliberately NOT set here (#17856): roles/backend/defaults owns it (4) and
+# inventory/group_vars/slm.yml overrides it for the co-located box; a play-level include_vars
+# would shadow both.
 ---
 backend_user: autobot
 backend_group: autobot
@@ -15,7 +18,6 @@ backend_log_dir: /var/log/autobot
 backend_data_dir: /var/lib/autobot
 backend_host: "0.0.0.0"
 backend_port: 8001
-backend_workers: 1  # Issue #876: Single worker to prevent deadlock
 backend_redis_host: "{{ hostvars[groups['database'][0]]['ansible_host'] | default('127.0.0.1') }}"
 backend_redis_port: 6379
 backend_redis_password: ""
@@ -34,7 +36,7 @@ backend_embedding_model: "{{ lookup('env', 'AUTOBOT_EMBEDDING_MODEL') | default(
 # co-located (single-host): backend_ai_stack_host stays 127.0.0.1
 # distributed (fleet):      backend_ai_stack_host is set from ai_stack_host in production.yml
 backend_ai_stack_host: "{{ ai_stack_host | default('127.0.0.1') }}"
-backend_ai_stack_port: "{{ ai_stack_port | default(8080) }}"
+backend_ai_stack_port: "{{ ai_stack_port }}"
 
 # ChromaDB connection (#4087: always co-located with AI Stack — derive from backend_ai_stack_host)
 # WSL2 override in roles/backend/tasks/main.yml adjusts both vars together when WSL2 is detected.

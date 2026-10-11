@@ -105,8 +105,8 @@ const getIconPath = (type: string): string => {
 }
 
 .toast-error {
-  border: 1px solid color-mix(in srgb, var(--color-danger-500) 45%, var(--a11y-bg-surface));
-  border-left: 4px solid var(--color-danger-500);
+  border: 1px solid color-mix(in srgb, var(--color-error-500) 45%, var(--a11y-bg-surface));
+  border-left: 4px solid var(--color-error-500);
 }
 
 .toast-icon {
@@ -116,7 +116,7 @@ const getIconPath = (type: string): string => {
 .toast-info .toast-icon { color: var(--color-primary-500); }
 .toast-success .toast-icon { color: var(--color-success-500); }
 .toast-warning .toast-icon { color: var(--color-warning-500); }
-.toast-error .toast-icon { color: var(--color-danger-500); }
+.toast-error .toast-icon { color: var(--color-error-500); }
 
 .toast-content {
   flex: 1;

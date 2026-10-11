@@ -7,7 +7,8 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
-    "./tokens": "./src/tokens/contract.css"
+    "./tokens": "./src/tokens/contract.css",
+    "./adapter": "./src/tokens/adapter.css"
   },
   "files": [
     "index.ts",

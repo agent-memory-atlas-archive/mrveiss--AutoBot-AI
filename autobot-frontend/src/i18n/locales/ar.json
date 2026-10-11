@@ -5825,6 +5825,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "السمة",
       "title": "Preferences",
       "reset": "إعادة تعيين",
       "resetAll": "Reset all preferences to defaults",
@@ -5879,6 +5880,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "النظام",
+      "highContrast": "تباين عالٍ",
+      "monochrome": "أحادي اللون",
+      "accentThemeDescription": "افتراضي السمة — اللون الأساسي الخاص بالسمة",
+      "baseThemeChanged": "تم تغيير السمة الأساسية إلى {name}",
+      "accentChanged": "تم تغيير لون التمييز إلى {name}",
+      "presetChanged": "تم تغيير إعداد السمة المسبق إلى {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

@@ -100831,14 +100831,14 @@ export interface components {
             reasoning_effort: string;
             /**
              * Theme
-             * @description Base theme mode (dark, light, system)
-             * @default dark
+             * @description Base theme (light, dark, contrast, mono, system); light is the Refined default (#18223)
+             * @default light
              */
             theme: string;
             /**
              * Accent Color
-             * @description Accent color preset
-             * @default blue
+             * @description Accent color preset; 'theme' sets none, so the theme's own primary stands (#18223)
+             * @default theme
              */
             accent_color: string;
             /**

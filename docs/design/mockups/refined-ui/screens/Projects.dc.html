@@ -152,12 +152,10 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
     <a href="Analytics.dc.html" class="adv">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
     <span class="sr" role="status" aria-live="polite">{{uiAnnounce}}</span>
-    <a href="ThemeManager.dc.html" class="adv" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon adv" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon adv" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
     <button type="button" class="uitog {{uiTogCls}}" onClick="{{toggleUi}}" aria-pressed="{{uiMinPressed}}" data-tip="Minimal interface — hide advanced features" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" class="iw"/><path d="M4 9h16M9 9v11"/><rect x="11.5" y="11.5" width="6" height="6" rx="1" class="i2"/></svg><span>Minimal</span></button>
-    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <a href="Preferences.dc.html" aria-label="Profile settings" data-tip="Profile settings" data-tip-pos="bottom" style="margin-left: 8px; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--brand-bg); font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand-fg); cursor: pointer; display: grid; place-items: center; text-decoration: none">JD</a>
   </nav>
 
@@ -185,6 +183,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
       <a href="Members.dc.html"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Members</a>
       <a href="Roles.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h3"/></svg>Roles</a>
       <a href="Costs.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" class="it2"/><path d="M12 7v10"/></svg>Costs &amp; Budget</a>
+      <a href="BusinessIntelligence.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M5 16l4-5 4 3 6-8" /><circle cx="19" cy="6" r="1.6" class="i2"/></svg>Business intelligence</a>
       <a href="HeartbeatMonitor.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-4 4 8 2-4h6"/></svg>Heartbeat</a>
       <a href="Portability.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M13 9l3 3-3 3"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg>Portability</a>
       <a href="CompanySecrets.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3"/></svg>Secrets</a>
@@ -223,7 +222,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
           </div>
           <span class="sub2">Target 31 Oct 2026</span>
           <dl class="kv">
-            <dt>Repository</dt><dd style="overflow: visible"><a href="#" data-tip="github.com/autobot-labs/npu-worker">autobot-labs/npu-worker</a></dd><span></span>
+            <dt>Repository</dt><dd style="overflow: visible"><a href="#" data-tip="github.com/example-org/npu-worker">example-org/npu-worker</a></dd><span></span>
             <dt class="adv">Workspace path</dt><dd class="mono adv" style="font-size: 12px; overflow: visible" data-tip="/srv/app/workspaces/npu-worker" tabindex="0"><span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">/srv/app/workspaces/npu-worker</span></dd><button type="button" class="btn sm adv" aria-label="Copy workspace path" data-tip="Copy workspace path" data-tip-pos="left" style="width: 32px; padding: 0; justify-content: center"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" class="it1"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>
             <dt>Status</dt><dd style="overflow: visible"><span class="pill ok" data-tip="Workspace matches the latest commit on the tracked branch">synced</span></dd><span></span>
           </dl>
@@ -262,7 +261,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
           </div>
           <span class="sub2">Target 15 Aug 2026</span>
           <dl class="kv">
-            <dt>Repository</dt><dd style="overflow: visible"><a href="#" data-tip="github.com/autobot-labs/gpu-worker">autobot-labs/gpu-worker</a></dd><span></span>
+            <dt>Repository</dt><dd style="overflow: visible"><a href="#" data-tip="github.com/example-org/gpu-worker">example-org/gpu-worker</a></dd><span></span>
             <dt>Status</dt><dd style="overflow: visible"><span class="pill idle" data-tip="Repository link kept for reference; workspace no longer syncs">detached</span></dd><span></span>
           </dl>
           <div class="ft"><button type="button" class="btn sm">Edit</button><button type="button" class="btn sm">Restore</button><button type="button" class="btn sm dng">Delete</button></div>
@@ -272,7 +271,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
         <section class="card" aria-labelledby="ar" style="border-color: var(--stroke)">
           <div class="ch"><span class="tile"><svg class="ic" width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><circle cx="14" cy="12" r="4" class="i1"/><circle cx="14" cy="36" r="4" class="i1"/><circle cx="34" cy="18" r="4" class="i2"/><path d="M14 16v16M34 22c0 6-8 6-16 12"/></svg></span><h2 id="ar">Attach GitHub repository</h2></div>
           <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
-            <label style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">GitHub repo (owner/repo)</span><input class="inp mono" type="text" placeholder="e.g. acme-org/backend or https://github.com/acme-org/backend" value="autobot-labs/model-cache"></label>
+            <label style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">GitHub repo (owner/repo)</span><input class="inp mono" type="text" placeholder="e.g. acme-org/backend or https://github.com/acme-org/backend" value="example-org/model-cache"></label>
             <span class="sub2">GitHub only. Paste a URL or owner/repo — it will be normalized.</span>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px">
               <label style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">Branch</span><input class="inp mono" type="text" placeholder="main" value="main"></label>

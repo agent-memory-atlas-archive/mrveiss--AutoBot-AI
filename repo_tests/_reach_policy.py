@@ -239,6 +239,21 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
     ),
+    "ansible-concept-forks-17856-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Yaml, template and shell files are a subset of everything tracked under the ansible tree.",
+    ),
+    "concept-forks-17856-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "session-ownership-validator-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
     "oauth-bundle-app-secret-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -259,6 +274,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Frontend ts and vue source, excluding tests and generated types, against all tracked frontend files.",
     ),
+    "tool-effect-table-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source under three roots, a subset of all tracked Python; the test-file share drifts.",
+    ),
     "chunker-private-hook-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -272,7 +292,8 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     "important-declaration-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
-        "One frontend's components, against all tracked `.vue`.",
+        "Both frontends' components (shared with the raw-palette-class ratchet), against all tracked `.vue`, "
+        "which also includes the shared kit's.",
     ),
     "infra-backend-import-scan": (
         ABSOLUTE,

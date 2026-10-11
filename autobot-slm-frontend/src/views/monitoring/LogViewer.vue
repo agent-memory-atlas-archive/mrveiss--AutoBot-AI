@@ -517,7 +517,7 @@ onUnmounted(() => {
       <div
         v-if="appLogError"
         role="alert"
-        class="bg-danger-50 text-danger-700 border border-danger-200 rounded-lg px-4 py-2 mb-4 text-sm"
+        class="bg-error-50 text-error-700 border border-error-200 rounded-lg px-4 py-2 mb-4 text-sm"
       >
         {{ $t('monitoring.logViewer.appLogs.fetchError', { error: appLogError }) }}
       </div>

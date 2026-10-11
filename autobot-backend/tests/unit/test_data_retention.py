@@ -132,7 +132,7 @@ class TestChatRetention:
 
         with (
             patch("tasks.chat_retention.get_redis_client", return_value=redis),
-            patch("tasks.chat_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = await _async_cleanup_expired_chats(retention_days=90)
 
@@ -160,7 +160,7 @@ class TestChatRetention:
 
         with (
             patch("tasks.chat_retention.get_redis_client", return_value=redis),
-            patch("tasks.chat_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = await _async_cleanup_expired_chats(retention_days=90)
 
@@ -187,7 +187,7 @@ class TestChatRetention:
 
         with (
             patch("tasks.chat_retention.get_redis_client", return_value=redis),
-            patch("tasks.chat_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = await _async_cleanup_expired_chats(retention_days=90)
 
@@ -213,7 +213,7 @@ class TestChatRetention:
 
         with (
             patch("tasks.chat_retention.get_redis_client", return_value=redis),
-            patch("tasks.chat_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = await _async_cleanup_expired_chats(retention_days=90)
 
@@ -241,7 +241,7 @@ class TestChatRetention:
 
         with (
             patch("tasks.chat_retention.get_redis_client", return_value=redis),
-            patch("tasks.chat_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = await _async_cleanup_expired_chats(retention_days=90, dry_run=True)
 
@@ -270,7 +270,7 @@ class TestChatRetention:
 
         with (
             patch("tasks.chat_retention.get_redis_client", return_value=redis),
-            patch("tasks.chat_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = await _async_cleanup_expired_chats(retention_days=90)
 
@@ -309,7 +309,7 @@ class TestFileRetention:
 
         with (
             patch("tasks.file_retention._STORAGE_BASE", tmp_path),
-            patch("tasks.file_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = _cleanup_expired_files(retention_days=90)
 
@@ -326,7 +326,7 @@ class TestFileRetention:
 
         with (
             patch("tasks.file_retention._STORAGE_BASE", tmp_path),
-            patch("tasks.file_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = _cleanup_expired_files(retention_days=90)
 
@@ -355,7 +355,7 @@ class TestFileRetention:
         with (
             patch("tasks.file_retention._STORAGE_BASE", tmp_path),
             patch.object(old_file.__class__, "unlink", raise_not_found),
-            patch("tasks.file_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = _cleanup_expired_files(retention_days=90)
 
@@ -376,7 +376,7 @@ class TestFileRetention:
 
         with (
             patch("tasks.file_retention._STORAGE_BASE", tmp_path),
-            patch("tasks.file_retention.audit_emit") as mock_emit,
+            patch("tasks.retention_audit.audit_emit") as mock_emit,
         ):
             result = _cleanup_expired_files(retention_days=90, dry_run=True)
 

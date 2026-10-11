@@ -41,14 +41,14 @@ class UserPreferences(BaseModel):
         description="Default reasoning effort level (low, medium, high, auto)",
     )
     theme: str = Field(
-        "dark",
-        pattern=r"^(dark|light|system)\z",
-        description="Base theme mode (dark, light, system)",
+        "light",
+        pattern=r"^(light|dark|contrast|mono|system)\z",
+        description="Base theme (light, dark, contrast, mono, system); light is the Refined default (#18223)",
     )
     accent_color: str = Field(
-        "blue",
-        pattern=r"^(blue|green|purple|orange|pink|teal|indigo|red)\z",
-        description="Accent color preset",
+        "theme",
+        pattern=r"^(theme|blue|green|purple|orange|pink|teal|indigo|red)\z",
+        description="Accent color preset; 'theme' sets none, so the theme's own primary stands (#18223)",
     )
     layout_density: str = Field(
         "comfortable",

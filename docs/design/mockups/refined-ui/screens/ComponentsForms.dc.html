@@ -264,11 +264,9 @@ input[type="search"]::-webkit-search-cancel-button{display:none}
     <a href="CompanyOS.dc.html">Company OS</a>
     <a href="Analytics.dc.html">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
-    <a href="ThemeManager.dc.html" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon" aria-label="Plugins" title="Plugins"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon" aria-label="Secrets" title="Secrets"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" title="Preferences"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
-    <a href="AdminUsers.dc.html" class="icon" aria-label="Admin panel" title="Admin panel"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <button type="button" aria-label="Profile menu" style="margin-left: 8px; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--brand-bg); font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand-fg); cursor: pointer">JD</button>
   </nav>
 
@@ -376,7 +374,7 @@ input[type="search"]::-webkit-search-cancel-button{display:none}
         <div class="states">
           <div class="fld"><span class="st">Focus</span><div class="grp fx"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" class="it1"/><path d="M16 16l4 4"/></svg></span><input class="inp" aria-label="Search (focus example)" placeholder="Name, role or IP" /></div></div>
           <div class="fld"><span class="st">Disabled</span><div class="grp dis"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" class="it1"/><path d="M16 16l4 4"/></svg></span><input class="inp" aria-label="Search (disabled example)" placeholder="Fleet offline" disabled="disabled" /></div></div>
-          <div class="fld"><span class="st">Error</span><div class="grp inv"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" class="it1"/><path d="M16 16l4 4"/></svg></span><input class="inp" aria-label="Search (error example)" value="203.0.113." aria-invalid="true" /></div><span class="err">Error: incomplete IP address</span></div>
+          <div class="fld"><span class="st">Error</span><div class="grp inv"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" class="it1"/><path d="M16 16l4 4"/></svg></span><input class="inp" aria-label="Search (error example)" value="10.0.0." aria-invalid="true" /></div><span class="err">Error: incomplete IP address</span></div>
         </div>
       </div>
       <p class="rules"><strong>Rules</strong> · Clear button appears only with a value, has aria-label "Clear search" and returns focus to the input. Esc also clears. Announce result counts with aria-live="polite".</p>
@@ -586,7 +584,7 @@ input[type="search"]::-webkit-search-cancel-button{display:none}
           <label class="lbl" for="dp">Run on</label>
           <div class="grp {{dpCls}}"><input id="dp" class="inp mono" value="{{dpTxt}}" onInput="{{onDp}}" onChange="{{onDp}}" placeholder="YYYY-MM-DD" aria-describedby="dph" /><button type="button" class="ibtn" aria-label="Choose date" aria-haspopup="dialog" aria-expanded="{{dpExp}}" onClick="{{dpToggle}}"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" class="it2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg></button></div>
           <sc-if value="{{dpBad}}" hint-placeholder-val="{{ false }}"><span class="err">Error: use YYYY-MM-DD, e.g. 2026-10-14</span></sc-if>
-          <span class="help" id="dph">Type or pick · Europe/Riga</span>
+          <span class="help" id="dph">Type or pick · Europe/Helsinki</span>
           <sc-if value="{{dpOpen}}" hint-placeholder-val="{{ true }}">
             <div class="cal" role="dialog" aria-label="Choose run date">
               <div class="calh"><button type="button" class="ibtn" aria-label="Previous month"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>October 2026<button type="button" class="ibtn" aria-label="Next month"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
@@ -638,11 +636,11 @@ input[type="search"]::-webkit-search-cancel-button{display:none}
       <div class="ch"><h2 id="h-time">Time field</h2><span class="use">Use for: a time of day such as a daily routine</span></div>
       <div class="spec">
         <div class="states" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
-          <div class="fld"><span class="st">Default</span><label class="lbl" for="tm1">Daily digest at</label><div class="grp"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" class="it1"/><path d="M12 8v4l3 2"/></svg></span><input id="tm1" class="inp mono" placeholder="HH:MM" inputmode="numeric" /><span class="ad r">Europe/Riga</span></div></div>
-          <div class="fld"><span class="st">Focus · filled</span><label class="lbl" for="tm2">Daily digest at</label><div class="grp fx"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" class="it1"/><path d="M12 8v4l3 2"/></svg></span><input id="tm2" class="inp mono" value="09:30" /><span class="ad r">Europe/Riga</span></div><span class="help">Next run tomorrow 09:30 (UTC+3)</span></div>
+          <div class="fld"><span class="st">Default</span><label class="lbl" for="tm1">Daily digest at</label><div class="grp"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" class="it1"/><path d="M12 8v4l3 2"/></svg></span><input id="tm1" class="inp mono" placeholder="HH:MM" inputmode="numeric" /><span class="ad r">Europe/Helsinki</span></div></div>
+          <div class="fld"><span class="st">Focus · filled</span><label class="lbl" for="tm2">Daily digest at</label><div class="grp fx"><span class="ad ia"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" class="it1"/><path d="M12 8v4l3 2"/></svg></span><input id="tm2" class="inp mono" value="09:30" /><span class="ad r">Europe/Helsinki</span></div><span class="help">Next run tomorrow 09:30 (UTC+3)</span></div>
           <div class="fld"><span class="st">Disabled</span><label class="lbl" for="tm3">Backup window</label><div class="grp dis"><input id="tm3" class="inp mono" value="02:00" disabled="disabled" /><span class="ad r">UTC</span></div></div>
           <div class="fld"><span class="st">Read-only</span><label class="lbl" for="tm4">Maintenance</label><div class="grp ro"><input id="tm4" class="inp mono" value="Sun 03:00" readonly="readonly" /></div></div>
-          <div class="fld"><span class="st">Error</span><label class="lbl" for="tm5">Daily digest at</label><div class="grp inv"><input id="tm5" class="inp mono" value="25:00" aria-invalid="true" /><span class="ad r">Europe/Riga</span></div><span class="err">Error: use 24-hour time, 00:00–23:59</span></div>
+          <div class="fld"><span class="st">Error</span><label class="lbl" for="tm5">Daily digest at</label><div class="grp inv"><input id="tm5" class="inp mono" value="25:00" aria-invalid="true" /><span class="ad r">Europe/Helsinki</span></div><span class="err">Error: use 24-hour time, 00:00–23:59</span></div>
         </div>
       </div>
       <p class="rules"><strong>Rules</strong> · 24-hour format, typed as HH:MM; accept "930" and normalise to 09:30 on blur. Always show the time zone the schedule runs in.</p>
@@ -822,7 +820,7 @@ input[type="search"]::-webkit-search-cancel-button{display:none}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark","contrast","mono"],"default":"light"},"$preview":{"width":1440,"height":5600}}'>
 const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['contrast', 'High contrast'], ['mono', 'Monochrome']];
-const NODES = [['node-01', 'main', '203.0.113.11'], ['node-02', 'ollama', '203.0.113.12'], ['node-03', 'npu-worker', '203.0.113.13'], ['node-04', 'redis', '203.0.113.14'], ['node-05', 'browser', '203.0.113.15']];
+const NODES = [['node-01', 'main', '192.0.2.11'], ['node-02', 'ollama', '192.0.2.12'], ['node-03', 'npu-worker', '192.0.2.13'], ['node-04', 'redis', '192.0.2.14'], ['node-05', 'browser', '192.0.2.15']];
 const MODELS = [
   { g: 'Local · Ollama', items: [['ollama/qwen2.5:14b', '14.8B · Q4_K_M'], ['ollama/llama3.1:8b', '8B · Q4_K_M'], ['ollama/mistral-nemo:12b', '12B · Q4_0'], ['ollama/nomic-embed-text', 'embeddings']] },
   { g: 'Local · OpenVINO NPU', items: [['openvino/phi-3-mini-int4', '3.8B · INT4']] },

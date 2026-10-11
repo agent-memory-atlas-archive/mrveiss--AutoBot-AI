@@ -1372,7 +1372,7 @@ onUnmounted(() => {
             </span>
           </p>
         </div>
-        <button @click="handleRemoveCodeSource" class="btn btn-danger text-sm">
+        <button @click="handleRemoveCodeSource" class="btn btn-error text-sm">
           {{ $t('codeSyncView.remove') }}
         </button>
       </div>

@@ -1,20 +1,24 @@
 /* Copyright 2025-2026 mrveiss
-   SPDX-License-Identifier: Apache-2.0
-
-   @autobot/ui token adapter — main user GUI identity.
-
-   Maps every semantic token in the kit's contract (libs/autobot-ui/src/tokens/
-   contract.css, all `--aui-*`) onto this app's own design tokens (defined in
-   src/assets/css/design-tokens.css + per-theme overrides in
-   src/assets/css/themes/*.css). Same names, this app's values → the shared
-   components (BaseModal, BaseButton, …) render in the user GUI's identity.
-
-   Every value is a var() reference to an app token — no hardcoded colors — so
-   this adapter auto-adapts across the ember / dark / light themes at runtime.
-
-   Load order (see main.ts): import '@autobot/ui/tokens' (neutral fallbacks)
-   BEFORE this file (app overrides), and this file AFTER the app's own theme CSS
-   so the app tokens it references are already defined. */
+   SPDX-License-Identifier: Apache-2.0 */
+/**
+ * @autobot/ui token adapter: the ONE mapping of the kit's contract (`--aui-*`,
+ * ./contract.css) onto the app-side semantic token names.
+ *
+ * Both frontends used to keep their own copy of this file (aui-theme.css, 142
+ * differing lines) and each mapped the contract onto names only it defined.
+ * They now share the semantic names (--bg-surface, --text-primary,
+ * --border-default, --color-primary, --color-error, --radius-md, ...), each
+ * with its OWN values: autobot-frontend in src/assets/css/design-tokens.css and
+ * themes/, autobot-slm-frontend in src/assets/styles/slm-scheme.css. So this
+ * file has no value in it and no app-specific name.
+ *
+ * Every name an app must define for this adapter is a `var()` below. An app
+ * that leaves one undefined gets an invalid --aui-* token, not the contract's
+ * neutral fallback, so add the name to the app rather than to a fallback here.
+ *
+ * Load order (main.ts of each app): '@autobot/ui/tokens' (neutral fallbacks)
+ * first, then '@autobot/ui/adapter', after the app's own theme CSS.
+ */
 
 :root {
   /* ---- Color: brand / interactive ------------------------------------ */
@@ -38,20 +42,17 @@
   --aui-color-success-contrast: var(--text-on-success);
   --aui-color-warning: var(--color-warning);
   --aui-color-warning-contrast: var(--text-on-warning);
-  --aui-color-danger: var(--color-error);
-  --aui-color-danger-contrast: var(--text-on-error);
+  --aui-color-error: var(--color-error);
+  --aui-color-error-contrast: var(--text-on-error);
   --aui-color-info: var(--color-info);
   --aui-color-info-contrast: var(--text-on-primary);
 
-  /* ---- Overlay (modal backdrop) --------------------------------------
-     App's canonical dark scrim (rgba(0,0,0,0.5), theme-aware). Note: the app
-     also references an undefined `--bg-overlay-dark` in a few components — see
-     the fix in design-tokens.css that aliases it to this same value. */
+  /* ---- Overlay (modal backdrop) -------------------------------------- */
   --aui-color-overlay: var(--bg-overlay);
 
   /* ---- Focus --------------------------------------------------------- */
   --aui-color-focus-ring: var(--border-focus);
-  --aui-focus-ring-width: 3px;
+  --aui-focus-ring-width: var(--focus-ring-width);
 
   /* ---- Radius -------------------------------------------------------- */
   --aui-radius-sm: var(--radius-sm);

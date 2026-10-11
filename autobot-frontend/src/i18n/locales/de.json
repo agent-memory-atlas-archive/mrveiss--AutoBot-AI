@@ -5825,6 +5825,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "Design",
       "title": "Preferences",
       "reset": "Reset",
       "resetAll": "Reset all preferences to defaults",
@@ -5879,6 +5880,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "System",
+      "highContrast": "Hoher Kontrast",
+      "monochrome": "Monochrom",
+      "accentThemeDescription": "Design-Standard – die Primärfarbe des Designs",
+      "baseThemeChanged": "Basisdesign geändert zu {name}",
+      "accentChanged": "Akzentfarbe geändert zu {name}",
+      "presetChanged": "Designvorlage geändert zu {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

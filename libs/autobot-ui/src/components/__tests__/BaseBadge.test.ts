@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BaseBadge, { type BadgeVariant, type BadgeSize } from '../BaseBadge.vue'
 
-const VARIANTS: BadgeVariant[] = ['neutral', 'primary', 'success', 'warning', 'danger', 'info']
+const VARIANTS: BadgeVariant[] = ['neutral', 'primary', 'success', 'warning', 'error', 'info']
 const SIZES: BadgeSize[] = ['sm', 'md']
 
 describe('BaseBadge', () => {
@@ -44,8 +44,8 @@ describe('BaseBadge', () => {
     // reactively off the `variant` prop (e.g. hardcoded into a non-reactive const)
     const wrapper = mount(BaseBadge, { props: { variant: 'success' } })
     expect(wrapper.classes()).toContain('aui-badge--success')
-    await wrapper.setProps({ variant: 'danger' })
-    expect(wrapper.classes()).toContain('aui-badge--danger')
+    await wrapper.setProps({ variant: 'error' })
+    expect(wrapper.classes()).toContain('aui-badge--error')
     expect(wrapper.classes()).not.toContain('aui-badge--success')
   })
 

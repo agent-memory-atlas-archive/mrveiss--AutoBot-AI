@@ -142,7 +142,7 @@ backend_browser_port: 9001  # Port 9001 is canonical; 3000 was Grafana's port (#
 # the default?" without restating the address (#17244).
 backend_ai_stack_host_shipped_default: "127.0.0.1"
 backend_ai_stack_host: "{{ backend_ai_stack_host_shipped_default }}"
-backend_ai_stack_port: 8080
+backend_ai_stack_port: "{{ ai_stack_port }}"
 
 # ChromaDB connection (co-located: ai-stack node; fleet deployment: ai-stack node IP)
 # Default follows backend_ai_stack_host so WSL2 auto-detection (#3503) propagates here too.

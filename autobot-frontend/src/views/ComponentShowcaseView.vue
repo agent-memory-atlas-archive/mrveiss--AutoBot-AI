@@ -84,7 +84,7 @@
             <BaseBadge variant="primary">{{ $t('views.componentShowcase.primary') }}</BaseBadge>
             <BaseBadge variant="success">{{ $t('views.componentShowcase.success') }}</BaseBadge>
             <BaseBadge variant="warning">{{ $t('views.componentShowcase.warning') }}</BaseBadge>
-            <BaseBadge variant="danger">{{ $t('views.componentShowcase.error') }}</BaseBadge>
+            <BaseBadge variant="error">{{ $t('views.componentShowcase.error') }}</BaseBadge>
             <BaseBadge variant="info">{{ $t('views.componentShowcase.info') }}</BaseBadge>
           </div>
 
@@ -93,7 +93,7 @@
             <BaseBadge variant="primary" outline>{{ $t('views.componentShowcase.primary') }}</BaseBadge>
             <BaseBadge variant="success" outline>{{ $t('views.componentShowcase.success') }}</BaseBadge>
             <BaseBadge variant="warning" outline>{{ $t('views.componentShowcase.warning') }}</BaseBadge>
-            <BaseBadge variant="danger" outline>{{ $t('views.componentShowcase.error') }}</BaseBadge>
+            <BaseBadge variant="error" outline>{{ $t('views.componentShowcase.error') }}</BaseBadge>
           </div>
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.monospace') }}</h4>
@@ -221,15 +221,15 @@
         <div class="component-section">
           <h4 class="section-heading">{{ $t('views.componentShowcase.electricBlue') }}</h4>
           <div class="color-swatches">
-            <div class="color-swatch" style="background-color: #3b82f6;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-primary);">
               <span class="swatch-label">{{ $t('views.componentShowcase.primary') }}</span>
               <span class="swatch-hex">#3b82f6</span>
             </div>
-            <div class="color-swatch" style="background-color: #2563eb;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-hover);">
               <span class="swatch-label">{{ $t('views.componentShowcase.hover') }}</span>
               <span class="swatch-hex">#2563eb</span>
             </div>
-            <div class="color-swatch" style="background-color: #1d4ed8;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-active);">
               <span class="swatch-label">{{ $t('views.componentShowcase.active') }}</span>
               <span class="swatch-hex">#1d4ed8</span>
             </div>
@@ -237,19 +237,19 @@
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.statusColors') }}</h4>
           <div class="color-swatches">
-            <div class="color-swatch" style="background-color: #10b981;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-success);">
               <span class="swatch-label">{{ $t('views.componentShowcase.success') }}</span>
               <span class="swatch-hex">#10b981</span>
             </div>
-            <div class="color-swatch" style="background-color: #f59e0b;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-warning);">
               <span class="swatch-label">{{ $t('views.componentShowcase.warning') }}</span>
               <span class="swatch-hex">#f59e0b</span>
             </div>
-            <div class="color-swatch" style="background-color: #ef4444;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-error);">
               <span class="swatch-label">{{ $t('views.componentShowcase.error') }}</span>
               <span class="swatch-hex">#ef4444</span>
             </div>
-            <div class="color-swatch" style="background-color: #06b6d4;">
+            <div class="color-swatch" style="background-color: var(--showcase-swatch-info);">
               <span class="swatch-label">{{ $t('views.componentShowcase.info') }}</span>
               <span class="swatch-hex">#06b6d4</span>
             </div>

@@ -42,11 +42,11 @@ describe('useTheme', () => {
   })
 
   describe('theme management', () => {
-    it('should initialize with default dark theme', () => {
+    it('should initialize with the default light theme (the Refined default, #18223)', () => {
       const { theme, effectiveTheme, isDark } = useTheme()
-      expect(theme.value).toBe('dark')
-      expect(effectiveTheme.value).toBe('dark')
-      expect(isDark.value).toBe(true)
+      expect(theme.value).toBe('light')
+      expect(effectiveTheme.value).toBe('light')
+      expect(isDark.value).toBe(false)
     })
 
     it('should apply theme to document', () => {
@@ -54,6 +54,32 @@ describe('useTheme', () => {
       setTheme('light')
       expect(document.documentElement.getAttribute('data-theme')).toBe('light')
       expect(document.documentElement.style.colorScheme).toBe('light')
+    })
+
+    it.each(['contrast', 'mono'] as const)('should apply the %s theme to document', (name) => {
+      const { setTheme, effectiveTheme, isDark, isLight } = useTheme()
+      setTheme(name)
+      expect(document.documentElement.getAttribute('data-theme')).toBe(name)
+      // Both are light-based: native controls render light.
+      expect(document.documentElement.style.colorScheme).toBe('light')
+      expect(effectiveTheme.value).toBe(name)
+      expect(isDark.value).toBe(false)
+      expect(isLight.value).toBe(false)
+    })
+
+    it.each(['contrast', 'mono'] as const)('should restore the saved %s theme on init', async (name) => {
+      localStorage.setItem('autobot-theme', name)
+      vi.resetModules()
+      const module = await import('./useTheme')
+      module.initializeTheme()
+      expect(document.documentElement.getAttribute('data-theme')).toBe(name)
+    })
+
+    it('should ignore an unknown saved theme', async () => {
+      localStorage.setItem('autobot-theme', 'sepia')
+      vi.resetModules()
+      const module = await import('./useTheme')
+      expect(module.useTheme().theme.value).toBe('light')
     })
 
     it('should persist theme to localStorage', () => {
@@ -72,11 +98,11 @@ describe('useTheme', () => {
 
     it('should toggle between dark and light', () => {
       const { theme, toggleTheme } = useTheme()
-      expect(theme.value).toBe('dark')
-      toggleTheme()
       expect(theme.value).toBe('light')
       toggleTheme()
       expect(theme.value).toBe('dark')
+      toggleTheme()
+      expect(theme.value).toBe('light')
     })
 
     it('should handle system theme preference', () => {
@@ -89,9 +115,19 @@ describe('useTheme', () => {
   })
 
   describe('accent color management', () => {
-    it('should initialize with default blue accent', () => {
+    it('should initialize with the theme accent, which sets no data-accent', () => {
       const { accentColor } = useTheme()
-      expect(accentColor.value).toBe('blue')
+      expect(accentColor.value).toBe('theme')
+      expect(document.documentElement.hasAttribute('data-accent')).toBe(false)
+    })
+
+    it('should clear data-accent when the theme accent is chosen again', () => {
+      const { setAccentColor } = useTheme()
+      setAccentColor('green')
+      expect(document.documentElement.getAttribute('data-accent')).toBe('green')
+      setAccentColor('theme')
+      expect(document.documentElement.hasAttribute('data-accent')).toBe(false)
+      expect(localStorage.getItem('autobot-accent-color')).toBe('theme')
     })
 
     it('should apply accent color to document', () => {
@@ -120,19 +156,20 @@ describe('useTheme', () => {
       const module = await import('./useTheme')
       const { accentColor } = module.useTheme()
       // Should fallback to default
-      expect(accentColor.value).toBe('blue')
+      expect(accentColor.value).toBe('theme')
     })
   })
 
   describe('available options', () => {
     it('should provide available theme options', () => {
       const { availableThemes } = useTheme()
-      expect(availableThemes).toEqual(['dark', 'light', 'system'])
+      expect(availableThemes).toEqual(['light', 'dark', 'contrast', 'mono', 'system'])
     })
 
     it('should provide available accent options', () => {
       const { availableAccents } = useTheme()
       expect(availableAccents).toEqual([
+        'theme',
         'blue',
         'green',
         'purple',
@@ -149,6 +186,8 @@ describe('useTheme', () => {
       expect(themeLabels.dark).toBe('Dark')
       expect(themeLabels.light).toBe('Light')
       expect(themeLabels.system).toBe('System')
+      expect(themeLabels.contrast).toBe('High contrast')
+      expect(themeLabels.mono).toBe('Monochrome')
     })
 
     it('should provide accent labels', () => {
@@ -209,8 +248,8 @@ describe('useTheme', () => {
       vi.resetModules()
       const module = await import('./useTheme')
       const { theme, accentColor } = module.useTheme()
-      expect(theme.value).toBe('dark')
-      expect(accentColor.value).toBe('blue')
+      expect(theme.value).toBe('light')
+      expect(accentColor.value).toBe('theme')
       localStorage.getItem = originalGetItem
     })
   })

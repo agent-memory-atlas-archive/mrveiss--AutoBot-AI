@@ -15,6 +15,7 @@ FEATURE FLAG SUPPORT:
 - ENFORCED: Full enforcement with access blocking
 """
 
+import inspect
 from typing import Dict
 
 from fastapi import HTTPException, Request
@@ -27,6 +28,7 @@ from security.enforcement_mode import (
     resolve_enforcement_mode,
     resolve_enforcement_mode_for_request,
 )
+from security.session_posture import SessionPosture, authenticated_user, read_owner, require_posture, validate_strict
 
 logger = get_logger(__name__)
 
@@ -212,31 +214,8 @@ class SessionOwnershipValidator:
             return None
 
     def _get_authenticated_user(self, session_id: str, request: Request) -> Dict:
-        """
-        Get authenticated user from request, raising HTTPException if not authenticated.
-
-        Issue #281: Extracted helper for authentication check.
-
-        Args:
-            session_id: Chat session ID (for logging)
-            request: FastAPI request object
-
-        Returns:
-            Dict with user data
-
-        Raises:
-            HTTPException: 401 if not authenticated
-        """
-        user_data = get_auth_middleware().get_user_from_request(request)
-
-        if not user_data:
-            logger.warning(f"Unauthenticated access attempt to session {session_id[:8]}...")
-            raise HTTPException(
-                status_code=401,
-                detail="Authentication required to access conversations",
-            )
-
-        return user_data
+        """The authenticated user, or 401 (Issue #281). One body, shared with STRICT (#14016)."""
+        return authenticated_user(session_id, request)
 
     async def _get_enforcement_mode(self) -> ResolvedEnforcementMode:
         """The global enforcement mode, with whether it was determined or degraded to.
@@ -520,21 +499,12 @@ class SessionOwnershipValidator:
         unowned and handed them to their next visitor, which is this issue's own
         defect reintroduced for that vintage of file.
 
-        Returns None when the session records no owner or cannot be read; the
-        caller then treats it as genuinely unowned. See the PR for why that
-        fail-open is deliberate and where it is uncomfortable.
+        Returns None only when the session records no owner. ANY failure to look
+        the owner up -- typed or not, or no manager to ask -- raises 403 (#14033):
+        an unknown owner is not "unowned", and claiming it would hand the session
+        to the caller.
         """
-        try:
-            from utils.chat_utils import get_chat_history_manager  # noqa: PLC0415
-
-            manager = get_chat_history_manager(request)
-            if manager is None:
-                return None
-            owner = await manager.get_session_owner(session_id)
-        except Exception as exc:
-            logger.warning("Could not read the durable owner of session %s...: %s", session_id[:8], exc)
-            return None
-        return owner if isinstance(owner, str) and owner else None
+        return await read_owner(session_id, request) or None
 
     async def _owner_when_cache_is_empty(
         self, session_id: str, username: str, user_data: Dict, request: Request
@@ -772,9 +742,11 @@ class SessionOwnershipValidator:
 
 
 # Dependency function for FastAPI endpoints
-async def validate_session_ownership(session_id: str, request: Request) -> Dict:
+async def validate_session_ownership(
+    session_id: str, request: Request, posture: SessionPosture = SessionPosture.DEFAULT
+) -> Dict:
     """
-    FastAPI dependency to validate session ownership with feature flag support.
+    The ONE endpoint ownership dependency (#14016), with feature flag support.
 
     Integrates with:
     - Feature flags service (for enforcement mode)
@@ -795,6 +767,8 @@ async def validate_session_ownership(session_id: str, request: Request) -> Dict:
     Args:
         session_id: Chat session ID from URL path
         request: FastAPI request object
+        posture: ``SessionPosture.STRICT`` for the conversation-file routes. Hidden from FastAPI
+            (see below), so a client can never choose it.
 
     Returns:
         Dict with authorization status and user data
@@ -802,6 +776,9 @@ async def validate_session_ownership(session_id: str, request: Request) -> Dict:
     Raises:
         HTTPException: 401 if not authenticated, 403 if not authorized (ENFORCED mode)
     """
+    if require_posture(posture) is SessionPosture.STRICT:
+        return await validate_strict(session_id, authenticated_user(session_id, request), request)
+
     from autobot_shared.redis_client import get_redis_client as get_redis_manager
     from services.access_control_metrics import get_metrics_service
     from services.feature_flags import get_feature_flags
@@ -831,3 +808,10 @@ async def validate_session_ownership(session_id: str, request: Request) -> Dict:
     validator = SessionOwnershipValidator(redis, feature_flags=feature_flags, metrics_service=metrics_service)
 
     return await validator.validate_ownership(session_id, request)
+
+
+# FastAPI would otherwise expose ``posture`` as a query parameter; the posture is a caller's
+# decision in code, never a client's.
+validate_session_ownership.__signature__ = inspect.signature(validate_session_ownership).replace(
+    parameters=list(inspect.signature(validate_session_ownership).parameters.values())[:2]
+)

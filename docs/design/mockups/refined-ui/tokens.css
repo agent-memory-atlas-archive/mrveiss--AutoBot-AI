@@ -123,7 +123,7 @@
   --field-gap:16px;--inline-gap:8px;--form-section-gap:28px;--form-label-col:200px;--form-max:640px;--action-gap:8px;
   --check-gap:8px;--control-size:18px;--switch-w:36px;--switch-h:20px;--switch-knob:14px;
 
-  --tooltip-delay:500ms;--tooltip-hide-delay:100ms;--tooltip-offset:8px;--tooltip-max:280px;
+  --tooltip-delay:500ms;--tooltip-hide-delay:100ms;--tooltip-skip-delay:300ms;--tooltip-offset:8px;--tooltip-max:280px;
 }
 @media (max-width:1023.98px){:root{--grid-cols:8;--grid-gutter:16px;--space-section:24px;--stack:12px}}
 @media (max-width:767.98px){:root{--grid-cols:4}}

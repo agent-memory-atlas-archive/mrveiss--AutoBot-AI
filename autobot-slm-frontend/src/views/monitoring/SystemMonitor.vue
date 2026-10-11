@@ -61,14 +61,14 @@ function getStatusColor(status: string): string {
   switch (status) {
     case 'healthy': return 'bg-success-500'
     case 'degraded': return 'bg-warning-500'
-    case 'unhealthy': return 'bg-danger-500'
+    case 'unhealthy': return 'bg-error-500'
     case 'offline': return 'bg-gray-400'
     default: return 'bg-gray-400'
   }
 }
 
 function getMetricColor(value: number): string {
-  if (value >= 90) return 'text-danger-500'
+  if (value >= 90) return 'text-error-500'
   if (value >= 70) return 'text-warning-500'
   return 'text-success-500'
 }
@@ -181,7 +181,7 @@ function getMetricColor(value: number): string {
           <p class="text-2xl font-bold capitalize" :class="{
             'text-success-600': systemHealth === 'healthy',
             'text-warning-600': systemHealth === 'degraded',
-            'text-danger-600': systemHealth === 'critical',
+            'text-error-600': systemHealth === 'critical',
             'text-gray-400': systemHealth === 'unknown',
           }">{{ systemHealth }}</p>
         </div>

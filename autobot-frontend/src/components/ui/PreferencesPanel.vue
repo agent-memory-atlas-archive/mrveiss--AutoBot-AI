@@ -167,6 +167,7 @@ const fontSizeOptions = computed(() => [
 // both the colour set and where to write it. `emerald` is retired -- it is the
 // same colour this set calls `green` (identical value in accents.css).
 const accentColorOptions = computed(() => [
+  { value: 'theme' as AccentColor, label: t('ui.preferences.accentTheme') },
   { value: 'blue' as AccentColor, label: t('ui.preferences.blue') },
   { value: 'green' as AccentColor, label: t('ui.preferences.green') },
   { value: 'purple' as AccentColor, label: t('ui.preferences.purple') },
@@ -442,6 +443,10 @@ function handleReset() {
 }
 
 /* Active color preview gets border */
+.color-preview[data-accent="theme"] {
+  background: var(--primary);
+}
+
 .color-btn.active .color-preview {
   border: 2px solid var(--color-primary);
 }

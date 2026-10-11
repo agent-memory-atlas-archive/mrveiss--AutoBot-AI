@@ -5825,6 +5825,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "Tēma",
       "title": "Preferences",
       "reset": "Reset",
       "resetAll": "Reset all preferences to defaults",
@@ -5879,6 +5880,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "Sistēma",
+      "highContrast": "Augsts kontrasts",
+      "monochrome": "Melnbalts",
+      "accentThemeDescription": "Tēmas noklusējums — pašas tēmas primārā krāsa",
+      "baseThemeChanged": "Pamata tēma nomainīta uz {name}",
+      "accentChanged": "Akcenta krāsa nomainīta uz {name}",
+      "presetChanged": "Tēmas sagatave nomainīta uz {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

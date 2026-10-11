@@ -158,7 +158,7 @@ onUnmounted(() => {
         <h2 class="pf-section-title">{{ $t('admin.providerFallback.timeline') }}</h2>
         <ul class="pf-timeline">
           <li v-for="(ev, idx) in timeline" :key="`${ev.conversation_id}-${idx}`" class="pf-event">
-            <BaseBadge :variant="ev.exhausted ? 'danger' : 'warning'" size="sm">
+            <BaseBadge :variant="ev.exhausted ? 'error' : 'warning'" size="sm">
               {{
                 ev.exhausted
                   ? $t('admin.providerFallback.exhausted')
