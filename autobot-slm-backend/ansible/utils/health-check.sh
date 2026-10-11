@@ -14,7 +14,7 @@ _PROJECT_ROOT="$SCRIPT_DIR"
 while [ "$_PROJECT_ROOT" != "/" ] && [ ! -f "$_PROJECT_ROOT/.env" ]; do
     _PROJECT_ROOT="$(dirname "$_PROJECT_ROOT")"
 done
-source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true
+source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true; : "${AUTOBOT_AI_STACK_PORT:?ssot-config.sh not loaded — AUTOBOT_AI_STACK_PORT unset}"
 LOG_FILE="/var/log/autobot/health-check-$(date +%Y%m%d-%H%M%S).log"
 TIMEOUT=10
 
