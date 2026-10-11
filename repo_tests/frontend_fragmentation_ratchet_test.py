@@ -105,8 +105,11 @@ BASELINE = {
     #
     # #16972/#15455: same owner-approved, one-off exception as distinct_class_names
     # directly above -- see that comment.
-    "css_rule_declarations": 9379,  # #17565: the App.vue skip-link rules moved to
-    # the kit (lowered from 9381); earlier #17020, same reason as distinct_class_names
+    "css_rule_declarations": 9378,  # #14785: density reuses the existing
+    # [data-layout-density] attribute (no .density-* classes), and the dead
+    # assets/main.css .sr-only rule went with that file (lowered from 9379).
+    # #17565: the App.vue skip-link rules moved to the kit (lowered from 9381);
+    # earlier #17020, same reason as distinct_class_names
     # Files declaring at least one `.btn-*` CSS rule. Target is 1 — a single
     # shared stylesheet.
     "button_definition_files": 101,

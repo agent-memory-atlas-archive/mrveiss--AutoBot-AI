@@ -8,6 +8,7 @@ import { getApiBase } from '@/config/ssot-config'
 import { fetchWithAuth } from '@/utils/fetchWithAuth'
 import { isRealAuthToken } from '@/utils/authToken'
 import { isAdminRole } from '@/constants/roles'
+import { colorSchemeFor, type EffectiveTheme } from '@/composables/useTheme'
 
 const logger = createLogger('useUserStore')
 
@@ -25,7 +26,7 @@ export interface UserProfile {
 }
 
 export interface UserPreferences {
-  theme: 'light' | 'dark' | 'auto'
+  theme: EffectiveTheme | 'auto'
   language: string
   timezone: string
   notifications: {
@@ -69,7 +70,7 @@ export const useUserStore = defineStore('user', () => {
   const currentUser = ref<UserProfile | null>(null)
 
   const defaultPreferences: UserPreferences = {
-    theme: 'auto',
+    theme: 'light',
     language: 'en',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     notifications: {
@@ -171,7 +172,7 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  function updateTheme(theme: 'light' | 'dark' | 'auto') {
+  function updateTheme(theme: EffectiveTheme | 'auto') {
     updatePreferences({ theme })
     applyTheme()
   }
@@ -243,7 +244,8 @@ export const useUserStore = defineStore('user', () => {
     const root = document.documentElement
 
     root.setAttribute('data-theme', currentTheme)
-    root.style.colorScheme = currentTheme
+    // contrast and mono are light-based (#18223): colorSchemeFor maps all four.
+    root.style.colorScheme = colorSchemeFor(currentTheme)
 
     // Update meta theme-color for mobile browsers
     const metaThemeColor = document.querySelector('meta[name="theme-color"]')

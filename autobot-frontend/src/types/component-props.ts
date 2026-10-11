@@ -18,6 +18,6 @@ export type ButtonVariant =
   | 'link'
 
 // BadgeVariant is the shared presentational semantic vocabulary (#10885):
-// neutral | primary | success | warning | danger | info. The former local
-// 'default'/'error' members were reconciled to canonical 'neutral'/'danger'.
+// neutral | primary | success | warning | error | info. The former local
+// 'default' member was reconciled to canonical 'neutral'; 'danger' to 'error' (#14775).
 export type BadgeVariant = SemanticVariant

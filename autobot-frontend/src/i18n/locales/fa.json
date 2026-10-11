@@ -4834,6 +4834,13 @@
   },
   "ui": {
     "themeToggle": {
+      "system": "سیستمی",
+      "highContrast": "کنتراست بالا",
+      "monochrome": "تک‌رنگ",
+      "accentThemeDescription": "پیش‌فرض پوسته — رنگ اصلی خود پوسته",
+      "baseThemeChanged": "پوسته پایه به {name} تغییر کرد",
+      "accentChanged": "رنگ تأکیدی به {name} تغییر کرد",
+      "presetChanged": "پیش‌تنظیم پوسته به {name} تغییر کرد",
       "dark": "Dark",
       "light": "Light",
       "switchToDark": "Switch to dark mode",
@@ -4842,6 +4849,7 @@
       "selectTheme": "Select theme"
     },
     "preferences": {
+      "accentTheme": "پوسته",
       "fontSizeChanged": "Font size changed to {size}",
       "fontSizeOptions": "Font size options",
       "orange": "نارنجی",

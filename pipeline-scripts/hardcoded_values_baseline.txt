@@ -988,9 +988,6 @@
 1|other|autobot-slm-backend/ansible/deploy-native.sh|"/tmp/autobot-native-deployment
 1|other|autobot-slm-backend/ansible/deploy.sh|"/tmp/autobot-deployment
 1|ssot|autobot-slm-backend/ansible/enable-tls.yml|:8443
-1|other|autobot-slm-backend/ansible/fix-backend-deadlock.sh|"/tmp/autobot-backend-single-worker.service
-1|other|autobot-slm-backend/ansible/fix-backend-deadlock.sh|Group=autobot
-1|other|autobot-slm-backend/ansible/fix-backend-deadlock.sh|User=autobot
 1|other|autobot-slm-backend/ansible/fix-backend-worker-deadlock.yml|30
 2|ssot|autobot-slm-backend/ansible/fix-backend-worker-deadlock.yml|:8443
 1|ssot|autobot-slm-backend/ansible/fix-slm-env-ports.yml|:5173

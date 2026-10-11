@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.tool_catalogue import ToolEffect, tools_with_all
 from autobot_shared.tracing import tool_span
 from code_intelligence.code_generation.diff import DiffGenerator
 from constants.status_enums import TaskStatus
@@ -38,16 +39,7 @@ logger = get_logger(__name__)
 # =============================================================================
 
 # Tools that mutate files — artifact capture is enabled for these
-_FILE_MODIFYING_TOOLS: frozenset[str] = frozenset(
-    {
-        "edit_file",
-        "write_file",
-        "create_file",
-        "delete_file",
-        "move_file",
-        "rename_file",
-    }
-)
+_FILE_MODIFYING_TOOLS: frozenset[str] = tools_with_all(ToolEffect.WRITE | ToolEffect.FILE_TARGET)
 
 # Tools that produce test output
 _TEST_RUNNER_TOOLS: frozenset[str] = frozenset(

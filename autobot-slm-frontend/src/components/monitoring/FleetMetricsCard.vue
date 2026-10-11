@@ -27,11 +27,11 @@ const healthColor = computed(() => {
   const pct = healthPercentage.value
   if (pct >= 90) return 'text-success-600'
   if (pct >= 70) return 'text-warning-600'
-  return 'text-danger-600'
+  return 'text-error-600'
 })
 
 function getMetricColor(value: number): string {
-  if (value >= 90) return 'text-danger-600'
+  if (value >= 90) return 'text-error-600'
   if (value >= 70) return 'text-warning-600'
   return 'text-success-600'
 }
@@ -92,7 +92,7 @@ function formatTimestamp(timestamp: string): string {
           {{ metrics.running_services }}/{{ metrics.total_services }}
         </div>
         <div class="text-xs text-gray-600">
-          <span v-if="metrics.failed_services > 0" class="text-danger-600">{{ $t('monitoring.fleetMetricsCard.value0Failed', { value0: metrics.failed_services }) }}</span>
+          <span v-if="metrics.failed_services > 0" class="text-error-600">{{ $t('monitoring.fleetMetricsCard.value0Failed', { value0: metrics.failed_services }) }}</span>
           <span v-else class="text-success-600">{{ $t('monitoring.fleetMetricsCard.allHealthy') }}</span>
         </div>
       </div>

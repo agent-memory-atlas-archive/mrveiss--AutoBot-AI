@@ -72,16 +72,16 @@ widget-span and tooltip tokens. The app already has a token pipeline; extend it,
 ## 4. Shared behaviours (build once, used everywhere)
 
 ### 4.1 Top navigation
-Logo · Home · Chat · Knowledge · Company OS · Analytics (`adv`), then an outlined **SLM Admin ↗**
-link (`adv`) and an icon cluster on the right: Plugins · Secrets (key) · Preferences ·
-**UI-mode toggle** · Admin panel (shield) · Profile settings. Every icon has an `aria-label` and a
-tooltip. Active item: `--nav-on-bw` underline in `--accent`. Overflow collapses into the existing
+Logo · Home · Chat · Knowledge · Company OS · Analytics (`adv`), then an icon cluster on the
+right: Secrets (key) · Preferences · **UI-mode toggle** · Platform admin (shield, "Platform admin —
+opens the SLM console ↗") · Profile settings. Plugins lives in the SLM console nav, not the user
+top nav. Every icon has an `aria-label` and a tooltip. Active item: `--nav-on-bw` underline in `--accent`. Overflow collapses into the existing
 `NavOverflowMenu`. Agents is reached from its own pages' sub-navigation, not the top bar.
 Reference: any app screen (e.g. `Chat`); `ComponentsNavigation` for states.
 
 ### 4.2 Minimal / Full interface mode
 - Root attribute `data-ui="minimal|full"`; CSS hides `.adv` in Minimal (`tokens.css`).
-- **Toggle** is a button in the nav icon cluster, just before the Admin icon. Label "Minimal",
+- **Toggle** is a button in the nav icon cluster, just before the Platform admin icon. Label "Minimal",
   `aria-pressed` reflects state, pressed style = `--surface2` fill + `--accent` border.
   A visually hidden `aria-live` region announces the change.
 - **Preference:** Profile settings → *Preferred mode* (Minimal / Full cards) plus *Start in*
@@ -119,13 +119,21 @@ columns into a half-width card. Reference: `ComponentsGrid` §tables, `Component
 
 ### 4.7 System Control moves out of Chat
 The System Control widget (status + Reload System) is removed from the Chat sidebar and becomes the
-first item of the **Danger Zone** card in Admin → Advanced control. Reference: `Chat`,
+first item of the **Danger Zone** card in SLM console → Advanced control. Reference: `Chat`,
 `AdminAdvancedControl`.
 
 ## 5. Screen → view map
 
 Route/view as found on `main` at 940da29. **New** = no view exists yet; confirm the backend before
 building UI for it.
+
+Page groups on the canvas (115 screens): Entry & Home 8 · Chat & Workspace 3 · Knowledge 13 ·
+Company OS 24 (includes BusinessIntelligence) · Automation 7 · Agents 3 · Analytics 6 · Settings 2
+(Secrets, Preferences) · **SLM console (server-wide) 23** · Auth & Account 10 · Components 16. The
+SLM console group holds Operations, ErrorMonitoring, FailureAnalysis, Plugins, Marketplace,
+SecretsApiKeys, SecretsAudit, LlmConfig, ThemeManager, the Admin* screens, AuditLogs, SystemHealth,
+Experiments, Benchmark, Evolution and DevSpeedup. The routes below are the current user-frontend
+routes; the group says where the mockup now puts the screen.
 
 | Mockup | Route | View / component |
 |---|---|---|
@@ -216,7 +224,7 @@ building UI for it.
 
 - Several strings shown in the mockups have no `en.json` key yet — add i18n keys as screens are built.
 - `/llm-config`, `/desktop` and `/documents` are redirects, not screens.
-- Admin → Permission scopes is an empty state on `main`.
+- SLM console → Permission scopes is an empty state on `main`.
 - No mailbox, sign-up, password-reset, two-factor or invite UI exists.
 - Mockup tooltip text includes a few **keyboard shortcuts that the app does not have** (e.g.
   Ctrl+S, Ctrl+Enter, Ctrl+L, F11, Shift+F10). Implement the shortcut or drop it from the tooltip —
@@ -237,7 +245,7 @@ Each step is one PR-sized scope. A session should take one step, not the whole l
    tooltip (#14779), command menu — from the `Components*` screens.
 4. **Home and Company OS dashboards** — including move/resize widgets.
 5. **Section by section** — Chat (incl. System Control move to Advanced control), Knowledge,
-   Company OS pages + Automation, Agents, Analytics, Settings, Admin, SLM.
+   Company OS pages + Automation, Agents, Analytics, Settings, SLM console.
 6. **New screens** — account area, auth flows, help, search, mailbox — each only after its backend
    is confirmed.
 

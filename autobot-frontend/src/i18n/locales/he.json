@@ -4834,6 +4834,13 @@
   },
   "ui": {
     "themeToggle": {
+      "system": "מערכת",
+      "highContrast": "ניגודיות גבוהה",
+      "monochrome": "מונוכרום",
+      "accentThemeDescription": "ברירת המחדל של ערכת הנושא — הצבע הראשי של ערכת הנושא עצמה",
+      "baseThemeChanged": "ערכת הנושא הבסיסית שונתה ל-{name}",
+      "accentChanged": "צבע ההדגשה שונה ל-{name}",
+      "presetChanged": "הגדרת ערכת הנושא המוכנה שונתה ל-{name}",
       "dark": "Dark",
       "light": "Light",
       "switchToDark": "Switch to dark mode",
@@ -4842,6 +4849,7 @@
       "selectTheme": "Select theme"
     },
     "preferences": {
+      "accentTheme": "ערכת נושא",
       "fontSizeChanged": "Font size changed to {size}",
       "fontSizeOptions": "Font size options",
       "orange": "כתום",

@@ -762,8 +762,6 @@ async def get_cache_stats(admin_check: bool = Depends(check_admin_permission)):
     Issue #744: Requires admin authentication.
     """
     try:
-        from utils.cache_manager import cache_manager
-
         # Get cache statistics
         cache_stats = await cache_manager.get_stats()
 
@@ -871,8 +869,6 @@ async def get_cache_activity(admin_check: bool = Depends(check_admin_permission)
     Issue #744: Requires admin authentication.
     """
     try:
-        from utils.cache_manager import cache_manager
-
         activity_response = {
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             "activity": {

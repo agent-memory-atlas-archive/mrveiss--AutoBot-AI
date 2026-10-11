@@ -135,6 +135,23 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Links in body text carry a cue that is not colour (WCAG 1.4.1, #18223): in the
+ * Refined themes the link colour is the text colour (--link = --text), so an
+ * underline at rest is what tells a link from a word. Anchors that carry a class
+ * (nav, buttons, cards) style themselves. Hover takes the handoff's --link-h. */
+a:not([class]),
+.prose a,
+.message-text a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+a:not([class]):hover,
+.prose a:hover,
+.message-text a:hover {
+  color: var(--text-link-hover);
+}
+
 a:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;

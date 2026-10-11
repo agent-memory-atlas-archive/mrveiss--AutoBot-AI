@@ -20,8 +20,7 @@ import '@fontsource/inter/latin-500.css'
 import '@fontsource/inter/latin-600.css'
 import '@fontsource/inter/latin-700.css'
 
-// Import legacy theme system (Issue #548) - loaded BEFORE design system so tokens win
-import './assets/styles/theme.css'
+// Legacy view styles - loaded BEFORE the design system so its tokens win (theme.css retired into design-tokens.css, #14785)
 import './assets/styles/view.css'
 
 // Import CSS Design System (Issue #704/#901) - SSOT - must come AFTER legacy to override
@@ -37,12 +36,12 @@ import './assets/css/interaction-polish.css'
 // .view-container don't scroll properly.
 import './assets/base.css'
 
-// @autobot/ui shared kit: token contract fallbacks first, then this app's
-// adapter (mapping --aui-* onto the app's own design tokens). Loaded AFTER
-// the app design-system CSS above so the tokens the adapter references are
-// already defined (#10750 C2c, #10860 Task-C).
+// @autobot/ui shared kit: token contract fallbacks first, then the kit's one
+// adapter (mapping --aui-* onto the shared semantic token names, which this app
+// defines in the design-system CSS above). Loaded AFTER that CSS so the tokens
+// the adapter references are already defined (#10750 C2c, #10860 Task-C).
 import '@autobot/ui/tokens'
-import './assets/aui-theme.css'
+import '@autobot/ui/adapter'
 
 // Initialize theme early to prevent flash of unstyled content
 import { initializeTheme } from '@/composables/useTheme'
