@@ -78,3 +78,5 @@ Research reports covering hardware integration, system conflicts, and technology
 - [[../analysis/_index\|Analysis]] — Analysis based on research
 - [[../design/_index\|Design]] — Design informed by research
 - [[../discovery/_index\|Discovery]] — Discovery reports
+| [[llm-code-analysis-finding-discipline]] | LLM code-analysis finding discipline — three closure states, a coverage ledger, diff-scope rules, ordered security-fix gates and content-keyed finding fingerprints; review-fleet silently drops low-confidence findings (#18330, #18331–#18335) |
+| [[evidence-first-recoverable-agent-runtime]] | Evidence-first recoverable agent runtime — one tool-effect SSOT, effect bracketing, run-generation fencing, per-turn context manifest, typed denial reasons; conversation turns were persisted twice (#18293, #18294, #18302–#18307) |
