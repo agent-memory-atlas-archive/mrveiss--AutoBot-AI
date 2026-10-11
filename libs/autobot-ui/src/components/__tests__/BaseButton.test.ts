@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BaseButton, { type ButtonVariant, type ButtonSize } from '../BaseButton.vue'
 
-const VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'ghost', 'danger']
+const VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'ghost', 'error']
 const SIZES: ButtonSize[] = ['sm', 'md', 'lg']
 
 describe('BaseButton', () => {

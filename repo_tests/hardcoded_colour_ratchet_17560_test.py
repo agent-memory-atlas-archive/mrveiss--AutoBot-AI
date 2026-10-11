@@ -29,12 +29,14 @@ from repo_tests._hardcoded_colour_detect import (
     REACH_COLOUR_FILES,
     REACH_IMPORTANT_FILES,
     REACH_STYLE_BLOCKS,
+    SLM_KEY_PREFIX,
     _colour_scanned_files,
     _important_scanned_files,
     _is_colour,
     _owned_token_names,
     _scan,
     _scan_important,
+    _scan_important_all,
     _token_redefinitions,
 )
 from repo_tests._paths import repo_root
@@ -49,7 +51,7 @@ def measured() -> dict[str, int]:
 
 @pytest.fixture(scope="module")
 def measured_important() -> dict[str, int]:
-    return _scan_important(repo_root() / _FRONTEND)
+    return _scan_important_all(repo_root())
 
 
 class TestTheDetectorWorksBeforeItsOutputIsRead:
@@ -246,6 +248,19 @@ class TestTheImportantPopulationOnlyShrinks:
 
     def test_the_total_matches_the_entries(self):
         assert TOTAL_IMPORTANT == sum(IMPORTANT_DECLARATIONS.values())
+
+    def test_the_sweep_covers_the_control_plane_too(self, measured_important):
+        # #17567: the AC is both frontends. The control plane's keys carry a
+        # prefix; seeing none would mean the second tree was never read.
+        assert any(k.startswith(SLM_KEY_PREFIX) for k in measured_important)
+        assert any(f.startswith(SLM_KEY_PREFIX) for f in _important_scanned_files(repo_root()))
+
+    def test_a_prefixed_key_cannot_collide_with_the_user_frontend(self, tmp_path):
+        for name in ("autobot-frontend", "autobot-slm-frontend"):
+            d = tmp_path / name / "src" / "views"
+            d.mkdir(parents=True)
+            (d / "A.vue").write_text("<style>.x { top: 0 !important; }</style>", encoding="utf-8")
+        assert _scan_important_all(tmp_path) == {"views/A.vue": 1, f"{SLM_KEY_PREFIX}views/A.vue": 1}
 
     def test_every_pinned_important_matches_its_measured_count(self, measured_important):
         grew = {

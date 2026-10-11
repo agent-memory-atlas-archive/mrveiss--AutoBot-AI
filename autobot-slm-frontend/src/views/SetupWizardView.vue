@@ -1180,8 +1180,8 @@ onMounted(async () => {
 }
 
 .close-btn:hover {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 /* Progress bar */
@@ -1385,7 +1385,7 @@ onMounted(async () => {
 .status-badge.error,
 .status-badge.offline {
   background: rgba(239, 68, 68, 0.15);
-  color: var(--color-danger-500);
+  color: var(--color-error-500);
 }
 
 .status-badge.enrolling {
@@ -1675,14 +1675,14 @@ input.full-width {
 .provision-failure {
   padding: 0.75rem 1rem;
   margin-top: 0.75rem;
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-color);
+  background: var(--error-bg);
+  border: 1px solid var(--error-color);
   border-radius: var(--radius-md);
 }
 
 .provision-failure-title {
   margin: 0 0 0.25rem;
-  color: var(--danger-color);
+  color: var(--error-color);
   font-weight: 600;
 }
 
@@ -1778,7 +1778,7 @@ input.full-width {
 
 .health-badge.critical {
   background: rgba(239, 68, 68, 0.15);
-  color: var(--color-danger-500);
+  color: var(--color-error-500);
 }
 
 /* Complete panel */

@@ -4,6 +4,8 @@
 // Centralized type definitions for all settings components
 
 // Chat Settings Interface
+import type { EffectiveTheme } from '@/composables/useTheme';
+
 export interface ChatSettings {
   auto_scroll: boolean;
   max_messages: number;
@@ -12,7 +14,7 @@ export interface ChatSettings {
 
 // UI Settings Interface
 export interface UISettings {
-  theme: 'light' | 'dark' | 'auto';
+  theme: EffectiveTheme | 'auto';
   language: string;
   show_timestamps: boolean;
   show_status_bar: boolean;

@@ -150,12 +150,10 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
     <a href="Analytics.dc.html" class="adv">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
     <span class="sr" role="status" aria-live="polite">{{uiAnnounce}}</span>
-    <a href="ThemeManager.dc.html" class="adv" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon adv" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon adv" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
     <button type="button" class="uitog {{uiTogCls}}" onClick="{{toggleUi}}" aria-pressed="{{uiMinPressed}}" data-tip="Minimal interface — hide advanced features" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" class="iw"/><path d="M4 9h16M9 9v11"/><rect x="11.5" y="11.5" width="6" height="6" rx="1" class="i2"/></svg><span>Minimal</span></button>
-    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon adv" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <a href="Preferences.dc.html" aria-label="Profile settings" data-tip="Profile settings" data-tip-pos="left" style="margin-left: 8px; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--brand-bg); font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand-fg); cursor: pointer; display: grid; place-items: center; text-decoration: none">JD</a>
   </nav>
 
@@ -187,7 +185,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
       <button type="button" aria-expanded="false" data-tip="Choose a host to connect to" data-tip-pos="bottom" style="flex: 1 1 360px; min-width: 0; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 6px; border: var(--bw) solid var(--border); background: var(--surface); font: inherit; color: var(--text); cursor: pointer; text-align: left">
         <svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" class="it1"/><path d="M9 20h6M12 16v4"/></svg>
         <strong style="font-size: 14px; font-weight: 600">node-03</strong>
-        <span class="mono sub2 adv">192.0.2.23</span>
+        <span class="mono sub2 adv">203.0.113.23</span>
         <span class="pill ok adv" data-tip="Virtual Network Computing — graphical remote control" data-tip-pos="bottom">vnc</span>
         <svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="margin-left: auto"><path d="M6 9l6 6 6-6"/></svg>
       </button>
@@ -275,9 +273,9 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
               <button type="button" class="btn sm" aria-pressed="true" data-tip="Show hosts with a VNC server (graphical desktop)">VNC</button>
             </div>
             <div style="display: flex; flex-direction: column; gap: 1px">
-              <button type="button" class="host"><span class="dot d-ok"></span>node-01<span class="mono sub2 adv" style="font-size: 12px; margin-left: auto; font-weight: 400" data-tip="192.0.2.21" data-tip-pos="left">.168.21</span></button>
-              <button type="button" class="host"><span class="dot d-ok"></span>node-02<span class="mono sub2 adv" style="font-size: 12px; margin-left: auto; font-weight: 400" data-tip="192.0.2.22" data-tip-pos="left">.168.22</span></button>
-              <button type="button" class="host on" aria-current="true"><span class="dot d-ok"></span>node-03<span class="mono sub2 adv" style="font-size: 12px; margin-left: auto; font-weight: 400" data-tip="192.0.2.23" data-tip-pos="left">.168.23</span></button>
+              <button type="button" class="host"><span class="dot d-ok"></span>node-01<span class="mono sub2 adv" style="font-size: 12px; margin-left: auto; font-weight: 400" data-tip="203.0.113.21" data-tip-pos="left">.168.21</span></button>
+              <button type="button" class="host"><span class="dot d-ok"></span>node-02<span class="mono sub2 adv" style="font-size: 12px; margin-left: auto; font-weight: 400" data-tip="203.0.113.22" data-tip-pos="left">.168.22</span></button>
+              <button type="button" class="host on" aria-current="true"><span class="dot d-ok"></span>node-03<span class="mono sub2 adv" style="font-size: 12px; margin-left: auto; font-weight: 400" data-tip="203.0.113.23" data-tip-pos="left">.168.23</span></button>
               <button type="button" class="host"><span class="dot d-warn"></span>node-04<span class="pill warn" style="margin-left: auto" data-tip="Reachable but failing health checks; connection may be slow" data-tip-pos="left">Degraded</span></button>
               <span data-tip="Host unreachable — can't connect until it's back online" tabindex="0" style="display: block"><button type="button" class="host" disabled><span class="dot d-bad"></span>node-06<span class="pill bad" style="margin-left: auto">Offline</span></button></span>
             </div>

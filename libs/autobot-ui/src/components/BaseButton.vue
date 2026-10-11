@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'error'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const props = withDefaults(
@@ -126,12 +126,12 @@ const isDisabled = computed(() => props.disabled || props.loading)
   background-color: var(--aui-color-surface-raised);
 }
 
-.aui-btn--danger {
-  background-color: var(--aui-color-danger);
-  color: var(--aui-color-danger-contrast);
+.aui-btn--error {
+  background-color: var(--aui-color-error);
+  color: var(--aui-color-error-contrast);
 }
-.aui-btn--danger:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--aui-color-danger) 88%, black);
+.aui-btn--error:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--aui-color-error) 88%, black);
 }
 
 /* ---- loading spinner ---- */

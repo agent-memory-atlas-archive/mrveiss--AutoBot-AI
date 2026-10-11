@@ -287,7 +287,8 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     "important-declaration-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
-        "One frontend's components, against all tracked `.vue`.",
+        "Both frontends' components (shared with the raw-palette-class ratchet), against all tracked `.vue`, "
+        "which also includes the shared kit's.",
     ),
     "infra-backend-import-scan": (
         ABSOLUTE,

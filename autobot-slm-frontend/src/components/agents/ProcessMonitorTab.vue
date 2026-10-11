@@ -320,7 +320,7 @@ function formatTime(iso: string | null): string {
                 <button class="btn-confirm" @click="signalProcess(proc.id, 'SIGTERM')">
                   SIGTERM
                 </button>
-                <button class="btn-confirm btn-danger" @click="signalProcess(proc.id, 'SIGKILL')">
+                <button class="btn-confirm btn-error" @click="signalProcess(proc.id, 'SIGKILL')">
                   SIGKILL
                 </button>
                 <button class="btn-cancel-sm" @click="showKillConfirm = null">x</button>
@@ -396,23 +396,23 @@ function formatTime(iso: string | null): string {
 .badge-gray { background: var(--slm-gray-100); color: var(--slm-gray-500); }
 .badge-blue { background: var(--slm-blue-100); color: var(--slm-blue-600); }
 .badge-green { background: var(--slm-emerald-100); color: var(--slm-emerald-600); }
-.badge-red { background: var(--slm-red-100); color: var(--color-danger-600); }
+.badge-red { background: var(--slm-red-100); color: var(--color-error-600); }
 .badge-orange { background: var(--slm-orange-100); color: var(--slm-orange-600); }
 .badge-pulse { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-.btn-kill { background: var(--color-danger-500); color: white; border: none; padding: var(--spacing-1) 10px; border-radius: var(--radius-default); font-size: var(--text-xs); font-weight: 500; cursor: pointer; }
-.btn-kill:hover { background: var(--color-danger-600); }
+.btn-kill { background: var(--color-error-500); color: white; border: none; padding: var(--spacing-1) 10px; border-radius: var(--radius-default); font-size: var(--text-xs); font-weight: 500; cursor: pointer; }
+.btn-kill:hover { background: var(--color-error-600); }
 .kill-confirm { display: flex; gap: var(--spacing-1); align-items: center; }
 .btn-confirm { background: var(--slm-amber-500); color: white; border: none; padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-default); font-size: 11px; cursor: pointer; }
-.btn-danger { background: var(--color-danger-500); }
+.btn-error { background: var(--color-error-500); }
 .btn-cancel-sm { background: var(--slm-gray-200); color: var(--slm-gray-700); border: none; padding: 2px 6px; border-radius: var(--radius-default); font-size: 11px; cursor: pointer; }
 .log-panel { background: white; border-radius: var(--radius-xl); box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: var(--spacing-5); margin-top: var(--spacing-5); }
 .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-3); }
 .log-header h4 { font-size: var(--text-base); font-weight: 600; margin: 0; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-2); }
 .log-actions { display: flex; gap: var(--spacing-2); }
-.streaming-badge { font-size: 10px; padding: 2px var(--spacing-2); border-radius: var(--radius-default); font-weight: 600; background: var(--color-danger-600); color: white; animation: pulse 1.5s ease-in-out infinite; }
+.streaming-badge { font-size: 10px; padding: 2px var(--spacing-2); border-radius: var(--radius-default); font-weight: 600; background: var(--color-error-600); color: white; animation: pulse 1.5s ease-in-out infinite; }
 .log-content { background: var(--slm-slate-800); color: var(--slm-slate-200); border-radius: var(--radius-lg); padding: var(--spacing-4); font-family: 'IBM Plex Mono', monospace; font-size: var(--text-xs); line-height: 1.6; overflow-x: auto; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
-.error-banner { background: var(--slm-red-100); border: 1px solid var(--color-danger-500); color: var(--slm-red-700); padding: var(--spacing-3) var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-4); display: flex; justify-content: space-between; align-items: center; }
+.error-banner { background: var(--slm-red-100); border: 1px solid var(--color-error-500); color: var(--slm-red-700); padding: var(--spacing-3) var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-4); display: flex; justify-content: space-between; align-items: center; }
 .loading { text-align: center; color: var(--text-secondary); padding: 60px; }
 .empty-state { text-align: center; color: var(--text-secondary); padding: 60px; }
 </style>

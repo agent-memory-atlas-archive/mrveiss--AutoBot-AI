@@ -234,11 +234,9 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
     <a href="CompanyOS.dc.html">Company OS</a>
     <a href="Analytics.dc.html">Analytics</a>
     <span style="flex-grow: 1" aria-hidden="true"></span>
-    <a href="ThemeManager.dc.html" style="height: 34px; border: var(--bw) solid var(--border); border-radius: 6px; margin-right: 6px">SLM Admin ↗</a>
-    <a href="Plugins.dc.html" class="icon" aria-label="Plugins" data-tip="Plugins" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5a2 2 0 1 1 4 0h5v5a2 2 0 1 1 0 4v5H5z" class="i2"/></svg></a>
     <a href="Secrets.dc.html" class="icon" aria-label="Secrets" data-tip="Secrets" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4" class="i3"/><path d="M12 12h9M18 12v3M21 12v2"/></svg></a>
     <a href="Preferences.dc.html" class="icon" aria-label="Preferences" data-tip="Preferences" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" class="i1"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></a>
-    <a href="AdminUsers.dc.html" class="icon" aria-label="Admin panel" data-tip="Admin panel" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
+    <a href="AdminUsers.dc.html" class="icon" aria-label="Platform admin, opens the SLM console" data-tip="Platform admin — opens the SLM console ↗" data-tip-pos="bottom"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" class="it3"/><path d="M9 12l2 2 4-4"/></svg></a>
     <button type="button" aria-label="Profile menu" data-tip="Profile settings" data-tip-pos="left" style="margin-left: 8px; width: 34px; height: 34px; border-radius: 99px; border: 0; background: var(--brand-bg); font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand-fg); cursor: pointer">JD</button>
   </nav>
 
@@ -704,7 +702,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
 const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['contrast', 'High contrast'], ['mono', 'Monochrome']];
 const R = '/workspace/autobot-ai';
 const LIMIT = 50 * 1048576;
-const ME = 'jdoe';
+const ME = 'example-org';
 const D = (n, m, o, x) => Object.assign({ n: n, dir: true, s: null, m: m, o: o, g: '' }, x || {});
 const F = (n, s, m, o, g) => ({ n: n, dir: false, s: s, m: m, o: o, g: g || '' });
 const AG = ['code-agent', 'research-agent', 'devops-engineer', 'documentation-engineer'];

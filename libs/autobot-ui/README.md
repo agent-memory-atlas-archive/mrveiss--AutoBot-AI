@@ -44,7 +44,7 @@ Then import the contract once at app startup and use components anywhere:
 
 ```ts
 import '@autobot/ui/tokens'          // semantic token names + neutral fallbacks
-import './assets/aui-theme.css'      // this app's OWN values for those names (below)
+import '@autobot/ui/adapter'         // maps the contract onto the shared semantic names (below)
 ```
 
 ```vue
@@ -58,34 +58,18 @@ import { BaseButton } from '@autobot/ui'
 
 ## Implementing the contract (each app supplies its own values)
 
-Every app ships a small adapter that maps its existing design tokens onto the
-`--aui-*` names. **Same names, different values → different skins.**
+The kit ships ONE adapter, [`src/tokens/adapter.css`](./src/tokens/adapter.css), that maps
+the `--aui-*` contract onto the shared **semantic names** (`--bg-surface`, `--text-primary`,
+`--border-default`, `--color-primary`, `--color-error`, `--radius-md`, ...). It holds no
+value. Each app defines those names with its own values, so **same names, different
+values → different skins**:
 
-```css
-/* autobot-frontend/src/assets/aui-theme.css  (main user GUI identity) */
-:root {
-  --aui-color-primary: var(--color-primary);          /* main's accent      */
-  --aui-color-primary-contrast: var(--color-on-primary);
-  --aui-color-surface: var(--color-surface);
-  --aui-color-border: var(--color-border);
-  --aui-color-text: var(--color-text);
-  --aui-color-danger: var(--color-danger);
-  /* …map the rest of the contract to main's design-tokens… */
-}
-```
+- `autobot-frontend`: `src/assets/css/design-tokens.css` and `themes/`
+- `autobot-slm-frontend`: `src/assets/styles/slm-scheme.css` (teal scheme) and `main.css`
 
-```css
-/* autobot-slm-frontend/src/assets/aui-theme.css  (control-plane identity) */
-:root {
-  --aui-color-primary: var(--slm-accent);             /* SLM's DISTINCT accent */
-  --aui-color-primary-contrast: #ffffff;
-  --aui-color-surface: var(--slm-surface);
-  --aui-color-border: var(--slm-border);
-  --aui-color-text: var(--slm-text);
-  --aui-color-danger: var(--slm-danger);
-  /* …map the rest to SLM's control-plane palette… */
-}
-```
+An app that leaves one of the adapter's names undefined gets an invalid `--aui-*` token,
+so define the name in the app; do not add a fallback to the adapter. (Before this, each
+app kept its own copy of the adapter and mapped the contract onto names only it defined.)
 
 Because the kit is Tailwind-v4-independent (scoped CSS + tokens), an app only needs to
 provide these values — no Tailwind config wiring for the package is required.
