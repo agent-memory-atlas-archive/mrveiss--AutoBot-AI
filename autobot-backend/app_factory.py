@@ -39,6 +39,7 @@ from initialization import (
     register_root_endpoints,
 )
 from initialization.integrity_handlers import register_integrity_handlers
+from initialization.registry_handlers import register_registry_handlers
 from initialization.router_registry.route_dependencies import dependencies_for
 from knowledge.upload_rejections import UploadRejection, upload_rejection_handler
 
@@ -58,6 +59,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
     # integrity violation has a specific, actionable answer and must not be
     # flattened into a 500 (#15775).
     register_integrity_handlers(app)
+    register_registry_handlers(app)
     # A 422's default body echoes the submitted payload verbatim -- the
     # concrete case is a secret disclosed through a failed request model
     # validator (#16428 security review).
