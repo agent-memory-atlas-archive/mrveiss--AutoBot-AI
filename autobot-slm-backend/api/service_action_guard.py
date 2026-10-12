@@ -69,7 +69,12 @@ FLEET_SERVICE_ACTION_ROUTE = {
 }
 
 
-def valid_since_or_422(since: str | None = Query(None)) -> str | None:
+#: The route declares ``since`` too, but FastAPI documents the dependency's copy, so the
+#: description lives here or the generated SLM types lose it (#18359).
+SINCE_QUERY_DESCRIPTION = "Time period, e.g. '1h', '30m'"
+
+
+def valid_since_or_422(since: str | None = Query(None, description=SINCE_QUERY_DESCRIPTION)) -> str | None:
     """Dependency: the optional ``since`` window must be an accepted ``journalctl --since`` form."""
     try:
         return validate_journal_since(since) if since else since
