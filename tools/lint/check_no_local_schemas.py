@@ -296,7 +296,7 @@ def run(files: Sequence[Path], repo_root: Path, *, changed_only: bool, base: str
     argv = [str(path) for path in files]
     if changed_only:
         argv = ["--changed-lines-only", *(["--base", base] if base else []), *argv]
-    return run_check(HOOK_ID, _collect, argv, root=repo_root)
+    return run_check(HOOK_ID, _collect, argv, root=repo_root, full_repo_of=_is_full_repo)
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -312,6 +312,11 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return args
 
 
+def _is_full_repo(argv: Sequence[str]) -> bool:
+    """A sweep is whole-repo when no *files* were named; flags alone do not scope it."""
+    return not _parse_args(argv).files
+
+
 def _collect(argv: List[str], repo_root: Path) -> Tuple[int, List[str]]:
     """``(files reached, finding lines)`` for the hook's own *argv* (empty = whole repo)."""
     args = _parse_args(argv)
@@ -323,7 +328,7 @@ def _collect(argv: List[str], repo_root: Path) -> Tuple[int, List[str]]:
 def main(argv: List[str]) -> int:
     # Vacuity floor (#14896): full-repo mode only -- pre-commit legitimately
     # hands this hook an argv with no Python in it. Exit 2 = the scan proved nothing.
-    return run_anchored(HOOK_ID, _collect, argv[1:], anchor=Path(__file__), floor=PY_FLOOR)
+    return run_anchored(HOOK_ID, _collect, argv[1:], anchor=Path(__file__), floor=PY_FLOOR, full_repo_of=_is_full_repo)
 
 
 if __name__ == "__main__":
