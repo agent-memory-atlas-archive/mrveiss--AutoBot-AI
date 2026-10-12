@@ -59,7 +59,7 @@ REACH = declare(
     "chunker-private-hook-scan",
     discover=_population,
     # Mid-window, from REACH.window(); the arithmetic is on the PR, not here.
-    floor=4920,
+    floor=5079,
     what="tracked python",
     roots=_ROOTS,
     growth=300,

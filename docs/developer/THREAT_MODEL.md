@@ -107,8 +107,8 @@ response, a log line, an issue, a PR comment — is already redacted.
 **Invariants**
 - No parallel crypto path. A diff introducing its own `Fernet(...)` or `AESGCM(...)` instead
   of calling the store is a finding regardless of whether the primitive is used correctly.
-- Secrets compare with `secrets.compare_digest`, never `==`. A missing/`None` credential can
-  never match — `verify_internal_api_key` returns `False` when either side is unset.
+- Secrets compare with `secrets.compare_digest`, never `==`. A missing/`None` credential can never match — `verify_internal_api_key` returns `False` when either side is unset,
+  and `/api/metrics/prometheus` admits only its dedicated scrape token ([`prometheus_scrape_auth.py`](../../autobot-backend/monitoring/prometheus_scrape_auth.py); unset refuses every scrape; record, delivery, rotation: [`PROMETHEUS_SCRAPE_TOKEN_ROTATION.md`](PROMETHEUS_SCRAPE_TOKEN_ROTATION.md)).
 - Every `ConnectorCredentialStore` read takes `owner_id` and passes `_require_owner`; a new
   method that skips it grants cross-tenant credential read.
 - Nothing reaches a log, HTTP error body, or outward artifact without
@@ -125,28 +125,6 @@ response, a log line, an issue, a PR comment — is already redacted.
   [`jwks_verifier.py`](../../autobot-slm-backend/services/jwks_verifier.py) `verify_authority_token` (:218) denies the token (401) at both call sites; the write side stays best-effort.
 - The shared password-epoch helper fails CLOSED in both services (#16411, #16422, owner decisions): a Redis error, or a non-integer stored
   marker or `iat`, raises `RevocationCheckUnavailable` (a `ConnectionError`), which the SLM denies as above and [`auth_revocation.py`](../../autobot-backend/auth_revocation.py) denies with 401; an `except` reading it as "not revoked" is a fail-open.
-
-### Prometheus scrape token (#16375)
-
-`/api/metrics/prometheus` admits only a dedicated read-only bearer token, compared with
-`secrets.compare_digest` in [`prometheus_scrape_auth.py`](../../autobot-backend/monitoring/prometheus_scrape_auth.py); an unset token refuses every scrape.
-
-- **Record:** the SLM `SystemSecret` `prometheus_scrape_token`, generated once at SLM startup
-  ([`generated_system_secrets.py`](../../autobot-slm-backend/services/generated_system_secrets.py)) and mirrored to the System vault. A
-  mirror that failed (vault down at first boot) is retried on every SLM startup.
-- **Delivery:** `fetch_deploy_secrets` -> backend role (`AUTOBOT_PROMETHEUS_SCRAPE_TOKEN` in
-  `backend.env`) and monitoring role (a root:prometheus 0640 file named by `bearer_token_file`).
-  A run that carries no token keeps the deployed one on both sides.
-- **Rotation:** in the SLM Secrets UI, update `prometheus_scrape_token` (this also re-mirrors the
-  vault copy), then redeploy the **backend** and **monitoring** roles on their nodes. Prometheus
-  re-reads the file on each scrape; until both roles have run, scrapes return 401. Nothing
-  rotates it automatically, and no agent rotates it on its own (#17038).
-- **docker-compose exception (local/dev only):** compose does run an SLM, but nothing delivers SLM
-  secrets into compose containers -- there is no ansible run against them. So
-  `docker/secrets-init.sh` generates the token into the `autobot_secrets` volume, exports it to the
-  backend, and writes Prometheus' copy beside it; the SLM's own `SystemSecret` is a different
-  value there and is unused. Recorded in [`ARCHITECTURE_EXCEPTIONS.md`](ARCHITECTURE_EXCEPTIONS.md). To rotate in compose,
-  delete the `_GEN_PROMETHEUS_SCRAPE_TOKEN` line from the volume's `autobot.env` and restart.
 
 ## 5. Remote desktop access
 
