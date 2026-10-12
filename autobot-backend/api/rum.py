@@ -15,7 +15,10 @@ Access posture (#16375, owner decision 2026-10-12):
   ``fetch``/``sendBeacon``) and runs on ``/login`` and ``/shared/:token``, where
   no session exists, so a gate would silently stop RUM on every page. Both are
   bounded instead (``api/rum_ingest_bounds.py``): per-address rate limit (429),
-  body-size cap (413), field caps (422), and one bounded row per request.
+  body-size cap enforced while the body streams (413, ``api/rum_body_cap.py``),
+  field, list and string caps (422), one bounded row per event, and metric
+  label values held to a fixed vocabulary per label (#18368). Owner ruling
+  2026-10-12: ``/metrics`` stays open like ``/event``, bounded the same way.
 * ``POST /config``, ``/disable``, ``/clear`` change collection or delete data,
   and ``GET /export`` returns every visitor's URLs (``/shared/:token`` links
   included): admin only.
@@ -28,11 +31,13 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from api.rum_body_cap import BodyCappedRoute
 from api.rum_ingest_bounds import (
     append_bounded,
     bound_event_ingest,
     bound_metrics_ingest,
     enforce_event_field_caps,
+    enforce_metrics_caps,
     track_session,
 )
 from api.rum_metrics_dispatch import dispatch_and_tally_rum_metrics
@@ -47,13 +52,15 @@ from api.schemas_workflows import (
     RUMStatusResponse,
 )
 from auth_middleware import check_admin_permission, get_current_user
+from autobot_shared.env_registry import env
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.security.redaction import sanitize_log_value
 from autobot_shared.time_utils import parse_utc_iso
 from monitoring.prometheus_metrics import get_metrics_manager
 from type_defs.common import Metadata
 
-router = APIRouter()
+router = APIRouter(route_class=BodyCappedRoute)
 logger = get_logger(__name__)
 
 # RUM configuration storage
@@ -419,10 +426,16 @@ async def get_rum_status():
 
 
 def format_rum_log_message(event_data: Metadata) -> str:
-    """Format RUM event data into a readable log message.
+    """The RUM log line for *event_data*, with control characters escaped.
 
-    Uses dictionary dispatch pattern to reduce nesting (Issue #315).
+    Every field is unauthenticated input, so CR/LF and other controls are
+    rendered as visible escapes (CWE-117, #16375) -- one event is one log line.
     """
+    return sanitize_log_value(_compose_rum_log_message(event_data), max_chars=int(env("AUTOBOT_RUM_EVENT_MAX_BYTES")))
+
+
+def _compose_rum_log_message(event_data: Metadata) -> str:
+    """Format RUM event data into a readable log message (dictionary dispatch, Issue #315)."""
     event_type = event_data.get("type", "unknown")
     session_id = event_data.get("sessionId", "unknown")
     url = event_data.get("url", "unknown")
@@ -454,7 +467,9 @@ async def receive_rum_metrics(metrics: RumMetrics):
 
     Issue #476: This endpoint receives batched RUM metrics from the frontend
     and records them to the Prometheus metrics system for monitoring.
+    #18368: every list and string is capped before anything is recorded.
     """
+    enforce_metrics_caps(metrics)
     try:
         metrics_manager = get_metrics_manager()
         recorded_count = dispatch_and_tally_rum_metrics(metrics_manager, metrics)

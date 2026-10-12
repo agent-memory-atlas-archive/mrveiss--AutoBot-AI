@@ -13,6 +13,13 @@ its own copy of the same select / add / commit / IntegrityError block in
 Idempotent: an existing row, operator-set or generated, is never overwritten,
 and a concurrent startup that seeds the key first wins. A generated value never
 appears in a log line or an exception message.
+
+Vault mirror retry: for a ``mirror_to_vault`` secret, every startup whose row
+already exists copies it to the System vault when the vault copy is missing
+(``migrate_key_to_vault`` is idempotent). A mirror that failed because the
+backend vault was down at first boot is therefore retried on each restart,
+never left absent for good. Rotation is documented in
+``docs/developer/THREAT_MODEL.md`` (Prometheus scrape token).
 """
 
 from __future__ import annotations
@@ -21,6 +28,12 @@ import logging
 import secrets
 from dataclasses import dataclass
 
+# Stdlib logging, deliberately -- CLAUDE.md's pattern table exception. The SLM test
+# harness replaces `config` with a MagicMock, and `get_logger` builds a rotating
+# file handler from it (`maxBytes > 0` on a MagicMock raises), so importing this
+# module under the harness fails. Measured, not assumed: with get_logger, every
+# test in tests/test_prometheus_scrape_token_provisioned_16375.py errored at
+# import. `system_secrets_vault.py` beside it uses stdlib logging too.
 logger = logging.getLogger(__name__)
 
 
@@ -73,10 +86,24 @@ async def _insert_if_absent(spec: GeneratedSecret, value: str) -> bool:
     return True
 
 
+async def _backfill_vault_copy(spec: GeneratedSecret) -> None:
+    """Copy an existing row to the System vault when the vault copy is missing."""
+    from services.database import db_service
+    from services.system_secrets_vault import migrate_key_to_vault
+
+    try:
+        async with db_service.session() as db:
+            await migrate_key_to_vault(db, spec.key)
+    except Exception as exc:  # noqa: BLE001 — best-effort; the next startup retries
+        logger.warning("%s vault mirror retry failed (%s); retried next startup", spec.key, type(exc).__name__)
+
+
 async def ensure_generated_secret(spec: GeneratedSecret) -> None:
     """Generate *spec*'s secret once; never overwrite an existing value."""
     value = secrets.token_hex(32)
     if not await _insert_if_absent(spec, value):
+        if spec.mirror_to_vault:
+            await _backfill_vault_copy(spec)
         return
     if spec.mirror_to_vault:
         from services.system_secrets_vault import mirror_secret_to_vault

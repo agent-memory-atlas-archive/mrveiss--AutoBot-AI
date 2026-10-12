@@ -165,7 +165,10 @@ def test_a_generated_token_is_mirrored_and_never_logged(caplog) -> None:
 
 
 def test_an_existing_token_is_never_replaced(caplog) -> None:
-    mirror, _value = _ensure(False, caplog)
+    import services.generated_system_secrets as gen
+
+    with patch.object(gen, "_backfill_vault_copy", AsyncMock()):
+        mirror, _value = _ensure(False, caplog)
     mirror.assert_not_awaited()
 
 
@@ -180,3 +183,31 @@ def test_compose_provisions_the_same_token_to_both_sides() -> None:
     scrape = yaml.safe_load((_REPO / "autobot-monitoring" / "prometheus.yml").read_text(encoding="utf-8"))
     job = next(j for j in scrape["scrape_configs"] if j["job_name"] == "autobot-backend")
     assert job["bearer_token_file"] == "/run/autobot-secrets/prometheus_scrape_token"
+
+
+def test_an_existing_token_missing_from_the_vault_is_mirrored_on_startup() -> None:
+    """Review: a mirror that failed at first boot is retried on every later startup."""
+    import services.generated_system_secrets as gen
+
+    backfill = AsyncMock()
+    with (
+        patch.object(gen, "_insert_if_absent", AsyncMock(return_value=False)),
+        patch.object(gen, "_backfill_vault_copy", backfill),
+    ):
+        asyncio.run(gen.ensure_generated_secret(gen.PROMETHEUS_SCRAPE_TOKEN))
+        asyncio.run(gen.ensure_generated_secret(gen.SCIM_BEARER_TOKEN))
+    backfill.assert_awaited_once_with(gen.PROMETHEUS_SCRAPE_TOKEN)
+
+
+def test_a_failing_vault_retry_never_raises_or_logs_a_value(caplog) -> None:
+    import services.generated_system_secrets as gen
+
+    class _Boom(Exception):
+        pass
+
+    with (
+        patch("services.database.db_service.session", side_effect=_Boom("secret-ish")),
+        caplog.at_level(logging.DEBUG),
+    ):
+        asyncio.run(gen._backfill_vault_copy(gen.PROMETHEUS_SCRAPE_TOKEN))
+    assert "secret-ish" not in caplog.text

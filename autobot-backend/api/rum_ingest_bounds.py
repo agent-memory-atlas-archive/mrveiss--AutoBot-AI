@@ -11,8 +11,13 @@ amplifier, so each request is held to the #17007 treatment:
 
 * **rate-limited** per client address with the shared ``IPRateLimiter``
   (``AUTOBOT_RUM_INGEST_RATE_LIMIT``); over it, 429 and nothing is written;
-* **size-capped** before the payload is used (``AUTOBOT_RUM_*_MAX_BYTES``), 413;
-* **field-capped**: each identifying string has a maximum length, 422;
+* **size-capped** while the body streams, before any JSON is parsed
+  (``AUTOBOT_RUM_*_MAX_BYTES``, ``api.rum_body_cap``), 413;
+* **field-capped**: each identifying event string has a maximum length, and a
+  metrics batch caps every list (``AUTOBOT_RUM_METRICS_MAX_ITEMS``) and every
+  string (``AUTOBOT_RUM_METRICS_MAX_FIELD_CHARS``), 422;
+* **label-bounded**: every metric label value passes the recorder's bounded
+  vocabulary (``autobot_shared.monitoring.metrics.label_bounds``, #18368);
 * **one bounded row**: an event appends one entry to a capped buffer and
   upserts one entry in a capped session table -- the oldest is evicted, so no
   number of requests grows either past its cap.
@@ -20,9 +25,10 @@ amplifier, so each request is held to the #17007 treatment:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List
 
 from fastapi import HTTPException, Request
+from pydantic import BaseModel
 
 from autobot_shared.env_registry import REGISTRY, env
 from autobot_shared.proxy_utils import get_client_ip
@@ -48,35 +54,21 @@ EVENT_FIELD_CAPS: Dict[str, int] = {
 }
 
 
-def _too_large(cap: int) -> HTTPException:
-    return HTTPException(
-        status_code=413,
-        detail=f"RUM payload exceeds the {cap}-byte limit",
-    )
-
-
-async def _reject_oversize(request: Request, cap: int) -> None:
-    """413 when the declared or actual body is over *cap* bytes."""
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > cap:
-        raise _too_large(cap)
-    if len(await request.body()) > cap:
-        raise _too_large(cap)
-
-
-async def _bound(request: Request, cap_env: str) -> None:
+async def _rate_limit(request: Request) -> None:
     await _ingest_limiter.check_or_429(get_client_ip(request) or "unknown")
-    await _reject_oversize(request, int(env(cap_env)))
 
 
 async def bound_event_ingest(request: Request) -> None:
-    """Route dependency for ``POST /rum/event``: rate limit, then size cap."""
-    await _bound(request, "AUTOBOT_RUM_EVENT_MAX_BYTES")
+    """Route dependency for ``POST /rum/event``: per-address rate limit.
+
+    The body cap runs earlier, while the body streams (``api.rum_body_cap``).
+    """
+    await _rate_limit(request)
 
 
 async def bound_metrics_ingest(request: Request) -> None:
-    """Route dependency for ``POST /rum/metrics``: rate limit, then size cap."""
-    await _bound(request, "AUTOBOT_RUM_METRICS_MAX_BYTES")
+    """Route dependency for ``POST /rum/metrics``: per-address rate limit."""
+    await _rate_limit(request)
 
 
 def enforce_event_field_caps(event: Any) -> None:
@@ -113,3 +105,30 @@ def track_session(sessions: Dict[str, dict], event_data: dict) -> int:
     session["event_count"] += 1
     session["last_activity"] = event_data["server_timestamp"]
     return session["event_count"]
+
+
+def _refuse(detail: str) -> HTTPException:
+    return HTTPException(status_code=422, detail=detail)
+
+
+def _strings(model: BaseModel) -> Iterator[tuple[str, str]]:
+    """Every string in *model*, nested models and lists of models included."""
+    for name, value in model:
+        items = value if isinstance(value, list) else [value]
+        for item in items:
+            if isinstance(item, str):
+                yield name, item
+            elif isinstance(item, BaseModel):
+                yield from _strings(item)
+
+
+def enforce_metrics_caps(metrics: BaseModel) -> None:
+    """422 when a ``RumMetrics`` list or string is over its cap (#18368)."""
+    max_items = int(env("AUTOBOT_RUM_METRICS_MAX_ITEMS"))
+    for name, value in metrics:
+        if isinstance(value, list) and len(value) > max_items:
+            raise _refuse(f"RUM metrics list '{name}' exceeds {max_items} items")
+    max_chars = int(env("AUTOBOT_RUM_METRICS_MAX_FIELD_CHARS"))
+    for name, text in _strings(metrics):
+        if len(text) > max_chars:
+            raise _refuse(f"RUM metrics field '{name}' exceeds {max_chars} characters")

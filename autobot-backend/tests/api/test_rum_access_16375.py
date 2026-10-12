@@ -187,3 +187,68 @@ def test_anonymous_metrics_are_accepted_and_oversize_refused(client, monkeypatch
     assert test_client.post("/api/rum/metrics", json=body).status_code == 200
     monkeypatch.setenv("AUTOBOT_RUM_METRICS_MAX_BYTES", "16")
     assert test_client.post("/api/rum/metrics", json=body).status_code == 413
+
+
+# ---------------------------------------------------------------------------
+# #18368 / review: /metrics bounds, streaming body cap, log-line escaping
+# ---------------------------------------------------------------------------
+
+
+def _chunks(total: int, size: int = 256):
+    sent = 0
+    yield b'{"session_id": "s", "timestamp": "t", "pad": "'
+    while sent < total:
+        yield b"x" * size
+        sent += size
+    yield b'"}'
+
+
+def test_a_chunked_body_without_content_length_is_refused_while_streaming(client, monkeypatch) -> None:
+    """No Content-Length to check: the cap must count bytes as they arrive."""
+    monkeypatch.setenv("AUTOBOT_RUM_METRICS_MAX_BYTES", "1024")
+    parsed = []
+    monkeypatch.setattr(rum_api, "enforce_metrics_caps", lambda m: parsed.append(m))
+    test_client, _ = client
+    response = test_client.post(
+        "/api/rum/metrics", content=_chunks(64 * 1024), headers={"content-type": "application/json"}
+    )
+    assert response.status_code == 413
+    assert parsed == [], "the handler (and so the JSON parse) must never have been reached"
+
+
+def test_the_body_cap_is_scoped_to_the_ingest_routes() -> None:
+    from api.rum_body_cap import BODY_CAP_ENV
+
+    assert set(BODY_CAP_ENV) == {"/event", "/metrics"}
+
+
+def _metrics(**lists) -> dict:
+    body = {"session_id": "rum_s1", "timestamp": "2026-10-12T12:00:00Z"}
+    body.update(lists)
+    return body
+
+
+def test_an_oversize_metrics_list_is_refused(client, monkeypatch) -> None:
+    monkeypatch.setenv("AUTOBOT_RUM_METRICS_MAX_ITEMS", "5")
+    test_client, _ = client
+    item = {"resource_type": "script", "load_time_seconds": 0.1}
+    assert test_client.post("/api/rum/metrics", json=_metrics(resources=[item] * 5)).status_code == 200
+    assert test_client.post("/api/rum/metrics", json=_metrics(resources=[item] * 6)).status_code == 422
+
+
+def test_an_overlong_metrics_string_is_refused_even_nested(client, monkeypatch) -> None:
+    monkeypatch.setenv("AUTOBOT_RUM_METRICS_MAX_FIELD_CHARS", "32")
+    test_client, _ = client
+    errors = [{"error_type": "TypeError", "page": "/" + "p" * 40}]
+    assert test_client.post("/api/rum/metrics", json=_metrics(js_errors=errors)).status_code == 422
+
+
+def test_crlf_in_an_event_cannot_forge_a_log_line(client, rum_state) -> None:
+    test_client, _ = client
+    forged = "boom\r\n2026-10-12 - RUM - ERROR - forged entry"
+    body = _event(type="error", data={"message": forged})
+    assert test_client.post("/api/rum/event", json=body).status_code == 200
+    line = rum_state.rum_logger.error.call_args.args[0]
+    assert "forged entry" in line, "the formatter must have interpolated the raw message"
+    assert "\n" not in line and "\r" not in line
+    assert "\\x0d\\x0a" in line

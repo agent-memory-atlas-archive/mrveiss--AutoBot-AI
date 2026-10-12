@@ -133,3 +133,46 @@ register_env_var(
         component="security",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_METRICS_MAX_ITEMS",
+        type=int,
+        default=100,
+        description="Longest list in any field of a /api/rum/metrics batch; longer is refused with 422 (#18368).",
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_METRICS_MAX_FIELD_CHARS",
+        type=int,
+        default=512,
+        description="Longest string anywhere in a /api/rum/metrics batch; longer is refused with 422 (#18368).",
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_LABEL_MAX_VALUES",
+        type=int,
+        default=50,
+        description=(
+            "Distinct values each frontend RUM metric label admits; later new values record as "
+            "'other', so anonymous input cannot create unbounded Prometheus series (#18368)."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_LABEL_MAX_CHARS",
+        type=int,
+        default=128,
+        description="Longest frontend RUM metric label value; longer records as 'other' (#18368).",
+        component="security",
+    )
+)
