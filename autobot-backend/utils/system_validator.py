@@ -906,9 +906,9 @@ class SystemValidator:
                 return self._get_component_results(component)
 
             start_time = time.time()
-            search_results = await kb.search(
-                "Python programming tutorial", top_k=5, mode=CategoryDefaults.SEARCH_MODE_HYBRID
-            )
+            # limit= selects search()'s enhanced path, the only one honouring mode (#17599)
+            response = await kb.search("Python programming tutorial", limit=5, mode=CategoryDefaults.SEARCH_MODE_HYBRID)
+            search_results = response.get("results", []) if isinstance(response, dict) else response
             search_time = (time.time() - start_time) * 1000
             self._validate_hybrid_search_results(component, search_results, search_time)
 
