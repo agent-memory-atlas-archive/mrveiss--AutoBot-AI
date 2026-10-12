@@ -36,6 +36,7 @@ _SYSTEM_PROFILES = {"default", "professional", "rude"}
 
 _TONE_VALUES = ("direct", "professional", "casual", "technical")
 
+
 def _personalities_dir() -> Path:
     """Return the personalities directory, preferring the installed path."""
     if _PERSONALITIES_DIR.exists():
