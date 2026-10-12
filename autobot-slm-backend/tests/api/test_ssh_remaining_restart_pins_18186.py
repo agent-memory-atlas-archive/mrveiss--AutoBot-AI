@@ -254,6 +254,7 @@ def _orch_prefix(tmp_path):
         "BatchMode=yes",
         "-i",
         str(tmp_path / "id"),
+        "--",
         "autobot@node.example.test",
     ]
 

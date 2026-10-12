@@ -56,6 +56,7 @@ _FULL_SSH_PREFIX = [
     _KEY,
     "-p",
     "2222",
+    "--",
     "svc@node.example.test",
 ]
 

@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.ssot_config import config
 from models.database import Node, Service, SystemdState
+from services.ssh_utils import ssh_destination
 from services.unit_names import validate_unit_name
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,10 @@ _RESTART_SSH_TIMEOUT_SECONDS = env_float_clamped("AUTOBOT_SLM_RESTART_SSH_TIMEOU
 
 
 def build_service_ssh_base_cmd(node: Node) -> list:
-    """The ssh argv for *node*, up to but not including the remote command. Ref: #1088."""
+    """The ssh argv for *node*, up to but not including the remote command. Ref: #1088.
+
+    Raises ``InvalidSshDestination`` for a user or host that ssh would read as an option (#18366).
+    """
     ssh_user = node.ssh_user or "autobot"
     ssh_port = node.ssh_port or 22
     ssh_key = config.path.ssh_key_path  # canonical inter-node key (#12429)
@@ -87,7 +91,8 @@ def build_service_ssh_base_cmd(node: Node) -> list:
         ssh_key,
         "-p",
         str(ssh_port),
-        f"{ssh_user}@{node.ip_address}",
+        "--",
+        ssh_destination(ssh_user, node.ip_address),
     ]
 
 

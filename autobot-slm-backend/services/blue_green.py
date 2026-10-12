@@ -1148,7 +1148,7 @@ class BlueGreenService:
             done = await run_systemctl_over_ssh(
                 ssh_base_cmd,
                 "stop",
-                [shlex.quote(service)],
+                [service],  # the executor validates and quotes each unit; quoting here double-quoted it (#18352)
                 use_noninteractive_sudo=False,
                 timeout=30.0,
             )
