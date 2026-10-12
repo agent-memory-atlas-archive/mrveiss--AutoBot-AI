@@ -9732,6 +9732,8 @@
     "once_in_past": "Šis datums un laiks jau ir pagājis.",
     "invalid_rrule": "Šis kalendāra noteikums nav derīgs.",
     "invalid_cron": "Ievadiet standarta cron ar pieciem laukiem, piemēram, 0 9 * * 1-5.",
-    "invalid_generic": "Šis grafiks nav derīgs."
+    "invalid_generic": "Šis grafiks nav derīgs.",
+    "conflicting_fields": "Grafiks tiek saglabāts vai nu kā cron, vai kā kalendāra noteikums vai vienreizēja izpilde, nekad abi.",
+    "gatedNote": "Pēdējā diena, nedēļas diena mēnesī, 29.–31. datums un vienreizējas izpildes būs pieejamas pēc plānotāja atjaunināšanas."
   }
 }

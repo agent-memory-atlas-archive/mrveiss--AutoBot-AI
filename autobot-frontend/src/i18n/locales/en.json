@@ -9732,6 +9732,8 @@
     "once_in_past": "That date and time has already passed.",
     "invalid_rrule": "This calendar rule is not valid.",
     "invalid_cron": "Enter standard five-field cron, for example 0 9 * * 1-5.",
-    "invalid_generic": "This schedule is not valid."
+    "invalid_generic": "This schedule is not valid.",
+    "conflicting_fields": "A schedule is saved either as cron or as a calendar rule or one-off run, never both.",
+    "gatedNote": "Last day, weekday of the month, days 29 to 31 and one-off runs become available once the scheduler is updated."
   }
 }

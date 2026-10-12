@@ -12,15 +12,19 @@ import { defaultRule, ruleTime } from '../schedule/defaults'
 import { parseSpecToRule } from '../schedule/parse'
 import type { PickerRule, RepeatKind, ScheduleSpec } from '../schedule/types'
 
+function createRefs(start: ScheduleSpec | null, zone: string) {
+  const timezone = ref(start?.timezone ?? zone)
+  const rule = ref<PickerRule | null>(start ? parseSpecToRule(start) : defaultRule('daily', undefined, timezone.value))
+  return { timezone, rule, spec: ref<ScheduleSpec | null>(start) }
+}
+
 export function useScheduleState(
   model: () => ScheduleSpec | null,
   defaultZone: () => string,
   emitSpec: (spec: ScheduleSpec) => void,
 ) {
   const start = model()
-  const timezone = ref(start?.timezone ?? defaultZone())
-  const rule = ref<PickerRule | null>(start ? parseSpecToRule(start) : defaultRule('daily', undefined, timezone.value))
-  const spec = ref<ScheduleSpec | null>(start)
+  const { timezone, rule, spec } = createRefs(start, defaultZone())
   let silent = false
   let lastKey = start ? JSON.stringify(start) : ''
 
@@ -39,29 +43,24 @@ export function useScheduleState(
     void nextTick(() => (silent = false))
   }
 
-  /** A spec accepted from elsewhere (expert cron): show it AND tell the parent. */
-  function accept(next: ScheduleSpec): void {
-    adopt(next)
-    emitSpec(next)
-  }
-
-  function choose(repeat: RepeatKind): void {
-    rule.value = defaultRule(repeat, ruleTime(rule.value), timezone.value)
-  }
-
-  watch([rule, timezone], () => {
+  function recompile(): void {
     if (silent) return
     if (rule.value) publish(compilePickerRule(rule.value, timezone.value))
     else if (spec.value) publish({ ...spec.value, timezone: timezone.value })
-  }, { deep: true })
+  }
 
+  watch([rule, timezone], recompile, { deep: true })
   watch(model, (next) => {
     if (next && JSON.stringify(next) !== lastKey) adopt(next)
   }, { deep: true })
-
   onMounted(() => {
     if (!start && rule.value) publish(compilePickerRule(rule.value, timezone.value))
   })
 
-  return { rule, timezone, spec, choose, adopt, accept }
+  return {
+    rule, timezone, spec, adopt,
+    choose: (repeat: RepeatKind) => { rule.value = defaultRule(repeat, ruleTime(rule.value), timezone.value) },
+    /** A spec accepted from elsewhere (expert cron): show it AND tell the parent. */
+    accept: (next: ScheduleSpec) => { adopt(next); emitSpec(next) },
+  }
 }

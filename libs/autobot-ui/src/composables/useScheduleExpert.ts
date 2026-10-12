@@ -23,6 +23,17 @@ export function cronProblem(text: string): PreviewError | null {
   return parseCron5(text) ? null : { code: 'schedule.invalid_cron', params: {} }
 }
 
+async function serverVerdict(fn: SchedulePreviewFn | undefined, spec: ScheduleSpec): Promise<PreviewError | null> {
+  if (!fn) return null
+  try {
+    const res = await fn(spec, 1)
+    if (res && !res.valid) return { code: res.error_code ?? '', params: res.error_params ?? {} }
+  } catch {
+    // preview unavailable: the client 5-field parse already passed
+  }
+  return null
+}
+
 export function useScheduleExpert(
   zone: () => string,
   preview: () => SchedulePreviewFn | undefined,
@@ -40,20 +51,10 @@ export function useScheduleExpert(
     error.value = cronProblem(value)
     if (error.value) return
     const spec: ScheduleSpec = { kind: 'cron', timezone: zone(), cron: value.trim() }
-    const fn = preview()
-    if (fn) {
-      try {
-        const res = await fn(spec, 1)
-        if (mine !== seq) return
-        if (res && !res.valid) {
-          error.value = { code: res.error_code ?? '', params: res.error_params ?? {} }
-          return
-        }
-      } catch {
-        // preview unavailable: the client 5-field parse above already passed
-      }
-    }
-    if (mine === seq) accept(spec)
+    const verdict = await serverVerdict(preview(), spec)
+    if (mine !== seq) return
+    error.value = verdict
+    if (!verdict) accept(spec)
   }
 
   function startEditing(current: string): void {

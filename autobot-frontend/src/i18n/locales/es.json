@@ -9732,6 +9732,8 @@
     "once_in_past": "Esa fecha y hora ya han pasado.",
     "invalid_rrule": "Esta regla de calendario no es válida.",
     "invalid_cron": "Introduzca un cron estándar de cinco campos, por ejemplo 0 9 * * 1-5.",
-    "invalid_generic": "Esta programación no es válida."
+    "invalid_generic": "Esta programación no es válida.",
+    "conflicting_fields": "Una programación se guarda como cron o como regla de calendario o ejecución única, nunca ambas.",
+    "gatedNote": "El último día, el día de la semana del mes, los días 29 a 31 y las ejecuciones únicas estarán disponibles cuando se actualice el planificador."
   }
 }

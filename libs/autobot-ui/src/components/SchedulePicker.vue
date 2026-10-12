@@ -15,10 +15,12 @@
 import { computed, useId, watch } from 'vue'
 import { summaryText, weekdayName } from '../schedule/summary'
 import { listZones } from '../schedule/zone'
-import { joinTime, splitTime } from '../schedule/time'
-import { MINUTE_STEPS, WEEKDAYS, type PickerRule, type RepeatKind, type SchedulePreviewFn, type ScheduleSpec, type ScheduleTranslate, type Weekday } from '../schedule/types'
+import { joinTime } from '../schedule/time'
+import { MINUTE_STEPS, WEEKDAYS, type RepeatKind, type SchedulePreviewFn, type ScheduleSpec, type ScheduleTranslate, type Weekday } from '../schedule/types'
 import { useScheduleExpert } from '../composables/useScheduleExpert'
 import { useSchedulePreview, type PreviewError } from '../composables/useSchedulePreview'
+import { useScheduleFields } from '../composables/useScheduleFields'
+import { useScheduleMessages } from '../composables/useScheduleMessages'
 import { useScheduleState } from '../composables/useScheduleState'
 import ScheduleTimeField from './ScheduleTimeField.vue'
 
@@ -40,6 +42,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:modelValue': [spec: ScheduleSpec]
   'update:valid': [valid: boolean]
+  /** True once the server preview has answered; false while unavailable (cron-only gate). */
+  'update:previewAvailable': [available: boolean]
 }>()
 
 const uid = useId()
@@ -55,13 +59,7 @@ const NTHS = [1, 2, 3, 4, -1] as const
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1)
 const zones = computed(() => listZones(props.defaultTimezone, props.companyTimezone ?? '', timezone.value))
-const pick = <R extends RepeatKind>(r: R) => computed(() => (rule.value?.repeat === r ? (rule.value as Extract<PickerRule, { repeat: R }>) : null))
-const minutes = pick('minutes')
-const hourly = pick('hourly')
-const daily = pick('daily')
-const weekly = pick('weekly')
-const monthly = pick('monthly')
-const once = pick('once')
+const { minutes, hourly, daily, weekly, monthly, once, windowOn, hourOf, setHour, onMinuteDay, onWeekDay, monthlyMode, onDay, onNth } = useScheduleFields(rule)
 const nthKey = (n: number) => (n === -1 ? 'last' : String(n))
 
 const zoneLabel = computed(() =>
@@ -75,57 +73,14 @@ const error = computed<PreviewError | null>(() => expert.error.value ?? pv.error
 const valid = computed(() => spec.value !== null && error.value === null)
 watch(valid, (v) => emit('update:valid', v), { immediate: true })
 
-const KNOWN_CODES = ['schedule.cron_extension_unsupported', 'schedule.invalid_timezone', 'schedule.once_in_past', 'schedule.invalid_rrule', 'schedule.invalid_cron']
-const errorText = computed(() => {
-  const e = error.value
-  if (!e) return ''
-  return t(KNOWN_CODES.includes(e.code) ? e.code : 'schedule.invalid_generic', e.params)
-})
+const { errorText, previewNote } = useScheduleMessages(t, error, pv)
+/** Without the server preview only cron-kind rules are offered (the scheduler may not run the rest yet). */
+const gated = computed(() => pv.available.value !== true)
+watch(() => pv.available.value === true, (v) => emit('update:previewAvailable', v), { immediate: true })
 
 const dayName = (d: Weekday, style: 'long' | 'short') => weekdayName(d, props.locale, style)
 const fmtRun = (d: Date) =>
   new Intl.DateTimeFormat(props.locale, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: timezone.value }).format(d)
-
-const windowOn = computed({
-  get: () => !!minutes.value?.window,
-  set: (on: boolean) => { if (minutes.value) minutes.value.window = on ? { from: '08:00', to: '18:00' } : undefined },
-})
-function hourOf(key: 'from' | 'to'): number {
-  const w = minutes.value?.window
-  return w ? ((splitTime(w[key]) ?? [0])[0] || (key === 'to' ? 24 : 0)) : 0
-}
-function setHour(key: 'from' | 'to', hour: number): void {
-  const w = minutes.value?.window
-  if (w) w[key] = joinTime(hour, 0)
-}
-function toggleDay(list: Weekday[] | undefined, day: Weekday, keepOne: boolean): Weekday[] {
-  const has = (list ?? []).includes(day)
-  if (has && keepOne && (list ?? []).length === 1) return list ?? []
-  return has ? (list ?? []).filter((d) => d !== day) : [...(list ?? []), day]
-}
-function onMinuteDay(day: Weekday): void {
-  if (minutes.value) minutes.value.days = toggleDay(minutes.value.days, day, false)
-}
-function onWeekDay(day: Weekday): void {
-  if (weekly.value) weekly.value.days = toggleDay(weekly.value.days, day, true)
-}
-type MonthlyMode = 'day' | 'lastDay' | 'nth'
-const monthlyMode = computed<MonthlyMode>({
-  get: () => (!monthly.value ? 'day' : 'lastDay' in monthly.value.on ? 'lastDay' : 'nth' in monthly.value.on ? 'nth' : 'day'),
-  set: (mode) => {
-    if (!monthly.value) return
-    monthly.value.on = mode === 'day' ? { day: 1 } : mode === 'lastDay' ? { lastDay: true } : { nth: 1, weekday: 'MO' }
-  },
-})
-const onDay = computed(() => (monthly.value && 'day' in monthly.value.on ? monthly.value.on : null))
-const onNth = computed(() => (monthly.value && 'nth' in monthly.value.on ? monthly.value.on : null))
-
-const previewNote = computed(() => {
-  if (pv.loading.value) return t('schedule.previewLoading')
-  if (pv.source.value === 'advisory') return t('schedule.previewApprox')
-  if (pv.runs.value.length === 0 && pv.source.value === 'none' && !error.value) return t('schedule.previewUnavailable')
-  return ''
-})
 </script>
 
 <template>
@@ -136,11 +91,13 @@ const previewNote = computed(() => {
       <span :id="`${uid}-rep`" class="aui-sched__label">{{ t('schedule.repeats') }}</span>
       <div class="aui-seg" role="radiogroup" :aria-labelledby="`${uid}-rep`">
         <label v-for="r in REPEATS" :key="r" class="aui-seg__item" :class="{ 'is-on': rule?.repeat === r }">
-          <input class="aui-seg__input" type="radio" :name="`${uid}-repeat`" :value="r" :checked="rule?.repeat === r" @change="choose(r)" />
+          <input class="aui-seg__input" type="radio" :name="`${uid}-repeat`" :value="r" :checked="rule?.repeat === r" :disabled="gated && r === 'once' && rule?.repeat !== 'once'" @change="choose(r)" />
           <span>{{ t(`schedule.repeat.${r}`) }}</span>
         </label>
       </div>
     </div>
+
+    <p v-if="gated" class="aui-sched__note">{{ t('schedule.gatedNote') }}</p>
 
     <p v-if="!rule" class="aui-sched__note" role="status">
       <strong>{{ t('schedule.summary.custom') }}</strong> {{ t('schedule.customNote') }}
@@ -207,7 +164,7 @@ const previewNote = computed(() => {
         <span :id="`${uid}-mm`" class="aui-sched__label">{{ t('schedule.monthly.which') }}</span>
         <div class="aui-seg" role="radiogroup" :aria-labelledby="`${uid}-mm`">
           <label v-for="m in (['day', 'lastDay', 'nth'] as const)" :key="m" class="aui-seg__item" :class="{ 'is-on': monthlyMode === m }">
-            <input class="aui-seg__input" type="radio" :name="`${uid}-mmode`" :value="m" :checked="monthlyMode === m" @change="monthlyMode = m" />
+            <input class="aui-seg__input" type="radio" :name="`${uid}-mmode`" :value="m" :checked="monthlyMode === m" :disabled="gated && m !== 'day' && monthlyMode !== m" @change="monthlyMode = m" />
             <span>{{ t(`schedule.monthly.${m}`) }}</span>
           </label>
         </div>
@@ -215,7 +172,7 @@ const previewNote = computed(() => {
       <div v-if="onDay" class="aui-sched__row">
         <label :for="`${uid}-mday`">{{ t('schedule.monthly.onDay') }}</label>
         <select :id="`${uid}-mday`" v-model.number="onDay.day" class="aui-field">
-          <option v-for="d in DAYS_OF_MONTH" :key="d" :value="d">{{ d }}</option>
+          <option v-for="d in DAYS_OF_MONTH" :key="d" :value="d" :disabled="gated && d > 28 && d !== onDay.day">{{ d }}</option>
         </select>
         <span v-if="onDay.day > 28" class="aui-sched__note">{{ t('schedule.shortMonths') }}</span>
       </div>

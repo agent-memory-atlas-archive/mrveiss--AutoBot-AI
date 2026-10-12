@@ -50,7 +50,9 @@ describe('SchedulePicker', () => {
   })
 
   it('repeats is a radiogroup; choosing monthly day 31 emits a calendar rule', async () => {
-    const w = make(cron('0 9 * * *'))
+    const preview = vi.fn().mockResolvedValue({ valid: true, next_runs: ['2030-01-01T09:00:00Z'] })
+    const w = make(cron('0 9 * * *'), { preview })
+    await flushPromises()
     const group = w.find('[role="radiogroup"]')
     expect(group.attributes('aria-labelledby')).toBeTruthy()
     expect(w.findAll('input[type="radio"]').length).toBeGreaterThanOrEqual(6)
@@ -89,6 +91,55 @@ describe('SchedulePicker', () => {
     await w.setProps({ modelValue: cron('30 6 1 * *') })
     await flushPromises()
     expect(w.text()).toContain('schedule.summary.monthlyDay')
+    expect(w.emitted('update:modelValue')).toBeUndefined()
+  })
+})
+
+describe('SchedulePicker cron-only gate', () => {
+  const okPreview = () => vi.fn().mockResolvedValue({ valid: true, next_runs: ['2030-01-01T09:00:00Z'] })
+  const radio = (w: ReturnType<typeof make>, label: string) =>
+    w.findAll('label.aui-seg__item').find((l) => l.text() === label)!.find('input')
+
+  async function toMonthly(w: ReturnType<typeof make>) {
+    await radio(w, 'schedule.repeat.monthly').setValue(true)
+  }
+
+  it.each([
+    ['no preview function', undefined],
+    ['preview resolves null (404)', () => vi.fn().mockResolvedValue(null)],
+    ['preview throws', () => vi.fn().mockRejectedValue(new Error('x'))],
+  ])('%s: only cron-kind rules are offered, with a note', async (_n, mk) => {
+    const w = make(cron('0 9 * * *'), { preview: mk?.() })
+    await flushPromises()
+    expect(w.text()).toContain('schedule.gatedNote')
+    expect(radio(w, 'schedule.repeat.once').attributes('disabled')).toBeDefined()
+    await toMonthly(w)
+    expect(radio(w, 'schedule.monthly.lastDay').attributes('disabled')).toBeDefined()
+    expect(radio(w, 'schedule.monthly.nth').attributes('disabled')).toBeDefined()
+    expect(radio(w, 'schedule.monthly.day').attributes('disabled')).toBeUndefined()
+    const options = w.findAll('select').find((s) => s.findAll('option').length === 31)!.findAll('option')
+    expect(options[27].attributes('disabled')).toBeUndefined() // 28
+    expect(options[28].attributes('disabled')).toBeDefined() // 29
+    expect(options[30].attributes('disabled')).toBeDefined() // 31
+    for (const e of w.emitted('update:modelValue') ?? []) expect((e[0] as ScheduleSpec).kind).toBe('cron')
+    expect(w.emitted('update:previewAvailable')!.at(-1)).toEqual([false])
+  })
+
+  it('preview available: every kind is enabled and no note is shown', async () => {
+    const w = make(cron('0 9 * * *'), { preview: okPreview() })
+    await flushPromises()
+    expect(w.text()).not.toContain('schedule.gatedNote')
+    expect(radio(w, 'schedule.repeat.once').attributes('disabled')).toBeUndefined()
+    await toMonthly(w)
+    expect(radio(w, 'schedule.monthly.lastDay').attributes('disabled')).toBeUndefined()
+    expect(radio(w, 'schedule.monthly.nth').attributes('disabled')).toBeUndefined()
+    expect(w.emitted('update:previewAvailable')!.at(-1)).toEqual([true])
+  })
+
+  it('a stored non-cron spec stays selectable while gated (never forcibly rewritten)', async () => {
+    const w = make({ kind: 'calendar', timezone: 'UTC', rrule: 'FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=9;BYMINUTE=0' })
+    await flushPromises()
+    expect(radio(w, 'schedule.monthly.lastDay').attributes('disabled')).toBeUndefined()
     expect(w.emitted('update:modelValue')).toBeUndefined()
   })
 })

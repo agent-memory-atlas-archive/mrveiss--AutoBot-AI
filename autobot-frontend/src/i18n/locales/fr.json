@@ -9732,6 +9732,8 @@
     "once_in_past": "Cette date et cette heure sont déjà passées.",
     "invalid_rrule": "Cette règle de calendrier n'est pas valide.",
     "invalid_cron": "Saisissez un cron standard à cinq champs, par exemple 0 9 * * 1-5.",
-    "invalid_generic": "Cette planification n'est pas valide."
+    "invalid_generic": "Cette planification n'est pas valide.",
+    "conflicting_fields": "Une planification est enregistrée soit en cron, soit en règle de calendrier ou exécution unique, jamais les deux.",
+    "gatedNote": "Le dernier jour, le jour de la semaine du mois, les jours 29 à 31 et les exécutions uniques seront disponibles une fois le planificateur mis à jour."
   }
 }

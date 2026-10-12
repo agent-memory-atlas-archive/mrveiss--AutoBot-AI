@@ -155,7 +155,7 @@ import { formatDateTime, formatDuration } from '@/utils/formatHelpers'
 import { useI18n } from 'vue-i18n'
 import type { ScheduleSpec } from '@autobot/ui'
 import SchedulePickerField from '@/components/schedule/SchedulePickerField.vue'
-import { routineSpec, useScheduleSummary } from '@/composables/useSchedule'
+import { routineSpec, schedulePayload, useScheduleSummary } from '@/composables/useSchedule'
 
 const props = defineProps<{ companyId?: string }>()
 
@@ -303,10 +303,9 @@ function buildPayload() {
   const payload: Record<string, unknown> = {
     name: f.name,
     description: f.description || null,
-    // Legacy field stays for back-compat while the scheduler reads it; only a
-    // cron spec has one (a calendar/once spec lives in schedule_spec alone).
-    ...(f.schedule?.kind === 'cron' ? { cron_schedule: f.schedule.cron } : {}),
-    schedule_spec: f.schedule,
+    // Exactly ONE of cron_schedule / schedule_spec (the server refuses both):
+    // a cron spec is today's payload, calendar/once go as schedule_spec alone.
+    ...schedulePayload(f.schedule),
     assignee_agent_id: f.assignee_agent_id || null,
     produces: f.produces,
   }

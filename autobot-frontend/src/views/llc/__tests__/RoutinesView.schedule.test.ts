@@ -71,7 +71,7 @@ describe('RoutinesView schedule picker (#18432)', () => {
     const [url, body] = patch.mock.calls[0]
     expect(url).toBe('/api/llc/routines/r1')
     expect(body.cron_schedule).toBe('0 9 * * 1-5')
-    expect(body.schedule_spec).toEqual({ kind: 'cron', timezone: 'UTC', cron: '0 9 * * 1-5' })
+    expect('schedule_spec' in body).toBe(false) // exactly one field, today's payload
   })
 
   it('asks the server preview with the picked spec', async () => {
@@ -96,7 +96,22 @@ describe('RoutinesView schedule picker (#18432)', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     const call = post.mock.calls.find(([u]) => u === '/api/llc/companies/c1/routines')!
-    expect(call[1].schedule_spec).toEqual({ kind: 'cron', timezone: 'UTC', cron: '0 9 * * 1-5' })
     expect(call[1].cron_schedule).toBe('0 9 * * 1-5')
+    expect('schedule_spec' in call[1]).toBe(false)
+  })
+
+  it('a calendar routine saves schedule_spec only, never cron_schedule', async () => {
+    const spec = { kind: 'calendar', timezone: 'UTC', rrule: 'FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=9;BYMINUTE=0' }
+    get.mockImplementation(async (url: string) =>
+      url.includes('/routines') ? [{ ...ROUTINE, cron_schedule: '', schedule_spec: spec }] : [])
+    const wrapper = await mountView()
+    expect(wrapper.find('tbody tr').text()).toContain('On the last day of every month at 09:00, UTC')
+    await wrapper.findAll('tbody tr button').find((b) => b.text() === 'Edit')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    const body = patch.mock.calls[0][1]
+    expect(body.schedule_spec).toEqual(spec)
+    expect('cron_schedule' in body).toBe(false)
   })
 })

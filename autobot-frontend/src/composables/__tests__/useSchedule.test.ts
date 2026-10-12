@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 const post = vi.fn()
 vi.mock('@/plugins/api', () => ({ useApiClient: () => ({ post }) }))
 
-import { routineSpec, useSchedulePreviewCall } from '../useSchedule'
+import { routineSpec, schedulePayload, useSchedulePreviewCall } from '../useSchedule'
 
 describe('routineSpec', () => {
   it('reads a bare cron string as UTC, never the company zone (no silent shift)', () => {
@@ -32,5 +32,16 @@ describe('useSchedulePreviewCall', () => {
   it('resolves null (preview unavailable) when the endpoint 404s', async () => {
     post.mockRejectedValueOnce(new Error('HTTP 404: Not Found'))
     expect(await useSchedulePreviewCall()(spec, 3)).toBeNull()
+  })
+})
+
+describe('schedulePayload', () => {
+  it('sets exactly one of cron_schedule / schedule_spec', () => {
+    expect(schedulePayload({ kind: 'cron', timezone: 'UTC', cron: '0 9 * * *' })).toEqual({ cron_schedule: '0 9 * * *' })
+    const cal = { kind: 'calendar' as const, timezone: 'UTC', rrule: 'FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=9;BYMINUTE=0' }
+    expect(schedulePayload(cal)).toEqual({ schedule_spec: cal })
+    const once = { kind: 'once' as const, timezone: 'UTC', at: '2030-01-01T09:00' }
+    expect(schedulePayload(once)).toEqual({ schedule_spec: once })
+    expect(schedulePayload(null)).toEqual({})
   })
 })

@@ -31,6 +31,16 @@ export function routineSpec(routine: { cron_schedule?: string | null; schedule_s
   return routine.cron_schedule ? { kind: 'cron', timezone: 'UTC', cron: routine.cron_schedule } : null
 }
 
+/**
+ * Routine payload fragment: EXACTLY ONE of `cron_schedule` / `schedule_spec`.
+ * A cron spec is today's payload; calendar and once go as `schedule_spec`
+ * alone. Sending both is a 422 `schedule.conflicting_fields`.
+ */
+export function schedulePayload(spec: ScheduleSpec | null): Record<string, unknown> {
+  if (!spec) return {}
+  return spec.kind === 'cron' ? { cron_schedule: spec.cron } : { schedule_spec: spec }
+}
+
 /** Server preview. Resolves null when the endpoint is unavailable (404, offline). */
 export function useSchedulePreviewCall(): SchedulePreviewFn {
   const api = useApiClient()

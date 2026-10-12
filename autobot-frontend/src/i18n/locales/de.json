@@ -9732,6 +9732,8 @@
     "once_in_past": "Dieser Zeitpunkt liegt bereits in der Vergangenheit.",
     "invalid_rrule": "Diese Kalenderregel ist ungültig.",
     "invalid_cron": "Geben Sie Standard-Cron mit fünf Feldern ein, zum Beispiel 0 9 * * 1-5.",
-    "invalid_generic": "Dieser Zeitplan ist ungültig."
+    "invalid_generic": "Dieser Zeitplan ist ungültig.",
+    "conflicting_fields": "Ein Zeitplan wird entweder als Cron oder als Kalenderregel bzw. einmalige Ausführung gespeichert, nie beides.",
+    "gatedNote": "Letzter Tag, Wochentag im Monat, die Tage 29 bis 31 und einmalige Ausführungen stehen zur Verfügung, sobald der Scheduler aktualisiert ist."
   }
 }

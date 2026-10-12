@@ -9732,6 +9732,8 @@
     "once_in_past": "Ta data i godzina już minęły.",
     "invalid_rrule": "Ta reguła kalendarzowa jest nieprawidłowa.",
     "invalid_cron": "Wpisz standardowy cron z pięcioma polami, na przykład 0 9 * * 1-5.",
-    "invalid_generic": "Ten harmonogram jest nieprawidłowy."
+    "invalid_generic": "Ten harmonogram jest nieprawidłowy.",
+    "conflicting_fields": "Harmonogram zapisuje się albo jako cron, albo jako reguła kalendarzowa lub uruchomienie jednorazowe, nigdy jako oba.",
+    "gatedNote": "Ostatni dzień, dzień tygodnia w miesiącu, dni 29–31 i uruchomienia jednorazowe będą dostępne po aktualizacji harmonogramatora."
   }
 }
