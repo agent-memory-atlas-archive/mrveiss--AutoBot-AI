@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from llc.models.company_os import LLCRoleSkill, LLCWorkflowNode, LLCWorkflowTransition
 from llc.models.company_os_enums import WorkflowKind, WorkflowTriggerKind
+from llc.models.enums import WorkflowStatus
 from llc.services.authz import require_company_admin
 from llc.services.base import LLCServiceBase
 from llc.services.workflow import WorkflowConflictError, WorkflowService
@@ -161,6 +162,22 @@ class CompanyOsWorkflowService(LLCServiceBase):
             .where(LLCWorkflowTransition.handoff_row_id == row.id, Workflow.company_id == company_id)
         )
         return role_id in {r for (r,) in out_rows} | {r for (r,) in in_rows}
+
+    async def update_status(
+        self,
+        session: AsyncSession,
+        company_id: uuid.UUID,
+        workflow_id: str,
+        status: str,
+        *,
+        actor: Optional[uuid.UUID],
+    ) -> Workflow:
+        """Change the lifecycle status; the same admin gate as every other write."""
+        await require_company_admin(session, company_id, actor)
+        row = await get_workflow_row(session, company_id, workflow_id)
+        row.status = WorkflowStatus(status).value
+        await session.flush()
+        return row
 
     async def delete(
         self, session: AsyncSession, company_id: uuid.UUID, workflow_id: str, *, actor: Optional[uuid.UUID]

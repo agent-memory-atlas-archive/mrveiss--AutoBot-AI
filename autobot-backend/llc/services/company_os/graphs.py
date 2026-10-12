@@ -80,7 +80,9 @@ class GraphService(LLCServiceBase):
     ) -> GraphReport:
         """Validate then swap in *spec*. Raises :class:`GraphInvalid` on any error."""
         await require_company_admin(session, company_id, actor)
-        row = await get_workflow_row(session, company_id, workflow_id)
+        # Lock the workflow row so two concurrent PUTs serialise rather than interleave
+        # their delete-then-insert of the same graph.
+        row = await get_workflow_row(session, company_id, workflow_id, lock=True)
         report = validate_graph(spec, await self.build_context(session, company_id, row, spec))
         if report.errors:
             raise GraphInvalid(report.errors)

@@ -13,6 +13,7 @@ import uuid
 from typing import AsyncIterator
 
 import httpx
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -24,6 +25,7 @@ from llc.deps import get_session
 from llc.models.company_os import LLCProcess, LLCRoleSkill, LLCWorkflowNode, LLCWorkflowTransition
 from llc.models.enums import MembershipRole
 from llc.models.membership import LLCCompanyMembership
+from llc.services.company_os.graph_types import GraphSpec
 from llc.services.workflow import WorkflowService
 
 # Registers the SQLite compile shims for postgresql.JSONB / postgresql.UUID.
@@ -393,3 +395,91 @@ def test_every_route_depends_on_auth_and_the_org_context():
         for route in router.routes:
             calls = {d.call for d in route.dependant.dependencies}
             assert get_current_user in calls and require_org_context in calls, route.path
+
+
+# ---- the older /llc/workflows routes must not bypass the Company OS rules (#18390) ----
+
+LEGACY = "/api/llc/workflows"
+
+
+def _legacy_client(maker, company, user) -> httpx.AsyncClient:
+    from api.user_management.dependencies import get_current_user as gcu
+    from llc.api.workflows import router as legacy_router
+    from user_management.database import get_async_session
+
+    app = FastAPI()
+    app.include_router(legacy_router, prefix="/api/llc")
+
+    async def _session():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_async_session] = _session
+    app.dependency_overrides[gcu] = lambda: {"id": str(user)}
+    app.dependency_overrides[require_org_context] = lambda: TenantContext(
+        org_id=company, user_id=user, is_platform_admin=False
+    )
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t")
+
+
+async def test_legacy_routes_enforce_the_admin_gate_on_company_os_rows(factory, seeded):
+    async with _client(factory, COMPANY_A, ADMIN_A) as c:
+        await _post(c, "/workflows", workflow_id="meta", kind="meta_skill")
+    async with _legacy_client(factory, COMPANY_A, MEMBER_A) as member:
+        for wid in ("sales-wf", "meta"):
+            assert (await member.delete(f"{LEGACY}/{COMPANY_A}/{wid}")).status_code == 403
+            res = await member.patch(f"{LEGACY}/{COMPANY_A}/{wid}", json={"status": "running"})
+            assert res.status_code == 403
+    async with _client(factory, COMPANY_A, MEMBER_A) as check:
+        assert {w["workflow_id"] for w in (await check.get(f"{PREFIX}/workflows")).json()} >= {"sales-wf", "meta"}
+
+
+async def test_legacy_delete_of_a_referenced_workflow_is_409_not_500(factory, seeded):
+    ops_graph = {
+        "nodes": [{"key": "s", "kind": "start"}, {"key": "ok", "kind": "end", "end_outcome": "done"}],
+        "transitions": [{"from_node": "s", "kind": "success", "to_node": "ok"}],
+    }
+    sales_graph = {
+        **GRAPH,
+        "transitions": GRAPH["transitions"] + [{"from_node": "ok", "kind": "handoff", "handoff_workflow_id": "ops-wf"}],
+    }
+    async with _client(factory, COMPANY_A, ADMIN_A) as c:
+        await c.put(f"{PREFIX}/workflows/ops-wf/graph", json=ops_graph)
+        await c.put(f"{PREFIX}/workflows/sales-wf/graph", json=sales_graph)
+    async with _legacy_client(factory, COMPANY_A, ADMIN_A) as legacy:
+        assert (await legacy.delete(f"{LEGACY}/{COMPANY_A}/ops-wf")).status_code == 409
+        res = await legacy.patch(f"{LEGACY}/{COMPANY_A}/ops-wf", json={"status": "running"})
+        assert res.status_code == 200 and res.json()["status"] == "running"
+        assert (await legacy.delete(f"{LEGACY}/{COMPANY_A}/sales-wf")).status_code == 204
+
+
+async def test_legacy_list_and_role_attach_do_not_see_meta_skills(factory, seeded):
+    from llc.services.role_workflow import RoleWorkflowService
+
+    async with _client(factory, COMPANY_A, ADMIN_A) as c:
+        await _post(c, "/workflows", workflow_id="meta", kind="meta_skill")
+    async with _legacy_client(factory, COMPANY_A, ADMIN_A) as legacy:
+        listed = {w["workflow_id"] for w in (await legacy.get(f"{LEGACY}/{COMPANY_A}")).json()}
+    assert listed == {"sales-wf", "ops-wf"}
+    async with factory() as s:
+        with pytest.raises(ValueError, match="meta skill"):
+            await RoleWorkflowService()._require_workflow(s, COMPANY_A, "meta")
+
+
+async def test_replacing_a_graph_locks_the_workflow_row(factory, seeded):
+    from sqlalchemy.dialects import postgresql
+
+    from llc.services.company_os.graphs import GraphService
+
+    seen = []
+    async with factory() as s:
+        real = s.execute
+
+        async def spy(stmt, *a, **k):
+            seen.append(stmt)
+            return await real(stmt, *a, **k)
+
+        s.execute = spy
+        await GraphService().replace(s, COMPANY_A, "sales-wf", GraphSpec.model_validate(GRAPH), actor=ADMIN_A)
+    locking = [x for x in seen if "FOR UPDATE" in str(x.compile(dialect=postgresql.dialect()))]
+    assert locking, "replace() must SELECT ... FOR UPDATE the workflow row"

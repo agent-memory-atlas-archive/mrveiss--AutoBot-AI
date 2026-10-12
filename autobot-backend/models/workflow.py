@@ -84,6 +84,9 @@ class Workflow(Base):
     __tablename__ = "workflows"
     __table_args__ = (
         UniqueConstraint("company_id", "workflow_id", name="uq_workflows_company_workflow"),
+        # #18390: target of the composite (company_id, id) foreign keys of the Company OS
+        # graph tables, so those rows can only reference a workflow of their own company.
+        UniqueConstraint("company_id", "id", name="uq_workflows_company_id_id"),
         # #18390: a meta skill has no trigger and no owning role -- stated in the
         # schema, not only in the service, so no write path can produce one that has.
         CheckConstraint("kind IN ('workflow', 'meta_skill')", name="ck_workflows_kind"),

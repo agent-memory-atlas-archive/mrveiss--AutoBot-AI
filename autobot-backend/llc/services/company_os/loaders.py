@@ -32,10 +32,22 @@ async def require_role_in_company(session: AsyncSession, company_id: uuid.UUID, 
         raise CompanyOsNotFound(f"role {role_id} does not exist in this company")
 
 
-async def get_workflow_row(session: AsyncSession, company_id: uuid.UUID, workflow_id: str) -> Workflow:
-    result = await session.execute(
-        select(Workflow).where(Workflow.company_id == company_id, Workflow.workflow_id == workflow_id)
+def is_company_os_row(row: object) -> bool:
+    """True for a meta skill or a role-owned workflow: rows the Company OS rules govern.
+
+    ``isinstance`` on the owner, not truthiness, so a stand-in object cannot pass.
+    """
+    return getattr(row, "kind", None) == WorkflowKind.META_SKILL.value or isinstance(
+        getattr(row, "owner_role_id", None), uuid.UUID
     )
+
+
+async def get_workflow_row(
+    session: AsyncSession, company_id: uuid.UUID, workflow_id: str, *, lock: bool = False
+) -> Workflow:
+    """Load a workflow of this company. ``lock`` takes ``SELECT ... FOR UPDATE`` on the row."""
+    stmt = select(Workflow).where(Workflow.company_id == company_id, Workflow.workflow_id == workflow_id)
+    result = await session.execute(stmt.with_for_update() if lock else stmt)
     row = result.scalar_one_or_none()
     if row is None:
         raise CompanyOsNotFound(f"workflow {workflow_id!r} does not exist in this company")

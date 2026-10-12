@@ -110,12 +110,15 @@ class RoleWorkflowService(LLCServiceBase):
         ``MultipleResultsFound``.
         """
         own = await session.execute(
-            select(Workflow.workflow_id).where(
+            select(Workflow.kind).where(
                 Workflow.workflow_id == workflow_id,
                 Workflow.company_id == company_id,
             )
         )
-        if own.scalar_one_or_none() is not None:
+        own_kind = own.scalar_one_or_none()
+        if own_kind == "meta_skill":
+            raise ValueError(f"workflow {workflow_id!r} is a meta skill; roles hold meta skills as skills")
+        if own_kind is not None:
             return
 
         unattributed = await session.execute(

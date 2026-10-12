@@ -43,6 +43,20 @@ def _uuid_pk() -> Mapped[uuid.UUID]:
     return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
 
+def _wf_fk(columns: list, ondelete: str, tag: str, table: str = "nodes") -> sa.ForeignKeyConstraint:
+    """Composite ``(company_id, <col>) -> workflows(company_id, id)``.
+
+    A row can therefore only point at a workflow of its OWN company: the database
+    refuses a cross-company reference even if a service check is ever bypassed.
+    """
+    return sa.ForeignKeyConstraint(
+        ["company_id", *columns],
+        ["workflows.company_id", "workflows.id"],
+        ondelete=ondelete,
+        name=f"fk_llc_workflow_{table}_{tag}" if table != "role_skills" else f"fk_llc_role_skills_{tag}",
+    )
+
+
 class LLCProcess(Base):
     """A reusable process: one owner role, optional required skills."""
 
@@ -62,7 +76,11 @@ class LLCProcess(Base):
         sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now()
     )
 
-    __table_args__ = (sa.UniqueConstraint("company_id", "process_key", name="uq_llc_processes_company_key"),)
+    __table_args__ = (
+        sa.UniqueConstraint("company_id", "process_key", name="uq_llc_processes_company_key"),
+        # Target of the composite (company_id, process_id) foreign key on nodes.
+        sa.UniqueConstraint("company_id", "id", name="uq_llc_processes_company_id_id"),
+    )
 
 
 class LLCWorkflowNode(Base):
@@ -72,18 +90,12 @@ class LLCWorkflowNode(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    workflow_row_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    workflow_row_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     node_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     kind: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     label: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
-    process_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), sa.ForeignKey("llc_processes.id", ondelete="RESTRICT"), nullable=True, index=True
-    )
-    meta_skill_row_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=True, index=True
-    )
+    process_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    meta_skill_row_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     end_outcome: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     # Authoring order, so a graph reads back as it was written.
     position: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
@@ -91,6 +103,14 @@ class LLCWorkflowNode(Base):
 
     __table_args__ = (
         sa.UniqueConstraint("workflow_row_id", "node_key", name="uq_llc_workflow_nodes_key"),
+        _wf_fk(["workflow_row_id"], "CASCADE", "workflow_row"),
+        _wf_fk(["meta_skill_row_id"], "RESTRICT", "meta_skill"),
+        sa.ForeignKeyConstraint(
+            ["company_id", "process_id"],
+            ["llc_processes.company_id", "llc_processes.id"],
+            ondelete="RESTRICT",
+            name="fk_llc_workflow_nodes_process",
+        ),
         sa.CheckConstraint("(kind = 'process') = (process_id IS NOT NULL)", name="ck_llc_workflow_nodes_process"),
         sa.CheckConstraint(
             "(kind = 'meta_skill') = (meta_skill_row_id IS NOT NULL)", name="ck_llc_workflow_nodes_meta_skill"
@@ -106,22 +126,20 @@ class LLCWorkflowTransition(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    workflow_row_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    workflow_row_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     from_node_key: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     to_node_key: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     kind: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     retry_max: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     condition: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     timeout_seconds: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
-    handoff_row_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=True, index=True
-    )
+    handoff_row_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     position: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = _now_column()
 
     __table_args__ = (
+        _wf_fk(["workflow_row_id"], "CASCADE", "workflow_row", table="transitions"),
+        _wf_fk(["handoff_row_id"], "RESTRICT", "handoff", table="transitions"),
         sa.CheckConstraint("(kind = 'handoff') = (handoff_row_id IS NOT NULL)", name="ck_llc_transitions_handoff"),
         sa.CheckConstraint("(kind = 'handoff') = (to_node_key IS NULL)", name="ck_llc_transitions_target"),
     )
@@ -136,13 +154,12 @@ class LLCRoleSkill(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     skill_name: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
-    meta_skill_row_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=True, index=True
-    )
+    meta_skill_row_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = _now_column()
 
     __table_args__ = (
+        _wf_fk(["meta_skill_row_id"], "RESTRICT", "meta_skill", table="role_skills"),
         sa.UniqueConstraint("role_id", "skill_name", name="uq_llc_role_skills_name"),
         sa.UniqueConstraint("role_id", "meta_skill_row_id", name="uq_llc_role_skills_meta"),
         sa.CheckConstraint("(skill_name IS NULL) <> (meta_skill_row_id IS NULL)", name="ck_llc_role_skills_one_of"),

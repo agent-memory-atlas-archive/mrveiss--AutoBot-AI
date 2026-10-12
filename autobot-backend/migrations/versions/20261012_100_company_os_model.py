@@ -36,8 +36,16 @@ def _created_at() -> sa.Column:
     return sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()"))
 
 
-def _fk(column: str, target: str, ondelete: str) -> sa.Column:
-    return sa.Column(column, UUID(as_uuid=True), sa.ForeignKey(target, ondelete=ondelete), nullable=True)
+def _nullable_uuid(column: str) -> sa.Column:
+    return sa.Column(column, UUID(as_uuid=True), nullable=True)
+
+
+def _wf_fk(column: str, ondelete: str, name: str) -> sa.ForeignKeyConstraint:
+    """Composite ``(company_id, column) -> workflows(company_id, id)``: a row can only
+    reference a workflow of its own company, enforced by the database."""
+    return sa.ForeignKeyConstraint(
+        ["company_id", column], ["workflows.company_id", "workflows.id"], ondelete=ondelete, name=name
+    )
 
 
 def _extend_workflows() -> None:
@@ -48,6 +56,7 @@ def _extend_workflows() -> None:
         "workflows", sa.Column("trigger_config", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb"))
     )
     op.create_index("ix_workflows_owner_role_id", "workflows", ["owner_role_id"])
+    op.create_unique_constraint("uq_workflows_company_id_id", "workflows", ["company_id", "id"])
     op.create_check_constraint("ck_workflows_kind", "workflows", "kind IN ('workflow', 'meta_skill')")
     op.create_check_constraint(
         "ck_workflows_meta_skill_unowned",
@@ -70,6 +79,7 @@ def _create_processes() -> None:
         _created_at(),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.UniqueConstraint("company_id", "process_key", name="uq_llc_processes_company_key"),
+        sa.UniqueConstraint("company_id", "id", name="uq_llc_processes_company_id_id"),
     )
     op.create_index("ix_llc_processes_company_id", "llc_processes", ["company_id"])
     op.create_index("ix_llc_processes_owner_role_id", "llc_processes", ["owner_role_id"])
@@ -80,21 +90,24 @@ def _create_nodes() -> None:
         "llc_workflow_nodes",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("company_id", UUID(as_uuid=True), nullable=False),
-        sa.Column(
-            "workflow_row_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("workflows.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
+        sa.Column("workflow_row_id", UUID(as_uuid=True), nullable=False),
         sa.Column("node_key", sa.String(64), nullable=False),
         sa.Column("kind", sa.String(16), nullable=False),
         sa.Column("label", sa.String(255), nullable=True),
-        _fk("process_id", "llc_processes.id", "RESTRICT"),
-        _fk("meta_skill_row_id", "workflows.id", "RESTRICT"),
+        _nullable_uuid("process_id"),
+        _nullable_uuid("meta_skill_row_id"),
         sa.Column("end_outcome", sa.String(16), nullable=True),
         sa.Column("position", sa.Integer, nullable=False, server_default="0"),
         _created_at(),
         sa.UniqueConstraint("workflow_row_id", "node_key", name="uq_llc_workflow_nodes_key"),
+        _wf_fk("workflow_row_id", "CASCADE", "fk_llc_workflow_nodes_workflow_row"),
+        _wf_fk("meta_skill_row_id", "RESTRICT", "fk_llc_workflow_nodes_meta_skill"),
+        sa.ForeignKeyConstraint(
+            ["company_id", "process_id"],
+            ["llc_processes.company_id", "llc_processes.id"],
+            ondelete="RESTRICT",
+            name="fk_llc_workflow_nodes_process",
+        ),
         sa.CheckConstraint("(kind = 'process') = (process_id IS NOT NULL)", name="ck_llc_workflow_nodes_process"),
         sa.CheckConstraint(
             "(kind = 'meta_skill') = (meta_skill_row_id IS NOT NULL)", name="ck_llc_workflow_nodes_meta_skill"
@@ -110,21 +123,18 @@ def _create_transitions() -> None:
         "llc_workflow_transitions",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("company_id", UUID(as_uuid=True), nullable=False),
-        sa.Column(
-            "workflow_row_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("workflows.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
+        sa.Column("workflow_row_id", UUID(as_uuid=True), nullable=False),
         sa.Column("from_node_key", sa.String(64), nullable=False),
         sa.Column("to_node_key", sa.String(64), nullable=True),
         sa.Column("kind", sa.String(16), nullable=False),
         sa.Column("retry_max", sa.Integer, nullable=True),
         sa.Column("condition", sa.Text, nullable=True),
         sa.Column("timeout_seconds", sa.Integer, nullable=True),
-        _fk("handoff_row_id", "workflows.id", "RESTRICT"),
+        _nullable_uuid("handoff_row_id"),
         sa.Column("position", sa.Integer, nullable=False, server_default="0"),
         _created_at(),
+        _wf_fk("workflow_row_id", "CASCADE", "fk_llc_workflow_transitions_workflow_row"),
+        _wf_fk("handoff_row_id", "RESTRICT", "fk_llc_workflow_transitions_handoff"),
         sa.CheckConstraint("(kind = 'handoff') = (handoff_row_id IS NOT NULL)", name="ck_llc_transitions_handoff"),
         sa.CheckConstraint("(kind = 'handoff') = (to_node_key IS NULL)", name="ck_llc_transitions_target"),
     )
@@ -139,9 +149,10 @@ def _create_role_skills() -> None:
         sa.Column("company_id", UUID(as_uuid=True), nullable=False),
         sa.Column("role_id", UUID(as_uuid=True), nullable=False),
         sa.Column("skill_name", sa.String(255), nullable=True),
-        _fk("meta_skill_row_id", "workflows.id", "RESTRICT"),
+        _nullable_uuid("meta_skill_row_id"),
         sa.Column("created_by", UUID(as_uuid=True), nullable=True),
         _created_at(),
+        _wf_fk("meta_skill_row_id", "RESTRICT", "fk_llc_role_skills_meta_skill"),
         sa.UniqueConstraint("role_id", "skill_name", name="uq_llc_role_skills_name"),
         sa.UniqueConstraint("role_id", "meta_skill_row_id", name="uq_llc_role_skills_meta"),
         sa.CheckConstraint("(skill_name IS NULL) <> (meta_skill_row_id IS NULL)", name="ck_llc_role_skills_one_of"),
@@ -158,12 +169,28 @@ def upgrade() -> None:
     _create_role_skills()
 
 
+_POPULATED_SQL = (
+    "SELECT (SELECT COUNT(*) FROM llc_processes) + (SELECT COUNT(*) FROM llc_workflow_nodes) "
+    "+ (SELECT COUNT(*) FROM llc_workflow_transitions) + (SELECT COUNT(*) FROM llc_role_skills) "
+    "+ (SELECT COUNT(*) FROM workflows WHERE kind <> 'workflow' OR owner_role_id IS NOT NULL "
+    "OR trigger_type IS NOT NULL OR trigger_config <> '{}'::jsonb)"
+)
+
+
 def downgrade() -> None:
-    # Reverse dependency order. The new tables hold only Company OS data, so
-    # dropping them loses nothing the previous schema could have stored; the
-    # columns added to ``workflows`` are dropped with the rows they describe left intact.
+    # Everything Company OS wrote is dropped by this downgrade, and a meta skill would
+    # survive only as a plain workflow, so refuse once any of it exists (no data loss on
+    # update). An empty model downgrades; otherwise export the rows and reverse by hand.
+    populated = op.get_bind().execute(sa.text(_POPULATED_SQL)).scalar()
+    if populated:
+        raise NotImplementedError(
+            f"20261012_100 downgrade is refused: {populated} Company OS row(s) exist (processes, workflow "
+            "nodes, transitions, role skills, or workflows carrying a kind other than 'workflow', an owner "
+            "role or a trigger). Dropping them would discard that data. Export and remove them first."
+        )
     for table in ("llc_role_skills", "llc_workflow_transitions", "llc_workflow_nodes", "llc_processes"):
         op.drop_table(table)
+    op.drop_constraint("uq_workflows_company_id_id", "workflows", type_="unique")
     op.drop_constraint("ck_workflows_meta_skill_unowned", "workflows", type_="check")
     op.drop_constraint("ck_workflows_kind", "workflows", type_="check")
     op.drop_index("ix_workflows_owner_role_id", table_name="workflows")

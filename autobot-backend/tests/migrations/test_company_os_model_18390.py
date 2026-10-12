@@ -174,3 +174,53 @@ async def test_deleting_a_workflow_cascades_its_graph_and_a_referenced_one_is_re
             assert (await conn.execute(text("SELECT count(*) FROM llc_workflow_transitions"))).scalar() == 0
     finally:
         await engine.dispose()
+
+
+async def test_downgrade_refuses_while_company_os_data_exists(fresh_db_url):
+    """No data loss on update: a meta skill or any model row blocks the downgrade."""
+    assert run_alembic(["upgrade", _TARGET], fresh_db_url).returncode == 0
+    engine = create_async_engine(fresh_db_url)
+    try:
+        sql = _INSERT_WF.format(extra_cols=", kind", extra_vals=", 'meta_skill'")
+        async with engine.begin() as conn:
+            await conn.execute(text(sql), {"id": str(uuid.uuid4()), "wf": "m", "company": str(uuid.uuid4())})
+        refused = run_alembic(["downgrade", _PREVIOUS], fresh_db_url)
+        assert refused.returncode != 0 and "downgrade is refused" in refused.stderr
+        _, cols = await _tables_and_columns(engine)
+        assert "kind" in cols, "a refused downgrade must change nothing"
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM workflows"))
+            await conn.execute(
+                text(
+                    "INSERT INTO llc_processes (id, company_id, process_key, name, owner_role_id) "
+                    "VALUES (:id, :co, 'p', 'p', :role)"
+                ),
+                {"id": str(uuid.uuid4()), "co": str(uuid.uuid4()), "role": str(uuid.uuid4())},
+            )
+        assert run_alembic(["downgrade", _PREVIOUS], fresh_db_url).returncode != 0
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM llc_processes"))
+        assert run_alembic(["downgrade", _PREVIOUS], fresh_db_url).returncode == 0
+    finally:
+        await engine.dispose()
+
+
+async def test_a_row_cannot_reference_a_workflow_of_another_company(fresh_db_url):
+    """Composite (company_id, id) foreign keys: the database itself refuses the cross-company link."""
+    assert run_alembic(["upgrade", _TARGET], fresh_db_url).returncode == 0
+    engine = create_async_engine(fresh_db_url)
+    wf, company_a, company_b = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(_INSERT_WF.format(extra_cols="", extra_vals="")), {"id": wf, "wf": "w", "company": company_a}
+            )
+        node = (
+            "INSERT INTO llc_workflow_nodes (id, company_id, workflow_row_id, node_key, kind) "
+            "VALUES (:id, :co, :wf, 's', 'start')"
+        )
+        await _expect_integrity_error(engine, node, {"id": str(uuid.uuid4()), "co": company_b, "wf": wf})
+        async with engine.begin() as conn:
+            await conn.execute(text(node), {"id": str(uuid.uuid4()), "co": company_a, "wf": wf})
+    finally:
+        await engine.dispose()

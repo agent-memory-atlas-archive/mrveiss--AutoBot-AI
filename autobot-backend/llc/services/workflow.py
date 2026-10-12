@@ -161,7 +161,9 @@ class WorkflowService(LLCServiceBase):
         company_id: uuid.UUID,
     ) -> List[Workflow]:
         result = await session.execute(
-            select(Workflow).where(Workflow.company_id == company_id).order_by(Workflow.created_at.desc())
+            select(Workflow)
+            .where(Workflow.company_id == company_id, Workflow.kind == "workflow")
+            .order_by(Workflow.created_at.desc())
         )
         return list(result.scalars().all())
 
