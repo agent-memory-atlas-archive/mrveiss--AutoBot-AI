@@ -15,6 +15,7 @@
 import { ref, reactive, watch, type Ref } from 'vue'
 import { DEFAULT_CONFIG } from '@/config/defaults.js'
 import { createLogger } from '@/utils/debugUtils'
+import { fetchWithAuth } from '@/utils/fetchWithAuth'
 import { getApiBase } from '@/config/ssot-config'
 import { buildAuthenticatedWsSubprotocols } from '@/utils/buildAuthenticatedWsUrl'
 import { useUserStore } from '@/stores/useUserStore'
@@ -265,15 +266,13 @@ class GlobalWebSocketService {
     const timeoutId = setTimeout(() => controller.abort(), 2000)
 
     try {
-      const response = await fetch(`${getApiBase()}/health`, {
+      const response = await fetchWithAuth(`${getApiBase()}/health`, {
         signal: controller.signal,
         cache: 'no-store'
       })
-      clearTimeout(timeoutId)
       return response.ok
-    } catch (error: unknown) {
+    } finally {
       clearTimeout(timeoutId)
-      throw error
     }
   }
 

@@ -31,6 +31,7 @@ import type { Role } from '@/types/_generated/workflow'
 import { setupAsyncComponentErrorHandler } from '@/utils/asyncComponentHelpers'
 import { isChunkLoadError } from '@/utils/chunkLoadError'
 import { createLogger } from '@/utils/debugUtils'
+import { fetchWithAuth } from '@/utils/fetchWithAuth'
 import { getBackendUrl, getSLMAdminUrl } from '@/config/ssot-config'
 import { llcCompanyParamGuard } from './llcGuards'
 
@@ -1498,10 +1499,7 @@ router.beforeEach(async (to, from) => {
       let presetApplied = sessionStorage.getItem('onboarding_preset_applied')
       if (presetApplied === null) {
         try {
-          const resp = await fetch(`${getBackendUrl()}/api/onboarding/status`, {
-            credentials: 'include',
-            headers: { Accept: 'application/json' },
-          })
+          const resp = await fetchWithAuth(`${getBackendUrl()}/api/onboarding/status`, { credentials: 'include', headers: { Accept: 'application/json' } })
           if (resp.ok) {
             const data = await resp.json()
             presetApplied = data?.preset_applied ? '1' : '0'
