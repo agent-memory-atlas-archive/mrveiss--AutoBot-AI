@@ -62,14 +62,13 @@ from type_defs.common import Metadata
 # Import reusable chat utilities
 from utils.chat_utils import (
     create_chat_response,
-    create_error_response,
     generate_chat_session_id,
     generate_request_id,
     get_chat_history_manager,
     log_chat_event,
     validate_chat_session_id,
 )
-from utils.response_helpers import create_success_response
+from utils.response_helpers import create_error_response, create_success_response
 
 # ====================================================================
 # Router Configuration
@@ -1933,6 +1932,7 @@ async def clear_session_checkpoints(
     except Exception:
         logger.exception("Failed to clear checkpoints for %s", session_id)
         return create_error_response(
-            error="Failed to clear checkpoints",
+            error_code="CHECKPOINT_CLEAR_FAILED",
+            message="Failed to clear checkpoints",
             status_code=500,
         )
