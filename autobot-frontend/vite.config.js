@@ -71,7 +71,11 @@ export default defineConfig(({ mode }) => {
       preserveSymlinks: true,
       // #17959: pin @autobot/ui to the in-tree kit and dedupe its bare imports.
       dedupe: autobotUiResolve().dedupe,
-      alias: { ...autobotUiResolve().alias, '@': fileURLToPath(new URL('./src', import.meta.url)), 'vue': 'vue/dist/vue.esm-bundler.js' }
+      alias: [
+        ...autobotUiResolve().alias,
+        { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+        { find: 'vue', replacement: 'vue/dist/vue.esm-bundler.js' },
+      ]
     },
     server: {
       port: 5173,
