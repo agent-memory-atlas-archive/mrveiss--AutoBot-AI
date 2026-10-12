@@ -31,6 +31,7 @@ from pathlib import Path
 import pytest
 import repo_tests.ansible_concept_forks_17856_test as _ansible_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.anti_pattern_type_emitted_18189_test as _anti_pattern_guard  # noqa: F401 -- registers its scope
+import repo_tests.audit_writer_single_source_17225_test as _audit_writer_guard  # noqa: F401 -- registers its scope
 import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
 import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
@@ -178,6 +179,7 @@ def test_a_declared_scope_that_the_sweep_does_not_reach_is_refused() -> None:
 #: Compared as a SET in both directions. Adding a scoped declaration means adding a line here,
 #: and that is the point -- the scope is a decision, so it is written twice on purpose.
 _DECLARED_SCOPES = {
+    "audit-writer-single-source": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "one-content-digest-scan": ("autobot-backend", "autobot_shared"),
     "semantic-chunker-fork-scan": ("autobot-backend", "autobot_shared"),
     "migration-gate-test-import-sweep": ("autobot-backend/tests/migrations",),
