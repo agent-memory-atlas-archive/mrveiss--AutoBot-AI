@@ -74,8 +74,15 @@ def upgrade() -> None:
 
 
 def _index_is_invalid(name: str) -> bool:
-    """True when a failed concurrent build left *name* behind, unusable."""
-    row = op.get_bind().execute(
+    """True when a failed concurrent build left *name* behind, unusable.
+
+    ``pg_index`` exists only on PostgreSQL; on any other dialect there is no
+    such thing as an invalid index, so the answer is False.
+    """
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return False
+    row = bind.execute(
         sa.text("SELECT NOT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = :n"),
         {"n": name},
     )

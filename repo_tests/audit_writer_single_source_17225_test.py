@@ -53,11 +53,15 @@ _KNOWN_WRITERS: dict[str, str] = {
     # Not an audit record: code-audit daemon state sharing the `audit:` prefix (D4, needs a key move).
     "autobot-backend/workers/audit_tasks.py": "daemon state, D4 pending a key move",
 }
-#: Retired by #17225 D2/D3/D6. Each must stay gone or stop writing.
-_RETIRED = (
+#: Deleted by #17225 D2 and never to come back. A tombstone, censused as one by
+#: `stranded_recorder_entries_test.TOMBSTONE_LEDGERS`, which fails if any reappears.
+_RETIRED_MODULES = (
     "autobot-backend/services/audit/audit_log.py",
     "autobot-backend/services/event_log.py",
     "autobot-backend/knowledge/audit_log.py",
+)
+#: Kept by #17225 D3/D6 as adapters onto the canonical service; must not write a store again.
+_RETIRED_WRITERS = (
     "autobot-backend/services/audit_logger.py",
     "autobot-backend/security_layer.py",
 )
@@ -246,8 +250,15 @@ def test_every_known_writer_still_writes() -> None:
 
 def test_a_retired_writer_does_not_come_back() -> None:
     """D2/D3/D6: the five retired stores are gone or record through the service."""
-    back = sorted(set(_RETIRED) & set(_writers()))
+    back = sorted(set(_RETIRED_MODULES + _RETIRED_WRITERS) & set(_writers()))
     assert not back, f"#17225: {back} write an audit store again; record through services.audit.audit."
+
+
+def test_a_deleted_audit_module_stays_deleted() -> None:
+    """D2: a recreated legacy module is a second store waiting for a caller."""
+    root = repo_root()
+    back = [rel for rel in _RETIRED_MODULES if (root / rel).exists()]
+    assert not back, f"#17225: {back} exist again; record through services.audit.audit."
 
 
 def _redis_key_writers() -> list[str]:
