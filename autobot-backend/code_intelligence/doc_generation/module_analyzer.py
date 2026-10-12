@@ -13,7 +13,7 @@ Part of god class refactoring initiative.
 
 import ast
 import os
-from typing import List, Set
+from typing import List
 
 import code_intelligence.doc_generation.helpers as helpers  # direct submodule (#1210)
 from autobot_shared.logging_manager import get_logger
@@ -67,7 +67,6 @@ class ModuleAnalyzer:
         self.include_private = include_private
         self.include_dunder = include_dunder
         self.max_depth = max_depth
-        self._analyzed_files: Set[str] = set()
         self._docstring_parser = DocstringParser()
 
     def analyze_module(self, file_path: str) -> ModuleDoc | None:
@@ -109,7 +108,6 @@ class ModuleAnalyzer:
         module_doc.dependencies = helpers.extract_dependencies(module_doc.imports)
         module_doc.completeness = module_doc.calculate_completeness()
 
-        self._analyzed_files.add(validated_path)
         return module_doc
 
     def _process_module_node(self, node: ast.AST, source: str, module_doc: ModuleDoc) -> None:

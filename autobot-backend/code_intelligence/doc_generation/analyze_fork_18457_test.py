@@ -46,3 +46,16 @@ def test_canonical_functions_serve_former_doc_generator_callers(tmp_path):
     with_kwargs = module_analyzer.analyze_module(str(src), include_private=True)
     assert default is not None and with_kwargs is not None
     assert [f.name for f in default.functions] == ["f"]
+
+
+def test_shared_analyzer_accumulates_no_state_across_calls(tmp_path):
+    """The shared module-level analyzer must not grow per call (leak guard)."""
+    src = tmp_path / "sample_mod.py"
+    src.write_text('"""Sample."""\n', encoding="utf-8")
+    shared = module_analyzer._analyzer
+    before = {k: len(v) for k, v in vars(shared).items() if hasattr(v, "__len__")}
+    for _ in range(25):
+        module_analyzer.analyze_module(str(src))
+    after = {k: len(v) for k, v in vars(shared).items() if hasattr(v, "__len__")}
+    assert before == after
+    assert not hasattr(shared, "_analyzed_files")
