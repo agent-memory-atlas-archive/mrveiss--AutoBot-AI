@@ -112,7 +112,6 @@ async def test_an_admin_file_upload_is_written_system():
         patch.object(mod, "get_or_create_knowledge_base", AsyncMock(return_value=kb)),
         patch.object(mod, "_extract_file_content", return_value=("hello world", None)),
         patch.object(mod, "_has_usable_content", return_value=True),
-        patch.object(mod, "_page_provenance_metadata", return_value={}),
         patch.object(mod, "get_auth_middleware", MagicMock()),
         patch.object(mod, "audit_record", MagicMock()),
     ):

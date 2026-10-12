@@ -109,6 +109,7 @@ from knowledge.schemas.stats import (
     KnowledgeMainCategoriesResponse,
     KnowledgeStatsBasic,
 )
+from knowledge.upload_pages import clean_upload_text
 from knowledge.upload_rejections import (
     UploadRejection,
     UploadRejectionCode,
@@ -1127,7 +1128,7 @@ def _extract_file_content(filename: str, file_content: bytes) -> "tuple[str, Ext
         # #13894: store the text *without* page markers. `## Page 7` is structure,
         # not meaning, and it competes with the document's own words for
         # similarity once embedded. The page numbers travel as metadata instead —
-        # see _page_provenance_metadata, which derives its offsets from the same
+        # see page_provenance_metadata, which derives its offsets from the same
         # pure render of the same pages, so they always index this exact string.
         from media.document.extraction import render_plain
 
@@ -1157,33 +1158,6 @@ def _has_usable_content(content: str, extracted: "ExtractedDocument | None") -> 
     if extracted is not None:
         return extracted.has_usable_text_layer
     return bool(content.strip())
-
-
-def _page_provenance_metadata(extracted: "ExtractedDocument | None") -> dict:
-    """Page provenance for a stored fact, as metadata rather than marker text (#13894).
-
-    Offsets are derived from the same pure ``render_plain`` call over the same
-    pages that produced the stored content, so they index that exact string. A
-    retrieved span resolves to a page via ``page_for_offset`` / ``pages_for_span``
-    without the page number ever having entered the embedding.
-
-    Returns an empty dict for unpaginated formats — a DOCX has no pages, and
-    inventing ``page: 1`` would be a fabricated citation.
-    """
-    if extracted is None or not extracted.pages:
-        return {}
-
-    from media.document.extraction import render_plain
-
-    _text, spans = render_plain(extracted.pages)
-    if not spans:
-        return {}
-
-    return {
-        "page_count": extracted.page_count,
-        "page_spans": [span.as_metadata() for span in spans],
-        "pages_with_text": [span.number for span in spans],
-    }
 
 
 def _parse_upload_tags(tags_str) -> list:
@@ -1250,7 +1224,12 @@ async def upload_file_to_knowledge(
 
     # Issue #5064: sanitize against prompt injection; #13708: also the redact_content chokepoint,
     # since this endpoint's own extraction path skips content_extraction.py's redacted wrappers.
-    content = redact_content(_sanitize_document(content, source="file_upload").sanitized_text)
+    # Cleaned page by page for a paginated document, so page_spans index the text that is finally stored (#18407).
+    content, page_metadata = clean_upload_text(
+        content,
+        extracted_doc,
+        lambda text: redact_content(_sanitize_document(text, source="file_upload").sanitized_text),
+    )
 
     logger.info("Uploading file: filename='%s', size=%d", filename, len(file_content))
 
@@ -1262,7 +1241,7 @@ async def upload_file_to_knowledge(
         "type": "file",
         "filename": filename,
     }
-    fact_metadata.update(_page_provenance_metadata(extracted_doc))
+    fact_metadata.update(page_metadata)
 
     fact_id = await _store_fact_in_kb(kb_to_use, content, fact_metadata)
 
