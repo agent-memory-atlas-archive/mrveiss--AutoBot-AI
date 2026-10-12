@@ -431,7 +431,9 @@ async def test_legacy_routes_enforce_the_admin_gate_on_company_os_rows(factory, 
             res = await member.patch(f"{LEGACY}/{COMPANY_A}/{wid}", json={"status": "running"})
             assert res.status_code == 403
     async with _client(factory, COMPANY_A, MEMBER_A) as check:
-        assert {w["workflow_id"] for w in (await check.get(f"{PREFIX}/workflows")).json()} >= {"sales-wf", "meta"}
+        rows = {w["workflow_id"]: w for w in (await check.get(f"{PREFIX}/workflows")).json()}
+        assert {"sales-wf", "meta"} <= set(rows)
+        assert rows["sales-wf"]["status"] == rows["meta"]["status"] == "planned", "a refused PATCH must not write"
 
 
 async def test_legacy_delete_of_a_referenced_workflow_is_409_not_500(factory, seeded):
@@ -483,3 +485,35 @@ async def test_replacing_a_graph_locks_the_workflow_row(factory, seeded):
         await GraphService().replace(s, COMPANY_A, "sales-wf", GraphSpec.model_validate(GRAPH), actor=ADMIN_A)
     locking = [x for x in seen if "FOR UPDATE" in str(x.compile(dialect=postgresql.dialect()))]
     assert locking, "replace() must SELECT ... FOR UPDATE the workflow row"
+
+
+@pytest.mark.parametrize("verb", ["delete", "patch"])
+async def test_a_move_landing_between_the_read_and_the_write_is_still_refused(factory, seeded, verb, monkeypatch):
+    """#18446: the row is a plain workflow when first read and role-owned by the time the
+    legacy write runs. The write's own predicate matches nothing, the route re-loads and
+    re-dispatches through the Company OS rules, and the member is refused."""
+    from llc.services.company_os.workflows import CompanyOsWorkflowService
+    from llc.services.workflow import WorkflowService
+
+    async with factory() as s:
+        await WorkflowService().create(s, COMPANY_A, "race-wf", name="plain")
+        await s.commit()
+    original = getattr(WorkflowService, "delete" if verb == "delete" else "update_status")
+
+    async def move_then_write(self, session, *args, **kwargs):
+        async with factory() as other:
+            row = await CompanyOsWorkflowService().get(other, COMPANY_A, "race-wf")
+            await CompanyOsWorkflowService()._move_to_role(other, COMPANY_A, row, seeded["sales"])
+            await other.commit()
+        return await original(self, session, *args, **kwargs)
+
+    monkeypatch.setattr(WorkflowService, "delete" if verb == "delete" else "update_status", move_then_write)
+    async with _legacy_client(factory, COMPANY_A, MEMBER_A) as member:
+        if verb == "delete":
+            res = await member.delete(f"{LEGACY}/{COMPANY_A}/race-wf")
+        else:
+            res = await member.patch(f"{LEGACY}/{COMPANY_A}/race-wf", json={"status": "running"})
+    assert res.status_code == 403
+    async with _client(factory, COMPANY_A, ADMIN_A) as admin:
+        row = (await admin.get(f"{PREFIX}/workflows/race-wf")).json()
+    assert row["owner_role_id"] == str(seeded["sales"]) and row["status"] == "planned"

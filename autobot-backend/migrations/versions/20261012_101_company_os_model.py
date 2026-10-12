@@ -16,8 +16,8 @@ layer -- no second registry -- and adds what hangs off it:
 Plain ``op.create_table`` / ``op.add_column`` with literal names, which the
 baseline-adoption probe ladder reads statically.
 
-Revision ID: 20261012_100
-Revises: 20260928_097
+Revision ID: 20261012_101
+Revises: 20261012_100
 """
 
 from typing import Sequence, Union
@@ -26,8 +26,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision: str = "20261012_100"
-down_revision: Union[str, None] = "20260928_097"
+revision: str = "20261012_101"
+down_revision: Union[str, None] = "20261012_100"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -184,7 +184,7 @@ def downgrade() -> None:
     populated = op.get_bind().execute(sa.text(_POPULATED_SQL)).scalar()
     if populated:
         raise NotImplementedError(
-            f"20261012_100 downgrade is refused: {populated} Company OS row(s) exist (processes, workflow "
+            f"20261012_101 downgrade is refused: {populated} Company OS row(s) exist (processes, workflow "
             "nodes, transitions, role skills, or workflows carrying a kind other than 'workflow', an owner "
             "role or a trigger). Dropping them would discard that data. Export and remove them first."
         )

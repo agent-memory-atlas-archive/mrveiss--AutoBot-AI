@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.user_management.dependencies import get_current_user, require_org_context
 from autobot_shared.singleton_factory import lazy_singleton
 from llc.deps import assert_company_access
+from models.workflow import Workflow
 from user_management.database import get_async_session
 from user_management.services import TenantContext
 
@@ -68,6 +69,24 @@ _get_company_os = lazy_singleton(CompanyOsWorkflowService)
 
 def _company_os() -> CompanyOsWorkflowService:
     return _get_company_os()
+
+
+async def _is_company_os(session: AsyncSession, company_id: uuid.UUID, workflow_id: str) -> bool:
+    """Re-load after the legacy write matched nothing: was it a Company OS row (#18446)?"""
+    existing = await _svc().get(session, company_id, workflow_id)
+    return existing is not None and is_company_os_row(existing)
+
+
+async def _company_os_status(
+    session: AsyncSession, company_id: uuid.UUID, workflow_id: str, new_status: str, actor: uuid.UUID
+) -> Optional[Workflow]:
+    """Re-dispatch a status change the legacy write refused, through the Company OS rules."""
+    if not await _is_company_os(session, company_id, workflow_id):
+        return None
+    try:
+        return await _company_os().update_status(session, company_id, workflow_id, new_status, actor=actor)
+    except (CompanyOsError, NotAuthorisedError) as exc:
+        raise http_error(exc) from exc
 
 
 # ------------------------------------------------------------------ Schemas
@@ -169,19 +188,9 @@ async def update_workflow_status(
     ctx: TenantContext = Depends(require_org_context),
 ) -> WorkflowResponse:
     assert_company_access(ctx, company_id)
-    existing = await _svc().get(session, company_id, workflow_id)
-    if existing is not None and is_company_os_row(existing):
-        # A role-owned workflow or meta skill is governed by the Company OS rules (#18390):
-        # one code path, so the admin gate cannot be bypassed through this older route.
-        try:
-            workflow = await _company_os().update_status(
-                session, company_id, workflow_id, body.status, actor=actor_id(_current_user)
-            )
-        except (CompanyOsError, NotAuthorisedError) as exc:
-            raise http_error(exc) from exc
-        await session.commit()
-        return WorkflowResponse.model_validate(workflow)
     workflow = await _svc().update_status(session, company_id, workflow_id, body.status, actor=actor_id(_current_user))
+    if workflow is None:
+        workflow = await _company_os_status(session, company_id, workflow_id, body.status, actor_id(_current_user))
     if workflow is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
     await session.commit()
@@ -197,15 +206,13 @@ async def delete_workflow(
     ctx: TenantContext = Depends(require_org_context),
 ) -> None:
     assert_company_access(ctx, company_id)
-    existing = await _svc().get(session, company_id, workflow_id)
-    if existing is not None and is_company_os_row(existing):
+    deleted = await _svc().delete(session, company_id, workflow_id, actor=actor_id(_current_user))
+    if not deleted and await _is_company_os(session, company_id, workflow_id):
         try:
             await _company_os().delete(session, company_id, workflow_id, actor=actor_id(_current_user))
         except (CompanyOsError, NotAuthorisedError) as exc:
             raise http_error(exc) from exc
-        await session.commit()
-        return
-    deleted = await _svc().delete(session, company_id, workflow_id, actor=actor_id(_current_user))
+        deleted = True
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
     await session.commit()

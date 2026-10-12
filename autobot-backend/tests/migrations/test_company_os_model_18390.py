@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""Migration 20261012_100 -- Company OS model, up and down (#18390).
+"""Migration 20261012_101 -- Company OS model, up and down (#18390).
 
 Existing Automation rows must stay valid across the upgrade, the new tables must
 enforce what the model claims in the schema itself, and the downgrade must put the
@@ -20,8 +20,8 @@ from tests.migrations.conftest import requires_postgres, run_alembic
 
 pytestmark = [pytest.mark.migration_gate, requires_postgres]
 
-_PREVIOUS = "20260928_097"
-_TARGET = "20261012_100"
+_PREVIOUS = "20261012_100"
+_TARGET = "20261012_101"
 _NEW_TABLES = ("llc_processes", "llc_workflow_nodes", "llc_workflow_transitions", "llc_role_skills")
 _INSERT_WF = (
     "INSERT INTO workflows (id, workflow_id, company_id, name, status, source, definition{extra_cols}) "
