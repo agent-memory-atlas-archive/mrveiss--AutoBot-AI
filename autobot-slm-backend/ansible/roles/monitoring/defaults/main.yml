@@ -39,6 +39,10 @@ grafana_group: "grafana"
 # Installation directories
 prometheus_install_dir: "/opt/prometheus"
 prometheus_config_dir: "/etc/prometheus"
+# #16375: the file Prometheus reads its backend scrape credential from
+# (`bearer_token_file`). Written by this role from `prometheus_scrape_token`,
+# which the SLM delivers from its secret store; never set a literal token here.
+prometheus_scrape_token_file: "{{ prometheus_config_dir }}/autobot-scrape-token"
 
 # #12460: fail the play when no alerts-*.yml is found rather than installing
 # zero rules silently. Set false only for a node that intentionally ships none.

@@ -65,6 +65,20 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_PROMETHEUS_SCRAPE_TOKEN",
+        type=str,
+        default="",
+        description=(
+            "Read-only bearer token Prometheus presents to /api/metrics/prometheus (#16375). "
+            "Seeded by the SLM into its secret store and rendered by the deploy roles into "
+            "backend.env and Prometheus' bearer_token_file. Unset refuses every scrape."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_RUM_INGEST_RATE_LIMIT",
         type=int,
         default=120,

@@ -100,4 +100,10 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("autobot-backend/utils/chromadb_client.py", "chromadb_auth_token"): (
         f"{_AUTH_BOOTSTRAP}: internal ChromaDB data-layer service credential"
     ),
+    # #16375: the verifier half. The canonical copy is the SLM's SystemSecret
+    # (mirrored to the System vault); deploys deliver it into backend.env, and it
+    # is compared on every 15s scrape -- a vault read per scrape is not the design.
+    ("autobot-backend/monitoring/prometheus_scrape_auth.py", "prometheus_scrape_token"): (
+        f"{_AUTH_BOOTSTRAP}: internal Prometheus scrape credential, verified per request"
+    ),
 }

@@ -1692,6 +1692,7 @@ class MiscConfig(RedactedSettings):
     inference_profiling: str = Field(default="", alias="AUTOBOT_INFERENCE_PROFILING")
     input_timeout: int = Field(default=0, alias="AUTOBOT_INPUT_TIMEOUT")
     internal_api_key: str = Field(default="", alias="AUTOBOT_INTERNAL_API_KEY")
+    prometheus_scrape_token: str = Field(default="", alias="AUTOBOT_PROMETHEUS_SCRAPE_TOKEN")  # #16375
     jaeger_endpoint: str = Field(default="", alias="AUTOBOT_JAEGER_ENDPOINT")
     jwt_secret: str = Field(default="", alias="AUTOBOT_JWT_SECRET")
     jwt_private_key: str = Field(
