@@ -346,8 +346,8 @@ function formatDate(dateValue: Date | string | undefined | null): string {
 }
 
 .tab-btn.active {
-  color: var(--color-primary, #6366f1);
-  border-bottom-color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 .tab-btn i {
@@ -440,9 +440,9 @@ function formatDate(dateValue: Date | string | undefined | null): string {
 }
 
 .option-btn.active {
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary);
   color: white;
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-primary);
 }
 
 .toggle-list {
@@ -470,7 +470,7 @@ function formatDate(dateValue: Date | string | undefined | null): string {
 .save-btn {
   margin-top: var(--spacing-4);
   padding: var(--spacing-2) var(--spacing-5);
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: var(--radius-md);
@@ -508,7 +508,7 @@ function formatDate(dateValue: Date | string | undefined | null): string {
 
 .pw-input:focus {
   outline: none;
-  border-color: var(--color-primary, #6366f1);
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 .pw-input:focus-visible {
