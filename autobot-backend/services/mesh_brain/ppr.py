@@ -4,24 +4,10 @@
 # Author: mrveiss
 """Personalized PageRank over the mesh graph for importance-weighted expansion (#1994, #2057)."""
 
-from typing import Protocol
-
 from autobot_shared.logging_manager import get_logger
+from services.mesh_brain.neighbor_store import NeighborStore
 
 logger = get_logger(__name__)
-
-
-# =============================================================================
-# Protocol
-# =============================================================================
-
-
-class NeighborStore(Protocol):
-    """Protocol for mesh database neighbor lookups used by PPR."""
-
-    async def get_neighbors(self, node_id: str, min_weight: float) -> list[dict]:
-        """Return list of {"to_node": str, "weight": float} for node_id."""
-        ...
 
 
 # =============================================================================
@@ -165,9 +151,8 @@ class PersonalizedPageRank:
         new_edges: list[tuple[str, str, float]] = []
         for node_id in frontier:
             neighbors = await self.db.get_neighbors(node_id, min_weight=min_weight)
-            for neighbor in neighbors:
-                nid = neighbor["to_node"]
-                new_edges.append((node_id, nid, neighbor["weight"]))
+            for nid, weight in neighbors:
+                new_edges.append((node_id, nid, weight))
                 if nid not in visited:
                     visited.add(nid)
                     next_frontier.append(nid)
