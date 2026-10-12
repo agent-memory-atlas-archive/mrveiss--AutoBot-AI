@@ -58,12 +58,14 @@ _INVALID_INDEX_SQL = (
 
 def build_indexes_concurrently(conn) -> None:
     """Build the indexes outside any transaction; CONCURRENTLY refuses to run inside one."""
+    from psycopg2 import sql  # noqa: PLC0415 -- quoted identifier, as rename_audit_logs_to_slm_node_audit_logs (#11223)
+
     conn.autocommit = True
     cursor = conn.cursor()
     for name, create in _INDEX_SQL:
         cursor.execute(_INVALID_INDEX_SQL, (name,))
         if cursor.fetchone():
-            cursor.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {name}")  # nosec B608 -- name is a module constant
+            cursor.execute(sql.SQL("DROP INDEX CONCURRENTLY IF EXISTS {}").format(sql.Identifier(name)))
         cursor.execute(create)
 
 
