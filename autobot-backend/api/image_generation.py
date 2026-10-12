@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from api.schemas_media import ProvidersResponse, ProviderStatus
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
-from services.provider_key_vault import VaultKeyUnavailableError, resolve_image_provider_key
+from services.provider_key_vault import key_status, resolve_image_provider_key
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +71,8 @@ def _provider_status(name: str, env_var: str) -> ProviderStatus:
 
     A vault refusal reports that provider unavailable with the refusal as its reason, not a failed listing.
     """
-    try:
-        available = bool(resolve_image_provider_key(env_var))
-    except VaultKeyUnavailableError as exc:
-        return ProviderStatus(name=name, available=False, reason=str(exc))
-    return ProviderStatus(name=name, available=available, reason=None if available else f"{env_var} not set")
+    available, reason = key_status(resolve_image_provider_key, env_var)
+    return ProviderStatus(name=name, available=available, reason=reason)
 
 
 @router.get("/providers", response_model=ProvidersResponse)

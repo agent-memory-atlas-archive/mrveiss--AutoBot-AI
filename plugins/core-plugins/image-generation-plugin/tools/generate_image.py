@@ -12,35 +12,21 @@ Provider is chosen per-call; API keys are read from environment variables.
 from __future__ import annotations
 
 import logging
-import os
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 
 # Fully-qualified (#14373) — see plugins/core-plugins/image-generation-plugin/main.py.
 from autobot_shared.generation_http_timeouts import generation_timeout, poll_timeout
 from autobot_shared.http_client import get_http_client
+from autobot_shared.plugin_sdk.credential_binding import CredentialSlot
 from autobot_shared.tool_sdk.base import BaseTool, ToolMetadata, ToolPermission, ToolResult
 
 logger = logging.getLogger(__name__)
 
-#: Scoped resolver injected by the host plugin loader (#18094). ``None`` means
-#: standalone: keys are read straight from the environment, as before.
-_injected: Dict[str, Callable[[str], str]] = {}
-
-
-def set_credential_resolver(resolver: Callable[[str], str] | None) -> None:
-    """Install (or clear) the host-injected, name-scoped key resolver."""
-    if resolver is None:
-        _injected.clear()
-    else:
-        _injected["resolver"] = resolver
-
-
-def read_provider_key(name: str) -> str:
-    """Return the provider key *name*: via the injected resolver, else ``os.environ``; ``""`` when unset."""
-    resolver = _injected.get("resolver")
-    if resolver is not None:
-        return resolver(name)
-    return os.environ.get(name, "")
+#: Scoped resolver injected by the host plugin loader (#18094); standalone, keys come from the
+#: environment. The slot is the SDK's one implementation, shared with the video plugin.
+_slot = CredentialSlot()
+set_credential_resolver = _slot.set
+read_provider_key = _slot.read
 
 
 class GenerateImageTool(BaseTool):

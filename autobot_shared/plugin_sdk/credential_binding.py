@@ -15,6 +15,7 @@ isolation: plugins run in-process, so a loaded plugin can still read
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Callable, Dict, Iterable
 
@@ -50,3 +51,34 @@ def bound_resolver(
         return resolver
     logger.warning("credential resolver withheld from plugin %r: %s", name, reason)
     return None
+
+
+class CredentialUnavailableError(RuntimeError):
+    """A host resolver refused a credential it holds but cannot read (#18094).
+
+    Defined here, in the SDK, so a plugin can tell a refusal apart from any other
+    error without importing the backend; the backend's ``VaultKeyUnavailableError``
+    subclasses it. The message carries the reason and the key's name, never a value.
+    """
+
+
+class CredentialSlot:
+    """A plugin module's host-injected credential resolver -- one implementation for every plugin (#18094).
+
+    The host loader installs a name-scoped resolver; standalone (none installed) a
+    key is read from the environment by name, as before. A refusal from the
+    resolver propagates as :class:`CredentialUnavailableError`.
+    """
+
+    def __init__(self) -> None:
+        self._resolver: Callable[[str], str] | None = None
+
+    def set(self, resolver: Callable[[str], str] | None) -> None:
+        """Install (or, with ``None``, clear) the resolver."""
+        self._resolver = resolver
+
+    def read(self, name: str) -> str:
+        """The key *name* via the resolver, else the environment; ``""`` when unset."""
+        if self._resolver is not None:
+            return self._resolver(name)
+        return os.environ.get(name, "")

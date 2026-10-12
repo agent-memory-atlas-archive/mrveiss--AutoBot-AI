@@ -22,6 +22,7 @@ from typing import Dict, Optional
 # Fully-qualified (#14373): the bare `tool_sdk` path is not guaranteed to be
 # importable at plugin-load time and, where it is, resolves to a second
 # module identity with its own, independently empty, registry singleton.
+from autobot_shared.plugin_sdk.credential_binding import CredentialUnavailableError
 from autobot_shared.tool_sdk.registry import get_tool_registry
 from plugin_sdk.base import BasePlugin, PluginManifest
 
@@ -56,14 +57,11 @@ class ImageGenerationPlugin(BasePlugin):
         self._logger.info("ImageGenerationPlugin: registered generate_image tool")
 
     def _key_usable(self, name: str) -> bool:
-        """Whether *name* resolves to a key. A host refusal (vault unreadable, #18094) is logged, not fatal.
-
-        The refusal type is the backend's, so it is caught by base class here; the load continues and the
-        same refusal is returned as the tool error at call time.
-        """
+        """Whether *name* resolves to a key. A host refusal (vault unreadable, #18094) is logged, not fatal;
+        the same refusal is returned as the tool error at call time."""
         try:
             return bool(read_provider_key(name))
-        except Exception as exc:  # noqa: BLE001 - reported at ERROR; one refused key must not fail the plugin load
+        except CredentialUnavailableError as exc:
             self._logger.error("ImageGenerationPlugin: %s unavailable at load: %s", name, exc)
             return False
 

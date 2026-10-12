@@ -27,6 +27,8 @@ _VAULT_VALUE = "vault-value-98f00b20"  # pragma: allowlist secret
 def _clean(monkeypatch):
     pkv._hydrated_keys.clear()
     monkeypatch.setattr(pkv, "_env_fallback_logged", set())
+    monkeypatch.setattr(pkv, "_unreadable_keys", set())
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
     for name in _IMAGE:
         monkeypatch.delenv(name, raising=False)
     yield
@@ -138,8 +140,11 @@ def test_the_scoped_resolver_refuses_non_image_names(monkeypatch, name) -> None:
     assert _ENV_VALUE not in str(exc.value) and _VAULT_VALUE not in str(exc.value)
 
 
-def test_the_plugin_injection_map_hands_over_only_the_scoped_resolver() -> None:
-    assert pkv.plugin_credential_resolvers() == {"image-generation-plugin": pkv.resolve_image_provider_key}
+def test_the_plugin_injection_map_hands_over_only_the_scoped_resolvers() -> None:
+    assert pkv.plugin_credential_resolvers() == {
+        "image-generation-plugin": pkv.resolve_image_provider_key,
+        "video-generation-plugin": pkv.resolve_video_provider_key,
+    }
 
 
 def test_no_key_value_reaches_the_log(monkeypatch, caplog) -> None:

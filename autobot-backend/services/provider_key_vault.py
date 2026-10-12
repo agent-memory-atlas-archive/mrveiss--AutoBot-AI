@@ -40,7 +40,12 @@ that endpoint never had:
    read at hydration is different: :func:`resolve_provider_key` refuses it with
    :class:`VaultKeyUnavailableError` rather than falling back to an env value
    that may have been rotated out (owner decision 2026-10-12). A later
-   successful hydration or capture clears the refusal. It also records a
+   successful hydration or capture clears the refusal. A vault that cannot be
+   reached at startup (configured -- ``AUTOBOT_SECRETS_ROOT_KEY`` set -- but the
+   DB or decryption fails) leaves "does it hold this key?" unknown, so every
+   name is refused until a hydration succeeds. Env is allowed only where the
+   vault answered "no such key", where no vault is configured (root key unset),
+   or in a process that never hydrates (no backend lifespan). It also records a
    ``secret_dependencies`` edge (#10088 Task 8.2) for every name whose
    System-vault secret exists, regardless of whether the value currently
    resolves from the vault or from the env, so rotation-impact analysis
@@ -60,6 +65,7 @@ from typing import TYPE_CHECKING, Callable, Iterator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from autobot_shared.plugin_sdk.credential_binding import CredentialUnavailableError
 from autobot_shared.secrets_vault import VaultKind, VaultRef
 from models.secret import Secret
 
@@ -130,6 +136,7 @@ SERVICE_CREDENTIAL_KEY_NAMES: frozenset[str] = frozenset(
         "VIRUSTOTAL_API_KEY",
         "URLVOID_API_KEY",
         "AUTOBOT_SMTP_PASSWORD",
+        "TILDE_API_KEY",
     }
 )
 
@@ -139,11 +146,18 @@ SERVICE_CREDENTIAL_KEY_NAMES: frozenset[str] = frozenset(
 _IMAGE_ONLY_KEY_NAMES: frozenset[str] = frozenset({"FLUX_API_KEY", "STABILITY_API_KEY"})
 IMAGE_PROVIDER_KEY_NAMES: frozenset[str] = _IMAGE_ONLY_KEY_NAMES | (LLM_PROVIDER_KEY_NAMES & {"OPENAI_API_KEY"})
 
+#: Video-generation credentials (#18094): the plugin's providers and the backend video API.
+VIDEO_PROVIDER_KEY_NAMES: frozenset[str] = frozenset({"RUNWAY_API_KEY", "SORA_API_KEY", "KLING_API_KEY"})
+
 #: The full set of names eligible for capture-time mirroring and startup
 #: hydration -- provider-agnostic per #15267's suggestion, since this module
 #: is no longer LLM-only once search joins it.
 VAULT_RESOLVED_CREDENTIAL_NAMES: frozenset[str] = (
-    LLM_PROVIDER_KEY_NAMES | SEARCH_PROVIDER_KEY_NAMES | SERVICE_CREDENTIAL_KEY_NAMES | IMAGE_PROVIDER_KEY_NAMES
+    LLM_PROVIDER_KEY_NAMES
+    | SEARCH_PROVIDER_KEY_NAMES
+    | SERVICE_CREDENTIAL_KEY_NAMES
+    | IMAGE_PROVIDER_KEY_NAMES
+    | VIDEO_PROVIDER_KEY_NAMES
 )
 
 #: Which module resolves each name -- the ``secret_dependencies`` edge
@@ -152,6 +166,8 @@ _CREDENTIAL_CONSUMERS: dict[str, str] = {
     **{name: "llm_shared.provider_registry" for name in LLM_PROVIDER_KEY_NAMES},
     **{name: "agent_loop.search.registry" for name in SEARCH_PROVIDER_KEY_NAMES},
     **{name: "api.image_generation" for name in _IMAGE_ONLY_KEY_NAMES},
+    **{name: "api.video_generation" for name in VIDEO_PROVIDER_KEY_NAMES},
+    **{name: "voice_processing.providers.lv.tilde_provider" for name in ("TILDE_API_KEY",)},
     "SLACK_BOT_TOKEN": "integrations.capability_registry",  # nosec B105  # module path, not a credential
     "DISCORD_BOT_TOKEN": "integrations.capability_registry",  # nosec B105  # module path, not a credential
     "GOOGLE_API_KEY": "services.provider_health.providers",
@@ -176,15 +192,25 @@ _env_fallback_logged: set[str] = set()
 #: the vault": these are refused, never resolved from the environment (#18094).
 _unreadable_keys: set[str] = set()
 
+#: What this process knows about the vault (#18094). Only ``unreachable`` refuses
+#: every name; the others defer to the per-name state above.
+VAULT_NOT_HYDRATED = "not_hydrated"  # no hydration in this process (no backend lifespan)
+VAULT_NOT_CONFIGURED = "not_configured"  # no root key: this deployment has no vault
+VAULT_REACHABLE = "reachable"  # hydration completed: absent names really are absent
+VAULT_UNREACHABLE = "unreachable"  # configured but hydration failed: held-state unknown
+_vault_state: str = VAULT_NOT_HYDRATED
 
-class VaultKeyUnavailableError(RuntimeError):
-    """The vault holds *name* but it could not be read; the env value is deliberately not used."""
+_UNREADABLE = "is stored in the secrets manager but could not be read"
+_UNREACHABLE = "may be stored in the secrets manager, which could not be reached at startup"
 
-    def __init__(self, name: str) -> None:
+
+class VaultKeyUnavailableError(CredentialUnavailableError):
+    """The vault holds (or may hold) *name* but it could not be read; the env value is deliberately not used."""
+
+    def __init__(self, name: str, why: str = _UNREADABLE) -> None:
         self.name = _label(name)
         super().__init__(
-            f"vault unavailable: {self.name} is stored in the secrets manager but could not be read; "
-            "refusing the environment fallback, which may hold a rotated-out key"
+            f"vault unavailable: {self.name} {why}; refusing the environment fallback, which may hold a rotated-out key"
         )
 
 
@@ -207,6 +233,9 @@ def resolve_provider_key(env_var: str, config_value: str) -> str:
     vaulted = _hydrated_keys.get(env_var, "")
     if vaulted:
         return vaulted
+    if _vault_state == VAULT_UNREACHABLE:
+        logger.error("provider-key-vault: %s vault unreachable: refusing the environment fallback", _label(env_var))
+        raise VaultKeyUnavailableError(env_var, _UNREACHABLE)
     if env_var in _unreadable_keys:
         logger.error("provider-key-vault: %s vault unreadable: refusing the environment fallback", _label(env_var))
         raise VaultKeyUnavailableError(env_var)
@@ -251,14 +280,39 @@ def resolve_image_provider_key(name: str) -> str:
     narrows what the *sanctioned* path exposes and the loader hands it only to
     built-in plugins (origin-bound); it does not isolate a hostile plugin.
     """
-    if type(name) is not str or name not in IMAGE_PROVIDER_KEY_NAMES:
-        raise ValueError("not an image-provider credential name")
+    return _resolve_scoped(name, IMAGE_PROVIDER_KEY_NAMES, "image-provider")
+
+
+def resolve_video_provider_key(name: str) -> str:
+    """Scoped resolver for the video-generation plugin and the backend video API (#18094).
+
+    Same contract as :func:`resolve_image_provider_key`, over :data:`VIDEO_PROVIDER_KEY_NAMES`.
+    """
+    return _resolve_scoped(name, VIDEO_PROVIDER_KEY_NAMES, "video-provider")
+
+
+def _resolve_scoped(name: str, allowed: frozenset[str], kind: str) -> str:
+    """Resolve *name* only if it is one of *allowed* (exact ``str``, so a subclass cannot spoof membership)."""
+    if type(name) is not str or name not in allowed:
+        raise ValueError(f"not an {kind} credential name")
     return resolve_provider_key(name, os.environ.get(name, ""))
+
+
+def key_status(resolve: Callable[[str], str], name: str) -> tuple[bool, str | None]:
+    """``(available, reason)`` for a provider listing; never the value, and a refusal reports its reason (#18094)."""
+    try:
+        available = bool(resolve(name))
+    except VaultKeyUnavailableError as exc:
+        return False, str(exc)
+    return available, None if available else f"{name} not set"
 
 
 def plugin_credential_resolvers() -> dict[str, Callable[[str], str]]:
     """Plugin name -> scoped resolver; the one injection map handed to ``PluginLoader``/``PluginManager``."""
-    return {"image-generation-plugin": resolve_image_provider_key}
+    return {
+        "image-generation-plugin": resolve_image_provider_key,
+        "video-generation-plugin": resolve_video_provider_key,
+    }
 
 
 async def _find_system_secret_id(session: AsyncSession, name: str) -> uuid.UUID | None:
@@ -407,6 +461,18 @@ async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: b
     ``AUTOBOT_SECRETS_ROOT_KEY`` (production behaviour); tests pass an
     explicit key.
     """
+    global _vault_state
+    try:
+        hydrated = await _hydrate_all(session, root_key)
+    except Exception:
+        _vault_state = VAULT_UNREACHABLE
+        raise
+    _vault_state = VAULT_REACHABLE
+    return hydrated
+
+
+async def _hydrate_all(session: AsyncSession, root_key: bytes | None) -> list[str]:
+    """The hydration loop; any exception means the vault's held-state is unknown."""
     from services.envelope_secrets_service import EnvelopeSecretsService
 
     service = EnvelopeSecretsService(root_key=root_key)
@@ -425,3 +491,34 @@ async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: b
     if any_dependency_registered:
         await session.commit()
     return hydrated
+
+
+async def hydrate_at_startup(get_session_factory: Callable[[], Callable]) -> list[str]:
+    """Startup hydration that classifies the vault before anything resolves a key (#18094).
+
+    No root key configured: there is no vault, keys resolve from env (WARNING).
+    Configured but the DB or decryption fails: the vault is unreachable and every
+    vault-resolved name is refused until a hydration succeeds (ERROR). Never raises:
+    an outage must not stop startup, it must stop keys silently coming from env. Building the
+    session factory is inside the classification too: it is the DB.
+    """
+    global _vault_state
+    from autobot_shared.secrets_envelope import ROOT_KEY_ENV
+
+    if not os.environ.get(ROOT_KEY_ENV):
+        _vault_state = VAULT_NOT_CONFIGURED
+        logger.warning(
+            "provider-key-vault: no vault configured (%s unset): provider keys resolve from env", ROOT_KEY_ENV
+        )
+        return []
+    try:
+        async with get_session_factory()() as session:
+            return await hydrate_provider_keys_from_vault(session)
+    except Exception as exc:  # noqa: BLE001 - classified and reported; startup continues with keys refused
+        _vault_state = VAULT_UNREACHABLE
+        logger.error(
+            "provider-key-vault: vault unreachable at startup (%s): every vault-resolved provider key is refused, "
+            "never taken from env, until a hydration succeeds",
+            type(exc).__name__,
+        )
+        return []

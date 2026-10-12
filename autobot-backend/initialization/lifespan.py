@@ -417,27 +417,19 @@ async def _init_database() -> None:
 
 
 async def _hydrate_llm_provider_keys() -> None:
-    """Hydrate LLM provider keys from the System vault (#10088 Task 7).
+    """Hydrate provider keys from the System vault (#10088 Task 7) in Phase 1, before any key resolves.
 
-    Runs once, synchronously, in Phase 1 (after the DB is initialised) so
-    ``llm_shared.provider_registry``'s lazy first population -- which can be
-    triggered by the very first request -- always sees a key captured only
-    via the setup wizard (never set as an env var). Env vars always win
-    (skipped entirely when set), so an Ansible-provisioned deployment is
-    unaffected. Best-effort: no root key configured (dev/test) or a DB error
-    must never block startup.
+    The vault wins (#18094). ``hydrate_at_startup`` classifies the vault and never raises: no root
+    key means no vault (keys from env, WARNING); a configured vault that cannot be reached leaves
+    every key refused, never silently from env (ERROR). Only "reachable, key absent" allows env.
     """
     logger.info("[ 17%] Provider Keys: hydrating from System vault...")
-    try:
-        from services.provider_key_vault import hydrate_provider_keys_from_vault
-        from user_management.database import get_async_session_factory
+    from services.provider_key_vault import hydrate_at_startup
+    from user_management.database import get_async_session_factory
 
-        async with get_async_session_factory()() as session:
-            hydrated = await hydrate_provider_keys_from_vault(session)
-        if hydrated:
-            logger.info("[ 17%] Provider Keys: hydrated %d key(s) from vault: %s", len(hydrated), hydrated)
-    except Exception as exc:
-        logger.debug("Provider-key vault hydration skipped (non-critical): %s", exc)
+    hydrated = await hydrate_at_startup(get_async_session_factory)
+    if hydrated:
+        logger.info("[ 17%] Provider Keys: hydrated %d key(s) from vault: %s", len(hydrated), hydrated)
 
 
 async def _init_telemetry_and_redis() -> None:
