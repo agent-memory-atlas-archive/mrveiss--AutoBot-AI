@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { resetCircuitBreakers } from '@/utils/apiCircuitBreaker'
 import { useSystemMetrics } from '@/composables/usePrometheusMetrics'
 import { useServiceMessages } from '@/composables/useServiceMessages'
+import { useErrorMonitoring } from '@/composables/useErrorMonitoring'
 
 async function settle(run: () => Promise<unknown>) {
   const p = run()
@@ -44,6 +45,15 @@ describe('polled callers use the circuit breaker', () => {
     const calls = fetchMock.mock.calls.length
     expect(calls).toBeGreaterThanOrEqual(3)
     await settle(() => fetchLatest())
+    expect(fetchMock.mock.calls.length).toBe(calls)
+  })
+
+  it('useErrorMonitoring.fetchStatistics stops hitting the network after the threshold', async () => {
+    const { fetchStatistics } = useErrorMonitoring({ autoFetch: false, pollInterval: 0 })
+    await settle(() => fetchStatistics())
+    const calls = fetchMock.mock.calls.length
+    expect(calls).toBeGreaterThanOrEqual(3)
+    await settle(() => fetchStatistics())
     expect(fetchMock.mock.calls.length).toBe(calls)
   })
 })
