@@ -202,7 +202,7 @@ def _make_content_result(
     url: str = "",
     structured: dict | None = None,
 ) -> MagicMock:
-    """Build a mock ContentReachResult."""
+    """Build a mock ContentResult."""
     r = MagicMock()
     r.success = success
     r.text = text

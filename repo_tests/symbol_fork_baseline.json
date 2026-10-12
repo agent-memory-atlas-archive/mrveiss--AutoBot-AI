@@ -50,6 +50,7 @@
     "ConnectionManager",
     "ConnectionState",
     "ConnectionTestRequest",
+    "ContentResult",
     "ConversationFlow",
     "DeploymentConfig",
     "DeploymentMode",
