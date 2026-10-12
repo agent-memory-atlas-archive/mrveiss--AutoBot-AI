@@ -133,6 +133,9 @@ class Approval(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
     payload_hash = Column(String(64), nullable=True)  # sha256 hex of the proposed payload
     resume_ref = Column(String(255), nullable=True)  # key the source's resume handler continues from
+    # Username (session ``metadata.owner``, never a user id) of the person whose session raised a
+    # sourced approval; the pending list shows it to that user only (#18413, THREAT_MODEL s2).
+    owner_user = Column(String(255), nullable=True, index=True)
 
     # Relationships
     comments = relationship(

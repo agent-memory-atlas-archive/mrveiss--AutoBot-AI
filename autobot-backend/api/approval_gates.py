@@ -27,6 +27,7 @@ from api.schemas_approvals import (
 from api.user_management.dependencies import get_db_session
 from api.user_management.human_decider import classify_author_type, require_interactive_human
 from auth_middleware import get_current_user
+from autobot_shared.auth.permissions import is_admin_role
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.models.pagination import PaginationParams
@@ -221,6 +222,8 @@ async def list_pending_approvals(
     """Every pending approval across all sources -- the one approval inbox (#13421)."""
     svc = ApprovalGateService(session)
     approvals = await svc.list_pending(
+        viewer=current_user.get("username"),
+        is_admin=is_admin_role(current_user.get("role")),
         source=source.value if source else None,
         risk_tier=risk_tier.value if risk_tier else None,
         limit=pagination.limit,

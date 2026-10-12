@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""098 adds the five one-approval-record columns without touching a row (#13421 S1)."""
+"""098 adds the six one-approval-record columns without touching a row (#13421 S1)."""
 
 import uuid
 
@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.migration_gate, requires_postgres]
 
 _PRE = "20260928_097"
 _REV = "20261012_098"
-_NEW = {"source", "risk_tier", "expires_at", "payload_hash", "resume_ref"}
+_NEW = {"source", "risk_tier", "expires_at", "payload_hash", "resume_ref", "owner_user"}
 _ROWS = [
     {"id": uuid.uuid4(), "title": "platform", "type": "workflow_gate", "status": "pending", "company": None},
     {"id": uuid.uuid4(), "title": "company", "type": "hire", "status": "approved", "company": uuid.uuid4()},
@@ -65,7 +65,7 @@ async def test_upgrade_adds_five_nullable_columns_and_leaves_every_row_untouched
     after = await _run(
         fresh_db_url,
         "SELECT id, title, approval_type, status, company_id, updated_at, source, risk_tier, expires_at, "
-        "payload_hash, resume_ref FROM approvals",
+        "payload_hash, resume_ref, owner_user FROM approvals",
     )
     assert len(after) == len(before) == len(_ROWS)
     assert all(r[c] is None for r in after for c in _NEW)
@@ -86,7 +86,10 @@ async def test_downgrade_round_trips_an_untouched_table(fresh_db_url):
     assert run_alembic(["upgrade", _REV], fresh_db_url).returncode == 0, "upgrade after downgrade must work"
 
 
-@pytest.mark.parametrize("column,value", [("source", "'agent_tool'"), ("risk_tier", "'high'"), ("resume_ref", "'x'")])
+@pytest.mark.parametrize(
+    "column,value",
+    [("source", "'agent_tool'"), ("risk_tier", "'high'"), ("resume_ref", "'x'"), ("owner_user", "'bob'")],
+)
 async def test_downgrade_refuses_once_a_new_column_holds_a_value(fresh_db_url, column, value):
     assert run_alembic(["upgrade", _REV], fresh_db_url).returncode == 0
     await _seed(fresh_db_url)

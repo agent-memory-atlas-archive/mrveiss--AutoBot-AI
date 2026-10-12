@@ -47,11 +47,13 @@ def record_fields(
     payload_hash: str | None,
     resume_ref: str | None,
     context: Dict[str, Any] | None,
+    owner_user: str | None = None,
 ) -> Dict[str, Any]:
     """Validated column values for a new approval; every key is present, unset ones are ``None``.
 
-    A sourced approval must be graded (``risk_tier``) and must name a registered resume handler
-    when it carries a ``resume_ref`` -- the same "no gate that can never resume" rule #17315
+    A sourced approval must be graded (``risk_tier``) and owned (``owner_user``, so the pending
+    list can scope it), and must name a registered resume handler when it carries a
+    ``resume_ref`` -- the same "no gate that can never resume" rule #17315
     applied to ``context["action"]``. ``payload_hash`` defaults to the hash of ``context`` for a
     sourced approval.
     """
@@ -61,11 +63,14 @@ def record_fields(
         "expires_at": _checked_expiry(expires_at),
         "payload_hash": payload_hash,
         "resume_ref": resume_ref,
+        "owner_user": owner_user,
     }
     if source is None:
-        if risk_tier is not None or resume_ref is not None:
-            raise ValueError("risk_tier and resume_ref require a source")
+        if risk_tier is not None or resume_ref is not None or owner_user is not None:
+            raise ValueError("risk_tier, resume_ref and owner_user require a source")
         return fields
+    if not owner_user:
+        raise ValueError("a sourced approval must carry the owner_user of the session that raised it")
     fields["source"] = ApprovalSource(source).value
     if risk_tier is None:
         raise ValueError("a sourced approval must carry a risk_tier")

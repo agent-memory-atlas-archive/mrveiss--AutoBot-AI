@@ -45,6 +45,7 @@ def client(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: _USER
     app.dependency_overrides[get_db_session] = lambda: object()
     test_client = TestClient(app)
+    test_client.app = app
     test_client.calls = calls
     return test_client
 
@@ -59,6 +60,15 @@ def test_pending_is_routed_before_the_uuid_route_and_returns_every_source(client
         (None, None),
     ]
     assert body[0]["expires_at"].startswith("2030-01-01") and body[0]["payload_hash"] == "h" * 64
+
+
+def test_the_caller_identity_is_forwarded_so_the_service_can_scope_the_list(client):
+    """#18413: the route passes the username and admin-ness; scoping itself is tested on Postgres."""
+    assert client.get("/approval-gates/pending").status_code == 200
+    assert (client.calls[-1]["viewer"], client.calls[-1]["is_admin"]) == ("u1", False)
+    client.app.dependency_overrides[get_current_user] = lambda: {**_USER, "role": "admin"}
+    assert client.get("/approval-gates/pending").status_code == 200
+    assert client.calls[-1]["is_admin"] is True
 
 
 def test_filters_are_forwarded_as_plain_values(client):
