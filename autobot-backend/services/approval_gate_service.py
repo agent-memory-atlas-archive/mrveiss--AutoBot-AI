@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import now_utc
 from models.approval import Approval, ApprovalComment, ApprovalStatus, TaskApprovalLink
-from services.approval_execution import run_post_approval_actions
+from services.approval_execution import run_post_approval_actions, set_verified_decider
 
 logger = get_logger(__name__)
 
@@ -102,8 +102,12 @@ class ApprovalGateService:
         comment: str | None = None,
         *,
         author_type: str,
+        decider_id: uuid.UUID | None = None,
     ) -> Approval:
         """Approve a pending approval gate, then run whatever it proposed (#17038/#17043).
+
+        ``decider_id`` is the authenticated person's user id (#18430); handlers that care who decided compare it,
+        never ``decided_by`` (a display name).
 
         The transition itself commits first; ``run_post_approval_actions``
         cannot fail the approval decision, only what happens after it.
@@ -115,6 +119,7 @@ class ApprovalGateService:
             comment,
             author_type,
         )
+        set_verified_decider(approval, decider_id)
         await run_post_approval_actions(approval, self.session)
         return approval
 

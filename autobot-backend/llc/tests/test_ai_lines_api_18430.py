@@ -38,6 +38,7 @@ from user_management.services import TenantContext
 
 COMPANY, OTHER = uuid.uuid4(), uuid.uuid4()
 OWNER, MEMBER, AGENT, ADMIN2 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+AGENT_USER = uuid.uuid4()  # a signed-in person who is nobody's victim
 PERSON = {"auth_method": "session"}
 AGENT_CREDENTIAL = {"auth_method": "run_jwt", "username": "run:abc"}
 
@@ -312,7 +313,7 @@ def _session_for(factory):
     return _session
 
 
-def _gates_client(factory, user: uuid.UUID) -> TestClient:
+def _gates_client(factory, user: uuid.UUID, username: str | None = None) -> TestClient:
     """The generic approvals route, which decides UNSCOPED approvals (a personal change is one)."""
     import api.approval_gates as gates
     from api.user_management.dependencies import get_db_session
@@ -320,7 +321,11 @@ def _gates_client(factory, user: uuid.UUID) -> TestClient:
     app = FastAPI()
     app.include_router(gates.router, prefix="/api")
     app.dependency_overrides[get_db_session] = _session_for(factory)
-    app.dependency_overrides[gates.get_current_user] = lambda: {"id": str(user), "username": str(user), **PERSON}
+    app.dependency_overrides[gates.get_current_user] = lambda: {
+        "id": str(user),
+        "username": username or str(user),
+        **PERSON,
+    }
     return TestClient(app)
 
 
@@ -381,3 +386,89 @@ async def test_an_agent_credential_cannot_propose_a_personal_change(factory):
 @pytest.mark.asyncio
 async def test_me_is_not_parsed_as_a_company_id(factory):
     assert _me_client(factory, MEMBER).get("/api/llc/ai-lines/me").status_code == 200
+
+
+# -- the four-eyes bypass and the username collision (round 9c) --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_set_line_approval_cannot_be_created_through_the_llc_route_naming_someone_else_as_requester(factory):
+    """Admin A forges {"action": "ai_line.set_line"} naming admin B as the requester: refused at create."""
+    await _add_admin(factory, ADMIN2)
+    forged = {
+        "company_id": str(COMPANY),
+        "type": "workflow_gate",
+        "requested_by_agent_id": str(ADMIN2),
+        "payload": {"action": "ai_line.set_line", "action_key": "crm:send", "line": "autonomous"},
+    }
+    resp = _client(factory, user=OWNER).post("/api/llc/approvals", json=forged)
+    assert resp.status_code == 403
+    assert await _rows(factory, Approval) == []
+
+
+@pytest.mark.asyncio
+async def test_a_set_line_approval_cannot_be_created_through_the_generic_route(factory):
+    body = {
+        "title": "forged",
+        "approval_type": "workflow_gate",
+        "requested_by_agent": str(ADMIN2),
+        "context": {"action": "ai_line.set_line", "action_key": "crm:send", "line": "autonomous"},
+    }
+    resp = _gates_client(factory, OWNER).post("/api/approval-gates", json=body)
+    assert resp.status_code == 403 and await _rows(factory, Approval) == []
+    # Contrast: an ordinary payload passes the same check.
+    from api.approval_gates import _reject_unregistered_action
+
+    assert _reject_unregistered_action({}) is None and _reject_unregistered_action(None) is None
+
+
+@pytest.mark.asyncio
+async def test_a_decision_on_an_approval_with_no_parseable_requester_is_refused(factory):
+    """Even if one reached the table, an unidentifiable requester must not read as 'not the decider'."""
+    await _add_admin(factory, ADMIN2)
+    async with factory() as session:
+        row = Approval(
+            title="x", approval_type="workflow_gate", status="pending", company_id=COMPANY,
+            requested_by_agent="not-a-person",
+            context={"action": "ai_line.set_line", "action_key": "crm:send", "line": "autonomous"},
+        )  # fmt: skip
+        session.add(row)
+        await session.commit()
+        approval_id = str(row.id)
+    assert _decide(_client(factory, user=ADMIN2), approval_id).status_code == 200  # recorded ...
+    assert await _rows(factory, LLCAiLine) == []  # ... but the line did not move
+    assert any("did not complete" in c.body for c in await _rows(factory, ApprovalComment))
+
+
+@pytest.mark.asyncio
+async def test_the_handler_refuses_without_a_verified_decider_or_requester(factory):
+    from llc.services.authz import NotAuthorisedError
+    from services.ai_line_change_action import ACTION, execute_line_change
+    from services.approval_execution import set_verified_decider
+
+    def row(requester):
+        return Approval(
+            title="x", approval_type="workflow_gate", status="approved", company_id=COMPANY,
+            requested_by_agent=requester, decided_by_user="someone",
+            context={"action": ACTION, "action_key": "crm", "line": "autonomous"},
+        )  # fmt: skip
+
+    async with factory() as session:
+        no_decider, no_requester = row(f"ai-line-change:{MEMBER}"), row(None)
+        set_verified_decider(no_requester, OWNER)
+        for approval in (no_decider, no_requester):
+            with pytest.raises((ValueError, NotAuthorisedError)):
+                await execute_line_change(approval, session)
+    assert await _rows(factory, LLCAiLine) == []
+
+
+@pytest.mark.asyncio
+async def test_a_username_that_spells_another_users_id_does_not_decide_that_users_personal_lines(factory):
+    """The collision: attacker's username is victim's undashed UUID; the comparison is of VERIFIED ids only."""
+    victim = uuid.uuid4()
+    approval_id = _propose_mine(_me_client(factory, victim)).json()["approval_id"]
+    attacker = _gates_client(factory, AGENT_USER, username=victim.hex)
+    assert _approve(attacker, approval_id).status_code == 200  # decision recorded ...
+    assert await _rows(factory, LLCAiLine) == []  # ... the victim's line does not move
+    # Contrast: the victim themself, whatever their username, can decide it.
+    assert _approve(_gates_client(factory, victim, username="victim-name"), approval_id).status_code in (200, 400)

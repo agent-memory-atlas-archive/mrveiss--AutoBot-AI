@@ -23,7 +23,7 @@ from autobot_shared.logging_manager import get_logger
 from llc.deps import assert_company_access, get_session, load_authorized, service_dep
 from models.approval import Approval
 from services.ai_line_change_action import ACTION as LINE_CHANGE_ACTION
-from services.approval_execution import run_post_approval_actions
+from services.approval_execution import is_server_only_action, run_post_approval_actions, set_verified_decider
 from user_management.services import TenantContext
 
 from ..models.enums import ApprovalStatus, ApprovalType
@@ -95,6 +95,9 @@ async def request_approval(
 ) -> ApprovalResponse:
     """Create a pending approval gate record."""
     assert_company_access(ctx, body.company_id)
+    if is_server_only_action(body.payload.get("action")):
+        # #18430: this route lets the caller write both the payload and the requester; a four-eyes rule would be moot.
+        raise HTTPException(status_code=403, detail="this action can be proposed only by the server")
     async with session.begin():
         approval = await svc.request_approval(
             session,
@@ -185,6 +188,7 @@ async def decide_approval(
         # #18430: this route decided an approval without ever running what it proposed. Same dispatcher as
         # the generic route, but ONLY for the AI-line change: approvals here are self-created with arbitrary
         # payloads, and running any registered action from one is the #17161 class.
+        set_verified_decider(approval, decided_by)  # the verified caller (ctx.user_id), see _verified_decider
         await run_post_approval_actions(approval, session, only=frozenset({LINE_CHANGE_ACTION}))
     return _to_response(approval)
 

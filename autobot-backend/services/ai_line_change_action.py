@@ -30,9 +30,8 @@ from llc.models.membership import LLCCompanyMembership
 from llc.services.ai_lines import normalise_key, record_approved_line
 from llc.services.authz import GRANTING_ROLES, require_company_admin
 from models.approval import ApprovalComment, ApprovalStatus
-from services.approval_execution import register_post_approval_action
+from services.approval_execution import register_post_approval_action, verified_decider
 from services.audit_logger import audit_log
-from user_management.models.user import User
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,17 +42,6 @@ logger = get_logger(__name__)
 
 ACTION = "ai_line.set_line"
 PROPOSED_BY = "services.ai_line_change_proposal"
-
-
-async def _decider_id(session: "AsyncSession", decided_by: str | None) -> uuid.UUID | None:
-    """The deciding person's user id: the LLC route records a UUID, the generic route a username."""
-    if not decided_by:
-        return None
-    try:
-        return uuid.UUID(decided_by)
-    except ValueError:
-        found = await session.execute(select(User.id).where(User.username == decided_by))
-        return found.scalar_one_or_none()
 
 
 async def _admin_count(session: "AsyncSession", company_id: uuid.UUID) -> int:
@@ -75,7 +63,10 @@ def _requester_id(approval: "Approval") -> uuid.UUID | None:
 
 async def _four_eyes(approval: "Approval", session: "AsyncSession", decider: uuid.UUID | None) -> bool:
     """True when this is a flagged self-approval by the company's only owner/admin; raises when refused."""
-    if decider is None or decider != _requester_id(approval):
+    requester = _requester_id(approval)
+    if decider is None or requester is None:
+        raise ValueError("a line change needs a verified decider and a requester that can be identified")
+    if decider != requester:
         return False
     if await _admin_count(session, approval.company_id) >= 2:
         raise ValueError("a line change needs a different owner or admin than the one who asked for it")
@@ -127,7 +118,7 @@ async def execute_line_change(approval: "Approval", session: "AsyncSession") -> 
     if approval.status != ApprovalStatus.APPROVED.value or line is None:
         raise ValueError("not an approved request naming one of the three lines")
     key = normalise_key(str(ctx.get("action_key", "")))
-    decider = await _decider_id(session, approval.decided_by_user)
+    decider = verified_decider(approval)  # the authenticated person's id, never parsed from a username
     scope, self_approval = await _scope_and_review(approval, session, decider)
     await record_approved_line(
         session,
@@ -144,4 +135,4 @@ async def execute_line_change(approval: "Approval", session: "AsyncSession") -> 
 
 def register_ai_line_change_action() -> None:
     """Register the handler; called when the approval-gates router loads, before any approve()."""
-    register_post_approval_action(ACTION, execute_line_change, proposed_by=PROPOSED_BY)
+    register_post_approval_action(ACTION, execute_line_change, proposed_by=PROPOSED_BY, server_only=True)

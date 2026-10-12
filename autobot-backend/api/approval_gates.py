@@ -32,7 +32,7 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.models.pagination import PaginationParams
 from models.approval import ApprovalStatus, ApprovalType
 from services.ai_line_change_action import register_ai_line_change_action
-from services.approval_execution import is_registered_action
+from services.approval_execution import is_registered_action, is_server_only_action
 from services.approval_gate_service import ApprovalGateService
 from services.knowledge.collection_space_stamp_action import register_stamp_action
 
@@ -98,6 +98,14 @@ def _to_response(approval) -> ApprovalGateResponse:
     )
 
 
+def _user_uuid(current_user: dict) -> uuid.UUID | None:
+    """The authenticated user's id (never a username), or ``None`` if the principal carries none."""
+    try:
+        return uuid.UUID(str(current_user.get("id") or current_user.get("user_id")))
+    except ValueError:
+        return None
+
+
 def _reject_unregistered_action(context: dict | None) -> None:
     """Refuse a ``context.action`` that names no registered handler (#17315).
 
@@ -118,6 +126,11 @@ def _reject_unregistered_action(context: dict | None) -> None:
     action = (context or {}).get("action")
     if action is None:
         return
+    if is_server_only_action(action):
+        # #18430: only the action's own proposer may create it, with a requester taken from the session.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="this action can be proposed only by the server"
+        )
     if not isinstance(action, str) or not is_registered_action(action):
         # Deliberately does not echo the value back or list what IS
         # registered: the caller supplied it, and the set of live actions is
@@ -243,6 +256,7 @@ async def approve(
             username,
             body.comment,
             author_type=classify_author_type(current_user),
+            decider_id=_user_uuid(current_user),
         )
     except ValueError:
         raise HTTPException(

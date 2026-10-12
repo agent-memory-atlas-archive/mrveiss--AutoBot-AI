@@ -38,6 +38,8 @@ from models.approval import ApprovalComment
 from services.audit_logger import audit_log
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from models.approval import Approval
@@ -59,7 +61,33 @@ _PROPOSERS: dict[str, str] = {}
 _AUDIT_OPERATION = "approval.post_action_failed"
 
 
-def register_post_approval_action(action: str, handler: PostApprovalAction, *, proposed_by: str) -> None:
+#: Actions only a server-side proposer may create (#18430). A public create route would let a caller write the
+#: approval's payload AND its requester, which defeats any rule about who may decide it.
+_SERVER_ONLY: set[str] = set()
+
+#: Attribute carrying the VERIFIED decider's user id from the decision route to the handler. Never persisted and
+#: never parsed from ``decided_by_user``, which is a display name on one route and a different shape on the other.
+_DECIDER_ATTR = "_verified_decider_id"
+
+
+def is_server_only_action(action: object) -> bool:
+    """Whether *action* may be created only by its own server-side proposer, never through a create route."""
+    return isinstance(action, str) and action in _SERVER_ONLY
+
+
+def set_verified_decider(approval: "Approval", user_id: "uuid.UUID | None") -> None:
+    """Record, for this decision only, the id of the authenticated person who decided *approval*."""
+    setattr(approval, _DECIDER_ATTR, user_id)
+
+
+def verified_decider(approval: "Approval") -> "uuid.UUID | None":
+    """The authenticated decider's user id, or ``None`` when the route did not supply one (the handler refuses)."""
+    return getattr(approval, _DECIDER_ATTR, None)
+
+
+def register_post_approval_action(
+    action: str, handler: PostApprovalAction, *, proposed_by: str, server_only: bool = False
+) -> None:
     """Register *handler* to run when an approved gate's context names *action*.
 
     *proposed_by* is the dotted path of the production module that creates
@@ -78,6 +106,8 @@ def register_post_approval_action(action: str, handler: PostApprovalAction, *, p
         raise ValueError(f"action {action!r} must name the production module that proposes it (#17315)")
     _REGISTRY[action] = handler
     _PROPOSERS[action] = proposed_by.strip()
+    if server_only:
+        _SERVER_ONLY.add(action)
 
 
 def is_registered_action(action: str) -> bool:

@@ -251,6 +251,19 @@ def test_no_route_or_tool_handler_imports_the_writer() -> None:
     assert not offenders, f"#18430: {sorted(offenders)} import the line writer"
 
 
+def test_the_line_change_cannot_be_forged_through_a_create_route_or_decided_by_a_parsed_username() -> None:
+    """Four eyes needs a requester the caller did not write and a decider that is a verified id (#18430)."""
+    sources = _sources()
+    for rel in ("autobot-backend/api/approval_gates.py", "autobot-backend/llc/api/approvals.py"):
+        assert calls_of(sources[rel], "is_server_only_action"), f"{rel} creates approvals without the server-only check"
+    handler = sources[_HANDLER]
+    assert "server_only=True" in handler, "ai_line.set_line must be registered as server-only"
+    assert calls_of(handler, "verified_decider"), "the handler must compare the verified decider id"
+    assert (
+        not calls_of(handler, "_decider_id") and "User.username" not in handler
+    ), "a username must never be parsed or looked up as the decider id (it can spell another user's UUID)"
+
+
 # -- 4. the retired hold stays retired -----------------------------------------------------------------------
 
 
