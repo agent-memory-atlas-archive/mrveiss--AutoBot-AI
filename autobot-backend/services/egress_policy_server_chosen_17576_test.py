@@ -101,8 +101,7 @@ async def _command_extraction(n, base):
 
 
 async def _mcp_refresh(n, base):
-    host, port = base.removeprefix("http://").split(":")
-    n.monkeypatch.setattr(mcp_dispatch, "NetworkConstants", SimpleNamespace(MAIN_MACHINE_IP=host, BACKEND_PORT=port))
+    n.monkeypatch.setattr(mcp_dispatch, "config", SimpleNamespace(backend_url=base))
     await mcp_dispatch.MCPDispatcher().refresh_tool_cache()
 
 
@@ -152,6 +151,18 @@ async def _openai_health(n, base):
 
 async def _anthropic_health(n, base):
     await _vendor_health(providers.AnthropicHealth, n, base)
+
+
+async def _lmstudio_health(n, base):
+    checker = providers.LMStudioHealth()
+    checker.lmstudio_host = base
+    await checker.check_health()
+
+
+async def _vllm_health(n, base):
+    checker = providers.VLLMHealth()
+    checker.vllm_host = base
+    await checker.check_health()
 
 
 async def _google_health(n, base):
@@ -243,6 +254,8 @@ SITES = [
     pytest.param(_openai_health, "/models", id="provider_health.openai"),
     pytest.param(_anthropic_health, "/messages/count_tokens", id="provider_health.anthropic"),
     pytest.param(_google_health, "/models", id="provider_health.google"),
+    pytest.param(_lmstudio_health, "/v1/models", id="provider_health.lmstudio"),
+    pytest.param(_vllm_health, "/v1/models", id="provider_health.vllm"),
     pytest.param(_redis_action, "/restart", id="redis_service_manager.service_action"),
     pytest.param(_redis_status, "/services", id="redis_service_manager.service_status"),
     pytest.param(_proposer_http, "/api/skills/propose", id="skill_proposer.http"),
@@ -296,3 +309,47 @@ async def test_a_refused_target_is_reported_by_the_site_not_raised_past_it(net):
     ok, _, err = await command_extraction_service._slm_exec("node", "ls", slm_url=PRIVATE)
     assert ok is False
     assert "disallowed address" in err
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_is_actually_sent_to_the_slm(net):
+    """The manager's post is awaited and the request leaves once, with the expected URL and body."""
+    cfg = SimpleNamespace(slm_url=INTERNAL, timeout=SimpleNamespace(llm_call=5))
+    net.monkeypatch.setattr(skill_proposer, "config", cfg)
+    payload = {"name": "skill"}
+    await skill_proposer.SkillProposer(slm_client=None)._send_proposal_http(payload)
+    net.session.request.assert_awaited_once()
+    assert net.session.request.await_args.args[:2] == ("POST", f"{INTERNAL}/api/skills/propose")
+    assert net.session.request.await_args.kwargs["json"] == payload
+
+
+@pytest.mark.asyncio
+async def test_the_old_unawaited_form_cannot_be_entered(net):
+    """Contrast: ``async with manager.post(...)`` without ``await`` raises TypeError and sends nothing."""
+    mgr = skill_proposer.get_http_client()
+    with pytest.raises(TypeError):
+        async with mgr.post(f"{INTERNAL}/api/skills/propose", json={}):
+            pass
+    net.session.request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ai_stack_refusal_makes_exactly_one_attempt(net, monkeypatch):
+    calls = []
+    real = ai_stack_client.AIStackClient.__init__
+
+    def counting(self, *a, **k):
+        real(self, *a, **k)
+        original = self.http_client.request
+
+        async def request(*args, **kwargs):
+            calls.append(args)
+            return await original(*args, **kwargs)
+
+        monkeypatch.setattr(self.http_client, "request", request)
+
+    monkeypatch.setattr(ai_stack_client.AIStackClient, "__init__", counting)
+    client = ai_stack_client.AIStackClient(base_url=PRIVATE, enabled=True)
+    with pytest.raises(ai_stack_client.AIStackError):
+        await client._make_request("GET", "/x")
+    assert len(calls) == 1

@@ -2,10 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""
-Tests for SLM client SSL context, WebSocket reconnect backoff (#4664),
-and service JWT minting (#9852).
-"""
+"""Tests for SLM client SSL context, WebSocket reconnect backoff (#4664), service JWT minting (#9852)."""
 
 import os
 import ssl
@@ -23,6 +20,8 @@ from services.slm_client import (
     _get_slm_signing_secret,
     _mint_service_jwt,
 )
+
+pytestmark = pytest.mark.usefixtures("slm_egress_open")  # these tests are about URLs and tokens, not egress
 
 
 class TestCreatePermissiveSslContext:

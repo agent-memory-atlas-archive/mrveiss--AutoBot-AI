@@ -157,7 +157,7 @@ class PipelineDispatcher:
                     "layer_end": assignment.layer_range.end,
                     "hidden_state": hidden_state,
                 }
-                # pending #18256: unguarded -- worker URLs are caller-supplied; no SSOT source on the allowlist.
+                # pending #18356: pipeline dispatcher never attached
                 async with self._session.post(url, json=payload) as resp:
                     resp.raise_for_status()
                     result = await resp.json()
@@ -200,7 +200,7 @@ class PipelineDispatcher:
                     "layer_end": assignment.layer_range.end,
                     "hidden_state": hidden_state,
                 }
-                # pending #18256: unguarded -- worker URLs are caller-supplied; no SSOT source on the allowlist.
+                # pending #18356: pipeline dispatcher never attached
                 async with self._session.post(url, json=payload) as resp:
                     resp.raise_for_status()
                     async for line in resp.content:

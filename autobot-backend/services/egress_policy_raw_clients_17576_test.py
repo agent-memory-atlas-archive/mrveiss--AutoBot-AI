@@ -310,3 +310,24 @@ async def test_vendor_host_resolving_to_a_private_address_sends_no_request(site,
 async def test_arxiv_search_reports_a_refusal_as_no_results_not_an_exception(monkeypatch):
     _resolve_to(monkeypatch, PRIVATE_IP)
     assert await auto_research_agent._search_arxiv(_vendor_client(), "q", 1) == []
+
+
+# --- SLM event websocket ------------------------------------------------------------------------
+
+
+async def _slm_ws(base):
+    client = slm_client.SLMClient(slm_url=base, auth_token="token")
+    client._shutdown = True
+    await client._ws_connect_and_listen()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("base,reached", [(INTERNAL, True), (PRIVATE, False)])
+async def test_slm_websocket_handshake_is_guarded(base, reached, monkeypatch):
+    if base == INTERNAL:
+        al.reset_internal_origin_state()
+        monkeypatch.setattr(al, "_ssot_service_urls", lambda: ["ws://127.0.0.1:8001"])
+    connect = MagicMock(side_effect=RuntimeError("stop"))
+    monkeypatch.setattr(slm_client.websockets, "connect", connect)
+    await _slm_ws(base)
+    assert connect.called is reached

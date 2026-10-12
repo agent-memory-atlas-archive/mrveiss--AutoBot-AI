@@ -32,7 +32,7 @@ from autobot_shared.auth.permissions import ROLE_PERMISSIONS, Role, role_value
 from autobot_shared.http_client import get_http_client
 from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.logging_manager import get_logger
-from constants.network_constants import NetworkConstants
+from autobot_shared.ssot_config import config
 
 logger = get_logger(__name__)
 
@@ -104,7 +104,7 @@ class MCPDispatcher:
         Makes a single HTTP request to /api/mcp/tools which aggregates all
         bridges.  Returns the number of tools cached.
         """
-        backend_url = f"http://{NetworkConstants.MAIN_MACHINE_IP}:{NetworkConstants.BACKEND_PORT}"
+        backend_url = config.backend_url
         try:
             http_client = get_http_client()
             async with await http_client.get(
@@ -421,7 +421,7 @@ class MCPDispatcher:
 
         try:
             http_client = get_http_client()
-            async with await http_client.post(
+            async with await http_client.post(  # see #18355: endpoint is a relative path
                 endpoint,
                 json={"arguments": arguments},
                 timeout=aiohttp.ClientTimeout(total=30),

@@ -396,8 +396,7 @@ async def _try_ollama_embedding(text: str, model_name: str, ollama_url: str) -> 
     200-with-empty-result — previously indistinguishable in the logs.
     """
     try:
-        # pending #18256: unguarded -- the fallback URL is misc.ollama_host:port.ollama, not config.ollama_url,
-        # so it is not the allowlisted origin.
+        # pending #18357: two Ollama host homes
         async with get_http_client().tracked_request(
             "POST",
             ollama_url,

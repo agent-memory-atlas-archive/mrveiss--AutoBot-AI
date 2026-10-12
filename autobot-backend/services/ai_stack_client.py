@@ -19,7 +19,7 @@ from urllib.parse import urljoin
 import aiohttp
 
 from autobot_shared.http_client import get_http_client
-from autobot_shared.http_egress_guard import EGRESS_POLICY
+from autobot_shared.http_egress_guard import EGRESS_POLICY, EgressBlockedError
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from autobot_shared.status_enums import ConnectionStatus
@@ -67,7 +67,7 @@ async def _handle_transient_error(
 ) -> None:
     """Log and sleep on transient connection errors; raise on final attempt."""
     _log_connection_error(attempt + 1, e)
-    if attempt < retry_attempts - 1:
+    if attempt < retry_attempts - 1 and not isinstance(e, EgressBlockedError):  # a refusal is final
         await asyncio.sleep(retry_delay * (attempt + 1))
     else:
         raise final_error from e

@@ -426,8 +426,9 @@ class LMStudioHealth(BaseProviderHealth):
             models_url = f"{self.lmstudio_host}/v1/models"
 
             http_client = get_http_client()
-            # pending #18256: unguarded -- the LM Studio host (llm.lmstudio_host) is not on the egress allowlist.
-            async with await http_client.get(models_url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+            async with await http_client.get(
+                models_url, timeout=aiohttp.ClientTimeout(total=timeout), guard_egress=EGRESS_POLICY
+            ) as response:
                 response_time = time.time() - start_time
 
                 if response.status == 200:
@@ -499,8 +500,9 @@ class VLLMHealth(BaseProviderHealth):
             models_url = f"{self.vllm_host}/v1/models"
 
             http_client = get_http_client()
-            # pending #18256: unguarded -- the vLLM host (misc.vllm_host) is not on the egress allowlist.
-            async with await http_client.get(models_url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+            async with await http_client.get(
+                models_url, timeout=aiohttp.ClientTimeout(total=timeout), guard_egress=EGRESS_POLICY
+            ) as response:
                 response_time = time.time() - start_time
 
                 if response.status == 200:

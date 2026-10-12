@@ -53,8 +53,6 @@
   "autobot-backend/services/npu_client.py": 1,
   "autobot-backend/services/npu_pipeline/dispatcher.py": 2,
   "autobot-backend/services/npu_pipeline/npu_client.py": 2,
-  "autobot-backend/services/provider_health/providers.py": 2,
-  "autobot-backend/services/slm_client.py": 1,
   "autobot-backend/services/telegram_bot_service.py": 8,
   "autobot-backend/skills/builtin/community_growth.py": 4,
   "autobot-backend/skills/hub.py": 1,
