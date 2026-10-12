@@ -10219,8 +10219,8 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** NavigateRequest */
-        NavigateRequest: {
+        /** NavigateBrowserRequest */
+        NavigateBrowserRequest: {
             /** Url */
             url: string;
         } & {
@@ -15932,7 +15932,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NavigateRequest"];
+                "application/json": components["schemas"]["NavigateBrowserRequest"];
             };
         };
         responses: {

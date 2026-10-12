@@ -465,19 +465,19 @@ async def test_bootstrap_adds_zero_candidates_for_a_venv_full_of_files(tmp_path,
     present_paths = ["keep.py"] + [f"venv/lib/python3.14/site-packages/pkg{i}/mod.py" for i in range(500)]
 
     calls = []
-    real_run_git = _sd.run_git
+    real_run_git = _sd.run_git_capture
 
     async def counting_run_git(*args, **kwargs):
         calls.append(args)
         return await real_run_git(*args, **kwargs)
 
     # #16310: the is-shallow-repository check now lives in
-    # services.git_subprocess.is_shallow_repository, which calls run_git via
-    # its OWN module's global -- a separate name binding from _sd.run_git
-    # (sync_deletions.py's `from ... import run_git`). Both must be patched
+    # services.git_subprocess.is_shallow_repository, which calls run_git_capture via
+    # its OWN module's global -- a separate name binding from _sd.run_git_capture
+    # (sync_deletions.py's `from ... import run_git_capture`). Both must be patched
     # with the SAME counting wrapper to see all three calls.
-    monkeypatch.setattr(_sd, "run_git", counting_run_git)
-    monkeypatch.setattr(_gs, "run_git", counting_run_git)
+    monkeypatch.setattr(_sd, "run_git_capture", counting_run_git)
+    monkeypatch.setattr(_gs, "run_git_capture", counting_run_git)
 
     plan = await compute_bootstrap_plan(str(repo / "comp"), str(repo), commit_a, present_paths=present_paths)
 
@@ -501,14 +501,14 @@ async def test_bootstrap_makes_a_bounded_number_of_git_calls_regardless_of_file_
     present_paths = [f"file{i}.py" for i in range(25, 50)]  # the still-tracked half, present on target too
 
     calls = []
-    real_run_git = _sd.run_git
+    real_run_git = _sd.run_git_capture
 
     async def counting_run_git(*args, **kwargs):
         calls.append(args)
         return await real_run_git(*args, **kwargs)
 
-    monkeypatch.setattr(_sd, "run_git", counting_run_git)
-    monkeypatch.setattr(_gs, "run_git", counting_run_git)
+    monkeypatch.setattr(_sd, "run_git_capture", counting_run_git)
+    monkeypatch.setattr(_gs, "run_git_capture", counting_run_git)
 
     plan = await compute_bootstrap_plan(str(repo / "comp"), str(repo), commit_b, present_paths=present_paths)
 

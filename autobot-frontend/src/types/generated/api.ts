@@ -73992,14 +73992,14 @@ export interface components {
          */
         ExternalPMType: "jira" | "azure_devops" | "trello" | "asana" | "none";
         /**
-         * ExtractRequest
+         * ExtractPageRequest
          * @description Request body for POST /knowledge/extract.
          *
          *     The field ``json_schema`` is serialised as ``schema`` on the wire via
          *     ``alias``.  ``schema`` is a reserved attribute on ``BaseModel`` so we
          *     cannot use it as a Python field name directly.
          */
-        ExtractRequest: {
+        ExtractPageRequest: {
             /**
              * Url
              * @description Absolute URL to fetch and extract from
@@ -85541,7 +85541,7 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * NPUWorkerConfig
+         * NPUWorkerDefinition
          * @description NPU Worker Configuration Model
          * @example {
          *       "enabled": true,
@@ -85554,7 +85554,7 @@ export interface components {
          *       "weight": 2
          *     }
          */
-        NPUWorkerConfig: {
+        NPUWorkerDefinition: {
             /**
              * Id
              * @description Unique worker identifier
@@ -85638,11 +85638,11 @@ export interface components {
          */
         NPUWorkerDetails: {
             /** @description Worker configuration */
-            config: components["schemas"]["NPUWorkerConfig"];
+            config: components["schemas"]["NPUWorkerDefinition"];
             /** @description Worker runtime status */
             status: components["schemas"]["NPUWorkerStatus"];
             /** @description Worker performance metrics */
-            metrics?: components["schemas"]["NPUWorkerMetrics"] | null;
+            metrics?: components["schemas"]["NPUWorkerLoadMetrics"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -85663,7 +85663,7 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * NPUWorkerMetrics
+         * NPUWorkerLoadMetrics
          * @description NPU Worker Performance Metrics Model
          * @example {
          *       "avg_response_time_ms": 245.8,
@@ -85675,7 +85675,7 @@ export interface components {
          *       "success_rate": 99.2
          *     }
          */
-        NPUWorkerMetrics: {
+        NPUWorkerLoadMetrics: {
             /**
              * Id
              * @description Worker identifier
@@ -89718,13 +89718,13 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * ProvisionRequest
+         * ProvisionBudgetRequest
          * @description Request body for POST /budget/{agent_id} (GH#9901).
          *
          *     budget_limit is optional — omitting it uses LLC_DEFAULT_BUDGET_LIMIT (default $10).
          *     company_id is derived from agent_org_nodes to prevent cross-company row insertion.
          */
-        ProvisionRequest: {
+        ProvisionBudgetRequest: {
             /** Budget Limit */
             budget_limit?: number | string | null;
         } & {
@@ -161305,7 +161305,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ExtractRequest"];
+                "application/json": components["schemas"]["ExtractPageRequest"];
             };
         };
         responses: {
@@ -163360,7 +163360,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["NPUWorkerConfig"];
+                "application/json": components["schemas"]["NPUWorkerDefinition"];
             };
         };
         responses: {
@@ -163426,7 +163426,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["NPUWorkerConfig"];
+                "application/json": components["schemas"]["NPUWorkerDefinition"];
             };
         };
         responses: {
@@ -163527,7 +163527,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NPUWorkerMetrics"] | null;
+                    "application/json": components["schemas"]["NPUWorkerLoadMetrics"] | null;
                 };
             };
             /** @description Validation Error */
@@ -170590,7 +170590,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProvisionRequest"];
+                "application/json": components["schemas"]["ProvisionBudgetRequest"];
             };
         };
         responses: {

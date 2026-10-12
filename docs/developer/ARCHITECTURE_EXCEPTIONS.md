@@ -292,7 +292,7 @@ gains a subset ladder usable at the iteration site.
 
 **Grep check:** `grep -n "class .*Severity(str, enum.Enum)\|class .*Severity(str, Enum)"
 autobot-slm-backend/models/database.py` should list exactly these two. (The same
-pattern over all of `models/` also lists `ConflictSeverity` in `manifest.py`, a
+pattern over all of `models/` also lists `PortConflictSeverity` in `manifest.py`, a
 different vocabulary.)
 
 ## SLM Recovery Page — No i18n Runtime, English-Only
@@ -379,7 +379,7 @@ not merely an absent one. Absent produced "unknown scope kind" — the same
 answer a typo gets — so a caller reaching for `task:` could not tell a decision
 from a gap. `RESERVED_KINDS` now refuses it with the reason and the destination,
 through `_require_kind`, which every entry point that names a kind calls —
-`Scope.parse`, `list_claims`, and `branch_stewardship.prune` — so they cannot
+`Scope.parse`, `list_claims`, and `branch_stewardship.prune_closed_branches` — so they cannot
 drift apart. `RESERVED_KINDS` is a read-only mapping, as `VALID_KINDS` beside it
 is a `frozenset`, so no caller can un-reserve a kind at runtime. Both module
 docstrings state the split.

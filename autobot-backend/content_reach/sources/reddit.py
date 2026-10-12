@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""Reddit/HN content source: RedditJsonBackend → HnAlgoliaBackend → BrowserBackend (#10932).
+"""Reddit/HN content source: RedditJsonBackend → HnAlgoliaBackend → BrowserContentBackend (#10932).
 
 Chain priority:
   1. RedditJsonBackend — Reddit public JSON API (no auth required)
   2. HnAlgoliaBackend  — HN Algolia search API (https://hn.algolia.com/api/v1/search)
-  3. BrowserBackend    — Playwright-backed page fetch (browser required)
+  3. BrowserContentBackend    — Playwright-backed page fetch (browser required)
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import httpx
 from autobot_shared.security.ssrf_guard import SSRFError
 from content_reach._http import http_get
 from content_reach._url_guard import ensure_public_url
-from content_reach.backends.browser import BrowserBackend
+from content_reach.backends.browser import BrowserContentBackend
 from content_reach.base import BackendError, ContentBackend, ContentRequest, ContentResult
 from content_reach.chain import ContentSourceChain
 from source_attribution import SourceKind, SourceReliability
@@ -206,5 +206,5 @@ def build_reddit_chain() -> ContentSourceChain:
     return ContentSourceChain(
         source="reddit",
         source_type=SourceKind.REDDIT,
-        backends=[RedditJsonBackend(), HnAlgoliaBackend(), BrowserBackend(SourceKind.REDDIT)],
+        backends=[RedditJsonBackend(), HnAlgoliaBackend(), BrowserContentBackend(SourceKind.REDDIT)],
     )

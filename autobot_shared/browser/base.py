@@ -113,7 +113,7 @@ class NoCapableBackendError(BrowserError):
     """No registered backend both declares the capabilities and is reachable."""
 
 
-class UnsupportedFormatError(BrowserError):
+class UnsupportedContentFormatError(BrowserError):
     """The resolved backend cannot produce the requested content format.
 
     Raised rather than returning the wrong shape, which is what a single

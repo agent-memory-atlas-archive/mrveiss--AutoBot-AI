@@ -41,7 +41,7 @@ GIT_TIMEOUT_S = env_float("AUTOBOT_SYNC_GIT_TIMEOUT_S", 30.0)
 UNSHALLOW_TIMEOUT_S = env_float("AUTOBOT_SYNC_UNSHALLOW_TIMEOUT_S", 600.0)
 
 
-async def run_git(repo_root: str, *args: str, timeout: float = GIT_TIMEOUT_S) -> tuple[str, int]:
+async def run_git_capture(repo_root: str, *args: str, timeout: float = GIT_TIMEOUT_S) -> tuple[str, int]:
     """Run ``git -C repo_root <args>`` with a scrubbed env and bounded timeout.
 
     ``-c core.quotePath=false`` (#16310 review 3a): git C-style-quotes any
@@ -109,7 +109,7 @@ async def is_shallow_repository(repo_root: str) -> ShallowCheck:
     UNKNOWN when that could not be determined (#16310, tri-state #17118).
 
     UNKNOWN covers every way ``git rev-parse --is-shallow-repository``
-    fails to give a clean answer: ``run_git``'s own collapse of "could not
+    fails to give a clean answer: ``run_git_capture``'s own collapse of "could not
     run at all" (timeout, spawn failure) into ``rc=1``, and git running but
     the command itself failing (*repo_root* is not a git repository, a
     corrupted ``.git``, or any other rev-parse error) -- both are "could not
@@ -121,7 +121,7 @@ async def is_shallow_repository(repo_root: str) -> ShallowCheck:
     it) -- one answer to "is this clone shallow", asked with the same `git
     rev-parse` both callers would otherwise duplicate.
     """
-    output, rc = await run_git(repo_root, "rev-parse", "--is-shallow-repository")
+    output, rc = await run_git_capture(repo_root, "rev-parse", "--is-shallow-repository")
     if rc != 0:
         return ShallowCheck.UNKNOWN
     stripped = output.strip()
@@ -159,7 +159,7 @@ async def ensure_full_history(repo_root: str) -> tuple[bool, str]:
         return True, f"{repo_root} already has full history"
 
     logger.info("git_subprocess: %s is a shallow clone -- unshallowing (#16310)", repo_root)
-    _output, rc = await run_git(repo_root, "fetch", "--unshallow", timeout=UNSHALLOW_TIMEOUT_S)
+    _output, rc = await run_git_capture(repo_root, "fetch", "--unshallow", timeout=UNSHALLOW_TIMEOUT_S)
     if rc != 0:
         return False, f"git fetch --unshallow failed in {repo_root}"
 
@@ -180,6 +180,6 @@ async def last_commit_for_path(repo_root: str, pathspec: str) -> str | None:
     the same question -- "did git ever track this path?" -- against a commit
     range too wide for a name-status diff to answer.
     """
-    output, rc = await run_git(repo_root, "log", "-1", "--format=%H", "--", pathspec)
+    output, rc = await run_git_capture(repo_root, "log", "-1", "--format=%H", "--", pathspec)
     sha = output.strip()
     return sha if rc == 0 and sha else None
