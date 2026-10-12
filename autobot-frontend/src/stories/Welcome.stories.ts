@@ -166,7 +166,7 @@ export const Overview: Story = {
             <p class="text-sm text-gray-700 mb-3">Component stories are located alongside component files:</p>
             <code class="block bg-white p-3 rounded text-xs text-gray-800 border border-gray-200">
               src/components/base/BaseButton.stories.ts<br/>
-              src/components/ui/BaseModal.stories.ts<br/>
+              libs/autobot-ui/src/components/BaseModal.stories.ts<br/>
               src/components/layout/LanguageSwitcher.stories.ts<br/>
               src/stories/IconLibrary.stories.ts<br/>
               src/stories/DesignTokens.stories.ts
