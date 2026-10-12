@@ -53,6 +53,7 @@ if env_path.exists():
 from autobot_shared.doc_chunking import chunk_large_content as _chunk_large_content
 from autobot_shared.doc_chunking import estimate_tokens
 from autobot_shared.doc_chunking import process_h2_sections as _process_h2_sections
+from autobot_shared.embedding_model import active_embedding_model
 from autobot_shared.ssot_constants import CategoryDefaults
 from utils.chromadb_client import get_chromadb_client
 
@@ -371,7 +372,7 @@ class ChromaDBIndexer:
         )
 
         # Initialize embedding model
-        self.embed_model = OllamaEmbedding(model_name="nomic-embed-text", base_url="http://127.0.0.1:11434")
+        self.embed_model = OllamaEmbedding(model_name=active_embedding_model(), base_url="http://127.0.0.1:11434")
 
         logger.info(
             f"ChromaDB indexer initialized: collection='{self.collection_name}', "

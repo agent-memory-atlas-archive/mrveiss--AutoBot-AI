@@ -199,7 +199,12 @@ _DECLARED_SCOPES = {
         "libs",
     ),
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
-    "embedding-model-literal-sites": ("autobot-backend", "autobot_shared"),
+    "embedding-model-literal-sites": (
+        "autobot-backend",
+        "autobot_shared",
+        "autobot-infrastructure/shared/scripts/populate_kb_chromadb.py",
+        "autobot-infrastructure/shared/tools/index_documentation.py",
+    ),
     "tool-effect-table-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "deployment-mode-detector-scan": ("autobot-backend/", "autobot-infrastructure/"),
     "egress-default-outbound-call-sites": (
