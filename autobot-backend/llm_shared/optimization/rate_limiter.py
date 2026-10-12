@@ -18,15 +18,23 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, TypeVar
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.rate_limiter import RateLimiter as _SharedRateLimiter
-from autobot_shared.retry_mechanism import RetryStrategy
 
 logger = get_logger(__name__)
 
 T = TypeVar("T")
+
+
+class RetryStrategy(Enum):
+    """Retry backoff strategies."""
+
+    EXPONENTIAL = "exponential"  # 2^attempt seconds
+    LINEAR = "linear"  # attempt * base seconds
+    FIXED = "fixed"  # Fixed delay
 
 
 class RateLimitError(Exception):
@@ -59,7 +67,7 @@ class RateLimitConfig:
     base_delay: float = 1.0  # Base delay in seconds
     max_delay: float = 60.0  # Maximum delay cap
     jitter_factor: float = 0.5  # Random jitter (0-1)
-    strategy: RetryStrategy = RetryStrategy.EXPONENTIAL_BACKOFF
+    strategy: RetryStrategy = RetryStrategy.EXPONENTIAL
 
     # Rate limit detection
     rate_limit_status_codes: tuple = (429, 503)
@@ -134,12 +142,11 @@ class RateLimitHandler:
         if retry_after is not None and retry_after > 0:
             base_delay = retry_after
         else:
-            if self.config.strategy in (RetryStrategy.EXPONENTIAL_BACKOFF, RetryStrategy.JITTERED_BACKOFF):
-                # Jitter is always applied below, so JITTERED_BACKOFF is exponential here.
+            if self.config.strategy == RetryStrategy.EXPONENTIAL:
                 base_delay = self.config.base_delay * (2**attempt)
-            elif self.config.strategy == RetryStrategy.LINEAR_BACKOFF:
+            elif self.config.strategy == RetryStrategy.LINEAR:
                 base_delay = self.config.base_delay * (attempt + 1)
-            else:  # FIXED_DELAY
+            else:  # FIXED
                 base_delay = self.config.base_delay
 
         # Apply cap
@@ -369,6 +376,7 @@ __all__ = [
     "RateLimitHandler",
     "RateLimitConfig",
     "RateLimitError",
+    "RetryStrategy",
     "RetryMetrics",
     "with_rate_limit_retry",
     "llm_rate_limiter",

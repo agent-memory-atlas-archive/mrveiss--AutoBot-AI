@@ -17,7 +17,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 from llm_shared.optimization.model_inspector import (
-    ModelArchitectureInfo,
+    ModelInfo,
     _cache_put,
     _count_params_via_skeleton,
     _estimate_param_count,
@@ -253,7 +253,7 @@ class TestCacheTTL:
 
     def test_cache_hit_returns_same_info(self):
         """inspect_model returns cached value on second call without re-inspecting."""
-        info = ModelArchitectureInfo(
+        info = ModelInfo(
             num_layers=32,
             hidden_size=4096,
             num_attention_heads=32,
@@ -267,7 +267,7 @@ class TestCacheTTL:
 
     def test_expired_cache_triggers_fresh_inspection(self):
         """inspect_model re-inspects after TTL expiration."""
-        info = ModelArchitectureInfo(
+        info = ModelInfo(
             num_layers=32,
             hidden_size=4096,
             num_attention_heads=32,

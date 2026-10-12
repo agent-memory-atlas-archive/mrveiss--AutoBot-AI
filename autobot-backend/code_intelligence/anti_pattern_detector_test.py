@@ -55,7 +55,7 @@ AntiPatternDetector = anti_pattern_module.AntiPatternDetector
 AntiPatternInstance = anti_pattern_module.AntiPatternInstance
 AntiPatternReport = anti_pattern_module.AntiPatternReport
 AntiPatternType = anti_pattern_module.AntiPatternType
-AnalyzedClassInfo = anti_pattern_module.AnalyzedClassInfo
+ClassInfo = anti_pattern_module.ClassInfo
 ModuleInfo = anti_pattern_module.ModuleInfo
 Severity = anti_pattern_module.Severity
 # #7414 consolidated the local `Severity.score()` method onto the canonical
@@ -247,7 +247,7 @@ def with_loop(items):
 
     def test_god_class_score_below_threshold(self, detector):
         """Test god class score for small class."""
-        small_class = AnalyzedClassInfo(
+        small_class = ClassInfo(
             name="SmallClass",
             file_path="/test.py",
             line_number=1,
@@ -265,7 +265,7 @@ def with_loop(items):
 
     def test_god_class_score_above_threshold(self, detector):
         """Test god class score for large class."""
-        large_class = AnalyzedClassInfo(
+        large_class = ClassInfo(
             name="GodClass",
             file_path="/test.py",
             line_number=1,
@@ -394,7 +394,7 @@ class TestAntiPatternDetectorAsync:
         """Test god class detection."""
         # Set up a class that exceeds thresholds
         detector.classes = {
-            "module.GodClass": AnalyzedClassInfo(
+            "module.GodClass": ClassInfo(
                 name="GodClass",
                 file_path="/test.py",
                 line_number=1,
@@ -422,7 +422,7 @@ class TestAntiPatternDetectorAsync:
         mock_method.end_lineno = 100  # 90 lines
 
         detector.classes = {
-            "module.TestClass": AnalyzedClassInfo(
+            "module.TestClass": ClassInfo(
                 name="TestClass",
                 file_path="/test.py",
                 line_number=1,
@@ -459,7 +459,7 @@ class TestAntiPatternDetectorAsync:
         mock_method.args.args = mock_params
 
         detector.classes = {
-            "module.TestClass": AnalyzedClassInfo(
+            "module.TestClass": ClassInfo(
                 name="TestClass",
                 file_path="/test.py",
                 line_number=1,
@@ -510,7 +510,7 @@ class TestAntiPatternDetectorAsync:
         mock_method.name = "only_method"
 
         detector.classes = {
-            "module.LazyClass": AnalyzedClassInfo(
+            "module.LazyClass": ClassInfo(
                 name="LazyClass",
                 file_path="/test.py",
                 line_number=1,

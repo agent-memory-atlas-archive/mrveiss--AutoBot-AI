@@ -26,10 +26,9 @@ from typing import TYPE_CHECKING
 
 from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.retry_mechanism import RetryStrategy
 from autobot_shared.singleton_factory import lazy_singleton
 
-from .optimization.rate_limiter import RateLimitConfig, RateLimitError, RateLimitHandler
+from .optimization.rate_limiter import RateLimitConfig, RateLimitError, RateLimitHandler, RetryStrategy
 from .quota_headroom import get_quota_headroom_store
 
 if TYPE_CHECKING:
@@ -59,7 +58,7 @@ _DEFAULT_CONFIG = RateLimitConfig(
     base_delay=1.0,
     max_delay=120.0,
     jitter_factor=0.3,
-    strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    strategy=RetryStrategy.EXPONENTIAL,
 )
 get_backoff_handler = lazy_singleton(lambda: RateLimitHandler(config=_DEFAULT_CONFIG))
 

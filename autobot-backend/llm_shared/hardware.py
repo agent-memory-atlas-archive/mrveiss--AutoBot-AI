@@ -12,7 +12,7 @@ from typing import List, Set
 
 from autobot_shared.logging_manager import get_logger
 
-from .optimization.model_inspector import ModelArchitectureInfo, inspect_model
+from .optimization.model_inspector import ModelInfo, inspect_model
 
 logger = get_logger(__name__)
 
@@ -26,7 +26,7 @@ except (ImportError, RuntimeError):
     TORCH_AVAILABLE = False
 
 
-class AccelerationDetector:
+class HardwareDetector:
     """Detect and select optimal hardware acceleration backends."""
 
     def __init__(self, priority: List[str] | None = None):
@@ -180,7 +180,7 @@ class AccelerationDetector:
         Returns:
             Selected backend name.
         """
-        model_info: ModelArchitectureInfo | None = inspect_model(model_name)
+        model_info: ModelInfo | None = inspect_model(model_name)
         preferred = self.select_backend()
 
         if model_info is None:
@@ -212,8 +212,8 @@ class AccelerationDetector:
 
 
 __all__ = [
-    "AccelerationDetector",
+    "HardwareDetector",
     "TORCH_AVAILABLE",
-    "ModelArchitectureInfo",
+    "ModelInfo",
     "inspect_model",
 ]
