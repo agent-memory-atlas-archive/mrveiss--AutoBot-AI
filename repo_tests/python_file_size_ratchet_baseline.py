@@ -343,7 +343,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/execution/docker_backend.py": 605,
     "autobot-backend/services/fact_extraction_service.py": 870,
     "autobot-backend/services/fast_document_scanner.py": 653,
-    "autobot-backend/services/graph_rag_service.py": 738,
+    "autobot-backend/services/graph_rag_service.py": 734,
     "autobot-backend/services/graph_rag_service_test.py": 895,
     "autobot-backend/services/knowledge/autonomous_loop.py": 798,
     "autobot-backend/services/knowledge/code_indexer.py": 1179,

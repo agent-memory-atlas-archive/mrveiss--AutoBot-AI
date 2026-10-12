@@ -105,3 +105,42 @@ class TestStaleFilterOnEveryBranch:
         svc._filter_stale_chunks = AsyncMock(return_value=[])
         await svc._fallback_basic_search("q", 5)
         svc._filter_stale_chunks.assert_awaited_once()
+
+
+class TestGraphSearchTimeout:
+    """The graph path keeps its 10 s default as a named, env-backed RAGConfig field (#18141)."""
+
+    def test_default_is_ten_seconds_and_general_budget_is_untouched(self, monkeypatch) -> None:
+        monkeypatch.delenv("AUTOBOT_RAG_GRAPH_TIMEOUT_SECONDS", raising=False)
+        import importlib
+
+        import constants.rag_graph_constants as consts
+
+        importlib.reload(consts)
+        assert consts.RAG_GRAPH_TIMEOUT_SECONDS == 10.0
+        assert RAGConfig().timeout_seconds != 10.0
+
+    def test_env_overrides_the_default(self, monkeypatch) -> None:
+        import importlib
+
+        import constants.rag_graph_constants as consts
+
+        monkeypatch.setenv("AUTOBOT_RAG_GRAPH_TIMEOUT_SECONDS", "25")
+        try:
+            assert importlib.reload(consts).RAG_GRAPH_TIMEOUT_SECONDS == 25.0
+        finally:
+            monkeypatch.delenv("AUTOBOT_RAG_GRAPH_TIMEOUT_SECONDS")
+            importlib.reload(consts)
+
+    @pytest.mark.asyncio
+    async def test_graph_search_applies_the_graph_timeout_when_none_is_given(self) -> None:
+        rag = MagicMock()
+        rag.advanced_search = AsyncMock(return_value=([], MagicMock()))
+        graph = MagicMock(initialized=True)
+        svc = GraphRAGService(rag_service=rag, memory_graph=graph, enable_entity_extraction=False)
+        with patch("services.graph_rag_service.get_rag_config", return_value=RAGConfig(graph_timeout_seconds=10.0)):
+            await svc.graph_aware_search("q")
+        assert rag.advanced_search.await_args.kwargs["timeout"] == 10.0
+        with patch("services.graph_rag_service.get_rag_config", return_value=RAGConfig(graph_timeout_seconds=10.0)):
+            await svc.graph_aware_search("q", timeout=3.0)
+        assert rag.advanced_search.await_args.kwargs["timeout"] == 3.0

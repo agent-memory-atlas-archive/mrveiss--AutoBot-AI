@@ -171,7 +171,7 @@ async def test_graph_aware_search_basic(graph_rag_service, mock_rag_service) -> 
         query="Redis configuration",
         max_results=10,  # 2x for filtering
         enable_reranking=True,
-        timeout=None,
+        timeout=10.0,  # RAGConfig.graph_timeout_seconds default
     )
 
     # Verify results returned

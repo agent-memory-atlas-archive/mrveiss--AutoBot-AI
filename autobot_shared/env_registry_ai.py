@@ -30,6 +30,7 @@ Closes GH#7081.
 
 from __future__ import annotations
 
+from autobot_shared import env_registry_rag  # noqa: E402,F401
 from autobot_shared.env_registry import EnvVarSpec, register_env_var
 from autobot_shared.llm_provider_order import DEFAULT_ORDER
 
@@ -578,16 +579,5 @@ register_env_var(
             "stat-ed first and refused when over (media/audio/decode.py, #17778)."
         ),
         component="voice",
-    )
-)
-
-register_env_var(
-    EnvVarSpec(
-        name="AUTOBOT_RAG_GRAPH_WEIGHT",
-        type=float,
-        default=0.3,
-        description="Graph-signal weight in the one pre-rerank vector+graph blend (RAGConfig.graph_weight, #18141).",
-        component="rag",
-        range=(0.0, 1.0),
     )
 )

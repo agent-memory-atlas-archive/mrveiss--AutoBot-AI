@@ -243,7 +243,7 @@ class GraphRAGService:
 
         try:
             self._seen_content.clear()
-
+            timeout = timeout or get_rag_config().graph_timeout_seconds
             rag_results = await self._perform_initial_rag_search(query, max_results, enable_reranking, timeout, metrics)
 
             all_results = await self._extract_and_expand_graph(
@@ -721,17 +721,13 @@ class GraphRAGService:
         return result
 
     async def get_metrics(self) -> Dict[str, Any]:
-        """
-        Get service health and performance metrics.
-
-        Returns:
-            Dictionary with service metrics including RAG and graph statistics
-        """
+        """Get service health and performance metrics (RAG and graph statistics)."""
         rag_stats = await self.rag.get_metrics() if hasattr(self.rag, "get_metrics") else {}
 
         return {
             "service": "GraphRAGService",
             "graph_weight": self.graph_weight,
+            "graph_timeout_seconds": get_rag_config().graph_timeout_seconds,
             "entity_extraction_enabled": self.enable_entity_extraction,
             "rag_service": rag_stats,
             "graph_initialized": self.graph.initialized,

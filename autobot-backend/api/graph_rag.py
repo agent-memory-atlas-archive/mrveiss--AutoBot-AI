@@ -349,8 +349,9 @@ async def graph_rag_metrics(
             "entity_extraction_enabled": true,
             "rag_service": {
                 "enable_advanced_rag": true,
-                "timeout_seconds": 10.0
+                "timeout_seconds": "<RAGConfig.timeout_seconds>"
             },
+            "graph_timeout_seconds": "<RAGConfig.graph_timeout_seconds>",
             "graph_initialized": true
         }
         ```
