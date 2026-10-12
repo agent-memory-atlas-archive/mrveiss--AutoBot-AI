@@ -4,6 +4,7 @@
 # Author: mrveiss
 """The one CAPTCHA taxonomy, shared by the services and browser solvers (#18131)."""
 
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -28,3 +29,33 @@ class CaptchaType(Enum):
         if value == "text_image":
             return cls.TEXT
         return None
+
+
+class SolverConfidence(Enum):
+    """Confidence levels for CAPTCHA solutions"""
+
+    HIGH = "high"  # >90% confident
+    MEDIUM = "medium"  # 70-90% confident
+    LOW = "low"  # 50-70% confident
+    NONE = "none"  # <50% or unable to solve
+
+
+@dataclass
+class CaptchaSolveResult:
+    """The one result of a CAPTCHA solve attempt (#18131), for both the OCR solver and the browser pipeline.
+
+    The OCR solver fills ``confidence`` (a band) and ``processing_time_ms``; the browser pipeline
+    fills ``method_used`` ("local_ml", "cache", "human_loop", "math") and ``confidence_score``
+    (a float in [0, 1], 1.0 for deterministic results). ``solution`` is ``None`` when solving
+    failed or a human solved it in-browser.
+    """
+
+    success: bool
+    captcha_type: CaptchaType
+    solution: str | None = None
+    confidence: SolverConfidence = SolverConfidence.NONE
+    error_message: str | None = None
+    processing_time_ms: float = 0.0
+    requires_human: bool = True
+    method_used: str | None = None
+    confidence_score: float | None = None

@@ -82,6 +82,28 @@ def test_exactly_one_captcha_taxonomy_exists() -> None:
     assert found == [CANONICAL], f"a second CAPTCHA-type enum appeared (or the canonical moved): {found}"
 
 
+def _result_classes(root: Path) -> list[str]:
+    """`path::Class` of every class annotating both `success` and `captcha_type`: a CAPTCHA result."""
+    found: list[str] = []
+    for rel in REACH.examined(root):
+        try:
+            tree = ast.parse((root / rel).read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        for n in ast.walk(tree):
+            if isinstance(n, ast.ClassDef):
+                fields = {
+                    s.target.id for s in n.body if isinstance(s, ast.AnnAssign) and isinstance(s.target, ast.Name)
+                }
+                if {"success", "captcha_type"} <= fields:
+                    found.append(f"{rel}::{n.name}")
+    return found
+
+
+def test_exactly_one_captcha_result_class_exists() -> None:
+    assert _result_classes(repo_root()) == ["autobot_shared/captcha_types.py::CaptchaSolveResult"]
+
+
 def test_canonical_carries_every_former_kind() -> None:
     from autobot_shared.captcha_types import CaptchaType
 

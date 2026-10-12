@@ -12,7 +12,7 @@ Classes:
     CaptchaType          — imported from autobot_shared.captcha_types (the one taxonomy)
     CaptchaDetector      — keyword/selector detection + element screenshot extraction
     LocalCaptchaSolver   — ONNX-based OCR running on NPU/CPU; math expression eval
-    SolveResult          — result dataclass returned by the pipeline
+    CaptchaSolveResult   — shared result dataclass (autobot_shared.captcha_types)
     CaptchaSolverPipeline — orchestrates the full solve attempt
 
 Design decisions:
@@ -38,10 +38,9 @@ import hashlib
 import io
 import re
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 
-from autobot_shared.captcha_types import CaptchaType
+from autobot_shared.captcha_types import CaptchaSolveResult, CaptchaType
 from autobot_shared.logging_manager import get_logger
 from services.captcha_human_loop import get_captcha_human_loop
 
@@ -83,27 +82,6 @@ _TRAILING_EQUALS_RE = re.compile(r"\s*[=?]+\s*$")
 # ---------------------------------------------------------------------------
 # Enumerations and result types
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class SolveResult:
-    """Outcome of a single CAPTCHA solve attempt.
-
-    Attributes:
-        success:      Whether the CAPTCHA was (or is expected to be) solved.
-        answer:       The answer string, or ``None`` when solving failed.
-        method_used:  Human-readable label: "local_ml", "cache", "human_loop", "math".
-        confidence:   Float in [0, 1]; 1.0 for deterministic results (math, cache).
-        captcha_type: The CaptchaType that was processed.
-        error:        Error description when ``success`` is False.
-    """
-
-    success: bool
-    answer: str | None
-    method_used: str
-    confidence: float
-    captcha_type: CaptchaType
-    error: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -563,7 +541,7 @@ class CaptchaSolverPipeline:
         self._solver = solver or LocalCaptchaSolver(model_path=model_path)
         self._detector = detector or CaptchaDetector()
 
-    async def solve(self, page: Any, captcha_type: CaptchaType) -> SolveResult:
+    async def solve(self, page: Any, captcha_type: CaptchaType) -> CaptchaSolveResult:
         """Attempt to solve the CAPTCHA on *page* of type *captcha_type*.
 
         Args:
@@ -571,7 +549,7 @@ class CaptchaSolverPipeline:
             captcha_type: The type of CAPTCHA to solve.
 
         Returns:
-            A ``SolveResult`` describing the outcome.
+            A ``CaptchaSolveResult`` describing the outcome.
         """
         logger.info("CaptchaSolverPipeline.solve: type=%s", captcha_type.value)
         start = time.monotonic()
@@ -600,11 +578,12 @@ class CaptchaSolverPipeline:
                 cached = _answer_cache.get(_image_hash(image_bytes))
                 if cached:
                     logger.info("CaptchaSolverPipeline: cache hit for image hash")
-                    return SolveResult(
+                    return CaptchaSolveResult(
                         success=True,
-                        answer=cached,
+                        requires_human=False,
+                        solution=cached,
                         method_used="cache",
-                        confidence=1.0,
+                        confidence_score=1.0,
                         captcha_type=captcha_type,
                     )
 
@@ -615,7 +594,7 @@ class CaptchaSolverPipeline:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _solve_math_from_page(self, page: Any, captcha_type: CaptchaType) -> SolveResult:
+    async def _solve_math_from_page(self, page: Any, captcha_type: CaptchaType) -> CaptchaSolveResult:
         """Extract page text and attempt math solving.
 
         Args:
@@ -623,28 +602,29 @@ class CaptchaSolverPipeline:
             captcha_type: Should be CaptchaType.MATH.
 
         Returns:
-            SolveResult with method_used="math" on success.
+            CaptchaSolveResult with method_used="math" on success.
         """
         try:
             content: str = await page.content()
             answer = self._solver.solve_math(content)
             if answer is not None:
-                return SolveResult(
+                return CaptchaSolveResult(
                     success=True,
-                    answer=answer,
+                    requires_human=False,
+                    solution=answer,
                     method_used="math",
-                    confidence=1.0,
+                    confidence_score=1.0,
                     captcha_type=captcha_type,
                 )
         except Exception as exc:
             logger.warning("_solve_math_from_page failed: %s", exc)
-        return SolveResult(
+        return CaptchaSolveResult(
             success=False,
-            answer=None,
+            solution=None,
             method_used="math",
-            confidence=0.0,
+            confidence_score=0.0,
             captcha_type=captcha_type,
-            error="Math expression not found in page content",
+            error_message="Math expression not found in page content",
         )
 
     async def _extract_image(self, page: Any, captcha_type: CaptchaType) -> bytes | None:
@@ -679,37 +659,38 @@ class CaptchaSolverPipeline:
         }
         return mapping.get(captcha_type, "#captcha")
 
-    async def _try_local_ml(self, image_bytes: bytes, captcha_type: CaptchaType) -> SolveResult:
-        """Run ONNX inference and return a SolveResult.
+    async def _try_local_ml(self, image_bytes: bytes, captcha_type: CaptchaType) -> CaptchaSolveResult:
+        """Run ONNX inference and return a CaptchaSolveResult.
 
         Args:
             image_bytes:  Raw image bytes.
             captcha_type: Type being solved (TEXT or MATH).
 
         Returns:
-            SolveResult with method_used="local_ml".
+            CaptchaSolveResult with method_used="local_ml".
         """
         answer = await self._solver.solve_text_image(image_bytes)
         if answer:
             # Store in cache for future reuse within this process
             _answer_cache[_image_hash(image_bytes)] = answer
-            return SolveResult(
+            return CaptchaSolveResult(
                 success=True,
-                answer=answer,
+                requires_human=False,
+                solution=answer,
                 method_used="local_ml",
-                confidence=_MIN_CONFIDENCE,
+                confidence_score=_MIN_CONFIDENCE,
                 captcha_type=captcha_type,
             )
-        return SolveResult(
+        return CaptchaSolveResult(
             success=False,
-            answer=None,
+            solution=None,
             method_used="local_ml",
-            confidence=0.0,
+            confidence_score=0.0,
             captcha_type=captcha_type,
-            error="ONNX inference returned no answer",
+            error_message="ONNX inference returned no answer",
         )
 
-    async def _human_fallback(self, page: Any, captcha_type: CaptchaType) -> SolveResult:
+    async def _human_fallback(self, page: Any, captcha_type: CaptchaType) -> CaptchaSolveResult:
         """Delegate to the human-in-the-loop service.
 
         Args:
@@ -717,7 +698,7 @@ class CaptchaSolverPipeline:
             captcha_type: Type of CAPTCHA for logging/routing.
 
         Returns:
-            SolveResult with method_used="human_loop".
+            CaptchaSolveResult with method_used="human_loop".
         """
         logger.info(
             "CaptchaSolverPipeline: falling back to human-in-the-loop for type=%s",
@@ -731,21 +712,22 @@ class CaptchaSolverPipeline:
                 url=url,
                 captcha_type=captcha_type.value,
             )
-            return SolveResult(
+            return CaptchaSolveResult(
                 success=resolution.success,
-                answer=None,  # Human solves in-browser; no answer text returned
+                requires_human=False,
+                solution=None,  # Human solves in-browser; no answer text returned
                 method_used="human_loop",
-                confidence=1.0 if resolution.success else 0.0,
+                confidence_score=1.0 if resolution.success else 0.0,
                 captcha_type=captcha_type,
-                error=resolution.error_message if not resolution.success else None,
+                error_message=resolution.error_message if not resolution.success else None,
             )
         except Exception as exc:
             logger.error("_human_fallback: human-in-the-loop failed: %s", exc)
-            return SolveResult(
+            return CaptchaSolveResult(
                 success=False,
-                answer=None,
+                solution=None,
                 method_used="human_loop",
-                confidence=0.0,
+                confidence_score=0.0,
                 captcha_type=captcha_type,
-                error=str(exc),
+                error_message=str(exc),
             )

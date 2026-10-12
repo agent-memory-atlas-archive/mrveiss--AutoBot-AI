@@ -36,11 +36,9 @@ from __future__ import annotations
 
 import io
 import re
-from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING
 
-from autobot_shared.captcha_types import CaptchaType
+from autobot_shared.captcha_types import CaptchaSolveResult, CaptchaType, SolverConfidence
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.slug import sanitize_token
@@ -62,28 +60,6 @@ _MATH_EXPR_RE = re.compile(r"(\d+)\s*([+\-*/])\s*(\d+)")
 _HUMAN_ONLY_TYPES = frozenset(
     {CaptchaType.RECAPTCHA, CaptchaType.HCAPTCHA, CaptchaType.CLOUDFLARE, CaptchaType.SLIDER, CaptchaType.IMAGE_SELECT}
 )
-
-
-class SolverConfidence(Enum):
-    """Confidence levels for CAPTCHA solutions"""
-
-    HIGH = "high"  # >90% confident
-    MEDIUM = "medium"  # 70-90% confident
-    LOW = "low"  # 50-70% confident
-    NONE = "none"  # <50% or unable to solve
-
-
-@dataclass
-class CaptchaSolveResult:
-    """Result of a CAPTCHA solving attempt"""
-
-    success: bool
-    captcha_type: CaptchaType
-    solution: str | None = None
-    confidence: SolverConfidence = SolverConfidence.NONE
-    error_message: str | None = None
-    processing_time_ms: float = 0.0
-    requires_human: bool = True
 
 
 class CaptchaSolver:
