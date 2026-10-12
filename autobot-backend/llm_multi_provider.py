@@ -32,6 +32,7 @@ from llm_shared import BaseProvider, ProviderRegistry, get_provider_registry
 # Re-export canonical types from their authoritative modules
 # ---------------------------------------------------------------------------
 from llm_shared.models import LLMRequest, LLMResponse
+from llm_shared.provider_degradation import AllCredentialsNeedReauthError
 from llm_shared.providers import (
     AnthropicProvider,
     CustomOpenAIProvider,
@@ -180,7 +181,8 @@ async def get_provider(
     Return a provider instance from the registry.
 
     Backward-compatible wrapper around
-    ``get_provider_registry().get_provider_for_request()``.
+    ``get_provider_registry().get_provider_for_request()``; like it, raises
+    ``AllCredentialsNeedReauthError`` when every candidate credential is dead (#15022).
     """
     registry = get_provider_registry()
     return await registry.get_provider_for_request(
@@ -257,10 +259,13 @@ class LLMInterface:
         if _escalation_result is not None:
             return _escalation_result
 
-        selected = await registry.get_provider_for_request(
-            provider_name=provider_name,
-            request=request,
-        )
+        try:
+            selected = await registry.get_provider_for_request(
+                provider_name=provider_name,
+                request=request,
+            )
+        except AllCredentialsNeedReauthError as exc:
+            return LLMResponse(content="", provider=ProviderType.MOCK.value, model="failed", error=str(exc))
         if selected is None:
             return LLMResponse(
                 content="",

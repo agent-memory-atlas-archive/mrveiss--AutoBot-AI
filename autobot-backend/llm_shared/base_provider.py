@@ -33,7 +33,9 @@ from .models import LLMRequest, LLMResponse, LLMSettings
 from .observability import registry as obs_registry
 from .provider_auth import ApiKeyAuth, ProviderAuthError, ProviderAuthStrategy, TokenExpiredError
 from .provider_degradation import DegradationCause, get_degradation_store
+from .quota_headroom import get_quota_headroom_store
 from .rate_limit_backoff import extract_rate_limit_info, get_backoff_handler, raise_if_rate_limited
+from .rate_limit_headers import has_header_mapping, parse_rate_limit_headers
 from .structured_output import StructuredOutputMode, effective_mode, note_structured_output
 from .token_budget import get_token_budget_gate
 
@@ -408,6 +410,50 @@ class BaseProvider(ABC):
             # can never have raised TokenExpiredError in the first place.
             await get_degradation_store().clear(self.provider_name)
         return token
+
+    def _headroom_http_client(self, default_client_cls: Any) -> Any | None:
+        """An SDK httpx client that harvests rate-limit headers off every response (#15026).
+
+        *default_client_cls* is the SDK's own ``DefaultAsyncHttpxClient`` so its
+        timeouts/limits are kept; only a ``response`` event hook is added. The
+        hook fires for success, 429 and streaming responses alike, and issues no
+        request of its own. Returns ``None`` -- the SDK builds its own client --
+        for a provider whose header spelling is unmapped or an SDK without the
+        class, so absence is "no harvesting", never a failure.
+        """
+        if default_client_cls is None or not has_header_mapping(self.provider_name):
+            return None
+
+        async def _on_response(response: Any) -> None:
+            self._harvest_headroom(response.headers)
+
+        return default_client_cls(event_hooks={"response": [_on_response]})
+
+    def _harvest_headroom(self, headers: Any) -> None:
+        """Record the headroom *headers* carry; never raises, never blocks the response.
+
+        The store write is scheduled fire-and-forget so the response path pays
+        only for parsing a handful of header lookups.
+        """
+        try:
+            observations = parse_rate_limit_headers(self.provider_name, headers)
+            if not observations:
+                return
+            fire_and_forget(self._record_headroom(observations), name="quota-headroom-harvest")
+        except Exception:
+            logger.debug("quota_headroom: harvest skipped for %s", self.provider_name, exc_info=True)
+
+    async def _record_headroom(self, observations: List[Any]) -> None:
+        store = get_quota_headroom_store()
+        for obs in observations:
+            await store.record(
+                self.provider_name,
+                obs.window,
+                limit=obs.limit,
+                remaining=obs.remaining,
+                resets_at=obs.resets_at,
+                source=obs.source,
+            )
 
     def _build_provider_metadata(
         self,

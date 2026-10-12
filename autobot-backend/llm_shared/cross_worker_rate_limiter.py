@@ -37,6 +37,16 @@ provider plan:
   AUTOBOT_LLM_RL_{PROVIDER}_RPM   (requests per minute)
   AUTOBOT_LLM_RL_{PROVIDER}_BURST (burst tokens, defaults to RPM)
 
+Observed limits (#15028)
+------------------------
+The defaults above are guesses. When the headroom store (#15026) holds a
+FRESH observed ``rpm`` window for a provider (``limit`` read off its response
+headers), that limit replaces the guessed default, so the bucket corrects
+itself. An observation older than ``headroom_routing._MAX_AGE_SECONDS`` is
+ignored entirely -- a stale reading can never widen the bucket. An operator
+who sets ``AUTOBOT_LLM_RL_{PROVIDER}_RPM`` / ``_BURST`` explicitly keeps that
+value: the env vars stay both the bootstrap and the override.
+
 Usage::
 
     limiter = get_llm_rate_limiter()
@@ -53,12 +63,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Optional, Tuple
 
 from autobot_shared.env_utils import env_int
 from autobot_shared.singleton_factory import lazy_singleton
+
+from .headroom_routing import is_fresh
+from .quota_headroom import get_quota_headroom_store
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +145,28 @@ def _provider_limits(provider: str) -> Tuple[float, float]:
     return float(burst), float(rpm) / 60.0  # capacity, tokens/sec
 
 
+async def _effective_limits(provider: str) -> Tuple[float, float]:
+    """(capacity, refill_rate) for *provider*: fresh observed rpm limit, else the env/default guess (#15028).
+
+    The observation replaces only a value the operator did not set explicitly,
+    and only while fresh; any store failure falls back to the guess.
+    """
+    capacity, rate = _provider_limits(provider)
+    pname = provider.upper()
+    try:
+        entry = await get_quota_headroom_store().get(provider, "rpm")
+    except Exception:
+        logger.debug("LLM rate limiter: headroom unreadable for %s -- using configured limits", provider, exc_info=True)
+        return capacity, rate
+    if entry is None or entry.limit is None or entry.limit <= 0 or not is_fresh(entry):
+        return capacity, rate
+    if f"AUTOBOT_LLM_RL_{pname}_BURST" not in os.environ:
+        capacity = float(entry.limit)
+    if f"AUTOBOT_LLM_RL_{pname}_RPM" not in os.environ:
+        rate = float(entry.limit) / 60.0
+    return capacity, rate
+
+
 class LLMCrossWorkerRateLimiter:
     """
     Redis-backed proactive token-bucket rate limiter for LLM providers.
@@ -198,7 +234,7 @@ class LLMCrossWorkerRateLimiter:
         try:
             redis = await self._get_redis()
             data = await redis.hmget(f"{_KEY_PREFIX}:{provider}", "tokens", "ts")
-            capacity, rate = _provider_limits(provider)
+            capacity, rate = await _effective_limits(provider)
             tokens_raw, ts_raw = data
             tokens = float(tokens_raw) if tokens_raw else capacity
             ts = float(ts_raw) if ts_raw else time.time()
@@ -224,7 +260,7 @@ class LLMCrossWorkerRateLimiter:
     async def _redis_try_acquire(self, provider: str) -> Tuple[bool, float]:
         redis = await self._get_redis()
         sha = await self._load_script(redis)
-        capacity, rate = _provider_limits(provider)
+        capacity, rate = await _effective_limits(provider)
         key = f"{_KEY_PREFIX}:{provider}"
         now = time.time()
 
