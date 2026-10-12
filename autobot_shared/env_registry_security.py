@@ -93,3 +93,127 @@ register_env_var(
         component="security",
     )
 )
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_PROMETHEUS_SCRAPE_TOKEN",
+        type=str,
+        default="",
+        description=(
+            "Read-only bearer token Prometheus presents to /api/metrics/prometheus (#16375). "
+            "Seeded by the SLM into its secret store and rendered by the deploy roles into "
+            "backend.env and Prometheus' bearer_token_file. Unset refuses every scrape."
+        ),
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_INGEST_RATE_LIMIT",
+        type=int,
+        default=120,
+        description=(
+            "Requests per client address per minute accepted by the anonymous RUM ingest "
+            "routes, /api/rum/event and /api/rum/metrics (#16375). Over it the caller gets 429 "
+            "and nothing is written."
+        ),
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_EVENT_MAX_BYTES",
+        type=int,
+        default=16384,
+        description="Largest request body /api/rum/event accepts; larger is refused with 413 (#16375).",
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_METRICS_MAX_BYTES",
+        type=int,
+        default=65536,
+        description="Largest request body /api/rum/metrics accepts; larger is refused with 413 (#16375).",
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_MAX_EVENTS",
+        type=int,
+        default=5000,
+        description="RUM events held in memory; the oldest is dropped as each new one arrives (#16375).",
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_MAX_SESSIONS",
+        type=int,
+        default=1000,
+        description=(
+            "RUM session tallies held in memory (#16375). An anonymous caller mints a session id "
+            "per request at will, so the table is capped and the oldest session is evicted."
+        ),
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_METRICS_MAX_ITEMS",
+        type=int,
+        default=100,
+        description="Longest list in any field of a /api/rum/metrics batch; longer is refused with 422 (#18368).",
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_METRICS_MAX_FIELD_CHARS",
+        type=int,
+        default=512,
+        description="Longest string anywhere in a /api/rum/metrics batch; longer is refused with 422 (#18368).",
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_LABEL_MAX_VALUES",
+        type=int,
+        default=50,
+        description=(
+            "Distinct values each frontend RUM metric label admits; later new values record as "
+            "'other', so anonymous input cannot create unbounded Prometheus series (#18368)."
+        ),
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_LABEL_MAX_CHARS",
+        type=int,
+        default=128,
+        description="Longest frontend RUM metric label value; longer records as 'other' (#18368).",
+        component="security",
+    )
+)

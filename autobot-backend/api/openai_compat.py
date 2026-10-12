@@ -74,6 +74,7 @@ _AUTO_MODEL_NAMES = frozenset({"auto", "auto-fast", "auto-quality"})
 # directly here. #7271 extracted that into autobot_shared/rate_limit.py so
 # it can be reused by /a2a (#7270) and any future per-IP limiter.
 
+from autobot_shared.proxy_utils import get_client_ip
 from autobot_shared.rate_limit import IPRateLimiter
 
 _oai_limiter = IPRateLimiter(
@@ -85,11 +86,13 @@ _oai_limiter = IPRateLimiter(
 
 
 def _remote_addr(request: Request) -> str:
-    """Extract real client IP (respects X-Forwarded-For from nginx)."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """The client address for rate limiting, through the shared trusted-proxy rule.
+
+    #17848: this read the leftmost X-Forwarded-For with no trusted-proxy check,
+    so any caller chose its own rate-limit key. ``get_client_ip`` honours the
+    header only from a trusted proxy and reads the appended chain from the right.
+    """
+    return get_client_ip(request) or "unknown"
 
 
 # ---------------------------------------------------------------------------

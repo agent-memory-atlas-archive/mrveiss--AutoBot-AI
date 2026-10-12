@@ -250,6 +250,14 @@
   no_log: true
   tags: ['backend', 'config']
 
+# #16375: keep the deployed Prometheus scrape token if this run carries none,
+# so a secret-fetch failure never renders an empty token over a working one.
+- name: "Backend | Keep the deployed Prometheus scrape token (#16375)"
+  ansible.builtin.include_tasks: ../../../_shared/tasks/keep_prometheus_scrape_token.yml
+  vars:
+    scrape_token_env_files: ["/etc/autobot/autobot-backend.env", "{{ backend_code_dir | default(backend_install_dir) }}/.env"]
+  tags: ['backend', 'config']
+
 # #16627 (P1b of #13568): the backend authenticates to Redis as `default` with the
 # SLM-generated password while the server stays nopass. Adopted only when no
 # password is set, so a password a server may already enforce is never replaced,
