@@ -6,12 +6,11 @@
 """Quick backend diagnostic script"""
 
 import logging
-import os
 import sys
-from pathlib import Path
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -19,14 +18,16 @@ logger = logging.getLogger(__name__)
 
 import requests
 
-# Import configuration from centralized source
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# `autobot_shared` lives at the repository root, which is not on the path when this
-# script is run standalone (#18094; same bootstrap as deployment_rollback.py).
+# Runs from any directory with no PYTHONPATH: put the repository root on the path for
+# `autobot_shared` (#18289).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-from autobot_shared.ssot_config import config as ssot_config
+
+from autobot_shared.network_constants import ServiceURLs  # noqa: E402
+
+API_BASE_URL = ServiceURLs.BACKEND_API
+OLLAMA_URL = ServiceURLs.OLLAMA_LOCAL
 
 
 @dataclass
@@ -91,9 +92,9 @@ logger.info("🔍 Checking backend health...")
 
 # Test endpoints
 endpoints = [
-    (f"{ssot_config.backend_url}/api/hello", "Basic API"),
-    (f"{ssot_config.backend_url}/api/system/health", "Health Check"),
-    (f"{ssot_config.backend_url}/api/chat/list", "Chat List"),
+    (f"{API_BASE_URL}/api/hello", "Basic API"),
+    (f"{API_BASE_URL}/api/system/health", "Health Check"),
+    (f"{API_BASE_URL}/api/chat/list", "Chat List"),
 ]
 
 # Batch check all endpoints concurrently
@@ -115,7 +116,7 @@ for result in results:
 # Check Ollama
 logger.info("\n🤖 Checking Ollama...")
 try:
-    response = requests.get(f"{ssot_config.ollama_url}/api/tags", timeout=5)
+    response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
     if response.status_code == 200:
         models = response.json().get("models", [])
         logger.info(f"   ✅ Ollama is running with {len(models)} models")

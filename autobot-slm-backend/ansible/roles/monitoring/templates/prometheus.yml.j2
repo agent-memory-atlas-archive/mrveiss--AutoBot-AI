@@ -90,6 +90,10 @@ scrape_configs:
       - targets: ["localhost:{{ backend_port }}"]
     metrics_path: /api/metrics/prometheus
     scheme: http
+{% if _backend_scrape_token_present | default(false) | bool %}
+    # #16375: the backend refuses a scrape without its scrape token.
+    bearer_token_file: {{ prometheus_scrape_token_file }}
+{% endif %}
 {% else %}
   # Distributed: uvicorn is loopback-only on a remote host, so the TLS front is
   # the only reachable entry. Self-signed, hence insecure_skip_verify (#944).
@@ -100,6 +104,10 @@ scrape_configs:
     scheme: https
     tls_config:
       insecure_skip_verify: true
+{% if _backend_scrape_token_present | default(false) | bool %}
+    # #16375: the backend refuses a scrape without its scrape token.
+    bearer_token_file: {{ prometheus_scrape_token_file }}
+{% endif %}
 {% endif %}
 
   # Redis exporter (if available)

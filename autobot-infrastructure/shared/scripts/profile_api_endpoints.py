@@ -10,22 +10,21 @@ Tests the actual API endpoints for response time analysis
 
 import asyncio
 import logging
-import os
 import sys
-from pathlib import Path
 import time
+from pathlib import Path
 
 import requests
 
 logger = logging.getLogger(__name__)
 
-# Add the project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# `autobot_shared` lives at the repository root, which is not on the path when this
-# script is run standalone (#18094; same bootstrap as deployment_rollback.py).
+# Runs from any directory with no PYTHONPATH: put the repository root on the path for
+# `autobot_shared` (#18289).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+from autobot_shared.network_constants import ServiceURLs  # noqa: E402
 
 
 def test_endpoint_performance(url, description, params=None):
@@ -106,9 +105,7 @@ async def test_api_endpoints():
     logger.info("API Endpoint Performance Testing")
     logger.info("=" * 50)
 
-    from autobot_shared.ssot_config import config as ssot_config
-
-    endpoints = _get_endpoint_list(ssot_config.backend_url)
+    endpoints = _get_endpoint_list(ServiceURLs.BACKEND_API)
     results = []
     total_time = 0
     successful_tests = 0
