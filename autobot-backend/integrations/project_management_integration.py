@@ -29,6 +29,7 @@ from integrations.base import (
     IntegrationHealth,
     IntegrationStatus,
 )
+from knowledge.connectors.egress import VENDOR_API_EGRESS, instance_host_egress
 
 logger = get_logger(__name__)
 
@@ -270,8 +271,7 @@ class JiraIntegration(BaseIntegration):
         """Make authenticated request to Jira API."""
         url = f"{self.config.base_url}{endpoint}"
         auth_str = f"{self.config.username}:{self.config.api_key}"
-        auth_bytes = auth_str.encode("utf-8")
-        auth_b64 = base64.b64encode(auth_bytes).decode("ascii")
+        auth_b64 = base64.b64encode(auth_str.encode("utf-8")).decode("ascii")
 
         headers = {
             "Authorization": f"Basic {auth_b64}",
@@ -282,7 +282,7 @@ class JiraIntegration(BaseIntegration):
         try:
             timeout = aiohttp.ClientTimeout(total=30.0)
             async with get_http_client().tracked_request(
-                method, url, headers=headers, json=json_data, timeout=timeout
+                method, url, headers=headers, json=json_data, timeout=timeout, guard_egress=instance_host_egress()
             ) as resp:
                 if resp.status == 204:
                     return {"status_code": 204, "body": {}}
@@ -497,13 +497,13 @@ class TrelloIntegration(BaseIntegration):
             data = None
 
         try:
-            timeout = aiohttp.ClientTimeout(total=30.0)
             async with get_http_client().tracked_request(
                 method,
                 url,
                 params=params,
                 json=data if method != "GET" else None,
-                timeout=timeout,
+                timeout=aiohttp.ClientTimeout(total=30.0),
+                guard_egress=VENDOR_API_EGRESS,
             ) as resp:
                 body = await resp.json()
                 return {"status_code": resp.status, "body": body}
@@ -737,7 +737,7 @@ class AsanaIntegration(BaseIntegration):
         try:
             timeout = aiohttp.ClientTimeout(total=30.0)
             async with get_http_client().tracked_request(
-                method, url, headers=headers, json=json_data, timeout=timeout
+                method, url, headers=headers, json=json_data, timeout=timeout, guard_egress=VENDOR_API_EGRESS
             ) as resp:
                 body = await resp.json()
                 return {"status_code": resp.status, "body": body}

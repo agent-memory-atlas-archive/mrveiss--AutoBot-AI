@@ -29,13 +29,13 @@ from dataclasses import dataclass
 from typing import Callable, Dict
 
 import aiohttp
-import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from autobot_shared.auth.jwt_core import encode_jwt
 from autobot_shared.http_egress_guard import assert_egress_policy
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
+from autobot_shared.ws_no_redirect import connect_no_redirect
 from constants.ttl_constants import TTL_5_MINUTES
 from services.slm_deployments import SLMDeploymentsMixin
 
@@ -665,7 +665,7 @@ class SLMClient(SLMDeploymentsMixin):
             # Token is passed via Sec-WebSocket-Protocol subprotocol header so
             # it never appears in the URL or server access logs (project rule:
             # WebSocket JWT must NOT go in URL).
-            async with websockets.connect(
+            async with connect_no_redirect(
                 ws_url,
                 subprotocols=["bearer", token],
                 ssl=ws_ssl,
