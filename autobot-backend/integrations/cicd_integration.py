@@ -18,7 +18,7 @@ from integrations.base import (
     IntegrationHealth,
     IntegrationStatus,
 )
-from knowledge.connectors.egress import VENDOR_API_EGRESS, instance_host_egress
+from knowledge.connectors.egress import instance_host_egress
 
 logger = get_logger(__name__)
 
@@ -318,7 +318,7 @@ class CircleCIIntegration(BaseIntegration):
                 headers=self.headers,
                 timeout=aiohttp.ClientTimeout(total=10),
                 suppress_error_log=True,
-                guard_egress=VENDOR_API_EGRESS,
+                guard_egress=instance_host_egress(),
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -389,14 +389,14 @@ class CircleCIIntegration(BaseIntegration):
         """List CircleCI pipelines."""
         project_slug = params["project_slug"]
         url = f"{self.base_url}/project/{project_slug}/pipeline"
-        data = await get_http_client().get_json(url, headers=self.headers, guard_egress=VENDOR_API_EGRESS)
+        data = await get_http_client().get_json(url, headers=self.headers, guard_egress=instance_host_egress())
         return {"pipelines": data.get("items", [])}
 
     async def _get_workflow_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get CircleCI workflow status."""
         workflow_id = params["workflow_id"]
         url = f"{self.base_url}/workflow/{workflow_id}"
-        return await get_http_client().get_json(url, headers=self.headers, guard_egress=VENDOR_API_EGRESS)
+        return await get_http_client().get_json(url, headers=self.headers, guard_egress=instance_host_egress())
 
     async def _trigger_pipeline(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Trigger CircleCI pipeline."""
@@ -404,4 +404,6 @@ class CircleCIIntegration(BaseIntegration):
         branch = params.get("branch", "main")
         url = f"{self.base_url}/project/{project_slug}/pipeline"
         payload = {"branch": branch}
-        return await get_http_client().post_json(url, payload, headers=self.headers, guard_egress=VENDOR_API_EGRESS)
+        return await get_http_client().post_json(
+            url, payload, headers=self.headers, guard_egress=instance_host_egress()
+        )

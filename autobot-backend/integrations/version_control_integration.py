@@ -19,7 +19,7 @@ from integrations.base import (
     IntegrationHealth,
     IntegrationStatus,
 )
-from knowledge.connectors.egress import instance_host_egress
+from knowledge.connectors.egress import VENDOR_API_EGRESS, instance_host_egress
 
 logger = get_logger(__name__)
 
@@ -299,7 +299,7 @@ class BitbucketIntegration(BaseIntegration):
         try:
             kwargs = self._request_kwargs(timeout=10)
             async with get_http_client().tracked_request(
-                "GET", f"{self.base_url}/user", suppress_error_log=True, **kwargs, guard_egress=instance_host_egress()
+                "GET", f"{self.base_url}/user", suppress_error_log=True, **kwargs, guard_egress=VENDOR_API_EGRESS
             ) as response:
                 if response.status == 200:
                     user_data = await response.json()
@@ -385,9 +385,7 @@ class BitbucketIntegration(BaseIntegration):
             raise ValueError("Workspace is required")
 
         url = f"{self.base_url}/repositories/{workspace}"
-        data = await get_http_client().get_json(
-            url, **self._request_kwargs(timeout=30), guard_egress=instance_host_egress()
-        )
+        data = await get_http_client().get_json(url, **self._request_kwargs(timeout=30), guard_egress=VENDOR_API_EGRESS)
         return {
             "repositories": data.get("values", []),
             "count": len(data.get("values", [])),
@@ -413,7 +411,7 @@ class BitbucketIntegration(BaseIntegration):
         kwargs = self._request_kwargs(timeout=30)
         kwargs["params"] = {"state": state}
 
-        data = await get_http_client().get_json(url, **kwargs, guard_egress=instance_host_egress())
+        data = await get_http_client().get_json(url, **kwargs, guard_egress=VENDOR_API_EGRESS)
         return {
             "pull_requests": data.get("values", []),
             "count": len(data.get("values", [])),
@@ -435,9 +433,7 @@ class BitbucketIntegration(BaseIntegration):
         repo_slug = params["repo_slug"]
 
         url = f"{self.base_url}/repositories/{workspace}/" f"{repo_slug}/refs/branches"
-        data = await get_http_client().get_json(
-            url, **self._request_kwargs(timeout=30), guard_egress=instance_host_egress()
-        )
+        data = await get_http_client().get_json(url, **self._request_kwargs(timeout=30), guard_egress=VENDOR_API_EGRESS)
         return {
             "branches": data.get("values", []),
             "count": len(data.get("values", [])),
@@ -461,6 +457,6 @@ class BitbucketIntegration(BaseIntegration):
 
         url = f"{self.base_url}/repositories/{workspace}/" f"{repo_slug}/commit/{commit_hash}"
         commit = await get_http_client().get_json(
-            url, **self._request_kwargs(timeout=30), guard_egress=instance_host_egress()
+            url, **self._request_kwargs(timeout=30), guard_egress=VENDOR_API_EGRESS
         )
         return {"commit": commit}

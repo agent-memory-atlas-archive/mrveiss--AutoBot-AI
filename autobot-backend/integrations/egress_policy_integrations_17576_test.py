@@ -7,9 +7,10 @@
 Every integration's base URL, webhook URL or tenant region is entered by an operator or user and stored as
 integration settings, so none of them is a *server-chosen* URL: ``EGRESS_POLICY`` (which trusts the SSOT
 internal origins) would let whoever edits the setting aim the server, with its bearer token, at its own
-services. The self-hostable tools (Jenkins, GitLab, Bitbucket, GitHub, Jira) use ``instance_host_egress()`` --
+services. The self-hostable tools (Jenkins, GitLab, CircleCI Server, GitHub, and Jira when the admin router builds it) use ``instance_host_egress()`` --
 public, plus RFC-1918 only when ``AUTOBOT_CONNECTOR_PRIVATE_NETWORK_EGRESS`` is on; loopback and link-local
-(metadata) never. The SaaS-only vendors use ``VENDOR_API_EGRESS`` (public only). A real HTTP manager with a
+(metadata) never. Jira built from a tenant's stored ``pm-config`` (LLC), Bitbucket (Cloud API only) and the
+SaaS-only vendors use public-only egress. A real HTTP manager with a
 mocked session shows whether a request left; DNS is stubbed.
 """
 
@@ -89,7 +90,8 @@ BASE_URL_SITES = {
     "github": (github_integration.GitHubIntegration, _cfg),
     "microsoft365": (microsoft365_integration.Microsoft365Integration, _cfg),
     "notion": (notion_integration.NotionIntegration, _cfg),
-    "jira": (project_management_integration.JiraIntegration, _cfg),
+    "jira_tenant": (project_management_integration.JiraIntegration, _cfg),
+    "jira_admin": (lambda cfg: project_management_integration.JiraIntegration(cfg, instance_host=True), _cfg),
     "trello": (project_management_integration.TrelloIntegration, _cfg),
     "asana": (project_management_integration.AsanaIntegration, _cfg),
 }
@@ -197,7 +199,7 @@ async def test_action_paths_and_kwargs_wrappers_are_guarded_too(site, action, pa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("site", ["jenkins", "gitlab_ci", "gitlab_vcs", "bitbucket", "github", "jira"])
+@pytest.mark.parametrize("site", ["jenkins", "gitlab_ci", "circleci", "gitlab_vcs", "github", "jira_admin"])
 async def test_instance_hosts_follow_the_private_network_opt_in_but_never_loopback(site, net, monkeypatch):
     monkeypatch.setattr(ssot.feature, "connector_private_network_egress", True)
     cls, build = BASE_URL_SITES[site]
@@ -210,9 +212,43 @@ async def test_instance_hosts_follow_the_private_network_opt_in_but_never_loopba
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("site", ["circleci", "slack", "discord", "microsoft365", "notion", "trello", "asana"])
+@pytest.mark.parametrize("site", ["bitbucket", "slack", "discord", "microsoft365", "notion", "trello", "asana"])
 async def test_saas_vendors_ignore_the_private_network_opt_in(site, net, monkeypatch):
     monkeypatch.setattr(ssot.feature, "connector_private_network_egress", True)
     cls, build = BASE_URL_SITES[site]
     await cls(build("http://10.1.2.3:8080")).test_connection()
     assert _sent(net) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("make_url", INTERNAL_URLS)
+async def test_llc_tenant_jira_url_is_public_only_even_with_the_private_network_opt_in(make_url, net, monkeypatch):
+    """The LLC test-connection and outbound-dispatch paths build Jira from a DB-stored, tenant-editable URL."""
+    from llc.api.companies import _test_pm_connectivity
+    from llc.sync.outbound_sync import _dispatch_to_jira
+
+    monkeypatch.setattr(ssot.feature, "connector_private_network_egress", True)
+    pm = {"base_url": make_url(), "username": "u", "api_key": _CRED, "project_key": "P"}
+    await _test_pm_connectivity("jira", pm)
+    await _dispatch_to_jira(pm, "created", {"title": "t"})
+    assert _sent(net) == []
+
+
+@pytest.mark.asyncio
+async def test_llc_tenant_jira_public_url_is_allowed(net):
+    from llc.api.companies import _test_pm_connectivity
+
+    await _test_pm_connectivity("jira", {"base_url": PUBLIC_URL, "username": "u", "api_key": _CRED})
+    assert _sent(net)
+
+
+def test_admin_router_builds_jira_with_instance_host_trust_and_llc_does_not():
+    import inspect
+
+    from api import integration_project_management as admin
+    from llc.api import companies
+    from llc.sync import outbound_sync
+
+    assert "instance_host=True" in inspect.getsource(admin._get_integration)
+    for fn in (companies._test_pm_connectivity, outbound_sync._dispatch_to_jira):
+        assert "instance_host" not in inspect.getsource(fn)

@@ -28,7 +28,8 @@ file, under-matching is the confident zero this guard exists to prevent.
   where ``<expr>`` is the same expression as the request's URL argument. A module-level policy call
   never counts. It also needs redirects refused: a literal ``allow_redirects=False`` (aiohttp,
   requests) or no ``follow_redirects`` opt-in (httpx, whose default is off). ``urlopen`` can never
-  be guarded this way; a websocket handshake is not redirected.
+  be guarded this way; a websocket counts only through ``ws_no_redirect.connect_no_redirect`` (websockets follows
+  handshake redirects).
 """
 
 from __future__ import annotations
@@ -246,6 +247,10 @@ def _url_arg(call: ast.Call, req: _Req | None) -> ast.expr | None:
 
 def _accepted_policy(value: ast.expr, ctx: _Ctx) -> bool:
     """``False``, ``EGRESS_POLICY`` or a canonical policy value imported from the egress modules."""
+    if isinstance(
+        value, ast.IfExp
+    ):  # ``instance_host_egress() if self.admin else CONTENT_URL_EGRESS``: both arms canonical
+        return _accepted_policy(value.body, ctx) and _accepted_policy(value.orelse, ctx)
     if isinstance(value, ast.Constant):
         return value.value is False
     if isinstance(value, ast.Call):
@@ -283,10 +288,11 @@ def _redirects_refused(kind: str, call: ast.Call, req: _Req | None, ctx: _Ctx) -
 
     aiohttp and requests follow redirects by default, so only a literal ``allow_redirects=False``
     counts. httpx does not follow by default: refused unless the call or its client opts in.
-    ``urlopen`` has no switch at all. A websocket handshake is not followed.
+    ``urlopen`` has no switch at all. A websocket handshake is followed by ``websockets.connect``;
+    only the ``ws_no_redirect`` wrapper refuses it.
     """
-    if kind == "websocket":
-        return True
+    if kind == "websocket":  # ``websockets.connect`` follows handshake redirects; only the wrapper refuses them
+        return _is_no_redirect_connect(_canon(call.func, ctx.aliases))
     if kind == "httpx":
         opted_in = any(kw.arg == "follow_redirects" for kw in call.keywords)
         if opted_in:
