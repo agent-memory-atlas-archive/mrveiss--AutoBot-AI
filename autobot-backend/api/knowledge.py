@@ -689,10 +689,8 @@ async def _store_fact_in_kb(kb, content: str, metadata: dict) -> str:
     caller writing ``type: file``, is a document: SYSTEM unless something already claims it (#16693)."""
     if metadata.get("type") == "file":
         stamp_if_document(metadata)
-    if hasattr(kb, "store_fact"):
-        result = await kb.store_fact(content=content, metadata=metadata)
-    else:
-        result = await kb.store_fact(text=content, metadata=metadata)
+    # The one ingest path (#18407): long input is chunked, with per-chunk page_spans.
+    result = await kb.add_document(content, metadata)
     return result.get("fact_id")
 
 

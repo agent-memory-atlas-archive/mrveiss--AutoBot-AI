@@ -208,7 +208,15 @@ def _split_oversized(paragraph: str, max_tokens: int) -> List[str]:
         words = sentence.split()
         window = max(1, max_tokens * 4 // 6)  # ~6 chars per word incl. space
         pieces.extend(" ".join(words[i : i + window]) for i in range(0, len(words), window))
-    return pieces
+    return [part for piece in pieces for part in _hard_cap(piece, max_tokens)]
+
+
+def _hard_cap(piece: str, max_tokens: int) -> List[str]:
+    """Cut a piece that is still over budget (one token with no whitespace, e.g. base64) by characters."""
+    limit = max(1, max_tokens * 4)
+    if estimate_tokens(piece) <= max_tokens:
+        return [piece]
+    return [piece[i : i + limit] for i in range(0, len(piece), limit)]
 
 
 def chunk_plain_text(text: str, max_tokens: int = DEFAULT_CHUNK_MAX_TOKENS) -> List[str]:

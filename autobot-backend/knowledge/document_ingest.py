@@ -28,6 +28,7 @@ from typing import Any, Dict, List
 from autobot_shared.doc_chunking import chunk_plain_text
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.status_enums import OperationOutcome
+from knowledge.chunk_provenance import chunk_offsets, chunk_page_metadata
 
 logger = get_logger(__name__)
 
@@ -42,10 +43,9 @@ def chunk_fact_id(doc_id: str, index: int) -> str:
     return doc_id if index == 0 else "%s:chunk:%d" % (doc_id, index)
 
 
-def _chunk_metadata(metadata: Dict[str, Any], doc_id: str, index: int, total: int) -> Dict[str, Any]:
-    chunk_meta = dict(metadata)
-    if total > 1:
-        chunk_meta.update({"document_id": doc_id, "chunk_index": index, "chunk_count": total})
+def _chunk_metadata(metadata: Dict[str, Any], doc_id: str, index: int, total: int, offsets) -> Dict[str, Any]:
+    chunk_meta = chunk_page_metadata(metadata, offsets)
+    chunk_meta.update({"document_id": doc_id, "chunk_index": index, "chunk_count": total})
     return chunk_meta
 
 
@@ -62,25 +62,26 @@ async def read_ingest_record(kb, doc_id: str) -> Dict[str, str]:
     }
 
 
-async def _write_record(kb, doc_id: str, status: OperationOutcome, stored: int, total: int, digest: str) -> None:
+async def _write_record(
+    kb, doc_id: str, status: OperationOutcome, stored: int, total: int, extra: Dict[str, Any]
+) -> None:
     key = _record_key(doc_id)
-    mapping = {
-        "status": status.value,
-        "chunks_stored": stored,
-        "chunks_total": total,
-        "content_digest": digest,
-        "updated_at": int(time.time()),
-    }
+    mapping = {"status": status.value, "chunks_stored": stored, "chunks_total": total, "updated_at": int(time.time())}
+    mapping.update(extra)
     await asyncio.to_thread(kb.redis_client.hset, key, mapping=mapping)
     await asyncio.to_thread(kb.redis_client.expire, key, KB_INGEST_RECORD_TTL_SECONDS)
 
 
-async def _resume_point(kb, doc_id: str, digest: str) -> tuple[int, bool]:
-    """(chunks already stored, whether a record for this exact content exists)."""
-    record = await read_ingest_record(kb, doc_id)
-    if record.get("content_digest") != digest:
-        return 0, False
-    return int(record.get("chunks_stored", 0)), True
+async def _drop_orphans(kb, doc_id: str, new_total: int, record: Dict[str, str]) -> None:
+    """Delete this document's own chunks past the new count when shorter content replaces longer.
+
+    These are derived chunks of the same document id being replaced, not user data: left behind they
+    would keep serving text the document no longer contains.
+    """
+    for index in range(max(new_total, 1), int(record.get("chunks_total", 0))):
+        await kb.delete_fact(chunk_fact_id(doc_id, index))
+    if new_total == 1 and record:
+        await asyncio.to_thread(kb.redis_client.delete, _record_key(doc_id))
 
 
 async def _store_chunk(kb, text: str, metadata: Dict[str, Any], fact_id: str, interrupted: bool) -> Dict[str, Any]:
@@ -91,28 +92,36 @@ async def _store_chunk(kb, text: str, metadata: Dict[str, Any], fact_id: str, in
     return await kb._add_document_internal(text, metadata, fact_id)
 
 
-def _outcome(status: OperationOutcome, doc_id: str, stored: int, total: int, first: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the caller-facing result; ``status`` keeps the vocabulary pre-chunking callers expect."""
-    result = dict(first)
-    result.update(
-        {
-            "fact_id": doc_id if stored else None,
-            "status": status.value,
-            "document_id": doc_id,
-            "chunks_stored": stored,
-            "chunks_total": total,
-        }
-    )
-    return result
+def _outcome(status: OperationOutcome, doc_id: str, stored: int, total: int, first_id: str | None) -> Dict[str, Any]:
+    """Build the caller-facing result; ``status`` is the OperationOutcome value."""
+    return {
+        "status": status.value,
+        "fact_id": (first_id or doc_id) if stored else None,
+        "document_id": doc_id,
+        "chunks_stored": stored,
+        "chunks_total": total,
+    }
 
 
 async def _ingest_single(kb, text: str, metadata: Dict[str, Any], doc_id: str, budget: float) -> Dict[str, Any]:
     """A document within one chunk: stored as before, all-or-nothing."""
+    record = await read_ingest_record(kb, doc_id) if getattr(kb, "redis_client", None) is not None else {}
+    if record:
+        await _drop_orphans(kb, doc_id, 1, record)
     try:
         return await asyncio.wait_for(kb._add_document_internal(text, metadata, doc_id), timeout=budget)
     except asyncio.TimeoutError:
         logger.warning("Document addition timed out")
         return {"status": "timeout", "message": "Document addition timed out"}
+
+
+async def _plan(kb, doc_id: str, digest: str, total: int) -> tuple[int, bool, str | None]:
+    """(chunks already stored, resuming?, chunk-0 fact id); drops orphans of a longer earlier version."""
+    record = await read_ingest_record(kb, doc_id)
+    await _drop_orphans(kb, doc_id, total, record)
+    if record.get("content_digest") != digest:
+        return 0, False, None
+    return int(record.get("chunks_stored", 0)), True, record.get("first_fact_id")
 
 
 async def ingest_document(kb, content: str, metadata: Dict[str, Any], doc_id: str, budget: float) -> Dict[str, Any]:
@@ -122,18 +131,19 @@ async def ingest_document(kb, content: str, metadata: Dict[str, Any], doc_id: st
     if total == 1:
         return await _ingest_single(kb, content, metadata, doc_id, budget)
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    stored, resumed = await _resume_point(kb, doc_id, digest)
+    stored, resumed, first_id = await _plan(kb, doc_id, digest, total)
+    offsets = chunk_offsets(content, chunks) if "page_spans" in metadata else [None] * total
     deadline = time.monotonic() + budget
-    first: Dict[str, Any] = {}
     status = OperationOutcome.SUCCESS
     for index in range(stored, total):
         try:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise asyncio.TimeoutError
-            chunk_meta = _chunk_metadata(metadata, doc_id, index, total)
+            chunk_meta = _chunk_metadata(metadata, doc_id, index, total, offsets[index])
+            interrupted = resumed and index == stored
             res = await asyncio.wait_for(
-                _store_chunk(kb, chunks[index], chunk_meta, chunk_fact_id(doc_id, index), resumed and index == stored),
+                _store_chunk(kb, chunks[index], chunk_meta, chunk_fact_id(doc_id, index), interrupted),
                 timeout=remaining,
             )
         except asyncio.TimeoutError:
@@ -145,8 +155,12 @@ async def ingest_document(kb, content: str, metadata: Dict[str, Any], doc_id: st
                 return res
             status = OperationOutcome.PARTIAL
             break
-        first = first or res
+        first_id = first_id or res.get("fact_id")
         stored = index + 1
-        await _write_record(kb, doc_id, OperationOutcome.PARTIAL, stored, total, digest)
-    await _write_record(kb, doc_id, status, stored, total, digest)
-    return _outcome(status, doc_id, stored, total, first)
+        await _write_record(kb, doc_id, OperationOutcome.PARTIAL, stored, total, _extra(digest, first_id))
+    await _write_record(kb, doc_id, status, stored, total, _extra(digest, first_id))
+    return _outcome(status, doc_id, stored, total, first_id)
+
+
+def _extra(digest: str, first_id: str | None) -> Dict[str, Any]:
+    return {"content_digest": digest, "first_fact_id": first_id or ""}

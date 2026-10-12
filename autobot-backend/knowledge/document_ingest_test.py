@@ -5,6 +5,7 @@
 """add_document chunks (#17830) and keeps what it stored when the budget runs out (#17986)."""
 
 import asyncio
+import re
 from unittest.mock import PropertyMock, patch
 
 import pytest
@@ -32,6 +33,9 @@ class _FakeRedis:
     def expire(self, key, ttl):
         return True
 
+    def delete(self, key):
+        self.hashes.pop(key, None)
+
     def exists(self, key):
         return key in self.facts
 
@@ -41,13 +45,19 @@ class _FakeKB(DocumentsMixin):
 
     def __init__(self, delay=0.0):
         self.delay, self.redis_client = delay, _FakeRedis()
-        self.stored, self.revectorized = {}, []
+        self.stored, self.revectorized, self.deleted = {}, [], []
 
     async def _add_document_internal(self, content, metadata=None, doc_id=None):
         await asyncio.sleep(self.delay)
         self.stored[doc_id] = (content, dict(metadata or {}))
         self.redis_client.facts.add("fact:%s" % doc_id)
         return {"status": "success", "fact_id": doc_id}
+
+    async def delete_fact(self, fact_id):
+        self.stored.pop(fact_id, None)
+        self.redis_client.facts.discard("fact:%s" % fact_id)
+        self.deleted.append(fact_id)
+        return {"status": "success"}
 
     async def vectorize_existing_fact(self, fact_id):
         self.revectorized.append(fact_id)
@@ -147,3 +157,59 @@ async def test_changed_content_under_the_same_id_restarts_instead_of_resuming():
     kb.delay = 0.0
     result = await kb.add_document(_transcript(300), doc_id="doc-4")
     assert result["status"] == "success" and result["chunks_stored"] == result["chunks_total"]
+
+
+@pytest.mark.asyncio
+async def test_shorter_content_under_the_same_id_removes_the_orphaned_chunks():
+    kb = _FakeKB()
+    first = await kb.add_document(_transcript(400), doc_id="doc-5")
+    assert first["chunks_total"] > 3
+    second = await kb.add_document(_transcript(150), doc_id="doc-5")
+    assert second["chunks_total"] < first["chunks_total"] and second["status"] == "success"
+    assert set(kb.stored) == {chunk_fact_id("doc-5", i) for i in range(second["chunks_total"])}
+    assert all(m["chunk_count"] == second["chunks_total"] for _c, m in kb.stored.values())
+
+
+@pytest.mark.asyncio
+async def test_content_shrinking_to_one_chunk_removes_every_old_chunk_and_the_record():
+    kb = _FakeKB()
+    await kb.add_document(_transcript(400), doc_id="doc-6")
+    result = await kb.add_document("now short", doc_id="doc-6")
+    assert result["status"] == "success" and set(kb.stored) == {"doc-6"}
+    assert await read_ingest_record(kb, "doc-6") == {}
+
+
+@pytest.mark.asyncio
+async def test_a_chunk_still_over_budget_is_hard_capped():
+    kb = _FakeKB()
+    blob = "A" * (CHUNK_TOKENS * 4 * 5)  # one 'token' with no whitespace, five budgets long
+    result = await kb.add_document("intro. " + blob + " outro.", doc_id="doc-7")
+    assert result["chunks_total"] >= 5
+    assert all(estimate_tokens(c) <= CHUNK_TOKENS for c, _m in kb.stored.values())
+    assert "".join(c.replace(" ", "") for c, _m in kb.stored.values()).count("A") == len(blob)
+
+
+def _paged_text():
+    """Four 'pages' of three paragraphs, with spans in the shape _page_provenance_metadata records."""
+    spans, text = [], ""
+    for page in range(1, 5):
+        start = len(text)
+        text += "\n\n".join("Page %d para %d. " % (page, q) + "word " * 70 for q in range(3))
+        spans.append({"page": page, "start": start, "end": len(text)})
+        text += "\n\n"
+    return text.rstrip(), spans
+
+
+@pytest.mark.asyncio
+async def test_each_chunk_carries_only_the_pages_it_covers_with_rebased_offsets():
+    text, spans = _paged_text()
+    kb = _FakeKB()
+    meta = {"page_count": 4, "page_spans": spans, "pages_with_text": [1, 2, 3, 4]}
+    result = await kb.add_document(text, meta, doc_id="doc-8")
+    assert result["chunks_total"] > 2
+    for chunk, m in kb.stored.values():
+        covered = {int(x) for x in re.findall(r"Page (\d) para", chunk)}
+        assert {s["page"] for s in m["page_spans"]} == covered == set(m["pages_with_text"])
+        for span in m["page_spans"]:
+            assert 0 <= span["start"] < span["end"] <= len(chunk)
+        assert m["page_spans"][-1]["end"] == len(chunk.rstrip())
