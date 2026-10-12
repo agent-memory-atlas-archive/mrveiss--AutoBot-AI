@@ -274,7 +274,6 @@
 1|other|autobot-backend/judges/__init__.py|"system"
 1|other|autobot-backend/judges/__init__.py|"user"
 1|other|autobot-backend/knowledge/__init__.py|"general"
-1|other|autobot-backend/knowledge/audit_log.py|100
 1|other|autobot-backend/knowledge/backends/async_base.py|10
 1|other|autobot-backend/knowledge/backends/async_chromadb_adapter.py|10
 1|other|autobot-backend/knowledge/backends/async_memory_adapter.py|10
@@ -438,9 +437,7 @@
 1|other|autobot-backend/services/ai_stack_client.py|60
 1|other|autobot-backend/services/approval_gate_service.py|50
 2|other|autobot-backend/services/audit/audit.py|100
-1|other|autobot-backend/services/audit/audit_log.py|100
 1|other|autobot-backend/services/audit_logger.py|100
-1|other|autobot-backend/services/audit_logger.py|offset=0
 1|other|autobot-backend/services/autoresearch/auto_research_agent.py|60
 1|other|autobot-backend/services/autoresearch/auto_research_agent.py|https://export.arxiv.org/api/query
 1|other|autobot-backend/services/autoresearch/knowledge_synthesizer.py|"system"
@@ -471,7 +468,6 @@
 1|other|autobot-backend/services/context_sufficiency.py|"system"
 1|other|autobot-backend/services/context_sufficiency.py|"user"
 1|other|autobot-backend/services/delegation_service.py|50
-1|other|autobot-backend/services/event_log.py|100
 1|other|autobot-backend/services/execution/claude_code_backend.py|"assistant"
 1|other|autobot-backend/services/execution/modal_backend.py|300
 1|other|autobot-backend/services/fact_extraction_service.py|100
@@ -650,7 +646,6 @@
 2|ssot|autobot-frontend/src/test/utils/test-setup-helpers.ts|:3000
 2|ssot|autobot-frontend/src/test/vitest-setup.ts|:3000
 2|other|autobot-frontend/src/utils/ApiClient.ts|'user'
-1|other|autobot-frontend/src/utils/ChatManager.js|"user"
 1|other|autobot-frontend/src/utils/ErrorHandler.js|10
 1|other|autobot-frontend/src/utils/urlUtils.ts|https://duckduckgo.com/?q=${encodeURIComponent(input
 1|other|autobot-frontend/src/views/EvolutionView.vue|"/opt/autobot
@@ -1299,7 +1294,6 @@
 1|other|autobot-slm-backend/api/infrastructure.py|"/opt/autobot/backups
 1|other|autobot-slm-backend/api/infrastructure.py|300
 3|other|autobot-slm-backend/api/nodes.py|"/opt/autobot/backups/
-1|other|autobot-slm-backend/api/roles.py|120
 1|other|autobot-slm-backend/api/scim.py|offset=0
 1|other|autobot-slm-backend/api/secrets.py|https://huggingface.co/settings/tokens
 1|ssot|autobot-slm-backend/api/slm_users.py|:5432
@@ -1317,7 +1311,7 @@
 1|other|autobot-slm-backend/scripts/autobot-admin.py|"/opt/autobot/autobot-slm-backend/.env
 1|ssot|autobot-slm-backend/scripts/verify_endpoints.py|:8080
 1|other|autobot-slm-backend/services/agent_seeder.py|30
-5|other|autobot-slm-backend/services/backup.py|30
+3|other|autobot-slm-backend/services/backup.py|30
 2|other|autobot-slm-backend/services/backup.py|300
 1|other|autobot-slm-backend/services/backup.py|60
 1|other|autobot-slm-backend/services/blue_green.py|30
@@ -1334,9 +1328,7 @@
 1|other|autobot-slm-backend/services/service_orchestrator.py|"/opt/autobot/autobot-backend
 1|other|autobot-slm-backend/services/service_orchestrator.py|"/opt/autobot/autobot-browser-worker
 1|other|autobot-slm-backend/services/service_orchestrator.py|"/opt/autobot/autobot-slm-frontend
-1|other|autobot-slm-backend/services/service_orchestrator.py|30
 2|other|autobot-slm-backend/services/sync_orchestrator.py|120
-1|other|autobot-slm-backend/services/sync_orchestrator.py|60
 1|other|autobot-slm-backend/slm/agent/health_collector.py|30
 1|other|autobot-slm-backend/slm/agent/version.py|"/opt/autobot/autobot-slm-agent
 1|other|autobot-slm-backend/tests/conftest.py|"sqlite:///:memory:"

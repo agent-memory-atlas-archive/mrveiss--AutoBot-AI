@@ -511,61 +511,6 @@ knowledge_base:
     max_size: 1000  # Maximum number of cached queries
     prefix: "kb_cache:"  # Redis key prefix for cache entries
 
-# Search Configuration
-search:
-  # Hybrid search settings
-  hybrid:
-    enabled: true
-    semantic_weight: 0.7  # Weight for semantic similarity scores
-    keyword_weight: 0.3   # Weight for keyword matching scores
-    min_keyword_score: 0.1  # Minimum keyword score threshold
-    keyword_boost_factor: 1.5  # Boost factor for multiple keyword matches
-    semantic_top_k: 15    # Number of semantic results to retrieve for hybrid processing
-    final_top_k: 10       # Maximum number of final results to return
-
-    # Keyword extraction settings
-    min_keyword_length: 3
-    stop_words:
-      - "the"
-      - "a"
-      - "an"
-      - "and"
-      - "or"
-      - "but"
-      - "in"
-      - "on"
-      - "at"
-      - "to"
-      - "for"
-      - "of"
-      - "with"
-      - "by"
-      - "from"
-      - "up"
-      - "about"
-      - "into"
-      - "through"
-      - "during"
-      - "is"
-      - "are"
-      - "was"
-      - "were"
-      - "be"
-      - "been"
-      - "being"
-      - "have"
-      - "has"
-      - "had"
-      - "do"
-      - "does"
-      - "did"
-      - "will"
-      - "would"
-      - "could"
-      - "should"
-      - "may"
-      - "might"
-
 # Monitoring Configuration
 monitoring:
   # Metrics collection settings

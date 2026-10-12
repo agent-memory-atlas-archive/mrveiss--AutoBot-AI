@@ -172,7 +172,7 @@ MIN_READS_FOUND = 40
 #: classified NOT_USER_FACING rather than filtered -- see _WATCH_RECONCILE in the
 #: allowlist for why a visibility filter would make a reconciliation delete *wrong*,
 #: not safer.
-UNFILTERED_READ_CEILING = 96
+UNFILTERED_READ_CEILING = 94
 
 _REASON_PREFIXES = ("TRACKED_GAP #", "SCOPED: ", "NOT_USER_FACING: ", "IMPL: ", "ADMIN_ONLY: ")
 _NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)

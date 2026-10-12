@@ -1200,7 +1200,7 @@ async def test_performance_monitoring(
 
 
 # Issue #1288: Prometheus metrics endpoints removed — consolidated into
-# api/prometheus_endpoint.py at /api/metrics/prometheus (no auth, for scraping).
+# api/prometheus_endpoint.py at /api/metrics/prometheus (scrape-token gated, #16375).
 # The auth-protected duplicates here were unusable by Prometheus server.
 
 

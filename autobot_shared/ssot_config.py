@@ -1306,12 +1306,10 @@ class DatabasePoolConfig(RedactedSettings):
 
 
 class PathConfig(RedactedSettings):
-    """
-    File-system path configuration.
+    """File-system path configuration.
 
     Provides a single source of truth for well-known AutoBot directories so
     production code never needs to hard-code paths like /opt/autobot.
-
     Override any value via environment variable (e.g. AUTOBOT_BASE_DIR=/srv/autobot).
     """
 
@@ -1338,6 +1336,8 @@ class PathConfig(RedactedSettings):
     logs_dir: str = Field(default="logs", alias="AUTOBOT_LOG_DIR")
     models_dir: str = Field(default="models", alias="AUTOBOT_MODELS_DIR")
     docs_dir: str = Field(default="docs", alias="AUTOBOT_DOCS_DIR")
+    # #18293: the retired, read-only transcript store -- under base_dir (NOT data_dir), as its writer put it.
+    legacy_transcripts_dir: str = Field(default="data/conversation_transcripts", alias="AUTOBOT_LEGACY_TRANSCRIPTS_DIR")
     # On a real deployment, code_source lives at /opt/autobot/code_source, a
     # sibling of autobot-backend/ (NOT inside base_dir) — and the Ansible
     # template always sets AUTOBOT_CODE_SOURCE explicitly, so this default
@@ -1692,6 +1692,7 @@ class MiscConfig(RedactedSettings):
     inference_profiling: str = Field(default="", alias="AUTOBOT_INFERENCE_PROFILING")
     input_timeout: int = Field(default=0, alias="AUTOBOT_INPUT_TIMEOUT")
     internal_api_key: str = Field(default="", alias="AUTOBOT_INTERNAL_API_KEY")
+    prometheus_scrape_token: str = Field(default="", alias="AUTOBOT_PROMETHEUS_SCRAPE_TOKEN")  # #16375
     jaeger_endpoint: str = Field(default="", alias="AUTOBOT_JAEGER_ENDPOINT")
     jwt_secret: str = Field(default="", alias="AUTOBOT_JWT_SECRET")
     jwt_private_key: str = Field(

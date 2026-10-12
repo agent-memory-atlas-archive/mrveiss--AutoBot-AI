@@ -233,6 +233,9 @@ services:
       # volume's mount point makes canonical == legacy for this service, so
       # the migration correctly no-ops instead of relocating anything.
       - AUTOBOT_DATA_DIR=${AUTOBOT_DATA_DIR:-/app/data}
+      # #18293: the retired chat-transcript store (read-only legacy), where its old writer put
+      # it -- data/conversation_transcripts under the image WORKDIR (/app). Pinned, not inferred.
+      - AUTOBOT_LEGACY_TRANSCRIPTS_DIR=${AUTOBOT_LEGACY_TRANSCRIPTS_DIR:-/app/data/conversation_transcripts}
       # No AI Stack VM ships with compose — disable the poll to stop the per-boot
       # connection-error warning flood (#9782). Set to true if you run an AI Stack.
       - AUTOBOT_AI_STACK_ENABLED=${AUTOBOT_AI_STACK_ENABLED:-false}
@@ -740,6 +743,12 @@ services:
       # Whole directory, not just prometheus.yml: the alerts-*.yml rule files
       # sit beside it and were otherwise absent from the container (#12460).
       - ./autobot-monitoring:/etc/prometheus:ro
+      # #16375: the backend scrape token file (prometheus_scrape_token). The
+      # volume's autobot.env is 0640 999:999, unreadable to this container.
+      - autobot_secrets:/run/autobot-secrets:ro
+    depends_on:
+      autobot-secrets-init:
+        condition: service_completed_successfully
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus

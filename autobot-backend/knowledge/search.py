@@ -12,7 +12,7 @@ See: src/knowledge/search_components/
 - helpers.py: Redis hash operations and result building
 - query_processor.py: Query preprocessing and expansion
 - keyword_search.py: Keyword-based search using Redis
-- hybrid_search.py: Hybrid search with RRF
+- hybrid_search.py: Hybrid search with RRF (the one KB hybrid search, #17599)
 - reranking.py: Cross-encoder result reranking
 - tag_filter.py: Tag-based result filtering
 - analytics.py: Search analytics tracking

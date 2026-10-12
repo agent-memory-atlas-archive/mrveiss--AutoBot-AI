@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Tuple
 
 
@@ -79,6 +80,25 @@ class Concept:
 
 
 _FACTS = "autobot-backend/knowledge/facts.py"
+
+
+def legacy_conversation_transcripts_dir() -> Path:
+    """The ONE resolution of the legacy transcript directory, absolute (#18293).
+
+    Read from SSOT config: ``config.path.legacy_transcripts_dir``
+    (``AUTOBOT_LEGACY_TRANSCRIPTS_DIR``), relative to ``base_dir`` unless absolute.
+    The default, ``data/conversation_transcripts`` under ``base_dir``, is where the
+    retired writer put the files: it resolved that path against its working
+    directory, and on an Ansible install ``AUTOBOT_BASE_DIR`` IS the backend's code
+    and working directory. It is not ``data_dir``/``PATH.DATA_DIR``, where readers
+    used to look and nothing was ever written. No working-directory dependence: a
+    script run from anywhere resolves the same directory as the service.
+    ``repo_tests/conversation_turn_single_store_18293_test.py`` fails a write under it.
+    """
+    from autobot_shared.ssot_config import config
+
+    return config.path.resolve(config.path.legacy_transcripts_dir).resolve()
+
 
 #: Keyed by concept name. Ordered by store so a reader can see, in one pass,
 #: which concepts share an authority.
@@ -181,6 +201,21 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "four tables stay, empty, for the cascade-delete-safety reason #16464 fixed, "
         "independent of whether anything writes to them.",
     ),
+    "audit_trail": Concept(
+        name="audit_trail",
+        system_of_record=Store.POSTGRES,
+        projections=(Store.REDIS,),
+        write_sites=(
+            "autobot-backend/services/audit/store.py",
+            "autobot-backend/services/audit/projection.py",
+            "autobot_shared/user_management/audit_rows.py",
+        ),
+        rebuilt_by="services.audit.audit.rebuild_projection() replays audit_logs rows into the "
+        "audit:unified and audit:category:* sorted sets; nothing reads those keys as an answer.",
+        note="#17225 D1: the owner chose to extend the existing audit_logs table rather than add "
+        "a second Postgres audit table. Every audit_logs row is built by audit_rows.audit_row, "
+        "whether the canonical service or a shared RBAC/org/team writer records it.",
+    ),
     "verbatim_memory": Concept(
         name="verbatim_memory",
         system_of_record=Store.CHROMADB,
@@ -225,9 +260,29 @@ STORE_AUTHORITY: dict[str, Concept] = {
             "autobot-backend/chat_history/file_io.py",
             "autobot-backend/chat_history/session.py",
             "autobot-backend/chat_history/cache.py",
+            # #18293: writes only the chat:conversation:* LLM-context cache, a
+            # projection of these messages -- never a durable copy of a turn.
+            "autobot-backend/chat_workflow/conversation.py",
         ),
         rebuilt_by="ChatHistoryCacheMixin repopulates a session's cache entry from its session "
-        "file on the next load; the file is written atomically and is the session.",
+        "file on the next load; the file is written atomically and is the session. The "
+        "chat:conversation:* LLM-context cache is re-projected from load_session() on a miss "
+        "(chat_history/turn_projection.project_turn_pairs).",
+        note="The one system of record for conversation turns (#18293). The per-turn transcript "
+        "files that once duplicated them are legacy_conversation_transcripts: read-only.",
+    ),
+    "legacy_conversation_transcripts": Concept(
+        name="legacy_conversation_transcripts",
+        system_of_record=Store.DISK,
+        projections=(),
+        # Empty on purpose and pinned by the #18293 guard: nothing writes here any more.
+        write_sites=(),
+        rebuilt_by="Nothing rebuilds it and nothing writes it. Retired by #18293 in favour of "
+        "chat_sessions. No request path reads it -- ownership of a legacy file cannot be "
+        "proven -- only the human-run #13293 repair and an approved #17038 backfill.",
+        note="NOT an authority for any new turn -- a frozen legacy source. Its files predate "
+        "#18293 and are kept until a human approves their disposition through the #17038 "
+        "review queue (backfill into chat_sessions, then retire); no agent moves them.",
     ),
     "auth_signing_key": Concept(
         name="auth_signing_key",

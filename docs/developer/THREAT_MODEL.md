@@ -107,8 +107,8 @@ response, a log line, an issue, a PR comment — is already redacted.
 **Invariants**
 - No parallel crypto path. A diff introducing its own `Fernet(...)` or `AESGCM(...)` instead
   of calling the store is a finding regardless of whether the primitive is used correctly.
-- Secrets compare with `secrets.compare_digest`, never `==`. A missing/`None` credential can
-  never match — `verify_internal_api_key` returns `False` when either side is unset.
+- Secrets compare with `secrets.compare_digest`, never `==`. A missing/`None` credential can never match — `verify_internal_api_key` returns `False` when either side is unset,
+  and `/api/metrics/prometheus` admits only its dedicated read-only scrape token ([`prometheus_scrape_auth.py`](../../autobot-backend/monitoring/prometheus_scrape_auth.py); unset refuses every scrape; record, delivery, rotation: [`PROMETHEUS_SCRAPE_TOKEN_ROTATION.md`](PROMETHEUS_SCRAPE_TOKEN_ROTATION.md)).
 - Every `ConnectorCredentialStore` read takes `owner_id` and passes `_require_owner`; a new
   method that skips it grants cross-tenant credential read.
 - Nothing reaches a log, HTTP error body, or outward artifact without
