@@ -28,7 +28,7 @@ from autobot_shared.status_enums import Severity
 
 # Import existing monitoring infrastructure
 from constants.api_constants import PATH_API_HEALTH
-from utils.performance_monitoring.decorator import monitor_performance, set_redis_client  # noqa: F401 - re-export
+from utils.performance_monitoring.decorator import monitor_performance  # noqa: F401 - re-export
 from utils.performance_monitoring.metrics import (
     GPUMetrics,
     MultiModalMetrics,
@@ -96,7 +96,6 @@ class HardwarePerformanceMonitor:
 
             self.redis_client = get_redis_client(async_client=False, database="analytics")
             self.redis_client.ping()
-            set_redis_client(self.redis_client)
             self.logger.info("Redis client initialized for performance metrics")
         except Exception as e:
             self.logger.warning(f"Could not initialize Redis for performance metrics: {e}")
