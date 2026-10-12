@@ -104,9 +104,11 @@ def _ctx(units=("a.service", "b.service"), restart=True):
 
 
 @pytest.fixture
-def orch_logger(monkeypatch):
+def orch_logger(monkeypatch, tmp_path):
     fake = create_autospec(logging.Logger, instance=True, spec_set=True)
     monkeypatch.setattr(sync_orchestrator, "logger", fake)
+    # SyncOrchestrator() creates its cache dir; the default is a host path a CI runner lacks.
+    monkeypatch.setattr(sync_orchestrator, "CODE_CACHE_DIR", tmp_path / "code-cache")
     return fake
 
 
