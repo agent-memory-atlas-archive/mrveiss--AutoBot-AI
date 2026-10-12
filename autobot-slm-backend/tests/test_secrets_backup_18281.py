@@ -24,6 +24,7 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 ROOT = Path(__file__).resolve().parents[1]
+STAGING = "/tmp/slm-secrets-AbC123"
 PAYLOAD = b"SQLite format 3\x00 ciphertext rows"
 
 
@@ -86,17 +87,23 @@ def _node(roles):
 class _Remote:
     """Fake of ``BackupService._run_command``: records argv, serves scp/sha256sum, can fail snapshot."""
 
-    def __init__(self, fail_snapshot=False, corrupt_copy=False):
+    def __init__(self, fail_snapshot=False, corrupt_copy=False, fail_mktemp=False, fail_scp=False):
         self.calls: list[list[str]] = []
         self.fail_snapshot = fail_snapshot
         self.corrupt_copy = corrupt_copy
+        self.fail_mktemp = fail_mktemp
+        self.fail_scp = fail_scp
 
     async def __call__(self, cmd, timeout=60, stdin=None):
         self.calls.append(list(cmd))
         if cmd[0].endswith("scp"):
+            if self.fail_scp:
+                return False, "connection reset"
             await asyncio.to_thread(Path(cmd[-1]).write_bytes, PAYLOAD + (b"x" if self.corrupt_copy else b""))
             return True, ""
         remote = cmd[-1]
+        if "mktemp" in remote:
+            return (False, "no space") if self.fail_mktemp else (True, STAGING + "\n")
         if "sqlite3" in remote:
             return (False, "boom") if self.fail_snapshot else (True, "")
         if remote.startswith("sha256sum"):
@@ -147,14 +154,16 @@ async def test_success_records_checksum_status_and_completed_at(mods, service):
 async def test_the_staged_snapshot_is_removed_from_the_node(mods, service):
     _, sb = mods
     await sb.execute_secrets_backup(service, _DB(_Row()), "bk1", _node(["backend"]))
-    assert service.remote.remote_commands()[-1].startswith("rm -f -- ")
+    commands = service.remote.remote_commands()
+    assert "mktemp -d -p /tmp slm-secrets-XXXXXX" in commands[0] and commands[0].startswith("umask 077 && ")
+    assert commands[-1] == f"rm -rf -- {STAGING}"
 
 
 async def test_the_remote_command_quotes_every_interpolated_path(mods, service, monkeypatch):
     _, sb = mods
     monkeypatch.setattr(sb, "BACKEND_DATA_DIR", "/var/lib/odd dir; touch pwned")
     await sb.execute_secrets_backup(service, _DB(_Row()), "bk1", _node(["main"]))
-    snapshot = service.remote.remote_commands()[0]
+    snapshot = service.remote.remote_commands()[1]
     assert "'/var/lib/odd dir; touch pwned/secrets.db'" in snapshot
 
 
@@ -174,7 +183,7 @@ async def test_a_failed_snapshot_fails_the_row_and_still_cleans_up(mods, service
     row = _Row()
     ok, message = await sb.execute_secrets_backup(service, _DB(row), "bk1", _node(["backend"]))
     assert not ok and row.status == "failed" and "snapshot failed" in message
-    assert service.remote.remote_commands()[-1].startswith("rm -f -- ")
+    assert service.remote.remote_commands()[-1] == f"rm -rf -- {STAGING}"
 
 
 async def test_a_copy_whose_checksum_differs_is_not_recorded_as_completed(mods, service):
@@ -221,9 +230,9 @@ async def test_the_snapshot_runs_as_the_service_user_via_non_interactive_sudo(mo
     monkeypatch.setattr(sb, "SERVICE_USER", "svc user")
     row, node = _Row(), _node(["backend"])
     assert (await sb.execute_secrets_backup(service, _DB(row), "bk1", node))[0]
-    snapshot = service.remote.remote_commands()[0]
+    snapshot = service.remote.remote_commands()[1]
     assert "sudo -n -u 'svc user' python3 -c " in snapshot
-    assert snapshot.rstrip().endswith("> /tmp/slm-secrets-bk1.db")
+    assert snapshot.rstrip().endswith(f"> {STAGING}/snapshot.db")
 
 
 async def test_no_sudo_when_the_ssh_user_is_the_service_user(mods, service):
@@ -231,4 +240,39 @@ async def test_no_sudo_when_the_ssh_user_is_the_service_user(mods, service):
     node = _node(["backend"])
     node.ssh_user = sb.SERVICE_USER
     await sb.execute_secrets_backup(service, _DB(_Row()), "bk1", node)
-    assert "sudo" not in service.remote.remote_commands()[0]
+    assert "sudo" not in service.remote.remote_commands()[1]
+
+
+def _stored_files(tmp_path):
+    return [p for p in tmp_path.iterdir() if p.name.endswith(".secrets.db")]
+
+
+async def test_a_checksum_mismatch_leaves_no_file_in_storage(mods, service, tmp_path):
+    _, sb = mods
+    service.remote.corrupt_copy = True
+    ok, _ = await sb.execute_secrets_backup(service, _DB(_Row()), "bk1", _node(["backend"]))
+    assert not ok and _stored_files(tmp_path) == []
+
+
+async def test_a_failed_scp_leaves_no_file_in_storage(mods, service, tmp_path):
+    _, sb = mods
+    service.remote.fail_scp = True
+    row = _Row()
+    ok, _ = await sb.execute_secrets_backup(service, _DB(row), "bk1", _node(["backend"]))
+    assert not ok and row.status == "failed" and _stored_files(tmp_path) == []
+
+
+async def test_a_staging_failure_fails_the_row_without_touching_the_store(mods, service):
+    _, sb = mods
+    service.remote.fail_mktemp = True
+    row = _Row()
+    ok, message = await sb.execute_secrets_backup(service, _DB(row), "bk1", _node(["backend"]))
+    assert not ok and "staging directory" in message and row.status == "failed"
+    assert not any("python3" in c for c in service.remote.remote_commands())
+
+
+def test_a_typod_timeout_env_does_not_stop_the_module_loading(monkeypatch):
+    monkeypatch.setenv("SLM_SECRETS_BACKUP_TIMEOUT_S", "three hundred")
+    monkeypatch.setenv("SLM_SECRETS_BACKUP_REMOVE_TIMEOUT_S", "-4")
+    module = _load("_real_secrets_snapshot_typo_18281", "services/secrets_store_snapshot.py")
+    assert module.SNAPSHOT_TIMEOUT_S == 300 and module.REMOVE_TIMEOUT_S == 5

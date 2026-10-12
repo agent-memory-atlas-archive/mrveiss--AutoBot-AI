@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple
 
+from autobot_shared import env_utils
 from models.database import BackupStatus
 
 if TYPE_CHECKING:
@@ -55,9 +56,12 @@ STAGING_DIR = os.getenv("SLM_SECRETS_BACKUP_STAGING_DIR", "/tmp")
 #: Roles that mean "this node runs the backend" (same pair inventory_builder treats as backend).
 BACKEND_ROLES = frozenset({"backend", "main"})
 STORED_SUFFIX = ".secrets.db"
-SNAPSHOT_TIMEOUT_S = int(os.getenv("SLM_SECRETS_BACKUP_TIMEOUT_S", "300"))
-REMOVE_TIMEOUT_S = int(os.getenv("SLM_SECRETS_BACKUP_REMOVE_TIMEOUT_S", "30"))
-CHECKSUM_TIMEOUT_S = int(os.getenv("SLM_SECRETS_BACKUP_CHECKSUM_TIMEOUT_S", "60"))
+# Clamped readers: a typo'd value must not stop api/stateful.py (which imports this module) from loading.
+SNAPSHOT_TIMEOUT_S = env_utils.env_int_clamped("SLM_SECRETS_BACKUP_TIMEOUT_S", 300, min_v=10, max_v=3600)
+REMOVE_TIMEOUT_S = env_utils.env_int_clamped("SLM_SECRETS_BACKUP_REMOVE_TIMEOUT_S", 30, min_v=5, max_v=600)
+CHECKSUM_TIMEOUT_S = env_utils.env_int_clamped("SLM_SECRETS_BACKUP_CHECKSUM_TIMEOUT_S", 60, min_v=5, max_v=3600)
+STAGED_NAME = "snapshot.db"
+STAGING_PREFIX = "slm-secrets-"
 
 NO_BACKEND_NODE = "no registered backend node: the secrets store lives on a node with the backend role"
 
@@ -95,9 +99,9 @@ def remote_store_path() -> str:
     return str(Path(BACKEND_DATA_DIR) / SECRETS_DB_NAME)
 
 
-def staged_path(backup_id: str) -> str:
-    """The temp path the snapshot is written to on the node."""
-    return str(Path(STAGING_DIR) / f"slm-secrets-{backup_id}.db")
+def staged_file(staging_dir: str) -> str:
+    """The snapshot's path inside the fresh per-run staging directory."""
+    return str(Path(staging_dir) / STAGED_NAME)
 
 
 def snapshot_command(ssh_user: str, source: str, destination: str) -> str:
@@ -116,11 +120,23 @@ def is_backend_node(node: "Node") -> bool:
     return bool(BACKEND_ROLES & set(node.roles or []))
 
 
-async def _remove_staged(service: "BackupService", node: "Node", path: str) -> None:
-    """Best-effort removal of the staged snapshot (a copy of the store must not linger in /tmp)."""
+async def _make_staging_dir(service: "BackupService", node: "Node") -> str:
+    """A fresh ``mktemp -d`` directory (0700, the ssh user's) on the node: unpredictable, never pre-existing."""
+    template = shlex.quote(f"{STAGING_PREFIX}XXXXXX")
+    command = f"umask 077 && mktemp -d -p {shlex.quote(STAGING_DIR)} {template}"
+    cmd = service._build_ssh_command(node.ip_address, node.ssh_user or "autobot", node.ssh_port or 22, command)
+    ok, out = await service._run_command(cmd, timeout=REMOVE_TIMEOUT_S)
+    path = out.strip()
+    if not ok or "\n" in path or not path.startswith(STAGING_DIR.rstrip("/") + "/"):
+        raise RuntimeError(f"could not create a staging directory on the node: {out.strip()[:200]}")
+    return path
+
+
+async def _remove_staged(service: "BackupService", node: "Node", staging_dir: str) -> None:
+    """Best-effort removal of the whole staging directory (a copy of the store must not linger)."""
     try:
         cmd = service._build_ssh_command(
-            node.ip_address, node.ssh_user or "autobot", node.ssh_port or 22, f"rm -f -- {shlex.quote(path)}"
+            node.ip_address, node.ssh_user or "autobot", node.ssh_port or 22, f"rm -rf -- {shlex.quote(staging_dir)}"
         )
         await service._run_command(cmd, timeout=REMOVE_TIMEOUT_S)
     except Exception as exc:
@@ -141,12 +157,16 @@ async def _fetch_verified(service: "BackupService", node: "Node", backup_id: str
     host, user, port = node.ip_address, node.ssh_user or "autobot", node.ssh_port or 22
     remote_sum = await _remote_sha256(service, node, remote)
     ok, path, err = await service._copy_backup_to_storage(host, user, port, remote, backup_id, suffix=STORED_SUFFIX)
-    if not ok:
-        raise RuntimeError(f"copy to SLM storage failed: {err}")
-    local_sum = await service._calculate_checksum(path)
-    if not local_sum or local_sum != remote_sum:
-        raise RuntimeError("checksum of the copied snapshot does not match the node's")
-    path.chmod(0o600)
+    try:
+        if not ok:
+            raise RuntimeError(f"copy to SLM storage failed: {err}")
+        path.chmod(0o600)  # before anything else can fail: ciphertext is owner-only from the moment it lands
+        local_sum = await service._calculate_checksum(path)
+        if not local_sum or local_sum != remote_sum:
+            raise RuntimeError("checksum of the copied snapshot does not match the node's")
+    except BaseException:
+        path.unlink(missing_ok=True)  # an unverified file with no row would never be pruned by retention
+        raise
     return path, local_sum
 
 
@@ -170,16 +190,18 @@ async def execute_secrets_backup(
         return False, "Backup not found"
     if not is_backend_node(node):
         return await service._fail_backup(db, backup, NO_BACKEND_NODE)
-    remote = staged_path(backup_id)
+    staging = None
     try:
-        path, checksum = await _snapshot_and_fetch(service, node, backup_id, remote)
+        staging = await _make_staging_dir(service, node)
+        path, checksum = await _snapshot_and_fetch(service, node, backup_id, staged_file(staging))
     except asyncio.TimeoutError:
         return await service._fail_backup(db, backup, "Secrets backup timed out")
     except Exception as exc:
         logger.error("Secrets backup %s failed: %s", backup_id, exc)
         return await service._fail_backup(db, backup, f"Secrets backup failed: {exc}")
     finally:
-        await _remove_staged(service, node, remote)
+        if staging:
+            await _remove_staged(service, node, staging)
     return await _record_completed(db, backup, path, checksum)
 
 
