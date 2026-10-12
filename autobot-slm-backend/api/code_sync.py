@@ -61,7 +61,7 @@ from api.venv_reconcile import (
     refuse_explicit_list,
 )
 from autobot_shared.async_compat import fire_and_forget
-from autobot_shared.cron_expression import validate_cron_expression
+from autobot_shared.cron_expression import INVALID_CRON_ERROR_CODE, validate_cron_expression
 from autobot_shared.db_url import assemble_postgres_url
 from autobot_shared.env_utils import env_float, env_int, env_int_clamped
 from autobot_shared.secret_redaction import redact_mapping
@@ -3957,7 +3957,7 @@ async def create_schedule(
     if not validate_cron_expression(schedule.cron_expression):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid cron expression",
+            detail=f"Invalid cron expression ({INVALID_CRON_ERROR_CODE})",
         )
 
     # Calculate initial next_run
@@ -4036,7 +4036,7 @@ async def update_schedule(
         if not validate_cron_expression(update.cron_expression):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid cron expression",
+                detail=f"Invalid cron expression ({INVALID_CRON_ERROR_CODE})",
             )
         schedule.cron_expression = update.cron_expression
         schedule.next_run = _calculate_next_run(update.cron_expression)

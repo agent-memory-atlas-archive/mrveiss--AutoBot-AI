@@ -30,10 +30,13 @@ def test_day_names_now_schedule():
     assert next_cron_run("0 9 * * MON", after=BASE) == datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)
 
 
-def test_day_of_month_and_weekday_are_ored_as_in_standard_cron():
-    """Behaviour difference: the old parser ANDed day-of-month with weekday (the next Monday
-    that is also the 1st); standard cron, and croniter, OR them."""
-    assert next_cron_run("0 0 1 * 1", after=BASE) == datetime(2026, 10, 19, 0, 0, tzinfo=timezone.utc)
+def test_day_of_month_and_weekday_are_still_anded():
+    """Owner decision (#18449): no stored trigger changes frequency. `0 0 1 * 1` fires only on a
+    Monday that is the 1st (standard cron would also fire every Monday and every 1st)."""
+    assert next_cron_run("0 0 1 * 1", after=BASE) == datetime(2027, 2, 1, 0, 0, tzinfo=timezone.utc)
+    assert next_cron_run("0 0 1 * 1", after=datetime(2027, 2, 1, 0, 0, tzinfo=timezone.utc)) == datetime(
+        2027, 3, 1, 0, 0, tzinfo=timezone.utc
+    )
 
 
 def test_six_field_cron_is_refused_with_the_contract_code():
@@ -44,3 +47,81 @@ def test_six_field_cron_is_refused_with_the_contract_code():
 def test_impossible_date_raises_value_error():
     with pytest.raises(ValueError):
         next_cron_run("0 0 31 2 *", after=BASE)
+
+
+# --- stored schedules: a bad one is skipped and reported, never fatal (#18449) ---
+
+import asyncio  # noqa: E402
+import logging  # noqa: E402
+
+from services.trigger_service import TriggerDefinition, TriggerService, TriggerType  # noqa: E402
+
+
+def _cron_def(trigger_id: str, expression: str) -> TriggerDefinition:
+    return TriggerDefinition(
+        id=trigger_id,
+        trigger_type=TriggerType.CRON,
+        workflow_id="wf",
+        config={"cron_expression": expression},
+        conditions=[],
+        enabled=True,
+        created_at="2026-10-12T00:00:00+00:00",
+    )
+
+
+async def _start_with(monkeypatch, definitions):
+    svc = TriggerService()
+
+    async def _all():
+        return definitions
+
+    monkeypatch.setattr(svc, "_load_all_triggers", _all)
+
+    async def _launcher(workflow_id, payload):
+        return None
+
+    await svc.start(_launcher)
+    return svc
+
+
+@pytest.mark.asyncio
+async def test_a_bad_stored_cron_is_skipped_and_reported_while_the_others_run(monkeypatch, caplog):
+    defs = [
+        _cron_def("good-1", "*/5 * * * *"),
+        _cron_def("bad-six-field", "* * * * * *"),
+        _cron_def("bad-range", "0 0 * 0-7 *"),
+        _cron_def("good-2", "0 9 * * 1"),
+    ]
+    with caplog.at_level(logging.WARNING, logger=trigger_service.logger.name):
+        svc = await _start_with(monkeypatch, defs)
+    try:
+        assert set(svc._tasks) == {"good-1", "good-2"}
+        assert all(not t.done() for t in svc._tasks.values())
+        assert svc.invalid_schedules() == {
+            "bad-six-field": "schedule.invalid_cron",
+            "bad-range": "schedule.invalid_cron",
+        }
+        text = caplog.text
+        assert "bad-six-field" in text and "bad-range" in text and "schedule.invalid_cron" in text
+        assert "good-1" not in text.replace("Spawned", "")
+    finally:
+        await svc.stop()
+
+
+@pytest.mark.asyncio
+async def test_the_cron_loop_reports_and_exits_on_an_invalid_expression_without_raising(caplog):
+    svc = TriggerService()
+    with caplog.at_level(logging.WARNING, logger=trigger_service.logger.name):
+        await asyncio.wait_for(svc._cron_loop(_cron_def("late-bad", "* * * * * *")), timeout=5)
+    assert svc.invalid_schedules() == {"late-bad": "schedule.invalid_cron"}
+    assert "late-bad" in caplog.text and "schedule.invalid_cron" in caplog.text
+
+
+def test_list_serialisation_surfaces_the_schedule_error():
+    svc = TriggerService()
+    svc._invalid_schedules["bad"] = "schedule.invalid_cron"
+    by_id = {
+        t["id"]: t for t in svc.serialise_triggers([_cron_def("bad", "* * * * * *"), _cron_def("ok", "* * * * *")])
+    }
+    assert by_id["bad"]["schedule_error"] == "schedule.invalid_cron"
+    assert "schedule_error" not in by_id["ok"]

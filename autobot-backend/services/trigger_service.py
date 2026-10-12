@@ -41,7 +41,7 @@ from typing import Any, Callable, Coroutine, Dict, List
 
 from croniter import CroniterBadDateError, croniter
 
-from autobot_shared.cron_expression import INVALID_CRON_ERROR_CODE, validate_cron_expression
+from autobot_shared.cron_expression import INVALID_CRON_ERROR_CODE, log_stored_cron_findings, validate_cron_expression
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_redis_client
 from autobot_shared.time_utils import now_utc
@@ -234,7 +234,8 @@ def next_cron_run(expression: str, after: datetime | None = None) -> datetime:
     if not validate_cron_expression(expression):
         raise ValueError(f"Invalid cron expression ({INVALID_CRON_ERROR_CODE}): '{expression}'")
     try:
-        return croniter(expression, after or now_utc()).get_next(datetime)
+        # day_or=False: day-of-month AND weekday, as the replaced parser did (owner decision, #18449).
+        return croniter(expression, after or now_utc(), day_or=False).get_next(datetime)
     except CroniterBadDateError as exc:
         raise ValueError(f"Could not find next run time for cron expression '{expression}'") from exc
 
@@ -270,6 +271,8 @@ class TriggerService:
         self._running = False
         # Keyed by trigger_id; values are HMAC secrets for webhook validation
         self._webhook_secrets: Dict[str, str] = {}
+        # Stored cron triggers skipped as invalid: trigger_id -> error code (surfaced by list_triggers)
+        self._invalid_schedules: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -451,6 +454,20 @@ class TriggerService:
         expected_sig = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected_sig, signature)
 
+    def invalid_schedules(self) -> Dict[str, str]:
+        """Cron triggers skipped as invalid, as ``{trigger_id: error_code}``."""
+        return dict(self._invalid_schedules)
+
+    def serialise_triggers(self, triggers: List[TriggerDefinition]) -> List[Dict[str, Any]]:
+        """Dicts for the list API; a trigger skipped as invalid carries ``schedule_error``."""
+        return [
+            {
+                **t.to_dict(),
+                **({"schedule_error": self._invalid_schedules[t.id]} if t.id in self._invalid_schedules else {}),
+            }
+            for t in triggers
+        ]
+
     def get_webhook_url_path(self, trigger_id: str) -> str:
         """Return the URL path for the webhook endpoint of *trigger_id*."""
         return f"/api/triggers/webhook/{trigger_id}"
@@ -466,6 +483,8 @@ class TriggerService:
             self._tasks[trigger_id].cancel()
 
         if tdef.trigger_type == TriggerType.CRON:
+            if not self._stored_cron_is_runnable(tdef):
+                return
             coro = self._cron_loop(tdef)
         elif tdef.trigger_type == TriggerType.REDIS_PUBSUB:
             coro = self._pubsub_loop(tdef)
@@ -484,6 +503,14 @@ class TriggerService:
             trigger_id,
             tdef.trigger_type.value,
         )
+
+    def _stored_cron_is_runnable(self, tdef: TriggerDefinition) -> bool:
+        """Vet a stored cron before its loop starts; a bad one is recorded and skipped (#18449)."""
+        self._invalid_schedules.pop(tdef.id, None)
+        if log_stored_cron_findings(logger, "Trigger", tdef.id, tdef.config.get("cron_expression", "")):
+            return True
+        self._invalid_schedules[tdef.id] = INVALID_CRON_ERROR_CODE
+        return False
 
     # ------------------------------------------------------------------
     # Background loops
@@ -520,10 +547,12 @@ class TriggerService:
                 logger.info("Cron loop cancelled: trigger=%s", tdef.id)
                 return
             except ValueError as exc:
-                logger.error(
-                    "Invalid cron expression for trigger %s: %s — stopping loop",
+                self._invalid_schedules[tdef.id] = INVALID_CRON_ERROR_CODE
+                logger.warning(
+                    "Trigger %s stopped: %s (%s)",
                     tdef.id,
                     exc,
+                    INVALID_CRON_ERROR_CODE,
                 )
                 return
             except Exception:
