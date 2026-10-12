@@ -85,8 +85,36 @@ def verified_decider(approval: "Approval") -> "uuid.UUID | None":
     return getattr(approval, _DECIDER_ATTR, None)
 
 
+#: action -> the ``context`` keys that are free text the action IGNORES. Every other key of an approval that names
+#: a registered action is what a human reviewed and is frozen: resubmitting after a revision request may not change
+#: it, or the human would approve something other than what they looked at (#17349).
+_FREE_TEXT_KEYS: dict[str, frozenset[str]] = {}
+
+
+def context_change_violation(old: "dict | None", new: "dict | None") -> str | None:
+    """What a resubmit may NOT change, or ``None``: the action, and every reviewed field of a registered action.
+
+    An approval that names no action carries no executable meaning, so its context may change freely.
+    """
+    old, new = old or {}, new or {}
+    if old.get("action") != new.get("action"):
+        return "context.action"
+    if old.get("action") not in _REGISTRY:
+        return None
+    free = _FREE_TEXT_KEYS.get(old["action"], frozenset())
+    for key in sorted((set(old) | set(new)) - free):
+        if old.get(key) != new.get(key):
+            return f"context.{key}"
+    return None
+
+
 def register_post_approval_action(
-    action: str, handler: PostApprovalAction, *, proposed_by: str, server_only: bool = False
+    action: str,
+    handler: PostApprovalAction,
+    *,
+    proposed_by: str,
+    server_only: bool = False,
+    free_text_keys: "frozenset[str]" = frozenset(),
 ) -> None:
     """Register *handler* to run when an approved gate's context names *action*.
 
@@ -108,6 +136,7 @@ def register_post_approval_action(
     _PROPOSERS[action] = proposed_by.strip()
     if server_only:
         _SERVER_ONLY.add(action)
+    _FREE_TEXT_KEYS[action] = frozenset(free_text_keys)
 
 
 def is_registered_action(action: str) -> bool:

@@ -256,6 +256,10 @@ def test_the_line_change_cannot_be_forged_through_a_create_route_or_decided_by_a
     sources = _sources()
     for rel in ("autobot-backend/api/approval_gates.py", "autobot-backend/llc/api/approvals.py"):
         assert calls_of(sources[rel], "is_server_only_action"), f"{rel} creates approvals without the server-only check"
+    gates = sources["autobot-backend/api/approval_gates.py"]
+    assert calls_of(
+        gates, "_guard_resubmit"
+    ), "resubmit can rewrite a reviewed proposal and bypass the create-route check"
     handler = sources[_HANDLER]
     assert "server_only=True" in handler, "ai_line.set_line must be registered as server-only"
     assert calls_of(handler, "verified_decider"), "the handler must compare the verified decider id"
