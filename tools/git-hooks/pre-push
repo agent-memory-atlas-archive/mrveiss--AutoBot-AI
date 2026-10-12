@@ -135,8 +135,10 @@ node_modules_usable() {
 # pass or fail. A non-zero exit WITHOUT it means vitest died before collecting
 # anything (a package missing from an emptied node_modules, an unloadable config), so
 # no test ran -- that is COULD NOT RUN, exactly as vue-tsc's "no error TS line" rule.
+# A " FAIL " line also counts as having run: a crash after some tests failed (OOM, a
+# killed worker) can lose the summary, and that must stay a failure, not become allowable.
 vitest_ran_nothing() {
-  ! printf '%s\n' "$1" | grep -q "Test Files"
+  ! printf '%s\n' "$1" | grep -qE "Test Files| FAIL "
 }
 ok()    { printf "${GRN}[pre-push OK]${CLR} %s\n" "$*" >&2; }
 

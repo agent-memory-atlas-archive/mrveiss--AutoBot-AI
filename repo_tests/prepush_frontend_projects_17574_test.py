@@ -565,6 +565,17 @@ class TestAVitestThatRanNothingIsNotAFailure:
     def test_a_passing_run_ran_something(self) -> None:
         assert not self._ran_nothing(_REAL_PASS)
 
+    def test_a_crash_after_a_failure_is_still_a_failure(self) -> None:
+        # A killed worker can lose the summary; the FAIL line it already printed must count.
+        crashed = " FAIL  src/composables/__tests__/useThing.test.ts > adds\nError: Worker exited unexpectedly\n"
+        assert not self._ran_nothing(crashed)
+
+    def test_the_new_branch_only_fires_on_a_non_zero_exit(self) -> None:
+        source = _source()
+        assert (
+            'elif [ "$vitest_exit" != "0" ] && vitest_ran_nothing "$vitest_output"; then' in source
+        ), "the could-not-run branch lost its non-zero-exit guard — a clean run could be reported as unrunnable"
+
     def test_the_could_not_run_branch_is_checked_before_the_failure_branch(self) -> None:
         source = _source()
         could_not = source.find('vitest_ran_nothing "$vitest_output"')
