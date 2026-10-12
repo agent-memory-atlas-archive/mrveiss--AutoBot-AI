@@ -252,10 +252,19 @@ async def test_no_observation_keeps_the_guess(_limiter):
 
 
 @pytest.mark.asyncio
-async def test_operator_env_override_beats_observation(_limiter, monkeypatch):
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"AUTOBOT_LLM_RL_OPENAI_RPM": "120"}, (500.0, 2.0)),  # RPM only: whole bucket stays configured
+        ({"AUTOBOT_LLM_RL_OPENAI_BURST": "40"}, (40.0, 500.0 / 60.0)),  # BURST only
+        ({"AUTOBOT_LLM_RL_OPENAI_RPM": "120", "AUTOBOT_LLM_RL_OPENAI_BURST": "120"}, (120.0, 2.0)),
+        ({}, (2000.0, 2000.0 / 60.0)),  # neither set: observation applies
+    ],
+)
+async def test_observation_applies_only_when_neither_rpm_nor_burst_is_set(_limiter, monkeypatch, env, expected):
     rl, store = _limiter
-    monkeypatch.setenv("AUTOBOT_LLM_RL_OPENAI_RPM", "120")
-    monkeypatch.setenv("AUTOBOT_LLM_RL_OPENAI_BURST", "120")
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
     _put(store, "openai", remaining=10, limit=2000.0)
 
-    assert await rl._effective_limits("openai") == (120.0, 2.0)
+    assert await rl._effective_limits("openai") == expected

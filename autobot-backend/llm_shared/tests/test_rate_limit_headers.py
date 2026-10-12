@@ -77,6 +77,16 @@ def test_unmapped_provider_and_garbage_values_yield_nothing():
     assert parse_rate_limit_headers("openai", junk) == []
 
 
+def test_non_finite_numbers_are_not_a_reading():
+    """nan / inf parse as floats but are not a quota; they must yield no entry."""
+    bad = {
+        "x-ratelimit-limit-requests": "inf",
+        "x-ratelimit-remaining-requests": "nan",
+        "x-ratelimit-limit-tokens": "-inf",
+    }
+    assert parse_rate_limit_headers("openai", bad) == []
+
+
 # ---------------------------------------------------------------------------
 # Harvest hook (BaseProvider._headroom_http_client)
 # ---------------------------------------------------------------------------

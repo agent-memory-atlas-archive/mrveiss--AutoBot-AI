@@ -412,3 +412,47 @@ async def test_clear_by_another_worker_drops_the_local_mirror(
     _down(worker_b)
 
     assert await worker_b.needs_reauth("openai") is False
+
+
+@pytest.mark.asyncio
+async def test_replayed_clear_does_not_erase_a_newer_mark_from_another_worker(
+    _require_fakeredis, _make_store_with_fake_server, _inject_globals
+):
+    """Two writers: A clears during an outage, B then marks anew; A's replay must leave B's mark.
+
+    Contrast: an unconditional replayed DELETE removed B's newer mark, putting a
+    dead credential back in the pool with no TTL to heal it.
+    """
+    from llm_shared.provider_degradation import DegradationCause
+
+    server = fakeredis.FakeServer()
+    worker_a, worker_b = _make_store_with_fake_server(server), _make_store_with_fake_server(server)
+    with _inject_globals(worker_a.mark_degraded, _get_alert_cooldown=lambda: _NoopCooldown()):
+        await worker_a.mark_degraded("openai", cause=DegradationCause.NEEDS_REAUTH)
+    restore = _down(worker_a)
+    await worker_a.clear("openai")  # A re-authed, but Redis is unreachable: the clear is deferred
+    with _inject_globals(worker_b.mark_degraded, _get_alert_cooldown=lambda: _NoopCooldown()):
+        await worker_b.mark_degraded("openai", cause=DegradationCause.NEEDS_REAUTH)  # newer, dead again
+    restore()
+
+    assert await worker_a.needs_reauth("openai") is True  # replay ran and left B's mark in place
+    assert await worker_b.needs_reauth("openai") is True
+
+
+@pytest.mark.asyncio
+async def test_replayed_clear_still_removes_the_mark_it_saw(
+    _require_fakeredis, _make_store_with_fake_server, _inject_globals
+):
+    """The compare-and-delete does not break the single-writer case: the seen mark is removed."""
+    from llm_shared.provider_degradation import DegradationCause
+
+    server = fakeredis.FakeServer()
+    worker_a, peer = _make_store_with_fake_server(server), _make_store_with_fake_server(server)
+    with _inject_globals(worker_a.mark_degraded, _get_alert_cooldown=lambda: _NoopCooldown()):
+        await worker_a.mark_degraded("openai", cause=DegradationCause.NEEDS_REAUTH)
+    restore = _down(worker_a)
+    await worker_a.clear("openai")
+    restore()
+
+    assert await worker_a.needs_reauth("openai") is False
+    assert await peer.needs_reauth("openai") is False

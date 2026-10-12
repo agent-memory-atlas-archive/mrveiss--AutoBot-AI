@@ -129,7 +129,7 @@ def _parse_cause(raw) -> Optional[DegradationCause]:
     if isinstance(raw, bytes):
         raw = raw.decode()
     try:
-        return DegradationCause(raw)
+        return DegradationCause(raw.split("@", 1)[0])  # "needs_reauth@<mark id>" carries an id
     except ValueError:
         return DegradationCause.TRANSIENT
 
@@ -149,7 +149,9 @@ class ProviderDegradationStore:
         self._local: Dict[str, _LocalEntry] = {}
         # Keys whose needs_reauth mark / clear never reached Redis.
         self._pending_reauth: set[str] = set()
-        self._pending_clear: set[str] = set()
+        # key -> the mark value the clearing worker saw; replay deletes only that exact mark.
+        self._pending_clear: Dict[str, Optional[str]] = {}
+        self._seen: Dict[str, str] = {}  # key -> value of the last needs_reauth mark this worker wrote/read
 
     # ------------------------------------------------------------------
     # Public API
@@ -171,9 +173,12 @@ class ProviderDegradationStore:
         key = _make_key(provider, model)
         reauth = cause is DegradationCause.NEEDS_REAUTH
         ttl = None if reauth else _DEGRADATION_TTL_SECONDS
+        value = f"{cause.value}@{time.time_ns()}" if reauth else cause.value  # id: see _delete_if_equal
+        if reauth:
+            self._seen[key] = value
         try:
             redis = await self._get_redis()
-            await redis.set(key, cause.value, ex=ttl)
+            await redis.set(key, value, ex=ttl)
             logger.info("degradation: marked %r degraded (cause=%s ttl=%s key=%s)", key, cause.value, ttl, key)
             confirmed = True
         except Exception:
@@ -215,13 +220,14 @@ class ProviderDegradationStore:
         key = _make_key(provider, model)
         self._local.pop(key, None)
         self._pending_reauth.discard(key)
+        seen = self._seen.pop(key, None)
         try:
             redis = await self._get_redis()
             await redis.delete(key)
-            self._pending_clear.discard(key)
+            self._pending_clear.pop(key, None)
         except Exception:
             logger.debug("degradation: Redis unavailable — clear of %s deferred", key, exc_info=True)
-            self._pending_clear.add(key)
+            self._pending_clear[key] = seen
 
     async def degraded_entries(self) -> list[dict[str, str]]:
         """Return currently-degraded entries with their cause (for observability).
@@ -262,7 +268,7 @@ class ProviderDegradationStore:
             return  # a confirmed transient mark needs no local copy
         self._local[key] = (cause, None if reauth else time.monotonic() + _DEGRADATION_TTL_SECONDS)
         if reauth:
-            self._pending_clear.discard(key)
+            self._pending_clear.pop(key, None)
             if not redis_confirmed:
                 self._pending_reauth.add(key)
 
@@ -271,7 +277,11 @@ class ProviderDegradationStore:
         try:
             redis = await self._get_redis()
             await self._flush_pending(redis)
-            cause = _parse_cause(await redis.get(key))
+            raw = await redis.get(key)
+            raw = raw.decode() if isinstance(raw, bytes) else raw
+            cause = _parse_cause(raw)
+            if cause is DegradationCause.NEEDS_REAUTH and key not in self._pending_clear:
+                self._seen[key] = raw
             self._mirror(key, cause)
             return cause
         except Exception:
@@ -302,13 +312,38 @@ class ProviderDegradationStore:
             self._local.pop(key, None)
 
     async def _flush_pending(self, redis) -> None:
-        """Replay outage-time needs_reauth marks and clears into the recovered Redis."""
+        """Replay outage-time needs_reauth marks and clears into the recovered Redis.
+
+        A mark replays with NX (never overwriting a newer mark). A clear replays
+        as compare-and-delete: it removes only the mark its worker saw, so a
+        newer mark another worker wrote meanwhile is not erased.
+        """
         for key in list(self._pending_reauth):
-            await redis.set(key, DegradationCause.NEEDS_REAUTH.value)
+            await redis.set(key, self._seen.get(key, DegradationCause.NEEDS_REAUTH.value), nx=True)
             self._pending_reauth.discard(key)
-        for key in list(self._pending_clear):
-            await redis.delete(key)
-            self._pending_clear.discard(key)
+        for key, seen in list(self._pending_clear.items()):
+            if seen is not None:
+                await self._delete_if_equal(redis, key, seen)
+            self._pending_clear.pop(key, None)
+
+    @staticmethod
+    async def _delete_if_equal(redis, key: str, expected: str) -> None:
+        """Delete *key* only if it still holds *expected* (WATCH/MULTI compare-and-delete)."""
+        from redis.exceptions import WatchError  # noqa: PLC0415
+
+        async with redis.pipeline(transaction=True) as pipe:
+            try:
+                await pipe.watch(key)
+                current = await pipe.get(key)
+                current = current.decode() if isinstance(current, bytes) else current
+                if current != expected:
+                    await pipe.unwatch()
+                    return
+                pipe.multi()
+                pipe.delete(key)
+                await pipe.execute()
+            except WatchError:
+                return  # changed under us: someone wrote a newer mark -- leave it
 
     def _alert_needs_reauth(self, provider: str, model: Optional[str]) -> None:
         """Emit an operator alert for a needs_reauth transition (#15022, #1948).

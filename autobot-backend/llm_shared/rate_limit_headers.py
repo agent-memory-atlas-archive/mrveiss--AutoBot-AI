@@ -19,6 +19,7 @@ already received.
 
 from __future__ import annotations
 
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -98,9 +99,10 @@ def _as_float(raw: Optional[str]) -> Optional[float]:
     if raw is None:
         return None
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError:
         return None
+    return value if math.isfinite(value) else None
 
 
 def parse_rate_limit_headers(

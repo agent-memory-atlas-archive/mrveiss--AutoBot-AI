@@ -44,8 +44,8 @@ FRESH observed ``rpm`` window for a provider (``limit`` read off its response
 headers), that limit replaces the guessed default, so the bucket corrects
 itself. An observation older than ``headroom_routing._MAX_AGE_SECONDS`` is
 ignored entirely -- a stale reading can never widen the bucket. An operator
-who sets ``AUTOBOT_LLM_RL_{PROVIDER}_RPM`` / ``_BURST`` explicitly keeps that
-value: the env vars stay both the bootstrap and the override.
+who sets ``AUTOBOT_LLM_RL_{PROVIDER}_RPM`` or ``_BURST`` explicitly keeps the
+whole configured bucket: the env vars stay both the bootstrap and the override.
 
 Usage::
 
@@ -148,11 +148,13 @@ def _provider_limits(provider: str) -> Tuple[float, float]:
 async def _effective_limits(provider: str) -> Tuple[float, float]:
     """(capacity, refill_rate) for *provider*: fresh observed rpm limit, else the env/default guess (#15028).
 
-    The observation replaces only a value the operator did not set explicitly,
+    The observation applies only when the operator set neither RPM nor BURST,
     and only while fresh; any store failure falls back to the guess.
     """
     capacity, rate = _provider_limits(provider)
     pname = provider.upper()
+    if f"AUTOBOT_LLM_RL_{pname}_RPM" in os.environ or f"AUTOBOT_LLM_RL_{pname}_BURST" in os.environ:
+        return capacity, rate  # operator configured this bucket: observation never overrides
     try:
         entry = await get_quota_headroom_store().get(provider, "rpm")
     except Exception:
@@ -160,11 +162,7 @@ async def _effective_limits(provider: str) -> Tuple[float, float]:
         return capacity, rate
     if entry is None or entry.limit is None or entry.limit <= 0 or not is_fresh(entry):
         return capacity, rate
-    if f"AUTOBOT_LLM_RL_{pname}_BURST" not in os.environ:
-        capacity = float(entry.limit)
-    if f"AUTOBOT_LLM_RL_{pname}_RPM" not in os.environ:
-        rate = float(entry.limit) / 60.0
-    return capacity, rate
+    return float(entry.limit), float(entry.limit) / 60.0
 
 
 class LLMCrossWorkerRateLimiter:
