@@ -49473,7 +49473,7 @@ export interface paths {
         put?: never;
         /**
          * Cancel Chat Turn
-         * @description Cancel the turn currently running for *session_id* (owner only).
+         * @description Cancel the turn currently running for *session_id* (owner only, on whichever worker).
          */
         post: operations["cancel_chat_turn_api_chat_sessions__session_id__turn_cancel_post"];
         delete?: never;
@@ -100071,7 +100071,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "cancelled" | "no_active_turn";
+            status: "cancelled" | "no_active_turn" | "unconfirmed";
             /** Cancelled Turns */
             cancelled_turns: number;
         } & {
