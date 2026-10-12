@@ -179,6 +179,19 @@ class ApprovalCategory(str, Enum):
 _VALID_APPROVAL_CATEGORIES = frozenset(c.value for c in ApprovalCategory)
 
 
+def approval_category_for(tool_name: str, categories: Iterable[str]) -> Optional[str]:
+    """Return the first of *categories* that gates *tool_name*, else ``None`` (GH#11160, #18430).
+
+    The one matcher every approval surface uses (the chat seam, the plan-time interrupt and the
+    AI-line enforcement point). Word-boundary matching (GH#11206): ``deploy`` gates
+    ``deploy_service`` but not ``deployment_status``. A false positive only ever adds a hold.
+    """
+    for category in categories:
+        if match_tool_name(tool_name, APPROVAL_CATEGORY_TOOLS.get(category, ()), word_boundary=True):
+            return category
+    return None
+
+
 def valid_approval_categories() -> "frozenset[str]":
     """Return the set of valid ``requires_approval_before`` category strings."""
     return _VALID_APPROVAL_CATEGORIES

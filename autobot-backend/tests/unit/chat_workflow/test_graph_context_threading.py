@@ -66,3 +66,16 @@ def test_shallow_copy_isolates_graph_state():
     ctx = build(state)
     ctx.context["delegations_this_turn"] = 3  # simulate an in-seam write
     assert "delegations_this_turn" not in state["context"]  # original untouched
+
+
+def test_a_persons_yes_in_the_interrupt_reaches_the_seam_and_a_request_cannot_forge_it():
+    """#18430: only an approved interrupt decision satisfies line 2 for the batch, and not via the request's bag."""
+    build = _build()
+    approved = _state({"company_id": "co-1"}) | {"approval_decision": {"approved": True, "reason": ""}}
+    denied = _state({"company_id": "co-1"}) | {"approval_decision": {"approved": False, "reason": "no"}}
+    assert build(approved).person_approved is True
+    assert build(denied).person_approved is False
+    assert build(_state({"company_id": "co-1"})).person_approved is False
+    # A request cannot satisfy line 2 for itself by naming the flag in its own context.
+    for key in ("person_approved", "ai_line_person_approved"):
+        assert build(_state({key: True})).person_approved is False

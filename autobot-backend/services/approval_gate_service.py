@@ -56,9 +56,11 @@ class ApprovalGateService:
         workflow_step: str | None = None,
         context: Dict[str, Any] | None = None,
         task_ids: List[str] | None = None,
+        company_id: uuid.UUID | None = None,
     ) -> Approval:
-        """Create a new approval gate request."""
+        """Create a new approval gate request (company-scoped when *company_id* is given, #18430)."""
         approval = Approval(
+            company_id=company_id,
             title=title,
             description=description,
             approval_type=approval_type,

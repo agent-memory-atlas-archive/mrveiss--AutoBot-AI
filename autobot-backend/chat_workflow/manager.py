@@ -3716,8 +3716,8 @@ before summarizing.
         pinned agent's ``forbidden_work`` is enforced at the tool seam and cannot be
         lifted by the caller. GH#11202: when the approval gate flag is on and the
         session declares approval categories, they are overlaid as
-        ``requires_approval_before`` so the existing ``_enforce_work_item_approval``
-        seam gate holds matching tools BEFORE they execute — the correct
+        ``requires_approval_before`` so the AI-line point (``_enforce_ai_line``, #18430) holds
+        matching tools BEFORE they execute — the correct
         pre-execution stage. Backend decides; the frontend only calls the endpoints.
         """
         from chat_workflow.approval_baseline import with_baseline_categories

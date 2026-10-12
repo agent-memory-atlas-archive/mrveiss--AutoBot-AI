@@ -1,0 +1,226 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""The AI-lines API and the approval that changes a line, end to end (#18430).
+
+Real routes, a real (in-memory) store and the real LLC decide route. What each test pins:
+
+* reading and proposing are company-scoped (another company's caller gets 404);
+* an agent credential cannot propose a change (403) and a proposal changes NOTHING by itself;
+* a line moves only when an owner or admin of THAT company approves the request;
+* the approval is decided through the LLC route, which now runs what the approval proposed.
+"""
+
+from __future__ import annotations
+
+import uuid
+from unittest.mock import AsyncMock, patch
+
+import pytest
+import pytest_asyncio
+import sqlalchemy as sa
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from api.user_management.dependencies import get_current_user, require_org_context
+from llc.api.ai_lines import router as ai_lines_router
+from llc.api.approvals import router as approvals_router
+from llc.deps import get_session
+from llc.models.ai_line import LLCAiLine
+from llc.models.enums import MembershipRole
+from llc.models.membership import LLCCompanyMembership
+from llc.tests import _e2e_harness as harness
+from models.approval import Approval, ApprovalComment, TaskApprovalLink
+from user_management.models.base import Base
+from user_management.services import TenantContext
+
+COMPANY, OTHER = uuid.uuid4(), uuid.uuid4()
+OWNER, MEMBER, AGENT = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+PERSON = {"auth_method": "session"}
+AGENT_CREDENTIAL = {"auth_method": "run_jwt", "username": "run:abc"}
+
+
+@pytest_asyncio.fixture
+async def factory():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")  # canonical: ignore py-adhoc-db-engine (test-local)
+    tables = [
+        Approval.__table__,
+        ApprovalComment.__table__,
+        TaskApprovalLink.__table__,
+        LLCAiLine.__table__,
+        LLCCompanyMembership.__table__,
+    ]
+    for table in tables:
+        harness._scrub_pg_server_defaults(table)
+        harness._clientside_timestamps(table)
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=tables))
+    maker = async_sessionmaker(  # canonical: ignore py-adhoc-db-engine (test-local factory)
+        engine, expire_on_commit=False, class_=AsyncSession
+    )
+    async with maker() as session:
+        for user, role in ((OWNER, MembershipRole.OWNER), (MEMBER, MembershipRole.MEMBER)):
+            session.add(LLCCompanyMembership(id=uuid.uuid4(), company_id=COMPANY, user_id=user, role=role.value))
+        await session.commit()
+    yield maker
+    await engine.dispose()
+
+
+def _client(factory, *, user: uuid.UUID, org: uuid.UUID = COMPANY, credential: dict = PERSON) -> TestClient:
+    app = FastAPI()
+    app.include_router(ai_lines_router, prefix="/api/llc")
+    app.include_router(approvals_router, prefix="/api/llc")
+
+    async def _session():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _session
+    app.dependency_overrides[get_current_user] = lambda: {"id": str(user), "username": "person", **credential}
+    app.dependency_overrides[require_org_context] = lambda: TenantContext(org_id=org, user_id=user)
+    return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _outside_world(factory):
+    with (
+        patch("services.ai_line_change_proposal.get_async_session_factory", lambda: factory),
+        patch("services.ai_line_change_action.audit_log", AsyncMock(return_value=True)),
+        patch("services.ai_line_view.gated_categories", AsyncMock(return_value=["writing files"])),
+        patch("events.bus.publish_event", AsyncMock()),
+        patch("llc.api.approvals.ApprovalService.publish_decided", AsyncMock()),
+        patch("llc.api.approvals.ApprovalService.log_decision_to_kb", AsyncMock()),
+    ):
+        yield
+
+
+async def _rows(factory, model):
+    async with factory() as session:
+        return list((await session.execute(sa.select(model))).scalars().all())
+
+
+def _propose(client, key="crm:send", line="autonomous", company=COMPANY):
+    return client.post(f"/api/llc/ai-lines/{company}/changes", json={"action_key": key, "line": line})
+
+
+def _decide(client, approval_id: str, decision="approved"):
+    return client.post(f"/api/llc/approvals/{approval_id}/decide", json={"decision": decision})
+
+
+# -- read ----------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reading_the_lines_shows_every_mutating_tool_as_line_two_and_a_stored_line(factory):
+    async with factory() as session:
+        session.add(LLCAiLine(id=uuid.uuid4(), company_id=COMPANY, action_key="crm:read", line="autonomous"))
+        session.add(LLCAiLine(id=uuid.uuid4(), company_id=OTHER, action_key="crm:delete", line="never"))
+        await session.commit()
+    body = _client(factory, user=OWNER).get(f"/api/llc/ai-lines/{COMPANY}").json()
+    by_key = {e["action_key"]: e for e in body["entries"]}
+    assert body["default_line"] == "draft_then_send"
+    assert by_key["crm:read"]["effective_line"] == "autonomous" and by_key["crm:read"]["is_set"]
+    assert by_key["write_file"]["effective_line"] == "draft_then_send" and not by_key["write_file"]["is_set"]
+    assert "crm:delete" not in by_key  # another company's line
+
+
+@pytest.mark.asyncio
+async def test_a_stored_autonomous_line_in_a_baseline_category_is_shown_as_line_two_with_the_reason(factory):
+    async with factory() as session:
+        session.add(LLCAiLine(id=uuid.uuid4(), company_id=COMPANY, action_key="write_file", line="autonomous"))
+        await session.commit()
+    entry = next(
+        e
+        for e in _client(factory, user=OWNER).get(f"/api/llc/ai-lines/{COMPANY}").json()["entries"]
+        if e["action_key"] == "write_file"
+    )
+    assert entry["stored_line"] == "autonomous" and entry["effective_line"] == "draft_then_send"
+    assert entry["floor_category"] == "writing files" and "baseline" in entry["reason"]
+
+
+@pytest.mark.asyncio
+async def test_another_companys_caller_cannot_read_the_lines(factory):
+    assert _client(factory, user=OWNER, org=OTHER).get(f"/api/llc/ai-lines/{COMPANY}").status_code == 404
+
+
+# -- propose ------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_files_an_approval_and_changes_nothing(factory):
+    resp = _propose(_client(factory, user=MEMBER))
+    assert resp.status_code == 202 and resp.json()["status"] == "pending"
+    [approval] = await _rows(factory, Approval)
+    assert approval.company_id == COMPANY and approval.context["line"] == "autonomous"
+    assert await _rows(factory, LLCAiLine) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credential", [AGENT_CREDENTIAL, {"auth_method": "api_key"}, {"service": True}])
+async def test_an_agent_credential_cannot_propose_a_line_change(factory, credential):
+    resp = _propose(_client(factory, user=AGENT, credential=credential))
+    assert resp.status_code == 403
+    assert await _rows(factory, Approval) == [] and await _rows(factory, LLCAiLine) == []
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_for_another_company_is_refused(factory):
+    assert _propose(_client(factory, user=OWNER, org=OTHER)).status_code == 404
+    assert await _rows(factory, Approval) == []
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_key_or_unknown_line_is_rejected(factory):
+    client = _client(factory, user=OWNER)
+    assert _propose(client, key="crm send!").status_code == 422
+    assert _propose(client, line="allow-all").status_code == 422
+    assert await _rows(factory, Approval) == []
+
+
+# -- approve: the only way a line moves --------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_owners_approval_sets_the_line(factory):
+    approval_id = _propose(_client(factory, user=MEMBER)).json()["approval_id"]
+    assert _decide(_client(factory, user=OWNER), approval_id).status_code == 200
+    [row] = await _rows(factory, LLCAiLine)
+    assert (row.company_id, row.action_key, row.line) == (COMPANY, "crm:send", "autonomous")
+    assert row.decided_by == str(OWNER) and str(row.approval_id) == approval_id
+    entries = _client(factory, user=OWNER).get(f"/api/llc/ai-lines/{COMPANY}").json()["entries"]
+    entry = next(e for e in entries if e["action_key"] == "crm:send")
+    assert entry["is_set"] and entry["effective_line"] == "autonomous"
+
+
+@pytest.mark.asyncio
+async def test_a_rejected_proposal_changes_nothing(factory):
+    approval_id = _propose(_client(factory, user=MEMBER)).json()["approval_id"]
+    assert _decide(_client(factory, user=OWNER), approval_id, "rejected").status_code == 200
+    assert await _rows(factory, LLCAiLine) == []
+
+
+@pytest.mark.asyncio
+async def test_a_plain_member_approving_does_not_move_the_line(factory):
+    approval_id = _propose(_client(factory, user=MEMBER)).json()["approval_id"]
+    assert _decide(_client(factory, user=MEMBER), approval_id).status_code == 200  # the decision is recorded ...
+    assert await _rows(factory, LLCAiLine) == []  # ... the line is not, and the reason is on the approval
+    bodies = [c.body for c in await _rows(factory, ApprovalComment)]
+    assert any("did not complete" in b for b in bodies)
+
+
+@pytest.mark.asyncio
+async def test_an_agent_credential_cannot_decide_the_proposal(factory):
+    approval_id = _propose(_client(factory, user=OWNER)).json()["approval_id"]
+    assert _decide(_client(factory, user=AGENT, credential=AGENT_CREDENTIAL), approval_id).status_code == 403
+    assert await _rows(factory, LLCAiLine) == []
+
+
+@pytest.mark.asyncio
+async def test_approving_twice_does_not_rewrite_or_duplicate_the_line(factory):
+    client = _client(factory, user=OWNER)
+    approval_id = _propose(client).json()["approval_id"]
+    assert _decide(client, approval_id).status_code == 200
+    assert _decide(client, approval_id).status_code == 409
+    assert len(await _rows(factory, LLCAiLine)) == 1

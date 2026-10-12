@@ -421,7 +421,7 @@ def _build_llm_iteration_context(state: ChatState):
     # call evaluated as the default role — which is the bug being fixed.
     auth_role = resolve_auth_role(state.get("context", {}) or {})
 
-    return LLMIterationContext(
+    ctx = LLMIterationContext(
         ollama_endpoint=state["llm_params"]["ollama_endpoint"],
         selected_model=state["llm_params"]["selected_model"],
         session_id=state["session_id"],
@@ -444,6 +444,9 @@ def _build_llm_iteration_context(state: ChatState):
         work_item_id=work_item_id,
         requires_approval_before=approval_cats,
     )
+    # #18430: a person's yes in the interrupt satisfies line 2 for this batch; line 3 never is.
+    ctx.person_approved = bool((state.get("approval_decision") or {}).get("approved"))
+    return ctx
 
 
 async def _run_llm_iteration(manager, ctx, iteration, messages, stream_cb):
@@ -492,21 +495,15 @@ async def _run_llm_iteration(manager, ctx, iteration, messages, stream_cb):
 # ---------------------------------------------------------------------------
 
 
-def _tool_call_needs_approval(tool_call: Dict[str, Any], ctx) -> bool:
-    """Combined work-item + category approval gate for one planned tool call.
+async def _tool_call_needs_approval(tool_call: Dict[str, Any], ctx) -> bool:
+    """Whether a planned tool call must wait for a person (GH#11202, #18430).
 
-    GH#11202: a tool call requires approval when the run carries declared
-    ``requires_approval_before`` categories (from the work item and/or the
-    session, already resolved onto ``ctx``) AND this tool's action category
-    matches one of them, per the existing ``_approval_category_for`` matcher
-    (GH#11160/#11206) — reused verbatim, never reinvented.
+    Not a policy of its own: it asks the AI-line point's resolver (stored line, approval baseline and
+    the work item's declared categories), so the plan-time interrupt and the dispatch seam agree.
     """
-    from chat_workflow.tool_handler import _approval_category_for
+    from services.ai_line_enforcement import call_needs_approval
 
-    declared = getattr(ctx, "requires_approval_before", None) or []
-    if not declared:
-        return False
-    return _approval_category_for(tool_call.get("name", ""), declared) is not None
+    return await call_needs_approval(tool_call, ctx)
 
 
 async def _run_llm_iteration_plan(manager, ctx, iteration, messages, stream_cb):
@@ -622,7 +619,7 @@ async def _generate_response_planned(
 
     tool_calls = tool_calls or []
     for tc in tool_calls:
-        tc["needs_approval"] = _tool_call_needs_approval(tc, ctx)
+        tc["needs_approval"] = await _tool_call_needs_approval(tc, ctx)
 
     if tool_calls:
         emit_plan(tool_calls, session_id=session_id)

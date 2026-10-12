@@ -398,6 +398,10 @@ class LLMIterationContext:
     # key that slipped through. Defaults to the same "user" every downstream
     # seam already defaulted to.
     auth_role: str = "user"
+    # #18430: a person already said yes to this batch in the chat interrupt (set only by the graph's
+    # execute_tools path). Its own field, not a `context` key, for the reason auth_role is: `context`
+    # is copied from the request, so a client could otherwise satisfy line 2 for itself. Never lifts line 3.
+    person_approved: bool = False
     # #16950: authority inherited from the principals this run acts for -- a delegating
     # parent's gates, boundary and grants. Met with the run's own at every seam that
     # enforces one, so no hop can widen it. None: nothing inherited.

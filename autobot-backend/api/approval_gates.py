@@ -31,6 +31,7 @@ from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.models.pagination import PaginationParams
 from models.approval import ApprovalStatus, ApprovalType
+from services.ai_line_change_action import register_ai_line_change_action
 from services.approval_execution import is_registered_action
 from services.approval_gate_service import ApprovalGateService
 from services.knowledge.collection_space_stamp_action import register_stamp_action
@@ -38,6 +39,7 @@ from services.knowledge.collection_space_stamp_action import register_stamp_acti
 logger = get_logger(__name__)
 router = APIRouter()
 register_stamp_action()  # registered with the router so the handler exists before any approve()
+register_ai_line_change_action()  # #18430: a person's approval is what changes an AI line
 
 
 # -- Helpers -----------------------------------------------------------
