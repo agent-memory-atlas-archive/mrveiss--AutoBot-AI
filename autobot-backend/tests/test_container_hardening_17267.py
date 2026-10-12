@@ -178,7 +178,7 @@ def test_a_bind_of_the_docker_socket_or_host_root_is_refused(volumes: object) ->
 
 
 @pytest.mark.parametrize(
-    "path", ["/srv/work", "/home/agent/workspace/t1", "/var/lib/other", "namedvol", "/procfoo", "/etcetera"]
+    "path", ["/srv/work", "/home/sandbox/workspace/t1", "/var/lib/other", "namedvol", "/procfoo", "/etcetera"]
 )
 def test_a_legitimate_bind_path_still_passes(path: str) -> None:
     from autobot_shared.container_hardening import execution_hardening_kwargs

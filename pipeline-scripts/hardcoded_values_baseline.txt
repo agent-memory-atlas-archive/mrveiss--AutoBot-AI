@@ -438,7 +438,6 @@
 1|other|autobot-backend/services/approval_gate_service.py|50
 2|other|autobot-backend/services/audit/audit.py|100
 1|other|autobot-backend/services/audit_logger.py|100
-1|other|autobot-backend/services/audit_logger.py|offset=0
 1|other|autobot-backend/services/autoresearch/auto_research_agent.py|60
 1|other|autobot-backend/services/autoresearch/auto_research_agent.py|https://export.arxiv.org/api/query
 1|other|autobot-backend/services/autoresearch/knowledge_synthesizer.py|"system"
