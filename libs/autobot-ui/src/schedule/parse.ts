@@ -40,7 +40,7 @@ function timedRule(f: CronFields, minute: number, hour: number): PickerRule | nu
   if (isStar(f.raw[2]) && isStar(f.raw[3])) {
     if (isStar(f.raw[4]) || f.dow.size === 7) return { repeat: 'daily', time, weekdaysOnly: false }
     if (isMonToFri(f.dow)) return { repeat: 'daily', time, weekdaysOnly: true }
-    if (/^[\d,\-]+$/.test(f.raw[4])) return { repeat: 'weekly', time, days: sortDays([...f.dow].map(cronToWeekday)) }
+    if (/^[\d,-]+$/.test(f.raw[4])) return { repeat: 'weekly', time, days: sortDays([...f.dow].map(cronToWeekday)) }
     return null
   }
   const day = /^\d+$/.test(f.raw[2]) ? only(f.dom) : null

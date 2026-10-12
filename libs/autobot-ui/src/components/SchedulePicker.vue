@@ -28,8 +28,10 @@ const props = withDefaults(
     /** App translator — the kit owns keys, never strings. */
     translate: ScheduleTranslate
     locale?: string
-    /** The company's zone: the default for new schedules and the "company time" label. */
+    /** Zone preselected for a new schedule. */
     defaultTimezone?: string
+    /** The company's zone, when known: labelled "company time" in summaries. */
+    companyTimezone?: string
     preview?: SchedulePreviewFn
     debounceMs?: number
   }>(),
@@ -52,7 +54,7 @@ const REPEATS: RepeatKind[] = ['minutes', 'hourly', 'daily', 'weekly', 'monthly'
 const NTHS = [1, 2, 3, 4, -1] as const
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1)
-const zones = computed(() => listZones(props.defaultTimezone, timezone.value))
+const zones = computed(() => listZones(props.defaultTimezone, props.companyTimezone ?? '', timezone.value))
 const pick = <R extends RepeatKind>(r: R) => computed(() => (rule.value?.repeat === r ? (rule.value as Extract<PickerRule, { repeat: R }>) : null))
 const minutes = pick('minutes')
 const hourly = pick('hourly')
@@ -63,7 +65,7 @@ const once = pick('once')
 const nthKey = (n: number) => (n === -1 ? 'last' : String(n))
 
 const zoneLabel = computed(() =>
-  timezone.value === props.defaultTimezone ? t('schedule.zone.company') : timezone.value)
+  timezone.value === props.companyTimezone ? t('schedule.zone.company') : timezone.value)
 const summary = computed(() => summaryText(rule.value, zoneLabel.value, t, props.locale))
 const savedText = computed(() => {
   const s = spec.value
@@ -245,7 +247,7 @@ const previewNote = computed(() => {
       <select :id="`${uid}-zone`" v-model="timezone" class="aui-field">
         <option v-for="z in zones" :key="z" :value="z">{{ z }}</option>
       </select>
-      <span v-if="timezone === defaultTimezone" class="aui-sched__note">{{ t('schedule.zone.usesCompany') }}</span>
+      <span v-if="timezone === companyTimezone" class="aui-sched__note">{{ t('schedule.zone.usesCompany') }}</span>
     </div>
 
     <p class="aui-sched__summary" role="status" aria-live="polite">{{ summary }}</p>
