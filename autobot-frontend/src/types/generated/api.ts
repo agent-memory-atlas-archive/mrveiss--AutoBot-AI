@@ -3785,10 +3785,10 @@ export interface paths {
         head?: never;
         /**
          * Update User Preferences
-         * @description Update current user's preferences.
+         * @description Update current user's preferences (partial: omitted fields keep stored values).
          *
          *     Args:
-         *         preferences: New preference values
+         *         preferences: Preference values; only fields present in the body are written
          *
          *     Returns:
          *         DataResponse with updated preferences
