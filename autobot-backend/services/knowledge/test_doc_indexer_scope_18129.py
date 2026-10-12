@@ -57,3 +57,18 @@ def test_taxonomy_detects_the_directory_before_the_filename():
     assert detect_category(Path("docs/api/x.md")) == "api"
     assert detect_category(Path("docs/misc/DOCKER_NOTES.md")) == "deployment"
     assert detect_category(Path("nothing.md")) == "general"
+
+
+def test_the_indexer_chunks_with_the_shared_primitives_the_kb_chunker_is_built_on():
+    """The indexer owns no packing logic: its fallback is the very function ``chunk_plain_text`` reuses."""
+    from autobot_shared import doc_chunking
+    from services.knowledge import doc_indexer
+
+    assert doc_indexer._chunk_large_content is doc_chunking.chunk_large_content
+    assert doc_indexer._process_h2_sections is doc_chunking.process_h2_sections
+    # A header-less document is all intro: it is cut by chunk_plain_text, not kept as one chunk
+    # (before, it stayed one over-budget chunk and relied on the embedder rejecting it).
+    body = "\n\n".join(f"paragraph {i} " + "word " * 300 for i in range(6))
+    markdown_chunks = doc_indexer._chunk_markdown(body, "docs/x.md")
+    plain_chunks = doc_chunking.chunk_plain_text(body)
+    assert len(markdown_chunks) == len(plain_chunks) > 1

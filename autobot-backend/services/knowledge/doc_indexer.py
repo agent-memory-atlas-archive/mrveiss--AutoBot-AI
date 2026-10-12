@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from autobot_shared.doc_chunking import chunk_large_content as _chunk_large_content
+from autobot_shared.doc_chunking import chunk_plain_text
 from autobot_shared.doc_chunking import create_chunk as _create_chunk
 from autobot_shared.doc_chunking import estimate_tokens as _estimate_tokens
 from autobot_shared.doc_chunking import process_h2_sections as _process_h2_sections
@@ -299,16 +300,11 @@ def _chunk_markdown(content: str, file_path: str) -> List[Dict[str, Any]]:
     # Intro content before first H2
     intro = h2_splits[0].strip() if h2_splits else ""
     if intro and _estimate_tokens(intro) > 50:
-        chunks.append(
-            _create_chunk(
-                intro,
-                "Introduction",
-                None,
-                file_path,
-                doc_type,
-                category,
-                doc_title,
-            )
+        # chunk_plain_text returns the intro whole within the token budget, and cuts an
+        # oversized one (a header-less document is all intro) the way the KB ingest does (#18129).
+        chunks.extend(
+            _create_chunk(piece, "Introduction", None, file_path, doc_type, category, doc_title)
+            for piece in chunk_plain_text(intro)
         )
 
     _process_h2_sections(h2_splits, file_path, doc_type, category, doc_title, chunks)
