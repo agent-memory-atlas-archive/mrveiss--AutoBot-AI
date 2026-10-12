@@ -159,7 +159,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/chat_workflow/chat_intent_detector_test.py": 621,
     "autobot-backend/chat_workflow/graph.py": 1682,
     "autobot-backend/chat_workflow/llm_handler.py": 1343,
-    "autobot-backend/chat_workflow/manager.py": 3975,  # #18293: transcript_dir retired
+    "autobot-backend/chat_workflow/manager.py": 3887,  # #17273: graph turn lifecycle moved to turn_control
     "autobot-backend/chat_workflow/tool_handler.py": 3731,  # #11542 dispatch merge + #14068 mirror
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,
     "autobot-backend/chat_workflow/workflow_plan_approval_test.py": 624,
