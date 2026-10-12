@@ -743,6 +743,12 @@ services:
       # Whole directory, not just prometheus.yml: the alerts-*.yml rule files
       # sit beside it and were otherwise absent from the container (#12460).
       - ./autobot-monitoring:/etc/prometheus:ro
+      # #16375: the backend scrape token file (prometheus_scrape_token). The
+      # volume's autobot.env is 0640 999:999, unreadable to this container.
+      - autobot_secrets:/run/autobot-secrets:ro
+    depends_on:
+      autobot-secrets-init:
+        condition: service_completed_successfully
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
