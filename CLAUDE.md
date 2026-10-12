@@ -1,9 +1,8 @@
 # AutoBot Development Instructions
 
 Index plus the rules that are catastrophic to miss. Everything else is in `docs/developer/` —
-read a doc when its trigger fires, not before. Universal rules (worktree mandate, "I don't
-know", evidence, PR batching, never-idle) live in the global instructions and are not repeated
-here; where the two disagree, **this file wins**.
+read a doc when its trigger fires, not before. Universal rules (worktree mandate, evidence, never-idle) live in the
+global instructions and are not repeated here; where the two disagree, **this file wins**.
 
 ## Read when triggered
 
@@ -41,6 +40,7 @@ symbol, on extraction PRs · 8 Outbound HTTP goes through the guarded fetch (egr
 ## Never violate
 
 - **Before acting on a measurement, name what it is about** — environment, path, symbol, question. Family **F** (*correct, complete, about a different question*) reads as a clean answer: if more data would not change it, it is F → `MEASUREMENT_DISCIPLINE.md`.
+- **Say "I don't know" — never fabricate.** A guessed cause, count or verdict is the one error treated as serious; an admission is an opening, not a closure → [`MEASUREMENT_DISCIPLINE.md`](docs/developer/MEASUREMENT_DISCIPLINE.md#a-stated-gap-is-a-finding-never-a-closure).
 - **PRs target `main`; `release` is the release branch.** `release`/`master` are blocked by the pre-commit hook — use `issue-*` or `hotfix-*`.
 - **Never work from a stale base.** `git fetch origin` and branch from current base before the first edit; answer "is this already done?" against current `origin/main` and the issue's ACs, **never an old branch** → `CLAUDE_GIT.md`.
 - **Commit format:** `<type>(scope): <description> (#issue-number)`. Never `--no-verify` — a PostToolUse hook auto-formats `.py`.
