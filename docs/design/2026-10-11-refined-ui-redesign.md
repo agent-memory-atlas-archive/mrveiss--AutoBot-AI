@@ -127,8 +127,8 @@ first item of the **Danger Zone** card in SLM console → Advanced control. Refe
 Route/view as found on `main` at 940da29. **New** = no view exists yet; confirm the backend before
 building UI for it.
 
-Page groups on the canvas (128 screens): Entry & Home 8 · Chat & Workspace 3 · Knowledge 9 ·
-Company OS 39 (includes BusinessIntelligence and the Transcriber screens) · Automation 7 · Agents 3 ·
+Page groups on the canvas (130 screens): Entry & Home 8 · Chat & Workspace 3 · Knowledge 9 ·
+Company OS 40 (includes BusinessIntelligence, the Transcriber screens and Handbook) · Automation 8 · Agents 3 ·
 Analytics 6 · Settings 2 (Secrets, Preferences) · **SLM console (server-wide) 25** · Auth & Account
 10 · Components 16. The SLM console group holds Operations, ErrorMonitoring, FailureAnalysis,
 Plugins, Marketplace, SecretsApiKeys, SecretsAudit, LlmConfig, ThemeManager, the Admin* screens,
@@ -144,7 +144,21 @@ is reusable across workflows, has one owner role, may require skills, and may al
 routine as its owner role. Roles hold **skills** and **meta skills** (a reusable graph of processes
 with no trigger, called by workflows as one step). `OrgChart`, `ProcessCanvas`,
 `ProcessCanvasTable`, `Roles` and `Routines` follow this model; build to #18390 once its open
-decisions are made. The routes below are the current user-frontend
+decisions are made.
+
+**Three lines for AI (owner, 2026-10-12 — #18430).** Every tool action, process and meta skill is
+*Autonomous*, *AI drafts, a person sends* (waits in Approvals) or *AI never touches*. Unset = the
+middle line; agents never change a line; changing one is an approval. A process shows its effective
+line (strictest of its own and its tool actions'). Setting up an automation is **four moves** —
+connect, set the line, give the job, wire the trigger — `AutomationSetup`.
+
+**Handbook (#18431).** An employee handbook that onboards people and agents: company chapters plus a
+generated page for every role, workflow, process and meta skill, an onboarding path per role, and
+need-to-know scoping per reader. `Handbook`.
+
+**Schedules (#18432).** One clickable schedule picker (Routines, workflow Schedule trigger, automation
+setup); lists show a plain-language summary; storage is translated in the background to standard
+cron, an RFC 5545 calendar rule, or a one-off run. The routes below are the current user-frontend
 routes; the group says where the mockup now puts the screen.
 
 | Mockup | Route | View / component |
@@ -157,7 +171,7 @@ routes; the group says where the mockup now puts the screen.
 | SharedChat | `/shared/:token` | `views/SharedChatView.vue` |
 | NotFound | catch-all | `views/NotFoundView.vue` |
 | PermissionDenied | `/permission-denied` | (route exists) |
-| Chat | `/chat` | `ChatView` → `components/chat/ChatInterface.vue` |
+| Chat | `/chat` | `ChatView` → `components/chat/ChatInterface.vue` — tabs Chat · Files · Terminal · Browser · Remote desktop (`ChatTabs`, `ChatTabContent`); right panels Session files (`ChatFilePanel`) and Voice chat (`VoiceConversationPanel`), one at a time |
 | Desktop | `/chat/novnc` (`/desktop` redirects) | `ChatInterface.vue` (noVNC tab) |
 | Canvas | `/canvas` | `views/CanvasView.vue` |
 | Knowledge | `/knowledge/browser` | `components/knowledge/KnowledgeBrowser.vue` |
@@ -199,12 +213,14 @@ routes; the group says where the mockup now puts the screen.
 | Approvals | `…/approvals` | `views/llc/ApprovalsInbox.vue` |
 | Costs | `…/costs` | `views/llc/CostDashboard.vue` |
 | HeartbeatMonitor | `…/heartbeat` | `views/llc/HeartbeatMonitor.vue` |
-| Routines | `…/routines` | `views/llc/RoutinesView.vue` |
+| Routines | `…/routines` | `views/llc/RoutinesView.vue` — schedule picker replaces cron entry (#18432); each routine runs a process as its owner role |
+| Handbook | — **new** | company handbook, generated role/workflow/process pages, onboarding, need-to-know (#18431) |
 | CeoChat | `…/ceo-chat` | `views/llc/CeoChatView.vue` |
 | Activity | `…/activity` | `views/llc/ActivityFeedView.vue` |
 | Portability | `…/portability` | `views/llc/CompanyPortabilityView.vue` |
 | CompanySecrets | `…/secrets` | `views/llc/SecretsView.vue` |
 | AutomationOverview / Automation / Templates / Runner / History | `…/automation/:section` | `WorkflowBuilderView` |
+| AutomationSetup | — **new** | four-move setup: connect, set the line per tool action, give the job, wire the trigger (#18430) |
 | BrowserAutomation | `…/automation/browser-automation` | (child route) |
 | VisionAutomation | `…/automation/vision-automation` | `views/VisionAutomationView.vue` |
 | Agents | `/agents/registry` | `views/AgentRegistryView.vue` |
@@ -274,7 +290,9 @@ Each step is one PR-sized scope. A session should take one step, not the whole l
    Agent ledger).
 6. **New screens** — account area, auth flows, help, search, mailbox, and the Company OS screens
    marked **new** in §5 — each only after its backend is confirmed. The role → workflow → process
-   screens wait for #18390; the agent ledger screens for #18391's read APIs.
+   screens wait for #18390; the agent ledger screens for #18391's read APIs; the AI lines and
+   automation setup for #18430 (one enforcement point with the approval policies, #17463); the
+   handbook for #18431; the schedule picker for #18432's scheduler support.
 
 ## Related
 

@@ -118,6 +118,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
 .rn{width:20px;height:20px;border-radius:99px;background:var(--idle-bg);color:var(--idle-fg);font:600 11px 'IBM Plex Mono',monospace;display:grid;place-items:center;flex:none;margin-top:6px;border:var(--pill-b)}
 .rb{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 .rl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--text2)}
+.aip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:99px;line-height:1.25;white-space:nowrap}
 .rtb{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:99px;background:var(--info-bg);color:var(--info-fg);border:var(--pill-b);white-space:nowrap}
 .rc2{display:flex;flex-direction:column;gap:2px}
 .th[data-ui="minimal"] .adv{display:none !important}
@@ -201,6 +202,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
       <a href="Members.dc.html"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Members</a>
       <a href="Teams.dc.html"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3" class="i2"/><path d="M2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0"/></svg>Teams</a>
       <a href="Roles.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M14 10h4M14 14h3"/></svg>Roles</a>
+      <a href="Handbook.dc.html"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" class="it2"/><path d="M5 17a3 3 0 0 1 3-3h10M9 8h5"/></svg>Handbook</a>
       <a href="Costs.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" class="it2"/><path d="M12 7v10"/></svg>Costs &amp; Budget</a>
       <a href="BusinessIntelligence.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M5 16l4-5 4 3 6-8" /><circle cx="19" cy="6" r="1.6" class="i2"/></svg>Business intelligence</a>
       <a href="HeartbeatMonitor.dc.html" class="adv"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-4 4 8 2-4h6"/></svg>Heartbeat</a>
@@ -259,6 +261,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
           <div style="display: flex; align-items: center; gap: 8px"><label class="lb" for="f-role">Used by role</label><select id="f-role" class="inp" value="{{fRole}}" onChange="{{onFRole}}"><sc-for list="{{roleOpts}}" as="o" hint-placeholder-count="4"><option value="{{o.v}}">{{o.l}}</option></sc-for></select></div>
           <div style="display: flex; align-items: center; gap: 8px"><label class="lb" for="f-own">Owner role</label><select id="f-own" class="inp" value="{{fOwn}}" onChange="{{onFOwn}}"><sc-for list="{{roleOpts}}" as="o" hint-placeholder-count="4"><option value="{{o.v}}">{{o.l}}</option></sc-for></select></div>
           <div style="display: flex; align-items: center; gap: 8px"><label class="lb" for="f-wf">Used in workflow</label><select id="f-wf" class="inp" value="{{fWf}}" onChange="{{onFWf}}"><sc-for list="{{wfOpts}}" as="o" hint-placeholder-count="4"><option value="{{o.v}}">{{o.l}}</option></sc-for></select></div>
+          <div style="display: flex; align-items: center; gap: 8px"><label class="lb" for="f-line">AI line</label><select id="f-line" class="inp" value="{{fLine}}" onChange="{{onFLine}}"><option value="all">All lines</option><option value="auto">Autonomous</option><option value="draft">Drafts · person sends</option><option value="never">Never touches</option><option value="unset">Not set</option></select></div>
           <div style="display: flex; align-items: center; gap: 8px"><label class="lb" for="f-shr">Sharing</label><select id="f-shr" class="inp" value="{{fShare}}" onChange="{{onShare}}"><option value="all">All processes</option><option value="shared">Shared by several workflows</option><option value="single">Used in one workflow</option><option value="none">Not in any workflow</option></select></div>
           <button type="button" class="linkbtn" onClick="{{clearFilters}}">Clear filters</button>
         </div>
@@ -299,6 +302,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
                 <th scope="col"><span tabindex="0" data-tip="Colour from the first matching rule" data-tip-pos="right">Colour</span></th>
                 <th scope="col">Process</th>
                 <th scope="col"><span tabindex="0" data-tip="A process does one job. A meta skill is know-how made of several processes, held by roles and called by workflows." data-tip-pos="right">Kind</span></th>
+                <th scope="col"><span tabindex="0" data-tip="How far AI may go. The effective line is the strictest of the process and its tools. Changing a line goes through Approvals." data-tip-pos="right">AI line</span></th>
                 <th scope="col"><span tabindex="0" data-tip="Skills the role running the process must hold. A skill is marked missing when a role that runs it lacks it." data-tip-pos="right">Requires skills</span></th>
                 <th scope="col"><span tabindex="0" data-tip="Every workflow that uses this process, and the role that performs it. Editing the process changes it in all of them." data-tip-pos="right">Used in</span></th>
                 <th scope="col"><span tabindex="0" data-tip="The role responsible for the process. A routine runs it as this role." data-tip-pos="right">Owner role</span></th>
@@ -314,6 +318,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
                     <td><span class="pill {{r.colour}}" tabindex="0" data-tip="{{r.colourTip}}" data-tip-pos="right">{{r.colourLabel}}</span></td>
                     <td><a href="ProcessCanvas.dc.html" data-tip="Open on the canvas" style="font-weight: 600; text-decoration: none">{{r.title}}</a></td>
                     <td><span class="pill {{r.kindCls}}">{{r.kind}}</span></td>
+                    <td><span class="pill {{r.lineCls}} aip" tabindex="0" data-tip="{{r.lineTip}}"><svg class="ic" width="10" height="10" viewBox="0 0 24 24" aria-hidden="true"><path d="{{r.lineIcon}}"/></svg>{{r.lineLabel}}</span></td>
                     <td><span style="display: flex; gap: 4px; flex-wrap: wrap; max-width: 260px"><sc-for list="{{r.skills}}" as="k" hint-placeholder-count="1"><span class="pill {{k.cls}}" tabindex="0" data-tip="{{k.tip}}" style="white-space: normal">{{k.label}}</span></sc-for></span><sc-if value="{{r.noSkills}}" hint-placeholder-val="{{ false }}"><span class="sub2">None</span></sc-if></td>
                     <td><span class="rc2"><sc-for list="{{r.uses}}" as="u" hint-placeholder-count="2"><span><a href="ProcessCanvas.dc.html" style="text-decoration: none">{{u.wf}}</a> <span class="sub2" style="font-size: 11.5px">· {{u.role}}</span></span></sc-for></span><sc-if value="{{r.shared}}" hint-placeholder-val="{{ false }}"><span class="pill info" tabindex="0" data-tip="{{r.sharedTip}}" style="display: inline-block; margin-top: 3px">{{r.sharedLabel}}</span></sc-if><sc-if value="{{r.noUses}}" hint-placeholder-val="{{ false }}"><span class="sub2">{{r.noUsesText}}</span></sc-if><sc-if value="{{r.metaIn}}" hint-placeholder-val="{{ false }}"><span class="sub2" style="font-size: 11.5px; display: block">{{r.metaInText}}</span></sc-if></td>
                     <td><span class="rc2"><span>{{r.ownerName}}</span><span class="sub2" style="font-size: 11.5px">{{r.ownerWho}}</span></span><sc-if value="{{r.away}}" hint-placeholder-val="{{ false }}"><span class="pill warn" tabindex="0" data-tip="{{r.awayTip}}" style="display: inline-block; margin-top: 3px">Away</span></sc-if></td>
@@ -378,7 +383,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
                       <div class="rl">
                         <span>If</span>
                         <label class="sr" for="{{u.fid}}">Field</label>
-                        <select id="{{u.fid}}" class="inp" value="{{u.field}}" onChange="{{u.onField}}"><option value="cost">Cost/run</option><option value="owner">Holder type</option><option value="workflow">Used in workflow</option><option value="role">Used by role</option><option value="tag">Tag</option><option value="sharing">Sharing</option><option value="ownerRole">Owner role</option><option value="routine">Routine</option><option value="skillMissing">Skill missing</option></select>
+                        <select id="{{u.fid}}" class="inp" value="{{u.field}}" onChange="{{u.onField}}"><option value="cost">Cost/run</option><option value="owner">Holder type</option><option value="workflow">Used in workflow</option><option value="role">Used by role</option><option value="tag">Tag</option><option value="sharing">Sharing</option><option value="ownerRole">Owner role</option><option value="routine">Routine</option><option value="skillMissing">Skill missing</option><option value="aiLine">AI line</option></select>
                         <span>{{u.op}}</span>
                         <sc-if value="{{u.isNum}}" hint-placeholder-val="{{ true }}">
                           <span style="display: inline-flex; align-items: center; gap: 4px"><label class="sr" for="{{u.vid}}">Amount in EUR</label><input id="{{u.vid}}" class="inp mono" type="number" step="0.5" min="0" value="{{u.val}}" onInput="{{u.onVal}}" style="width: 64px"><span class="mono">EUR</span></span>
@@ -427,7 +432,7 @@ td{font-size:13px;padding:10px 16px;border-bottom:var(--bw) solid var(--line);wh
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark","contrast","mono"],"default":"light"},"ui":{"editor":"enum","options":["full","minimal"],"default":"full"},"$preview":{"width":1440,"height":2800}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark","contrast","mono"],"default":"light"},"ui":{"editor":"enum","options":["full","minimal"],"default":"full"},"$preview":{"width":1440,"height":2850}}'>
 class Component extends DCLogic {
   componentDidMount() {
     try { const t = window.localStorage.getItem('autobot-theme'); if (t) this.setState({ theme: t }); } catch (e) {}
@@ -476,6 +481,23 @@ class Component extends DCLogic {
   }
   owners() {
     return { check: 'comms', summ: 'writer', fleet: 'opslead', reindex: 'research', costrep: 'ops', classify: 'ops', extract: 'ops', route: 'ops' };
+  }
+  lines() {
+    const set = (k, ids) => ids.reduce((o, id) => { o[id] = k; return o; }, {});
+    return Object.assign({},
+      set('auto', ['classify', 'extract', 'route', 'sources', 'spec', 'impl', 'tests', 'review', 'bench', 'compare', 'trans', 'label', 'tsum', 'kb', 'check', 'fleet', 'triage', 'alert', 'smoke', 'staging', 'rbs', 'notify', 'costrep', 'wi', 'email', 'safe']),
+      set('draft', ['reply', 'sched', 'prod', 'rbp', 'ask', 'publish', 'restore']),
+      set('never', ['approve', 'budgets', 'goals']));
+  }
+  toolLines() {
+    return { 'git-forge': 'auto', 'ansible-runner': 'auto', 'issue-tracker': 'auto', 'test-runner': 'auto', 'llm-completion': 'auto', 'knowledge-search': 'auto', 'bench-runner': 'auto', 'alerting': 'auto', 'status-page': 'auto', 'docs-site': 'draft', 'mailbox': 'draft', 'social-media': 'draft', 'transcriber': 'auto' };
+  }
+  lineDefs() {
+    return {
+      auto: { rank: 0, label: 'Autonomous', setTo: 'Autonomous', cls: 'ok', icon: 'M5 12l5 5 9-10' },
+      draft: { rank: 1, label: 'Drafts · person sends', setTo: 'Drafts', cls: 'warn', icon: 'M4 20h4L19 9l-4-4L4 16z' },
+      never: { rank: 2, label: 'Never touches', setTo: 'Never touches', cls: 'bad', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM6 6l12 12' }
+    };
   }
   skills() {
     return { email: 'Email classification', ansible: 'Ansible deploy', smoke: 'Smoke testing', writeup: 'Incident write-up', brand: 'Brand voice writing', review: 'Code review', bench: 'Benchmarking', tech: 'Technical writing', research: 'Web research', transcribe: 'Transcription' };
@@ -560,6 +582,23 @@ class Component extends DCLogic {
       model.metas.forEach((m) => { if (m.ps.some((q) => q.id === c.id)) m.held.forEach(add); });
       c.skillRows = c.req.map((k) => ({ name: SK[k], missingRoles: ids.filter((id) => !heldSet(roleOf[id])[k]).map((id) => roleOf[id].name) }));
       c.skillMissing = c.skillRows.some((x) => x.missingRoles.length > 0);
+      const LD = this.lineDefs();
+      const PL = this.lines();
+      const TL = this.toolLines();
+      const own = PL[c.id] || '';
+      const cand = [{ k: own || 'draft', t: 'its own line is not set' }];
+      const tcand = (t) => ({ k: TL[t] || 'draft', t: 'tool ' + t + (TL[t] ? ' is set to ' + LD[TL[t]].setTo : ' has no line, treated as Drafts') });
+      if (c.meta) {
+        c.meta.ps.forEach((x) => cand.push({ k: PL[x.id] || 'draft', t: x.title + (PL[x.id] ? ' is set to ' + LD[PL[x.id]].setTo : ' has no line, treated as Drafts') }));
+        c.meta.ps.forEach((x) => x.tools.forEach((t) => cand.push(tcand(t))));
+      } else {
+        c.tools.forEach((t) => cand.push(tcand(t)));
+      }
+      let best = cand[0];
+      cand.forEach((x) => { if (LD[x.k].rank > LD[best.k].rank) best = x; });
+      c.line = best.k;
+      c.lineUnset = !own;
+      c.lineTip = 'Effective: ' + LD[best.k].label + (best === cand[0] ? (own ? '' : ' (not set, treated as Drafts until the owner role decides)') : ' (because ' + best.t + ')');
     });
     return out;
   }
@@ -643,12 +682,13 @@ class Component extends DCLogic {
     if (rule.field === 'tag') return c.tags.indexOf(rule.val) >= 0;
     if (rule.field === 'sharing') return rule.val === c.key;
     if (rule.field === 'ownerRole') return !!c.owner && c.owner.name === rule.val;
+    if (rule.field === 'aiLine') return c.line === rule.val;
     if (rule.field === 'skillMissing') return (rule.val === 'yes') === c.skillMissing;
     if (rule.field === 'routine') return (rule.val === 'yes') === !!c.routine;
     return false;
   }
   describe(rule) {
-    const names = { cost: 'Cost/run is more than ' + rule.val + ' EUR', owner: 'A holder is ' + (rule.val === 'agent' ? 'an agent' : 'a person'), workflow: 'Used in workflow ' + rule.val, role: 'Used by role ' + rule.val, tag: 'Tag includes ' + rule.val, sharing: { shared: 'Shared by several workflows', single: 'Used in one workflow', none: 'Not in any workflow' }[rule.val], ownerRole: 'Owner role is ' + rule.val, routine: rule.val === 'yes' ? 'Runs on a routine' : 'Has no routine', skillMissing: rule.val === 'yes' ? 'A required skill is missing' : 'No required skill is missing' };
+    const names = { cost: 'Cost/run is more than ' + rule.val + ' EUR', owner: 'A holder is ' + (rule.val === 'agent' ? 'an agent' : 'a person'), workflow: 'Used in workflow ' + rule.val, role: 'Used by role ' + rule.val, tag: 'Tag includes ' + rule.val, sharing: { shared: 'Shared by several workflows', single: 'Used in one workflow', none: 'Not in any workflow' }[rule.val], ownerRole: 'Owner role is ' + rule.val, routine: rule.val === 'yes' ? 'Runs on a routine' : 'Has no routine', skillMissing: rule.val === 'yes' ? 'A required skill is missing' : 'No required skill is missing', aiLine: 'AI line is ' + ({ auto: 'Autonomous', draft: 'Drafts · person sends', never: 'Never touches' })[rule.val] };
     return names[rule.field] || '';
   }
   renderVals() {
@@ -657,7 +697,7 @@ class Component extends DCLogic {
     const ui = st.ui || this.props.ui || 'full';
     const defs = [['light', 'Light'], ['dark', 'Dark'], ['contrast', 'High contrast'], ['mono', 'Monochrome']];
     const resLabels = { warn: 'Warn', bad: 'Bad', info: 'Info', ok: 'OK', idle: 'Neutral' };
-    const ops = { cost: 'is more than', owner: 'is', workflow: 'is', role: 'is', tag: 'includes', sharing: 'is', ownerRole: 'is', routine: 'is', skillMissing: 'is' };
+    const ops = { cost: 'is more than', owner: 'is', workflow: 'is', role: 'is', tag: 'includes', sharing: 'is', ownerRole: 'is', routine: 'is', skillMissing: 'is', aiLine: 'is' };
     const model = this.model();
     const all = this.cards();
     const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
@@ -673,14 +713,17 @@ class Component extends DCLogic {
       sharing: [{ v: 'shared', l: 'shared by several workflows' }, { v: 'single', l: 'used in one workflow' }, { v: 'none', l: 'not in any workflow' }],
       ownerRole: asChoices(roleNames),
       routine: [{ v: 'yes', l: 'runs on a routine' }, { v: 'no', l: 'has no routine' }],
-      skillMissing: [{ v: 'yes', l: 'missing' }, { v: 'no', l: 'none missing' }]
+      skillMissing: [{ v: 'yes', l: 'missing' }, { v: 'no', l: 'none missing' }],
+      aiLine: [{ v: 'auto', l: 'Autonomous' }, { v: 'draft', l: 'Drafts · person sends' }, { v: 'never', l: 'Never touches' }]
     };
-    const defVal = { cost: '5', owner: 'agent', workflow: 'Deploy a release', role: 'Ops Lead', tag: 'cost-watch', sharing: 'shared', ownerRole: 'Ops Lead', routine: 'yes', skillMissing: 'yes' };
+    const defVal = { cost: '5', owner: 'agent', workflow: 'Deploy a release', role: 'Ops Lead', tag: 'cost-watch', sharing: 'shared', ownerRole: 'Ops Lead', routine: 'yes', skillMissing: 'yes', aiLine: 'draft' };
     const fRole = st.fRole || 'all';
     const fWf = st.fWf || 'all';
     const fShare = st.fShare || 'all';
     const fOwn = st.fOwn || 'all';
-    const cards = all.filter((c) => (fRole === 'all' || c.roles.indexOf(fRole) >= 0) && (fWf === 'all' || c.uses.some((u) => u.wf === fWf)) && (fShare === 'all' || fShare === c.key) && (fOwn === 'all' || (!!c.owner && c.owner.name === fOwn)));
+    const fLine = st.fLine || 'all';
+    const LDS = this.lineDefs();
+    const cards = all.filter((c) => (fRole === 'all' || c.roles.indexOf(fRole) >= 0) && (fWf === 'all' || c.uses.some((u) => u.wf === fWf)) && (fShare === 'all' || fShare === c.key) && (fOwn === 'all' || (!!c.owner && c.owner.name === fOwn)) && (fLine === 'all' || (fLine === 'unset' ? c.lineUnset : c.line === fLine)));
     const rules = st.rules || this.defaultRules();
     const sel = st.sel || { staging: true, prod: true };
     const selIds = cards.filter((c) => sel[c.id]).map((c) => c.id);
@@ -707,6 +750,7 @@ class Component extends DCLogic {
         uses: c.uses.map((u) => ({ wf: u.wf, role: u.role })),
         shared: c.shared,
         noUses: c.uses.length === 0,
+        lineCls: LDS[c.line].cls, lineIcon: LDS[c.line].icon, lineLabel: LDS[c.line].label, lineTip: c.lineTip,
         kind: c.meta ? 'Meta skill' : 'Process',
         kindCls: c.meta ? 'info' : 'idle',
         noUsesText: c.meta ? 'Not used in any workflow' : 'Not in any workflow',
@@ -787,13 +831,15 @@ class Component extends DCLogic {
       fWf: fWf,
       fShare: fShare,
       fOwn: fOwn,
+      fLine: fLine,
+      onFLine: (e) => this.say('', { fLine: e.target.value }),
       onFOwn: (e) => this.say('', { fOwn: e.target.value }),
       roleOpts: [{ v: 'all', l: 'All roles' }].concat(roleNames.map((t) => ({ v: t, l: t }))),
       wfOpts: [{ v: 'all', l: 'All workflows' }].concat(wfNames.map((t) => ({ v: t, l: t }))),
       onFRole: (e) => this.say('', { fRole: e.target.value }),
       onFWf: (e) => this.say('', { fWf: e.target.value }),
       onShare: (e) => this.say('', { fShare: e.target.value }),
-      clearFilters: () => this.say('Filters cleared', { fRole: 'all', fWf: 'all', fShare: 'all', fOwn: 'all' }),
+      clearFilters: () => this.say('Filters cleared', { fRole: 'all', fWf: 'all', fShare: 'all', fOwn: 'all', fLine: 'all' }),
       exportOpen: exportOpen ? 'true' : 'false',
       exportOpenB: exportOpen,
       toggleExport: () => this.setState({ exportOpen: !exportOpen }),
