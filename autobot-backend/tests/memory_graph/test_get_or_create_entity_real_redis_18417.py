@@ -68,3 +68,24 @@ async def test_concurrent_upserts_against_real_redis_create_one_entity(server):
     assert sorted(created for _, created in results).count(True) == 1
     assert len({entity["id"] for entity, _ in results}) == 1
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_release_is_compare_and_delete_against_real_redis(server):
+    import redis.asyncio as aioredis
+
+    from autobot_memory_graph import entity_upsert
+
+    client = aioredis.Redis(host="127.0.0.1", port=server, decode_responses=True)
+    graph = AutoBotMemoryGraph()
+    graph._initialized = True
+    graph.redis_client = client
+    key = entity_upsert.name_index_key("Redis")
+
+    await client.set(key, "new")  # a re-claim after the releaser read "old"
+    await entity_upsert.release_name(graph, "Redis", "old")
+    assert await client.get(key) == "new"
+
+    await entity_upsert.release_name(graph, "Redis", "new")
+    assert await client.get(key) is None
+    await client.aclose()

@@ -30,12 +30,23 @@ ENTITY_KEY_PREFIX = "memory:entity:"
 #: JSON, ARGV[3] entity key prefix. Returns the id that owns the name afterwards.
 CLAIM_AND_WRITE_LUA = """
 local existing = redis.call('GET', KEYS[1])
+-- ARGV[3] .. existing builds a key inside the script: not Redis-Cluster-safe; no cluster is used.
 if existing and redis.call('EXISTS', ARGV[3] .. existing) == 1 then
     return existing
 end
 redis.call('SET', KEYS[1], ARGV[1])
 redis.call('JSON.SET', KEYS[2], '$', ARGV[2])
 return ARGV[1]
+"""
+
+
+#: KEYS[1] name index; ARGV[1] the id the caller believes owns it. Deletes only on a match,
+#: atomically, so a re-claim landing after a read cannot lose its live claim.
+RELEASE_IF_OWNER_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
 """
 
 
@@ -109,11 +120,8 @@ async def get_or_create(
 
 
 async def release_name(graph: AutoBotMemoryGraphCore, name: str, entity_id: str) -> None:
-    """Drop the name index entry, but only if it still points at ``entity_id``."""
-    key = name_index_key(name)
-    claimed = await graph.redis_client.get(key)
-    if claimed and _text(claimed) == entity_id:
-        await graph.redis_client.delete(key)
+    """Drop the name index entry, but only if it still points at ``entity_id`` (atomic)."""
+    await graph.redis_client.eval(RELEASE_IF_OWNER_LUA, 1, name_index_key(name), entity_id)
 
 
 async def strict_search_by_name(graph: AutoBotMemoryGraphCore, name: str, limit: int) -> List[Dict[str, Any]]:

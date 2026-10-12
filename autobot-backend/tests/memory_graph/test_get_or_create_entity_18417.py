@@ -22,10 +22,20 @@ class FakeRedis:
         self.eval_gate = None  # an Event the FIRST eval caller waits on, to stall it mid-flight
         self._first_eval = True
 
-    async def eval(self, script, numkeys, index_key, doc_key, new_id, doc_json, prefix):
+    async def _release(self, _numkeys, index_key, owner_id):
+        """Python mirror of RELEASE_IF_OWNER_LUA: compare and delete in one step."""
+        self._check()
+        if self.strings.get(index_key) == owner_id:
+            del self.strings[index_key]
+            return 1
+        return 0
+
+    async def eval(self, script, numkeys, index_key, doc_key=None, new_id=None, doc_json=None, prefix=None):
         """Python mirror of CLAIM_AND_WRITE_LUA. No await between read and write = atomic, like the script."""
         from autobot_memory_graph import entity_upsert
 
+        if script == entity_upsert.RELEASE_IF_OWNER_LUA:
+            return await self._release(numkeys, index_key, doc_key)
         assert script == entity_upsert.CLAIM_AND_WRITE_LUA
         if self._first_eval and self.eval_gate is not None:
             self._first_eval = False
@@ -244,3 +254,20 @@ async def test_delete_does_not_drop_an_index_that_points_elsewhere():
     redis.strings[entity_upsert.name_index_key("Redis")] = "someone-else"
     await entity_upsert.release_name(graph, "Redis", "mine")
     assert redis.strings[entity_upsert.name_index_key("Redis")] == "someone-else"
+
+
+@pytest.mark.asyncio
+async def test_a_reclaim_between_read_and_delete_survives():
+    """The old GET -> compare -> DEL lost a claim landing in the gap; compare-and-delete cannot."""
+    from autobot_memory_graph import entity_upsert
+
+    redis = FakeRedis()
+    graph = _graph(redis)
+    key = entity_upsert.name_index_key("Redis")
+    redis.strings[key] = "old"
+    stale_read = redis.strings[key]  # what a GET-then-DEL releaser would have compared against
+    redis.strings[key] = "new"  # a re-claim lands in the gap
+
+    await entity_upsert.release_name(graph, "Redis", stale_read)
+
+    assert redis.strings[key] == "new"
