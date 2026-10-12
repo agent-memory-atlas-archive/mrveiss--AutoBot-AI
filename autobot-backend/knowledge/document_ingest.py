@@ -28,7 +28,7 @@ from typing import Any, Dict, List
 from autobot_shared.doc_chunking import chunk_plain_text
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.status_enums import OperationOutcome
-from knowledge.chunk_provenance import chunk_offsets, chunk_page_metadata
+from knowledge.chunk_provenance import chunk_page_metadata, locate_chunks
 
 logger = get_logger(__name__)
 
@@ -132,7 +132,7 @@ async def ingest_document(kb, content: str, metadata: Dict[str, Any], doc_id: st
         return await _ingest_single(kb, content, metadata, doc_id, budget)
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     stored, resumed, first_id = await _plan(kb, doc_id, digest, total)
-    offsets = chunk_offsets(content, chunks) if "page_spans" in metadata else [None] * total
+    offsets = locate_chunks(content, chunks) if "page_spans" in metadata else [None] * total
     deadline = time.monotonic() + budget
     status = OperationOutcome.SUCCESS
     for index in range(stored, total):

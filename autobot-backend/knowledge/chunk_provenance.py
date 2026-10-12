@@ -16,7 +16,7 @@ from autobot_shared.logging_manager import get_logger
 logger = get_logger(__name__)
 
 
-def chunk_offsets(text: str, chunks: List[str]) -> List[Optional[Tuple[int, int]]]:
+def locate_chunks(text: str, chunks: List[str]) -> List[Optional[Tuple[int, int]]]:
     """``[start, end)`` of each chunk in *text*, or ``None`` where it cannot be located.
 
     Chunks are whitespace-normalised pieces of the text in order, so each is located by
