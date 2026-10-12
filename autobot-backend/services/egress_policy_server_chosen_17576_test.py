@@ -181,17 +181,16 @@ async def _redis_status(n, base):
     await _redis_manager(base)._slm_get_service_status()
 
 
-async def _proposer_http(n, base):
+def _policy(monkeypatch, value):
+    monkeypatch.setattr(skill_proposer, "fetch_slm_policy_json", AsyncMock(return_value=value))
+    monkeypatch.setattr(skill_proposer, "_disabled_logged", False)
+
+
+async def _proposer(n, base):
+    _policy(n.monkeypatch, {"enabled": True})
     cfg = SimpleNamespace(slm_url=base, timeout=SimpleNamespace(llm_call=5))
     n.monkeypatch.setattr(skill_proposer, "config", cfg)
-    await skill_proposer.SkillProposer(slm_client=None)._send_proposal_http({})
-
-
-async def _proposer_ws(n, base):
-    cfg = SimpleNamespace(slm_url=PRIVATE, timeout=SimpleNamespace(llm_call=5))
-    n.monkeypatch.setattr(skill_proposer, "config", cfg)
-    slm = SimpleNamespace(_ws_url=base.replace("http://", "ws://"))
-    await skill_proposer.SkillProposer(slm_client=slm)._send_proposal_to_slm({})
+    await skill_proposer.SkillProposer(slm_client=None)._send_proposal_to_slm({})
 
 
 async def _ranker_skills(n, base):
@@ -258,8 +257,7 @@ SITES = [
     pytest.param(_vllm_health, "/v1/models", id="provider_health.vllm"),
     pytest.param(_redis_action, "/restart", id="redis_service_manager.service_action"),
     pytest.param(_redis_status, "/services", id="redis_service_manager.service_status"),
-    pytest.param(_proposer_http, "/api/skills/propose", id="skill_proposer.http"),
-    pytest.param(_proposer_ws, "/api/skills/propose", id="skill_proposer.slm"),
+    pytest.param(_proposer, "/api/skills/propose", id="skill_proposer.send"),
     pytest.param(_ranker_skills, "/api/skills/active", id="skill_ranker.active_skills"),
     pytest.param(_ranker_embedding, "/api/embeddings", id="skill_ranker.embedding"),
     pytest.param(_tts_available, "/health", id="tts_client.is_available"),
@@ -312,15 +310,36 @@ async def test_a_refused_target_is_reported_by_the_site_not_raised_past_it(net):
 
 
 @pytest.mark.asyncio
-async def test_a_proposal_is_actually_sent_to_the_slm(net):
+async def test_a_proposal_is_actually_sent_when_the_policy_is_on(net):
     """The manager's post is awaited and the request leaves once, with the expected URL and body."""
+    _policy(net.monkeypatch, {"enabled": True})
     cfg = SimpleNamespace(slm_url=INTERNAL, timeout=SimpleNamespace(llm_call=5))
     net.monkeypatch.setattr(skill_proposer, "config", cfg)
     payload = {"name": "skill"}
-    await skill_proposer.SkillProposer(slm_client=None)._send_proposal_http(payload)
+    await skill_proposer.SkillProposer(slm_client=None)._send_proposal_to_slm(payload)
     net.session.request.assert_awaited_once()
     assert net.session.request.await_args.args[:2] == ("POST", f"{INTERNAL}/api/skills/propose")
     assert net.session.request.await_args.kwargs["json"] == payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, {}, {"enabled": False}, {"enabled": "true"}, ["enabled"]])
+async def test_nothing_is_sent_unless_the_policy_explicitly_enables_it(value, net):
+    _policy(net.monkeypatch, value)
+    net.monkeypatch.setattr(skill_proposer, "config", SimpleNamespace(slm_url=INTERNAL))
+    result = await skill_proposer.SkillProposer(slm_client=None)._send_proposal_to_slm({"name": "skill"})
+    assert result == {"status": "disabled"}
+    net.session.request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_off_state_is_logged_once(net, caplog):
+    _policy(net.monkeypatch, None)
+    proposer = skill_proposer.SkillProposer(slm_client=None)
+    with caplog.at_level("INFO"):
+        await proposer._send_proposal_to_slm({})
+        await proposer._send_proposal_to_slm({})
+    assert sum("Skill proposals are off" in r.getMessage() for r in caplog.records) == 1
 
 
 @pytest.mark.asyncio
