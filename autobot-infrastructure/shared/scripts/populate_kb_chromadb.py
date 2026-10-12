@@ -20,6 +20,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from autobot_shared.embedding_model import active_embedding_model  # noqa: E402
 from autobot_shared.paths import project_root  # noqa: E402
 
 # Configure logging
@@ -149,7 +150,7 @@ async def populate_with_chromadb():
 
     llm = LlamaIndexOllamaLLM(model=default_model, base_url=ollama_base_url)
 
-    embed_model = OllamaEmbedding(model_name="nomic-embed-text", base_url=ollama_base_url)
+    embed_model = OllamaEmbedding(model_name=active_embedding_model(), base_url=ollama_base_url)
 
     # Configure settings
     Settings.llm = llm
