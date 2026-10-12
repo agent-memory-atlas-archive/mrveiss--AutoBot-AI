@@ -11,6 +11,7 @@ notifications for pending approvals.
 """
 
 import uuid
+from datetime import datetime
 from typing import Any, Dict, List
 
 from sqlalchemy import select
@@ -18,11 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.store_authority import system_of_record
 from autobot_shared.time_utils import now_utc
 from models.approval import Approval, ApprovalComment, ApprovalStatus, TaskApprovalLink
-from services.approval_execution import run_post_approval_actions
+from services.approval_execution import resume_decided_approval, run_post_approval_actions
+from services.approval_record_fields import payload_hash_of, record_fields
 
 logger = get_logger(__name__)
+SYSTEM_OF_RECORD = system_of_record("approval")
 
 # Valid state transitions: source -> {allowed targets}
 _VALID_TRANSITIONS = {
@@ -56,8 +60,18 @@ class ApprovalGateService:
         workflow_step: str | None = None,
         context: Dict[str, Any] | None = None,
         task_ids: List[str] | None = None,
+        *,
+        source: str | None = None,
+        risk_tier: Any = None,
+        expires_at: datetime | None = None,
+        payload_hash: str | None = None,
+        resume_ref: str | None = None,
     ) -> Approval:
-        """Create a new approval gate request."""
+        """Create a new approval gate request.
+
+        The keyword-only record fields (#13421) are for server-side emitters; they are validated
+        by ``record_fields`` and are deliberately not accepted from the HTTP create route.
+        """
         approval = Approval(
             title=title,
             description=description,
@@ -67,28 +81,25 @@ class ApprovalGateService:
             workflow_id=workflow_id,
             workflow_step=workflow_step,
             context=context or {},
+            **record_fields(
+                source=source,
+                risk_tier=risk_tier,
+                expires_at=expires_at,
+                payload_hash=payload_hash,
+                resume_ref=resume_ref,
+                context=context,
+            ),
         )
         self.session.add(approval)
         await self.session.flush()
-
-        if task_ids:
-            for tid in task_ids:
-                link = TaskApprovalLink(
-                    approval_id=approval.id,
-                    task_id=tid,
-                )
-                self.session.add(link)
+        for tid in task_ids or ():
+            self.session.add(TaskApprovalLink(approval_id=approval.id, task_id=tid))
 
         await self.session.commit()
         await self.session.refresh(approval)
 
         await self._notify("approval_pending", approval)
-        logger.info(
-            "Approval %s created: type=%s, agent=%s",
-            approval.id,
-            approval_type,
-            requested_by_agent,
-        )
+        logger.info("Approval %s created: type=%s, agent=%s", approval.id, approval_type, requested_by_agent)
         return approval
 
     # -- Status transitions --------------------------------------------
@@ -168,6 +179,8 @@ class ApprovalGateService:
             approval.description = description
         if context is not None:
             approval.context = context
+            if approval.source:
+                approval.payload_hash = payload_hash_of(context)
 
         await self.session.commit()
         await self.session.refresh(approval)
@@ -273,6 +286,9 @@ class ApprovalGateService:
         agent_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        *,
+        source: str | None = None,
+        risk_tier: str | None = None,
     ) -> List[Approval]:
         """List unscoped approvals with optional filters (see ``get``: never a company-scoped row)."""
         stmt = (
@@ -286,17 +302,41 @@ class ApprovalGateService:
             .limit(limit)
             .offset(offset)
         )
-        if status:
-            stmt = stmt.where(Approval.status == status)
-        if approval_type:
-            stmt = stmt.where(Approval.approval_type == approval_type)
-        if workflow_id:
-            stmt = stmt.where(Approval.workflow_id == workflow_id)
-        if agent_id:
-            stmt = stmt.where(Approval.requested_by_agent == agent_id)
-
+        filters = {
+            Approval.status: status,
+            Approval.approval_type: approval_type,
+            Approval.workflow_id: workflow_id,
+            Approval.requested_by_agent: agent_id,
+            Approval.source: source,
+            Approval.risk_tier: risk_tier,
+        }
+        for column, wanted in filters.items():
+            if wanted:
+                stmt = stmt.where(column == wanted)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_pending(
+        self,
+        source: str | None = None,
+        risk_tier: str | None = None,
+        *,
+        limit: int,
+        offset: int,
+    ) -> List[Approval]:
+        """Every pending unscoped approval across all sources -- the inbox query (#13421).
+
+        Includes approvals with no ``source`` (the pre-#13421 gates), so the inbox is the union
+        of all of them. A past ``expires_at`` is still listed: the row stays decidable until a
+        sweeper moves it to EXPIRED, and the client shows the deadline.
+        """
+        return await self.list_approvals(
+            status=ApprovalStatus.PENDING.value,
+            limit=limit,
+            offset=offset,
+            source=source,
+            risk_tier=risk_tier,
+        )
 
     async def list_pending_for_workflow(
         self,
@@ -374,6 +414,7 @@ class ApprovalGateService:
             new_status.value,
             decided_by,
         )
+        await resume_decided_approval(approval, self.session)
         return approval
 
     async def _notify(
@@ -397,6 +438,9 @@ class ApprovalGateService:
                     "decided_by_user": approval.decided_by_user,
                     "workflow_id": approval.workflow_id,
                     "workflow_step": approval.workflow_step,
+                    "source": approval.source,
+                    "risk_tier": approval.risk_tier,
+                    "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
                 },
                 persist=PersistStrategy.NONE,
             )
