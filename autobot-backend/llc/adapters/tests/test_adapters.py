@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from llc.adapters import AdapterRunStatus, get_adapter, register_adapter
-from llc.adapters.base import LLCAdapter
+from llc.adapters.base import LLCAdapter, _registry
 from llc.adapters.http_adapter import HttpAdapter
 from llc.adapters.process_adapter import LLCProcessAdapter
 from llc.models.enums import LLCRunStatus
@@ -365,6 +365,9 @@ class TestAdapterRegistry:
             async def cancel(self, agent_config: dict, run_id: str) -> None:
                 pass
 
-        register_adapter("fake_test", FakeAdapter())
-        retrieved = get_adapter("fake_test")
-        assert isinstance(retrieved, FakeAdapter)
+        # patch.dict restores the registry so "fake_test" cannot leak into
+        # tests that enumerate registered adapters.
+        with patch.dict(_registry):
+            register_adapter("fake_test", FakeAdapter())
+            retrieved = get_adapter("fake_test")
+            assert isinstance(retrieved, FakeAdapter)
