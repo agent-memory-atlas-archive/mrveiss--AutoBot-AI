@@ -103,6 +103,11 @@ _ALLOWED: dict[str, tuple[int, str]] = {
         1,
         "#14815 — a watermark, not a lock: SETNX keeps the LOWEST broken event id for a channel.",
     ),
+    "autobot-backend/llm_shared/provider_degradation.py": (
+        1,
+        "#15022 -- a state replay, not a lock: an outage-time needs_reauth mark is written back with `nx` "
+        "so it never overwrites a newer mark another worker wrote. No holder, no renewal, nothing to release.",
+    ),
     "autobot-backend/llc/notifications/router.py": (
         1,
         "#8579 — one uvicorn worker runs the notification router.",
@@ -200,7 +205,7 @@ REACH = declare(
     # the bottom tenth of `growth`, because that is zero tolerance dressed as an allowance.
     # Re-measured by the mechanism itself, not carried across (#15928); the arithmetic is in
     # the commit message, which cannot drift from the tree it describes.
-    floor=3_089,  # re-pinned mid-window: population 3114, window [3064, 3114]
+    floor=3113,  # re-pinned mid-window: population 3114, window [3064, 3114]
     what="Python modules swept for claim-or-lock primitives",
     growth=50,
     # Scope as data (#17844). Five trees, including `scripts/` and `pipeline-scripts/` that no
