@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import pytest_asyncio
-from sqlalchemy import Column, MetaData, Table, Uuid
+from sqlalchemy import Boolean, Column, MetaData, String, Table, Uuid, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from autobot_shared.user_management.models.role import Permission, Role, RolePermission, UserRole
@@ -53,6 +53,23 @@ class GrantDb:
         await self.session.execute(table.insert().values(id=perm_id, name=name, resource=resource, action=action))
         return perm_id
 
+    async def add_sso_link(self, username: str, *, admin: bool, provider: str = "corp-idp") -> uuid.UUID:
+        """Insert a user, a provider and an SSO link between them; returns the link id."""
+        user_id, provider_id, link_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        await self.session.execute(
+            text("INSERT INTO users (id, username, is_platform_admin) VALUES (:i, :u, :a)"),
+            {"i": user_id.hex, "u": username, "a": admin},
+        )
+        await self.session.execute(
+            text("INSERT INTO sso_providers (id, name, provider_type) VALUES (:i, :n, 'oauth2')"),
+            {"i": provider_id.hex, "n": provider},
+        )
+        await self.session.execute(
+            text("INSERT INTO user_sso_links (id, user_id, provider_id) VALUES (:i, :u, :p)"),
+            {"i": link_id.hex, "u": user_id.hex, "p": provider_id.hex},
+        )
+        return link_id
+
     async def add_user(self, name: str, role_names: list[str]) -> uuid.UUID:
         """Assign the named roles to a fresh user id."""
         user_id = uuid.uuid4()
@@ -67,7 +84,19 @@ class GrantDb:
 def _private_metadata() -> MetaData:
     metadata = MetaData()
     Table("organizations", metadata, Column("id", Uuid, primary_key=True))
-    Table("users", metadata, Column("id", Uuid, primary_key=True))
+    Table(
+        "users",
+        metadata,
+        Column("id", Uuid, primary_key=True),
+        Column("username", String(100)),
+        Column("is_platform_admin", Boolean, default=False),
+    )
+    # SSO tables reduced to the columns the admin-link audit reads (#18338); the real
+    # ones carry JSONB, which SQLite cannot create.
+    Table("sso_providers", metadata, Column("id", Uuid, primary_key=True), Column("name", String(100)),
+          Column("provider_type", String(50)))  # fmt: skip
+    Table("user_sso_links", metadata, Column("id", Uuid, primary_key=True), Column("user_id", Uuid),
+          Column("provider_id", Uuid))  # fmt: skip
     for model in (Permission, Role, RolePermission, UserRole):
         model.__table__.to_metadata(metadata)
     return metadata

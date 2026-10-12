@@ -14,6 +14,9 @@ So the caller is resolved by each service's own authentication (``get_current_us
 ``org_id`` from its caller, read the role differently, or stopped wiring the shared
 gate would answer differently here. Only the deny-audit writer and the DB grant
 loader are stood in for; the loader's answer depends on the org it is asked for.
+So this proves token decoding and gate wiring agree, NOT each service's DB grant path
+(middleware -> UserService -> scoped query); that is #18363. The shared query itself
+is exercised on real SQLite in ``role_permission_query_test``.
 
 API-key narrowing is not in this table: the backend accepts no user API keys
 (``api_key_scopes_are_enforced_16040_test``), so there is no backend row to compare.

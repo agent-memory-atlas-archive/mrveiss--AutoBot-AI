@@ -88,12 +88,13 @@ def test_cli_emits_json(monkeypatch, capsys):
 
     async def fake(url):
         assert url == "sqlite+aiosqlite:///:memory:"
-        return [change]
+        return report.GrantReport([change], [])
 
     monkeypatch.setenv("GRANT_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setattr(report, "_report_from_url", fake)
     assert report.main(["--url-env", "GRANT_URL", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)[0]["granted"] == ["users:read"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["role_changes"][0]["granted"] == ["users:read"] and payload["sso_admin_links"] == []
 
 
 async def test_report_from_url_reads_a_real_engine(tmp_path):
@@ -103,4 +104,28 @@ async def test_report_from_url_reads_a_real_engine(tmp_path):
     async with engine.begin() as conn:
         await conn.run_sync(_private_metadata().create_all)
     await engine.dispose()
-    assert await report._report_from_url(url) == []
+    assert await report._report_from_url(url) == report.GrantReport([], [])
+
+
+async def test_a_newly_granted_vault_admin_is_flagged_on_its_own_line(grant_db):
+    """#18338: the vault reads admin:access from platform grants, so the operator must see it."""
+    await grant_db.add_role("ops", ["admin:access", "secrets:system:read", "users:read"])
+    await grant_db.add_role("company-ops", ["admin:access"], org_id=_ORG)
+    await grant_db.add_user("v1", ["ops", "company-ops"])
+    changes = {c.role_name: c for c in await report.build_grant_change_report(grant_db.session)}
+    assert changes["ops"].vault_admin and changes["ops"].vault_grants == ("secrets:system:read",)
+    assert not changes["company-ops"].vault_admin  # the vault asks for platform grants only
+    text = report.format_report(list(changes.values()))
+    assert "! VAULT ADMIN: 1 holder(s) become secrets-vault administrators" in text
+    assert "! vault grant: secrets:system:read" in text
+    assert text.count("VAULT ADMIN") == 1
+
+
+async def test_the_report_lists_stored_sso_links_to_platform_admins(grant_db):
+    await grant_db.add_sso_link("root-admin", admin=True)
+    await grant_db.add_sso_link("plain-user", admin=False)
+    full = await report.build_report(grant_db.session)
+    assert [link.username for link in full.sso_admin_links] == ["root-admin"]
+    assert "user root-admin" in report.format_sso_admin_links(full.sso_admin_links)
+    assert "No stored SSO link" in report.format_sso_admin_links([])
+    assert not grant_db.session.new and not grant_db.session.dirty and not grant_db.session.deleted

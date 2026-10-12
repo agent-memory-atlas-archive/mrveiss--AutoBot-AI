@@ -13,6 +13,11 @@ company role's only to callers acting in that company. A role with neither grant
 nothing and is not listed. This module computes old vs new per role and permission so the
 newly granted set is reviewed per deployment before the fix is deployed.
 
+The secrets vault reads these grants too, platform scope only: a newly granted
+``admin:access`` makes the role's holders vault administrators, flagged on its own
+line (#18338). The report also lists stored SSO links whose account is a platform
+admin, read-only, for review.
+
 Only meaningful where the service runs with ``postgres_enabled``: without it the
 middleware never consulted the database, before or after the fix.
 
@@ -36,8 +41,14 @@ from typing import Any, Iterable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from autobot_shared.secrets_vault import VAULT_ADMIN_PERMISSION, VAULT_PERMISSION_PREFIX
 from autobot_shared.user_management.grant_scope import grant_scope
 from autobot_shared.user_management.role_permission_query import role_grant_rows_query
+from autobot_shared.user_management.sso_admin_link_audit import (
+    SSOAdminLink,
+    find_sso_admin_links,
+    format_sso_admin_links,
+)
 
 DEFAULT_URL_ENV = "AUTOBOT_GRANT_REPORT_DATABASE_URL"
 
@@ -54,6 +65,17 @@ class RoleGrantChange:
     users_holding: int
     granted: tuple[str, ...]
     revoked: tuple[str, ...]
+    #: Newly granted names the secrets vault reads (#10088), which asks for platform grants only.
+    vault_admin: bool = False
+    vault_grants: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GrantReport:
+    """The role changes plus the read-only SSO admin-link audit."""
+
+    role_changes: list[RoleGrantChange]
+    sso_admin_links: list[SSOAdminLink]
 
 
 def legacy_effective_grant(role_permission_names: Iterable[str]) -> frozenset[str]:
@@ -97,6 +119,8 @@ def _change_for(role_id: str, entry: dict[str, Any]) -> RoleGrantChange | None:
     old = legacy_effective_grant(entry["permissions"])
     if old == new:
         return None
+    granted = tuple(sorted(new - old))
+    vault_view = granted if entry["scope"] == "platform" else ()
     return RoleGrantChange(
         role_id=role_id,
         role_name=entry["role_name"],
@@ -104,8 +128,10 @@ def _change_for(role_id: str, entry: dict[str, Any]) -> RoleGrantChange | None:
         is_system=entry["is_system"],
         scope=entry["scope"],
         users_holding=entry["users_holding"],
-        granted=tuple(sorted(new - old)),
+        granted=granted,
         revoked=tuple(sorted(old - new)),
+        vault_admin=VAULT_ADMIN_PERMISSION in vault_view,
+        vault_grants=tuple(name for name in vault_view if name.startswith(VAULT_PERMISSION_PREFIX)),
     )
 
 
@@ -119,8 +145,17 @@ async def build_grant_change_report(session: Any) -> list[RoleGrantChange]:
     return [change for change in changes if change is not None]
 
 
+def _vault_lines(change: RoleGrantChange) -> list[str]:
+    """The vault consequences of a role change, each on its own line (#18338)."""
+    lines = []
+    if change.vault_admin:
+        lines.append(f"    ! VAULT ADMIN: {change.users_holding} holder(s) become secrets-vault administrators")
+    lines.extend(f"    ! vault grant: {name}" for name in change.vault_grants)
+    return lines
+
+
 def format_report(changes: list[RoleGrantChange]) -> str:
-    """Human-readable report: one block per role, one line per permission."""
+    """Human-readable report: one block per role, one line per permission, vault effects flagged."""
     if not changes:
         return "No role's effective permission set changes with the #18259 fix.\n"
     lines = [f"{len(changes)} role(s) change effective permissions with the #18259 fix:"]
@@ -131,10 +166,16 @@ def format_report(changes: list[RoleGrantChange]) -> str:
         )
         lines.extend(f"    + {name}" for name in change.granted)
         lines.extend(f"    - {name}" for name in change.revoked)
+        lines.extend(_vault_lines(change))
     return "\n".join(lines) + "\n"
 
 
-async def _report_from_url(url: str) -> list[RoleGrantChange]:
+async def build_report(session: Any) -> GrantReport:
+    """The whole read-only report: role changes and stored SSO links to platform admins."""
+    return GrantReport(await build_grant_change_report(session), await find_sso_admin_links(session))
+
+
+async def _report_from_url(url: str) -> GrantReport:
     """Open a read-only transaction, build the report, roll back, dispose."""
     engine = create_async_engine(url)
     try:
@@ -142,7 +183,7 @@ async def _report_from_url(url: str) -> list[RoleGrantChange]:
             if conn.dialect.name == "postgresql":
                 await conn.execute(text("SET TRANSACTION READ ONLY"))
             try:
-                return await build_grant_change_report(conn)
+                return await build_report(conn)
             finally:
                 await conn.rollback()
     finally:
@@ -163,11 +204,11 @@ def main(argv: list[str] | None = None) -> int:
     if not url:
         sys.stderr.write(f"{args.url_env} is not set; it must hold the database URL\n")
         return 2
-    changes = asyncio.run(_report_from_url(url))
+    report = asyncio.run(_report_from_url(url))
     if args.json:
-        sys.stdout.write(json.dumps([asdict(change) for change in changes], indent=2) + "\n")
+        sys.stdout.write(json.dumps(asdict(report), indent=2) + "\n")
     else:
-        sys.stdout.write(format_report(changes))
+        sys.stdout.write(format_report(report.role_changes) + format_sso_admin_links(report.sso_admin_links))
     return 0
 
 

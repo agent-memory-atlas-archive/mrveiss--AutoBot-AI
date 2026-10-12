@@ -11,8 +11,9 @@ Two rules, applied by ``SSOService._find_or_provision_user`` before any token is
 - **Linking an existing account by email.** An identity with no SSO link whose email
   matches an existing account is linked to it ONLY when all of these hold:
   the provider opts in (``config["link_existing_by_verified_email"] is True``), the
-  identity provider asserted the email as verified (OIDC ``email_verified``), and the
-  account is not a platform admin. Otherwise the login is refused and the account
+  identity provider asserted the email as verified (OIDC ``email_verified``), the
+  account is not a platform admin, and -- for a provider bound to an organization --
+  the account belongs to that same organization. Otherwise the login is refused and the account
   has to be linked explicitly. SAML and LDAP assert no verification claim, so they
   never link by email.
 
@@ -43,6 +44,9 @@ def email_link_refusal(provider: Any, user_data: dict[str, Any], existing: Any) 
     """Why an unlinked identity may not be linked to *existing* by email, or None."""
     if existing.is_platform_admin:
         return "an SSO identity is never linked to a platform admin by email"
+    provider_org = getattr(provider, "org_id", None)
+    if provider_org is not None and getattr(existing, "org_id", None) != provider_org:
+        return "the account with this email belongs to another organization"
     if (provider.config or {}).get(LINK_POLICY_KEY) is not True:
         return "an account with this email exists; it must be linked explicitly"
     if user_data.get("email_verified") is not True:

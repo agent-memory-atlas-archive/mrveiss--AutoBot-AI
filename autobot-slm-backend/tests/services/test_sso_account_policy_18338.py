@@ -25,15 +25,19 @@ from test_sso_service import SSOAuthenticationError, SSOService, _sso_mod  # noq
 _LINKED, _EMAIL = "linked", "email"
 
 
-def _account(*, active: bool = True, deleted: bool = False, admin: bool = False) -> SimpleNamespace:
+_ORG_A, _ORG_B = uuid.uuid4(), uuid.uuid4()
+
+
+def _account(*, active: bool = True, deleted: bool = False, admin: bool = False, org=None) -> SimpleNamespace:
+    deleted_at = object() if deleted else None
     return SimpleNamespace(
-        id=uuid.uuid4(), is_active=active, deleted_at=object() if deleted else None, is_platform_admin=admin
+        id=uuid.uuid4(), is_active=active, deleted_at=deleted_at, is_platform_admin=admin, org_id=org
     )
 
 
-def _provider(link_policy: bool = True) -> SimpleNamespace:
+def _provider(link_policy: bool = True, org=None) -> SimpleNamespace:
     config = {"link_existing_by_verified_email": True} if link_policy else {}
-    return SimpleNamespace(id=uuid.uuid4(), org_id=None, allow_user_creation=True, config=config, group_mapping={})
+    return SimpleNamespace(id=uuid.uuid4(), org_id=org, allow_user_creation=True, config=config, group_mapping={})
 
 
 def _service(user, path: str) -> SSOService:  # type: ignore[valid-type]
@@ -62,6 +66,7 @@ _REFUSED = [
     ("platform-admin email match", _account(admin=True), _EMAIL, _provider(), _identity(), "platform admin"),
     ("email match without the policy", _account(), _EMAIL, _provider(link_policy=False), _identity(), "explicitly"),
     ("inactive email match", _account(active=False), _EMAIL, _provider(), _identity(), "account_inactive"),
+    ("cross-org email match", _account(org=_ORG_B), _EMAIL, _provider(org=_ORG_A), _identity(), "another organization"),
 ]
 
 
@@ -96,6 +101,14 @@ async def test_a_verified_match_under_the_policy_links_a_non_admin():
     assert await service._find_or_provision_user(_provider(), "ext-1", _identity()) is user
     service._create_sso_link.assert_awaited_once()
     service._create_sso_user.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_same_org_verified_match_under_the_policy_links():
+    user = _account(org=_ORG_A)
+    service = _service(user, _EMAIL)
+    assert await service._find_or_provision_user(_provider(org=_ORG_A), "ext-1", _identity()) is user
+    service._create_sso_link.assert_awaited_once()
 
 
 @pytest.mark.asyncio
