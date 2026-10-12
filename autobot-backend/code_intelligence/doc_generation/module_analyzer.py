@@ -24,7 +24,7 @@ from code_intelligence.doc_generation.models import (
     ModuleDoc,
     PackageDoc,
 )
-from code_intelligence.doc_generation.types import ElementType, ParameterDoc, ReturnDoc
+from code_intelligence.doc_generation.types import CodeElementType, ParameterDoc, ReturnDoc
 
 # Re-export constants for internal use
 _FUNCTION_DEF_TYPES = helpers.FUNCTION_DEF_TYPES
@@ -261,7 +261,7 @@ class ModuleAnalyzer:
     def analyze_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef, source: str) -> FunctionDoc:
         """Analyze a function/method definition and extract documentation."""
         is_async = isinstance(node, ast.AsyncFunctionDef)
-        element_type = ElementType.METHOD if helpers.is_method(node) else ElementType.FUNCTION
+        element_type = CodeElementType.METHOD if helpers.is_method(node) else CodeElementType.FUNCTION
 
         func_doc = FunctionDoc(
             name=node.name,
@@ -297,7 +297,7 @@ class ModuleAnalyzer:
         # Handle property decorator specially
         if dec_name == "property":
             func_doc.is_property = True
-            func_doc.element_type = ElementType.PROPERTY
+            func_doc.element_type = CodeElementType.PROPERTY
             return
 
         # Use lookup for simple attribute decorators
