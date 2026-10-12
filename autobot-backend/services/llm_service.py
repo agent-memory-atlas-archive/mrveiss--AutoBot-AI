@@ -262,11 +262,11 @@ class LLMService:
         max_fallback_attempts = 10  # Safety limit
 
         while len(attempted_models) < max_fallback_attempts:
-            provider = await resolve_attempt_provider(self._registry, current_provider_name, conversation_id)
+            provider, failure = await resolve_attempt_provider(self._registry, current_provider_name, conversation_id)
             if provider is None:
                 self._error_count += 1
                 logger.error("No available provider for chat request")
-                return _build_error_response(request, "No available LLM provider", "none")
+                return _build_error_response(request, failure or "No available LLM provider", "none")
 
             request.model_name = current_model
             attempt_key = track_attempt(
@@ -355,10 +355,10 @@ class LLMService:
         max_fallback_attempts = 10  # Safety limit
 
         while len(attempted_models) < max_fallback_attempts:
-            provider = await resolve_attempt_provider(self._registry, current_provider_name, conversation_id)
+            provider, failure = await resolve_attempt_provider(self._registry, current_provider_name, conversation_id)
             if provider is None:
                 self._error_count += 1
-                raise RuntimeError("No available LLM provider for streaming request")
+                raise RuntimeError(failure or "No available LLM provider for streaming request")
 
             request.model_name = current_model
             attempt_key = track_attempt(

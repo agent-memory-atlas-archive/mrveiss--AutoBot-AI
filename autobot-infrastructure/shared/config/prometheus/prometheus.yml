@@ -26,6 +26,10 @@ scrape_configs:
 
     # Issue #1288: Consolidated Prometheus scrape to /api/metrics/prometheus
     metrics_path: '/api/metrics/prometheus'
+    # #16375: the backend refuses a scrape without its scrape token. Place the
+    # value of the backend's AUTOBOT_PROMETHEUS_SCRAPE_TOKEN in this file,
+    # owned root:prometheus, mode 0640.
+    bearer_token_file: /etc/prometheus/autobot-scrape-token
     scrape_interval: 15s
     scrape_timeout: 10s
 
