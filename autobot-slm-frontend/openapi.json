@@ -2120,6 +2120,21 @@
         "title": "BlueGreenResponse",
         "type": "object"
       },
+      "Body_exchange_sso_code_api_auth_sso_exchange_post": {
+        "properties": {
+          "code": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "Body_exchange_sso_code_api_auth_sso_exchange_post",
+        "type": "object"
+      },
       "Body_saml_callback_api_auth_sso_saml_callback_post": {
         "properties": {
           "RelayState": {
@@ -16134,6 +16149,48 @@
           }
         },
         "summary": "Oauth Callback",
+        "tags": [
+          "sso-auth"
+        ]
+      }
+    },
+    "/api/auth/sso/exchange": {
+      "post": {
+        "description": "Exchange a single-use SSO code for the session token (#18394).",
+        "operationId": "exchange_sso_code_api_auth_sso_exchange_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_exchange_sso_code_api_auth_sso_exchange_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exchange Sso Code",
         "tags": [
           "sso-auth"
         ]
