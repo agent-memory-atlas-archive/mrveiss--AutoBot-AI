@@ -556,6 +556,16 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_VOICE_REFERENCE_MAX_SECONDS",
+        type=float,
+        default=120.0,
+        description="Longest reference audio kept when a voice is created; ffmpeg cuts there (#18477).",
+        component="voice",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_AUDIO_DECODE_MAX_SECONDS",
         type=float,
         default=600.0,
