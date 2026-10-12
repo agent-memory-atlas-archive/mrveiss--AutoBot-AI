@@ -3708,7 +3708,7 @@ before summarizing.
         return error_msg
 
     async def _apply_session_role(
-        self, session_id: str, context: Dict[str, Any] | None, auth_role: str | None = None, org: str | None = None
+        self, session_id: str, context: Dict[str, Any] | None, auth_role: str | None = None, scope: dict | None = None
     ) -> Dict[str, Any] | None:
         """Overlay the trusted per-session governance onto the chat context (GH#11186/#11202).
 
@@ -3732,7 +3732,7 @@ before summarizing.
         # #13821: the authenticated caller's RBAC role, from the endpoint's
         # server-side identity. Applied unconditionally (it strips on a missing
         # role) so a client-supplied auth_role can never reach the tool seam.
-        context = apply_auth_role(context, auth_role, org)  # org: #18430, the AI lines' verified company
+        context = apply_auth_role(context, auth_role, scope)  # scope: #18430, the AI lines' verified principal
         context = apply_role(context, await svc.get_role(session_id))
         # #13704: same trust model for the work-item binding. A server-set value
         # overrides any client-supplied work_item_id, and an unbound session has
@@ -3750,7 +3750,7 @@ before summarizing.
         message: str,
         context: Dict[str, Any] | None = None,
         auth_role: str | None = None,
-        auth_org_id: str | None = None,
+        auth_scope: dict | None = None,
     ):
         """Process a message via LangGraph StateGraph.
 
@@ -3762,7 +3762,7 @@ before summarizing.
         """
         # GH#11186: apply the trusted per-session role once here, so both the graph
         # and legacy paths carry the governed identity into the tool seam.
-        context = await self._apply_session_role(session_id, context, auth_role, auth_org_id)
+        context = await self._apply_session_role(session_id, context, auth_role, auth_scope)
         self._active_streams += 1
         try:
             try:

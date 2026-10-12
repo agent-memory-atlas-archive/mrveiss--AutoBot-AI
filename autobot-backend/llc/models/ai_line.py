@@ -32,7 +32,10 @@ class LLCAiLine(Base):
     __tablename__ = "llc_ai_lines"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    #: The scope's id: the company's id when ``scope_kind`` is ``company``, the user's id when it is ``user``
+    #: (a user with no company has personal lines, same store). The name predates the personal scope.
     company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    scope_kind: Mapped[str] = mapped_column(sa.String(10), nullable=False, default="company", server_default="company")
     action_key: Mapped[str] = mapped_column(sa.String(ACTION_KEY_LENGTH), nullable=False)
     line: Mapped[str] = mapped_column(sa.String(30), nullable=False)
     #: The approval that authorised this value -- the paper trail for every change.
@@ -46,7 +49,9 @@ class LLCAiLine(Base):
         sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now()
     )
 
-    __table_args__ = (sa.UniqueConstraint("company_id", "action_key", name="uq_llc_ai_lines_company_action"),)
+    __table_args__ = (
+        sa.UniqueConstraint("scope_kind", "company_id", "action_key", name="uq_llc_ai_lines_scope_action"),
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<LLCAiLine company={self.company_id} action={self.action_key!r} line={self.line!r}>"

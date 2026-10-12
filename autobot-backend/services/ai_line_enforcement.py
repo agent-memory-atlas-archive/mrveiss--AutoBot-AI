@@ -41,12 +41,16 @@ from typing import Any, Iterable, Mapping, Optional
 from sqlalchemy import select
 
 from autobot_shared.ai_lines import (
+    SCOPE_COMPANY,
     VERIFIED_COMPANY_KEY,
+    VERIFIED_USER_KEY,
     AiLine,
     LineResolution,
+    LineScope,
     action_key,
     is_mutating,
     resolve_line,
+    resolve_scope,
 )
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.secret_redaction import redact_nested
@@ -103,24 +107,16 @@ async def gated_categories(declared: Iterable[str]) -> list[str]:
     return sorted(set(baseline) | {c for c in declared if isinstance(c, str)})
 
 
-async def _stored(company_id: Optional[uuid.UUID], key: str) -> tuple[Optional[AiLine], bool]:
-    """``(stored line, store unavailable)``. No company means no scope to hold a line in: unset."""
-    if company_id is None:
+async def _stored(scope: Optional[LineScope], key: str) -> tuple[Optional[AiLine], bool]:
+    """``(stored line, store unavailable)``. No scope means nothing to read a line from: unset."""
+    if scope is None:
         return None, False
     try:
         async with get_async_session_factory()() as session:
-            return await stored_line(session, company_id, key), False
+            return await stored_line(session, scope.id, key, scope.kind), False
     except Exception as exc:  # noqa: BLE001 - fail closed
         logger.error("AI line store unreadable for %s (%s); failing closed", key, exc)
         return None, True
-
-
-def _parse_company(company_id: Any) -> Optional[uuid.UUID]:
-    try:
-        return uuid.UUID(str(company_id)) if company_id else None
-    except ValueError:
-        logger.error("Company id %r is not a UUID; resolving as unscoped", company_id)
-        return None
 
 
 async def resolve_action_line(
@@ -128,13 +124,18 @@ async def resolve_action_line(
     params: Optional[Mapping[str, Any]],
     company_id: Any,
     *,
+    user_id: Any = None,
     declared_categories: Iterable[str] = (),
     role_requires_approval: bool = False,
 ) -> LineResolution:
-    """Resolve the effective line for one action. Read-only: creates nothing, runs nothing."""
+    """Resolve the effective line for one action. Read-only: creates nothing, runs nothing.
+
+    LineScope: the verified company; with none, the verified user's personal scope (#18430). A company that is
+    present but malformed is not a missing one and is never replaced by the user's scope.
+    """
     key = action_key(tool_name, params)
-    company = _parse_company(company_id)
-    stored, unavailable = await _stored(company, key)
+    scope = resolve_scope(company_id, user_id)
+    stored, unavailable = await _stored(scope, key)
     category = approval_category_for(tool_name, await gated_categories(declared_categories))
     return resolve_line(
         key,
@@ -143,7 +144,7 @@ async def resolve_action_line(
         baseline_category=category,
         role_requires_approval=role_requires_approval,
         store_unavailable=unavailable,
-        company_missing=company is None,
+        scope_missing=scope is None,
     )
 
 
@@ -157,6 +158,7 @@ async def call_needs_approval(tool_call: Mapping[str, Any], ctx: Any) -> bool:
         tool_call.get("name", ""),
         params if isinstance(params, dict) else {},
         (getattr(ctx, "context", None) or {}).get(VERIFIED_COMPANY_KEY),
+        user_id=(getattr(ctx, "context", None) or {}).get(VERIFIED_USER_KEY),
         declared_categories=getattr(ctx, "requires_approval_before", None) or (),
     )
     return resolution.line is not AiLine.AUTONOMOUS
@@ -201,7 +203,7 @@ async def _existing_hold(session, company_id: Optional[uuid.UUID], requester: st
 async def _file_hold(
     resolution: LineResolution,
     params: Mapping[str, Any],
-    company_id: Optional[uuid.UUID],
+    scope: LineScope,
     requested_by: str,
     surface: str,
 ) -> Approval:
@@ -212,6 +214,7 @@ async def _file_hold(
     requester = f"{REQUESTER_PREFIX}:{requested_by}"
     safe_params = redact_nested(dict(params))
     fingerprint = shown_call_fingerprint(resolution.key.split(":", 1)[0], params)
+    company_id = scope.id if scope.kind == SCOPE_COMPANY else None  # a personal hold is an unscoped approval
     async with get_async_session_factory()() as session:
         existing = await _existing_hold(session, company_id, requester, fingerprint)
         if existing is not None:
@@ -228,6 +231,8 @@ async def _file_hold(
                 "line_source": resolution.source,
                 "params": safe_params,
                 "fingerprint": fingerprint,
+                "scope_kind": scope.kind,
+                "scope_id": str(scope.id),
             },
             company_id=company_id,
         )
@@ -254,6 +259,7 @@ async def enforce_line(
     company_id: Any,
     requested_by: str,
     surface: str,
+    user_id: Any = None,
     declared_categories: Iterable[str] = (),
     role_requires_approval: bool = False,
     hold_in_approvals: bool = True,
@@ -270,6 +276,7 @@ async def enforce_line(
         tool_name,
         params,
         company_id,
+        user_id=user_id,
         declared_categories=declared_categories,
         role_requires_approval=role_requires_approval,
     )
@@ -278,7 +285,9 @@ async def enforce_line(
     elif resolution.line is AiLine.AUTONOMOUS or shown_call_fingerprint(tool_name, params) in approved_fingerprints:
         verdict = LineVerdict(Outcome.RUN, resolution)
     else:
-        verdict = await _hold(resolution, params or {}, company_id, requested_by, surface, hold_in_approvals)
+        verdict = await _hold(
+            resolution, params or {}, resolve_scope(company_id, user_id), requested_by, surface, hold_in_approvals
+        )
     await _report(verdict, requested_by, surface)
     return verdict
 
@@ -286,15 +295,15 @@ async def enforce_line(
 async def _hold(
     resolution: LineResolution,
     params: Mapping[str, Any],
-    company_id: Any,
+    scope: Optional[LineScope],
     requested_by: str,
     surface: str,
     hold_in_approvals: bool,
 ) -> LineVerdict:
-    if not hold_in_approvals:
+    if not hold_in_approvals or scope is None:
         return LineVerdict(Outcome.HOLD, resolution)
     try:
-        approval = await _file_hold(resolution, params, _parse_company(company_id), requested_by, surface)
+        approval = await _file_hold(resolution, params, scope, requested_by, surface)
     except Exception as exc:  # noqa: BLE001 - not recorded is still not run
         logger.error("Could not record the approval for held action %s: %s", resolution.key, exc)
         return LineVerdict(Outcome.HOLD, resolution)

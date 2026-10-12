@@ -75,3 +75,18 @@ async def test_a_call_with_no_verified_company_never_reaches_the_transport(compa
     result, transport = await _call({"crm:read": AiLine.AUTONOMOUS}, {"action": "read"}, company=company)
     assert result.is_error is True and "verified company" in result.content
     transport.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_user_with_no_company_gets_line_two_for_a_voice_tool_call():
+    """No company: the signed-in user's personal scope. Unset on an unknown tool is line 2, so it is held."""
+    bridge = _bridge()
+    transport = AsyncMock(return_value="sent")
+    a, b, c, d, e = _world({})
+    with a, b, c, d, e, patch.object(RealtimeMCPBridge, "_call_inprocess", transport):
+        held = await bridge.call_tool("crm", {"action": "send"}, user_id=str(uuid.UUID(int=9)), company_id=None)
+        forged = await bridge.call_tool(
+            "crm", {"action": "send"}, user_id=str(uuid.UUID(int=9)), company_id="not-a-uuid"
+        )
+    transport.assert_not_awaited()
+    assert "requires approval" in held.content and "verified company or user" in forged.content

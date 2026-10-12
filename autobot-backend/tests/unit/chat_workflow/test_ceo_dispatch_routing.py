@@ -69,7 +69,11 @@ def _mixin():
 def _ctx():
     # Mirrors a CEO-chat iteration context: company scope, no approval gates.
     return SimpleNamespace(
-        context={"company_id": "co-1", "user_id": "u-1"},
+        context={
+            "company_id": "client-claim",
+            "verified_company_id": "00000000-0000-0000-0000-0000000000c1",
+            "verified_user_id": "u-1",
+        },
         consecutive_invalid_tool_calls=0,
         requires_approval_before=None,
         work_item_id=None,
@@ -121,7 +125,9 @@ async def test_dispatch_routes_create_task_to_llc_handler():
     # guard, and not fall through to MCP/unknown).
     disp.assert_awaited_once()
     assert disp.await_args.args[0] == "create_task"
-    assert disp.await_args.args[2] == "co-1"  # company_id from ctx.context
+    assert (
+        disp.await_args.args[2] == "00000000-0000-0000-0000-0000000000c1"
+    )  # the VERIFIED company, never the request's claim
     assert exec_results and exec_results[-1].get("status") == "success"
     assert not any(getattr(x, "type", "") == "approval_required" for x in msgs)
 

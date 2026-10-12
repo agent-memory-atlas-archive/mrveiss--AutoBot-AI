@@ -290,3 +290,94 @@ async def test_the_decide_route_does_not_execute_any_other_registered_action(fac
         _PROPOSERS.pop("test.other_action_18430", None)
     ran.assert_not_awaited()
     assert any("only its allowed actions" in c.body for c in await _rows(factory, ApprovalComment))
+
+
+# -- personal lines: a user with no company (owner decision, #18430) ---------------------------------------------
+
+
+def _me_client(factory, user: uuid.UUID, credential: dict = PERSON) -> TestClient:
+    """A person with NO org context: only authentication, no company."""
+    app = FastAPI()
+    app.include_router(ai_lines_router, prefix="/api/llc")
+    app.dependency_overrides[get_session] = _session_for(factory)
+    app.dependency_overrides[get_current_user] = lambda: {"id": str(user), "username": str(user), **credential}
+    return TestClient(app)
+
+
+def _session_for(factory):
+    async def _session():
+        async with factory() as session:
+            yield session
+
+    return _session
+
+
+def _gates_client(factory, user: uuid.UUID) -> TestClient:
+    """The generic approvals route, which decides UNSCOPED approvals (a personal change is one)."""
+    import api.approval_gates as gates
+    from api.user_management.dependencies import get_db_session
+
+    app = FastAPI()
+    app.include_router(gates.router, prefix="/api")
+    app.dependency_overrides[get_db_session] = _session_for(factory)
+    app.dependency_overrides[gates.get_current_user] = lambda: {"id": str(user), "username": str(user), **PERSON}
+    return TestClient(app)
+
+
+def _propose_mine(client, key="write_file", line="autonomous"):
+    return client.post("/api/llc/ai-lines/me/changes", json={"action_key": key, "line": line})
+
+
+def _approve(client, approval_id: str):
+    return client.post(f"/api/approval-gates/{approval_id}/approve", json={})
+
+
+@pytest.mark.asyncio
+async def test_a_user_with_no_company_reads_their_own_lines_with_the_unset_default(factory):
+    body = _me_client(factory, MEMBER).get("/api/llc/ai-lines/me").json()
+    by_key = {e["action_key"]: e for e in body["entries"]}
+    assert body["default_line"] == "draft_then_send" and body["company_id"] == str(MEMBER)
+    assert by_key["write_file"]["effective_line"] == "draft_then_send" and not by_key["write_file"]["is_set"]
+
+
+@pytest.mark.asyncio
+async def test_a_personal_proposal_is_an_unscoped_approval_and_changes_nothing(factory):
+    resp = _propose_mine(_me_client(factory, MEMBER))
+    assert resp.status_code == 202
+    [approval] = await _rows(factory, Approval)
+    assert approval.company_id is None and approval.context["scope_kind"] == "user"
+    assert approval.context["scope_id"] == str(MEMBER)
+    assert await _rows(factory, LLCAiLine) == []
+
+
+@pytest.mark.asyncio
+async def test_the_person_can_approve_their_own_personal_change_and_it_is_flagged(factory, _outside_world):
+    approval_id = _propose_mine(_me_client(factory, MEMBER)).json()["approval_id"]
+    assert _approve(_gates_client(factory, MEMBER), approval_id).status_code == 200
+    [row] = await _rows(factory, LLCAiLine)
+    assert (row.scope_kind, row.company_id, row.action_key, row.line) == ("user", MEMBER, "write_file", "autonomous")
+    assert _outside_world.await_args.kwargs["details"]["self_approval"] is True
+    mine = _me_client(factory, MEMBER).get("/api/llc/ai-lines/me").json()["entries"]
+    assert next(e for e in mine if e["action_key"] == "write_file")["is_set"]
+    # ... and it is not on anyone else's page or any company's.
+    other = _me_client(factory, OWNER).get("/api/llc/ai-lines/me").json()["entries"]
+    assert not next(e for e in other if e["action_key"] == "write_file")["is_set"]
+
+
+@pytest.mark.asyncio
+async def test_nobody_else_can_approve_a_personal_change(factory):
+    approval_id = _propose_mine(_me_client(factory, MEMBER)).json()["approval_id"]
+    assert _approve(_gates_client(factory, OWNER), approval_id).status_code == 200  # decision recorded ...
+    assert await _rows(factory, LLCAiLine) == []  # ... the personal line does not move
+    assert any("did not complete" in c.body for c in await _rows(factory, ApprovalComment))
+
+
+@pytest.mark.asyncio
+async def test_an_agent_credential_cannot_propose_a_personal_change(factory):
+    resp = _propose_mine(_me_client(factory, AGENT, credential=AGENT_CREDENTIAL))
+    assert resp.status_code == 403 and await _rows(factory, Approval) == []
+
+
+@pytest.mark.asyncio
+async def test_me_is_not_parsed_as_a_company_id(factory):
+    assert _me_client(factory, MEMBER).get("/api/llc/ai-lines/me").status_code == 200

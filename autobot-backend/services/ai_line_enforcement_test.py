@@ -20,7 +20,7 @@ import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from autobot_shared.ai_lines import AiLine
+from autobot_shared.ai_lines import SCOPE_COMPANY, SCOPE_USER, AiLine, LineScope
 from autobot_shared.tool_catalogue import valid_approval_categories
 from chat_workflow import approval_baseline as baseline
 from llc.models.ai_line import LLCAiLine
@@ -285,8 +285,9 @@ async def test_proposing_a_change_changes_nothing_until_a_person_approves(factor
     from services.ai_line_change_proposal import propose_line_change
 
     with patch("services.ai_line_change_proposal.get_async_session_factory", lambda: factory):
-        proposed = await propose_line_change(company_id=COMPANY, key="crm:send", line=L1, requested_by="u")
-        again = await propose_line_change(company_id=COMPANY, key="CRM:send", line=L1, requested_by="u")
+        scope = LineScope(SCOPE_COMPANY, COMPANY)
+        proposed = await propose_line_change(scope=scope, key="crm:send", line=L1, requested_by="u")
+        again = await propose_line_change(scope=scope, key="CRM:send", line=L1, requested_by="u")
     assert proposed.status == "pending" and again.id == proposed.id  # reused, not duplicated
     async with factory() as session:
         assert await stored_line(session, COMPANY, "crm:send") is None
@@ -347,3 +348,101 @@ def test_the_fingerprint_is_an_hmac_of_the_raw_call_and_is_not_the_plain_hash():
     assert fp != shown_call_fingerprint("crm", {**params, "api_key": "k2"})  # pragma: allowlist secret
     with patch.object(enforcement, "_fingerprint_key", lambda: b"another-key-" * 3):
         assert shown_call_fingerprint("crm", params) != fp  # keyed: the digest cannot be recomputed without the secret
+
+
+# -- personal scope: a user with no company (owner decision, #18430) -----------------------------------------
+
+USER = uuid.UUID(int=18432)
+OTHER_USER = uuid.UUID(int=18433)
+
+
+async def _me(tool, params=None, user=USER, company=None, **kw):
+    return await enforce_line(
+        tool_name=tool, params=params or {}, company_id=company, user_id=str(user), requested_by="s", surface="t", **kw
+    )
+
+
+async def test_a_user_with_no_company_gets_line_two_for_an_unset_mutating_action_and_can_approve_it(factory, world):
+    world["relaxed"] = ALL_RELAXED
+    verdict = await _me("write_file", {"path": "a.md"})
+    [approval] = await _approvals(factory)
+    assert verdict.outcome is Outcome.HOLD and verdict.resolution.source == "default"
+    assert approval.company_id is None and approval.context["scope_kind"] == "user"
+    assert approval.context["scope_id"] == str(USER)
+    # Self-approval: a yes bound to exactly this call carries it.
+    shown = _shown("write_file", {"path": "a.md"})
+    assert (await _me("write_file", {"path": "a.md"}, approved_fingerprints=shown)).outcome is Outcome.RUN
+    assert (await _me("write_file", {"path": "b.md"}, approved_fingerprints=shown)).outcome is Outcome.HOLD
+
+
+async def test_a_user_with_no_company_runs_a_known_read(factory, world):
+    assert (await _me("read_file", {"path": "a.md"})).outcome is Outcome.RUN
+
+
+async def test_a_forged_company_is_still_refused_even_for_a_signed_in_user(factory, world):
+    world["relaxed"] = ALL_RELAXED
+    for forged in ("not-a-uuid", "12345"):
+        verdict = await _me("write_file", company=forged)
+        assert verdict.outcome is Outcome.REFUSE and verdict.resolution.source == "no_verified_company"
+    assert await _approvals(factory) == []
+
+
+async def test_personal_lines_apply_to_the_user_and_to_nobody_else(factory, world):
+    world["relaxed"] = ALL_RELAXED
+    async with factory() as session:
+        await record_approved_line(
+            session,
+            company_id=USER,
+            kind=SCOPE_USER,
+            key="write_file",
+            line=L1,
+            approval_id=uuid.uuid4(),
+            decided_by="me",
+        )
+        await record_approved_line(
+            session,
+            company_id=USER,
+            kind=SCOPE_USER,
+            key="crm:delete",
+            line=L3,
+            approval_id=uuid.uuid4(),
+            decided_by="me",
+        )
+        await session.commit()
+    assert (await _me("write_file")).outcome is Outcome.RUN
+    assert (await _me("crm", {"action": "delete"})).outcome is Outcome.REFUSE
+    assert (await _me("write_file", user=OTHER_USER)).outcome is Outcome.HOLD  # someone else's scope: unset
+    # The same id as a COMPANY is a different scope: a personal line never leaks into a company, or back.
+    assert (await _act("write_file", company=USER)).outcome is Outcome.HOLD
+
+
+async def test_with_a_company_the_company_scope_applies_not_the_personal_one(factory, world):
+    world["relaxed"] = ALL_RELAXED
+    async with factory() as session:
+        await record_approved_line(
+            session,
+            company_id=USER,
+            kind=SCOPE_USER,
+            key="write_file",
+            line=L1,
+            approval_id=uuid.uuid4(),
+            decided_by="me",
+        )
+        await session.commit()
+    assert (await _me("write_file", company=COMPANY)).outcome is Outcome.HOLD  # in a company, its lines decide
+
+
+async def test_the_baseline_floor_applies_to_a_personal_line_too(factory, world):
+    async with factory() as session:
+        await record_approved_line(
+            session,
+            company_id=USER,
+            kind=SCOPE_USER,
+            key="write_file",
+            line=L1,
+            approval_id=uuid.uuid4(),
+            decided_by="me",
+        )
+        await session.commit()
+    held = await _me("write_file")  # baseline not relaxed
+    assert held.outcome is Outcome.HOLD and held.resolution.source == "baseline_floor"

@@ -30,14 +30,16 @@ def upgrade() -> None:
     op.create_table(
         "llc_ai_lines",
         sa.Column("id", sa.UUID(as_uuid=True), primary_key=True, nullable=False),
+        # The scope's id: a company's, or a user's when scope_kind is 'user' (personal lines, same store).
         sa.Column("company_id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("scope_kind", sa.String(10), server_default="company", nullable=False),
         sa.Column("action_key", sa.String(320), nullable=False),
         sa.Column("line", sa.String(30), nullable=False),
         sa.Column("approval_id", sa.UUID(as_uuid=True), nullable=True),
         sa.Column("decided_by", sa.String(255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.UniqueConstraint("company_id", "action_key", name="uq_llc_ai_lines_company_action"),
+        sa.UniqueConstraint("scope_kind", "company_id", "action_key", name="uq_llc_ai_lines_scope_action"),
     )
     op.create_index("ix_llc_ai_lines_company_id", "llc_ai_lines", ["company_id"])
 

@@ -20,6 +20,7 @@ seam, the agent terminal and the API all resolve a line the same way. The store 
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional
@@ -47,6 +48,12 @@ DEFAULT_LINE = AiLine.DRAFT_THEN_SEND
 #: ``context`` key holding the company of the AUTHENTICATED principal (#18430). The request's own
 #: ``company_id`` is a client claim and never scopes a policy decision; only this key does.
 VERIFIED_COMPANY_KEY = "verified_company_id"
+#: ``context`` key holding the AUTHENTICATED user (never the request's ``user_id`` claim): the personal scope.
+VERIFIED_USER_KEY = "verified_user_id"
+
+#: A line is stored under a scope: a company, or -- for a user with no company -- the user alone (#18430).
+SCOPE_COMPANY = "company"
+SCOPE_USER = "user"
 
 #: Why a line resolved the way it did (shown to the person; also what the tests assert on).
 SOURCE_STORED = "stored"
@@ -56,6 +63,35 @@ SOURCE_ROLE = "role_floor"
 SOURCE_UNAVAILABLE = "store_unavailable"
 SOURCE_UNMANAGED = "unmanaged"
 SOURCE_NO_COMPANY = "no_verified_company"
+
+
+@dataclass(frozen=True)
+class LineScope:
+    """Whose lines apply: ``kind`` is :data:`SCOPE_COMPANY` or :data:`SCOPE_USER`; ``id`` is that principal's UUID."""
+
+    kind: str
+    id: uuid.UUID
+
+
+def resolve_scope(company_id: Any, user_id: Any) -> Optional[LineScope]:
+    """The scope for an authenticated principal, or ``None`` when it cannot be scoped (REFUSE).
+
+    * A company that is PRESENT but not a valid id is forged or broken: ``None``, never a fall-through to the
+      user's personal scope.
+    * No company at all is normal (a user outside any company): the user's own personal scope.
+    * Neither: nothing to scope by, ``None``.
+    """
+    if company_id not in (None, ""):
+        try:
+            return LineScope(SCOPE_COMPANY, uuid.UUID(str(company_id)))
+        except ValueError:
+            return None
+    if user_id not in (None, ""):
+        try:
+            return LineScope(SCOPE_USER, uuid.UUID(str(user_id)))
+        except ValueError:
+            return None
+    return None
 
 
 def strictest(*lines: AiLine) -> AiLine:
@@ -124,7 +160,7 @@ class LineResolution:
         if self.source == SOURCE_ROLE:
             return "the agent role's policy requires approval for this risk"
         if self.source == SOURCE_NO_COMPANY:
-            return "no verified company scopes this action, so it cannot be allowed"
+            return "no verified company or user scopes this action, so it cannot be allowed"
         if self.source == SOURCE_UNAVAILABLE:
             return "the line store could not be read, so the action fails closed"
         if self.source == SOURCE_DEFAULT:
@@ -142,7 +178,7 @@ def resolve_line(
     baseline_category: Optional[str] = None,
     role_requires_approval: bool = False,
     store_unavailable: bool = False,
-    company_missing: bool = False,
+    scope_missing: bool = False,
 ) -> LineResolution:
     """Decide the effective line for one action. Pure; every floor can only tighten.
 
@@ -152,10 +188,10 @@ def resolve_line(
     * Baseline-sensitive categories (#18294) can never be line 1, whatever is stored.
     * A role policy that requires approval (#17463) can never be line 1 either.
     * An unreadable store fails closed: ``never``.
-    * No verified company (missing or malformed) refuses a mutating action: there is no scope its line could be
-      read from, and the request's own claim is not one (#18430).
+    * No verifiable scope (a malformed company, or no principal at all) refuses a mutating action: there is no scope
+      its line could be read from, and the request's own claim is not one (#18430).
     """
-    if company_missing and mutating:
+    if scope_missing and mutating:
         return LineResolution(key, AiLine.NEVER, SOURCE_NO_COMPANY)
     if store_unavailable:
         return LineResolution(key, AiLine.NEVER, SOURCE_UNAVAILABLE)

@@ -21,6 +21,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from async_chat_workflow import WorkflowMessage
+from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY, VERIFIED_USER_KEY
 from autobot_shared.auth.mcp_tool_permissions import required_permission
 from autobot_shared.auth.permissions import Permission
 from autobot_shared.env_utils import env_flag, env_int
@@ -57,6 +58,7 @@ from chat_workflow.tool_dispatch_guards import (
     enforce_peer_messages,
     enforce_pre_action_verifier,
     enforce_repetition,
+    llc_scope_error,
 )
 from chat_workflow.tool_permission_gate import permission_denial
 from llc.agent_tools import LLC_TOOL_NAMES, LLC_TOOL_SCHEMAS, LLCToolError, dispatch_llc_tool
@@ -2676,33 +2678,31 @@ class ToolHandlerMixin:
     ):
         """Dispatch an LLC work-object tool company-scoped (#11501).
 
-        company_id comes from the chat request context (set by the CEO-chat
-        endpoint, T2). A missing/invalid context surfaces as a tool error the
-        LLM can react to, rather than a crash.
+        company_id is the AUTHENTICATED company (``verified_company_id``), never the request context's own
+        ``company_id`` claim; without one the tool is refused (#18430). A missing/invalid context surfaces as a
+        tool error the LLM can react to, rather than a crash.
 
-        #14491: every LLC tool mutates company-scoped work objects
-        (``dispatch_llc_tool`` has no RBAC check of its own — only the
-        company/tenant scoping above and the cross-tenant IDOR guard inside
-        ``_update_goal``) and this was the highest-risk of the seven branches
-        never reaching ``BEFORE_TOOL_EXECUTE`` at all. ``Permission.WORKFLOW_CREATE``
-        is the closest existing declaration: it is the permission this system
-        already uses for "create/mutate a unit of work", held by
-        admin/operator/editor and withheld from analyst/user/readonly — the
-        same tier a company board operation should require. Denial returns
-        before ``dispatch_llc_tool`` is ever awaited.
+        #14491: every LLC tool mutates company-scoped work objects (``dispatch_llc_tool`` has no RBAC check of
+        its own), so ``Permission.WORKFLOW_CREATE`` -- the permission this system already uses for "create/mutate
+        a unit of work", held by admin/operator/editor, withheld from analyst/user/readonly -- is declared at
+        BEFORE_TOOL_EXECUTE. Denial returns before ``dispatch_llc_tool`` is ever awaited.
         """
         params = tool_call.get("params", {}) or {}
         _cctx = ctx.context if ctx is not None and ctx.context else {}
-        company_id = _cctx.get("company_id")
+        company_id = _cctx.get(VERIFIED_COMPANY_KEY)
         # #11501 review: actor for audit/authz comes from the authenticated chat
-        # context, never from LLM-supplied params.
-        user_id = _cctx.get("user_id")
+        # context, never from LLM-supplied params or the request's own claim.
+        user_id = _cctx.get(VERIFIED_USER_KEY)
 
         denial = await permission_denial(
             tool_name, params, session_id, Permission.WORKFLOW_CREATE.value, role, execution_results
         )
         if denial is not None:
             yield denial
+            return
+
+        if (scope_msg := llc_scope_error(tool_name, company_id, execution_results)) is not None:
+            yield scope_msg
             return
 
         try:

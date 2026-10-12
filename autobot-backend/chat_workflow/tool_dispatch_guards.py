@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from async_chat_workflow import WorkflowMessage
-from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY
+from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY, VERIFIED_USER_KEY, resolve_scope
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.tool_catalogue import SENSITIVE_TOOLS, match_tool_name
 
@@ -318,6 +318,7 @@ async def enforce_ai_line(
         tool_name=tool_name,
         params=_call_params(tool_call),
         company_id=context.get(VERIFIED_COMPANY_KEY),  # server-verified, never the request's claim
+        user_id=context.get(VERIFIED_USER_KEY),  # the personal scope of a user with no company
         requested_by=str(getattr(ctx, "session_id", None) or "chat"),
         surface="chat_tool",
         declared_categories=getattr(ctx, "requires_approval_before", None) or (),
@@ -342,6 +343,23 @@ async def enforce_ai_line(
         content=verdict.message,
         metadata={**meta, "error": refused, "approval_required": not refused},
     )
+
+
+NO_VERIFIED_COMPANY_ERROR = (
+    "This tool changes a company's work objects and needs a verified company; there is none for this session."
+)
+
+
+def llc_scope_error(tool_name: str, company_id: Any, execution_results: list[dict[str, Any]]) -> WorkflowMessage | None:
+    """Refuse an LLC work-object tool that has no verified company to scope it by (#18430).
+
+    ``company_id`` must be the AUTHENTICATED company, never the request's own claim; absent or malformed is a
+    refusal, not a fall-through to the user's personal scope (a personal scope owns no company work objects).
+    """
+    if resolve_scope(company_id, None) is not None:
+        return None
+    execution_results.append({"tool": tool_name, "status": "error", "error": NO_VERIFIED_COMPANY_ERROR})
+    return WorkflowMessage(type="error", content=NO_VERIFIED_COMPANY_ERROR, metadata={"tool": tool_name, "error": True})
 
 
 def enforce_peer_messages(ctx: "LLMIterationContext | None") -> None:

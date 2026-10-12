@@ -64,9 +64,9 @@ def test_an_unknown_tool_is_treated_as_mutating_so_an_unset_line_holds_it():
 
 
 def test_no_verified_company_refuses_a_mutating_action_and_leaves_a_known_read_alone():
-    refused = resolve_line("write_file", stored=L1, mutating=True, company_missing=True)
+    refused = resolve_line("write_file", stored=L1, mutating=True, scope_missing=True)
     assert (refused.line, refused.source) == (L3, SOURCE_NO_COMPANY)
-    assert resolve_line("read_file", stored=None, mutating=False, company_missing=True).line is L1
+    assert resolve_line("read_file", stored=None, mutating=False, scope_missing=True).line is L1
 
 
 @pytest.mark.parametrize("stored", [L1, L2, L3])
@@ -106,3 +106,30 @@ def test_a_role_that_needs_approval_can_never_be_line_one_and_never_loosens():
 def test_an_unreadable_store_fails_closed_to_never():
     got = resolve_line("x", stored=L1, mutating=False, store_unavailable=True)
     assert (got.line, got.source) == (L3, SOURCE_UNAVAILABLE)
+
+
+USER_ID = "00000000-0000-0000-0000-000000000042"
+COMPANY_ID = "00000000-0000-0000-0000-0000000000c1"
+
+
+def test_a_company_scopes_by_the_company_and_a_user_with_no_company_by_themselves():
+    from autobot_shared.ai_lines import SCOPE_COMPANY, SCOPE_USER, resolve_scope
+
+    assert resolve_scope(COMPANY_ID, USER_ID).kind == SCOPE_COMPANY  # the company wins when there is one
+    assert resolve_scope(None, USER_ID).kind == SCOPE_USER
+    assert resolve_scope("", USER_ID).kind == SCOPE_USER
+    assert str(resolve_scope(None, USER_ID).id) == USER_ID
+
+
+def test_a_present_but_malformed_company_is_refused_not_replaced_by_the_personal_scope():
+    from autobot_shared.ai_lines import resolve_scope
+
+    assert resolve_scope("not-a-uuid", USER_ID) is None
+    assert resolve_scope("12345", USER_ID) is None
+
+
+def test_no_principal_at_all_has_no_scope():
+    from autobot_shared.ai_lines import resolve_scope
+
+    assert resolve_scope(None, None) is None and resolve_scope("", "") is None
+    assert resolve_scope(None, "not-a-uuid") is None

@@ -134,3 +134,35 @@ async def test_a_work_item_category_still_holds_a_tool_the_company_set_to_line_o
 async def test_an_unreadable_store_refuses_rather_than_runs():
     message, filed = await arun_guard({"name": "crm", "params": {"action": "read"}}, _ctx(), [], store_unavailable=True)
     assert message.type == "error" and filed == 0
+
+
+USER = "00000000-0000-0000-0000-000000000042"
+
+
+def _me(**kw) -> SimpleNamespace:
+    """A signed-in user with NO company: only the verified user id."""
+    return _ctx(context={"verified_user_id": USER}, **kw)
+
+
+@pytest.mark.asyncio
+async def test_a_user_with_no_company_gets_line_two_and_can_approve_their_own_shown_call():
+    from services.ai_line_enforcement import shown_call_fingerprint
+
+    call = {"name": "write_file", "params": {"path": "a.md"}}
+    held, filed = await arun_guard(call, _me(), [], verified_company=False, slm_relaxed=["writing files"])
+    shown = frozenset({shown_call_fingerprint("write_file", call["params"])})
+    passed, _ = await arun_guard(
+        call, _me(approved_fingerprints=shown), [], verified_company=False, slm_relaxed=["writing files"]
+    )
+    assert held.type == "approval_required" and filed == 1 and passed is None
+
+
+@pytest.mark.asyncio
+async def test_a_user_with_no_company_runs_a_read_and_a_forged_company_is_still_refused():
+    read, _ = await arun_guard({"name": "read_file", "params": {}}, _me(), [], verified_company=False)
+    assert read is None
+    forged = _ctx(context={"verified_company_id": "not-a-uuid", "verified_user_id": USER})
+    refused, filed = await arun_guard(
+        {"name": "write_file", "params": {}}, forged, [], verified_company=False, stored=L1
+    )
+    assert refused.type == "error" and filed == 0

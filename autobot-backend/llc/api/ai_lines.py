@@ -6,6 +6,8 @@
 
 Route group: ``/llc/ai-lines/{company_id}``
 
+* ``GET  /me`` and ``POST /me/changes`` -- the same for a user with NO company: personal lines, same store.
+  Only that user can approve a change to them (self-approval, audit-flagged).
 * ``GET  /{company_id}``          -- every action's line, the effective line, and why.
 * ``POST /{company_id}/changes``  -- PROPOSE a change. It files an approval and changes nothing:
   the line is written only when a person approves it (``services.ai_line_change_action``).
@@ -25,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.user_management.dependencies import get_current_user, require_org_context
 from api.user_management.human_decider import require_interactive_human
-from autobot_shared.ai_lines import DEFAULT_LINE, AiLine
+from autobot_shared.ai_lines import DEFAULT_LINE, SCOPE_COMPANY, SCOPE_USER, AiLine, LineScope
 from llc.deps import assert_company_access, get_session
 from llc.services.ai_lines import normalise_key
 from services.ai_line_change_action import register_ai_line_change_action
@@ -71,6 +73,58 @@ class ProposedLineChange(BaseModel):
     line: AiLine
 
 
+def _entries(views) -> List[AiLineEntry]:
+    return [
+        AiLineEntry(
+            action_key=v.action_key,
+            stored_line=v.stored,
+            effective_line=v.resolution.line,
+            is_set=v.stored is not None,
+            reason=v.resolution.reason,
+            floor_category=v.resolution.floor_category,
+            approval_id=str(v.approval_id) if v.approval_id else None,
+            decided_by=v.decided_by,
+        )
+        for v in views
+    ]
+
+
+def _personal_scope(current_user: dict) -> uuid.UUID:
+    """The signed-in user's own id: the key of their personal lines. Never taken from the URL or the body."""
+    try:
+        return uuid.UUID(str(current_user.get("id") or current_user.get("user_id")))
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Personal lines need a signed-in user account") from exc
+
+
+# Personal routes are declared BEFORE the company routes so that "/me" is never parsed as a company id.
+@router.get("/me", response_model=AiLinesResponse)
+async def read_my_lines(
+    session: AsyncSession = Depends(get_session), current_user: dict = Depends(get_current_user)
+) -> AiLinesResponse:
+    """The signed-in user's own lines: the scope of a user with no company (#18430)."""
+    user = _personal_scope(current_user)
+    views = await describe_lines(session, user, SCOPE_USER)
+    return AiLinesResponse(company_id=str(user), default_line=DEFAULT_LINE, entries=_entries(views))
+
+
+@router.post("/me/changes", response_model=ProposedLineChange, status_code=202)
+async def propose_my_change(
+    payload: ProposeLineChange, current_user: dict = Depends(get_current_user)
+) -> ProposedLineChange:
+    """Propose a change to a personal line. Only the same person can approve it (self-approval, audit-flagged)."""
+    require_interactive_human(current_user, "AI line change request")
+    user = _personal_scope(current_user)
+    try:
+        key = normalise_key(payload.action_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    approval = await propose_line_change(
+        scope=LineScope(SCOPE_USER, user), key=key, line=payload.line, requested_by=str(user), reason=payload.reason
+    )
+    return ProposedLineChange(approval_id=str(approval.id), status=approval.status, action_key=key, line=payload.line)
+
+
 @router.get("/{company_id}", response_model=AiLinesResponse)
 async def read_lines(
     company_id: uuid.UUID,
@@ -80,23 +134,7 @@ async def read_lines(
 ) -> AiLinesResponse:
     assert_company_access(ctx, company_id)
     views = await describe_lines(session, company_id)
-    return AiLinesResponse(
-        company_id=str(company_id),
-        default_line=DEFAULT_LINE,
-        entries=[
-            AiLineEntry(
-                action_key=v.action_key,
-                stored_line=v.stored,
-                effective_line=v.resolution.line,
-                is_set=v.stored is not None,
-                reason=v.resolution.reason,
-                floor_category=v.resolution.floor_category,
-                approval_id=str(v.approval_id) if v.approval_id else None,
-                decided_by=v.decided_by,
-            )
-            for v in views
-        ],
-    )
+    return AiLinesResponse(company_id=str(company_id), default_line=DEFAULT_LINE, entries=_entries(views))
 
 
 @router.post("/{company_id}/changes", response_model=ProposedLineChange, status_code=202)
@@ -113,7 +151,7 @@ async def propose_change(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     approval = await propose_line_change(
-        company_id=company_id,
+        scope=LineScope(SCOPE_COMPANY, company_id),
         key=key,
         line=payload.line,
         requested_by=str(actor_id(current_user)),

@@ -11317,7 +11317,7 @@ export interface paths {
         put?: never;
         /**
          * Call Realtime Tool
-         * @description Route a Realtime tool call through the MCP bridge (#7343).
+         * @description Route a Realtime tool call through the MCP bridge (#7343); its AI line is resolved first (#18430).
          */
         post: operations["call_realtime_tool_api_voice_realtime_tools_call_post"];
         delete?: never;
@@ -49739,6 +49739,46 @@ export interface paths {
         get: operations["list_adapters_api_llc_adapters_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/ai-lines/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read My Lines
+         * @description The signed-in user's own lines: the scope of a user with no company (#18430).
+         */
+        get: operations["read_my_lines_api_llc_ai_lines_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/ai-lines/me/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose My Change
+         * @description Propose a change to a personal line. Only the same person can approve it (self-approval, audit-flagged).
+         */
+        post: operations["propose_my_change_api_llc_ai_lines_me_changes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -170462,6 +170502,59 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    read_my_lines_api_llc_ai_lines_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiLinesResponse"];
+                };
+            };
+        };
+    };
+    propose_my_change_api_llc_ai_lines_me_changes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeLineChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposedLineChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

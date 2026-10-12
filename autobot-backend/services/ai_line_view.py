@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from autobot_shared.ai_lines import AiLine, LineResolution, is_mutating, parse_line, resolve_line
+from autobot_shared.ai_lines import SCOPE_COMPANY, AiLine, LineResolution, is_mutating, parse_line, resolve_line
 from autobot_shared.tool_catalogue import ToolEffect, approval_category_for, tools_with
 from llc.services.ai_lines import list_lines
 from services.ai_line_enforcement import gated_categories
@@ -32,9 +32,9 @@ class AiLineView:
     decided_by: Optional[str]
 
 
-async def describe_lines(session: AsyncSession, company_id: uuid.UUID) -> List[AiLineView]:
+async def describe_lines(session: AsyncSession, company_id: uuid.UUID, kind: str = SCOPE_COMPANY) -> List[AiLineView]:
     """Every action with a stored line, plus every mutating catalogue tool (which counts as line 2 unset)."""
-    rows = await list_lines(session, company_id)
+    rows = await list_lines(session, company_id, kind)
     categories = await gated_categories(())
     keys = sorted(set(rows) | set(tools_with(ToolEffect.MUTATING, include_aliases=False)))
     views = []

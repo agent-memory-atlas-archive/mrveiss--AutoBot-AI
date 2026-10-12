@@ -4,8 +4,8 @@
 # Author: mrveiss
 """SSE streaming helpers for the chat endpoints (Issue #398), moved out of ``api/chat.py`` (#18430).
 
-Both generators hand the AUTHENTICATED caller's role and org to the workflow manager. The org is the company the
-AI lines are decided for, so it must come from the session, never from the request's own ``context`` bag.
+Both generators hand the AUTHENTICATED caller's role and scope (org, user) to the workflow manager. The scope is whose
+AI lines are decided, so it must come from the session, never from the request's own ``context`` bag.
 """
 
 import json
@@ -16,6 +16,12 @@ from autobot_shared.logging_manager import get_logger
 logger = get_logger(__name__)
 
 
+def principal_scope(current_user: dict | None) -> dict:
+    """The AUTHENTICATED principal's org and user, for the AI lines' scope (#18430)."""
+    user = current_user or {}
+    return {"org_id": user.get("org_id"), "user_id": user.get("id") or user.get("user_id")}
+
+
 async def _stream_chat_workflow_messages(
     chat_workflow_manager,
     chat_id: str,
@@ -23,7 +29,7 @@ async def _stream_chat_workflow_messages(
     context: dict,
     request_id: str,
     auth_role: str | None = None,
-    auth_org_id: str | None = None,
+    auth_scope: dict | None = None,
 ):
     """Stream chat workflow messages as SSE events (Issue #398: extracted)."""
     try:
@@ -34,7 +40,7 @@ async def _stream_chat_workflow_messages(
         logger.debug("[%s] Processing message: %s...", request_id, message[:50])
         message_count = 0
         async for msg in chat_workflow_manager.process_message_stream(
-            session_id=chat_id, message=message, context=context, auth_role=auth_role, auth_org_id=auth_org_id
+            session_id=chat_id, message=message, context=context, auth_role=auth_role, auth_scope=auth_scope
         ):
             message_count += 1
             msg_data = msg.to_dict() if hasattr(msg, "to_dict") else msg
@@ -56,7 +62,7 @@ async def _stream_direct_response(
     remember_choice: bool,
     request_id: str,
     auth_role: str | None = None,
-    auth_org_id: str | None = None,
+    auth_scope: dict | None = None,
 ):
     """Stream direct response for approvals/denials (Issue #398: extracted)."""
     try:
@@ -68,7 +74,7 @@ async def _stream_direct_response(
             message=message,
             context={"remember_choice": remember_choice},
             auth_role=auth_role,
-            auth_org_id=auth_org_id,
+            auth_scope=auth_scope,
         ):
             msg_data = msg.to_dict() if hasattr(msg, "to_dict") else msg
             yield f"data: {json.dumps(msg_data)}\n\n"

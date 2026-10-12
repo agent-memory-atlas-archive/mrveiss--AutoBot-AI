@@ -12,6 +12,7 @@ administrator to have relaxed the category -- the role flag alone never lets a c
 
 from __future__ import annotations
 
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -133,4 +134,28 @@ async def test_a_session_with_no_verified_company_is_refused_even_on_line_one():
     svc.get_session = AsyncMock(return_value=session)
     result = await _run(svc, stored=AiLine.AUTONOMOUS, relaxed=ALL_RELAXED)
     assert result["status"] == "error" and "verified company" in result["error"]
+    svc._execute_auto_approved_command.assert_not_awaited()
+
+
+async def test_a_user_with_no_company_gets_line_two_for_their_terminal_commands():
+    """No tenant: the owner's personal scope applies. Unset is line 2 (queued); a personal line 1 runs it."""
+    session = _session()
+    session.tenant_id = None
+    session.owner = "alice"
+    queued, ran = _service(), _service()
+    for svc in (queued, ran):
+        svc.get_session = AsyncMock(return_value=session)
+    with patch("services.agent_terminal.ai_line_gate._owner_user_id", AsyncMock(return_value=str(uuid.UUID(int=7)))):
+        assert await _run(queued, stored=None, relaxed=ALL_RELAXED) == {"status": "pending_approval"}
+        assert await _run(ran, stored=AiLine.AUTONOMOUS, relaxed=ALL_RELAXED) == {"status": "success"}
+
+
+async def test_a_forged_tenant_is_refused_and_is_not_replaced_by_the_owners_personal_scope():
+    session = _session()
+    session.tenant_id = "not-a-uuid"
+    session.owner = "alice"
+    svc = _service()
+    svc.get_session = AsyncMock(return_value=session)
+    result = await _run(svc, stored=AiLine.AUTONOMOUS, relaxed=ALL_RELAXED)
+    assert result["status"] == "error"
     svc._execute_auto_approved_command.assert_not_awaited()

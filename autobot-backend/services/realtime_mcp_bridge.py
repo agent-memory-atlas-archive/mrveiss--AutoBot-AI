@@ -327,6 +327,7 @@ class RealtimeMCPBridge:
             tool_name=name,
             params=arguments,
             company_id=company_id,
+            user_id=user_id,
             requested_by=str(user_id or session_id or "realtime"),
             surface="realtime_voice",
         )
