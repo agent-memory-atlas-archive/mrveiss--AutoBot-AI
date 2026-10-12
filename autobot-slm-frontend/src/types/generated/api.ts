@@ -352,6 +352,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/sso/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange Sso Code
+         * @description Exchange a single-use SSO code for the session token (#18394).
+         */
+        post: operations["exchange_sso_code_api_auth_sso_exchange_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/sso/ldap/login": {
         parameters: {
             query?: never;
@@ -7947,6 +7967,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Body_exchange_sso_code_api_auth_sso_exchange_post */
+        Body_exchange_sso_code_api_auth_sso_exchange_post: {
+            /** Code */
+            code: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** Body_saml_callback_api_auth_sso_saml_callback_post */
         Body_saml_callback_api_auth_sso_saml_callback_post: {
             /** Relaystate */
@@ -14939,6 +14966,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exchange_sso_code_api_auth_sso_exchange_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_exchange_sso_code_api_auth_sso_exchange_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
                 };
             };
             /** @description Validation Error */

@@ -13,7 +13,7 @@ import os
 import uuid
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.responses import Response as RawResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,11 @@ from config import settings
 from models.schemas import TokenResponse
 from services.auth import auth_service
 from services.database import get_db
+from services.sso_exchange_code import (
+    ExchangeCodeUnavailableError,
+    consume_exchange_code,
+    issue_exchange_code,
+)
 from user_management.database import get_slm_db
 from user_management.models.sso import SSOProviderType
 from user_management.schemas.sso import (
@@ -134,6 +139,41 @@ def _build_callback_url(request: Request) -> str:
     # Reconstruct netloc from validated components
     netloc = hostname + (f":{port}" if port else "")
     return f"{scheme}://{netloc}/api/auth/sso/callback"
+
+
+async def _redirect_with_session_code(user) -> RedirectResponse:
+    """Mint the session for `user`, redirect with a one-time code, never the JWT (#18394)."""
+    # Convert User ORM object to dict-like structure for auth_service
+    user_dict = type(
+        "User",
+        (),
+        {
+            "username": user.username,
+            "is_admin": (user.is_platform_admin if hasattr(user, "is_platform_admin") else False),
+        },
+    )()
+    token_response = await auth_service.create_token_response(user_dict)
+    try:
+        code = await issue_exchange_code(token_response.model_dump())
+    except ExchangeCodeUnavailableError:
+        return RedirectResponse(url="/sso-callback?error=sso_unavailable", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=f"/sso-callback?code={code}", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/exchange", response_model=TokenResponse)
+async def exchange_sso_code(
+    response: Response,
+    code: str = Body(..., embed=True, min_length=1, max_length=256),
+) -> TokenResponse:
+    """Exchange a single-use SSO code for the session token (#18394)."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        payload = await consume_exchange_code(code)
+    except ExchangeCodeUnavailableError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="SSO unavailable")
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+    return TokenResponse(**payload)
 
 
 @router.get("/providers", response_model=list[ActiveProviderResponse])
@@ -274,21 +314,7 @@ async def oauth_callback(
         except Exception as audit_err:
             logger.warning("SSO audit write failed: %s", audit_err)
 
-        # Convert User ORM object to dict-like structure for auth_service
-        user_dict = type(
-            "User",
-            (),
-            {
-                "username": user.username,
-                "is_admin": (user.is_platform_admin if hasattr(user, "is_platform_admin") else False),
-            },
-        )()
-
-        token_response = await auth_service.create_token_response(user_dict)
-        return RedirectResponse(
-            url=f"/?token={token_response.access_token}",
-            status_code=status.HTTP_302_FOUND,
-        )
+        return await _redirect_with_session_code(user)
     except (SSOAuthenticationError, SSOProviderNotFoundError) as e:
         logger.error("OAuth callback failed: %s", e)
         try:
@@ -535,21 +561,7 @@ async def saml_callback(
         except Exception as audit_err:
             logger.warning("SSO audit write failed: %s", audit_err)
 
-        # Convert User ORM object to dict-like structure for auth_service
-        user_dict = type(
-            "User",
-            (),
-            {
-                "username": user.username,
-                "is_admin": (user.is_platform_admin if hasattr(user, "is_platform_admin") else False),
-            },
-        )()
-
-        token_response = await auth_service.create_token_response(user_dict)
-        return RedirectResponse(
-            url=f"/?token={token_response.access_token}",
-            status_code=status.HTTP_302_FOUND,
-        )
+        return await _redirect_with_session_code(user)
     except SSOAuthenticationError as e:
         logger.error("SAML callback failed: %s", e)
         try:
