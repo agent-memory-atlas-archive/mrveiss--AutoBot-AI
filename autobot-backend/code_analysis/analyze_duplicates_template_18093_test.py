@@ -13,7 +13,7 @@ This pins that a generated copy cannot come back as a string constant.
 import ast
 from pathlib import Path
 
-_SCRIPT = Path(__file__).with_name("analyze_duplicates.py")
+_SCRIPT = Path(__file__).parent / "scripts" / "analyze_duplicates.py"
 
 
 def _embeds_generated_command_utils(source: str) -> bool:
