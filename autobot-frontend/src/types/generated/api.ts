@@ -62965,6 +62965,52 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ChatSessionSummary
+         * @description One row of ``SessionListData.sessions`` (#15138).
+         *
+         *     Keys mirror ``_build_session_entry``. Several are deliberate duplicates
+         *     (``id``/``chatId``, ``title``/``name``, ``createdAt``/``createdTime``,
+         *     ``updatedAt``/``lastModified``) that the frontend reads under both spellings;
+         *     they are declared rather than tidied, because narrowing the payload is a
+         *     separate decision from describing it.
+         */
+        ChatSessionSummary: {
+            /** Id */
+            id?: string | null;
+            /** Chatid */
+            chatId?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Messages */
+            messages?: unknown[] | null;
+            /** Messagecount */
+            messageCount?: number | null;
+            /** Createdat */
+            createdAt?: string | null;
+            /** Createdtime */
+            createdTime?: string | null;
+            /** Updatedat */
+            updatedAt?: string | null;
+            /** Lastmodified */
+            lastModified?: string | null;
+            /** Updatedatepoch */
+            updatedAtEpoch?: number | null;
+            /** Isactive */
+            isActive?: boolean | null;
+            /** Filesize */
+            fileSize?: number | null;
+            /** Fast Mode */
+            fast_mode?: boolean | null;
+            /** Companyid */
+            companyId?: string | null;
+            /** Sessionkind */
+            sessionKind?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ChatStatsData
          * @description data payload for GET /chat/stats (#6490).
          *
@@ -80762,6 +80808,20 @@ export interface components {
          */
         LLCCompanyStatus: "onboarding" | "active" | "paused" | "offboarding" | "archived";
         /**
+         * LLCTemplateSearchResponse
+         * @description Response for GET /llc/templates/search (GH#8260).
+         */
+        LLCTemplateSearchResponse: {
+            /** Query */
+            query: string;
+            /** Results */
+            results: components["schemas"]["TemplateSearchResult"][];
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * LLMAnalyzeQueryResponse
          * @description Response for POST /llm-awareness/analyze-query.
          */
@@ -90378,6 +90438,37 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RealtimeSessionSummary */
+        RealtimeSessionSummary: {
+            /** Session Id */
+            session_id: string;
+            /** User Id */
+            user_id: string | null;
+            /** Model */
+            model: string;
+            /** Started At */
+            started_at: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Duration S */
+            duration_s: number;
+            /** Audio In S */
+            audio_in_s: number;
+            /** Audio Out S */
+            audio_out_s: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Tool Calls */
+            tool_calls: number;
+            /** Estimated Cost Usd */
+            estimated_cost_usd: number;
+            /** Disconnect Reason */
+            disconnect_reason: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * RecordClickResponse
          * @description Shape returned by POST /record_click.
@@ -94912,7 +95003,7 @@ export interface components {
          */
         SessionListData: {
             /** Sessions */
-            sessions: components["schemas"]["api__schemas_chat_rows__SessionSummary"][];
+            sessions: components["schemas"]["ChatSessionSummary"][];
             /** Count */
             count: number;
             /** Scope */
@@ -98661,6 +98752,22 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * TemplateSearchResponse
+         * @description Response for GET /templates/search.
+         */
+        TemplateSearchResponse: {
+            /** Success */
+            success: boolean;
+            /** Query */
+            query: string;
+            /** Results */
+            results: unknown[];
+            /** Total */
+            total: number;
         } & {
             [key: string]: unknown;
         };
@@ -103984,37 +104091,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** SessionSummary */
-        api__realtime_session__SessionSummary: {
-            /** Session Id */
-            session_id: string;
-            /** User Id */
-            user_id: string | null;
-            /** Model */
-            model: string;
-            /** Started At */
-            started_at: string;
-            /** Ended At */
-            ended_at: string | null;
-            /** Duration S */
-            duration_s: number;
-            /** Audio In S */
-            audio_in_s: number;
-            /** Audio Out S */
-            audio_out_s: number;
-            /** Input Tokens */
-            input_tokens: number;
-            /** Output Tokens */
-            output_tokens: number;
-            /** Tool Calls */
-            tool_calls: number;
-            /** Estimated Cost Usd */
-            estimated_cost_usd: number;
-            /** Disconnect Reason */
-            disconnect_reason: string;
-        } & {
-            [key: string]: unknown;
-        };
         /**
          * ApprovalDecision
          * @description Request body for approving or rejecting a skill approval record.
@@ -104086,68 +104162,6 @@ export interface components {
              * @description Retrieval relevance score (0–1)
              */
             score: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * SessionSummary
-         * @description One row of ``SessionListData.sessions`` (#15138).
-         *
-         *     Keys mirror ``_build_session_entry``. Several are deliberate duplicates
-         *     (``id``/``chatId``, ``title``/``name``, ``createdAt``/``createdTime``,
-         *     ``updatedAt``/``lastModified``) that the frontend reads under both spellings;
-         *     they are declared rather than tidied, because narrowing the payload is a
-         *     separate decision from describing it.
-         */
-        api__schemas_chat_rows__SessionSummary: {
-            /** Id */
-            id?: string | null;
-            /** Chatid */
-            chatId?: string | null;
-            /** Title */
-            title?: string | null;
-            /** Name */
-            name?: string | null;
-            /** Messages */
-            messages?: unknown[] | null;
-            /** Messagecount */
-            messageCount?: number | null;
-            /** Createdat */
-            createdAt?: string | null;
-            /** Createdtime */
-            createdTime?: string | null;
-            /** Updatedat */
-            updatedAt?: string | null;
-            /** Lastmodified */
-            lastModified?: string | null;
-            /** Updatedatepoch */
-            updatedAtEpoch?: number | null;
-            /** Isactive */
-            isActive?: boolean | null;
-            /** Filesize */
-            fileSize?: number | null;
-            /** Fast Mode */
-            fast_mode?: boolean | null;
-            /** Companyid */
-            companyId?: string | null;
-            /** Sessionkind */
-            sessionKind?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TemplateSearchResponse
-         * @description Response for GET /templates/search.
-         */
-        api__schemas_code__TemplateSearchResponse: {
-            /** Success */
-            success: boolean;
-            /** Query */
-            query: string;
-            /** Results */
-            results: unknown[];
-            /** Total */
-            total: number;
         } & {
             [key: string]: unknown;
         };
@@ -104696,20 +104710,6 @@ export interface components {
             } | null;
             /** Auto Rollover */
             auto_rollover?: boolean | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TemplateSearchResponse
-         * @description Response for GET /llc/templates/search (GH#8260).
-         */
-        llc__models__template__TemplateSearchResponse: {
-            /** Query */
-            query: string;
-            /** Results */
-            results: components["schemas"]["TemplateSearchResult"][];
-            /** Total */
-            total: number;
         } & {
             [key: string]: unknown;
         };
@@ -152699,7 +152699,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__schemas_code__TemplateSearchResponse"];
+                    "application/json": components["schemas"]["TemplateSearchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -178082,7 +178082,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["llc__models__template__TemplateSearchResponse"];
+                    "application/json": components["schemas"]["LLCTemplateSearchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -178709,7 +178709,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__realtime_session__SessionSummary"][];
+                    "application/json": components["schemas"]["RealtimeSessionSummary"][];
                 };
             };
             /** @description Validation Error */
