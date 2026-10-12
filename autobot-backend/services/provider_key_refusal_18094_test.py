@@ -29,7 +29,7 @@ def _clean(monkeypatch):
     monkeypatch.setattr(pkv, "_hydrated_keys", {})
     monkeypatch.setattr(pkv, "_unreadable_keys", set())
     monkeypatch.setattr(pkv, "_env_fallback_logged", set())
-    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_REACHABLE)  # empty vault; lazy-path tests set their own
 
 
 async def _hydrate(read: AsyncMock, monkeypatch) -> list[str]:

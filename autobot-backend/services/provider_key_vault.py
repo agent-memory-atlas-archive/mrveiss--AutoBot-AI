@@ -44,11 +44,10 @@ that endpoint never had:
    root key, so a held name with no usable root key is refused too. A vault
    whose rows cannot be listed (DB unreachable, session factory failing) leaves
    "does it hold this key?" unknown, so every name is refused until a hydration
-   succeeds. Env is used only where the listing found no row for that name, or
-   in a process that has not hydrated AND has no root key configured (nothing
-   can say which names are held there). Every non-lifespan process hydrates on
-   first resolution when a root key is set, and Celery workers on
-   ``worker_process_init`` (``services.provider_key_process_init``). Hydration
+   succeeds (retried with backoff on later resolutions). Env is used only where
+   the listing found no row for that name. Every process hydrates: the lifespan
+   in Phase 1, Celery workers on ``worker_process_init``, and any other process
+   on its first resolution (``services.provider_key_process_init``). Hydration
    builds a new cache and swaps it in, so readers never see a half-filled one
    and a deleted row leaves no stale value. It also records a
    ``secret_dependencies`` edge (#10088 Task 8.2) for every name whose
@@ -219,12 +218,6 @@ class VaultKeyUnavailableError(CredentialUnavailableError):
         )
 
 
-def _root_key_configured() -> bool:
-    from autobot_shared.secrets_envelope import ROOT_KEY_ENV
-
-    return bool(os.environ.get(ROOT_KEY_ENV))
-
-
 def _label(name: str) -> str:
     """A registry label for *name* -- only those are ever logged (same construction as #16444)."""
     return "".join(VAULT_RESOLVED_CREDENTIAL_NAMES & {name}) or "<unregistered name>"
@@ -244,9 +237,10 @@ def resolve_provider_key(env_var: str, config_value: str) -> str:
     vaulted = _hydrated_keys.get(env_var, "")
     if vaulted:
         return vaulted
-    if _vault_state == VAULT_NOT_HYDRATED and _root_key_configured():
-        # A non-lifespan process (CLI, script, MCP server, a worker before its init hook):
-        # read the vault once rather than serve env for a key it may hold.
+    if _vault_state in (VAULT_NOT_HYDRATED, VAULT_UNREACHABLE):
+        # A process that has not read the vault (CLI, script, MCP server, a worker before its
+        # init hook) reads it now -- listing needs no root key -- and an unreachable vault is
+        # retried with backoff, rather than serving env for a key it may hold.
         from services.provider_key_process_init import hydrate_this_process
 
         hydrate_this_process()

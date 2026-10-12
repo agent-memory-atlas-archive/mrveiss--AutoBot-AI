@@ -51,7 +51,7 @@ def _clear_hydration_cache(monkeypatch):
     """The process-lifetime hydration state must not leak between tests (hydration swaps the cache, #18094)."""
     monkeypatch.setattr(provider_key_vault, "_hydrated_keys", {})
     monkeypatch.setattr(provider_key_vault, "_unreadable_keys", set())
-    monkeypatch.setattr(provider_key_vault, "_vault_state", provider_key_vault.VAULT_NOT_HYDRATED)
+    monkeypatch.setattr(provider_key_vault, "_vault_state", provider_key_vault.VAULT_REACHABLE)
 
 
 async def test_capture_lands_in_system_vault(session):

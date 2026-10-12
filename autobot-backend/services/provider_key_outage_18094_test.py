@@ -16,7 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autobot_shared.secrets_envelope import ROOT_KEY_ENV
+from services import provider_key_process_init as init
 from services import provider_key_vault as pkv
+
+_REAL_HYDRATE = init.hydrate_this_process
 
 _ENV_VALUE = "env-maybe-rotated-9c1185a5"  # pragma: allowlist secret
 _NAME = "GROQ_API_KEY"  # pragma: allowlist secret
@@ -27,7 +30,11 @@ def _clean(monkeypatch):
     monkeypatch.setattr(pkv, "_hydrated_keys", {})
     monkeypatch.setattr(pkv, "_unreadable_keys", set())
     monkeypatch.setattr(pkv, "_env_fallback_logged", set())
-    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_REACHABLE)  # empty vault; lazy-path tests set their own
+    # No real retry against a DB from these tests; the process-init tests call _REAL_HYDRATE.
+    monkeypatch.setattr(init, "hydrate_this_process", lambda: [])
+    monkeypatch.setattr(init, "_next_retry_at", 0.0)
+    monkeypatch.setattr(init, "_backoff_s", float(init.REHYDRATE_BACKOFF_S))
 
 
 def _db_down():
@@ -158,11 +165,9 @@ async def test_a_successful_hydration_after_an_outage_restores_resolution(monkey
     assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == _ENV_VALUE
 
 
-def test_an_unhydrated_process_with_a_root_key_hydrates_before_resolving(monkeypatch) -> None:
+def test_an_unhydrated_process_hydrates_before_resolving(monkeypatch) -> None:
     """Contrast: before, a process outside the lifespan (a Celery worker) served env unread."""
-    from services import provider_key_process_init as init
-
-    monkeypatch.setenv(ROOT_KEY_ENV, "configured")
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
     calls = []
 
     def _outage():
@@ -177,9 +182,7 @@ def test_an_unhydrated_process_with_a_root_key_hydrates_before_resolving(monkeyp
 
 
 def test_a_lazily_hydrated_vault_value_wins(monkeypatch) -> None:
-    from services import provider_key_process_init as init
-
-    monkeypatch.setenv(ROOT_KEY_ENV, "configured")
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
 
     def _hydrate():
         pkv._hydrated_keys[_NAME] = "vault-value"  # pragma: allowlist secret
@@ -190,33 +193,87 @@ def test_a_lazily_hydrated_vault_value_wins(monkeypatch) -> None:
     assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == "vault-value"
 
 
-def test_without_a_root_key_an_unhydrated_process_uses_env_and_does_not_touch_the_db(monkeypatch) -> None:
-    """The stated residual: no root key and no hydration means nothing can say which names are held."""
-    from services import provider_key_process_init as init
-
+def test_without_a_root_key_an_unhydrated_process_still_refuses_held_names(monkeypatch) -> None:
+    """Contrast with the previous gate: no root key used to mean "skip hydration, serve env"."""
     monkeypatch.delenv(ROOT_KEY_ENV, raising=False)
-    monkeypatch.setattr(init, "hydrate_this_process", lambda: pytest.fail("must not hydrate without a root key"))
-    assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == _ENV_VALUE
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
+
+    def _list_rows_without_a_root_key():
+        import asyncio
+
+        with (
+            patch.object(pkv, "_find_system_secret_id", side_effect=_rows_for(_NAME)),
+            patch.object(pkv, "_register_credential_dependency", AsyncMock()),
+        ):
+            return asyncio.run(pkv.hydrate_at_startup(_factory_with(MagicMock(commit=AsyncMock()))))
+
+    monkeypatch.setattr(init, "hydrate_this_process", _list_rows_without_a_root_key)
+    with pytest.raises(pkv.VaultKeyUnavailableError, match="could not be read"):
+        pkv.resolve_provider_key(_NAME, _ENV_VALUE)
+    assert pkv.resolve_provider_key("MISTRAL_API_KEY", "mistral-env") == "mistral-env"  # pragma: allowlist secret
 
 
-def test_the_private_engine_path_classifies_a_db_failure_as_an_outage(monkeypatch) -> None:
-    from services import provider_key_process_init as init
+def test_the_private_engine_path_classifies_a_db_failure_as_an_outage_and_backs_off(monkeypatch) -> None:
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
+    attempts = []
 
     def _no_db():
+        attempts.append(1)
         raise ConnectionRefusedError("db down")
 
     monkeypatch.setattr("user_management.database.get_deployment_config", _no_db)
-    assert init.hydrate_this_process() == []
+    assert _REAL_HYDRATE() == []
     assert pkv._vault_state == pkv.VAULT_UNREACHABLE
-    assert init.hydrate_this_process() == []  # once per process: no second attempt
+    assert _REAL_HYDRATE() == []  # inside the backoff window: no second attempt
+    assert attempts == [1]
+
+
+def test_an_unreachable_vault_is_retried_after_the_backoff_and_recovers(monkeypatch) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(init.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_UNREACHABLE)
+    outcomes = iter([pkv.VAULT_UNREACHABLE, pkv.VAULT_REACHABLE])
+
+    def _fake_run(vault):
+        vault._vault_state = next(outcomes)
+        return []
+
+    monkeypatch.setattr(init, "_run_bounded", _fake_run)
+    _REAL_HYDRATE()  # due at once: fails, schedules a retry after the first backoff
+    first = init.REHYDRATE_BACKOFF_S
+    assert init._next_retry_at == clock[0] + first and init._backoff_s == first * 2
+    clock[0] += first - 1
+    assert _REAL_HYDRATE() == [] and pkv._vault_state == pkv.VAULT_UNREACHABLE  # not yet due
+    clock[0] += 1
+    _REAL_HYDRATE()  # due: succeeds, backoff resets
+    assert pkv._vault_state == pkv.VAULT_REACHABLE and init._backoff_s == float(first)
+
+
+def test_a_hydration_that_hangs_fails_closed_after_the_timeout(monkeypatch, caplog) -> None:
+    import threading
+
+    release = threading.Event()
+
+    async def _hang():
+        release.wait(5)
+        return []
+
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
+    monkeypatch.setattr(init, "HYDRATION_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(init, "_hydrate_on_private_engine", _hang)
+    with caplog.at_level(logging.ERROR):
+        assert _REAL_HYDRATE() == []
+    release.set()
+    assert pkv._vault_state == pkv.VAULT_UNREACHABLE
+    assert "hydration timed out" in caplog.text
+    assert not init._lock.locked()
 
 
 @pytest.mark.asyncio
 async def test_hydrate_this_process_is_safe_inside_a_running_loop(monkeypatch) -> None:
-    from services import provider_key_process_init as init
-
+    monkeypatch.setattr(pkv, "_vault_state", pkv.VAULT_NOT_HYDRATED)
     monkeypatch.setattr("user_management.database.get_deployment_config", _db_down)
-    assert init.hydrate_this_process() == []
+    assert _REAL_HYDRATE() == []
     assert pkv._vault_state == pkv.VAULT_UNREACHABLE
 
 
