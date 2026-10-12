@@ -585,9 +585,9 @@ class AIHardwareAccelerator:
         task_type = task.task_type
 
         if task_type == "embedding_generation":
-            return "nomic-embed-text"
-        elif task_type == "chat_inference":
-            return cfg.get_default_llm_model()
+            from autobot_shared.embedding_model import active_npu_worker_model
+
+            return active_npu_worker_model()  # no stored index here (#18143)
         elif task_type == "text_classification":
             return "text-classification-model"
         else:
@@ -685,10 +685,10 @@ class AIHardwareAccelerator:
         from utils.semantic_chunker import get_semantic_chunker
 
         chunker = get_semantic_chunker()
-        await chunker._initialize_model()
+        await chunker.load_embedding_model()
 
         sentences = [content] if isinstance(content, str) else content
-        embeddings = await chunker._compute_sentence_embeddings_async(sentences)
+        embeddings = await chunker.embed_sentences(sentences)
         raw_embedding = embeddings[0] if len(embeddings) > 0 else np.zeros(HardwareAcceleratorConfig.MINILM_OUTPUT_DIM)
 
         if self.text_projection:

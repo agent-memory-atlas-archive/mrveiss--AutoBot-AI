@@ -37,6 +37,20 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_EGRESS_INTERNAL_ORIGINS_TTL_S",
+        type=int,
+        default=60,
+        description=(
+            "Seconds the egress policy reuses the origins returned by registered internal-origin "
+            "providers (e.g. SLM-managed nodes) before asking them again (#17576). Static origins "
+            "from the SSOT are never cached. A provider that raises is logged and skipped."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_EXECUTION_MEMORY_LIMIT",
         type=str,
         default="512m",
@@ -46,6 +60,20 @@ register_env_var(
             "Cold-start tasks size their own cap from the task's resource limits. Raising it "
             "lets warm-pool code use more memory before the kernel OOM-kills it "
             "(autobot_shared/container_hardening.py)."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S",
+        type=int,
+        default=5,
+        description=(
+            "Seconds one internal-origin provider may run before it is abandoned for this refresh "
+            "(#17576). A provider that times out or raises is logged and skipped; the static SSOT "
+            "origins still apply."
         ),
         component="security",
     )

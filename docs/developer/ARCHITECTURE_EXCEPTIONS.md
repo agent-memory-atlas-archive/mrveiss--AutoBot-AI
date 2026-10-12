@@ -264,6 +264,37 @@ the guarded fetch applies.
 **Grep check:** `grep -rn "guard_egress\|ssrf_guard" autobot-slm-backend/` should
 stay empty, or this entry needs replacing with the migration.
 
+## SLM event severity enums — not aliased to the shared Severity
+
+**File:** `autobot-slm-backend/models/database.py:195` (`EventSeverity`), `:729` (`SecurityEventSeverity`)
+**Issue:** #18098
+
+**Pattern bypassed:** the one canonical `autobot_shared.status_enums.Severity`.
+
+**Reason:** (1) `models/database.py` must stay path-loadable without a package path
+(`database.py:35`, `:215`; the migration gate;
+`migrations/migrate_system_secrets_to_vault_test.py:87`;
+`tests/services/test_security_posture_auditor.py:28-50`), and the bare name
+`status_enums` there resolves to the SLM's own `autobot-slm-backend/status_enums.py`
+(`database.py:41`; `conftest.py:399-405`), so `autobot_shared.status_enums` cannot be
+imported there. (2) Both are `(str, Enum)`, persisted as `.value` into indexed
+`String(16)` columns (`database.py:235`, `:801`). (3) `api/security.py:425`
+`for sev in SecurityEventSeverity:` builds the threat-summary keys, so an alias would
+grow the response from 4 to 10 keys.
+
+**What keeps it safe instead:** the values are a strict subset of the canonical
+lowercase values; every consumer uses `.value` (the consumer audit found no
+str-equality, no member JSON and no `Enum` column); the guard
+`repo_tests/severity_enum_fork_guard_18098_test.py` records them as out of its scan.
+
+**Revisit when:** `models/database.py` stops being path-loaded, or the canonical module
+gains a subset ladder usable at the iteration site.
+
+**Grep check:** `grep -n "class .*Severity(str, enum.Enum)\|class .*Severity(str, Enum)"
+autobot-slm-backend/models/database.py` should list exactly these two. (The same
+pattern over all of `models/` also lists `ConflictSeverity` in `manifest.py`, a
+different vocabulary.)
+
 ## SLM Recovery Page — No i18n Runtime, English-Only
 
 **File:** `autobot-slm-backend/static/recovery.html`

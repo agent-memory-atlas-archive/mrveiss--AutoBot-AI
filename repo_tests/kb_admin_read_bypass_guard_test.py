@@ -63,9 +63,9 @@ PASS_THROUGH = frozenset({"autobot-backend/knowledge/search_filters.py"})
 #: Accepted only while the helper's own body in :data:`HELPER_HOME` passes ``is_admin`` (asserted).
 CANONICAL_READ_HELPERS = frozenset({"can_read_fact", "authorize_fact_read"})
 HELPER_HOME = "autobot-backend/knowledge/search_filters.py"
-#: Explicit read APIs plus the caller-driven pipeline route that reads one document by id (#18184).
-#: Adding a file needs the same owner decision as :data:`EXPLICIT_READ_APIS`.
-HELPER_CALLERS = EXPLICIT_READ_APIS | {"autobot-backend/api/knowledge_graph_routes.py"}
+#: Only the explicit read APIs may call the canonical read helpers (#18184). run_pipeline writes graph
+#: records and uses the write check (`authorize_fact_write`), so it is not a read caller.
+HELPER_CALLERS = EXPLICIT_READ_APIS
 
 
 def _is_production(rel: str) -> bool:
@@ -93,7 +93,7 @@ def _production_files(root: Path) -> list[str]:
 REACH = declare(
     "kb-admin-read-bypass",
     discover=_production_files,
-    floor=2567,
+    floor=2652,  # re-pinned mid-window: population 2752, window [2552, 2752]
     growth=200,
     skips=0,
     # The scope moves from prose to data (#17844): `declare` renders the same sentence from

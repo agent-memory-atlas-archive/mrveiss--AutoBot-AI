@@ -21,10 +21,16 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# A backend tool (#18288): it deliberately drives backend internals. It puts the backend and the
+# repository root (for `autobot_shared`) on its own path, so it runs from any directory with no
+# PYTHONPATH; the backend's Python dependencies must be installed.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _root in (_REPO_ROOT / "autobot-backend", _REPO_ROOT):
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
 
 from autobot_shared.redis_utils import decode_redis_list
 from config import ConfigManager
@@ -144,6 +150,33 @@ class KnowledgeConsistencyVerifier:
         self.critical_errors = []
         self.warnings = []
 
+    def _verify_chunker_vector_shape(self, chunker) -> bool:
+        """--deep: the chunker's vector width must equal the KB's. False on a critical mismatch."""
+        try:
+            import asyncio
+
+            test_text = "test chunker-kb model consistency"
+            kb_obj = KnowledgeBase()
+            kb_vec = kb_obj.embed_model.get_text_embedding(test_text)
+            chunker_vecs = asyncio.run(chunker.embed_sentences([test_text]))
+            if chunker_vecs is None or len(chunker_vecs[0]) != len(kb_vec):
+                chunker_dim = len(chunker_vecs[0]) if chunker_vecs else "None"
+                self.critical_errors.append(
+                    f"CRITICAL: Chunker embedding dimension ({chunker_dim}) "
+                    f"!= KB embedding dimension ({len(kb_vec)})"
+                )
+                logger.error(
+                    "❌ --deep: chunker dim %s != KB dim %s",
+                    chunker_dim,
+                    len(kb_vec),
+                )
+                return False
+            logger.info("✅ --deep: chunker vector shape verified (dim=%s)", len(kb_vec))
+        except Exception as exc:
+            self.warnings.append(f"--deep chunker vector check failed: {exc}")
+            logger.warning("--deep chunker vector check failed: %s", exc)
+        return True
+
     def verify_embedding_model_consistency(self, deep: bool = False) -> bool:
         """CRITICAL: Ensure all components use identical embedding models"""
         logger.info("🔍 CRITICAL CHECK: Verifying embedding model consistency...")
@@ -194,29 +227,8 @@ class KnowledgeConsistencyVerifier:
                     )
                     if deep and chunker_model and chunker_model == kb_embedding_model:
                         # String compare passed; verify vector shape matches too.
-                        try:
-                            import asyncio
-
-                            test_text = "test chunker-kb model consistency"
-                            kb_obj = KnowledgeBase()
-                            kb_vec = kb_obj.embed_model.get_text_embedding(test_text)
-                            chunker_vecs = asyncio.run(chunker._compute_embeddings([test_text]))
-                            if chunker_vecs is None or len(chunker_vecs[0]) != len(kb_vec):
-                                chunker_dim = len(chunker_vecs[0]) if chunker_vecs else "None"
-                                self.critical_errors.append(
-                                    f"CRITICAL: Chunker embedding dimension ({chunker_dim}) "
-                                    f"!= KB embedding dimension ({len(kb_vec)})"
-                                )
-                                logger.error(
-                                    "❌ --deep: chunker dim %s != KB dim %s",
-                                    chunker_dim,
-                                    len(kb_vec),
-                                )
-                                return False
-                            logger.info("✅ --deep: chunker vector shape verified (dim=%s)", len(kb_vec))
-                        except Exception as exc:
-                            self.warnings.append(f"--deep chunker vector check failed: {exc}")
-                            logger.warning("--deep chunker vector check failed: %s", exc)
+                        if not self._verify_chunker_vector_shape(chunker):
+                            return False
                 except (ImportError, AttributeError, RuntimeError, OSError) as e:
                     # SemanticChunker() can raise on missing config,
                     # failed model load, or Redis-init failure.

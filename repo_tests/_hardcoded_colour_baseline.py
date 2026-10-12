@@ -131,7 +131,12 @@ IMPORTANT_DECLARATIONS: dict[str, int] = {
     "components/visualizations/ServiceMessageTimeline.vue": 1,
     "views/AdminUsersView.vue": 1,
     "views/CustomDashboard.vue": 1,
+    # The control plane (#17567). Prefixed so its paths cannot collide with the
+    # user frontend's. Keyed like the rest; no per-file reason is claimed.
+    "slm:components/agents/OrgChartTab.vue": 1,
+    "slm:components/monitoring/GrafanaDashboard.vue": 1,
+    "slm:views/AgentsView.vue": 2,
 }
 
 #: Frozen total, asserted separately.
-TOTAL_IMPORTANT = 58
+TOTAL_IMPORTANT = 62

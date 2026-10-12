@@ -104,7 +104,7 @@ const healthClass = computed(() => {
   switch (fleetStore.overallHealth) {
     case 'healthy': return 'bg-success-500'
     case 'degraded': return 'bg-warning-500'
-    case 'unhealthy': return 'bg-danger-500'
+    case 'unhealthy': return 'bg-error-500'
     default: return 'bg-gray-400'
   }
 })
@@ -235,7 +235,7 @@ onUnmounted(() => {
           <span>{{ fleetStore.fleetSummary.degraded_nodes }}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-danger-500">{{ $t('common.sidebar.unhealthy') }}</span>
+          <span class="text-error-500">{{ $t('common.sidebar.unhealthy') }}</span>
           <span>{{ fleetStore.fleetSummary.unhealthy_nodes }}</span>
         </div>
       </div>

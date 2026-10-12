@@ -1286,7 +1286,10 @@
         "envVarRecommendations": "Recomendaciones de variables de entorno",
         "sampleHardcodedValues": "Valores codificados de muestra",
         "noHardcodedValues": "No se encontraron valores de entorno codificados. ¡Tu configuración se ve limpia!",
-        "noData": "No hay datos de análisis ambientales disponibles."
+        "noData": "No hay datos de análisis ambientales disponibles.",
+        "modelHint": "Modelo: {model}",
+        "modelLoading": "cargando…",
+        "modelServerDefault": "predeterminado del servidor"
       },
       "ownership": {
         "title": "Análisis de propiedad del código",
@@ -5822,6 +5825,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "Tema",
       "title": "Preferences",
       "reset": "Reset",
       "resetAll": "Reset all preferences to defaults",
@@ -5876,6 +5880,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "Sistema",
+      "highContrast": "Alto contraste",
+      "monochrome": "Monocromo",
+      "accentThemeDescription": "Predeterminado del tema: el color primario propio del tema",
+      "baseThemeChanged": "Tema base cambiado a {name}",
+      "accentChanged": "Color de acento cambiado a {name}",
+      "presetChanged": "Preajuste de tema cambiado a {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

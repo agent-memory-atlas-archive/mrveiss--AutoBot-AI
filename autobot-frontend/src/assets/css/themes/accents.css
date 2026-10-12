@@ -148,8 +148,7 @@
 
 @supports (color: oklch(0 0 0)) {
   /* Blue (default) */
-  [data-accent="blue"],
-  :root {
+  [data-accent="blue"] {
     --color-primary: oklch(62.3% 0.188 259.8);
     --color-primary-hover: oklch(54.6% 0.215 262.9);
     --color-primary-active: oklch(48.8% 0.217 264.4);

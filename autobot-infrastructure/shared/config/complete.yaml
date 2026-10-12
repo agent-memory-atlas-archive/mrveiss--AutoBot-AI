@@ -590,14 +590,8 @@ monitoring:
     real_time_updates: true # Enable WebSocket real-time updates
 
 # LLM Optimization Configuration
+# No model name lives here: the tier map in autobot_shared/ssot_config.py is the only model authority (#15502).
 llm:
-  # Specific model assignments for different tasks
-  models:
-    rag: "gemma3:270m"              # Lightweight model for RAG operations (291MB)
-    chat: "llama3.2:1b-instruct-q4_K_M"  # Balanced model for chat (807MB)
-    classification: "gemma3:270m"    # Fast model for message classification
-    fallback: "qwen3.5:9b"  # Quality model for complex tasks (#2585)
-
   # Model optimization settings
   optimization:
     performance_threshold: 0.8  # Minimum performance threshold for model selection
@@ -610,9 +604,6 @@ llm:
   tiered_routing:
     enabled: true                    # Enable/disable tiered model routing
     complexity_threshold: 3.0        # Score threshold (0-10): < threshold uses simple tier
-    models:
-      simple: "gemma2:2b"            # Model for simple requests (score < 3)
-      complex: "qwen3.5:9b" # Model for complex requests (score >= 3)
     fallback_to_complex: true        # Fallback to complex tier if simple fails
     logging:
       log_scores: true               # Log complexity scores for debugging
@@ -622,10 +613,6 @@ llm:
   fallback:
     strategy: "performance"    # "performance", "size", "speed"
     max_retries: 3            # Maximum retries before falling back
-    fallback_models:          # Ordered list of fallback models
-      - "qwen3.5:9b"
-      - "gemma2:2b"
-      - "llama3.2:1b"
 
   # Performance targets
   targets:
@@ -633,16 +620,8 @@ llm:
     min_tokens_per_second: 5  # Minimum tokens/second for acceptable performance
     min_success_rate: 0.85    # Minimum success rate threshold
 
-  # Existing LLM Configuration (continued)
-  fallback_models:
-    - "qwen3.5:9b"
-    - "gemma2:2b"
-    - "llama3.2:1b"
-  emergency_fallback_model: "llama3.2:1b"
-
-  # Embedding settings
+  # Embedding settings (the model name comes from the tier map)
   embedding:
-    model: "nomic-embed-text:latest"
     dimensions: 768
     test_timeout: 10
 
@@ -736,7 +715,6 @@ agents:
   # Knowledge Base Librarian Agent
   kb_librarian:
     enabled: true
-    model: "llama3.2:1b-instruct-q4_K_M"
     provider: "ollama"
     timeout_seconds: 15.0
     max_results: 5
@@ -747,7 +725,6 @@ agents:
   # Research Agent (Web Research)
   research:
     enabled: true
-    model: "llama3.2:1b-instruct-q4_K_M"
     provider: "ollama"
     timeout_seconds: 30.0
     max_results: 5
@@ -763,7 +740,6 @@ agents:
   # Classification Agent
   classification:
     enabled: true
-    model: "gemma2:2b"
     provider: "ollama"
     timeout_seconds: 10.0
     priority: 1
@@ -771,7 +747,6 @@ agents:
   # Chat Agent
   chat:
     enabled: true
-    model: "llama3.2:1b-instruct-q4_K_M"
     provider: "ollama"
     timeout_seconds: 20.0
     priority: 1
@@ -779,7 +754,6 @@ agents:
   # System Commands Agent
   system_commands:
     enabled: true
-    model: "llama3.2:1b-instruct-q4_K_M"
     provider: "ollama"
     timeout_seconds: 15.0
     priority: 3
@@ -787,7 +761,6 @@ agents:
   # Security Scanner Agent
   security_scanner:
     enabled: true
-    model: "llama3.2:1b-instruct-q4_K_M"
     provider: "ollama"
     timeout_seconds: 30.0
     priority: 3
@@ -795,7 +768,6 @@ agents:
   # Code Analysis Agent
   code_analysis:
     enabled: true
-    model: "llama3.2:1b-instruct-q4_K_M"
     provider: "ollama"
     timeout_seconds: 25.0
     priority: 2
@@ -804,7 +776,6 @@ agents:
 agent_global:
   default_timeout: 20.0
   default_provider: "ollama"
-  default_model: "llama3.2:1b-instruct-q4_K_M"
   max_concurrent_agents: 3
   agent_pool_size: 5
   health_check_interval: 300

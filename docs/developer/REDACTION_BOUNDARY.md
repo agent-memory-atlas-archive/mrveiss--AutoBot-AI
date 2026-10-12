@@ -21,7 +21,7 @@ secret/PII types. Calling someone else's redactor does not count.
 
 | module | own vocabulary | match | shape it owns | census |
 |---|---|---|---|---|
-| `autobot_shared/secret_redaction.py` | `CREDENTIAL_SUFFIXES` + `AUTHORIZATION_TERMS` + `BROAD_ONLY_STEMS` | `MatchPolicy.PRECISE` / `BROAD` | field names, mappings, log lines, free-text credentials | in |
+| `autobot_shared/secret_redaction.py` (+ its vocabulary sibling `secret_redaction_vocabulary.py`) | `CREDENTIAL_SUFFIXES` + `AUTHORIZATION_TERMS` + `BROAD_ONLY_STEMS` | `MatchPolicy.PRECISE` / `BROAD` | field names, mappings, log lines, free-text credentials | in |
 | `autobot-backend/a2a/pii_pipeline.py` | `PIIType` + regex detectors | regex | PII types and BLOCK/REDACT/HASH policy | in |
 | `autobot-backend/llm_shared/credential_redaction.py` | `API_KEY_PATTERNS` | regex | dict / log-record redaction (LLM layer); keys via `BROAD` | in |
 | `autobot_shared/security/redaction.py` | none | -- | AWS ARN identifiers, log-value neutralisation; re-exports `redact_text` / `redact_mapping` | out (#17336) |
@@ -73,6 +73,41 @@ uses `is_credential_entry`, and
 and stay masked.
 
 
+**One recursive mapping redactor (#18205).** `redact_nested` is the only one. `redact_dict` composes it with
+`exempt_counts=False` (it always masked `max_tokens`, so no name leaves its masked set) and
+`extra_scan=redact_string` (its own `API_KEY_PATTERNS`, including the 32+ character generic key, run over every
+string left unmasked; `replay_service._redact_sensitive` / `_redact_log_dict`, `safe_repr` and
+`CredentialRedactionFilter` all depend on that). **Disclosure fix:** `redact_dict` used to reveal
+`value[:4]...value[-4:]` of a credential string and `***` for other types; it now returns the fixed-width
+`REDACTED_PLACEHOLDER` for both, because eight characters of a key are a disclosure. `redact_api_key` (used by
+`redact_string`'s `API_KEY_PATTERNS` matches inside free text, so `CredentialRedactionFilter` and `safe_repr`)
+returns the same placeholder, so no `llm_shared` path reveals any part of a key. Behaviour that
+changed: tuples and sets are now walked (the old walk skipped them), and `None`/`""` under a credential name
+is returned as-is (nothing to hide) instead of `***`.
+
+**Behaviour that changed in `redact_nested` / `redact_dict` (#18205).**
+- A URL under a credential name is masked whole by `redact_dict` (`mask_credential_urls=True`, so its masked set
+  never shrinks against base: `webhook_secret_url`, `token_url`, `auth_url` all `**********`). `redact_nested`'s
+  default masks whole too, except under a plain endpoint name (`token_url`, `auth_url`, `oauth_token_endpoint`,
+  `authorization_url`, `db_dsn`): every name part is one of `ENDPOINT_NAME_WORDS`, so the URL keeps its host and
+  loses userinfo and credential query params. `webhook_secret_url`, `api_key_url` and `signed_token_url` are
+  masked whole.
+- Leaves of type `datetime`, `date`, `time`, `timedelta`, `UUID` and `Decimal` pass through under an ordinary
+  name (replay snapshots carry them; base passed them). Under a credential name they are masked. Any other
+  type, `bytes` included, still fails closed.
+
+**Whole-token nouns (#18194).** `pin` and `passcode` are credentials too, but `pin` is also a verb and
+a prefix (`pin_memory`, `pinned_revision`, `spinner`, `opinion`), so they are not suffix or substring
+nouns. `secret_redaction_vocabulary.WHOLE_TOKEN_NOUNS` is consulted by BOTH policies: the name is split
+on `_ - .` and camelCase, and it matches when its last tokens are `pin`, `pin code`, `pincode`, `pin hash|digest|salt` or `passcode`
+(`pin`, `user_pin`, `pinCode`, `card.pin`, `pin_hash`, `passcode` masked; `pin_length`, `pin_memory`,
+`pinned_revision`, `spinner`, `opinion`, `pinyin` unmasked). Never add them to `BROAD_FRAGMENTS`: it is
+substring-matched and feeds `credential_redaction.SENSITIVE_KEYS`.
+**Consequence of the owner's whole-word ruling, not a bug:** `gpio_pin`, `led_pin` and `version_pin` ARE masked,
+because their last token is `pin` (pinned by `test_a_pin_in_any_other_sense_is_masked_too_by_the_whole_word_ruling`). The vocabulary and matcher live in
+`secret_redaction_vocabulary.py` (split from `secret_redaction.py` for the 600-line ceiling); it is the same
+canonical module, re-exported, and the census guard treats the pair as one home.
+
 `BROAD` is a superset of `PRECISE` by construction (same nouns, plus
 `AUTHORIZATION_TERMS` and `BROAD_ONLY_STEMS`, which would over-mask as
 suffixes: `use_auth` is a flag, `is_private` is not a secret).
@@ -88,25 +123,25 @@ Recorded at `#17336` / `#17337` so that no site silently changed policy.
 | `redact_mapping` (slm `code_sync` extra-vars) | substring, 8 fragments | `BROAD` |
 | `redact_nested` (`GET /api/llm/config` and `/current` response bodies, #18193) | none (new caller) | `BROAD`, `exempt_counts=True` |
 | `redact_text` (slm `monitoring`, bedrock errors) | text regex | same regex, moved into `secret_redaction` |
-| `credential_redaction.redact_dict` | normalized substring | `BROAD` |
+| `credential_redaction.redact_dict` | normalized substring | `BROAD`, `exempt_counts=False`: a thin composition over `redact_nested` (#18205) |
 | `cot_events._is_sensitive` | own 13-fragment substring | `BROAD` |
 | `portability._scrub_adapter_config` | own 12-name exact match | `PRECISE` (`exempt_counts`; `False`/`None`/`True` kept except `True` under the 12 names) |
 | `config_revision_service._is_secret_key` | own 5-fragment substring | `BROAD` |
 
 Every migration only **widened** the masked set. Measured per caller over
-`autobot_shared/redaction_corpus_17336.txt` (3,384 names) against a frozen copy of
+`autobot_shared/redaction_corpus_17336.txt` (3,403 names) against a frozen copy of
 what `origin/main` masked at that caller
 (`secret_redaction_policy_17336_test.py::test_no_name_leaves_the_masked_set_at_any_caller`,
 values int, float, digit string, JWT and `True`):
 
 | caller | masked on main | here: int | digit string | JWT | `True` | removed |
 |---|---|---|---|---|---|---|
-| `redact_value` / `RedactedReprMixin` / URL query (`PRECISE`) | 1131 | 1131 | 1392 | 1392 | 1392 | 0 |
-| `redact_mapping` (`BROAD`) | 1983 | 2437 | 2437 | 2437 | 2437 | 0 |
-| `credential_redaction.redact_dict` (`BROAD`) | 2382 | 2437 | 2437 | 2437 | 2437 | 0 |
-| `cot_events` (`BROAD`) | 1831 | 2437 | 2437 | 2437 | 2437 | 0 |
-| `config_revision_service` (`BROAD`) | 1590 | 2437 | 2437 | 2437 | 2437 | 0 |
-| `portability` export (`PRECISE`, `exempt_counts`) | 14 | 1040 | 1392 | 1392 | 14 | 0 |
+| `redact_value` / `RedactedReprMixin` / URL query (`PRECISE`) | 1132 | 1143 | 1404 | 1404 | 1404 | 0 |
+| `redact_mapping` (`BROAD`) | 1984 | 2449 | 2449 | 2449 | 2449 | 0 |
+| `credential_redaction.redact_dict` (`BROAD`) | 2384 | 2449 | 2449 | 2449 | 2449 | 0 |
+| `cot_events` (`BROAD`) | 1831 | 2449 | 2449 | 2449 | 2449 | 0 |
+| `config_revision_service` (`BROAD`) | 1590 | 2449 | 2449 | 2449 | 2449 | 0 |
+| `portability` export (`PRECISE`, `exempt_counts`) | 14 | 1052 | 1404 | 1404 | 14 | 0 |
 
 The export layer (`llc/services/portability_export_names.py`, the one owner of the rule) keeps `False`/`None`
 and a `True` under any name outside main's 12 exact names (`verify_cert: true` round-trips). A `True`
@@ -122,11 +157,32 @@ no cell removes anything.
 | an object whose `__repr__` must not leak config | `secret_redaction.RedactedReprMixin` | hand-written `__repr__` |
 | free text that may contain a credential | `secret_redaction.redact_content` | a new regex |
 | a nested dict/list that leaves in an API response body (credentials at any depth, URL userinfo) | `secret_redaction.redact_nested` (`BROAD`; masks like `redact_value`, copies, keeps non-credential values and types) | `redact_mapping` (flat, `***`), a per-route key list |
+| a bare `user:password@host[:port]` value (no `scheme://`) | applied by `redact_value` and `redact_nested` through `secret_redaction.redact_schemeless_userinfo` (#18206): whole-value only, so emails, `host:port`, `mailto:` and prose are unchanged. Not applied in `redact_text`/`redact_content`: free text has no value boundary, and `note:bob@example.com` would read as userinfo | a per-field regex |
 | a raw log line, or an extra-vars mapping | `secret_redaction.redact_text` / `.redact_mapping` | `redact_content` (it does not mask `Authorization:` headers) |
 | a provider exception that may name an AWS account | `security/redaction.redact_provider_error` | a new ARN regex |
 | text leaving the process to a peer or an LLM, needing a **policy** (block vs redact vs hash) | `a2a.pii_pipeline.scrub_outbound` | `redact_content` -- it has no policy and cannot block |
-| a dict or log record in the LLM layer | `llm_shared.credential_redaction.redact_dict` | `redact_mapping` |
+| a dict or log record in the LLM layer | `llm_shared.credential_redaction.redact_dict` (composes `redact_nested`; adds the `API_KEY_PATTERNS` content scan) | `redact_mapping` |
 | a raw chat message | `security.chat_message_safety.scan_chat_message` | any of the above directly |
+
+### Scheme-less userinfo inventory (#18206)
+
+Config fields that can hold a `user:pass@host` value (verified by grep, `file:line`; no value is copied here):
+
+* `autobot_shared/ssot_config.py`: `database_url` (:1627), `redis_url` (:1801), `custom_endpoint` (:334),
+  `ollama_gpu_endpoint` (:338), `jaeger_endpoint` (:1695).
+* `autobot-slm-backend/config.py`: `database_url` (:206), `slm_users_database_url` (:212),
+  `autobot_users_database_url` (:218), `redis_url` (:271, env `SLM_REDIS_URL`).
+* `.env.example`: `AUTOBOT_REDIS_URL` (:153), `CELERY_BROKER_URL` (:367, commented out).
+* Ansible templates: `{{ db_env_prefix }}_DATABASE_URL` and the per-database `*_DATABASE_URL`
+  (`autobot-slm-backend/ansible/roles/postgresql/templates/db-credentials.env.j2:21,23`);
+  `AUTOBOT_REDIS_URL` (`autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2:34,37`).
+* Proxy settings: none found (`grep -rniE "(https?_proxy|proxy_url)"` over `autobot_shared/`, `config/`,
+  `.env.example`, `autobot-slm-backend/config.py` and `autobot-slm-backend/ansible/`).
+
+Every one is documented and templated in `scheme://` form, which `redact_url_userinfo` already handles. No parser
+accepts the scheme-less form: SQLAlchemy `make_url` raises `ArgumentError` and `redis.Redis.from_url` raises
+`ValueError` on `user:pass@host`. The scheme-less rule is therefore defence in depth for a value pasted into a
+free-form field, not a form these settings take.
 
 ## Adding a detector
 

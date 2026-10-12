@@ -69,43 +69,14 @@ class TimingConstants:
     ERROR_RECOVERY_LONG_DELAY = 30.0
 
 
-class DeploymentMode(Enum):
-    """Deployment modes (mirrors backend utils/service_registry.py)."""
-
-    LOCAL = "local"
-    DOCKER_LOCAL = "docker_local"
-    DISTRIBUTED = "distributed"
-    KUBERNETES = "kubernetes"
-    CLOUD = "cloud"
-
-
-class ServiceRegistry:
-    """Env-driven standalone stand-in for the backend ServiceRegistry."""
-
-    def __init__(self):
-        """Initialize registry from environment."""
-        self.deployment_mode = self._detect_deployment_mode()
-        self.services: Dict[str, str] = {}
-
-    def update_service_url(self, name: str, url: str) -> None:
-        """Point a service at a new base URL.
-
-        In-process only: this standalone stand-in has no persistent store —
-        the canonical registry lives in autobot-backend/utils/service_registry.py.
-        """
-        self.services[name] = url
-
-    @staticmethod
-    def _detect_deployment_mode() -> DeploymentMode:
-        """Detect deployment mode from env, falling back to container heuristic."""
-        mode = os.environ.get("AUTOBOT_DEPLOYMENT_MODE", "").lower()
-        if mode:
-            try:
-                return DeploymentMode(mode)
-            except ValueError:
-                logger.warning("Invalid AUTOBOT_DEPLOYMENT_MODE: %s", mode)
-        return DeploymentMode.DOCKER_LOCAL if os.path.exists("/.dockerenv") else DeploymentMode.LOCAL
-
+# #18132: these were defined in six scripts with six distinct class bodies -- one
+# copied class, each copy trimmed to what its script used. The union now lives in
+# deployment_registry.py beside this file.
+from deployment_registry import (  # noqa: E402
+    SERVICE_DEFINITIONS,
+    DeploymentMode,
+    ServiceRegistry,
+)
 
 _registry: Optional[ServiceRegistry] = None
 
@@ -114,7 +85,11 @@ def get_service_registry() -> ServiceRegistry:
     """Get the process-wide ServiceRegistry instance."""
     global _registry
     if _registry is None:
-        _registry = ServiceRegistry()
+        # #18132: this script filled the registry itself through update_service_url, so
+        # its ServiceRegistry started EMPTY. The shared class builds URLs eagerly by
+        # default, so the original behaviour is preserved explicitly rather than by
+        # accident of which copy it used.
+        _registry = ServiceRegistry(populate_services=False)
     return _registry
 
 
@@ -200,25 +175,25 @@ class ZeroDowntimeDeployer:
             "traffic_switch_timeout": 60,
             "services": {
                 "backend": {
-                    "port": 8001,
+                    "port": SERVICE_DEFINITIONS["backend"].port,
                     "health_endpoint": "/api/system/health",
                     "startup_time": 30,
                     "dependencies": ["redis", "ai-stack"],
                 },
                 "frontend": {
-                    "port": 5173,
+                    "port": SERVICE_DEFINITIONS["frontend"].port,
                     "health_endpoint": "/",
                     "startup_time": 20,
                     "dependencies": ["backend"],
                 },
                 "ai-stack": {
-                    "port": 8080,
+                    "port": SERVICE_DEFINITIONS["ai-stack"].port,
                     "health_endpoint": "/health",
                     "startup_time": 45,
                     "dependencies": ["redis"],
                 },
                 "npu-worker": {
-                    "port": 8081,
+                    "port": SERVICE_DEFINITIONS["npu-worker"].port,
                     "health_endpoint": "/health",
                     "startup_time": 25,
                     "dependencies": ["redis"],

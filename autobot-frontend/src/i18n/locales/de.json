@@ -1286,7 +1286,10 @@
         "envVarRecommendations": "Empfehlungen für Umgebungsvariablen",
         "sampleHardcodedValues": "Beispiel für hartcodierte Werte",
         "noHardcodedValues": "Es wurden keine hartcodierten Umgebungswerte gefunden. Ihre Konfiguration sieht sauber aus!",
-        "noData": "Es liegen keine Umweltanalysedaten vor."
+        "noData": "Es liegen keine Umweltanalysedaten vor.",
+        "modelHint": "Modell: {model}",
+        "modelLoading": "wird geladen …",
+        "modelServerDefault": "Server-Standard"
       },
       "ownership": {
         "title": "Code-Besitzanalyse",
@@ -5822,6 +5825,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "Design",
       "title": "Preferences",
       "reset": "Reset",
       "resetAll": "Reset all preferences to defaults",
@@ -5876,6 +5880,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "System",
+      "highContrast": "Hoher Kontrast",
+      "monochrome": "Monochrom",
+      "accentThemeDescription": "Design-Standard – die Primärfarbe des Designs",
+      "baseThemeChanged": "Basisdesign geändert zu {name}",
+      "accentChanged": "Akzentfarbe geändert zu {name}",
+      "presetChanged": "Designvorlage geändert zu {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

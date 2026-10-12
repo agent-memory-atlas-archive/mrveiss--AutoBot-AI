@@ -69,7 +69,7 @@ backend_nginx_port: 8443
 frontend_port: 443
 redis_port: 6379
 npu_worker_port: 8081
-ai_stack_port: 11434
+# ai_stack_port: not defined here -- inventory/group_vars/all.yml is the one authority (#17856)
 browser_service_port: 3000
 ollama_port: 11434
 vnc_port: 6080

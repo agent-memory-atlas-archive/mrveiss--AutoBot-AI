@@ -283,7 +283,6 @@ class PhaseValidationCriteria:
             "files": [
                 "autobot-backend/utils/database_pool.py",
                 "autobot-backend/utils/advanced_cache_manager.py",
-                "autobot-backend/utils/cache_manager.py",
             ],
             "directories": ["autobot-backend/utils/", "autobot-backend/services/"],
             "endpoints": ["/api/metrics/system/health"],

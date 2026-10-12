@@ -176,7 +176,7 @@ async def _process_embedding_batch(
     Issue #620: Extracted from _generate_batch_embeddings_fallback. Issue #620.
     """
     try:
-        batch_embeddings = await chunker._compute_sentence_embeddings_async(batch_docs)
+        batch_embeddings = await chunker.embed_sentences(batch_docs)
         result = _convert_embeddings_to_lists(batch_embeddings)
 
         if total_docs > 100 and (batch_index + batch_size) % (batch_size * 5) == 0:
@@ -218,7 +218,7 @@ async def _generate_batch_embeddings_fallback(
 
     try:
         chunker = get_semantic_chunker()
-        await chunker._initialize_model()
+        await chunker.load_embedding_model()
     except Exception as e:
         logger.warning("Semantic chunker unavailable: %s", e)
         return []

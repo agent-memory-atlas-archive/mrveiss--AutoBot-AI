@@ -1296,7 +1296,10 @@
         "envVarRecommendations": "Environment Variable Recommendations",
         "sampleHardcodedValues": "Sample Hardcoded Values",
         "noHardcodedValues": "No hardcoded environment values found. Your configuration looks clean!",
-        "noData": "No environment analysis data available."
+        "noData": "No environment analysis data available.",
+        "modelHint": "Model: {model}",
+        "modelLoading": "loading…",
+        "modelServerDefault": "server default"
       },
       "ownership": {
         "title": "Code Ownership Analysis",
@@ -5829,6 +5832,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "Theme",
       "title": "Preferences",
       "reset": "Reset",
       "resetAll": "Reset all preferences to defaults",
@@ -5883,6 +5887,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "System",
+      "highContrast": "High contrast",
+      "monochrome": "Monochrome",
+      "accentThemeDescription": "Theme default — the theme's own primary colour",
+      "baseThemeChanged": "Base theme changed to {name}",
+      "accentChanged": "Accent color changed to {name}",
+      "presetChanged": "Theme preset changed to {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

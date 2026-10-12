@@ -55,7 +55,6 @@
     redis_host: "{{ infrastructure.hosts.database }}"
     redis_port: 6379
     ai_stack_host: "{{ infrastructure.hosts.aiml }}"
-    ai_stack_port: 8080
     npu_worker_host: "{{ infrastructure.hosts.npu }}"
     npu_worker_port: 8081
     browser_worker_host: "{{ infrastructure.hosts.browser }}"

@@ -44,8 +44,8 @@ not an auth boundary — the caller is logged in — so a missing check reads as
 endpoint.
 
 **Canonical enforcement:** [`autobot-backend/security/session_ownership.py`](../../autobot-backend/security/session_ownership.py)
-— `build_owner_metadata` (:34) the one owner stamper · `validate_session_ownership` (:775)
-the one read-side gate · `validate_ownership` (:613).
+— `build_owner_metadata` (:36) the one owner stamper · `validate_session_ownership` (:745) the one read-side gate · `validate_ownership` (:583).
+Two postures, one validator (#14016): the contract is the docstring of [`security/session_posture.py`](../../autobot-backend/security/session_posture.py). A failed durable owner lookup denies under both and claims nothing: "unknown" is never "unowned" (#14033).
 
 **Invariants**
 - Redis keys are `chat:session:{session_id}` — **not** namespaced by user. Key
@@ -53,7 +53,7 @@ the one read-side gate · `validate_ownership` (:613).
 - Owner identity is `metadata.owner` = **username**, never a user id. A diff comparing
   against `user_id` is comparing the wrong field.
 - Redis is a TTL cache; the session file's `metadata.owner` is the record of truth. An absent Redis record means
-  "not cached", never "unowned" — `_owner_when_cache_is_empty` (:539) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
+  "not cached", never "unowned" — [`session_ownership.py`](../../autobot-backend/security/session_ownership.py) `_owner_when_cache_is_empty` (:509) asks disk first and rehydrates **for the real owner, never for the caller** (#14018).
 - Undetermined enforcement policy degrades, in
   [`security/enforcement_mode.py`](../../autobot-backend/security/enforcement_mode.py), to
   `DEGRADED_ENFORCEMENT_MODE` (:53) and never to `disabled`: checks still run and violations
@@ -63,7 +63,7 @@ the one read-side gate · `validate_ownership` (:613).
   allow-and-audit in both, deliberately. A degraded route reporting the chosen `reason` is a finding.
 - Only two legitimate fast-path bypasses exist, in
   [`security/session_ownership.py`](../../autobot-backend/security/session_ownership.py) —
-  `_resolve_fast_paths` (:480): global auth disabled, and enforcement explicitly `disabled`.
+  `_resolve_fast_paths` (:459): global auth disabled, and enforcement explicitly `disabled`.
   A third one added in a diff is a finding.
 - Creating over an existing session id is a 409, identical for "owned by someone else" and
   "no recorded owner" — a 403 on the first would confirm who owns it (#14012).
@@ -100,7 +100,7 @@ response, a log line, an issue, a PR comment — is already redacted.
 
 **Canonical enforcement:** [`encryption_service.py`](../../autobot-backend/encryption_service.py) AES-GCM + PBKDF2 for data at rest ·
 [`autobot_shared/field_encryption.py`](../../autobot_shared/field_encryption.py) `encrypt_field`/`decrypt_field` for single columns ·
-[`credential_store.py`](../../autobot-backend/knowledge/connectors/credential_store.py) `ConnectorCredentialStore` (:195) for connector/OAuth creds, ownership via `_require_owner` (:643) ·
+[`credential_store.py`](../../autobot-backend/knowledge/connectors/credential_store.py) `ConnectorCredentialStore` (:211) for connector/OAuth creds, ownership via `_require_owner` (:642) ·
 [`auth_middleware.py`](../../autobot-backend/auth_middleware.py) `verify_internal_api_key` (:949) for service-to-service ·
 [`services/auth.py`](../../autobot-slm-backend/services/auth.py) `decode_token_async` (:124) for SLM token revocation.
 
@@ -112,7 +112,7 @@ response, a log line, an issue, a PR comment — is already redacted.
 - Every `ConnectorCredentialStore` read takes `owner_id` and passes `_require_owner`; a new
   method that skips it grants cross-tenant credential read.
 - Nothing reaches a log, HTTP error body, or outward artifact without
-  [`secret_redaction.py`](../../autobot_shared/secret_redaction.py) (`redact_text` (:356) / `redact_mapping` (:366)) or
+  [`secret_redaction.py`](../../autobot_shared/secret_redaction.py) (`redact_text` (:321) / `redact_mapping` (:331)) or
   [`security/redaction.py`](../../autobot_shared/security/redaction.py) (`redact_cloud_identifiers` (:67) / `redact_provider_error` (:81)).
   Exception text counts; a boto3 `ClientError` carries the account number in an ARN (#15324).
 - Keys come from SSOT config, never a literal. A default value for an encryption key is a
@@ -121,7 +121,7 @@ response, a log line, an issue, a PR comment — is already redacted.
   (`is_jti_revoked` (:132) in [`token_denylist.py`](../../autobot-slm-backend/services/token_denylist.py)) or the password-epoch check can't run because Redis errored,
   `decode_token_async` denies the token (401) instead of reading "could not check" as "not revoked" — a Redis outage takes SLM login down, including the backend admin path reached through the proxy (#16374).
 - The RS256 authority-token path fails CLOSED the same way (#16412): [`rs256_denylist.py`](../../autobot-slm-backend/services/rs256_denylist.py)
-  `is_rs256_jti_revoked` (:91) raises on a Redis error rather than reporting "not revoked"; its caller
+  `is_rs256_jti_revoked` (:89) raises on a Redis error rather than reporting "not revoked"; its caller
   [`jwks_verifier.py`](../../autobot-slm-backend/services/jwks_verifier.py) `verify_authority_token` (:218) denies the token (401) at both call sites; the write side stays best-effort.
 - The shared password-epoch helper fails CLOSED in both services (#16411, #16422, owner decisions): a Redis error, or a non-integer stored
   marker or `iat`, raises `RevocationCheckUnavailable` (a `ConnectionError`), which the SLM denies as above and [`auth_revocation.py`](../../autobot-backend/auth_revocation.py) denies with 401; an `except` reading it as "not revoked" is a fail-open.

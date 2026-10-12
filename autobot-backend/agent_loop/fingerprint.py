@@ -13,10 +13,11 @@ whether the agent is exploring genuinely new information.
 Implements GH#6627.
 """
 
-import hashlib
 import json
 import re
 from typing import Any
+
+from autobot_shared.content_digest import content_digest
 
 
 def normalize_content(content: Any) -> str:
@@ -36,7 +37,7 @@ def tokenize(text: str) -> list[str]:
 
 def content_hash(content: Any) -> str:
     """Return a stable SHA-256 hex digest of normalized content."""
-    return hashlib.sha256(normalize_content(content).encode()).hexdigest()
+    return content_digest(normalize_content(content))
 
 
 def compute_novel_token_ratio(content: Any, seen_tokens: set[str]) -> float:

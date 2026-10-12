@@ -4449,6 +4449,75 @@
         "title": "FleetServiceNodeStatus",
         "type": "object"
       },
+      "FleetServiceStatus": {
+        "description": "Aggregated fleet service status.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "failed_count": {
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/FleetServiceNodeStatus"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "running_count": {
+            "title": "Running Count",
+            "type": "integer"
+          },
+          "service_name": {
+            "title": "Service Name",
+            "type": "string"
+          },
+          "stopped_count": {
+            "title": "Stopped Count",
+            "type": "integer"
+          },
+          "total_nodes": {
+            "title": "Total Nodes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "service_name",
+          "category",
+          "nodes",
+          "running_count",
+          "stopped_count",
+          "failed_count",
+          "total_nodes"
+        ],
+        "title": "FleetServiceStatus",
+        "type": "object"
+      },
+      "FleetServicesResponse": {
+        "description": "Response for fleet services listing.",
+        "properties": {
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/FleetServiceStatus"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "total_services": {
+            "title": "Total Services",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "services",
+          "total_services"
+        ],
+        "title": "FleetServicesResponse",
+        "type": "object"
+      },
       "FleetStatusResponse": {
         "description": "Fleet-wide service status response.",
         "properties": {
@@ -14689,75 +14758,6 @@
         "title": "WizardStatus",
         "type": "object"
       },
-      "api__orchestration__FleetServiceStatus": {
-        "description": "Aggregated fleet service status.",
-        "properties": {
-          "category": {
-            "title": "Category",
-            "type": "string"
-          },
-          "failed_count": {
-            "title": "Failed Count",
-            "type": "integer"
-          },
-          "nodes": {
-            "items": {
-              "$ref": "#/components/schemas/FleetServiceNodeStatus"
-            },
-            "title": "Nodes",
-            "type": "array"
-          },
-          "running_count": {
-            "title": "Running Count",
-            "type": "integer"
-          },
-          "service_name": {
-            "title": "Service Name",
-            "type": "string"
-          },
-          "stopped_count": {
-            "title": "Stopped Count",
-            "type": "integer"
-          },
-          "total_nodes": {
-            "title": "Total Nodes",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "service_name",
-          "category",
-          "nodes",
-          "running_count",
-          "stopped_count",
-          "failed_count",
-          "total_nodes"
-        ],
-        "title": "FleetServiceStatus",
-        "type": "object"
-      },
-      "api__orchestration__FleetServicesResponse": {
-        "description": "Response for fleet services listing.",
-        "properties": {
-          "services": {
-            "items": {
-              "$ref": "#/components/schemas/api__orchestration__FleetServiceStatus"
-            },
-            "title": "Services",
-            "type": "array"
-          },
-          "total_services": {
-            "title": "Total Services",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "services",
-          "total_services"
-        ],
-        "title": "FleetServicesResponse",
-        "type": "object"
-      },
       "api__orchestration__ServiceActionResponse": {
         "description": "Response for a service action.",
         "properties": {
@@ -15180,76 +15180,6 @@
           "updated_at"
         ],
         "title": "UserResponse",
-        "type": "object"
-      },
-      "models__schemas__FleetServiceStatus": {
-        "description": "Service status across the fleet.",
-        "properties": {
-          "category": {
-            "default": "system",
-            "title": "Category",
-            "type": "string"
-          },
-          "failed_count": {
-            "title": "Failed Count",
-            "type": "integer"
-          },
-          "nodes": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Nodes",
-            "type": "array"
-          },
-          "running_count": {
-            "title": "Running Count",
-            "type": "integer"
-          },
-          "service_name": {
-            "title": "Service Name",
-            "type": "string"
-          },
-          "stopped_count": {
-            "title": "Stopped Count",
-            "type": "integer"
-          },
-          "total_nodes": {
-            "title": "Total Nodes",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "service_name",
-          "nodes",
-          "running_count",
-          "stopped_count",
-          "failed_count",
-          "total_nodes"
-        ],
-        "title": "FleetServiceStatus",
-        "type": "object"
-      },
-      "models__schemas__FleetServicesResponse": {
-        "description": "Aggregated service status across fleet.",
-        "properties": {
-          "services": {
-            "items": {
-              "$ref": "#/components/schemas/models__schemas__FleetServiceStatus"
-            },
-            "title": "Services",
-            "type": "array"
-          },
-          "total_services": {
-            "title": "Total Services",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "services",
-          "total_services"
-        ],
-        "title": "FleetServicesResponse",
         "type": "object"
       },
       "models__schemas__ServiceActionResponse": {
@@ -21672,14 +21602,14 @@
     },
     "/api/fleet/services": {
       "get": {
-        "description": "Get aggregated service status across all nodes.\n\nThis is the canonical endpoint for fleet-wide service status.\nConsolidated from Issue #850 orchestration unification.",
+        "description": "Deprecated alias of ``GET /orchestration/fleet/services`` (#17856).\n\nOne implementation lives in ``api.orchestration``; this route only delegates so the SLM\nfrontend keeps working until it calls the public path, after which this returns 410.",
         "operationId": "get_fleet_services_api_fleet_services_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/models__schemas__FleetServicesResponse"
+                  "$ref": "#/components/schemas/FleetServicesResponse"
                 }
               }
             },
@@ -21699,7 +21629,7 @@
     },
     "/api/fleet/services/{service_name}/category": {
       "patch": {
-        "description": "Update the category for a service across all nodes.\n\nThis is an admin override - manually categorize a service as\n'autobot' or 'system' across all nodes that have it.\n\nCanonical endpoint for fleet-wide category updates (Issue #850).",
+        "description": "Deprecated alias of ``PATCH /orchestration/fleet/services/{name}/category`` (#17856).",
         "operationId": "update_service_category_api_fleet_services__service_name__category_patch",
         "parameters": [
           {
@@ -27984,7 +27914,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api__orchestration__FleetServicesResponse"
+                  "$ref": "#/components/schemas/FleetServicesResponse"
                 }
               }
             },

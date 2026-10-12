@@ -99,9 +99,8 @@ def test_current_returns_only_model_and_provider_to_a_non_admin(monkeypatch) -> 
     r = _client(monkeypatch, _BACKEND_LLM, role="user").get("/api/llm/current")
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"model", "provider", "config"}  # LLMCurrentResponse fields: schema unchanged
-    # Exactly the active model and provider; `config` is the schema-required envelope, always empty.
-    assert body == {"model": "gpt-x", "provider": "openai", "config": {}}  # the fixture selects cloud/openai
+    assert set(body) == {"model", "provider"}  # #15502: slimmed to model + provider
+    assert body == {"model": "gpt-x", "provider": "openai"}  # the fixture selects cloud/openai
     for leaked in ("SENTINEL", "unified", "api_key", "endpoint", "ollama.example", _MODEL):
         assert leaked not in r.text, leaked
 
@@ -129,14 +128,14 @@ def test_current_reports_a_non_default_local_selection(monkeypatch) -> None:
     tree = copy.deepcopy(_BACKEND_LLM)
     tree["provider_type"] = "local"
     tree["local"]["providers"]["ollama"]["selected_model"] = "picked-model:1b"
-    assert _current(monkeypatch, tree) == {"model": "picked-model:1b", "provider": "ollama", "config": {}}
+    assert _current(monkeypatch, tree) == {"model": "picked-model:1b", "provider": "ollama"}
 
 
 def test_current_reports_a_cloud_selection(monkeypatch) -> None:
     tree = copy.deepcopy(_BACKEND_LLM)
     tree["cloud"]["provider"] = "openai"
     tree["cloud"]["providers"]["openai"]["selected_model"] = "gpt-picked"
-    assert _current(monkeypatch, tree) == {"model": "gpt-picked", "provider": "openai", "config": {}}
+    assert _current(monkeypatch, tree) == {"model": "gpt-picked", "provider": "openai"}
 
 
 def test_current_falls_back_to_the_default_only_when_nothing_is_selected(monkeypatch) -> None:
@@ -146,10 +145,10 @@ def test_current_falls_back_to_the_default_only_when_nothing_is_selected(monkeyp
     monkeypatch.delenv("AUTOBOT_DEFAULT_LLM_MODEL", raising=False)
     monkeypatch.setattr(ssot_config.llm, "default_model", "")
     body = _current(monkeypatch, {"provider_type": "local"})
-    assert body == {"model": ModelConstants.DEFAULT_OLLAMA_MODEL, "provider": "ollama", "config": {}}
+    assert body == {"model": ModelConstants.DEFAULT_OLLAMA_MODEL, "provider": "ollama"}
 
 
 def test_a_cloud_provider_with_no_model_reports_an_empty_model_not_an_ollama_default(monkeypatch) -> None:
     # SettingsPanel.vue:373 shows "Not selected" for this case; the default Ollama model is not a cloud model.
     tree = {"provider_type": "cloud", "cloud": {"provider": "openai", "providers": {"openai": {"timeout": 30}}}}
-    assert _current(monkeypatch, tree) == {"model": "", "provider": "openai", "config": {}}
+    assert _current(monkeypatch, tree) == {"model": "", "provider": "openai"}

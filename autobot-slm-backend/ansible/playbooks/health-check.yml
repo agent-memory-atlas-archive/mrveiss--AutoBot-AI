@@ -761,7 +761,7 @@
           - "  Frontend: http://{{ hostvars[_frontend_host[0]]['ansible_host'] | default('127.0.0.1') if _frontend_host | length > 0 else '(none)' }}"
           - "  Backend: https://{{ hostvars[_backend_host[0]]['ansible_host'] | default('127.0.0.1') if _backend_host | length > 0 else '(none)' }}:{{ backend_port | default(8443) }}/api"
           - "  Database: redis://{{ hostvars[_database_host[0]]['ansible_host'] | default('127.0.0.1') if _database_host | length > 0 else '(none)' }}:{{ redis_port | default(6379) }}"
-          - "  AI Stack: http://{{ hostvars[_ai_host[0]]['ansible_host'] | default('127.0.0.1') if _ai_host | length > 0 else '(none)' }}:{{ ai_stack_port | default(8080) }}"
+          - "  AI Stack: http://{{ hostvars[_ai_host[0]]['ansible_host'] | default('127.0.0.1') if _ai_host | length > 0 else '(none)' }}:{{ ai_stack_port }}"
           - "  NPU Worker: http://{{ hostvars[_npu_host[0]]['ansible_host'] | default('127.0.0.1') if _npu_host | length > 0 else '(none)' }}:{{ npu_port | default(8081) }}"
           - "  Browser: http://{{ hostvars[_browser_host[0]]['ansible_host'] | default('127.0.0.1') if _browser_host | length > 0 else '(none)' }}:{{ browser_port | default(3000) }}"
           - ""

@@ -45,7 +45,7 @@
     <!-- Error banner -->
     <div
       v-if="error"
-      class="flex items-center gap-2 px-4 py-3 mb-4 rounded-lg bg-danger-500/10 border border-danger-500/30 text-danger-500"
+      class="flex items-center gap-2 px-4 py-3 mb-4 rounded-lg bg-error-500/10 border border-error-500/30 text-error-500"
       role="alert"
     >
       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

@@ -394,3 +394,18 @@ class TestFalsyErrorFilter:
         error_result = {"error": "something went wrong", "data": []}
         loop._record_observation_fingerprints({"tool": error_result})
         assert len(loop._current_context.observation_fingerprints) == 0
+
+
+def test_content_hash_is_the_canonical_digest_of_normalized_content():
+    """#15722: the loop fingerprint delegates to the one digest primitive, byte-identical to before."""
+    import hashlib
+    import json
+
+    from agent_loop.fingerprint import content_hash, normalize_content
+    from autobot_shared.content_digest import content_digest
+
+    for value in ("plain text", {"b": 2, "a": [1, "é"]}, 42, None):
+        legacy = hashlib.sha256(normalize_content(value).encode()).hexdigest()
+        assert content_hash(value) == legacy
+        assert content_hash(value) == content_digest(normalize_content(value))
+    assert content_hash({"b": 1, "a": 2}) == content_hash(json.loads('{"a": 2, "b": 1}'))

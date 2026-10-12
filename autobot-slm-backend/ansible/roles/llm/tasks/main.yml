@@ -209,3 +209,47 @@
   changed_when: "'pulling' in (_model_pull.stderr | default(''))"
   failed_when: _model_pull.rc != 0
   tags: ['llm', 'models']
+
+
+# #15502: a pull that returned 0 is not proof the model is usable. Check presence, and name the
+# tiers this node class does not pull so the skip is visible rather than silent.
+- name: "Models | List the models Ollama holds"
+  ansible.builtin.command:
+    cmd: ollama list
+  become: true
+  register: _llm_installed
+  changed_when: false
+  check_mode: false
+  when: llm_pull_models | default(true)
+  tags: ['llm', 'models']
+
+- name: "Models | Assert every model for this node is present"
+  ansible.builtin.assert:
+    that: _llm_missing | length == 0
+    fail_msg: >-
+      Ollama is missing {{ _llm_missing | length }} model(s) this node should hold:
+      {{ _llm_missing | join(', ') }}. Held: {{ _llm_held | join(', ') }}.
+    success_msg: "All {{ _llm_models_to_pull | length }} models for this node are present."
+  vars:
+    # `ollama list` prints a NAME header row, then `<name>:<tag>  <id>  <size>  <age>`.
+    _llm_held: >-
+      {{ _llm_installed.stdout_lines[1:] | map('regex_replace', '\s.*$', '')
+         | map('regex_replace', ':latest$', '') | list }}
+    _llm_missing: >-
+      {{ _llm_models_to_pull | map('regex_replace', ':latest$', '')
+         | reject('in', _llm_held) | list }}
+  when:
+    - llm_pull_models | default(true)
+    - not ansible_check_mode
+  tags: ['llm', 'models']
+
+- name: "Models | WARNING canonical tiers skipped on this node class"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: this node is CPU-only, so the GPU-class tier models were NOT pulled and the
+      tiers they serve are unavailable here: {{ llm_gpu_models | join(', ') }}.
+  when:
+    - llm_pull_models | default(true)
+    - not (_llm_gpu_detected | bool)
+    - llm_gpu_models | length > 0
+  tags: ['llm', 'models']

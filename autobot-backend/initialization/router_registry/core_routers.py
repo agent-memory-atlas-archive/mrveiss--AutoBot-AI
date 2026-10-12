@@ -17,6 +17,7 @@ import content_reach.health  # noqa: F401 — registers KnownProbes.CONTENT_REAC
 # Core router imports - these are required for basic functionality
 from api.adapters import router as adapters_router  # Issue #1403
 from api.admin_event_logs import router as admin_event_logs_router  # Issue #4461
+from api.admin_oauth_bundle_strip import router as admin_oauth_bundle_strip_router  # #13630
 from api.admin_orphan_repair import router as admin_orphan_repair_router  # #15779, #16927
 from api.admin_orphan_storage import router as admin_orphan_storage_router  # #17038, #17039
 from api.admin_pricing import router as admin_pricing_router  # GH#6480
@@ -565,6 +566,13 @@ def _get_canvas_routers() -> list:
     ]
 
 
+def _get_credential_admin_routers() -> list:
+    """Admin routers that PROPOSE credential rewrites; execution needs human approval (#13630, #17038)."""
+    return [
+        (admin_oauth_bundle_strip_router, "", ["admin", "oauth-bundle-strip"], "admin_oauth_bundle_strip"),
+    ]
+
+
 def load_core_routers():
     """
     Load and return core API routers (Issue #560: decomposed, #730: plugins).
@@ -587,4 +595,5 @@ def load_core_routers():
     routers.extend(_get_agent_routers())
     routers.extend(_get_plugin_routers())
     routers.extend(_get_canvas_routers())
+    routers.extend(_get_credential_admin_routers())  # #13630
     return routers

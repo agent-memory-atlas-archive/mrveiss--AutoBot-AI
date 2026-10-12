@@ -1286,7 +1286,10 @@
         "envVarRecommendations": "Zalecenia dotyczące zmiennych środowiskowych",
         "sampleHardcodedValues": "Przykładowe wartości zakodowane na stałe",
         "noHardcodedValues": "Nie znaleziono zakodowanych na stałe wartości środowiska. Twoja konfiguracja wygląda na czystą!",
-        "noData": "Brak dostępnych danych z analizy środowiska."
+        "noData": "Brak dostępnych danych z analizy środowiska.",
+        "modelHint": "Model filtrujący: {model}",
+        "modelLoading": "ładowanie…",
+        "modelServerDefault": "domyślny serwera"
       },
       "ownership": {
         "title": "Analiza własności kodu",
@@ -5822,6 +5825,7 @@
       "retrySending": "Retry sending"
     },
     "preferences": {
+      "accentTheme": "Motyw",
       "title": "Preferences",
       "reset": "Reset",
       "resetAll": "Reset all preferences to defaults",
@@ -5876,6 +5880,13 @@
       "dismiss": "Dismiss"
     },
     "themeToggle": {
+      "system": "System",
+      "highContrast": "Wysoki kontrast",
+      "monochrome": "Monochromatyczny",
+      "accentThemeDescription": "Domyślny motyw – własny kolor podstawowy motywu",
+      "baseThemeChanged": "Motyw bazowy zmieniony na {name}",
+      "accentChanged": "Kolor akcentu zmieniony na {name}",
+      "presetChanged": "Ustawienie motywu zmienione na {name}",
       "theme": "Theme",
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",

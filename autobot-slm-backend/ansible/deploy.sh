@@ -15,7 +15,7 @@ _PROJECT_ROOT="$SCRIPT_DIR"
 while [ "$_PROJECT_ROOT" != "/" ] && [ ! -f "$_PROJECT_ROOT/.env" ]; do
     _PROJECT_ROOT="$(dirname "$_PROJECT_ROOT")"
 done
-source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true
+source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true; : "${AUTOBOT_AI_STACK_PORT:?ssot-config.sh not loaded — AUTOBOT_AI_STACK_PORT unset}"
 ANSIBLE_DIR="$SCRIPT_DIR"
 INVENTORY_FILE="$ANSIBLE_DIR/inventory/production.yml"
 PLAYBOOK_DIR="$ANSIBLE_DIR/playbooks"
@@ -204,7 +204,7 @@ validate_deployment() {
     fi
 
     # AI/ML services check
-    if curl -s -f "http://${AUTOBOT_AI_STACK_HOST:-localhost}:8080/health" > /dev/null; then
+    if curl -s -f "http://${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}/health" > /dev/null; then
         success "AI Stack service is healthy"
     else
         warn "AI Stack service health check failed"
@@ -234,7 +234,7 @@ show_summary() {
     log "INFO" "  Backend API: http://${AUTOBOT_BACKEND_HOST:-localhost}:8001"
     log "INFO" "  Redis:       redis://${AUTOBOT_REDIS_HOST:-localhost}:6379"
     log "INFO" "  RedisInsight: http://${AUTOBOT_REDIS_HOST:-localhost}:8002"
-    log "INFO" "  AI Stack:    http://${AUTOBOT_AI_STACK_HOST:-localhost}:8080"
+    log "INFO" "  AI Stack:    http://${AUTOBOT_AI_STACK_HOST:-localhost}:${AUTOBOT_AI_STACK_PORT}"
     log "INFO" "  NPU Worker:  http://${AUTOBOT_NPU_WORKER_HOST:-localhost}:8081"
     log "INFO" "  Browser:     http://${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}:3000"
     log "INFO" "  VNC Server:  vnc://${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}:5901"

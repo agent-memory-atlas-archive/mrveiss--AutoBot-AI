@@ -24,8 +24,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Sequence
 
+from autobot_shared.embedding_model import active_embedding_model
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.ssot_config import config as ssot_config
 
 from .core import ENTITY_TYPES as _ENTITY_TYPES  # noqa: F401 — re-exported via package
 
@@ -209,16 +209,15 @@ class MemoryGraphQueryProcessor:
                              alias).  RediSearch FT.SEARCH requires DB 0; entity
                              data keys also live on DB 0 after #9943.
             embedding_model: Ollama model name.  Falls back to
-                             config["knowledge.embedding_model"] or
-                             "nomic-embed-text".
+                             the SSOT-configured embedding model
+                             (``active_embedding_model()``).
         """
         self._redis = redis_client
         self._scorer = HybridScorer()
         if embedding_model:
             self._embedding_model = embedding_model
         else:
-            # ssot_config is a Pydantic model; use getattr with fallback
-            self._embedding_model = getattr(ssot_config, "embedding_model", "nomic-embed-text")
+            self._embedding_model = active_embedding_model()
 
     # ------------------------------------------------------------------
     # Public API

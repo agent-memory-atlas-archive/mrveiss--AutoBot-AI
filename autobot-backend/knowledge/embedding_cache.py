@@ -103,7 +103,8 @@ class EmbeddingCache:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _make_key(self, model: str, query: str) -> str:
+    @staticmethod
+    def make_key(model: str, query: str) -> str:
         """Create cache key from (model, query) using SHA-256 hash.
 
         Issue #12251: the embedding model id is folded into the key so the
@@ -183,7 +184,7 @@ class EmbeddingCache:
         Returns:
             Cached embedding or None if not found/expired
         """
-        key = self._make_key(model, query)
+        key = self.make_key(model, query)
 
         async with self._lock:
             # --- Check T1 ---
@@ -230,7 +231,7 @@ class EmbeddingCache:
             embedding: Computed embedding vector
             model: Embedding model id (part of the cache key — Issue #12251)
         """
-        key = self._make_key(model, query)
+        key = self.make_key(model, query)
 
         async with self._lock:
             # If already live, update value and timestamp (update in place)
