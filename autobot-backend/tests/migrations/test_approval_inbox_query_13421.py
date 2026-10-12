@@ -16,6 +16,8 @@ from tests.migrations.conftest import requires_postgres, run_alembic
 
 pytestmark = [pytest.mark.migration_gate, requires_postgres]
 
+_LIMIT = 100  # larger than any row count seeded here
+
 
 async def _service(url: str):
     engine = create_async_engine(url)
@@ -41,11 +43,13 @@ async def test_pending_spans_sources_and_excludes_decided_and_company_rows(fresh
         svc.session.add(Approval(title="llc", approval_type="hire", status="pending", company_id=uuid.uuid4()))
         await svc.session.commit()
 
-        every = {a.id for a in await svc.list_pending()}
+        every = {a.id for a in await svc.list_pending(limit=_LIMIT, offset=0)}
         assert every == {legacy.id, tool.id, plugin.id}
-        assert {a.id for a in await svc.list_pending(source="agent_tool")} == {tool.id}
-        assert {a.id for a in await svc.list_pending(risk_tier="low")} == {plugin.id}
-        assert {a.id for a in await svc.list_pending(source="agent_tool", risk_tier="low")} == set()
+        assert {a.id for a in await svc.list_pending(limit=_LIMIT, offset=0, source="agent_tool")} == {tool.id}
+        assert {a.id for a in await svc.list_pending(limit=_LIMIT, offset=0, risk_tier="low")} == {plugin.id}
+        assert {
+            a.id for a in await svc.list_pending(limit=_LIMIT, offset=0, source="agent_tool", risk_tier="low")
+        } == set()
     finally:
         await svc.session.close()
         await engine.dispose()

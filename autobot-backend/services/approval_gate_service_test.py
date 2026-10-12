@@ -36,6 +36,10 @@ def _make_approval(*, status: str = ApprovalStatus.PENDING.value) -> MagicMock:
     # post-approval dispatch, so a real approval's actual default (no
     # context at all) is what they mean to simulate.
     a.context = None
+    # #13421: likewise for resume dispatch -- an unconfigured mock's source and
+    # resume_ref are truthy, which would read as an approval waiting on a resumer.
+    a.source = None
+    a.resume_ref = None
     return a
 
 
