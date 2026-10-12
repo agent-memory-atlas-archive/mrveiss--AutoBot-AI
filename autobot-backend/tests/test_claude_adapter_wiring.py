@@ -360,56 +360,56 @@ class TestRateLimitDictHandling:
 
     @pytest.mark.asyncio
     async def test_dict_can_proceed_true_allows_request(self) -> None:
-        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, OptimizationMetrics
+        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, ClaudeBatchMetrics
 
         with patch("utils.graceful_degradation.Path.mkdir"):
             mgr = ClaudeAPIBatchManager(ClaudeAPIConfig(enable_rate_limiting=True))
         mgr.rate_limiter = MagicMock()
         mgr.rate_limiter.can_make_request = MagicMock(return_value={"can_proceed": True})
         mgr._lock = asyncio.Lock()
-        mgr._metrics = OptimizationMetrics()
+        mgr._metrics = ClaudeBatchMetrics()
 
         result = await mgr._check_and_apply_rate_limit()
         assert result is True
 
     @pytest.mark.asyncio
     async def test_dict_can_proceed_false_blocks_request(self) -> None:
-        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, OptimizationMetrics
+        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, ClaudeBatchMetrics
 
         with patch("utils.graceful_degradation.Path.mkdir"):
             mgr = ClaudeAPIBatchManager(ClaudeAPIConfig(enable_rate_limiting=True))
         mgr.rate_limiter = MagicMock()
         mgr.rate_limiter.can_make_request = MagicMock(return_value={"can_proceed": False})
         mgr._lock = asyncio.Lock()
-        mgr._metrics = OptimizationMetrics()
+        mgr._metrics = ClaudeBatchMetrics()
 
         result = await mgr._check_and_apply_rate_limit()
         assert result is False
 
     @pytest.mark.asyncio
     async def test_bool_true_allows_request(self) -> None:
-        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, OptimizationMetrics
+        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, ClaudeBatchMetrics
 
         with patch("utils.graceful_degradation.Path.mkdir"):
             mgr = ClaudeAPIBatchManager(ClaudeAPIConfig(enable_rate_limiting=True))
         mgr.rate_limiter = MagicMock()
         mgr.rate_limiter.can_make_request = MagicMock(return_value=True)
         mgr._lock = asyncio.Lock()
-        mgr._metrics = OptimizationMetrics()
+        mgr._metrics = ClaudeBatchMetrics()
 
         result = await mgr._check_and_apply_rate_limit()
         assert result is True
 
     @pytest.mark.asyncio
     async def test_bool_false_blocks_request(self) -> None:
-        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, OptimizationMetrics
+        from utils.claude_api_integration import ClaudeAPIBatchManager, ClaudeAPIConfig, ClaudeBatchMetrics
 
         with patch("utils.graceful_degradation.Path.mkdir"):
             mgr = ClaudeAPIBatchManager(ClaudeAPIConfig(enable_rate_limiting=True))
         mgr.rate_limiter = MagicMock()
         mgr.rate_limiter.can_make_request = MagicMock(return_value=False)
         mgr._lock = asyncio.Lock()
-        mgr._metrics = OptimizationMetrics()
+        mgr._metrics = ClaudeBatchMetrics()
 
         result = await mgr._check_and_apply_rate_limit()
         assert result is False

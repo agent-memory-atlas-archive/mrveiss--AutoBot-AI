@@ -50,7 +50,7 @@ assertions):
   for ``MemoryPool``, ``WeakCache`` and the ``memory_efficient_cache``
   decorator in the same module. 0 collapses each to zero capacity.
   Pre-#7437: 100 / 128 / 128.
-- ``memory_threshold_mb``/``memory_log_threshold_mb``: ``MemoryMonitor``'s
+- ``memory_threshold_mb``/``memory_log_threshold_mb``: ``ProcessMemoryMonitor``'s
   warning threshold, same module. 0 makes ``abs(diff) > threshold`` true for
   almost every allocation. Pre-#7437: 500 / 1.
 - ``chat_timeout``: ``api/chat.py`` reads it unguarded; 0 timed out every

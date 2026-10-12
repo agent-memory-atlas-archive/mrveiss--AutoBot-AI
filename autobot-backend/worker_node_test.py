@@ -287,7 +287,7 @@ class TestGUIControllerPlatformGate:
 
         reloaded = self._reload_worker_node(monkeypatch, "linux", fake_gui_controller=None)
 
-        assert reloaded.GUIController is gui_controller_dummy.GUIController
+        assert reloaded.GUIController is gui_controller_dummy.DummyGUIController
         assert reloaded.GUI_AUTOMATION_SUPPORTED is False
 
     def test_non_linux_uses_dummy_controller(self, monkeypatch):
@@ -297,7 +297,7 @@ class TestGUIControllerPlatformGate:
         fake_module = self._make_fake_gui_controller_module()
         reloaded = self._reload_worker_node(monkeypatch, "win32", fake_gui_controller=fake_module)
 
-        assert reloaded.GUIController is gui_controller_dummy.GUIController
+        assert reloaded.GUIController is gui_controller_dummy.DummyGUIController
         assert reloaded.GUI_AUTOMATION_SUPPORTED is False
 
 

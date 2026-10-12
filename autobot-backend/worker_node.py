@@ -84,11 +84,11 @@ if sys.platform.startswith("linux"):
         GUI_AUTOMATION_SUPPORTED = True
     except Exception as e:  # noqa: BLE001 - see comment above; unbounded Xlib/X11 import-time surface
         logger.warning("Real GUIController unavailable on this Linux node (%s); using dummy.", e)
-        from gui_controller_dummy import GUIController
+        from gui_controller_dummy import DummyGUIController as GUIController
 
         GUI_AUTOMATION_SUPPORTED = False
 else:
-    from gui_controller_dummy import GUIController
+    from gui_controller_dummy import DummyGUIController as GUIController
 
     GUI_AUTOMATION_SUPPORTED = False
 

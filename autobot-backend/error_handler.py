@@ -310,7 +310,7 @@ def retry(
     return decorator
 
 
-class CircuitBreaker:
+class CircuitBreakerDecorator:
     """
     Circuit breaker pattern for handling external service failures.
     """
@@ -483,7 +483,7 @@ async def call_external_api():
     return await make_api_request()
 
 # Using circuit breaker
-@CircuitBreaker(failure_threshold=5, recovery_timeout=TimingConstants.STANDARD_TIMEOUT)
+@CircuitBreakerDecorator(failure_threshold=5, recovery_timeout=TimingConstants.STANDARD_TIMEOUT)
 def unstable_service_call():
     # After 5 failures, circuit opens for 60 seconds
     return external_service.call()

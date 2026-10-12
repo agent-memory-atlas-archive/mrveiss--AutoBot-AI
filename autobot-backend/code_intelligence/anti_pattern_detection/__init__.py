@@ -44,8 +44,8 @@ from .detectors import (
 # Data models
 from .models import (
     AnalysisReport,
+    AnalyzedClassInfo,
     AntiPatternResult,
-    ClassInfo,
     FunctionInfo,
     ImportInfo,
 )
@@ -96,7 +96,7 @@ __all__ = [
     # Data models
     "AntiPatternResult",
     "AnalysisReport",
-    "ClassInfo",
+    "AnalyzedClassInfo",
     "FunctionInfo",
     "ImportInfo",
     # Severity utilities

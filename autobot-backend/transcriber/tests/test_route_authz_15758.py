@@ -166,7 +166,7 @@ async def test_a_signed_in_caller_passes_the_same_gate():
     app = _unauthenticated_app(lambda: {"user_id": OWNER, "role": "user"})
     with (
         patch("transcriber.routes.providers.list_available_providers", return_value=[]),
-        patch("transcriber.routes.providers.get_active_provider_id", return_value=None),
+        patch("transcriber.routes.providers.get_active_asr_provider_id", return_value=None),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.get(f"{PREFIX}/providers")
@@ -181,9 +181,9 @@ async def test_a_signed_in_caller_passes_the_same_gate():
 async def _patch_providers_as(role: str):
     app = _unauthenticated_app(lambda: {"user_id": "someone", "role": role})
     with (
-        patch("transcriber.routes.providers.set_active_provider") as set_provider,
+        patch("transcriber.routes.providers.set_active_asr_provider") as set_provider,
         patch("transcriber.routes.providers.list_available_providers", return_value=[]),
-        patch("transcriber.routes.providers.get_active_provider_id", return_value=None),
+        patch("transcriber.routes.providers.get_active_asr_provider_id", return_value=None),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.patch(f"{PREFIX}/providers", json={"provider": None})

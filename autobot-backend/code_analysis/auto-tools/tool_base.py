@@ -76,8 +76,8 @@ class SecurityFixToolBase:
     """Shared backup/report/CLI skeleton for the XSS security-fix tools.
 
     Verified byte-identical between ``security_sanitizer.SecurityFixAgent``
-    and ``security_deep_sanitizer.SecurityFixAgent`` (module-level class name
-    collision across two separate scripts — not the same class).
+    and ``security_deep_sanitizer.DeepSecurityFixAgent`` (two separate scripts that
+    formerly shared a class name — not the same class).
 
     Subclasses MUST set:
         - ``REPORT_FILE_PREFIX``: filename prefix for the saved report
