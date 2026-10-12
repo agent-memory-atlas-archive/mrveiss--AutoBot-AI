@@ -74,9 +74,9 @@
                 ref="voiceBtnRef"
                 @click="toggleVoiceConversation"
                 class="header-btn"
-                :class="{ 'bg-electric-100 text-electric-600': showVoiceOverlay || showVoicePanel }"
-                :aria-expanded="showVoicePanel"
-                aria-controls="chat-panel-voice"
+                :class="{ 'bg-electric-100 text-electric-600': voiceExpanded }"
+                :aria-expanded="voiceExpanded"
+                :aria-controls="voiceControlsId"
                 :title="$t('chat.interface.voiceChat')"
               >
                 <Icon name="headset" />
@@ -108,12 +108,12 @@
             </button>
             <!-- #16443: collaboration panel toggle, collaborative sessions only -->
             <button
-              v-if="isCollaborativeSession"
+              v-if="isCollaborativeSession" ref="collabBtnRef"
               @click="togglePanel('collaboration')"
               class="header-btn"
               :class="{ 'bg-electric-100 text-electric-600': showCollaborationPanel }"
               :title="$t('collaboration.panel.title')"
-              :aria-pressed="showCollaborationPanel"
+              :aria-expanded="showCollaborationPanel" aria-controls="chat-panel-collaboration"
             >
               <Icon name="users" />
             </button>
@@ -169,7 +169,7 @@
           @close="showVoicePanel = false"
         />
         <ChatCollaborationPanel
-          v-else-if="showCollaborationPanel && isCollaborativeSession"
+          id="chat-panel-collaboration" v-else-if="showCollaborationPanel && isCollaborativeSession"
           @close="showCollaborationPanel = false"
         />
       </Transition>
@@ -516,7 +516,7 @@ const voiceConversation = useVoiceConversation()
 const showVoiceOverlay = ref(false)
 // One right-hand panel at a time; focus handled in the composable (#18243)
 const { showFilePanel, showVoicePanel, showCollaborationPanel, fileBtnRef, voiceBtnRef,
-  toggle: togglePanel, closeAll: closeAllPanels } = useChatSidePanels()
+  collabBtnRef, voiceExpanded, voiceControlsId, toggle: togglePanel, closeAll: closeAllPanels } = useChatSidePanels(showVoiceOverlay)
 const { voiceDisplayMode, contextOverflowMode } = usePreferences()
 
 function openVoiceConversation(): void {

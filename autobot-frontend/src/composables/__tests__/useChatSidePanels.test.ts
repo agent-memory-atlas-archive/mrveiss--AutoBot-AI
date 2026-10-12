@@ -4,8 +4,10 @@
 // Author: mrveiss
 /** One right-hand chat panel at a time, with focus handed in and back (#18243). */
 import { describe, it, expect, afterEach } from 'vitest'
-import { nextTick } from 'vue'
-import { useChatSidePanels, FILE_PANEL_ID } from '../useChatSidePanels'
+import { nextTick, ref } from 'vue'
+import {
+  useChatSidePanels, FILE_PANEL_ID, VOICE_PANEL_ID, COLLABORATION_PANEL_ID, VOICE_OVERLAY_ID,
+} from '../useChatSidePanels'
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -82,5 +84,44 @@ describe('useChatSidePanels', () => {
     await nextTick()
     await nextTick()
     expect(document.activeElement).toBe(other)
+  })
+
+  it.each([
+    ['voice', VOICE_PANEL_ID, 'voiceBtnRef'],
+    ['collaboration', COLLABORATION_PANEL_ID, 'collabBtnRef'],
+  ] as const)('%s panel: focus moves in on open, back to its button if stranded', async (name, id, ref_) => {
+    const p = useChatSidePanels()
+    const panel = document.createElement('div')
+    panel.id = id
+    panel.tabIndex = -1
+    const btn = document.createElement('button')
+    document.body.append(panel, btn)
+    p[ref_].value = btn
+
+    p.toggle(name)
+    await nextTick()
+    await nextTick()
+    expect(document.activeElement).toBe(panel)
+
+    panel.remove()
+    p.toggle(name)
+    await nextTick()
+    await nextTick()
+    expect(document.activeElement).toBe(btn)
+  })
+
+  it('voice button aria reflects the side panel in side-panel mode', () => {
+    const p = useChatSidePanels(ref(false))
+    expect([p.voiceExpanded.value, p.voiceControlsId.value]).toEqual([false, VOICE_PANEL_ID])
+    p.toggle('voice')
+    expect([p.voiceExpanded.value, p.voiceControlsId.value]).toEqual([true, VOICE_PANEL_ID])
+  })
+
+  it('voice button aria reflects the overlay in overlay mode', () => {
+    const overlay = ref(false)
+    const p = useChatSidePanels(overlay)
+    overlay.value = true
+    expect(p.showVoicePanel.value).toBe(false)
+    expect([p.voiceExpanded.value, p.voiceControlsId.value]).toEqual([true, VOICE_OVERLAY_ID])
   })
 })
