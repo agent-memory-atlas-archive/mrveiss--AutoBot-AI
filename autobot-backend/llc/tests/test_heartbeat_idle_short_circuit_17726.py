@@ -26,7 +26,7 @@ from llc.models.work_item import LLCWorkItem
 from llc.scheduler.heartbeat_scheduler import (
     _IDLE_WAKE_KEY_PREFIX,
     _IDLE_WAKE_TTL_SECONDS,
-    HeartbeatScheduler,
+    LLCHeartbeatScheduler,
 )
 
 _AGENT_SLUG = "ceo-acme"
@@ -78,7 +78,7 @@ def _make_run() -> MagicMock:
 
 async def _drive(*, has_work: bool, agent: Dict[str, Any] | None = None, rate_limited=None, redis=None):
     """Run one due-agent tick and hand back what it touched."""
-    scheduler = HeartbeatScheduler()
+    scheduler = LLCHeartbeatScheduler()
     redis = redis or _make_redis()
     create_run = AsyncMock(return_value=_make_run())
     run_adapter = AsyncMock()
@@ -344,9 +344,9 @@ class TestAMisconfiguredCronDoesNotSilentlyUnscheduleAgents:
         """
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from llc.scheduler.heartbeat_scheduler import HeartbeatScheduler
+        from llc.scheduler.heartbeat_scheduler import LLCHeartbeatScheduler
 
-        scheduler = HeartbeatScheduler()
+        scheduler = LLCHeartbeatScheduler()
         redis = _make_redis()
         agents = [
             {"agent_id": "bad", "heartbeat_cron": "* * * * *"},

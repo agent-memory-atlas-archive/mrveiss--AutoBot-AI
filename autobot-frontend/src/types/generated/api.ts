@@ -55922,6 +55922,18 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** AgentHeartbeatTriggerResponse */
+        AgentHeartbeatTriggerResponse: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * AgentHireCreate
          * @description Request body for POST /agent-hires (GH#8487).
@@ -91994,6 +92006,21 @@ export interface components {
          * @enum {string}
          */
         RoutineStatus: "active" | "paused" | "archived";
+        /** RoutineTriggerResponse */
+        RoutineTriggerResponse: {
+            /**
+             * Routine Id
+             * Format: uuid
+             */
+            routine_id: string;
+            /**
+             * Message
+             * @default Routine scheduled for immediate execution
+             */
+            message: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** RoutineUpdate */
         RoutineUpdate: {
             /** Name */
@@ -104479,18 +104506,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** TriggerResponse */
-        llc__api__agents__TriggerResponse: {
-            /**
-             * Run Id
-             * Format: uuid
-             */
-            run_id: string;
-            /** Status */
-            status: string;
-        } & {
-            [key: string]: unknown;
-        };
         /** ApprovalDecision */
         llc__api__approvals__ApprovalDecision: {
             decision: components["schemas"]["ApprovalStatus"];
@@ -104556,21 +104571,6 @@ export interface components {
              * @default false
              */
             is_system: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /** TriggerResponse */
-        llc__api__routines__TriggerResponse: {
-            /**
-             * Routine Id
-             * Format: uuid
-             */
-            routine_id: string;
-            /**
-             * Message
-             * @default Routine scheduled for immediate execution
-             */
-            message: string;
         } & {
             [key: string]: unknown;
         };
@@ -176276,7 +176276,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["llc__api__agents__TriggerResponse"];
+                    "application/json": components["schemas"]["AgentHeartbeatTriggerResponse"];
                 };
             };
             /** @description Validation Error */
@@ -177206,7 +177206,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["llc__api__routines__TriggerResponse"];
+                    "application/json": components["schemas"]["RoutineTriggerResponse"];
                 };
             };
             /** @description Validation Error */

@@ -19,8 +19,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from autobot_shared.webhook_signature import verify_webhook_signature
 from initialization.router_registry.integration_routers import INTEGRATION_ROUTER_CONFIGS
-from services.whatsapp_service import flatten_messages, verify_webhook_signature
+from services.whatsapp_service import flatten_messages
 
 
 class TestRouterRegistration:

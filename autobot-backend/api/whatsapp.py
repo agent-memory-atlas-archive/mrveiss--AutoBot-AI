@@ -33,6 +33,7 @@ from api.schemas_system import WhatsAppConfigRequest, WhatsAppConfigResponse
 from auth_middleware import check_admin_permission
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.webhook_signature import verify_webhook_signature
 from services.gateway.gateway_manager import GatewayManager
 from services.gateway.ingest_governor import ingest_governor
 from services.whatsapp_service import (
@@ -42,7 +43,6 @@ from services.whatsapp_service import (
     get_whatsapp_app_secret,
     get_whatsapp_verify_token,
     save_whatsapp_config,
-    verify_webhook_signature,
 )
 from utils.chat_utils import generate_request_id
 

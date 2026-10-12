@@ -55,7 +55,7 @@ from ..models.enums import (
     WorkItemType,
 )
 from ..models.work_item import LLCWorkItem, LLCWorkItemComment
-from ..scheduler.heartbeat_scheduler import HeartbeatScheduler
+from ..scheduler.heartbeat_scheduler import LLCHeartbeatScheduler
 from ..services.activity_log import ActivityLogQuery, LLCActivityLogService
 from ..services.attachment_service import (
     AttachmentNotFound,
@@ -120,7 +120,7 @@ _kb_manager = KbCollectionManager()
 _get_relation_service = lazy_singleton(WorkItemRelationService)
 _get_attachment_service = lazy_singleton(AttachmentService)
 _get_comment_wake_service = lazy_singleton(CommentWakeService)
-_get_heartbeat_scheduler = lazy_singleton(HeartbeatScheduler)
+_get_heartbeat_scheduler = lazy_singleton(LLCHeartbeatScheduler)
 _get_activity_service = lazy_singleton(LLCActivityLogService)
 _get_ac_suggester = lazy_singleton(AcSuggester)
 
