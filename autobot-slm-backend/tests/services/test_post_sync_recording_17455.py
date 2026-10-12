@@ -127,3 +127,25 @@ async def test_the_issued_row_is_success_unknown_and_written_for_every_deferred_
     out = mock.call_args.args[5]
     assert (out.success, out.exit_code) == (None, None) and "issued" in out.error
     assert result.rows == [{"label": "x"}]
+
+
+@pytest.mark.parametrize("bad", ["a.service; reboot", "$(id).service", "-oProxyCommand=x", "a b.service"])
+async def test_an_invalid_unit_is_recorded_as_a_failure_and_nothing_is_spawned_18359(monkeypatch, recorded, bad):
+    """Decision 3: a role unit failing `validate_unit_name` is a recorded failure, never run, never silent."""
+    spawned = []
+
+    async def _spawn(*argv, **kwargs):
+        spawned.append(argv)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
+    outcome = await runner.restart_units(_base(), [bad], _REC)
+    assert outcome.success is False and "invalid systemd unit name" in outcome.error
+    assert spawned == []
+    args = recorded.call_args.args
+    assert args[1] == "restart" and args[3] == "systemctl restart (rejected: invalid unit name)"
+    assert args[5].success is False
+
+
+def test_an_invalid_unit_is_never_deferred_as_an_issued_self_restart_18359():
+    action = SimpleNamespace(category="restart", systemd_service="slm-backend; reboot")
+    assert plan_runner._is_deferred(action, ["slm-backend;", "reboot"]) is False
