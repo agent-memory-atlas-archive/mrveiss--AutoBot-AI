@@ -213,6 +213,7 @@ _DECLARED_SCOPES = {
         "libs",
     ),
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
+    "provenance-accessor-scan": ("autobot-backend",),
     "embedding-model-literal-sites": (
         "autobot-backend",
         "autobot_shared",
