@@ -36,7 +36,11 @@ that endpoint never had:
    FIRST: the System vault is the canonical credential store (owner decision
    2026-10-12, #18094). The env var / ``ssot_config`` value is only a logged
    migration fallback for a name the vault does not hold, so no provider key
-   becomes unreachable mid-cutover. It also records a
+   becomes unreachable mid-cutover. A name the vault DOES hold but could not
+   read at hydration is different: :func:`resolve_provider_key` refuses it with
+   :class:`VaultKeyUnavailableError` rather than falling back to an env value
+   that may have been rotated out (owner decision 2026-10-12). A later
+   successful hydration or capture clears the refusal. It also records a
    ``secret_dependencies`` edge (#10088 Task 8.2) for every name whose
    System-vault secret exists, regardless of whether the value currently
    resolves from the vault or from the env, so rotation-impact analysis
@@ -50,7 +54,8 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, Callable
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Callable, Iterator
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -167,6 +172,26 @@ _hydrated_keys: dict[str, str] = {}
 #: emitted once per name per process rather than on every resolution.
 _env_fallback_logged: set[str] = set()
 
+#: Names the System vault holds but whose last read failed. Distinct from "not in
+#: the vault": these are refused, never resolved from the environment (#18094).
+_unreadable_keys: set[str] = set()
+
+
+class VaultKeyUnavailableError(RuntimeError):
+    """The vault holds *name* but it could not be read; the env value is deliberately not used."""
+
+    def __init__(self, name: str) -> None:
+        self.name = _label(name)
+        super().__init__(
+            f"vault unavailable: {self.name} is stored in the secrets manager but could not be read; "
+            "refusing the environment fallback, which may hold a rotated-out key"
+        )
+
+
+def _label(name: str) -> str:
+    """A registry label for *name* -- only those are ever logged (same construction as #16444)."""
+    return "".join(VAULT_RESOLVED_CREDENTIAL_NAMES & {name}) or "<unregistered name>"
+
 
 def resolve_provider_key(env_var: str, config_value: str) -> str:
     """The one resolution order for vault-resolved credentials (#18094, owner decision 2026-10-12).
@@ -174,12 +199,17 @@ def resolve_provider_key(env_var: str, config_value: str) -> str:
     The System vault (hydrated cache) wins. *config_value* -- the env var as
     ``ssot_config`` read it -- is a migration fallback used only when the vault
     holds no value for *env_var*, and that fallback is logged by name, never by
-    value. Every caller (LLM, search, integrations, image generation) goes
-    through here, so the order has exactly one definition.
+    value. A name the vault holds but could not read raises
+    :class:`VaultKeyUnavailableError` instead. Every caller (LLM, search,
+    integrations, image generation) goes through here, so the order has exactly
+    one definition.
     """
     vaulted = _hydrated_keys.get(env_var, "")
     if vaulted:
         return vaulted
+    if env_var in _unreadable_keys:
+        logger.error("provider-key-vault: %s vault unreadable: refusing the environment fallback", _label(env_var))
+        raise VaultKeyUnavailableError(env_var)
     if config_value:
         _log_env_fallback(env_var)
     return config_value
@@ -190,11 +220,22 @@ def _log_env_fallback(name: str) -> None:
     if name in _env_fallback_logged:
         return
     _env_fallback_logged.add(name)
-    # Only a registry label is ever logged (same construction as the mirror warning, #16444).
-    label = "".join(VAULT_RESOLVED_CREDENTIAL_NAMES & {name}) or "<unregistered name>"
     logger.warning(
-        "provider-key-vault: %s resolved from the environment (migration fallback); store it in the vault", label
+        "provider-key-vault: %s vault has no key: using the environment (migration fallback); store it in the vault",
+        _label(name),
     )
+
+
+@contextmanager
+def registration_refusal(component: str) -> Iterator[None]:
+    """Contain a refusal at a registration site: *component* is skipped and the reason logged at ERROR.
+
+    One refused credential must not abort registering its siblings or crash startup.
+    """
+    try:
+        yield
+    except VaultKeyUnavailableError as exc:
+        logger.error("provider-key-vault: %s not registered -- %s", component, exc)
 
 
 def resolve_image_provider_key(name: str) -> str:
@@ -280,6 +321,7 @@ def _refresh_hydrated_key(name: str, plaintext: str) -> None:
     """
     if name in VAULT_RESOLVED_CREDENTIAL_NAMES:
         _hydrated_keys[name] = plaintext
+        _unreadable_keys.discard(name)
 
 
 async def mirror_provider_key_best_effort(name: str, value: str, created_by: uuid.UUID) -> bool:
@@ -335,13 +377,20 @@ async def _register_credential_dependency(session: AsyncSession, *, name: str, s
 async def _hydrate_one_key(
     session: AsyncSession, service: EnvelopeSecretsService, *, name: str, secret_id: uuid.UUID
 ) -> bool:
-    """Decrypt *secret_id* into ``_hydrated_keys[name]``. Returns whether it hydrated."""
+    """Decrypt *secret_id* into ``_hydrated_keys[name]``. Returns whether it hydrated.
+
+    A failed read marks *name* unreadable (resolution then refuses it rather than
+    using the env value); a successful one clears that mark.
+    """
     try:
         value = await service.read(session, secret_id=secret_id, accessible_vaults={_SYSTEM_VAULT})
     except Exception as exc:  # noqa: BLE001 - defensive, one bad row must not break the rest
         logger.warning("provider-key-vault: hydrate failed name=%s: %s", name, type(exc).__name__)
+        _hydrated_keys.pop(name, None)
+        _unreadable_keys.add(name)
         return False
     _hydrated_keys[name] = value.decode("utf-8")
+    _unreadable_keys.discard(name)
     return True
 
 
@@ -369,6 +418,7 @@ async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: b
             await _register_credential_dependency(session, name=name, secret_id=secret_id)
             any_dependency_registered = True
         if secret_id is None:
+            _unreadable_keys.discard(name)
             continue  # nothing vaulted: resolution falls back to the env var
         if await _hydrate_one_key(session, service, name=name, secret_id=secret_id):
             hydrated.append(name)

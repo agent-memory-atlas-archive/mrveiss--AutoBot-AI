@@ -41,11 +41,9 @@ class ImageGenerationPlugin(BasePlugin):
         self._logger.info("ImageGenerationPlugin: initializing")
 
         set_credential_resolver(self.credential_resolver)
-        openai_key = read_provider_key("OPENAI_API_KEY")
-        flux_key = read_provider_key("FLUX_API_KEY")
-        stability_key = read_provider_key("STABILITY_API_KEY")
+        usable = [self._key_usable(name) for name in ("OPENAI_API_KEY", "FLUX_API_KEY", "STABILITY_API_KEY")]
 
-        if not any([openai_key, flux_key, stability_key]):
+        if not any(usable):
             self._logger.warning(
                 "ImageGenerationPlugin: no API keys configured — "
                 "tool registered but all providers will fail at call time. "
@@ -56,6 +54,18 @@ class ImageGenerationPlugin(BasePlugin):
         registry.register(GenerateImageTool)
         self._registered = True
         self._logger.info("ImageGenerationPlugin: registered generate_image tool")
+
+    def _key_usable(self, name: str) -> bool:
+        """Whether *name* resolves to a key. A host refusal (vault unreadable, #18094) is logged, not fatal.
+
+        The refusal type is the backend's, so it is caught by base class here; the load continues and the
+        same refusal is returned as the tool error at call time.
+        """
+        try:
+            return bool(read_provider_key(name))
+        except Exception as exc:  # noqa: BLE001 - reported at ERROR; one refused key must not fail the plugin load
+            self._logger.error("ImageGenerationPlugin: %s unavailable at load: %s", name, exc)
+            return False
 
     async def shutdown(self) -> None:
         self._logger.info("ImageGenerationPlugin: shutting down")

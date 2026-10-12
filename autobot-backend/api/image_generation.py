@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from api.schemas_media import ProvidersResponse, ProviderStatus
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
-from services.provider_key_vault import resolve_image_provider_key
+from services.provider_key_vault import VaultKeyUnavailableError, resolve_image_provider_key
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,14 @@ class ImageGenerationResponse(BaseModel):
 
 
 def _provider_status(name: str, env_var: str) -> ProviderStatus:
-    """Availability of one provider; the key resolves vault-first, env as fallback (#18094). Never exposes the value."""
-    available = bool(resolve_image_provider_key(env_var))
+    """Availability of one provider; the key resolves vault-first, env as fallback (#18094). Never exposes the value.
+
+    A vault refusal reports that provider unavailable with the refusal as its reason, not a failed listing.
+    """
+    try:
+        available = bool(resolve_image_provider_key(env_var))
+    except VaultKeyUnavailableError as exc:
+        return ProviderStatus(name=name, available=False, reason=str(exc))
     return ProviderStatus(name=name, available=available, reason=None if available else f"{env_var} not set")
 
 

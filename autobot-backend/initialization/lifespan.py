@@ -1391,7 +1391,7 @@ async def _init_llm_adapters() -> None:
             OpenAIAdapter,
         )
         from llm_shared.adapters.registry import get_adapter_registry
-        from services.provider_key_vault import resolve_provider_key
+        from services.provider_key_vault import registration_refusal, resolve_provider_key
 
         registry = get_adapter_registry()
 
@@ -1405,17 +1405,16 @@ async def _init_llm_adapters() -> None:
         except Exception as exc:
             logger.debug("Ollama adapter registration skipped: %s", exc)
 
-        # OpenAI — registered when API key is set (vault first; env fallback, #15276)
-        if resolve_provider_key("OPENAI_API_KEY", getattr(_cfg, "openai_api_key", "") or ""):
-            registry.register(OpenAIAdapter())
-
-        # Anthropic — registered when API key is set (vault first; env fallback, #15276)
-        if resolve_provider_key("ANTHROPIC_API_KEY", getattr(_cfg, "anthropic_api_key", "") or ""):
-            registry.register(AnthropicAdapter())
-
-        # Groq — registered when API key is set (vault first; env fallback, #15276)
-        if resolve_provider_key("GROQ_API_KEY", getattr(_cfg, "groq_api_key", "") or ""):
-            registry.register(GroqAdapter())
+        # OpenAI, Anthropic, Groq — registered when the key resolves (vault first; env fallback, #15276);
+        # a vault refusal skips that adapter with the reason logged, never the others (#18094).
+        for name, field, adapter_cls in (
+            ("OPENAI_API_KEY", "openai_api_key", OpenAIAdapter),
+            ("ANTHROPIC_API_KEY", "anthropic_api_key", AnthropicAdapter),
+            ("GROQ_API_KEY", "groq_api_key", GroqAdapter),
+        ):
+            with registration_refusal(f"{name} adapter"):
+                if resolve_provider_key(name, getattr(_cfg, field, "") or ""):
+                    registry.register(adapter_cls())
 
         count = len(registry.list_adapters())
         logger.info("[ 97%%] LLM Adapters: %d adapter(s) registered", count)
