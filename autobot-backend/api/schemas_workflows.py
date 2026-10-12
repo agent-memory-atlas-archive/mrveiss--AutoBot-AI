@@ -1174,7 +1174,7 @@ class SessionPresenceResponse(BaseModel):
     """Response for GET /{session_id}/presence."""
 
     session_id: str
-    online_users: List[Any]
+    online_users: List[str]
     count: int
 
 
