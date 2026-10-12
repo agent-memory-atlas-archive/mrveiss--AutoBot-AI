@@ -31,7 +31,7 @@ export async function syncOnlineUsers(
     const { online_users } = await apiService.getSessionPresence(sessionId)
     if (currentSessionId() !== sessionId) return // left or switched while in flight
     const online = new Set(online_users.filter((u): u is string => typeof u === 'string'))
-    for (const userId of [...presence.keys()]) {
+    for (const userId of presence.keys()) {
       if (!online.has(userId)) presence.delete(userId)
     }
     for (const userId of online) {

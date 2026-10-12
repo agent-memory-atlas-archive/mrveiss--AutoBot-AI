@@ -180,7 +180,8 @@ class EntityOperationsMixin:
         entity_metadata = self._prepare_entity_metadata(metadata, tags)
         entity = self._build_entity_document(entity_id, entity_type, name, observations, entity_metadata)
         await self._store_entity_in_redis(entity_id, entity)
-        logger.info("Created entity: %s (%s) with ID %s", name, entity_type, entity_id[:8] + "...")
+        # The name can be anything a caller stored, a credential included; the type and id identify the row.
+        logger.info("Created entity of type %s with ID %s", entity_type, entity_id[:8] + "...")
         return entity
 
     async def get_or_create_entity(
