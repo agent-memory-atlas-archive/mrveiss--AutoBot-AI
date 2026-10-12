@@ -12,6 +12,7 @@ from typing import Callable
 import aiohttp
 
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config as ssot_config
 from autobot_shared.ssot_config import get_ollama_url
@@ -69,7 +70,9 @@ class OllamaHealth(BaseProviderHealth):
             tags_url = f"{self.ollama_host}/api/tags"
 
             http_client = get_http_client()
-            async with await http_client.get(tags_url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+            async with await http_client.get(
+                tags_url, timeout=aiohttp.ClientTimeout(total=timeout), guard_egress=EGRESS_POLICY
+            ) as response:
                 response_time = time.time() - start_time
 
                 if response.status == 200:
@@ -197,6 +200,7 @@ class OpenAIHealth(BaseProviderHealth):
                 models_url,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=timeout),
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 response_time = time.time() - start_time
                 data = await response.json() if response.status == 200 else {}
@@ -304,6 +308,7 @@ class AnthropicHealth(BaseProviderHealth):
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=timeout),
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 response_time = time.time() - start_time
                 # Use helper to build result (Issue #315)
@@ -407,6 +412,7 @@ class GoogleHealth(BaseProviderHealth):
                 models_url,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=timeout),
+                guard_egress=EGRESS_POLICY,
             ) as response:
                 response_time = time.time() - start_time
                 data = await response.json() if response.status == 200 else {}
@@ -453,7 +459,9 @@ class LMStudioHealth(BaseProviderHealth):
             models_url = f"{self.lmstudio_host}/v1/models"
 
             http_client = get_http_client()
-            async with await http_client.get(models_url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+            async with await http_client.get(
+                models_url, timeout=aiohttp.ClientTimeout(total=timeout), guard_egress=EGRESS_POLICY
+            ) as response:
                 response_time = time.time() - start_time
 
                 if response.status == 200:
@@ -525,7 +533,9 @@ class VLLMHealth(BaseProviderHealth):
             models_url = f"{self.vllm_host}/v1/models"
 
             http_client = get_http_client()
-            async with await http_client.get(models_url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+            async with await http_client.get(
+                models_url, timeout=aiohttp.ClientTimeout(total=timeout), guard_egress=EGRESS_POLICY
+            ) as response:
                 response_time = time.time() - start_time
 
                 if response.status == 200:

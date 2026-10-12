@@ -205,10 +205,10 @@ REACH = declare(
     # is [5737, 6137]. 5764 was 27 files from red, which the #17818 check calls
     # zero tolerance dressed as an allowance -- this PR's own new modules were
     # that ordinary growth. Mid-window, re-measured here, not carried (#15928).
-    # 5937 -> 6010 (#18094): a population of 6607 put 5937 in the bottom 40 of its window
-    # [5907, 6307]. The window's suggested 6107 is above what the sweep completes (6075 on
-    # this run), so the floor sits between the window's safe bottom (5947) and that count.
-    floor=6010,
+    # Re-pinned (#18293): REACH.window() gives [5900, 6300] against population 6600, but
+    # completed() reaches only 6068 because more files are skipped than the declared 300.
+    # 6000 clears the bottom band (>= 5940) and stays under what actually completes.
+    floor=6000,
     growth=400,
     skips=300,
     what="tracked python files",

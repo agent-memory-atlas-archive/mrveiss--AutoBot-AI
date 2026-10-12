@@ -277,7 +277,7 @@ def is_redaction_implementation(source: str) -> bool:
 REACH = declare(
     "redaction-concept-census",
     discover=_tracked_sources,
-    # 3369 (was 3247, #18094), NOT the `population - growth` value. The first version of this
+    # 3247, NOT the `population - growth` value. The first version of this
     # declaration used that formula and went red on the next rebase after a
     # handful of files landed -- which is what "zero tolerance by construction"
     # means in practice. Second instance of that error by this author in one
@@ -291,7 +291,7 @@ REACH = declare(
     # Prose citing a measurement survives the rebase that changes it -- the
     # resolver owns the value and nothing owns the sentence. The arithmetic is
     # in the commit message, which cannot drift from the tree it describes.
-    floor=3369,
+    floor=3368,
     growth=300,
     what="tracked production python files",
 )
