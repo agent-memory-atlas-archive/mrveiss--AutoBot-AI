@@ -69,3 +69,16 @@ export function localToUtc(p: LocalParts, zone: string): number {
     .map(({ t }) => t)
   return valid.length ? Math.min(...valid) : wall - before
 }
+
+/** Selectable IANA zones, always including `include` and UTC. */
+export function listZones(...include: string[]): string[] {
+  const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
+  return [...new Set([...include.filter(Boolean), 'UTC', ...all])].sort((a, b) => a.localeCompare(b))
+}
+
+/** Calendar date "YYYY-MM-DD" of `ms` in `zone`, shifted by `plusDays`. */
+export function zoneDate(ms: number, zone: string, plusDays = 0): string {
+  const p = localParts(ms, zone)
+  const d = new Date(Date.UTC(p.y, p.m - 1, p.d + plusDays))
+  return d.toISOString().slice(0, 10)
+}
