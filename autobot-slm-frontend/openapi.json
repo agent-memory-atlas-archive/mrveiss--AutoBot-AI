@@ -1737,7 +1737,8 @@
         "description": "Data service a backup, replication or verification targets (#13578).\n\n``service_type`` was the outlier among the eight sibling enums in this\nmodule: a bare ``String(32)`` with no constraint anywhere. The cost landed\nthe moment a second engine arrived — the dispatch table in\n``api/stateful.py`` had to accept two spellings of the same engine, and an\nunknown value was not rejected at the API boundary at all. It reached\n``_run_backup``, wrote a ``Backup`` row, and only then failed, leaving a\n``BackupStatus.FAILED`` row for a typo that is indistinguishable from one\nfor a real failure.\n\nThe column stays a string at rest (#13578: existing rows keep working);\nthis enum is the boundary that decides what may enter.",
         "enum": [
           "redis",
-          "postgres"
+          "postgres",
+          "secrets"
         ],
         "title": "BackupServiceType",
         "type": "string"
@@ -2118,6 +2119,21 @@
           "updated_at"
         ],
         "title": "BlueGreenResponse",
+        "type": "object"
+      },
+      "Body_exchange_sso_code_api_auth_sso_exchange_post": {
+        "properties": {
+          "code": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "Body_exchange_sso_code_api_auth_sso_exchange_post",
         "type": "object"
       },
       "Body_saml_callback_api_auth_sso_saml_callback_post": {
@@ -10735,6 +10751,56 @@
         "title": "SecretUpdate",
         "type": "object"
       },
+      "SecretsBackupStatus": {
+        "description": "What the verifier needs to decide, and nothing else (no path, no checksum).",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "integrity_ok": {
+            "title": "Integrity Ok",
+            "type": "boolean"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "status",
+          "service_type",
+          "completed_at",
+          "integrity_ok"
+        ],
+        "title": "SecretsBackupStatus",
+        "type": "object"
+      },
       "SecurityEventAcknowledge": {
         "description": "Acknowledge security event.",
         "properties": {
@@ -16134,6 +16200,48 @@
           }
         },
         "summary": "Oauth Callback",
+        "tags": [
+          "sso-auth"
+        ]
+      }
+    },
+    "/api/auth/sso/exchange": {
+      "post": {
+        "description": "Exchange a single-use SSO code for the session token (#18394).",
+        "operationId": "exchange_sso_code_api_auth_sso_exchange_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_exchange_sso_code_api_auth_sso_exchange_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exchange Sso Code",
         "tags": [
           "sso-auth"
         ]
@@ -34099,6 +34207,70 @@
           }
         ],
         "summary": "Verify Replication Sync",
+        "tags": [
+          "stateful"
+        ]
+      }
+    },
+    "/api/stateful/secrets-backups/{backup_id}": {
+      "get": {
+        "description": "Facts about one backup: its status, type, completion time and on-disk integrity.",
+        "operationId": "get_secrets_backup_status_api_stateful_secrets_backups__backup_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "backup_id",
+            "required": true,
+            "schema": {
+              "title": "Backup Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Internal-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretsBackupStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Secrets Backup Status",
         "tags": [
           "stateful"
         ]

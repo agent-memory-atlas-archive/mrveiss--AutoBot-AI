@@ -31,10 +31,12 @@ from pathlib import Path
 import pytest
 import repo_tests.ansible_concept_forks_17856_test as _ansible_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.anti_pattern_type_emitted_18189_test as _anti_pattern_guard  # noqa: F401 -- registers its scope
+import repo_tests.audit_writer_single_source_17225_test as _audit_writer_guard  # noqa: F401 -- registers its scope
 import repo_tests.chat_history_async_calls_awaited_18316_test as _chat_async_guard  # noqa: F401 -- registers its scope
 import repo_tests.chat_single_delete_implementation_18316_test as _chat_delete_guard  # noqa: F401 -- registers its scope
 import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
 import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
+import repo_tests.container_hardening_single_source_17267_test as _hardening_guard  # noqa: F401 -- registers its scope
 import repo_tests.conversation_turn_single_store_18293_test as _conversation_turn_guard  # noqa: F401 -- registers its scope
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
@@ -47,6 +49,7 @@ import repo_tests.migration_gate_filter_covers_what_its_tests_import_test as _mi
 import repo_tests.model_tier_single_definition_15502_test as _model_tier_guard  # noqa: F401 -- registers its scope
 import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_bm25_formula_18183_test as _bm25_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_brand_mark_and_announcer_18240_test as _brand_mark_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_content_digest_15722_test as _content_digest_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_deployment_mode_detector_12771_test as _deployment_mode_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_fact_read_authorization_18184_test as _fact_read_guard  # noqa: F401 -- registers its scope
@@ -56,6 +59,7 @@ import repo_tests.one_semantic_chunker_14485_test as _semantic_chunker_guard  # 
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_ssh_restart_executor_18186_test as _ssh_restart_guard
+import repo_tests.single_attribute_writer_18240_test as _attribute_writer_guard  # noqa: F401 -- registers its scope
 from repo_tests._paths import repo_root
 from repo_tests._reach import Reach, ReachScopeError, declare
 from repo_tests._reach_scope import relative_paths, scope_complaint
@@ -185,6 +189,9 @@ def test_a_declared_scope_that_the_sweep_does_not_reach_is_refused() -> None:
 #: Compared as a SET in both directions. Adding a scoped declaration means adding a line here,
 #: and that is the point -- the scope is a decision, so it is written twice on purpose.
 _DECLARED_SCOPES = {
+    "audit-writer-single-source": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "container-hardening-inline": ("autobot-backend", "autobot_shared"),
+    "brand-mark-announcer-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
     "one-content-digest-scan": ("autobot-backend", "autobot_shared"),
     "semantic-chunker-fork-scan": ("autobot-backend", "autobot_shared"),
     "migration-gate-test-import-sweep": ("autobot-backend/tests/migrations",),
@@ -209,7 +216,14 @@ _DECLARED_SCOPES = {
         "libs",
     ),
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
-    "embedding-model-literal-sites": ("autobot-backend", "autobot_shared"),
+    "provenance-accessor-scan": ("autobot-backend",),
+    "embedding-model-literal-sites": (
+        "autobot-backend",
+        "autobot_shared",
+        "autobot-infrastructure/shared/scripts/populate_kb_chromadb.py",
+        "autobot-infrastructure/shared/tools/index_documentation.py",
+    ),
+    "single-attribute-writer-scan": ("autobot-frontend/src",),
     "tool-effect-table-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "deployment-mode-detector-scan": ("autobot-backend/", "autobot-infrastructure/"),
     "egress-default-outbound-call-sites": (

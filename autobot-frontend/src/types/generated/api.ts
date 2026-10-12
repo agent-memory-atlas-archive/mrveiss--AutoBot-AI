@@ -3785,10 +3785,10 @@ export interface paths {
         head?: never;
         /**
          * Update User Preferences
-         * @description Update current user's preferences.
+         * @description Update current user's preferences (partial: omitted fields keep stored values).
          *
          *     Args:
-         *         preferences: New preference values
+         *         preferences: Preference values; only fields present in the body are written
          *
          *     Returns:
          *         DataResponse with updated preferences
@@ -28763,7 +28763,8 @@ export interface paths {
          * @description Expose Prometheus metrics in text/plain format for scraping
          *
          *     This endpoint is scraped by Prometheus at regular intervals
-         *     configured in prometheus.yml (default: 15s)
+         *     configured in prometheus.yml (default: 15s), with the scrape token
+         *     as a bearer credential.
          */
         get: operations["metrics_endpoint_api_metrics_prometheus_get"];
         put?: never;
@@ -29074,7 +29075,7 @@ export interface paths {
         put?: never;
         /**
          * Log Rum Event
-         * @description Log a RUM event from the frontend
+         * @description Log a RUM event from the frontend -- one bounded row per request (#16375).
          */
         post: operations["log_rum_event_api_rum_event_post"];
         delete?: never;
@@ -29178,6 +29179,7 @@ export interface paths {
          *
          *     Issue #476: This endpoint receives batched RUM metrics from the frontend
          *     and records them to the Prometheus metrics system for monitoring.
+         *     #18368: every list and string is capped before anything is recorded.
          */
         post: operations["receive_rum_metrics_api_rum_metrics_post"];
         delete?: never;
@@ -49456,6 +49458,26 @@ export interface paths {
          */
         put: operations["assign_session_to_folder_api_chat_sessions__session_id__folder_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/sessions/{session_id}/turn/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Chat Turn
+         * @description Cancel the turn currently running for *session_id* (owner only, on whichever worker).
+         */
+        post: operations["cancel_chat_turn_api_chat_sessions__session_id__turn_cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -70539,6 +70561,21 @@ export interface components {
              */
             success: boolean;
             data?: components["schemas"]["ThinkingPreferencesData"] | null;
+            /** Message */
+            message?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DataResponse[TurnCancelData] */
+        DataResponse_TurnCancelData_: {
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+            data?: components["schemas"]["TurnCancelData"] | null;
             /** Message */
             message?: string | null;
             /** Timestamp */
@@ -94964,7 +95001,7 @@ export interface components {
             /** Session Id */
             session_id: string;
             /** Online Users */
-            online_users: unknown[];
+            online_users: string[];
             /** Count */
             count: number;
         } & {
@@ -100026,6 +100063,23 @@ export interface components {
          */
         TrustLevel: "UNTRUSTED" | "LIMITED" | "STANDARD" | "TRUSTED";
         /**
+         * TurnCancelData
+         * @description Outcome of a turn-cancel request.
+         */
+        TurnCancelData: {
+            /** Session Id */
+            session_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "cancelled" | "no_active_turn" | "unconfirmed";
+            /** Cancelled Turns */
+            cancelled_turns: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * UIElementResponse
          * @description Response model for UI element
          */
@@ -100859,6 +100913,24 @@ export interface components {
              * @default auto
              */
             theme_preset: string;
+            /**
+             * Ui Mode
+             * @description Shell UI mode (minimal, full)
+             * @default full
+             */
+            ui_mode: string;
+            /**
+             * Ui Start
+             * @description Which UI mode to open in on sign-in (last, minimal, full)
+             * @default last
+             */
+            ui_start: string;
+            /**
+             * Theme Variant
+             * @description Theme variant id: 'default', a built-in, or an installed theme id
+             * @default default
+             */
+            theme_variant: string;
         } & {
             [key: string]: unknown;
         };
@@ -141943,7 +142015,9 @@ export interface operations {
     metrics_endpoint_api_metrics_prometheus_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -141956,6 +142030,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -169939,6 +170022,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_chat_turn_api_chat_sessions__session_id__turn_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_TurnCancelData_"];
                 };
             };
             /** @description Validation Error */

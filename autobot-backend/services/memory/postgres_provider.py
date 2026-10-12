@@ -44,13 +44,13 @@ class PostgresMemoryProvider:
             user_id = context.get("user_id")
             result = {}
             if conversation_id:
-                conversation = await self.memory_graph.get_entity(f"conversation_{conversation_id}")
+                conversation = await self.memory_graph.get_entity(entity_name=f"conversation_{conversation_id}")
                 if conversation:
                     result["conversation"] = conversation
                 related = await self.memory_graph.search_entities(conversation_id)
                 result["related_entities"] = related[:10]
             if user_id:
-                user_entity = await self.memory_graph.get_entity(f"user_{user_id}")
+                user_entity = await self.memory_graph.get_entity(entity_name=f"user_{user_id}")
                 if user_entity:
                     result["user"] = user_entity
             return result
@@ -73,12 +73,9 @@ class PostgresMemoryProvider:
                         observations=update.get("observations", []),
                     )
                 elif update.get("action") == "update":
-                    await self.memory_graph.update_entity(
-                        entity_id=update["entity_id"],
-                        **update.get("changes", {}),
-                    )
+                    await self._apply_entity_updates(update["entity_id"], update.get("changes", {}))
                 elif update.get("action") == "delete":
-                    await self.memory_graph.delete_entity(update["entity_id"])
+                    await self._delete_entity_by_id(update["entity_id"])
             for rel in relation_updates:
                 if rel.get("action") == "create":
                     await self.memory_graph.create_relation(
@@ -90,6 +87,7 @@ class PostgresMemoryProvider:
                     await self.memory_graph.delete_relation(
                         from_entity=rel["from_entity"],
                         to_entity=rel["to_entity"],
+                        relation_type=rel["relation_type"],
                     )
             logger.info(f"Synced {len(entity_updates)} entity and " f"{len(relation_updates)} relation updates")
         except Exception as e:
@@ -116,12 +114,37 @@ class PostgresMemoryProvider:
             logger.error(f"Error getting entity {entity_id}: {e}")
             return None
 
+    async def _name_for_id(self, entity_id: str) -> str:
+        """Resolve an entity id to the name the graph's write API is keyed by (#18414)."""
+        entity = await self.memory_graph.get_entity(entity_id=entity_id)
+        if not entity:
+            raise ValueError(f"Entity not found: {entity_id}")
+        return entity["name"]
+
+    async def _apply_entity_updates(self, entity_id: str, updates: Dict[str, Any]) -> None:
+        """Apply updates through the graph's one mutation, add_observations (#18414).
+
+        The graph has no field-level update; observations are its only mutable
+        content. Any other key is refused rather than silently dropped.
+        """
+        unsupported = set(updates) - {"observations"}
+        if unsupported:
+            raise ValueError(f"Unsupported entity update fields: {sorted(unsupported)}")
+        observations = updates.get("observations")
+        if not observations:
+            raise ValueError("Entity update has no observations to apply")
+        await self.memory_graph.add_observations(await self._name_for_id(entity_id), observations)
+
+    async def _delete_entity_by_id(self, entity_id: str) -> None:
+        """The graph deletes by name; resolve the id first (#18414)."""
+        await self.memory_graph.delete_entity(await self._name_for_id(entity_id))
+
     async def update_entity(self, entity_id: str, updates: Dict[str, Any]) -> None:
         if not self.memory_graph:
             logger.warning("Memory graph not initialized for update")
             return
         try:
-            await self.memory_graph.update_entity(entity_id, **updates)
+            await self._apply_entity_updates(entity_id, updates)
         except Exception as e:
             logger.error(f"Error updating entity {entity_id}: {e}")
             raise
@@ -131,7 +154,7 @@ class PostgresMemoryProvider:
             logger.warning("Memory graph not initialized for delete")
             return
         try:
-            await self.memory_graph.delete_entity(entity_id)
+            await self._delete_entity_by_id(entity_id)
         except Exception as e:
             logger.error(f"Error deleting entity {entity_id}: {e}")
             raise

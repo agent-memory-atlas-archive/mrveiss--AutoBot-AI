@@ -76,8 +76,8 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/analytics_precommit.py": 788,
     "autobot-backend/api/analytics_quality.py": 1729,
     "autobot-backend/api/analytics_root_cause_test.py": 628,
-    "autobot-backend/api/api_endpoint_migrations_test.py": 31023,
-    "autobot-backend/api/auth.py": 734,
+    "autobot-backend/api/api_endpoint_migrations_test.py": 31020,
+    "autobot-backend/api/auth.py": 731,
     "autobot-backend/api/batch_jobs.py": 964,
     "autobot-backend/api/browser_mcp.py": 1340,
     "autobot-backend/api/cache_management.py": 779,
@@ -88,12 +88,11 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,
     "autobot-backend/api/codebase_analytics/api_endpoint_scanner.py": 1444,
     "autobot-backend/api/codebase_analytics/chromadb_storage.py": 1389,  # #18055: split to problem_storage.py
-    "autobot-backend/api/codebase_analytics/duplicate_detector.py": 1326,
+    "autobot-backend/api/codebase_analytics/duplicate_detector.py": 1119,
     "autobot-backend/api/codebase_analytics/endpoints/call_graph.py": 756,
-    "autobot-backend/api/codebase_analytics/endpoints/duplicates.py": 660,  # #17758: triplicated cached body collapsed
     "autobot-backend/api/codebase_analytics/endpoints/environment.py": 698,  # #13602: sanitised traversal log
     "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 827,
-    "autobot-backend/api/codebase_analytics/endpoints/report.py": 2267,
+    "autobot-backend/api/codebase_analytics/endpoints/report.py": 2266,
     "autobot-backend/api/codebase_analytics/endpoints/stats.py": 663,
     "autobot-backend/api/conversation_files.py": 1078,
     "autobot-backend/api/database_mcp.py": 1076,
@@ -132,7 +131,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/playwright.py": 877,
     "autobot-backend/api/provider_auth.py": 608,
     "autobot-backend/api/redis_mcp/tools.py": 669,
-    "autobot-backend/api/rum.py": 604,
     "autobot-backend/api/schemas_agent.py": 2224,
     "autobot-backend/api/schemas_analytics.py": 3543,
     "autobot-backend/api/schemas_chat.py": 702,
@@ -161,7 +159,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/chat_workflow/chat_intent_detector_test.py": 621,
     "autobot-backend/chat_workflow/graph.py": 1682,
     "autobot-backend/chat_workflow/llm_handler.py": 1343,
-    "autobot-backend/chat_workflow/manager.py": 3975,  # #18293: transcript_dir retired
+    "autobot-backend/chat_workflow/manager.py": 3887,  # #17273: graph turn lifecycle moved to turn_control
     "autobot-backend/chat_workflow/tool_handler.py": 3731,  # #11542 dispatch merge + #14068 mirror
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,
     "autobot-backend/chat_workflow/workflow_plan_approval_test.py": 624,
@@ -214,10 +212,10 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/hardware_acceleration.py": 609,
     "autobot-backend/initialization/lifespan.py": 2340,
     "autobot-backend/initialization/router_registry/feature_routers.py": 779,
-    "autobot-backend/integrations/cloud_integration.py": 630,
+    "autobot-backend/integrations/cloud_integration.py": 616,
     "autobot-backend/integrations/communication_integration.py": 605,
-    "autobot-backend/integrations/microsoft365_integration.py": 633,
-    "autobot-backend/integrations/project_management_integration.py": 746,
+    "autobot-backend/integrations/microsoft365_integration.py": 632,
+    "autobot-backend/integrations/project_management_integration.py": 743,
     "autobot-backend/integrations/slack_integration.py": 739,
     "autobot-backend/integrations/whatsapp_integration.py": 754,
     "autobot-backend/intelligence/goal_processor.py": 609,
@@ -305,7 +303,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/protocols/agent_communication.py": 654,
     "autobot-backend/research_browser_manager.py": 704,
     "autobot-backend/secure_command_executor.py": 1220,
-    "autobot-backend/secure_sandbox_executor.py": 1019,
+    "autobot-backend/secure_sandbox_executor.py": 1017,
     "autobot-backend/security/command_patterns.py": 609,
     "autobot-backend/security/domain_security.py": 725,
     "autobot-backend/security/enterprise/compliance_manager.py": 910,
@@ -315,16 +313,15 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/security/input_validator.py": 607,
     # #16354: invisible-char table moved to security/unicode_normalization.py
     "autobot-backend/security/prompt_injection_detector.py": 703,
-    "autobot-backend/security/security_edge_cases_test.py": 638,
+    "autobot-backend/security/security_edge_cases_test.py": 613,
     "autobot-backend/security/session_ownership.py": 817,
     "autobot-backend/security/threat_detection_refactor_test.py": 880,
     "autobot-backend/security/threat_intelligence.py": 763,
-    "autobot-backend/security_layer.py": 767,
+    "autobot-backend/security_layer.py": 717,
     "autobot-backend/services/agent_analytics.py": 686,
     "autobot-backend/services/agent_terminal/service.py": 951,
     "autobot-backend/services/ai_stack_client.py": 764,
     "autobot-backend/services/analytics_service.py": 835,
-    "autobot-backend/services/audit_logger.py": 1022,
     "autobot-backend/services/autoresearch/auto_research_agent.py": 1187,
     "autobot-backend/services/autoresearch/auto_research_agent_test.py": 823,
     "autobot-backend/services/autoresearch/routes.py": 726,
@@ -340,7 +337,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/config_service.py": 605,
     "autobot-backend/services/docker_task_workspace.py": 673,
     "autobot-backend/services/execution/claude_code_backend.py": 661,
-    "autobot-backend/services/execution/docker_backend.py": 605,
+    "autobot-backend/services/execution/docker_backend.py": 604,
     "autobot-backend/services/fact_extraction_service.py": 870,
     "autobot-backend/services/fast_document_scanner.py": 653,
     "autobot-backend/services/graph_rag_service.py": 741,
@@ -450,10 +447,10 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/api/security.py": 962,
     "autobot-slm-backend/api/services.py": 1101,
     "autobot-slm-backend/api/setup_wizard.py": 1352,
-    "autobot-slm-backend/api/stateful.py": 688,
+    "autobot-slm-backend/api/stateful.py": 687,
     "autobot-slm-backend/api/tls.py": 994,
     "autobot-slm-backend/api/updates.py": 1107,
-    "autobot-slm-backend/main.py": 798,  # merge #16444+#17113: local admin socket lifespan wiring + shared 422 handler
+    "autobot-slm-backend/main.py": 781,  # #16375: secret seeding consolidated into services/generated_system_secrets.py
     "autobot-slm-backend/models/database.py": 1140,
     "autobot-slm-backend/models/schemas.py": 2155,
     "autobot-slm-backend/monitoring/business_intelligence_dashboard.py": 1159,
@@ -486,7 +483,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/tests/services/test_sso_service.py": 1258,
     "autobot-slm-backend/tests/test_cleanup_never_destroys_data_14856.py": 981,
     "autobot-slm-backend/user_management/services/sso_service.py": 778,
-    "autobot_shared/env_registry.py": 1215,  # #13602: +1 sibling import, -14 registration
+    "autobot_shared/env_registry.py": 1214,  # #13602: +1 sibling import, -14 registration
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 616,
     "autobot_shared/npu/integration.py": 929,
@@ -497,10 +494,10 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot_shared/redis_client.py": 679,
     "autobot_shared/redis_management/connection_manager.py": 1517,
     "autobot_shared/security/ssrf_guard_test.py": 633,
-    "autobot_shared/ssot_config.py": 3307,  # #16974: org_role_bound_enabled feature flag
+    "autobot_shared/ssot_config.py": 3308,  # #16375: AUTOBOT_PROMETHEUS_SCRAPE_TOKEN
     "autobot_shared/ssot_config_test.py": 782,
     "autobot_shared/ssot_constants.py": 896,
-    "autobot_shared/user_management/team_service.py": 725,
+    "autobot_shared/user_management/team_service.py": 724,
     "pipeline-scripts/check-pre-commit-hook-pr_test.py": 747,
     "pipeline-scripts/ci_dispatch_watchdog.py": 1370,  # #13439: supersession split to ci_run_supersession.py
     "pipeline-scripts/detect-hardcoded-values_test.py": 653,
