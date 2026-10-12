@@ -131,8 +131,9 @@ class PostgresMemoryProvider:
         if unsupported:
             raise ValueError(f"Unsupported entity update fields: {sorted(unsupported)}")
         observations = updates.get("observations")
-        if observations:
-            await self.memory_graph.add_observations(await self._name_for_id(entity_id), observations)
+        if not observations:
+            raise ValueError("Entity update has no observations to apply")
+        await self.memory_graph.add_observations(await self._name_for_id(entity_id), observations)
 
     async def _delete_entity_by_id(self, entity_id: str) -> None:
         """The graph deletes by name; resolve the id first (#18414)."""

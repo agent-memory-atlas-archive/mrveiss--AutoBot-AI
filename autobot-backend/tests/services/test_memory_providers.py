@@ -127,6 +127,12 @@ class TestPostgresMemoryProvider:
             await provider.update_entity("e1", {"entity_type": "x"})
 
     @pytest.mark.asyncio
+    async def test_update_entity_with_nothing_to_apply_is_refused_not_a_silent_noop(self, provider):
+        provider.memory_graph = _spec_graph()
+        with pytest.raises(ValueError, match="no observations"):
+            await provider.update_entity("e1", {})
+
+    @pytest.mark.asyncio
     async def test_delete_entity_resolves_id_to_name(self, provider):
         graph = provider.memory_graph = _spec_graph()
         graph.get_entity.return_value = {"id": "e1", "name": "Redis"}

@@ -13,6 +13,7 @@ Part of the modular autobot_memory_graph package (Issue #716).
 """
 
 import asyncio
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -161,22 +162,84 @@ class EntityOperationsMixin:
         self._validate_entity_inputs(entity_type, name)
 
         try:
-            entity_id = str(uuid.uuid4())
-            entity_metadata = self._prepare_entity_metadata(metadata, tags)
-            entity = self._build_entity_document(entity_id, entity_type, name, observations, entity_metadata)
-
-            await self._store_entity_in_redis(entity_id, entity)
-            logger.info(
-                "Created entity: %s (%s) with ID %s",
-                name,
-                entity_type,
-                entity_id[:8] + "...",
-            )
-            return entity
-
+            return await self._write_new_entity(str(uuid.uuid4()), entity_type, name, observations, metadata, tags)
         except Exception as e:
             logger.error("Failed to create entity: %s", e)
             raise RuntimeError("Entity creation failed") from e
+
+    async def _write_new_entity(
+        self: AutoBotMemoryGraphCore,
+        entity_id: str,
+        entity_type: str,
+        name: str,
+        observations: List[str],
+        metadata: Dict[str, Any] | None,
+        tags: List[str] | None,
+    ) -> Dict[str, Any]:
+        """Build and store one entity document under a caller-chosen id (#18417)."""
+        entity_metadata = self._prepare_entity_metadata(metadata, tags)
+        entity = self._build_entity_document(entity_id, entity_type, name, observations, entity_metadata)
+        await self._store_entity_in_redis(entity_id, entity)
+        logger.info("Created entity: %s (%s) with ID %s", name, entity_type, entity_id[:8] + "...")
+        return entity
+
+    @staticmethod
+    def _name_index_key(name: str) -> str:
+        """Redis key of the name -> entity-id claim (case and edge whitespace are not identity)."""
+        digest = hashlib.sha256(name.strip().casefold().encode("utf-8")).hexdigest()
+        return f"memory:entity_name:{digest}"
+
+    async def _indexed_entity(self: AutoBotMemoryGraphCore, index_key: str) -> Dict[str, Any] | None:
+        """The entity a name claim points at. A Redis error RAISES; it is never 'absent' (#18417)."""
+        claimed_id = await self.redis_client.get(index_key)
+        if not claimed_id:
+            return None
+        if isinstance(claimed_id, bytes):
+            claimed_id = claimed_id.decode("utf-8")
+        return await self.redis_client.json().get(f"memory:entity:{claimed_id}")
+
+    async def get_or_create_entity(
+        self: AutoBotMemoryGraphCore,
+        entity_type: str,
+        name: str,
+        observations: List[str],
+        metadata: Dict[str, Any] | None = None,
+        tags: List[str] | None = None,
+    ) -> tuple[Dict[str, Any], bool]:
+        """Atomically return the entity called ``name``, creating it if absent (#18417).
+
+        The claim is a Redis ``SET NX`` on a name-index key, so two concurrent
+        callers cannot both create. Redis errors propagate (an unreadable lookup is
+        never treated as 'not found'). An entity that predates the index is adopted
+        into it rather than duplicated; that legacy lookup only runs after the index
+        read proved Redis reachable.
+
+        Returns:
+            ``(entity, created)``; ``created`` is False when it already existed.
+        """
+        self.ensure_initialized()
+        self._validate_entity_inputs(entity_type, name)
+        index_key = self._name_index_key(name)
+
+        existing = await self._indexed_entity(index_key)
+        if existing:
+            return existing, False
+        legacy = await self.get_entity(entity_name=name)
+        if legacy and legacy.get("_resolution") == "exact":
+            await self.redis_client.set(index_key, legacy["id"], nx=True)
+            return (await self._indexed_entity(index_key)) or legacy, False
+
+        entity_id = str(uuid.uuid4())
+        if not await self.redis_client.set(index_key, entity_id, nx=True):
+            winner = await self._indexed_entity(index_key)
+            if winner:
+                return winner, False
+            await self.redis_client.set(index_key, entity_id)  # claim points at a missing document: repair
+        try:
+            return await self._write_new_entity(entity_id, entity_type, name, observations, metadata, tags), True
+        except Exception:
+            await self.redis_client.delete(index_key)  # release the claim so a retry can create
+            raise
 
     # How many relevance hits to scan for an exact name before giving up (#13761).
     # The query *is* the name, so an exact match ranks at or near the top; this is

@@ -135,12 +135,12 @@ class TestAsyncUpdateGraph:
     """Unit tests for the async helper backing memory.update_graph (#18414)."""
 
     @staticmethod
-    def _graph(exists=None):
+    def _graph(created=True):
         """Mock restricted to the real AutoBotMemoryGraph interface."""
         from autobot_memory_graph import AutoBotMemoryGraph
 
         graph = create_autospec(AutoBotMemoryGraph, instance=True)
-        graph.get_entity.return_value = exists
+        graph.get_or_create_entity.return_value = ({"id": "e1", "name": "Redis"}, created)
         return graph
 
     @staticmethod
@@ -152,36 +152,40 @@ class TestAsyncUpdateGraph:
 
     @pytest.mark.asyncio
     async def test_creates_new_entity_and_relation(self):
-        graph = self._graph(exists=None)
+        graph = self._graph(created=True)
         result = await self._run(
             graph,
             [{"name": "Redis", "type": "service", "properties": {"port": 6379}}],
             [{"source": "App", "target": "Redis", "relation_type": "uses", "properties": {}}],
         )
-        graph.create_entity.assert_awaited_once()
-        assert graph.create_entity.await_args.kwargs["observations"] == ["port: 6379"]
+        assert graph.get_or_create_entity.await_args.kwargs["observations"] == ["port: 6379"]
+        graph.add_observations.assert_not_awaited()
         graph.create_relation.assert_awaited_once()
         assert (result["entities_written"], result["relations_written"], result["status"]) == (1, 1, "ok")
 
     @pytest.mark.asyncio
     async def test_existing_entity_gets_observations_not_a_duplicate(self):
-        graph = self._graph(exists={"id": "e1", "name": "Redis", "_resolution": "exact"})
+        graph = self._graph(created=False)
         result = await self._run(graph, [{"name": "Redis", "type": "service", "properties": {"v": 7}}], [])
-        graph.create_entity.assert_not_awaited()
         graph.add_observations.assert_awaited_once_with(entity_name="Redis", observations=["v: 7"])
+        graph.create_entity.assert_not_awaited()
         assert result["entities_written"] == 1
 
     @pytest.mark.asyncio
-    async def test_fuzzy_match_is_not_an_existing_entity(self):
-        graph = self._graph(exists={"id": "e71", "name": "Incident 71", "_resolution": "fuzzy"})
-        await self._run(graph, [{"name": "Incident 7", "type": "service", "properties": {}}], [])
-        graph.add_observations.assert_not_awaited()
-        graph.create_entity.assert_awaited_once()
+    async def test_lookup_error_is_a_failure_not_a_create(self, caplog):
+        """#18417: an unreadable lookup must never fall through to a second entity."""
+        graph = self._graph()
+        graph.get_or_create_entity.side_effect = ConnectionError("redis down")
+        with caplog.at_level("WARNING"):
+            result = await self._run(graph, [{"name": "Redis", "type": "service", "properties": {}}], [])
+        graph.create_entity.assert_not_awaited()
+        assert (result["entities_written"], result["entities_failed"]) == (0, 1)
+        assert "Redis" in caplog.text
 
     @pytest.mark.asyncio
     async def test_failures_are_counted_and_logged_with_the_item(self, caplog):
-        graph = self._graph(exists=None)
-        graph.create_entity.side_effect = RuntimeError("write failed")
+        graph = self._graph()
+        graph.get_or_create_entity.side_effect = RuntimeError("write failed")
         with caplog.at_level("WARNING"):
             result = await self._run(
                 graph,
@@ -191,6 +195,7 @@ class TestAsyncUpdateGraph:
         assert (result["entities_written"], result["entities_failed"]) == (0, 1)
         assert (result["relations_written"], result["relations_failed"]) == (1, 0)
         assert result["status"] == "partial"
+        assert result["failures"] == [{"kind": "entity", "item": "Bad", "error": "write failed"}]
         assert "Bad" in caplog.text
 
 
