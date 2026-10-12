@@ -46,6 +46,8 @@ logger = logging.getLogger(__name__)
 
 #: Directory of the backend's secrets store on the backend node (``backend_data_dir``).
 BACKEND_DATA_DIR = os.getenv("SLM_BACKEND_DATA_DIR", "/var/lib/autobot")
+#: The account the backend service runs as (ansible ``backend_user``, the service units' ``User=``).
+SERVICE_USER = os.getenv("SLM_BACKEND_SERVICE_USER", "autobot")
 #: File name ``SecretsService`` uses inside the data directory.
 SECRETS_DB_NAME = "secrets.db"  # pragma: allowlist secret
 #: Where the snapshot is staged on the node before the copy.
@@ -59,21 +61,32 @@ CHECKSUM_TIMEOUT_S = int(os.getenv("SLM_SECRETS_BACKUP_CHECKSUM_TIMEOUT_S", "60"
 
 NO_BACKEND_NODE = "no registered backend node: the secrets store lives on a node with the backend role"
 
-# Run with: python3 -c <script> <source> <destination>. sqlite3's online backup API
-# gives a transactionally consistent copy while the backend keeps writing; the source
-# is opened but only read, and a missing source is an error, never an empty new store.
+# Run with: python3 -c <script> <source>, as the backend service user (the data directory is 0750 to
+# its group). sqlite3's online backup API gives a transactionally consistent copy while the backend
+# keeps writing; the source is only read, and a missing source is an error, never an empty new store.
+# The copy goes to a private 0600 temp file of that user, is integrity-checked, then streamed to stdout
+# and unlinked, so no artifact owned by the service user outlives the run: the caller's shell redirect
+# creates the only persistent file, owned by the ssh user, mode 0600.
 _SNAPSHOT_SCRIPT = """\
-import os, sqlite3, sys
-src, dst = sys.argv[1], sys.argv[2]
+import os, sqlite3, sys, tempfile
+src = sys.argv[1]
 if not os.path.isfile(src):
     sys.exit('secrets store not found')
-s = sqlite3.connect(src)
-d = sqlite3.connect(dst)
-s.backup(d)
-ok = d.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
-d.close()
-s.close()
-sys.exit(0 if ok else 'snapshot failed integrity_check')
+fd, tmp = tempfile.mkstemp(prefix='slm-secrets-')
+os.close(fd)
+try:
+    s = sqlite3.connect(src)
+    d = sqlite3.connect(tmp)
+    s.backup(d)
+    ok = d.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    d.close()
+    s.close()
+    if not ok:
+        sys.exit('snapshot failed integrity_check')
+    with open(tmp, 'rb') as f:
+        sys.stdout.buffer.write(f.read())
+finally:
+    os.unlink(tmp)
 """
 
 
@@ -87,9 +100,15 @@ def staged_path(backup_id: str) -> str:
     return str(Path(STAGING_DIR) / f"slm-secrets-{backup_id}.db")
 
 
-def snapshot_command(source: str, destination: str) -> str:
-    """The remote shell command that makes the online-backup snapshot (owner-only mode)."""
-    return f"umask 077 && python3 -c {shlex.quote(_SNAPSHOT_SCRIPT)} {shlex.quote(source)} {shlex.quote(destination)}"
+def snapshot_command(ssh_user: str, source: str, destination: str) -> str:
+    """The remote shell command that snapshots *source* into *destination* (owner-only, ssh user's).
+
+    Runs the script as ``SERVICE_USER`` through ``sudo -n`` (no password prompt, fail fast) unless the
+    ssh user already is that user.
+    """
+    run_as = "" if ssh_user == SERVICE_USER else f"sudo -n -u {shlex.quote(SERVICE_USER)} "
+    script, src, dst = shlex.quote(_SNAPSHOT_SCRIPT), shlex.quote(source), shlex.quote(destination)
+    return f"umask 077 && {run_as}python3 -c {script} {src} > {dst}"
 
 
 def is_backend_node(node: "Node") -> bool:
@@ -133,11 +152,9 @@ async def _fetch_verified(service: "BackupService", node: "Node", backup_id: str
 
 async def _snapshot(service: "BackupService", node: "Node", remote: str) -> None:
     """Run the online-backup snapshot on the node, raising when it fails."""
+    user = node.ssh_user or "autobot"
     cmd = service._build_ssh_command(
-        node.ip_address,
-        node.ssh_user or "autobot",
-        node.ssh_port or 22,
-        snapshot_command(remote_store_path(), remote),
+        node.ip_address, user, node.ssh_port or 22, snapshot_command(user, remote_store_path(), remote)
     )
     ok, out = await service._run_command(cmd, timeout=SNAPSHOT_TIMEOUT_S)
     if not ok:

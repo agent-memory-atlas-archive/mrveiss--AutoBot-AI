@@ -45,10 +45,9 @@ def snapshot(tmp_path):
     store = SecretsService(db_path=str(live), encryption_key=key)
     created = store.create_secret("api-token", "api_key", PLAINTEXT)
     copy = tmp_path / "snapshot.db"
-    done = subprocess.run(
-        [sys.executable, "-c", _snapshot_script(), str(live), str(copy)], capture_output=True, text=True, check=False
-    )
+    done = subprocess.run([sys.executable, "-c", _snapshot_script(), str(live)], capture_output=True, check=False)
     assert done.returncode == 0, done.stderr
+    copy.write_bytes(done.stdout)
     return key, created["id"], copy, live
 
 
@@ -73,9 +72,8 @@ def test_the_artifact_holds_no_plaintext_and_no_key(snapshot):
 
 def test_a_missing_source_fails_instead_of_minting_an_empty_store(tmp_path):
     done = subprocess.run(
-        [sys.executable, "-c", _snapshot_script(), str(tmp_path / "absent.db"), str(tmp_path / "out.db")],
+        [sys.executable, "-c", _snapshot_script(), str(tmp_path / "absent.db")],
         capture_output=True,
-        text=True,
         check=False,
     )
-    assert done.returncode != 0 and not (tmp_path / "absent.db").exists()
+    assert done.returncode != 0 and not done.stdout and not (tmp_path / "absent.db").exists()

@@ -124,6 +124,7 @@ async def test_success_uses_online_backup_and_never_names_key_material(mods, ser
     assert ok, message
     remote = "\n".join(service.remote.remote_commands())
     assert ".backup(" in remote and "sqlite3" in remote and "secrets.db" in remote
+    assert remote.startswith("umask 077 && ")
     everything = " ".join(" ".join(c) for c in service.remote.calls)
     for forbidden in ("secrets.key", "secrets.json", "AUTOBOT_SECRETS_KEY", "Fernet"):
         assert forbidden not in everything
@@ -201,3 +202,33 @@ def test_the_default_data_dir_is_the_ansible_backend_data_dir(mods):
     _, sb = mods
     defaults = (ROOT / "ansible" / "roles" / "backend" / "defaults" / "main.yml").read_text(encoding="utf-8")
     assert f"backend_data_dir: {sb.BACKEND_DATA_DIR}" in defaults
+
+
+def test_the_default_service_user_is_the_ansible_backend_user(mods):
+    _, sb = mods
+    defaults = (ROOT / "ansible" / "roles" / "backend" / "defaults" / "main.yml").read_text(encoding="utf-8")
+    assert f"backend_user: {sb.SERVICE_USER}\n" in defaults
+
+
+def test_the_slm_unit_renders_both_from_the_backend_role_variables():
+    unit = (ROOT / "ansible/roles/slm_manager/templates/autobot-slm-backend.service.j2").read_text(encoding="utf-8")
+    assert "SLM_BACKEND_DATA_DIR={{ backend_data_dir |" in unit
+    assert "SLM_BACKEND_SERVICE_USER={{ backend_user |" in unit
+
+
+async def test_the_snapshot_runs_as_the_service_user_via_non_interactive_sudo(mods, service, monkeypatch):
+    _, sb = mods
+    monkeypatch.setattr(sb, "SERVICE_USER", "svc user")
+    row, node = _Row(), _node(["backend"])
+    assert (await sb.execute_secrets_backup(service, _DB(row), "bk1", node))[0]
+    snapshot = service.remote.remote_commands()[0]
+    assert "sudo -n -u 'svc user' python3 -c " in snapshot
+    assert snapshot.rstrip().endswith("> /tmp/slm-secrets-bk1.db")
+
+
+async def test_no_sudo_when_the_ssh_user_is_the_service_user(mods, service):
+    _, sb = mods
+    node = _node(["backend"])
+    node.ssh_user = sb.SERVICE_USER
+    await sb.execute_secrets_backup(service, _DB(_Row()), "bk1", node)
+    assert "sudo" not in service.remote.remote_commands()[0]
