@@ -869,10 +869,10 @@ async def _run_background_doc_indexing():
         )
 
         # Fix HNSW pickle format after indexing (#1390)
-        from constants.path_constants import PATH
+        from autobot_shared.paths import chromadb_data_dir
         from utils.chromadb_client import _fix_hnsw_pickle_format
 
-        chroma_path = PATH.PROJECT_ROOT / "data" / "chromadb"
+        chroma_path = chromadb_data_dir()
         _fix_hnsw_pickle_format(chroma_path)
     except Exception as e:
         logger.warning("Background doc indexing failed (non-critical): %s", e)

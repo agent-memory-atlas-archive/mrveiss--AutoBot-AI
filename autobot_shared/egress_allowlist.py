@@ -119,11 +119,12 @@ def _ssot_service_urls() -> list[str]:
 
     ``backend_url``, ``ollama_url``, ``aistack_url``, ``npu_worker_url``, ``tts_worker_url``,
     ``browser_service_url`` and ``slm_url`` are URL properties; ChromaDB has none and is built from
-    ``vm.chromadb`` + ``port.chromadb``.
+    ``vm.chromadb`` + ``port.chromadb``. :func:`_server_called_urls` adds the targets server code calls
+    that the SSOT declares differently.
 
     Deliberately absent: ``redis_url`` (``redis://``, never HTTP egress), ``chrome_cdp_url`` (Playwright
     ``connect_over_cdp`` only -- allowlisting it would expose CDP ``/json/*`` control), ``vnc_url`` (a link
-    for a human), ``websocket_url`` (handed to clients) and ``frontend_url`` (a validator label).
+    for a human) and ``websocket_url`` (handed to clients).
     """
     from autobot_shared.ssot_config import config
 
@@ -138,7 +139,31 @@ def _ssot_service_urls() -> list[str]:
     )
     urls = [getattr(config, name, "") for name in names]
     urls.append(f"http://{config.vm.chromadb}:{config.port.chromadb}")
-    return urls
+    return urls + _server_called_urls()
+
+
+def _server_called_urls() -> list[str]:
+    """Origins the server itself calls, each from its SSOT source (never a second literal list).
+
+    The earlier exclusion of ``frontend_url`` and the VNC link was about callers that only hand a link
+    to a human. These are here because server code requests them: ``api/analytics.py`` health check
+    (frontend), ``api/vnc_proxy.py`` ``VNC_ENDPOINTS`` HTTP and websockify calls (``vm.main`` and
+    ``vm.browser`` on ``port.vnc``; the websockify call is ``wss://``, so both schemes), and
+    ``api/monitoring.py`` Alertmanager queries (``ServiceURLs.ALERTMANAGER_API``). Prometheus is deliberately
+    absent: its host is derived two ways (``vm.main`` vs ``REDIS_VM_IP``), pending #18326.
+    """
+    from autobot_shared.network_constants import ServiceURLs
+    from autobot_shared.ssot_config import config
+
+    return [
+        config.frontend_url,
+        *(
+            f"{scheme}://{host}:{config.port.vnc}"
+            for host in (config.vm.main, config.vm.browser)
+            for scheme in ("http", "wss")
+        ),
+        ServiceURLs.ALERTMANAGER_API,
+    ]
 
 
 def static_internal_origins() -> frozenset[str]:

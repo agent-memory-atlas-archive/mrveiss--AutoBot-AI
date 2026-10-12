@@ -45,3 +45,8 @@ def active_embedding_model() -> str:
     from autobot_shared.ssot_config import config
 
     return config.llm.embedding_model
+
+
+def active_npu_worker_model() -> str:
+    """The active embedding model in the bare form the NPU worker loads it (#18143)."""
+    return npu_worker_model_name(active_embedding_model())

@@ -19,9 +19,12 @@ logger = logging.getLogger(__name__)
 # name. LLMInterface now lives in autobot-backend/llm_multi_provider.py. Add
 # autobot-backend the way the other operator entry points in this tree do
 # (#14129).
-_BACKEND_DIR = Path(__file__).resolve().parents[4] / "autobot-backend"
-if str(_BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_DIR))
+# A backend tool (#18289): it also puts the repository root on the path (for `autobot_shared`), so it
+# runs from any directory with no PYTHONPATH.
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+for _root in (_REPO_ROOT / "autobot-backend", _REPO_ROOT):
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
 
 from agents.llm_failsafe_agent import get_robust_llm_response  # noqa: E402
 

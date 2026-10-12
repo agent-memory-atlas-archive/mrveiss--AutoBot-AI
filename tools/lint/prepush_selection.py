@@ -120,6 +120,19 @@ def pytest_settings(ini_text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return patterns, tuple(re.findall(r"(?m)^\s*--ignore=(\S+)", ini_text))
 
 
+def pytest_testpaths(ini_text: str) -> tuple[str, ...]:
+    """The ``testpaths`` roots from the text of ``pytest.ini``: where CI and a bare pytest collect (#18288).
+
+    A ``test_*.py`` outside them (the live probes under ``shared/scripts/analysis``) is never
+    collected, so running it as a push gate runs a live probe against the developer's machine.
+    """
+    block = re.search(r"(?ms)^testpaths\s*=\s*(.*?)(?=^\S)", ini_text)
+    if not block:
+        return ()
+    lines = (line.split("#", 1)[0].strip() for line in block.group(1).splitlines())
+    return tuple(line for line in lines if line)
+
+
 def is_test(path: str, patterns: Sequence[str]) -> bool:
     """Whether pytest collects *path*: its basename matches a ``python_files`` pattern."""
     return any(fnmatch.fnmatchcase(PurePosixPath(path).name, pattern) for pattern in patterns)
@@ -137,6 +150,7 @@ def select(
     ignores: Sequence[str],
     exists: Callable[[str], bool],
     declared_globs: Mapping[str, frozenset] | None = None,
+    testpaths: Sequence[str] = (),
 ) -> Dict[str, str]:
     """The tests to run for *changed*, each mapped to the reason it was chosen.
 
@@ -148,6 +162,9 @@ def select(
     A changed path ALSO runs every guard that declares a glob matching it. Those guards
     are co-located with nothing, so the two rules above never reach them: they scan the
     tree and fire on its shape. That is the whole class #17241 burned four CI cycles on.
+
+    When *testpaths* is given, a test outside every root is never selected: pytest would not
+    collect it (#18288), so the push would run a file no CI shard runs.
     """
     chosen: Dict[str, str] = {}
     declared = declared_globs or {}
@@ -166,7 +183,8 @@ def select(
             test, reason = f"{path[:-3]}_test.py", f"co-located with {path}"
         else:
             continue
-        if test not in chosen and exists(test) and not _under(test, ignores):
+        collected = not testpaths or _under(test, testpaths)
+        if test not in chosen and collected and exists(test) and not _under(test, ignores):
             chosen[test] = reason
     return chosen
 
@@ -179,7 +197,8 @@ def format_selection(chosen: Mapping[str, str]) -> str:
 def main() -> int:
     """Read the changed paths on stdin and print the tests to run, run from the repo root."""
     root = Path.cwd()
-    patterns, ignores = pytest_settings((root / "pytest.ini").read_text(encoding="utf-8"))
+    ini_text = (root / "pytest.ini").read_text(encoding="utf-8")
+    patterns, ignores = pytest_settings(ini_text)
     changed = [line.strip() for line in sys.stdin if line.strip()]
     record = root / GLOB_RECORD
     try:
@@ -193,6 +212,7 @@ def main() -> int:
         ignores=ignores,
         exists=lambda rel: (root / rel).is_file(),
         declared_globs=declared,
+        testpaths=pytest_testpaths(ini_text),
     )
     sys.stdout.write(format_selection(chosen))
     return 0

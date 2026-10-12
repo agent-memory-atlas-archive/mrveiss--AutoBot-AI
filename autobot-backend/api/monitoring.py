@@ -60,6 +60,7 @@ from auth_middleware import check_admin_permission
 # Import AutoBot monitoring system
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import get_config
 from autobot_shared.time_utils import to_rfc3339
@@ -110,11 +111,11 @@ async def _query_prometheus_instant(query: str) -> float | None:
     """
     try:
         http_client = get_http_client()
-        params = {"query": query}
+        # pending #18326: two Prometheus host derivations; guard once one SSOT home exists
         async with http_client.tracked_request(
             "GET",
             f"{_PROMETHEUS_URL}/api/v1/query",
-            params=params,
+            params={"query": query},
             timeout=aiohttp.ClientTimeout(total=10),
         ) as response:
             if response.status != 200:
@@ -157,12 +158,8 @@ async def _query_prometheus_range(
     """
     try:
         http_client = get_http_client()
-        params = {
-            "query": query,
-            "start": to_rfc3339(start),
-            "end": to_rfc3339(end),
-            "step": step,
-        }
+        params = {"query": query, "start": to_rfc3339(start), "end": to_rfc3339(end), "step": step}
+        # pending #18326: two Prometheus host derivations; guard once one SSOT home exists
         async with http_client.tracked_request(
             "GET",
             f"{_PROMETHEUS_URL}/api/v1/query_range",
@@ -255,7 +252,7 @@ async def _fetch_alertmanager_alerts() -> List[Dict[str, Any]]:
             # AlertManager v2 API for active alerts
             url = f"{ServiceURLs.ALERTMANAGER_API}/api/v2/alerts"
             async with get_http_client().tracked_request(
-                "GET", url, timeout=_ALERTMANAGER_TIMEOUT, suppress_error_log=True
+                "GET", url, timeout=_ALERTMANAGER_TIMEOUT, suppress_error_log=True, guard_egress=EGRESS_POLICY
             ) as response:
                 if response.status == 200:
                     raw_alerts = await response.json()
