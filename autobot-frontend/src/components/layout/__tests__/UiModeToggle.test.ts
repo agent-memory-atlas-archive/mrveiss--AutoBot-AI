@@ -5,7 +5,7 @@
  * (aria-pressed), focus stays on it, the change is announced in the kit's one
  * live region, and the mode lands on <html data-ui>.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import en from '@/i18n/locales/en.json'
@@ -18,6 +18,18 @@ async function mountToggle() {
   const { default: UiModeToggle } = await import('../UiModeToggle.vue')
   return mount(UiModeToggle, { attachTo: document.body, global: { plugins: [i18n] } })
 }
+
+
+/**
+ * Each test resets modules and re-imports a fresh instance. The first import also
+ * pays the cold transform of the whole import graph, which under load outran the
+ * default 10 s test timeout (pre-push, #18254). Warm the transform once here, with
+ * its own budget, so every test measures only its own work.
+ */
+const COLD_IMPORT_MS = 60_000
+beforeAll(async () => {
+  await import('../UiModeToggle.vue')
+}, COLD_IMPORT_MS)
 
 beforeEach(() => {
   localStorage.clear()
