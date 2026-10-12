@@ -13,14 +13,14 @@ The code lives server-side in Redis and is consumed atomically (GETDEL).
 
 import json
 import logging
-import os
 import secrets
 
+from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.redis_client import client_getdel, get_redis_client
 
 logger = logging.getLogger(__name__)
 
-SSO_CODE_TTL_SECONDS = int(os.getenv("SLM_SSO_CODE_TTL_SECONDS", "60"))
+SSO_CODE_TTL_SECONDS = env_int_clamped("SLM_SSO_CODE_TTL_SECONDS", 60, min_v=5, max_v=600)
 SSO_CODE_KEY_PREFIX = "slm:sso:exchange:"
 
 
