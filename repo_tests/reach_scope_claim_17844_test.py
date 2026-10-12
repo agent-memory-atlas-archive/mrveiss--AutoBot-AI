@@ -249,6 +249,7 @@ _DECLARED_SCOPES = {
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "infra-backend-import-scan": ("autobot-infrastructure",),
+    "captcha-type-fork-scan": ("autobot-backend", "autobot_shared"),
     "severity-enum-fork-scan": ("autobot-backend", "autobot_shared", "autobot-infrastructure"),
     "session-ownership-validator-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),

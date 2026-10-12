@@ -421,6 +421,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "tooling, SLM, tests, docs scripts) grow independently, so a share of the whole sinks "
         "with nothing wrong. The guard needs the roots reached, not a share of the repository.",
     ),
+    "captcha-type-fork-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked Python under two roots against all tracked Python: the other roots grow independently, "
+        "so a share of the whole sinks with nothing wrong. The guard needs the roots reached.",
+    ),
     "slm-frontend-locale-keys": (
         ABSOLUTE,
         "NOT_PATHS",
