@@ -35,13 +35,13 @@ Related: Issue #206
 from __future__ import annotations
 
 import io
-import re
 from typing import TYPE_CHECKING
 
 from autobot_shared.captcha_types import HUMAN_ONLY_TYPES, CaptchaSolveResult, CaptchaType, SolverConfidence
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.slug import sanitize_token
+from services.captcha_math import solve_math_expression
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -50,10 +50,6 @@ logger = get_logger(__name__)
 
 # Issue #380: Module-level frozensets for CAPTCHA type detection
 _MATH_OPERATORS = frozenset({"+", "-", "=", "\u00d7", "\u00f7", "*"})
-
-# Issue #380: Pre-compiled regex patterns for CAPTCHA processing
-_TRAILING_EQUALS_RE = re.compile(r"=\s*\??\s*$")
-_MATH_EXPR_RE = re.compile(r"(\d+)\s*([+\-*/])\s*(\d+)")
 
 
 class CaptchaSolver:
@@ -360,7 +356,7 @@ class CaptchaSolver:
             text = await self._quick_ocr(image)
 
             # Parse and solve the expression
-            solution = self._evaluate_math_expression(text)
+            solution = solve_math_expression(text)
 
             if solution is not None:
                 return CaptchaSolveResult(
@@ -475,79 +471,6 @@ class CaptchaSolver:
                 text = text.replace(wrong, right)
 
         return text.upper()
-
-    # Math operation lookup table (Issue #315: extracted to reduce nesting)
-    _MATH_OPS = {
-        "+": lambda a, b: a + b,
-        "-": lambda a, b: a - b,
-        "*": lambda a, b: a * b,
-        "/": lambda a, b: a // b if b != 0 else None,
-    }
-
-    def _clean_math_expression(self, expression: str) -> str:
-        """Clean and normalize a math expression (Issue #315: extracted).
-
-        Args:
-            expression: Raw math expression
-
-        Returns:
-            Cleaned expression with normalized operators
-        """
-        expr = expression.upper()
-        # Remove "= ?" or "= " at the end (Issue #380: use pre-compiled pattern)
-        expr = _TRAILING_EQUALS_RE.sub("", expr)
-        # Replace text/symbol operators with standard operators
-        replacements = [
-            ("\u00d7", "*"),
-            ("\u00f7", "/"),
-            ("X", "*"),
-            ("PLUS", "+"),
-            ("MINUS", "-"),
-            ("TIMES", "*"),
-        ]
-        for old, new in replacements:
-            expr = expr.replace(old, new)
-        return expr
-
-    def _apply_math_operation(self, a: int, op: str, b: int) -> int | None:
-        """Apply a math operation to two operands (Issue #315: extracted).
-
-        Args:
-            a: First operand
-            op: Operator (+, -, *, /)
-            b: Second operand
-
-        Returns:
-            Result of operation, or None if invalid
-        """
-        operation = self._MATH_OPS.get(op)
-        return operation(a, b) if operation else None
-
-    def _evaluate_math_expression(self, expression: str) -> int | None:
-        """Safely evaluate a simple math expression.
-
-        Issue #315: Refactored to use helpers for reduced nesting.
-
-        Args:
-            expression: Math expression string (e.g., "5 + 3 = ?")
-
-        Returns:
-            Integer result or None if can't parse
-        """
-        try:
-            expr = self._clean_math_expression(expression)
-            # Issue #380: use pre-compiled pattern
-            match = _MATH_EXPR_RE.search(expr)
-            if not match:
-                return None
-
-            a = int(match.group(1))
-            op = match.group(2)
-            b = int(match.group(3))
-            return self._apply_math_operation(a, op, b)
-
-        except Exception:
-            return None
 
 
 get_captcha_solver = lazy_singleton(CaptchaSolver)

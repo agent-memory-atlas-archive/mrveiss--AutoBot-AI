@@ -36,13 +36,13 @@ from __future__ import annotations
 
 import hashlib
 import io
-import re
 import time
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 
 from autobot_shared.captcha_types import CaptchaSolveResult, CaptchaType
 from autobot_shared.logging_manager import get_logger
 from services.captcha_human_loop import get_captcha_human_loop
+from services.captcha_math import MATH_EXPR_RE, solve_math_expression
 
 if TYPE_CHECKING:
     pass  # Playwright Page — only needed for type annotations, imported lazily
@@ -70,14 +70,6 @@ _HTML_CAPTCHA_KEYWORDS = frozenset(
 _RECAPTCHA_PATTERNS = frozenset({"g-recaptcha", "recaptcha", "grecaptcha", "recaptcha/api.js"})
 _HCAPTCHA_PATTERNS = frozenset({"h-captcha", "hcaptcha", "hcaptcha.com"})
 _SLIDER_PATTERNS = frozenset({"slider", "slide-verify", "slidercaptcha", "drag"})
-
-# Math CAPTCHA: matches expressions like "3 + 4 = ?", "12 - 5 =", "7 × 2"
-# ``x``/``X`` are accepted as multiplication: CAPTCHAs commonly render "4 x 5 = ?".
-# Both cases are required because ``_clean_math_expression`` upper-cases its input
-# before this pattern is applied, while ``CaptchaDetector.detect`` applies it to
-# lower-cased HTML. ``_apply_operator`` normalises the captured operator.
-_MATH_EXPR_RE = re.compile(r"(\d+)\s*([+\-*/×÷xX])\s*(\d+)")
-_TRAILING_EQUALS_RE = re.compile(r"\s*[=?]+\s*$")
 
 # ---------------------------------------------------------------------------
 # Enumerations and result types
@@ -149,7 +141,7 @@ class CaptchaDetector:
 
         # Math indicator: expression-like content before the CAPTCHA keyword
         if any(kw in lower for kw in _HTML_CAPTCHA_KEYWORDS):
-            if _MATH_EXPR_RE.search(lower):
+            if MATH_EXPR_RE.search(lower):
                 logger.debug("CaptchaDetector: math CAPTCHA pattern found")
                 return CaptchaType.MATH
             logger.debug("CaptchaDetector: generic text-image CAPTCHA keyword found")
@@ -314,20 +306,10 @@ class LocalCaptchaSolver:
             String representation of the integer result, or ``None`` when the
             expression cannot be parsed.
         """
-        cleaned = self._clean_math_expression(expression)
-        match = _MATH_EXPR_RE.search(cleaned)
-        if not match:
-            logger.debug("solve_math: no valid expression found in %r", expression)
-            return None
-
-        a_str, op, b_str = match.group(1), match.group(2), match.group(3)
-        a, b = int(a_str), int(b_str)
-        result = self._apply_operator(a, op, b)
+        result = solve_math_expression(expression)
         if result is None:
-            logger.warning("solve_math: could not apply operator %r", op)
+            logger.debug("solve_math: no solvable expression found in %r", expression)
             return None
-
-        logger.debug("solve_math: %d %s %d = %d", a, op, b, result)
         return str(result)
 
     # ------------------------------------------------------------------
@@ -450,58 +432,6 @@ class LocalCaptchaSolver:
         text = "".join(chars)
         mean_conf = (sum(confidences) / len(confidences)) if confidences else 0.0
         return text, mean_conf
-
-    # ------------------------------------------------------------------
-    # Math helpers
-    # ------------------------------------------------------------------
-
-    _MATH_OPS: Dict[str, Any] = {
-        "+": lambda a, b: a + b,
-        "-": lambda a, b: a - b,
-        "*": lambda a, b: a * b,
-        "×": lambda a, b: a * b,
-        "x": lambda a, b: a * b,
-        "/": lambda a, b: a // b if b != 0 else None,
-        "÷": lambda a, b: a // b if b != 0 else None,
-    }
-
-    def _clean_math_expression(self, expression: str) -> str:
-        """Normalise a raw math expression string for regex matching.
-
-        Args:
-            expression: Raw expression that may include trailing "= ?" markers.
-
-        Returns:
-            Cleaned expression string.
-        """
-        cleaned = expression.upper()
-        cleaned = _TRAILING_EQUALS_RE.sub("", cleaned)
-        # Normalise spelled-out operators
-        for old, new in [
-            ("PLUS", "+"),
-            ("MINUS", "-"),
-            ("TIMES", "*"),
-            ("DIVIDED BY", "/"),
-        ]:
-            cleaned = cleaned.replace(old, new)
-        return cleaned
-
-    def _apply_operator(self, a: int, op: str, b: int) -> int | None:
-        """Apply a binary arithmetic operator.
-
-        Args:
-            a:  Left operand.
-            op: Operator character.
-            b:  Right operand.
-
-        Returns:
-            Integer result, or ``None`` when the operator is unknown or the
-            operation is invalid (e.g. division by zero).
-        """
-        fn = self._MATH_OPS.get(op.lower()) or self._MATH_OPS.get(op)
-        if fn is None:
-            return None
-        return fn(a, b)
 
 
 # ---------------------------------------------------------------------------
