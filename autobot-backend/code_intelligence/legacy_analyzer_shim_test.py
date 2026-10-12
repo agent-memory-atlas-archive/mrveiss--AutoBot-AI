@@ -6,7 +6,7 @@
 Equivalence tests for the code_analysis.src legacy analyzer shims (#12362).
 
 Verifies that ``code_analysis.src.performance_analyzer.PerformanceAnalyzer``
-and ``code_analysis.src.security_analyzer.SecurityAnalyzer`` — now thin
+and ``code_analysis.src.security_analyzer.LegacySecurityAnalyzer`` — now thin
 adapters delegating to the canonical ``code_intelligence.performance_analysis``
 / ``code_intelligence.security`` packages — still return the legacy response
 contract (dict shape + dataclass field names) that pre-existing callers
@@ -22,6 +22,7 @@ conftest's generic code_intelligence stub (used everywhere else to avoid the
 heavy __init__ chain) does not carry a working __path__.
 """
 
+import asyncio
 import textwrap
 
 import pytest
@@ -32,9 +33,14 @@ from code_analysis.src.performance_analyzer import (
     PerformanceRecommendation,
 )
 from code_analysis.src.security_analyzer import (
-    SecurityAnalyzer,
+    LegacySecurityAnalyzer,
     SecurityVulnerability,
 )
+
+
+async def _write_source(path, text):
+    """Write a fixture source file off the event loop (#7444)."""
+    await asyncio.to_thread(path.write_text, text, encoding="utf-8")
 
 
 class TestPerformanceShimFieldMapping:
@@ -43,12 +49,15 @@ class TestPerformanceShimFieldMapping:
     @pytest.mark.asyncio
     async def test_analyze_performance_response_shape(self, tmp_path):
         """analyze_performance() must keep the legacy aggregate dict shape."""
-        (tmp_path / "blocking.py").write_text(textwrap.dedent("""
+        await _write_source(
+            tmp_path / "blocking.py",
+            textwrap.dedent("""
                 import time
 
                 async def blocked():
                     time.sleep(5)
-                """))
+                """),
+        )
 
         analyzer = PerformanceAnalyzer()
         results = await analyzer.analyze_performance(root_path=str(tmp_path))
@@ -72,12 +81,15 @@ class TestPerformanceShimFieldMapping:
     @pytest.mark.asyncio
     async def test_field_mapping_line_number_and_issue_type(self, tmp_path):
         """line_number must come from the modern line_start; issue_type must be a legacy bucket string."""
-        (tmp_path / "blocking.py").write_text(textwrap.dedent("""
+        await _write_source(
+            tmp_path / "blocking.py",
+            textwrap.dedent("""
                 import time
 
                 async def blocked():
                     time.sleep(5)
-                """))
+                """),
+        )
 
         analyzer = PerformanceAnalyzer()
         results = await analyzer.analyze_performance(root_path=str(tmp_path))
@@ -94,7 +106,7 @@ class TestPerformanceShimFieldMapping:
     @pytest.mark.asyncio
     async def test_dataclass_field_names_unchanged(self, tmp_path):
         """PerformanceIssue must keep line_number/issue_type (not line_start/PerformanceIssueType)."""
-        (tmp_path / "leak.py").write_text('f = open("x.txt", "r")\ndata = f.read()\n')
+        await _write_source(tmp_path / "leak.py", 'f = open("x.txt", "r")\ndata = f.read()\n')
 
         analyzer = PerformanceAnalyzer()
         results = await analyzer.analyze_performance(root_path=str(tmp_path))
@@ -121,12 +133,15 @@ class TestPerformanceShimRecommendations:
 
     @pytest.mark.asyncio
     async def test_recommendations_generated_for_high_impact(self, tmp_path):
-        (tmp_path / "blocking.py").write_text(textwrap.dedent("""
+        await _write_source(
+            tmp_path / "blocking.py",
+            textwrap.dedent("""
                 import time
 
                 async def blocked():
                     time.sleep(5)
-                """))
+                """),
+        )
 
         analyzer = PerformanceAnalyzer()
         results = await analyzer.analyze_performance(root_path=str(tmp_path))
@@ -143,13 +158,16 @@ class TestSecurityShimFieldMapping:
     @pytest.mark.asyncio
     async def test_analyze_security_response_shape(self, tmp_path):
         """analyze_security() must keep the legacy aggregate dict shape."""
-        (tmp_path / "sqli.py").write_text(textwrap.dedent("""
+        await _write_source(
+            tmp_path / "sqli.py",
+            textwrap.dedent("""
                 def get_user(cursor, user_id):
                     cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
                     return cursor.fetchone()
-                """))
+                """),
+        )
 
-        analyzer = SecurityAnalyzer()
+        analyzer = LegacySecurityAnalyzer()
         results = await analyzer.analyze_security(root_path=str(tmp_path))
 
         for key in (
@@ -171,13 +189,16 @@ class TestSecurityShimFieldMapping:
     @pytest.mark.asyncio
     async def test_field_mapping_line_number_and_vulnerability_type(self, tmp_path):
         """line_number must come from the modern line_start; vulnerability_type must be a legacy bucket string."""
-        (tmp_path / "sqli.py").write_text(textwrap.dedent("""
+        await _write_source(
+            tmp_path / "sqli.py",
+            textwrap.dedent("""
                 def get_user(cursor, user_id):
                     cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
                     return cursor.fetchone()
-                """))
+                """),
+        )
 
-        analyzer = SecurityAnalyzer()
+        analyzer = LegacySecurityAnalyzer()
         results = await analyzer.analyze_security(root_path=str(tmp_path))
 
         details = results["vulnerability_details"]
