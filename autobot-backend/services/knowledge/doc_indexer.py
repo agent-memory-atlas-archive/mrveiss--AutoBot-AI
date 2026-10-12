@@ -300,8 +300,6 @@ def _chunk_markdown(content: str, file_path: str) -> List[Dict[str, Any]]:
     # Intro content before first H2
     intro = h2_splits[0].strip() if h2_splits else ""
     if intro and _estimate_tokens(intro) > 50:
-        # chunk_plain_text returns the intro whole within the token budget, and cuts an
-        # oversized one (a header-less document is all intro) the way the KB ingest does (#18129).
         chunks.extend(
             _create_chunk(piece, "Introduction", None, file_path, doc_type, category, doc_title)
             for piece in chunk_plain_text(intro)
@@ -927,6 +925,8 @@ class DocIndexerService:
 
         file_tags = _extract_tags(body, file_str)
         file_tags = list(dict.fromkeys(fm_tags + fm_aliases + file_tags))[:20]
+        # Ids hash the section name: drop the file's prior chunks so a renamed section leaves no orphan.
+        await asyncio.to_thread(self._collection.delete, where={"file_path": rel_path})
         indexed = 0
         for i, chunk in enumerate(chunks):
             ok = await asyncio.to_thread(self._index_chunk, chunk, i, len(chunks), rel_path, file_tags, tier)

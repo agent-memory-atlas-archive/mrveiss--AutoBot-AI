@@ -2574,30 +2574,20 @@ async def get_import_statistics(
 # =============================================================================
 
 
-async def _get_indexed_docs_from_redis(kb) -> list:
-    """
-    Get all indexed documentation metadata from Redis doc_hash keys.
+async def _get_indexed_docs() -> list:
+    """One metadata dict per document in the ``autobot_docs`` collection (#18129).
 
-    Issue #165: Scans doc_hash:* keys to get document metadata for browsing.
+    Reads the collection ``DocIndexerService`` writes -- the single documentation store.
+    A collection that cannot be opened is a 503, not an empty browser.
     """
-    docs = []
-    cursor = 0
-    while True:
-        cursor, keys = await asyncio.to_thread(kb.redis_client.scan, cursor, match="doc_hash:*", count=500)
-        if keys:
-            # Batch fetch document data
-            values = await asyncio.to_thread(kb.redis_client.mget, keys)
-            for key, value in zip(keys, values):
-                if value:
-                    try:
-                        doc_data = json.loads(value)
-                        doc_data["content_hash"] = key.replace("doc_hash:", "")
-                        docs.append(doc_data)
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-        if cursor == 0:
-            break
-    return docs
+    from services.knowledge.doc_indexer import get_doc_indexer_service
+    from services.knowledge.doc_listing import list_indexed_documents
+
+    try:
+        return await list_indexed_documents(get_doc_indexer_service())
+    except RuntimeError as exc:
+        logger.warning("documentation browser: %s", exc)
+        raise HTTPException(status_code=503, detail="Documentation index unavailable")
 
 
 def _filter_docs(docs: list, request: DocsBrowseRequest) -> list:
@@ -2677,17 +2667,8 @@ async def browse_documentation(
     Supports category, doc_type, file_path, and search filters.
     Issue #744: Requires admin authentication.
     """
-    kb = await get_or_create_knowledge_base(req.app, force_refresh=False)
-    if kb is None:
-        # Issue #5407: KB instance not initialized - emit counter before 503.
-        logger.warning("browse_documentation: KB uninitialized - raising 503")
-        from knowledge.metrics import autobot_kb_degradation_total
-
-        autobot_kb_degradation_total.labels(endpoint="docs_browse", reason="kb_uninit").inc()
-        raise HTTPException(status_code=503, detail="Knowledge base unavailable")
-
     # Get all indexed documents
-    all_docs = await _get_indexed_docs_from_redis(kb)
+    all_docs = await _get_indexed_docs()
 
     # Apply filters
     filtered_docs = _filter_docs(all_docs, request)
@@ -2733,17 +2714,8 @@ async def get_documentation_categories(
     Categories are detected from file paths using CATEGORY_TAXONOMY.
     Issue #744: Requires admin authentication.
     """
-    kb = await get_or_create_knowledge_base(req.app, force_refresh=False)
-    if kb is None:
-        # Issue #5407: KB instance not initialized - emit counter before 503.
-        logger.warning("get_documentation_categories: KB uninitialized - raising 503")
-        from knowledge.metrics import autobot_kb_degradation_total
-
-        autobot_kb_degradation_total.labels(endpoint="docs_categories", reason="kb_uninit").inc()
-        raise HTTPException(status_code=503, detail="Knowledge base unavailable")
-
     # Get all indexed documents
-    all_docs = await _get_indexed_docs_from_redis(kb)
+    all_docs = await _get_indexed_docs()
 
     # Count by category (detected from file path)
     from pathlib import Path
@@ -2799,16 +2771,7 @@ async def get_documentation_stats(
     Issue #165: Provides overview stats for documentation health dashboard.
     Issue #744: Requires admin authentication.
     """
-    kb = await get_or_create_knowledge_base(req.app, force_refresh=False)
-    if kb is None:
-        # Issue #5407: KB instance not initialized - emit counter before 503.
-        logger.warning("get_documentation_stats: KB uninitialized - raising 503")
-        from knowledge.metrics import autobot_kb_degradation_total
-
-        autobot_kb_degradation_total.labels(endpoint="docs_stats", reason="kb_uninit").inc()
-        raise HTTPException(status_code=503, detail="Knowledge base unavailable")
-
-    all_docs = await _get_indexed_docs_from_redis(kb)
+    all_docs = await _get_indexed_docs()
 
     # Calculate stats
     total_chunks = sum(doc.get("chunks", 0) for doc in all_docs)
