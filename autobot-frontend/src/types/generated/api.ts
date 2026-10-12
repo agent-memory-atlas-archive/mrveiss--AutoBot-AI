@@ -28783,7 +28783,8 @@ export interface paths {
          * @description Expose Prometheus metrics in text/plain format for scraping
          *
          *     This endpoint is scraped by Prometheus at regular intervals
-         *     configured in prometheus.yml (default: 15s)
+         *     configured in prometheus.yml (default: 15s), with the scrape token
+         *     as a bearer credential.
          */
         get: operations["metrics_endpoint_api_metrics_prometheus_get"];
         put?: never;
@@ -29094,7 +29095,7 @@ export interface paths {
         put?: never;
         /**
          * Log Rum Event
-         * @description Log a RUM event from the frontend
+         * @description Log a RUM event from the frontend -- one bounded row per request (#16375).
          */
         post: operations["log_rum_event_api_rum_event_post"];
         delete?: never;
@@ -29198,6 +29199,7 @@ export interface paths {
          *
          *     Issue #476: This endpoint receives batched RUM metrics from the frontend
          *     and records them to the Prometheus metrics system for monitoring.
+         *     #18368: every list and string is capped before anything is recorded.
          */
         post: operations["receive_rum_metrics_api_rum_metrics_post"];
         delete?: never;
@@ -142026,7 +142028,9 @@ export interface operations {
     metrics_endpoint_api_metrics_prometheus_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -142039,6 +142043,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

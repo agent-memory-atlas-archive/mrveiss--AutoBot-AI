@@ -27,6 +27,9 @@ Features:
 
 Usage:
     python init_memory_graph_redis.py [--migrate] [--validate] [--benchmark] [--rollback]
+
+    --migrate reads the legacy transcripts from AUTOBOT_LEGACY_TRANSCRIPTS_DIR (SSOT config,
+    relative to AUTOBOT_BASE_DIR) -- the same directory the backend resolves (#18293).
 """
 
 import argparse
@@ -44,8 +47,15 @@ from redis.commands.search.field import NumericField, TagField, TextField, Vecto
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 
-from autobot_shared.paths import project_root
-from constants.network_constants import NetworkConstants
+# Runs from any directory with no PYTHONPATH: put the repository root on the path for
+# `autobot_shared` (#18289).
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from autobot_shared.network_constants import NetworkConstants  # noqa: E402
+from autobot_shared.paths import project_root  # noqa: E402
+from autobot_shared.store_authority import legacy_conversation_transcripts_dir  # noqa: E402
 
 # #14517: the log path was a shell placeholder in a plain string literal. Python
 # never expands one, so FileHandler was handed a directory that cannot exist and
@@ -884,7 +894,8 @@ def _execute_memory_graph_phases(initializer: MemoryGraphInitializer, args) -> b
         logger.info("PHASE 3: Conversation Migration")
         logger.info("=" * 80)
 
-        transcript_dir = project_root() / "data" / "conversation_transcripts"
+        # #18293: SSOT-config location, the same one the backend reads.
+        transcript_dir = legacy_conversation_transcripts_dir()
         migration_stats = initializer.migrate_conversations(transcript_dir)
         logger.info("\nMigration Results:")
         logger.info(json.dumps(migration_stats, indent=2))

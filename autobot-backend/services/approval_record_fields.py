@@ -57,6 +57,7 @@ def record_fields(
     applied to ``context["action"]``. ``payload_hash`` defaults to the hash of ``context`` for a
     sourced approval.
     """
+    owner_user = owner_user.strip() if isinstance(owner_user, str) else owner_user
     fields: Dict[str, Any] = {
         "source": None,
         "risk_tier": None,

@@ -50,9 +50,11 @@ env_path = PROJECT_ROOT / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
+from autobot_shared.slug import sanitize_token
 from autobot_shared.doc_chunking import chunk_large_content as _chunk_large_content
 from autobot_shared.doc_chunking import estimate_tokens
 from autobot_shared.doc_chunking import process_h2_sections as _process_h2_sections
+from autobot_shared.embedding_model import active_embedding_model
 from autobot_shared.ssot_constants import CategoryDefaults
 from utils.chromadb_client import get_chromadb_client
 
@@ -198,7 +200,7 @@ def extract_tags(content: str, file_path: str) -> List[str]:
     for part in path_parts:
         if part not in [".", "..", "docs", "home", "kali", "Desktop", "AutoBot"]:
             # Clean tag
-            tag = re.sub(r"[^a-zA-Z0-9-_]", "", part.lower())
+            tag = sanitize_token(part, allowed="a-zA-Z0-9_-", replacement="", case="lower")
             if tag and len(tag) > 2:
                 tags.add(tag)
 
@@ -371,7 +373,7 @@ class ChromaDBIndexer:
         )
 
         # Initialize embedding model
-        self.embed_model = OllamaEmbedding(model_name="nomic-embed-text", base_url="http://127.0.0.1:11434")
+        self.embed_model = OllamaEmbedding(model_name=active_embedding_model(), base_url="http://127.0.0.1:11434")
 
         logger.info(
             f"ChromaDB indexer initialized: collection='{self.collection_name}', "

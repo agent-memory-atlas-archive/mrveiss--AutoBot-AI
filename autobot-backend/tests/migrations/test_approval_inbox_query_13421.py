@@ -125,14 +125,24 @@ async def test_an_approval_without_a_resume_ref_resumes_nothing(env):
     assert resumed == []
 
 
+async def _raced(coro_fns):
+    """Run the decisions so each is past its own setup and released together by a barrier."""
+    barrier = asyncio.Barrier(len(coro_fns))
+
+    async def go(fn):
+        await barrier.wait()
+        return await fn()
+
+    return await asyncio.gather(*(go(fn) for fn in coro_fns), return_exceptions=True)
+
+
 async def test_two_concurrent_approves_resume_exactly_once(env):
     """#18413 AC2: the loser matches no row, raises, and does not resume."""
     service, resumed = env
     row = await _tool(service(), resume_ref="call-race")
-    results = await asyncio.gather(
-        service().approve(row.id, "alice", author_type="human"),
-        service().approve(row.id, "bob", author_type="human"),
-        return_exceptions=True,
+    a, b = service(), service()
+    results = await _raced(
+        [lambda: a.approve(row.id, "alice", author_type="human"), lambda: b.approve(row.id, "bob", author_type="human")]
     )
     assert sum(not isinstance(r, BaseException) for r in results) == 1, results
     assert sum(isinstance(r, ValueError) for r in results) == 1, results
@@ -142,10 +152,9 @@ async def test_two_concurrent_approves_resume_exactly_once(env):
 async def test_a_concurrent_approve_and_reject_decide_once(env):
     service, resumed = env
     row = await _tool(service(), resume_ref="call-race2")
-    results = await asyncio.gather(
-        service().approve(row.id, "alice", author_type="human"),
-        service().reject(row.id, "bob", author_type="human"),
-        return_exceptions=True,
+    a, b = service(), service()
+    results = await _raced(
+        [lambda: a.approve(row.id, "alice", author_type="human"), lambda: b.reject(row.id, "bob", author_type="human")]
     )
     assert sum(not isinstance(r, BaseException) for r in results) == 1
     assert len(resumed) == 1

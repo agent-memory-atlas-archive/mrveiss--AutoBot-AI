@@ -82,6 +82,11 @@ class TestRecordFields:
         with pytest.raises(ValueError, match="owner_user"):
             _fields(source="agent_tool", risk_tier="low")
 
+    def test_owner_user_is_stripped_and_a_blank_owner_counts_as_missing(self):
+        assert _fields(source="agent_tool", risk_tier="low", owner_user="  alice ")["owner_user"] == "alice"
+        with pytest.raises(ValueError, match="owner_user"):
+            _fields(source="agent_tool", risk_tier="low", owner_user="   ")
+
     def test_owner_user_without_a_source_is_refused(self):
         with pytest.raises(ValueError, match="require a source"):
             _fields(owner_user="alice")
