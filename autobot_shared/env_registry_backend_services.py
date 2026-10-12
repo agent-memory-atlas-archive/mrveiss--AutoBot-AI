@@ -536,3 +536,34 @@ register_env_var(
         component="knowledge",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS",
+        type=float,
+        default=1800.0,
+        description=(
+            "Total wall-clock budget for one LangGraph chat turn, across every LLM call and tool "
+            "step in it (chat_workflow/turn_control.py, #17273). A turn that exceeds it is "
+            "cancelled, its checkpoint dropped, and the client told the model took too long. A "
+            "turn parked on a command-approval interrupt has returned, so the wait for a human "
+            "is not counted against it."
+        ),
+        component="backend",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_CHAT_LLM_CALL_TIMEOUT_SECONDS",
+        type=float,
+        default=600.0,
+        description=(
+            "Total timeout for a single streaming chat LLM request, connect included "
+            "(chat_workflow/turn_control.py, #17273). The request previously set a connect "
+            "timeout only, so a model that accepted the connection and then stalled held the "
+            "turn forever."
+        ),
+        component="backend",
+    )
+)
