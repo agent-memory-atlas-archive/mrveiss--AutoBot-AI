@@ -91,6 +91,10 @@ class WorkflowService(LLCServiceBase):
         status: str = WorkflowStatus.PLANNED.value,
         definition: Optional[Dict[str, Any]] = None,
         actor: Optional[uuid.UUID] = None,
+        kind: str = "workflow",
+        owner_role_id: Optional[uuid.UUID] = None,
+        trigger_type: Optional[str] = None,
+        trigger_config: Optional[Dict[str, Any]] = None,
     ) -> Workflow:
         if company_id is None:
             raise ValueError("company_id is required to create a workflow")
@@ -107,6 +111,10 @@ class WorkflowService(LLCServiceBase):
             source=SOURCE_CREATED,
             definition=definition or {},
             created_by=actor,
+            kind=kind,
+            owner_role_id=owner_role_id,
+            trigger_type=trigger_type,
+            trigger_config=trigger_config or {},
         )
         session.add(workflow)
         try:
