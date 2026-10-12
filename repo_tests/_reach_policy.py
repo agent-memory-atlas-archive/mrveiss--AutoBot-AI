@@ -226,6 +226,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "One frontend tree's source, against all tracked `.vue`/`.ts`/`.js` including the other frontend.",
     ),
+    "container-hardening-inline": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
     "credential-field-name-only-callers": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -330,6 +335,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
+    "audit-writer-single-source": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
     ),
     "import-hermeticity": (
         ABSOLUTE,

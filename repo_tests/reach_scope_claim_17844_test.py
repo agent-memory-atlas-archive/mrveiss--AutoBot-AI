@@ -31,10 +31,12 @@ from pathlib import Path
 import pytest
 import repo_tests.ansible_concept_forks_17856_test as _ansible_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.anti_pattern_type_emitted_18189_test as _anti_pattern_guard  # noqa: F401 -- registers its scope
+import repo_tests.audit_writer_single_source_17225_test as _audit_writer_guard  # noqa: F401 -- registers its scope
 import repo_tests.chat_history_async_calls_awaited_18316_test as _chat_async_guard  # noqa: F401 -- registers its scope
 import repo_tests.chat_single_delete_implementation_18316_test as _chat_delete_guard  # noqa: F401 -- registers its scope
 import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
 import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
+import repo_tests.container_hardening_single_source_17267_test as _hardening_guard  # noqa: F401 -- registers its scope
 import repo_tests.conversation_turn_single_store_18293_test as _conversation_turn_guard  # noqa: F401 -- registers its scope
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
@@ -186,6 +188,8 @@ def test_a_declared_scope_that_the_sweep_does_not_reach_is_refused() -> None:
 #: Compared as a SET in both directions. Adding a scoped declaration means adding a line here,
 #: and that is the point -- the scope is a decision, so it is written twice on purpose.
 _DECLARED_SCOPES = {
+    "audit-writer-single-source": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "container-hardening-inline": ("autobot-backend", "autobot_shared"),
     "one-content-digest-scan": ("autobot-backend", "autobot_shared"),
     "semantic-chunker-fork-scan": ("autobot-backend", "autobot_shared"),
     "migration-gate-test-import-sweep": ("autobot-backend/tests/migrations",),
@@ -210,7 +214,12 @@ _DECLARED_SCOPES = {
         "libs",
     ),
     "chunker-private-hook-scan": ("autobot-backend", "autobot-infrastructure", "autobot_shared"),
-    "embedding-model-literal-sites": ("autobot-backend", "autobot_shared"),
+    "embedding-model-literal-sites": (
+        "autobot-backend",
+        "autobot_shared",
+        "autobot-infrastructure/shared/scripts/populate_kb_chromadb.py",
+        "autobot-infrastructure/shared/tools/index_documentation.py",
+    ),
     "tool-effect-table-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "deployment-mode-detector-scan": ("autobot-backend/", "autobot-infrastructure/"),
     "egress-default-outbound-call-sites": (
