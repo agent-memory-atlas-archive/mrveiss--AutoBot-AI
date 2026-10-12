@@ -151,6 +151,7 @@ def test_a_bare_or_namespaced_model_id_is_found(source: str) -> None:
         'M = "meta-llama/Llama-3.1-8B-Instruct"',
         'M = "mistralai/Mistral-7B-v0.1"',
         'M = "microsoft/phi-3-mini"',
+        'M = "BAAI/bge-reranker-v2-m3"',  # a cross-encoder reranker shares the bge- prefix, not the role
         'M = "llama3:8b"',
         'M = "gte"',
         'M = "sentence-transformers/"',

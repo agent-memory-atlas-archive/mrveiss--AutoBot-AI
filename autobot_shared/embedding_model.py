@@ -42,8 +42,8 @@ def is_embedding_model_id(value: str) -> bool:
     namespace = _NAMESPACE.match(name)
     if namespace:
         name = name[namespace.end() :]
-    if not name.startswith(KNOWN_EMBEDDING_MODEL_PREFIXES):
-        return False
+    if not name.startswith(KNOWN_EMBEDDING_MODEL_PREFIXES) or "rerank" in name:
+        return False  # a cross-encoder reranker (bge-reranker-*) shares the family prefix, not the role
     return _MODEL_ID_TAIL.fullmatch(name) is not None
 
 
