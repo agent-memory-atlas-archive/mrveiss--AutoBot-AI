@@ -29,8 +29,6 @@ Redis layout (database "workflows"):
 """
 
 import asyncio
-import hashlib
-import hmac
 import json
 import secrets
 import uuid
@@ -42,6 +40,7 @@ from typing import Any, Callable, Coroutine, Dict, List
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_redis_client
 from autobot_shared.time_utils import now_utc
+from autobot_shared.webhook_signature import verify_webhook_signature
 from constants.threshold_constants import TimingConstants
 from constants.ttl_constants import TTL_90_DAYS
 
@@ -588,8 +587,7 @@ class TriggerService:
             logger.warning("validate_webhook_signature: no secret found for trigger %s", trigger_id)
             return False
 
-        expected_sig = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(expected_sig, signature)
+        return verify_webhook_signature(body, signature, secret)
 
     def get_webhook_url_path(self, trigger_id: str) -> str:
         """Return the URL path for the webhook endpoint of *trigger_id*."""

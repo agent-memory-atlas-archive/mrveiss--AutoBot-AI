@@ -368,7 +368,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/slm_client_test.py": 659,
     "autobot-backend/services/temporal_invalidation_service.py": 997,
     "autobot-backend/services/tool_output_filter.py": 639,
-    "autobot-backend/services/trigger_service.py": 978,
+    "autobot-backend/services/trigger_service.py": 976,
     "autobot-backend/services/wake_word_service.py": 615,
     "autobot-backend/services/workflow_automation/executor.py": 1104,
     "autobot-backend/services/workflow_export_test.py": 611,

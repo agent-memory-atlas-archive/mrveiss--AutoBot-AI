@@ -341,6 +341,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
     ),
+    "gateway-adapter-package-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python files under one gateway directory; tests and new adapters drift the count.",
+    ),
     "provenance-accessor-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
