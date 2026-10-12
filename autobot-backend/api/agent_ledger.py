@@ -11,12 +11,12 @@ force-release and no delete; claims are released by their holder, and the one
 human action the design allows, asking a holder to release, is not here yet.
 
 TENANCY. The company comes from `require_org_context`, never from a request
-parameter. Presence, peer messages and idle subscriptions are keyed by tenant
-and filtered to the caller's own. Claims, waiters and events carry an
-``agent_id`` but no company, so they are attributed through the company's own
-agent slugs (`AgentOrgNode`, unique install-wide); a row whose agent is not one
-of them is invisible here -- fail closed. Install-wide agents (AI-stack roles,
-dev sessions) therefore appear only in the SLM view.
+parameter. Presence, peer messages and idle subscriptions are keyed by tenant and
+filtered to the caller's own. Claims, waiters and ledger events are scoped by the
+company STAMPED on them when they were written (`autobot_shared/coordination/
+claim_company.py`) -- not by agent name, which anyone can choose. A record with no
+stamp (install-wide actors such as dev sessions and AI-stack roles, or anything
+written before stamping) is invisible here and shown only in the SLM view.
 
 An unreachable store answers HTTP 503 with a typed body, never an empty list
 (`autobot_shared/coordination/ledger_http.py`).
@@ -27,9 +27,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.user_management.dependencies import get_current_user, get_db_session, require_org_context
+from api.user_management.dependencies import get_current_user, require_org_context
 from autobot_shared.coordination import ledger_read
 from autobot_shared.coordination.ledger_http import UNAVAILABLE_RESPONSES, serve_ledger
 from autobot_shared.coordination.ledger_schemas import (
@@ -44,7 +43,6 @@ from autobot_shared.coordination.ledger_schemas import (
     PresenceRow,
     WaitlistsResponse,
 )
-from llc.services.agent_presence_queries import company_agent_slugs
 from protocols.agent_presence import get_presence_registry
 from protocols.idle_notice import active_subscriptions
 from protocols.peer_inbox import get_peer_inbox_directory
@@ -55,17 +53,13 @@ router = APIRouter(dependencies=[Depends(get_current_user)], responses=UNAVAILAB
 
 @dataclass(frozen=True)
 class CompanyScope:
-    """The caller's company and the agent slugs it owns."""
+    """The caller's company, from the verified tenant context."""
 
     org_id: str
-    agent_ids: frozenset[str]
 
 
-async def company_scope(
-    ctx: TenantContext = Depends(require_org_context), session: AsyncSession = Depends(get_db_session)
-) -> CompanyScope:
-    org_id = str(ctx.org_id)
-    return CompanyScope(org_id=org_id, agent_ids=await company_agent_slugs(session, org_id))
+async def company_scope(ctx: TenantContext = Depends(require_org_context)) -> CompanyScope:
+    return CompanyScope(org_id=str(ctx.org_id))
 
 
 @router.get("/ledger/presence", response_model=PresenceResponse)
@@ -89,21 +83,21 @@ async def ledger_claims(
     scope: CompanyScope = Depends(company_scope),
 ) -> ClaimsResponse:
     """The company's held claims: scope, mode, intent, expiry and renewals."""
-    return await ledger_read.claims(scope.agent_ids, kind)
+    return await ledger_read.claims(scope.org_id, kind)
 
 
 @router.get("/ledger/waitlists", response_model=WaitlistsResponse)
 @serve_ledger
 async def ledger_waitlists(scope: CompanyScope = Depends(company_scope)) -> WaitlistsResponse:
     """The company's agents queued behind a scope someone else holds, in position order."""
-    return await ledger_read.waitlists(scope.agent_ids)
+    return await ledger_read.waitlists(scope.org_id)
 
 
 @router.get("/ledger/conflicts", response_model=ConflictsResponse)
 @serve_ledger
 async def ledger_conflicts(scope: CompanyScope = Depends(company_scope)) -> ConflictsResponse:
     """Refused releases, claims that expired while held, and unanswered yield requests."""
-    return await ledger_read.conflicts(scope.agent_ids)
+    return await ledger_read.conflicts(scope.org_id)
 
 
 @router.get("/ledger/activity", response_model=ActivityResponse)
@@ -112,7 +106,7 @@ async def ledger_activity(
     limit: int = Query(100, ge=1, le=500), scope: CompanyScope = Depends(company_scope)
 ) -> ActivityResponse:
     """Recent coordination activity for the company, newest first."""
-    return await ledger_read.activity(scope.agent_ids, limit)
+    return await ledger_read.activity(scope.org_id, limit)
 
 
 @router.get("/ledger/peer-messages", response_model=PeerMessagesResponse)

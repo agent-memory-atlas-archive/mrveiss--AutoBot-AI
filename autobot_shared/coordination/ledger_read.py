@@ -15,11 +15,10 @@ when its store cannot be read, naming the source. A router turns that into
 HTTP 503; an empty result therefore always means the store was read and held
 nothing (`MEASUREMENT_DISCIPLINE.md`: *nothing found* versus *did not look*).
 
-**Company scoping is by agent identity.** A claim carries ``agent_id``, not a
-company. A caller passes ``agent_ids`` -- the agent slugs its company owns -- and
-every row whose agent is not in that set is dropped, as is a row naming no
-agent. Fail closed: an agent nobody can attribute to a company is install-wide
-and is shown only to the install-wide view (``agent_ids=None``).
+**Company scoping is by the company stamped at write time** (`claim_company.py`), never by
+the agent's name. A company sees only records stamped with its id; an unstamped record
+(install-wide actor, or written before stamping) is visible only to the install-wide view
+(``company=None``). Fail closed.
 """
 
 from __future__ import annotations
@@ -58,7 +57,12 @@ from autobot_shared.coordination.ledger_schemas import (
     WaitlistsResponse,
 )
 from autobot_shared.coordination.work_claims import ClaimUnavailable, WorkClaim, claim_payload, list_claims
+from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
+
+logger = get_logger(__name__)
+
+GENERIC_DETAIL = "the coordination store could not be read"
 
 T = TypeVar("T")
 
@@ -70,7 +74,9 @@ SOURCE_WAITLISTS = "waitlists"
 SOURCE_EVENTS = "events"
 SOURCE_DEV_LOOP = "dev_loop"
 
-AgentIds = frozenset[str] | None
+#: ``None`` = the install-wide view (SLM, admin): every record, stamped or not. A string = that
+#: company: only records STAMPED with it at write time (`claim_company.py`).
+Company = str | None
 
 
 class LedgerUnreadable(Exception):
@@ -87,19 +93,26 @@ async def _read(source: str, call: Callable[[], Awaitable[T]]) -> T:
     try:
         return await call()
     except (ClaimUnavailable, RuntimeError, RedisError, OSError) as exc:
-        raise LedgerUnreadable(source, str(exc) or type(exc).__name__) from exc
+        # The cause (which may name a Redis host and port) stays in the server log; the caller gets a generic reason.
+        logger.warning("agent ledger: %s could not be read: %s", source, exc)
+        raise LedgerUnreadable(source, GENERIC_DETAIL) from exc
 
 
-def _visible(agent_ids: AgentIds, *agents: str | None) -> bool:
-    """True when the caller may see a row involving *agents*. ``None`` scope sees all."""
-    return agent_ids is None or any(a is not None and a in agent_ids for a in agents)
+def visible(company: Company, row_company: str | None) -> bool:
+    """True when the viewer may see a record stamped *row_company*.
+
+    The install-wide view (``company is None``) sees everything. A company sees only
+    records stamped with its own id: an unstamped record is install-wide or legacy and
+    never matches, so naming an agent (a string anyone can choose) reveals nothing.
+    """
+    return company is None or row_company == company
 
 
 def _claim_row(claim: WorkClaim) -> ClaimRow:
     return ClaimRow(**claim_payload(claim))
 
 
-def _waiter_rows(scope: str, queue: list[Waiter]) -> list[WaiterRow]:
+def _waiter_rows(scope: str, queue: list[Waiter], company: Company) -> list[WaiterRow]:
     return [
         WaiterRow(
             scope=scope,
@@ -111,30 +124,31 @@ def _waiter_rows(scope: str, queue: list[Waiter]) -> list[WaiterRow]:
             priority=w.priority,
             joined_at=w.joined_at,
             expires_at=w.expires_at,
+            company_id=w.company_id,
         )
         for i, w in enumerate(queue, start=1)
+        if visible(company, w.company_id)
     ]
 
 
-async def _claims(agent_ids: AgentIds, kind: str | None) -> list[ClaimRow]:
+async def _claims(company: Company, kind: str | None) -> list[ClaimRow]:
     held = await _read(SOURCE_CLAIMS, lambda: list_claims(kind))
-    rows = [_claim_row(c) for c in held if _visible(agent_ids, c.agent_id)]
+    rows = [_claim_row(c) for c in held if visible(company, c.company_id)]
     return sorted(rows, key=lambda r: (r.expires_at, r.scope))
 
 
-async def _waiters(agent_ids: AgentIds) -> list[WaiterRow]:
+async def _waiters(company: Company) -> list[WaiterRow]:
     queues = await _read(SOURCE_WAITLISTS, all_waiters)
-    rows = [row for scope, queue in sorted(queues.items()) for row in _waiter_rows(scope, queue)]
-    return [r for r in rows if _visible(agent_ids, r.agent_id)]
+    return [row for scope, queue in sorted(queues.items()) for row in _waiter_rows(scope, queue, company)]
 
 
-async def claims(agent_ids: AgentIds = None, kind: str | None = None) -> ClaimsResponse:
-    rows = await _claims(agent_ids, kind)
+async def claims(company: Company = None, kind: str | None = None) -> ClaimsResponse:
+    rows = await _claims(company, kind)
     return ClaimsResponse(claims=rows, count=len(rows))
 
 
-async def waitlists(agent_ids: AgentIds = None) -> WaitlistsResponse:
-    rows = await _waiters(agent_ids)
+async def waitlists(company: Company = None) -> WaitlistsResponse:
+    rows = await _waiters(company)
     return WaitlistsResponse(waiters=rows, count=len(rows))
 
 
@@ -154,33 +168,42 @@ async def contention() -> ContentionResponse:
     return ContentionResponse(resources=rows, count=len(rows))
 
 
-def _event_conflict(event: dict[str, Any], agent_ids: AgentIds) -> ConflictRow | None:
-    kind = event["type"]
-    if kind == RELEASE_REFUSED and _visible(agent_ids, event.get("agent_id"), event.get("holder_agent_id")):
-        detail = f"release of {event.get('scope')} aimed at a claim held by another holder"
-        return ConflictRow(
-            at=event["at"],
-            kind="release_refused",
-            scope=event.get("scope"),
-            agent_id=event.get("agent_id"),
-            task_id=event.get("task_id"),
-            other_agent_id=event.get("holder_agent_id"),
-            detail=detail,
-        )
-    if kind == CLAIM_EXPIRED and _visible(agent_ids, event.get("agent_id")):
-        detail = f"{event.get('scope')} lapsed at its TTL without being released"
+def _refused_release(event: dict[str, Any], company: Company) -> ConflictRow | None:
+    """A release aimed at another holder's claim, shown to each party with only its OWN side filled in.
+
+    The actor sees its own ids, the holder sees its own; neither learns the other company's
+    agent or task ids. A viewer that is neither party sees nothing.
+    """
+    actor, holder = visible(company, event.get("company_id")), visible(company, event.get("holder_company_id"))
+    if not (actor or holder):
+        return None
+    return ConflictRow(
+        at=event["at"],
+        kind="release_refused",
+        scope=event.get("scope"),
+        agent_id=event.get("agent_id") if actor else None,
+        task_id=event.get("task_id") if actor else None,
+        other_agent_id=event.get("holder_agent_id") if holder else None,
+        detail=f"a release of {event.get('scope')} was aimed at a claim held by another holder",
+    )
+
+
+def _event_conflict(event: dict[str, Any], company: Company) -> ConflictRow | None:
+    if event["type"] == RELEASE_REFUSED:
+        return _refused_release(event, company)
+    if event["type"] == CLAIM_EXPIRED and visible(company, event.get("company_id")):
         return ConflictRow(
             at=event["at"],
             kind="claim_expired",
             scope=event.get("scope"),
             agent_id=event.get("agent_id"),
             task_id=event.get("task_id"),
-            detail=detail,
+            detail=f"{event.get('scope')} lapsed at its TTL without being released",
         )
     return None
 
 
-def _yield_conflicts(events: list[dict[str, Any]], agent_ids: AgentIds) -> list[ConflictRow]:
+def _yield_conflicts(events: list[dict[str, Any]], company: Company) -> list[ConflictRow]:
     pending = unanswered_yields(events, now_epoch=time.time(), timeout_s=YIELD_TIMEOUT_S)
     return [
         ConflictRow(
@@ -192,7 +215,7 @@ def _yield_conflicts(events: list[dict[str, Any]], agent_ids: AgentIds) -> list[
             detail="asked the holder to release; no answer, so the claim is held",
         )
         for e in pending
-        if _visible(agent_ids, e.get("requester_agent_id"))
+        if visible(company, e.get("company_id"))
     ]
 
 
@@ -214,15 +237,15 @@ async def _lapsed_dev_loop() -> list[ConflictRow]:
     return rows
 
 
-async def conflicts(agent_ids: AgentIds = None) -> ConflictsResponse:
+async def conflicts(company: Company = None) -> ConflictsResponse:
     """Refused releases, claims that expired while held, unanswered yields, lapsed dev-loop actions.
 
     The last needs the dev-loop history, which names no company; it is included
-    only for the install-wide view (``agent_ids=None``).
+    only for the install-wide view (``company=None``).
     """
     events = await _read(SOURCE_EVENTS, _events)
-    rows = [row for e in events if (row := _event_conflict(e, agent_ids))] + _yield_conflicts(events, agent_ids)
-    if agent_ids is None:
+    rows = [row for e in events if (row := _event_conflict(e, company))] + _yield_conflicts(events, company)
+    if company is None:
         rows += await _lapsed_dev_loop()
     rows.sort(key=lambda r: _when(r.at), reverse=True)
     return ConflictsResponse(conflicts=rows, count=len(rows))
@@ -239,9 +262,8 @@ def _when(iso: str) -> float:
     return datetime.fromisoformat(iso).timestamp()
 
 
-def _event_activity(event: dict[str, Any], agent_ids: AgentIds) -> ActivityRow | None:
-    agents = (event.get("agent_id"), event.get("holder_agent_id"), event.get("requester_agent_id"))
-    if not _visible(agent_ids, *agents):
+def _event_activity(event: dict[str, Any], company: Company) -> ActivityRow | None:
+    if not visible(company, event.get("company_id")):
         return None
     return ActivityRow(
         at=event["at"],
@@ -253,14 +275,14 @@ def _event_activity(event: dict[str, Any], agent_ids: AgentIds) -> ActivityRow |
     )
 
 
-async def activity(agent_ids: AgentIds = None, limit: int = EVENT_CAP) -> ActivityResponse:
+async def activity(company: Company = None, limit: int = EVENT_CAP) -> ActivityResponse:
     """Recent coordination activity, newest first: claims taken, queues joined, recorded events.
 
     Built from what the stores keep -- a held claim's ``acquired_at``, a waiter's
     ``joined_at`` and the ledger event list. A claim taken and released between
     two reads leaves no row; the registry does not keep one.
     """
-    held, waiting = await _claims(agent_ids, None), await _waiters(agent_ids)
+    held, waiting = await _claims(company, None), await _waiters(company)
     events = await _read(SOURCE_EVENTS, _events)
     rows = [
         ActivityRow(
@@ -274,7 +296,7 @@ async def activity(agent_ids: AgentIds = None, limit: int = EVENT_CAP) -> Activi
         )
         for w in waiting
     ]
-    rows += [row for e in events if (row := _event_activity(e, agent_ids))]
+    rows += [row for e in events if (row := _event_activity(e, company))]
     rows.sort(key=lambda r: _when(r.at), reverse=True)
     rows = rows[: max(limit, 1)]
     return ActivityResponse(activity=rows, count=len(rows))

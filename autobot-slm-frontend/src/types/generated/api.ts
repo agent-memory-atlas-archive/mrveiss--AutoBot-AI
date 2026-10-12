@@ -8335,6 +8335,11 @@ export interface components {
             acquired_at: string;
             /** Agent Id */
             agent_id: string;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
             /** Expires At */
             expires_at: string;
             /** Intent */
@@ -14507,6 +14512,11 @@ export interface components {
         WaiterRow: {
             /** Agent Id */
             agent_id: string;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
             /** Expires At */
             expires_at: string;
             /** Intent */

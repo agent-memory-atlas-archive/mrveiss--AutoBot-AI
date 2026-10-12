@@ -67,18 +67,3 @@ async def distinct_company_ids_with_agents(session: AsyncSession) -> list[str]:
 
     result = await session.execute(select(AgentOrgNode.company_id).distinct())
     return [str(company_id) for company_id in result.scalars().all()]
-
-
-async def company_agent_slugs(session: AsyncSession, company_id: str) -> frozenset[str]:
-    """The agent slugs one company owns (#18391).
-
-    ``AgentOrgNode.agent_id`` is unique across the install, so a slug names at
-    most one company; the agent ledger uses that to attribute a claim -- which
-    carries an ``agent_id`` and no company -- to the company allowed to see it.
-    """
-    from sqlalchemy import select
-
-    from models.agent_org import AgentOrgNode
-
-    result = await session.execute(select(AgentOrgNode.agent_id).where(AgentOrgNode.company_id == company_id))
-    return frozenset(str(slug) for slug in result.scalars().all())

@@ -35,19 +35,11 @@ overlap rule to know that ``dir`` and ``file`` are the same namespace while
 nobody applies correctly at the next call site. One ``path`` kind whose claims
 are subtrees says the same thing with no exception.
 
-RELATIONSHIP TO ``services/task_claim.py`` (GH#6468), which must be understood
-before anything here is extended. That module already claims **task ids** --
-flat, exclusive-only, ``SET NX EX`` with owner-checked Lua release and renew --
-and `distributed_management.py` uses it to stop two agents picking up one task.
-It is the special case of this primitive: one scope kind, no hierarchy, no
-shared mode. The two are deliberately *not* merged here, because collapsing them
-means changing a live double-pickup guard, and that belongs in its own issue with
-its own tests rather than riding a new primitive's first commit -- filed as #15957.
-
-What matters is that nobody adds a third: **task identity stays
-``task_claim``'s**, which is why ``task`` is not one of :data:`VALID_KINDS`. A
-claim on the work a task will touch is this module's; a claim on the task itself
-is that module's.
+RELATIONSHIP TO ``services/task_claim.py`` (GH#6468): that module claims **task ids**
+-- flat, exclusive-only, ``SET NX EX`` -- and guards double pickup in
+`distributed_management.py`. It is the special case of this primitive; merging
+them is #15957's job, not this module's. Nobody adds a third: **task identity
+stays ``task_claim``'s**, which is why ``task`` is not one of :data:`VALID_KINDS`.
 
 WHAT THIS IS NOT: not a distributed transaction manager, not a substitute for
 database constraints, and not an enforcement mechanism on its own. Layer 1 is
@@ -69,6 +61,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any
 
+from autobot_shared.coordination.claim_company import resolve_company
 from autobot_shared.coordination.ledger_events import note_refused_release, record_expired_members
 from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
@@ -248,6 +241,8 @@ class WorkClaim:
     expires_at: str
     #: How many times the holder extended this claim with :func:`renew` (#18391).
     renewals: int = 0
+    #: The authenticated writer's company; None = install-wide or legacy (#18391).
+    company_id: str | None = None
 
     @property
     def parsed_scope(self) -> Scope:
@@ -292,6 +287,7 @@ def claim_payload(claim: WorkClaim) -> dict[str, Any]:
         "acquired_at": claim.acquired_at,
         "expires_at": claim.expires_at,
         "renewals": claim.renewals,
+        "company_id": claim.company_id,
     }
 
 
@@ -422,7 +418,9 @@ def _decode(raw: bytes | str) -> WorkClaim:
     return WorkClaim(**json.loads(raw))
 
 
-def _build(scope: Scope, agent_id: str, task_id: str, mode: ClaimMode, intent: str, ttl_s: int) -> WorkClaim:
+def _build(
+    scope: Scope, agent_id: str, task_id: str, mode: ClaimMode, intent: str, ttl_s: int, company_id: str | None = None
+) -> WorkClaim:
     acquired = now_utc()
     return WorkClaim(
         scope=str(scope),
@@ -432,6 +430,7 @@ def _build(scope: Scope, agent_id: str, task_id: str, mode: ClaimMode, intent: s
         intent=intent,
         acquired_at=acquired.isoformat(),
         expires_at=(acquired + timedelta(seconds=ttl_s)).isoformat(),
+        company_id=resolve_company(company_id),
     )
 
 
@@ -443,6 +442,7 @@ async def _acquire(
     mode: ClaimMode,
     intent: str,
     ttl_s: int | None,
+    company_id: str | None = None,
 ) -> tuple[str, WorkClaim | ClaimConflict]:
     """Acquire, returning the verdict alongside the result.
 
@@ -453,7 +453,7 @@ async def _acquire(
     parsed = Scope.parse(scope)
     _require_holder(agent_id, task_id)
     ttl = CLAIM_TTL_S if ttl_s is None else ttl_s
-    claim = _build(parsed, agent_id, task_id, mode, intent, ttl)
+    claim = _build(parsed, agent_id, task_id, mode, intent, ttl, company_id)
     client = await _redis()
     outcome = await client.eval(
         _ACQUIRE_LUA,
@@ -483,17 +483,17 @@ async def try_acquire(
     mode: ClaimMode = ClaimMode.EXCLUSIVE,
     intent: str,
     ttl_s: int | None = None,
+    company_id: str | None = None,
 ) -> WorkClaim | ClaimConflict:
     """WorkClaim *scope*, or return the conflict naming who holds it.
 
-    Never raises on contention -- a refusal is an ordinary answer here, and the
-    caller decides whether to wait, queue, ask, or pick different work (#15948).
-
-    Re-acquiring a scope this ``(agent_id, task_id)`` already holds is a renew,
-    not a conflict: an agent that deadlocks against itself is a bug in the
-    primitive, not in the caller.
+    Never raises on contention: the caller decides whether to wait, queue, ask or
+    pick other work (#15948). Re-acquiring a scope this ``(agent_id, task_id)``
+    already holds is a renew, not a conflict.
     """
-    _, result = await _acquire(scope, agent_id=agent_id, task_id=task_id, mode=mode, intent=intent, ttl_s=ttl_s)
+    _, result = await _acquire(
+        scope, agent_id=agent_id, task_id=task_id, mode=mode, intent=intent, ttl_s=ttl_s, company_id=company_id
+    )
     return result
 
 

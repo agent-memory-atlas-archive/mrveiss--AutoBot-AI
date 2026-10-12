@@ -2677,6 +2677,18 @@
             "title": "Agent Id",
             "type": "string"
           },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stamped at write time; null = install-wide or legacy",
+            "title": "Company Id"
+          },
           "expires_at": {
             "title": "Expires At",
             "type": "string"
@@ -15185,6 +15197,18 @@
           "agent_id": {
             "title": "Agent Id",
             "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stamped at write time; null = install-wide or legacy",
+            "title": "Company Id"
           },
           "expires_at": {
             "title": "Expires At",

@@ -17702,7 +17702,7 @@ export interface paths {
         };
         /**
          * Get Claims
-         * @description The live claim table, optionally filtered.
+         * @description The caller's company's live claim table, optionally filtered (install-wide claims are SLM-only).
          *
          *     A malformed `scope` or unknown `kind` is the caller's error and is reported
          *     as 400 rather than silently returning everything -- a filter that fails open
@@ -63275,6 +63275,11 @@ export interface components {
              * @default 0
              */
             renewals: number;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -102545,6 +102550,11 @@ export interface components {
             joined_at: string;
             /** Expires At */
             expires_at: string;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
         } & {
             [key: string]: unknown;
         };

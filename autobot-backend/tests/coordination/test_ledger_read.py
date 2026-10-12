@@ -47,8 +47,10 @@ async def redis(monkeypatch):
     await client.flushall()
 
 
-async def _hold(scope, agent, task="t1", intent="work", ttl_s=None):
-    return await try_acquire(scope, agent_id=agent, task_id=task, mode=ClaimMode.EXCLUSIVE, intent=intent, ttl_s=ttl_s)
+async def _hold(scope, agent, task="t1", intent="work", ttl_s=None, company=None):
+    return await try_acquire(
+        scope, agent_id=agent, task_id=task, mode=ClaimMode.EXCLUSIVE, intent=intent, ttl_s=ttl_s, company_id=company
+    )
 
 
 # --- claims, renewals ---------------------------------------------------------
@@ -71,14 +73,41 @@ async def test_claims_carry_the_renewal_count(redis):
 
 
 @pytest.mark.asyncio
-async def test_a_company_sees_only_its_own_agents_claims(redis):
-    await _hold("path:a/x", "co-a-agent")
-    await _hold("path:b/x", "co-b-agent")
-    await _hold("provider:anthropic", "dev-session")
-    scoped = await ledger_read.claims(frozenset({"co-a-agent"}))
-    assert [c.agent_id for c in scoped.claims] == ["co-a-agent"]
-    assert (await ledger_read.claims(frozenset())).count == 0  # a company with no agents sees nothing
+async def test_a_company_sees_only_claims_stamped_with_its_id(redis):
+    await _hold("path:a/x", "co-a-agent", company="A")
+    await _hold("path:b/x", "co-b-agent", company="B")
+    await _hold("provider:anthropic", "dev-session")  # install-wide: no stamp
+    assert [c.agent_id for c in (await ledger_read.claims("A")).claims] == ["co-a-agent"]
+    assert (await ledger_read.claims("C")).count == 0  # a company with no stamped claims sees nothing
     assert (await ledger_read.claims()).count == 3  # control: the install-wide read sees all three
+
+
+@pytest.mark.asyncio
+async def test_a_squatted_agent_slug_reveals_nothing(redis):
+    """Company B using company A's (or an install-wide) agent NAME gains no visibility: scoping is by stamp."""
+    await _hold("path:a/x", "shared-name", company="A")
+    await _hold("provider:anthropic", "shared-name")  # install-wide holder with the same slug
+    await join("path:a/x", agent_id="shared-name", task_id="w", intent="wait", company_id="A")
+    await release_scope(
+        "path:a/x",
+        agent_id="shared-name",
+        task_id="other",
+    )  # refused release, unstamped actor
+    for read in (ledger_read.claims, ledger_read.waitlists, ledger_read.conflicts, ledger_read.activity):
+        assert [r for r in vars(await read("B")).values() if isinstance(r, list)][0] == [], read.__name__
+    assert (await ledger_read.claims("A")).count == 1  # control: A sees its own
+
+
+@pytest.mark.asyncio
+async def test_the_authenticated_context_stamps_writes(redis):
+    from autobot_shared.coordination.claim_company import set_company
+
+    set_company("ctx-co")
+    try:
+        await _hold("path:c/x", "someone")
+    finally:
+        set_company(None)
+    assert [c.company_id for c in (await ledger_read.claims("ctx-co")).claims] == ["ctx-co"]
 
 
 # --- waitlists, contention ----------------------------------------------------
@@ -86,8 +115,8 @@ async def test_a_company_sees_only_its_own_agents_claims(redis):
 
 @pytest.mark.asyncio
 async def test_waitlists_list_every_queue_with_positions_and_scope_by_agent(redis):
-    await join("path:a/x", agent_id="co-a-agent", task_id="t", intent="wait")
-    await join("path:a/x", agent_id="co-b-agent", task_id="t", intent="wait")
+    await join("path:a/x", agent_id="co-a-agent", task_id="t", intent="wait", company_id="A")
+    await join("path:a/x", agent_id="co-b-agent", task_id="t", intent="wait", company_id="B")
     await join("provider:anthropic", agent_id="co-a-agent", task_id="t2", intent="wait")
     assert sorted(await all_waiters()) == ["path:a/x", "provider:anthropic"]
     rows = (await ledger_read.waitlists()).waiters
@@ -95,7 +124,7 @@ async def test_waitlists_list_every_queue_with_positions_and_scope_by_agent(redi
         ("path:a/x", 1, "co-a-agent"),
         ("path:a/x", 2, "co-b-agent"),
     ]
-    mine = await ledger_read.waitlists(frozenset({"co-b-agent"}))
+    mine = await ledger_read.waitlists("B")
     assert [(r.agent_id, r.position) for r in mine.waiters] == [("co-b-agent", 2)]
 
 
@@ -180,7 +209,7 @@ async def test_a_dev_loop_action_that_outlived_its_claim_is_a_conflict(redis):
         assert await dla.record(action)
     rows = (await ledger_read.conflicts()).conflicts
     assert [(r.kind, r.scope) for r in rows] == [("claim_lapsed_during_action", "issue:8")]
-    assert (await ledger_read.conflicts(frozenset({"anyone"}))).conflicts == []  # install-wide data, never a company's
+    assert (await ledger_read.conflicts("anyone")).conflicts == []  # install-wide data, never a company's
 
 
 # --- dev loop, activity -------------------------------------------------------
@@ -200,13 +229,13 @@ async def test_dev_loop_history_per_issue_includes_refusals(redis):
 
 @pytest.mark.asyncio
 async def test_activity_merges_claims_waiters_and_events_newest_first(redis):
-    await _hold("path:a/x", "co-a-agent")
-    await join("path:a/x", agent_id="co-a-agent", task_id="t9", intent="wait")
+    await _hold("path:a/x", "co-a-agent", company="A")
+    await join("path:a/x", agent_id="co-a-agent", task_id="t9", intent="wait", company_id="A")
     await release_scope("path:a/x", agent_id="stranger", task_id="s")
     rows = (await ledger_read.activity()).activity
     assert {r.type for r in rows} == {"claim_held", "waiting", "release_refused"}
     assert [r.at for r in rows] == sorted((r.at for r in rows), reverse=True)
-    assert {r.type for r in (await ledger_read.activity(frozenset({"nobody"}))).activity} == set()
+    assert {r.type for r in (await ledger_read.activity("nobody")).activity} == set()
 
 
 # --- unreachable is not empty -------------------------------------------------
@@ -232,3 +261,34 @@ async def test_every_read_raises_unreadable_when_redis_is_gone_and_none_returns_
         with pytest.raises(ledger_read.LedgerUnreadable):
             await call
         assert name
+
+
+@pytest.mark.asyncio
+async def test_a_refused_release_shows_each_party_only_its_own_side(redis):
+    await _hold("path:a/x", "holder-a", "th", company="A")
+    await release_scope("path:a/x", agent_id="intruder-b", task_id="ti")  # actor context: none -> unstamped
+    from autobot_shared.coordination.claim_company import set_company
+
+    set_company("B")
+    try:
+        await release_scope("path:a/x", agent_id="intruder-b", task_id="ti")
+    finally:
+        set_company(None)
+    as_b = [c for c in (await ledger_read.conflicts("B")).conflicts]
+    as_a = [c for c in (await ledger_read.conflicts("A")).conflicts]
+    assert [(c.agent_id, c.other_agent_id) for c in as_b] == [("intruder-b", None)]  # B never learns A's agent id
+    assert [(c.agent_id, c.task_id, c.other_agent_id) for c in as_a] == [(None, None, "holder-a")] * 2
+    assert (await ledger_read.conflicts("C")).conflicts == []
+
+
+@pytest.mark.asyncio
+async def test_the_unreadable_detail_is_generic_and_the_cause_is_only_logged(monkeypatch, caplog):
+    async def _boom(database: str = "main"):
+        raise ConnectionError("Error 111 connecting to 10.9.8.7:6379. Connection refused.")
+
+    for module in (wc_mod, wl_mod, dla, ledger_read):
+        monkeypatch.setattr(module, "get_async_redis_client", _boom)
+    with pytest.raises(ledger_read.LedgerUnreadable) as caught:
+        await ledger_read.claims()
+    assert "10.9.8.7" not in caught.value.detail and "6379" not in caught.value.detail
+    assert "10.9.8.7" in caplog.text  # kept server-side

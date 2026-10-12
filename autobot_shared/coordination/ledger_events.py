@@ -24,6 +24,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
+from autobot_shared.coordination.claim_company import resolve_company
 from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import utc_timestamp
@@ -57,7 +58,7 @@ async def record_event(client: Any, event_type: str, **fields: Any) -> bool:
     """Append one event. ``False`` means it was not recorded; never raises."""
     if event_type not in EVENT_TYPES:
         raise ValueError(f"unknown ledger event {event_type!r}; events are {sorted(EVENT_TYPES)}")
-    entry = json.dumps({"type": event_type, "at": utc_timestamp(), **fields})
+    entry = json.dumps({"type": event_type, "at": utc_timestamp(), "company_id": resolve_company(), **fields})
     try:
         async with client.pipeline(transaction=True) as pipe:
             pipe.lpush(EVENTS_KEY, entry)
@@ -75,7 +76,10 @@ async def record_expired_members(client: Any, kind: str, members: list[str]) -> 
     for member in members:
         path, _, rest = member.partition("|")
         agent_id, _, task_id = rest.partition("|")
-        await record_event(client, CLAIM_EXPIRED, scope=f"{kind}:{path}", agent_id=agent_id, task_id=task_id)
+        # The claim's payload is gone with its TTL, and with it the company: install-wide by default.
+        await record_event(
+            client, CLAIM_EXPIRED, scope=f"{kind}:{path}", agent_id=agent_id, task_id=task_id, company_id=None
+        )
 
 
 async def note_refused_release(
@@ -102,6 +106,7 @@ async def note_refused_release(
             task_id=task_id,
             holder_agent_id=claim.agent_id,
             holder_task_id=claim.task_id,
+            holder_company_id=claim.company_id,
         )
 
 

@@ -19,11 +19,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import agent_ledger
-from api.user_management.dependencies import get_current_user, get_db_session, require_org_context
+from api.user_management.dependencies import get_current_user, require_org_context
 from autobot_shared.coordination import claim_waitlist as wl_mod
 from autobot_shared.coordination import dev_loop_actions as dla
 from autobot_shared.coordination import ledger_read
 from autobot_shared.coordination import work_claims as wc_mod
+from autobot_shared.coordination.claim_company import set_company
 from autobot_shared.coordination.claim_waitlist import join
 from autobot_shared.coordination.work_claims import release_scope, try_acquire
 from protocols import idle_notice
@@ -42,7 +43,6 @@ except ImportError:  # pragma: no cover
     fakeredis = None  # type: ignore[assignment]
 
 CO_A, CO_B = uuid.uuid4(), uuid.uuid4()
-SLUGS = {str(CO_A): frozenset({"a-agent"}), str(CO_B): frozenset({"b-agent"})}
 
 
 @pytest_asyncio.fixture
@@ -67,10 +67,6 @@ def world(monkeypatch):
     monkeypatch.setattr(agent_ledger, "get_presence_registry", lambda: registry)
     monkeypatch.setattr(agent_ledger, "get_peer_inbox_directory", lambda: directory)
 
-    async def _slugs(_session, company_id):
-        return SLUGS[company_id]
-
-    monkeypatch.setattr(agent_ledger, "company_agent_slugs", _slugs)
     monkeypatch.setattr(idle_notice, "_ACTIVE", {})
     monkeypatch.setattr(agent_ledger, "active_subscriptions", idle_notice.active_subscriptions)
     return registry, directory
@@ -85,7 +81,6 @@ def _client(company: uuid.UUID) -> TestClient:
     app.include_router(agent_ledger.router, prefix="/coordination")
     app.dependency_overrides[get_current_user] = lambda: {"id": str(uuid.uuid4()), "role": "user"}
     app.dependency_overrides[require_org_context] = lambda: TenantContext(org_id=company)
-    app.dependency_overrides[get_db_session] = lambda: None
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -94,25 +89,32 @@ def _get(company, path):
 
 
 async def _seed():
-    for agent, scope in (("a-agent", "path:a/f"), ("b-agent", "path:b/f"), ("dev-session", "provider:x")):
-        await try_acquire(scope, agent_id=agent, task_id="t", intent=f"{agent} work")
+    stamps = {"a-agent": str(CO_A), "b-agent": str(CO_B), "dev-session": None}
+    for (agent, company), scope in zip(stamps.items(), ("path:a/f", "path:b/f", "provider:x")):
+        await try_acquire(scope, agent_id=agent, task_id="t", intent=f"{agent} work", company_id=company)
     for agent in ("a-agent", "b-agent"):
-        await join("path:shared/f", agent_id=agent, task_id="t", intent="wait")
+        await join("path:shared/f", agent_id=agent, task_id="t", intent="wait", company_id=stamps[agent])
 
 
 @pytest.mark.asyncio
 async def test_company_a_cannot_see_company_b_claims_waiters_or_events(redis, world):
     await _seed()
-    await release_scope("path:b/f", agent_id="a-agent", task_id="t-x")  # A reaches for B's claim
+    set_company(str(CO_A))  # A's authenticated context reaches for B's claim
+    try:
+        await release_scope("path:b/f", agent_id="a-agent", task_id="t-x")
+    finally:
+        set_company(None)
     a_claims = _get(CO_A, "claims").json()
     b_claims = _get(CO_B, "claims").json()
     assert [c["agent_id"] for c in a_claims["claims"]] == ["a-agent"]
     assert [c["agent_id"] for c in b_claims["claims"]] == ["b-agent"]  # install-wide dev-session claim is in neither
     assert [w["agent_id"] for w in _get(CO_A, "waitlists").json()["waiters"]] == ["a-agent"]
     assert [w["agent_id"] for w in _get(CO_B, "waitlists").json()["waiters"]] == ["b-agent"]
-    # The refused release names A as the actor and B as the holder: both companies are party to it.
-    assert [c["kind"] for c in _get(CO_A, "conflicts").json()["conflicts"]] == ["release_refused"]
-    assert [c["kind"] for c in _get(CO_B, "conflicts").json()["conflicts"]] == ["release_refused"]
+    # Each party sees only its own side of the refused release; neither learns the other's ids.
+    a_row = _get(CO_A, "conflicts").json()["conflicts"][0]
+    b_row = _get(CO_B, "conflicts").json()["conflicts"][0]
+    assert (a_row["agent_id"], a_row["other_agent_id"]) == ("a-agent", None)
+    assert (b_row["agent_id"], b_row["other_agent_id"]) == (None, "b-agent")
     assert {r["agent_id"] for r in _get(CO_A, "activity").json()["activity"]} == {"a-agent"}
     assert "b-agent" not in _get(CO_A, "activity").text
 
@@ -171,7 +173,7 @@ async def test_an_empty_ledger_is_200_with_an_empty_list(redis, world):
 
 def test_an_unreachable_ledger_is_503_with_a_typed_body_never_an_empty_list(monkeypatch, world):
     async def _none(database: str = "main"):
-        return None
+        raise ConnectionError("Error 111 connecting to 127.0.0.1:6379. Connection refused.")
 
     for module in (wc_mod, wl_mod, dla, ledger_read):
         monkeypatch.setattr(module, "get_async_redis_client", _none)
@@ -185,6 +187,7 @@ def test_an_unreachable_ledger_is_503_with_a_typed_body_never_an_empty_list(monk
         assert response.status_code == 503, path
         body = response.json()
         assert body["error"] == "ledger_unavailable" and body["source"] == source and body["detail"]
+        assert "127.0.0.1" not in response.text and "6379" not in response.text
         assert set(body) == {"error", "source", "detail"}  # the typed error alone: no rows to mistake for "none"
 
 
@@ -197,3 +200,39 @@ def test_the_ledger_routes_are_read_only_and_authenticated(world):
     client = _client(CO_A)
     assert client.post("/coordination/ledger/claims").status_code == 405
     assert client.delete("/coordination/ledger/claims").status_code == 405
+
+
+def _coord_client(company: uuid.UUID) -> TestClient:
+    from api import coordination
+
+    app = FastAPI()
+    app.include_router(coordination.router, prefix="/coordination")
+    app.dependency_overrides[get_current_user] = lambda: {"id": str(uuid.uuid4()), "role": "user"}
+    app.dependency_overrides[require_org_context] = lambda: TenantContext(org_id=company)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.mark.asyncio
+async def test_the_legacy_claims_route_is_scoped_to_the_callers_company_18410(redis, world):
+    await _seed()
+    a = _coord_client(CO_A).get("/coordination/claims").json()
+    b = _coord_client(CO_B).get("/coordination/claims").json()
+    assert [c["agent_id"] for c in a["claims"]] == ["a-agent"] and a["count"] == 1
+    assert [c["agent_id"] for c in b["claims"]] == ["b-agent"]
+    # Contrast with the unscoped table the route used to return: all three claims exist.
+    from services.claim_projection import claim_table
+
+    assert {c["agent_id"] for c in await claim_table()} == {"a-agent", "b-agent", "dev-session"}
+    # Its own filters still work inside the company.
+    assert _coord_client(CO_A).get("/coordination/claims?kind=provider").json()["claims"] == []
+    assert _coord_client(CO_A).get("/coordination/claims?kind=path").json()["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_user_who_squats_an_unowned_slug_sees_nothing(redis, world):
+    """Install-wide and other-company agents are reachable only by name; scoping is by stamp, so naming one reveals nothing."""
+    await try_acquire("provider:anthropic", agent_id="dev-session", task_id="t", intent="quota")
+    await try_acquire("path:a/f", agent_id="a-agent", task_id="t", intent="x", company_id=str(CO_A))
+    for path in ("claims", "waitlists", "conflicts", "activity"):
+        assert "dev-session" not in _get(CO_B, path).text and "a-agent" not in _get(CO_B, path).text, path
+    assert "dev-session" not in _coord_client(CO_B).get("/coordination/claims?kind=provider").text

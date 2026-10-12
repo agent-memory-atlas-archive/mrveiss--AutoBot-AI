@@ -38,6 +38,7 @@ class ClaimRow(BaseModel):
     acquired_at: str
     expires_at: str
     renewals: int = Field(0, description="Explicit renewals since the claim was acquired")
+    company_id: str | None = Field(default=None, description="Stamped at write time; null = install-wide or legacy")
 
 
 class WaiterRow(BaseModel):
@@ -50,6 +51,7 @@ class WaiterRow(BaseModel):
     priority: int
     joined_at: str
     expires_at: str
+    company_id: str | None = Field(default=None, description="Stamped at write time; null = install-wide or legacy")
 
 
 class ClaimsResponse(BaseModel):
