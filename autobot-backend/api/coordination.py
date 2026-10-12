@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from api.agent_ledger import router as agent_ledger_router  # #18391
 from api.user_management.dependencies import get_current_user
 from autobot_shared.coordination.work_claims import ScopeError
 from autobot_shared.logging_manager import get_logger
@@ -33,6 +34,8 @@ logger = get_logger(__name__)
 # which agent is doing what, which is operational detail about the running
 # system rather than public information.
 router = APIRouter(dependencies=[Depends(get_current_user)])
+# The company-scoped agent ledger (#18391) rides this router: same read-only claim table, same gate.
+router.include_router(agent_ledger_router)
 
 
 @router.get("/claims")

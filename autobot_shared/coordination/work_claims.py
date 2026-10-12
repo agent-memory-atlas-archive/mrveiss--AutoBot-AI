@@ -69,6 +69,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any
 
+from autobot_shared.coordination.ledger_events import note_refused_release, record_expired_members
 from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
@@ -245,6 +246,8 @@ class WorkClaim:
     intent: str
     acquired_at: str
     expires_at: str
+    #: How many times the holder extended this claim with :func:`renew` (#18391).
+    renewals: int = 0
 
     @property
     def parsed_scope(self) -> Scope:
@@ -288,6 +291,7 @@ def claim_payload(claim: WorkClaim) -> dict[str, Any]:
         "intent": claim.intent,
         "acquired_at": claim.acquired_at,
         "expires_at": claim.expires_at,
+        "renewals": claim.renewals,
     }
 
 
@@ -319,11 +323,13 @@ local agent, task = ARGV[6], ARGV[7]
 local mine = path .. '|' .. agent .. '|' .. task
 local members = redis.call('SMEMBERS', idx)
 local renewing = false
+local pruned = {}
 for i = 1, #members do
   local member = members[i]
   local raw = redis.call('GET', prefix .. member)
   if not raw then
     redis.call('SREM', idx, member)
+    pruned[#pruned + 1] = member
   else
     local sep = string.find(member, '|', 1, true)
     local held_path = string.sub(member, 1, sep - 1)
@@ -338,7 +344,7 @@ for i = 1, #members do
         local same_holder = held.agent_id == agent and held.task_id == task
         local both_shared = mode == 'shared' and held.mode == 'shared'
         if not same_holder and not both_shared then
-          return {'conflict', raw}
+          return {'conflict', raw, pruned}
         end
       end
     end
@@ -346,8 +352,8 @@ for i = 1, #members do
 end
 redis.call('SET', prefix .. mine, payload, 'EX', ttl)
 redis.call('SADD', idx, mine)
-if renewing then return {'renewed', payload} end
-return {'acquired', payload}
+if renewing then return {'renewed', payload, pruned} end
+return {'acquired', payload, pruned}
 """
 
 # Ownership is now STRUCTURAL, not checked: a holder's key contains its own
@@ -372,6 +378,7 @@ local raw = redis.call('GET', key)
 if not raw then return 0 end
 local held = cjson.decode(raw)
 held.expires_at = expires
+held.renewals = (held.renewals or 0) + 1
 redis.call('SET', key, cjson.encode(held), 'EX', ttl)
 return 1
 """
@@ -405,6 +412,10 @@ async def _redis() -> Any:
     return client
 
 
+def _text(raw: bytes | str) -> str:
+    return raw.decode() if isinstance(raw, bytes) else raw
+
+
 def _decode(raw: bytes | str) -> WorkClaim:
     if isinstance(raw, bytes):
         raw = raw.decode()
@@ -435,10 +446,9 @@ async def _acquire(
 ) -> tuple[str, WorkClaim | ClaimConflict]:
     """Acquire, returning the verdict alongside the result.
 
-    The verdict distinguishes a fresh ``acquired`` from a ``renewed`` -- a
-    re-acquisition by a holder that already had this exact scope. Only the
-    caller that acquired it fresh may release it, which is what stops a nested
-    :func:`work_claim` from releasing the scope its outer block is still using.
+    The verdict separates a fresh ``acquired`` from a ``renewed`` re-acquisition;
+    only a fresh acquirer may release, so a nested :func:`work_claim` cannot free
+    the scope its outer block still uses.
     """
     parsed = Scope.parse(scope)
     _require_holder(agent_id, task_id)
@@ -458,6 +468,8 @@ async def _acquire(
         task_id,
     )
     verdict = outcome[0].decode() if isinstance(outcome[0], bytes) else outcome[0]
+    if len(outcome) > 2 and outcome[2]:  # index members whose TTL ran out unreleased (#18391)
+        await record_expired_members(client, parsed.kind, [_text(m) for m in outcome[2]])
     if verdict == "conflict":
         return verdict, ClaimConflict(requested=str(parsed), holder=_decode(outcome[1]))
     return verdict, claim
@@ -488,9 +500,8 @@ async def try_acquire(
 async def release_scope(scope: str | Scope, *, agent_id: str, task_id: str) -> bool:
     """Release this holder's claim on *scope*. True when one went.
 
-    A holder can only ever address its own key, so releasing another agent's
-    claim is not refused -- it is unaddressable. Passing someone else's scope
-    deletes nothing and returns False.
+    Another holder's claim is unaddressable: nothing is deleted, False returns,
+    and the attempt is recorded in the ledger (#18391).
     """
     parsed = Scope.parse(scope)
     _require_holder(agent_id, task_id)
@@ -506,6 +517,8 @@ async def release_scope(scope: str | Scope, *, agent_id: str, task_id: str) -> b
             task_id,
         )
     )
+    if removed == 0:
+        await note_refused_release(client, str(parsed), agent_id, task_id, lambda: list_claims(parsed.kind))
     return removed == 1
 
 
@@ -532,11 +545,9 @@ async def renew(scope: str | Scope, *, agent_id: str, task_id: str, ttl_s: int |
 
 
 async def list_claims(kind: str | None = None) -> list[WorkClaim]:
-    """Every live claim, expired entries pruned from the index as they are found.
+    """Every live claim; expired entries are pruned from the index (and recorded) as found.
 
-    One ``MGET`` and at most one ``SREM`` per kind rather than a round trip per
-    member: #15949 reads this path to render the projection, so it is read far
-    more often than it is written.
+    One ``MGET`` and at most one ``SREM`` per kind: #15949 reads this path far more than it is written.
     """
     client = await _redis()
     kinds = sorted(VALID_KINDS) if kind is None else [kind]
@@ -551,6 +562,7 @@ async def list_claims(kind: str | None = None) -> list[WorkClaim]:
         vanished = [m for m, raw in zip(members, payloads) if raw is None]
         if vanished:
             await client.srem(index, *vanished)
+            await record_expired_members(client, k, [_text(m) for m in vanished])
         claims.extend(_decode(raw) for raw in payloads if raw is not None)
     return claims
 
@@ -582,11 +594,7 @@ async def work_claim(
     try:
         yield outcome
     finally:
-        # Only the block that acquired the scope fresh releases it. Reentrancy
-        # makes a nested `work_claim` over the same scope succeed as a renew, so
-        # an unconditional release here would delete the claim on the inner
-        # block's exit while the outer block was still writing -- and the scope
-        # would be free for another agent mid-write, which is the exact
-        # collision this module exists to prevent.
+        # Only the block that acquired fresh releases: a nested block's renew must
+        # not free the scope while the outer block is still writing.
         if verdict == "acquired":
             await release_scope(scope, agent_id=agent_id, task_id=tid)

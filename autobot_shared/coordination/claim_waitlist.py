@@ -318,3 +318,23 @@ async def next_waiter(scope: str | Scope) -> Waiter | None:
 async def depth(scope: str | Scope) -> int:
     """How many live waiters are queued behind *scope*."""
     return len(await waiters(scope))
+
+
+async def all_waiters() -> dict[str, list[Waiter]]:
+    """Every live queue, keyed by scope, each in position order (#18391).
+
+    Walks the ``work_claims:wait:`` keyspace, so it is for a ledger view, not a
+    hot path. Each queue goes through :func:`waiters`, so expired entries are
+    dropped the same way. Raises :class:`ClaimUnavailable` rather than returning
+    ``{}`` when Redis is unreachable -- no queues and no answer must read differently.
+    """
+    client = await _redis()
+    prefix = _WAIT_KEY.format(kind="", path="").rstrip(":")
+    queues: dict[str, list[Waiter]] = {}
+    async for raw in client.scan_iter(match=f"{prefix}:*"):
+        key = raw.decode() if isinstance(raw, bytes) else raw
+        kind, _, path = key[len(prefix) + 1 :].partition(":")
+        scope = Scope.parse(f"{kind}:{path}")
+        if queued := await waiters(scope):
+            queues[str(scope)] = queued
+    return queues
