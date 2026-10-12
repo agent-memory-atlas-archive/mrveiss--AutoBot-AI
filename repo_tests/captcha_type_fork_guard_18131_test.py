@@ -16,8 +16,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
 from repo_tests._paths import repo_root
-from repo_tests._reach import declare
+from repo_tests._reach import ReachFloorError, declare
 
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
@@ -82,14 +83,16 @@ def test_exactly_one_captcha_taxonomy_exists() -> None:
     assert found == [CANONICAL], f"a second CAPTCHA-type enum appeared (or the canonical moved): {found}"
 
 
-def _result_classes(root: Path) -> list[str]:
+def _result_classes(root: Path) -> tuple[list[str], int]:
     """`path::Class` of every class annotating both `success` and `captcha_type`: a CAPTCHA result."""
     found: list[str] = []
+    parsed = 0
     for rel in REACH.examined(root):
         try:
             tree = ast.parse((root / rel).read_text(encoding="utf-8"))
         except (SyntaxError, UnicodeDecodeError, OSError):
             continue
+        parsed += 1
         for n in ast.walk(tree):
             if isinstance(n, ast.ClassDef):
                 fields = {
@@ -97,11 +100,23 @@ def _result_classes(root: Path) -> list[str]:
                 }
                 if {"success", "captcha_type"} <= fields:
                     found.append(f"{rel}::{n.name}")
-    return found
+    return found, parsed
 
 
 def test_exactly_one_captcha_result_class_exists() -> None:
-    assert _result_classes(repo_root()) == ["autobot_shared/captcha_types.py::CaptchaSolveResult"]
+    root = repo_root()
+    REACH.verify_floor(root)
+    found, parsed = _result_classes(root)
+    REACH.completed(parsed)
+    assert found == ["autobot_shared/captcha_types.py::CaptchaSolveResult"]
+
+
+def test_an_empty_tree_fails_the_scan_instead_of_passing_it(tmp_path: Path) -> None:
+    """A scan that reached nothing must refuse, not report 'no second class'."""
+    with pytest.raises(ReachFloorError):
+        _result_classes(tmp_path)
+    with pytest.raises(ReachFloorError):
+        _taxonomies(tmp_path)
 
 
 def test_canonical_carries_every_former_kind() -> None:

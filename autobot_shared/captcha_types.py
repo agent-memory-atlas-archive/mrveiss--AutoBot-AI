@@ -31,6 +31,18 @@ class CaptchaType(Enum):
         return None
 
 
+#: Kinds OCR cannot attempt: routed straight to human intervention, never to auto-solve.
+HUMAN_ONLY_TYPES = frozenset(
+    {
+        CaptchaType.RECAPTCHA,
+        CaptchaType.HCAPTCHA,
+        CaptchaType.CLOUDFLARE,
+        CaptchaType.SLIDER,
+        CaptchaType.IMAGE_SELECT,
+    }
+)
+
+
 class SolverConfidence(Enum):
     """Confidence levels for CAPTCHA solutions"""
 

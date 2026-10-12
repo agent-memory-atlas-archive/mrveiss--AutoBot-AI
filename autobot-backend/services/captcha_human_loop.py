@@ -57,13 +57,14 @@ try:
 except ImportError:  # pragma: no cover
     from typing import Any as Page  # type: ignore[assignment, misc]
 
+from autobot_shared.captcha_types import HUMAN_ONLY_TYPES
 from constants.threshold_constants import TimingConstants
 from events.bus import PersistStrategy, publish_event
 
 logger = get_logger(__name__)
 
-# Issue #380: Module-level tuple for unsupported CAPTCHA types (require human intervention)
-_UNSUPPORTED_CAPTCHA_TYPES = ("recaptcha", "hcaptcha", "cloudflare")
+# Issue #380: human-only wire values, derived from the one definition (#18131).
+_UNSUPPORTED_CAPTCHA_TYPES = frozenset(t.value for t in HUMAN_ONLY_TYPES)
 
 
 class CaptchaResolutionStatus(Enum):
@@ -568,7 +569,6 @@ class CaptchaHumanLoop:
         try:
             from autobot_shared.captcha_types import CaptchaType
 
-            # Every kind either former solver could classify resolves (legacy "text_image" too).
             try:
                 captcha_type_enum = CaptchaType(captcha_type)
             except ValueError:

@@ -38,7 +38,7 @@ import io
 import re
 from typing import TYPE_CHECKING
 
-from autobot_shared.captcha_types import CaptchaSolveResult, CaptchaType, SolverConfidence
+from autobot_shared.captcha_types import HUMAN_ONLY_TYPES, CaptchaSolveResult, CaptchaType, SolverConfidence
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.slug import sanitize_token
@@ -54,12 +54,6 @@ _MATH_OPERATORS = frozenset({"+", "-", "=", "\u00d7", "\u00f7", "*"})
 # Issue #380: Pre-compiled regex patterns for CAPTCHA processing
 _TRAILING_EQUALS_RE = re.compile(r"=\s*\??\s*$")
 _MATH_EXPR_RE = re.compile(r"(\d+)\s*([+\-*/])\s*(\d+)")
-
-
-#: Kinds OCR cannot attempt; routed straight to human intervention.
-_HUMAN_ONLY_TYPES = frozenset(
-    {CaptchaType.RECAPTCHA, CaptchaType.HCAPTCHA, CaptchaType.CLOUDFLARE, CaptchaType.SLIDER, CaptchaType.IMAGE_SELECT}
-)
 
 
 class CaptchaSolver:
@@ -136,7 +130,7 @@ class CaptchaSolver:
             return await self._solve_text_captcha(image, expected_length, char_set)
         if captcha_type == CaptchaType.MATH:
             return await self._solve_math_captcha(image)
-        if captcha_type in _HUMAN_ONLY_TYPES:
+        if captcha_type in HUMAN_ONLY_TYPES:
             return CaptchaSolveResult(
                 success=False,
                 captcha_type=captcha_type,
