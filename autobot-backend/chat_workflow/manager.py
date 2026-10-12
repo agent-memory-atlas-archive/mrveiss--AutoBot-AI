@@ -52,7 +52,7 @@ from .session_handler import SessionHandlerMixin
 from .session_role import resolve_auth_role
 from .thought_markers import detect_content_type, find_last_tag_positions, find_new_segment_start
 from .tool_handler import ToolHandlerMixin
-from .turn_control import CHAT_LLM_CALL_TIMEOUT_SECONDS, stream_graph_turn
+from .turn_control import CHAT_LLM_CALL_TIMEOUT_SECONDS, stream_graph_turn, stream_legacy_turn
 
 logger = get_logger(__name__)
 
@@ -3775,8 +3775,9 @@ before summarizing.
                     "LangGraph flow failed, falling back to legacy: %s",
                     graph_err,
                 )
-                async for msg in self._process_message_stream_legacy(session_id, message, context):
-                    yield msg
+                async with aclosing(stream_legacy_turn(self, session_id, message, context)) as legacy:
+                    async for msg in legacy:
+                        yield msg
         finally:
             self._active_streams -= 1
 
@@ -3804,8 +3805,7 @@ before summarizing.
             "user_message": message,
             "context": context or {},
         }
-        # #17273: stream_graph_turn owns the task -- it cancels and awaits it on any exit,
-        # and aclosing() makes closing THIS generator close that one deterministically.
+        # #17273: the turn owns the task and cancels it on any exit; aclosing() makes that deterministic.
         async with aclosing(stream_graph_turn(self, graph, session_id, initial_state)) as turn:
             async for msg in turn:
                 yield msg

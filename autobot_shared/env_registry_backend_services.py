@@ -567,3 +567,18 @@ register_env_var(
         component="backend",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_CHAT_TURN_CANCEL_ACK_TIMEOUT_SECONDS",
+        type=float,
+        default=5.0,
+        description=(
+            "How long a chat turn-cancel request waits for the other backend workers that were "
+            "listening to confirm they stopped their turn (chat_workflow/turn_cancel_bus.py, "
+            "#18448). A worker that does not answer in time makes the response report "
+            "'unconfirmed' rather than a false 'no_active_turn'. Must be positive and finite."
+        ),
+        component="backend",
+    )
+)

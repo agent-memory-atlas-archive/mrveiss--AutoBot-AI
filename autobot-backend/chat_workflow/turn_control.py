@@ -24,21 +24,28 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict
 
 from async_chat_workflow import WorkflowMessage
-from autobot_shared.env_utils import env_float
+from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.logging_manager import get_logger
+
+from . import turn_cancel_bus
 
 logger = get_logger(__name__)
 
 #: Total wall-clock budget for one graph turn (#17273). Read as a module
 #: attribute at the point of use so a test (or a reload) sees one value.
-CHAT_TURN_TIMEOUT_SECONDS: float = env_float("AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS", default=1800.0)
+CHAT_TURN_TIMEOUT_SECONDS: float = env_float_clamped(
+    "AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS", default=1800.0, positive_finite=True
+)
 
 #: Total timeout for one streaming LLM request, connect included (#17273).
-CHAT_LLM_CALL_TIMEOUT_SECONDS: float = env_float("AUTOBOT_CHAT_LLM_CALL_TIMEOUT_SECONDS", default=600.0)
+CHAT_LLM_CALL_TIMEOUT_SECONDS: float = env_float_clamped(
+    "AUTOBOT_CHAT_LLM_CALL_TIMEOUT_SECONDS", default=600.0, positive_finite=True
+)
 
 REASON_DISCONNECT = "client_disconnect"
 REASON_CLIENT_CANCEL = "client_cancel"
@@ -121,14 +128,14 @@ async def _finish_failed(turn: _Turn, queue: asyncio.Queue, exc: Exception) -> N
     queue.put_nowait({"type": "error", "content": TIMEOUT_MESSAGE if timed_out else ERROR_MESSAGE})
 
 
-async def _run_graph(graph, graph_input, config, queue: asyncio.Queue, turn: _Turn) -> None:
-    """Execute the graph under the turn timeout and signal the end via the queue sentinel."""
+TurnBody = Callable[[asyncio.Queue], Awaitable[None]]
+
+
+async def _run_turn(body: TurnBody, queue: asyncio.Queue, turn: _Turn) -> None:
+    """Execute *body* under the turn timeout and signal the end via the queue sentinel."""
     try:
         async with asyncio.timeout(CHAT_TURN_TIMEOUT_SECONDS):
-            result = await graph.ainvoke(graph_input, config=config)
-        # An interrupt (command approval needed) is the turn's last output.
-        for intr in result.get("__interrupt__") or []:
-            queue.put_nowait(intr.value)
+            await body(queue)
     except asyncio.CancelledError:
         await _finish_cancelled(turn, queue)
         raise
@@ -170,29 +177,48 @@ def _to_message(data: Any) -> Any:
     )
 
 
-async def stream_graph_turn(manager, graph, session_id: str, graph_input: Any) -> AsyncIterator[Any]:
-    """Run *graph* as a registered turn and yield its messages as they arrive.
+async def stream_turn(session_id: str, body: TurnBody) -> AsyncIterator[Any]:
+    """Run *body* as a registered turn and yield what it puts on the queue.
 
     Leaving the iterator for any reason -- normal end, an error, or the client
-    closing the stream -- cancels and awaits the underlying task.
+    closing the stream -- cancels and awaits the underlying task. The turn also
+    listens for a cancel published by another worker (``turn_cancel_bus``).
     """
     queue: asyncio.Queue = asyncio.Queue()
-    config = {
-        "configurable": {
-            "thread_id": session_id,
-            "manager": manager,
-            "stream_callback": queue.put_nowait,
-        }
-    }
     turn = _Turn(session_id=session_id)
-    turn.task = asyncio.create_task(_run_graph(graph, graph_input, config, queue, turn))
+    turn.task = asyncio.create_task(_run_turn(body, queue, turn))
     _REGISTRY.add(turn)
     try:
-        while (data := await queue.get()) is not None:
-            yield _to_message(data)
-        await _settle(turn.task)
+        async with turn_cancel_bus.listening(session_id, cancel_turn):
+            while (data := await queue.get()) is not None:
+                yield _to_message(data)
+            await _settle(turn.task)
     finally:
         try:
             await _stop(turn)
         finally:
             _REGISTRY.remove(turn)
+
+
+def stream_graph_turn(manager, graph, session_id: str, graph_input: Any) -> AsyncIterator[Any]:
+    """A LangGraph run as a turn: *graph_input* is the initial state or a resume Command."""
+
+    async def body(queue: asyncio.Queue) -> None:
+        config = {"configurable": {"thread_id": session_id, "manager": manager, "stream_callback": queue.put_nowait}}
+        result = await graph.ainvoke(graph_input, config=config)
+        # An interrupt (command approval needed) is the turn's last output.
+        for intr in result.get("__interrupt__") or []:
+            queue.put_nowait(intr.value)
+
+    return stream_turn(session_id, body)
+
+
+def stream_legacy_turn(manager, session_id: str, message: str, context: Any) -> AsyncIterator[Any]:
+    """The pre-LangGraph fallback as a turn, so it is as cancellable and bounded as the graph path."""
+
+    async def body(queue: asyncio.Queue) -> None:
+        async with aclosing(manager._process_message_stream_legacy(session_id, message, context)) as stream:
+            async for msg in stream:
+                queue.put_nowait(msg)
+
+    return stream_turn(session_id, body)

@@ -15,5 +15,5 @@ class TurnCancelData(BaseModel):
     """Outcome of a turn-cancel request."""
 
     session_id: str
-    status: Literal["cancelled", "no_active_turn"]
+    status: Literal["cancelled", "no_active_turn", "unconfirmed"]
     cancelled_turns: int

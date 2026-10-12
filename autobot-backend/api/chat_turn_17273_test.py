@@ -2,60 +2,63 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""POST /chat/sessions/{id}/turn/cancel: owner-only, idempotent (#17273).
+"""POST /chat/sessions/{id}/turn/cancel: owner-only, idempotent, honest (#17273, #18448).
 
-Mounts the real router through a real request, so the ownership dependency is
-proven to bind ``session_id`` from the path. Before #17273 the route did not
-exist at all (404), so a stop control had nothing to call.
+The route is mounted through a real request. The ownership tests use the REAL
+validator under the default feature-flag state (``log_only``), where the default
+posture lets a non-owner who knows a session id through -- the route must not.
 """
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.testclient import TestClient
+from fastapi import FastAPI
 
 from api import chat_turn
 from auth_middleware import get_current_user
+from chat_workflow import graph as graph_module
+from chat_workflow import turn_cancel_bus as bus
 from chat_workflow import turn_control
-from security.session_ownership import validate_session_ownership
+from tests.helpers._fake_pubsub_redis import FakeRedis
+
+URL = "/chat/sessions/{}/turn/cancel"
 
 
-def _client(owner: str, seen: list) -> TestClient:
+def _app() -> FastAPI:
     app = FastAPI()
     app.include_router(chat_turn.router)
-
-    async def _ownership(session_id: str, request: Request = None):  # noqa: ARG001
-        seen.append(session_id)
-        if session_id != owner:
-            raise HTTPException(status_code=403, detail="not your session")
-        return {"authorized": True}
-
-    app.dependency_overrides[validate_session_ownership] = _ownership
-    app.dependency_overrides[get_current_user] = lambda: {"username": "alice"}
-    return TestClient(app, raise_server_exceptions=False)
+    app.dependency_overrides[get_current_user] = lambda: {"username": "bob"}
+    return app
 
 
-def test_a_non_owner_is_refused_and_the_turn_survives(monkeypatch):
-    cancel = []
-
-    async def _cancel(session_id, reason):
-        cancel.append(session_id)
-        return 1
-
-    monkeypatch.setattr(chat_turn, "cancel_turn", _cancel)
-    seen: list = []
-    response = _client("alices-chat", seen).post("/chat/sessions/bobs-chat/turn/cancel")
-
-    assert response.status_code == 403
-    assert seen == ["bobs-chat"]
-    assert cancel == [], "a refused caller must never reach the teardown"
+def _as_user(monkeypatch, username: str, owner: str | None) -> MagicMock:
+    """Authenticate *username*; the durable owner of every session is *owner*. Nothing else is mocked."""
+    monkeypatch.setattr(
+        "security.session_posture.get_auth_middleware",
+        lambda: MagicMock(get_user_from_request=lambda _r: {"username": username, "role": "user"}),
+    )
+    history = MagicMock(get_session_owner=AsyncMock(return_value=owner))
+    monkeypatch.setattr("utils.chat_utils.get_chat_history_manager", lambda _r: history)
+    return history
 
 
-@pytest.mark.asyncio
-async def test_the_owner_cancels_a_running_turn_through_the_real_registry():
-    """No mocks below the route: the registered task really is cancelled."""
+async def _post(session_id: str):
+    transport = httpx.ASGITransport(app=_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        return await client.post(URL.format(session_id))
+
+
+@pytest.fixture(autouse=True)
+def fake_bus(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(bus, "get_async_redis_client", AsyncMock(return_value=redis))
+    monkeypatch.setattr(graph_module, "delete_thread_checkpoints", AsyncMock())
+    return redis
+
+
+async def _register_turn(session_id: str):
     state = {}
 
     async def _turn():
@@ -65,42 +68,88 @@ async def test_the_owner_cancels_a_running_turn_through_the_real_registry():
             state["cancelled"] = True
             raise
 
-    turn = turn_control._Turn(session_id="alices-chat")
+    turn = turn_control._Turn(session_id=session_id)
     turn.task = asyncio.create_task(_turn())
     turn_control._REGISTRY.add(turn)
     await asyncio.sleep(0)
+    return turn, state
+
+
+@pytest.mark.asyncio
+async def test_a_non_owner_gets_403_and_the_turn_and_checkpoint_survive(monkeypatch):
+    _as_user(monkeypatch, "bob", owner="alice")
+    turn, state = await _register_turn("alices-chat")
     try:
-        transport = httpx.ASGITransport(app=_client("alices-chat", []).app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
-            first = await client.post("/chat/sessions/alices-chat/turn/cancel")
-            again = await client.post("/chat/sessions/alices-chat/turn/cancel")
+        response = await _post("alices-chat")
+
+        assert response.status_code == 403
+        assert not turn.task.done() and "cancelled" not in state, "a refused caller must not stop the run"
+        graph_module.delete_thread_checkpoints.assert_not_awaited()
+    finally:
+        turn.task.cancel()
+        turn_control._REGISTRY.remove(turn)
+
+
+@pytest.mark.asyncio
+async def test_the_owner_cancels_a_running_turn_and_a_second_cancel_is_a_noop(monkeypatch):
+    _as_user(monkeypatch, "alice", owner="alice")
+    turn, state = await _register_turn("alices-chat")
+    try:
+        first = await _post("alices-chat")
+        again = await _post("alices-chat")
     finally:
         turn_control._REGISTRY.remove(turn)
 
     assert state["cancelled"] is True and turn.task.cancelled()
+    assert first.status_code == 200
     assert first.json()["data"] == {"session_id": "alices-chat", "status": "cancelled", "cancelled_turns": 1}
-    assert again.json()["data"]["status"] == "no_active_turn", "a second cancel must be an idempotent no-op"
+    assert again.json()["data"] == {"session_id": "alices-chat", "status": "no_active_turn", "cancelled_turns": 0}
 
 
-def test_cancel_reports_cancelled_when_a_turn_was_stopped(monkeypatch):
-    async def _cancel(session_id, reason):
-        assert reason == turn_control.REASON_CLIENT_CANCEL
-        return 1
+@pytest.mark.asyncio
+async def test_cancel_with_no_turn_is_a_clear_noop(monkeypatch):
+    _as_user(monkeypatch, "alice", owner="alice")
 
-    monkeypatch.setattr(chat_turn, "cancel_turn", _cancel)
-    response = _client("alices-chat", []).post("/chat/sessions/alices-chat/turn/cancel")
-
-    assert response.status_code == 200
-    assert response.json()["data"] == {
-        "session_id": "alices-chat",
-        "status": "cancelled",
-        "cancelled_turns": 1,
-    }
-
-
-def test_cancel_with_no_turn_is_a_clear_noop():
-    response = _client("alices-chat", []).post("/chat/sessions/alices-chat/turn/cancel")
+    response = await _post("alices-chat")
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "no_active_turn"
-    assert response.json()["data"]["cancelled_turns"] == 0
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_bus_says_unconfirmed_not_no_active_turn(monkeypatch):
+    _as_user(monkeypatch, "alice", owner="alice")
+    monkeypatch.setattr(bus, "get_async_redis_client", AsyncMock(return_value=None))
+
+    response = await _post("alices-chat")
+
+    assert response.json()["data"] == {"session_id": "alices-chat", "status": "unconfirmed", "cancelled_turns": 0}
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_owner_is_denied(monkeypatch):
+    history = _as_user(monkeypatch, "alice", owner="alice")
+    history.get_session_owner.side_effect = RuntimeError("redis down")
+
+    assert (await _post("alices-chat")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_the_route_asks_for_the_strict_posture():
+    """Behaviour is tested above; this pins the seam so the default posture cannot slip back in."""
+    from security.session_posture import SessionPosture
+
+    seen = {}
+
+    async def spy(session_id, request, posture=SessionPosture.DEFAULT):
+        seen["posture"] = posture
+        return {"authorized": True}
+
+    original = chat_turn.validate_session_ownership
+    chat_turn.validate_session_ownership = spy
+    try:
+        await _post("alices-chat")
+    finally:
+        chat_turn.validate_session_ownership = original
+
+    assert seen["posture"] is SessionPosture.STRICT

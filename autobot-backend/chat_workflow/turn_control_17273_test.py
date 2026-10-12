@@ -17,8 +17,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from chat_workflow import graph as graph_module
-from chat_workflow import turn_control
+from chat_workflow import turn_cancel_bus, turn_control
 from chat_workflow.manager import ChatWorkflowManager
+from tests.helpers._fake_pubsub_redis import FakeRedis
 
 
 class _FakeGraph:
@@ -42,6 +43,14 @@ class _FakeGraph:
             raise
         self.tool_dispatches += 1  # work that only happens if the run is NOT torn down
         return {}
+
+
+@pytest.fixture(autouse=True)
+def fake_bus_redis(monkeypatch):
+    """The turn-cancel bus talks to Redis; these tests are about the turn, not the wire."""
+    redis = FakeRedis()
+    monkeypatch.setattr(turn_cancel_bus, "get_async_redis_client", AsyncMock(return_value=redis))
+    return redis
 
 
 @pytest.fixture
@@ -211,3 +220,107 @@ async def test_a_real_asgi_disconnect_reaches_the_llm_call(monkeypatch, drop_che
     assert fake.llm_cancelled is True
     assert fake.tool_dispatches == 0
     assert not turn_control.has_active_turn("s-asgi")
+
+
+class _LegacyStream:
+    """Stands in for the pre-LangGraph path: one chunk, then a long wait that counts cancellation."""
+
+    def __init__(self, seconds: float = 30.0):
+        self.seconds = seconds
+        self.started = asyncio.Event()
+        self.cancelled = False
+        self.finished = False
+
+    async def __call__(self, _session_id, _message, _context):
+        from async_chat_workflow import WorkflowMessage
+
+        yield WorkflowMessage(type="response", content="legacy-chunk")
+        try:
+            self.started.set()
+            await asyncio.sleep(self.seconds)
+            self.finished = True
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+
+
+def _fallback_manager(monkeypatch, legacy: _LegacyStream) -> ChatWorkflowManager:
+    """A manager whose graph cannot be built, so process_message_stream takes the fallback."""
+    mgr = ChatWorkflowManager()
+    monkeypatch.setattr(mgr, "_apply_session_role", AsyncMock(return_value={}))
+    monkeypatch.setattr(graph_module, "get_compiled_graph", AsyncMock(side_effect=RuntimeError("no graph")))
+    monkeypatch.setattr(mgr, "_process_message_stream_legacy", legacy)
+    return mgr
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_path_is_cancelled_on_disconnect(monkeypatch, drop_checkpoint):
+    legacy = _LegacyStream()
+    mgr = _fallback_manager(monkeypatch, legacy)
+    stream = mgr.process_message_stream("s-fb-disc", "hi")
+
+    first = await stream.__anext__()
+    await asyncio.wait_for(legacy.started.wait(), 2)
+    assert turn_control.has_active_turn("s-fb-disc"), "the fallback turn must be registered"
+    await stream.aclose()
+
+    assert first.content == "legacy-chunk"
+    assert legacy.cancelled is True and legacy.finished is False
+    assert not turn_control.has_active_turn("s-fb-disc")
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_path_can_be_cancelled_by_the_client(monkeypatch, drop_checkpoint):
+    legacy = _LegacyStream()
+    mgr = _fallback_manager(monkeypatch, legacy)
+    stream = mgr.process_message_stream("s-fb-cancel", "hi")
+    await stream.__anext__()
+    await asyncio.wait_for(legacy.started.wait(), 2)
+
+    assert await turn_control.cancel_turn("s-fb-cancel") == 1
+    rest = [m async for m in stream]
+
+    assert legacy.cancelled is True
+    assert [m.type for m in rest] == ["cancelled"]
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_path_has_the_turn_timeout(monkeypatch, drop_checkpoint):
+    legacy = _LegacyStream()
+    mgr = _fallback_manager(monkeypatch, legacy)
+    monkeypatch.setattr(turn_control, "CHAT_TURN_TIMEOUT_SECONDS", 0.05)
+
+    messages = [m async for m in mgr.process_message_stream("s-fb-time", "hi")]
+
+    assert [m.type for m in messages] == ["response", "error"]
+    assert messages[-1].content == turn_control.TIMEOUT_MESSAGE
+    assert legacy.cancelled is True
+
+
+@pytest.mark.parametrize("bad", ["0", "-5", "nan", "inf", "-inf", "abc"])
+def test_a_bad_timeout_value_falls_back_to_the_default(monkeypatch, bad):
+    """0 or a negative would time out every turn; nan and inf would never time one out."""
+    import importlib
+
+    monkeypatch.setenv("AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS", bad)
+    monkeypatch.setenv("AUTOBOT_CHAT_LLM_CALL_TIMEOUT_SECONDS", bad)
+    try:
+        importlib.reload(turn_control)
+        assert turn_control.CHAT_TURN_TIMEOUT_SECONDS == 1800.0
+        assert turn_control.CHAT_LLM_CALL_TIMEOUT_SECONDS == 600.0
+    finally:
+        monkeypatch.delenv("AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS")
+        monkeypatch.delenv("AUTOBOT_CHAT_LLM_CALL_TIMEOUT_SECONDS")
+        importlib.reload(turn_control)
+
+
+def test_a_good_timeout_value_is_honoured(monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS", "42.5")
+    try:
+        importlib.reload(turn_control)
+        assert turn_control.CHAT_TURN_TIMEOUT_SECONDS == 42.5
+    finally:
+        monkeypatch.delenv("AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS")
+        importlib.reload(turn_control)
