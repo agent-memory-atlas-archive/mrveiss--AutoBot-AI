@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.status_enums import Severity
 from autobot_shared.symbol_forks import FORK_ROOTS, ForkCluster, ForkScan, scan_symbol_forks
 
 from .chromadb_storage import make_problem_dict
@@ -59,7 +60,7 @@ def fork_problem(cluster: ForkCluster) -> Dict[str, Any]:
     more = len(cluster.definitions) - 5
     return make_problem_dict(
         problem_type=SYMBOL_FORK_PROBLEM_TYPE,
-        severity="medium",
+        severity=Severity.MEDIUM.value,
         file_path=first.path,
         line=first.lineno,
         description=(

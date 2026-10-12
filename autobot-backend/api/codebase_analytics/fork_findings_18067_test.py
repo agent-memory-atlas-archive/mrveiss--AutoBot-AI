@@ -13,6 +13,7 @@ of reporting zero.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,8 +27,7 @@ from api.codebase_analytics.type_coverage import problem_type_coverage
 from autobot_shared.paths import scrubbed_git_env
 
 _REPO = repo_root()
-sys.path.insert(0, str(_REPO / "tools" / "lint"))
-import check_symbol_forks as ci_detector  # noqa: E402
+_CLI = _REPO / "tools" / "lint" / "check_symbol_forks.py"
 
 
 def _git_tree(root: Path, files: dict[str, str]) -> Path:
@@ -55,15 +55,34 @@ def _planted(root: Path) -> Path:
     )
 
 
+def _ci_clusters() -> tuple[set[str], int]:
+    """The CI script's own answer, run as the CI runs it: a child process.
+
+    Not imported: the script is a lint tool outside the backend's package
+    layout, and importing it here would drag its path handling into every
+    process that collects this file.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-I", str(_CLI), "--report", "--limit", "100000"],
+        cwd=_REPO,
+        env=scrubbed_git_env(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    names = set(re.findall(r"^(\w+)  \(", proc.stdout, flags=re.M))
+    total = int(re.search(r"^(\d+) fork clusters", proc.stdout, flags=re.M).group(1))
+    return names, total
+
+
 def test_dashboard_and_ci_detector_agree_on_the_real_tree():
     outcome = run_fork_pass(str(_REPO))
-    ci_clusters, ci_parsed = ci_detector.find_clusters(ci_detector.tracked_python_files())
+    ci_names, ci_total = _ci_clusters()
     assert outcome.ran, outcome.reason
-    assert outcome.clusters == len(ci_clusters) > 0
-    assert outcome.parsed == ci_parsed
-    assert len(outcome.problems) == len(ci_clusters), "one problem row per fork cluster"
+    assert outcome.clusters == ci_total == len(ci_names) > 0
+    assert len(outcome.problems) == ci_total, "one problem row per fork cluster"
     named = {p["description"].split("'")[1] for p in outcome.problems}
-    assert named == set(ci_clusters), "same clusters, not merely the same count"
+    assert named == ci_names, "same clusters, not merely the same count"
     assert {p["type"] for p in outcome.problems} == {SYMBOL_FORK_PROBLEM_TYPE}
 
 

@@ -15,7 +15,6 @@ raised type -- not on the presence of a branch.
 
 from __future__ import annotations
 
-import asyncio
 import threading
 from pathlib import Path
 
@@ -29,6 +28,7 @@ from api.codebase_analytics.endpoints.scan_responses import (
     build_timeout_response,
     response_for,
 )
+from autobot_shared.eventually import eventually
 
 
 class _BlockingDetector:
@@ -52,6 +52,26 @@ def _fresh_guard(monkeypatch):
     _BlockingDetector.release = threading.Event()
     yield
     _BlockingDetector.release.set()
+
+
+class _Clock:
+    """A hand-wound monotonic clock, so a lease expires by decision, not by waiting."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+@pytest.fixture
+def clock(monkeypatch) -> _Clock:
+    fake = _Clock()
+    monkeypatch.setattr(dup_mod, "time", fake)
+    return fake
 
 
 class TestBusyIsNotATimeout:
@@ -108,10 +128,10 @@ class TestAnOrphanThatNeverExitsCannotHoldTheLockForever:
     and the next call still acquires."""
 
     @pytest.mark.asyncio
-    async def test_the_lease_expires_and_the_next_call_acquires(self, monkeypatch, tmp_path):
+    async def test_the_lease_expires_and_the_next_call_acquires(self, monkeypatch, tmp_path, clock):
         monkeypatch.setattr(dup_mod, "DuplicateCodeDetector", _BlockingDetector)
         monkeypatch.setattr(dup_mod.AnalyticsConfig, "DUPLICATE_DETECTION_TIMEOUT", 0.05)
-        monkeypatch.setattr(dup_mod, "ORPHAN_LEASE_SECONDS", 0.2)
+        monkeypatch.setattr(dup_mod, "ORPHAN_LEASE_SECONDS", 20.0)
         with pytest.raises(ScanTimedOut):
             await dup_mod._run_standard_analysis(str(tmp_path), 0.5)
 
@@ -119,22 +139,23 @@ class TestAnOrphanThatNeverExitsCannotHoldTheLockForever:
         with pytest.raises(ScanBusy):
             await dup_mod._run_standard_analysis(str(tmp_path), 0.5)
 
-        await asyncio.sleep(0.3)  # the thread is still blocked: its done-callback has NOT fired
+        clock.advance(30.0)  # past the lease; the thread is still blocked, its done-callback has NOT fired
         assert not _BlockingDetector.release.is_set()
         lock = dup_mod._take_scan_lock()  # reclaimed rather than ScanBusy forever
         assert lock is dup_mod._duplicate_scan_lock and lock.locked()
 
     @pytest.mark.asyncio
-    async def test_a_late_orphan_cannot_release_the_lock_a_newer_scan_owns(self, monkeypatch, tmp_path):
+    async def test_a_late_orphan_cannot_release_the_lock_a_newer_scan_owns(self, monkeypatch, tmp_path, clock):
         monkeypatch.setattr(dup_mod, "DuplicateCodeDetector", _BlockingDetector)
         monkeypatch.setattr(dup_mod.AnalyticsConfig, "DUPLICATE_DETECTION_TIMEOUT", 0.05)
-        monkeypatch.setattr(dup_mod, "ORPHAN_LEASE_SECONDS", 0.1)
+        monkeypatch.setattr(dup_mod, "ORPHAN_LEASE_SECONDS", 10.0)
+        orphan_lock = dup_mod._duplicate_scan_lock
         with pytest.raises(ScanTimedOut):
             await dup_mod._run_standard_analysis(str(tmp_path), 0.5)
-        await asyncio.sleep(0.2)
+        clock.advance(20.0)
         newer = dup_mod._take_scan_lock()
         _BlockingDetector.release.set()  # the old orphan finally exits and fires its callback
-        await asyncio.sleep(0.2)
+        await eventually(lambda: not orphan_lock.locked())  # the callback ran: it released ITS lock
         assert newer.locked(), "the late callback released a lock it never owned"
 
 
@@ -151,9 +172,10 @@ class TestTheBackgroundPathIsNotCappedByTheRequestDeadline:
 
         monkeypatch.setattr(dup_mod, "DuplicateCodeDetector", _Slow)
         monkeypatch.setattr(dup_mod.AnalyticsConfig, "DUPLICATE_DETECTION_TIMEOUT", 0.05)
+        request_lock = dup_mod._duplicate_scan_lock
         with pytest.raises(ScanTimedOut):
             await dup_mod._run_standard_analysis(str(tmp_path), 0.5)
-        await asyncio.sleep(0.5)  # let the request-path orphan release its lock
+        await eventually(lambda: not request_lock.locked())  # the request-path orphan released its lock
         assert await dup_mod._run_standard_analysis(str(tmp_path), 0.5, background=True) == "analysis"
 
     @pytest.mark.asyncio

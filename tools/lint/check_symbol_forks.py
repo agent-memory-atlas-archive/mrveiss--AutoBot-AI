@@ -50,38 +50,55 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-# Run as a script, `tools/lint` is sys.path[0] and the repo root is not.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from autobot_shared.symbol_forks import (  # noqa: E402
-    FORK_EXCLUDED_NAMES,
-    FORK_EXCLUDED_PARTS,
-    FORK_MIRRORED_PREFIX,
-    FORK_ROOTS,
-    ForkCluster,
-    ForkDefinition,
-    fork_definitions_in,
-    fork_find_clusters,
-    fork_in_population,
-    fork_is_mandatory_mirror,
-    fork_is_route_handler,
-    fork_is_test_file,
-    fork_tracked_python_files,
-)
+if TYPE_CHECKING:  # annotations only: nothing is imported at module load
+    from autobot_shared.symbol_forks import ForkCluster as Cluster
+    from autobot_shared.symbol_forks import ForkDefinition as Definition
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The detector itself lives in `autobot_shared.symbol_forks` so the analytics
-# cross-file pass counts with the SAME code (#18067). Everything below is the
-# CLI's policy -- floor, baseline, ratchet -- over that one implementation, with
-# the original names kept for the tests and importers that use them.
-ROOTS = FORK_ROOTS
-EXCLUDED_PARTS = FORK_EXCLUDED_PARTS
-EXCLUDED_NAMES = FORK_EXCLUDED_NAMES
-MIRRORED_PREFIX = FORK_MIRRORED_PREFIX
-Definition = ForkDefinition
-Cluster = ForkCluster
+
+def _shared():
+    """The detector module, `autobot_shared.symbol_forks`, imported by its real name.
+
+    Nothing touches `sys.path` at import time: a lint module that put the repo
+    root at `sys.path[0]` shadowed `autobot-backend`'s own `scripts` package in
+    any process that merely imported it, and broke collection on every shard
+    (#18362). Run as a script, `tools/lint` is `sys.path[0]` and the root is not
+    on the path, so the root is APPENDED here, only when the import would
+    otherwise fail, and never ahead of an existing entry.
+    """
+    try:
+        import autobot_shared.symbol_forks as shared
+    except ModuleNotFoundError:
+        sys.path.append(str(_REPO_ROOT))
+        import autobot_shared.symbol_forks as shared
+    return shared
+
+
+#: Names the tests and importers read off this module, mapped to their home in
+#: the shared detector (#18067). Resolved lazily by `__getattr__` below.
+_SHARED_NAMES = {
+    "ROOTS": "FORK_ROOTS",
+    "EXCLUDED_PARTS": "FORK_EXCLUDED_PARTS",
+    "EXCLUDED_NAMES": "FORK_EXCLUDED_NAMES",
+    "MIRRORED_PREFIX": "FORK_MIRRORED_PREFIX",
+    "Definition": "ForkDefinition",
+    "Cluster": "ForkCluster",
+    "is_test_file": "fork_is_test_file",
+    "is_mandatory_mirror": "fork_is_mandatory_mirror",
+    "in_population": "fork_in_population",
+    "is_route_handler": "fork_is_route_handler",
+}
+
+
+def __getattr__(name: str):
+    """PEP 562: the detector's names, without importing it at module load."""
+    if name in _SHARED_NAMES:
+        return getattr(_shared(), _SHARED_NAMES[name])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 #: Floor on files successfully PARSED — not on files listed, and never on
 #: findings. "0 new clusters" is meaningless if the sweep collapsed, and a
@@ -92,33 +109,29 @@ MIN_FILES_PARSED = 2000
 
 BASELINE = _REPO_ROOT / "repo_tests" / "symbol_fork_baseline.json"
 
-is_test_file = fork_is_test_file
-is_mandatory_mirror = fork_is_mandatory_mirror
-in_population = fork_in_population
-is_route_handler = fork_is_route_handler
-
 
 def tracked_python_files() -> list[Path]:
     """`git ls-files` rather than a walk: untracked scratch files are not the tree."""
-    return fork_tracked_python_files(_REPO_ROOT, ROOTS)
+    shared = _shared()
+    return shared.fork_tracked_python_files(_REPO_ROOT, shared.FORK_ROOTS)
 
 
-def definitions_in(path: Path) -> "list[tuple[str, Definition]] | None":
+def definitions_in(path: Path):
     """Module-level class/def bindings. Nested and conditional defs are out of scope."""
-    return fork_definitions_in(path, _REPO_ROOT)
+    return _shared().fork_definitions_in(path, _REPO_ROOT)
 
 
-def find_clusters(paths: list[Path]) -> "tuple[dict[str, Cluster], int]":
+def find_clusters(paths: list[Path]):
     """Group module-level definitions by name; keep those bound in >=2 files.
 
     Returns the clusters AND the number of files successfully PARSED, which is
     what the vacuity floor binds to.
     """
-    scan = fork_find_clusters(paths, _REPO_ROOT)
+    scan = _shared().fork_find_clusters(paths, _REPO_ROOT)
     return scan.clusters, scan.parsed
 
 
-def canonical_candidate(cluster: Cluster, import_counts: dict[str, int]) -> Definition:
+def canonical_candidate(cluster, import_counts: dict[str, int]):
     """The member a consolidation should merge INTO.
 
     Ranked by call sites first -- the copy most code already depends on is the
@@ -200,13 +213,14 @@ def load_baseline() -> set[str]:
 
 
 def write_baseline(names: set[str]) -> None:
+    shared = _shared()
     BASELINE.write_text(
         json.dumps(
             {
                 "_boundary": (
                     "Names bound by a MODULE-LEVEL class/def in >=2 tracked .py files under "
-                    f"{list(ROOTS)}, excluding {sorted(EXCLUDED_PARTS)} dirs, test files, "
-                    f"underscore-prefixed names and {sorted(EXCLUDED_NAMES)}. "
+                    f"{list(shared.FORK_ROOTS)}, excluding {sorted(shared.FORK_EXCLUDED_PARTS)} dirs, test files, "
+                    f"underscore-prefixed names and {sorted(shared.FORK_EXCLUDED_NAMES)}. "
                     "Methods, differently-named forks and non-Python are NOT seen -- "
                     "this count is a FLOOR on canonical debt. See tools/lint/check_symbol_forks.py."
                 ),
