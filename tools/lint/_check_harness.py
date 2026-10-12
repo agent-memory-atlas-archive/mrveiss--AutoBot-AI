@@ -135,7 +135,15 @@ def run_check(
         reached, findings = scan(list(argv), root)
     except (VacuousScan, EmptyEnumeration, GitEnumerationFailed, GitRepoRootUnavailable) as exc:
         return _vacuous(log, name, f"scan failed: {exc}")
-    return _verdict(log, name, reached, findings, full_repo=(full_repo_of(argv) if full_repo_of else not argv), floor=floor, summary=summary)
+    return _verdict(
+        log,
+        name,
+        reached,
+        findings,
+        full_repo=(full_repo_of(argv) if full_repo_of else not argv),
+        floor=floor,
+        summary=summary,
+    )
 
 
 def run_anchored(
