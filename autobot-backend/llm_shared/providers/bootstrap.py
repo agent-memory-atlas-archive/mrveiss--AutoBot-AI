@@ -82,7 +82,7 @@ def _register_api_key_providers(registry: "ProviderRegistry", fallback: List[str
     """
     from services.provider_key_vault import resolve_provider_key
 
-    # OpenAI — registered when API key is present (env wins; else System vault, #10088 Task 7)
+    # OpenAI — registered when API key is present (vault first; env as a logged fallback, #10088 Task 7)
     openai_key = resolve_provider_key("OPENAI_API_KEY", config.openai_api_key)
     if openai_key:
         openai_provider = OpenAIProvider(settings={"api_key": openai_key})
@@ -91,7 +91,7 @@ def _register_api_key_providers(registry: "ProviderRegistry", fallback: List[str
     else:
         logger.debug("OPENAI_API_KEY not set — OpenAI provider not registered")
 
-    # Anthropic — registered when API key is present (env wins; else System vault, #10088 Task 7)
+    # Anthropic — registered when API key is present (vault first; env as a logged fallback, #10088 Task 7)
     anthropic_key = resolve_provider_key("ANTHROPIC_API_KEY", config.anthropic_api_key)
     if anthropic_key:
         anthropic_provider = AnthropicProvider(settings={"api_key": anthropic_key})
@@ -100,7 +100,7 @@ def _register_api_key_providers(registry: "ProviderRegistry", fallback: List[str
     else:
         logger.debug("ANTHROPIC_API_KEY not set — Anthropic provider not registered")
 
-    # Groq — registered when API key is present (env wins; else System vault, #10088 Task 7)
+    # Groq — registered when API key is present (vault first; env as a logged fallback, #10088 Task 7)
     groq_key = resolve_provider_key("GROQ_API_KEY", config.groq_api_key)
     if groq_key:
         groq_provider = GroqProvider(settings={"api_key": groq_key})
@@ -109,7 +109,7 @@ def _register_api_key_providers(registry: "ProviderRegistry", fallback: List[str
     else:
         logger.debug("GROQ_API_KEY not set — Groq provider not registered")
 
-    # Mistral — registered when API key is present (Issue #10549; env wins else vault, #10088 Task 7)
+    # Mistral — registered when API key is present (Issue #10549; vault first, env fallback, #10088 Task 7)
     mistral_key = resolve_provider_key("MISTRAL_API_KEY", config.mistral_api_key)
     if mistral_key:
         mistral_provider = MistralProvider(
@@ -124,7 +124,7 @@ def _register_api_key_providers(registry: "ProviderRegistry", fallback: List[str
     else:
         logger.debug("MISTRAL_API_KEY not set — Mistral provider not registered")
 
-    # HuggingFace — HF token, reused below as the Nous Portal fallback (env wins; else vault, #15268).
+    # HuggingFace — HF token, reused below as the Nous Portal fallback (vault first; env fallback, #15268).
     hf_token = resolve_provider_key("HF_TOKEN", config.hf_token) or resolve_provider_key(
         "HUGGINGFACE_API_TOKEN", config.huggingface_api_token
     )
@@ -147,7 +147,7 @@ def _register_openai_compatible(registry: "ProviderRegistry", fallback: List[str
         custom_provider = CustomOpenAIProvider(
             settings={
                 "base_url": custom_url,
-                # env wins; else System vault (#10088 Task 7)
+                # vault first; env as a logged fallback (#10088 Task 7)
                 "api_key": resolve_provider_key("CUSTOM_OPENAI_API_KEY", config.custom_openai_api_key),
                 "default_model": config.custom_openai_default_model,
             }
@@ -157,7 +157,7 @@ def _register_openai_compatible(registry: "ProviderRegistry", fallback: List[str
     else:
         logger.debug("CUSTOM_OPENAI_BASE_URL not set — custom OpenAI provider not registered")
 
-    # OpenRouter — registered when API key is present (Issue #4341; env wins else vault, #10088 Task 7)
+    # OpenRouter — registered when API key is present (Issue #4341; vault first, env fallback, #10088 Task 7)
     openrouter_key = resolve_provider_key("OPENROUTER_API_KEY", config.openrouter_api_key)
     if openrouter_key:
         try:
@@ -179,7 +179,7 @@ def _register_hosted_inference(registry: "ProviderRegistry", fallback: List[str]
     """Nous Portal and vLLM: a curated gateway and a self-hosted engine."""
     from services.provider_key_vault import resolve_provider_key
 
-    # Nous Portal — registered when API key is present (Issue #4341; env wins else vault, #10088 Task 7).
+    # Nous Portal — registered when API key is present (Issue #4341; vault first, env fallback, #10088 Task 7).
     nous_key = resolve_provider_key("NOUS_API_KEY", config.nous_api_key) or hf_token
     if nous_key:
         try:

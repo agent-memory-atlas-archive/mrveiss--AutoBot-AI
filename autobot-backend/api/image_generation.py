@@ -67,7 +67,7 @@ class ImageGenerationResponse(BaseModel):
 
 
 def _provider_status(name: str, env_var: str) -> ProviderStatus:
-    """Availability of one provider; the key resolves env-first, then vault (#18094). Never exposes the value."""
+    """Availability of one provider; the key resolves vault-first, env as fallback (#18094). Never exposes the value."""
     available = bool(resolve_image_provider_key(env_var))
     return ProviderStatus(name=name, available=available, reason=None if available else f"{env_var} not set")
 

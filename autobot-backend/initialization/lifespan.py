@@ -1405,15 +1405,15 @@ async def _init_llm_adapters() -> None:
         except Exception as exc:
             logger.debug("Ollama adapter registration skipped: %s", exc)
 
-        # OpenAI — registered when API key is set (env wins; else vault, #15276)
+        # OpenAI — registered when API key is set (vault first; env fallback, #15276)
         if resolve_provider_key("OPENAI_API_KEY", getattr(_cfg, "openai_api_key", "") or ""):
             registry.register(OpenAIAdapter())
 
-        # Anthropic — registered when API key is set (env wins; else vault, #15276)
+        # Anthropic — registered when API key is set (vault first; env fallback, #15276)
         if resolve_provider_key("ANTHROPIC_API_KEY", getattr(_cfg, "anthropic_api_key", "") or ""):
             registry.register(AnthropicAdapter())
 
-        # Groq — registered when API key is set (env wins; else vault, #15276)
+        # Groq — registered when API key is set (vault first; env fallback, #15276)
         if resolve_provider_key("GROQ_API_KEY", getattr(_cfg, "groq_api_key", "") or ""):
             registry.register(GroqAdapter())
 

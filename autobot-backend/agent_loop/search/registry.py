@@ -104,8 +104,8 @@ def _populate_default_providers(registry: SearchProviderRegistry) -> None:
     from autobot_shared.ssot_config import config
     from services.provider_key_vault import resolve_provider_key
 
-    # Credentials/URL resolve through the vault seam (env wins; else System
-    # vault, #15267) -- the same treatment llm_shared.provider_registry
+    # Credentials/URL resolve through the vault seam (vault first; env as a
+    # logged fallback, #15267, #18094) -- the same treatment llm_shared.provider_registry
     # already gives its seven LLM provider keys.
     searxng_url = resolve_provider_key("SEARXNG_INSTANCE_URL", getattr(config, "searxng_instance_url", ""))
     if searxng_url:

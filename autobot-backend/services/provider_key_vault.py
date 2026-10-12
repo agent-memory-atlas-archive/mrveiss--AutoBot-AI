@@ -32,10 +32,11 @@ that endpoint never had:
    write-only (unreachable at runtime; the same class of defect Task 5 hit
    for connector credentials). :func:`hydrate_provider_keys_from_vault` runs
    once at startup (``initialization/lifespan.py``, Phase 1, after the DB is
-   initialised) and populates a process-lifetime cache consulted *only* when
-   the env var itself is unset, so an Ansible-provisioned deployment's env
-   vars remain authoritative and unaffected (dual-read, env-first -- no
-   provider key becomes unreachable mid-cutover). It also records a
+   initialised) and populates a process-lifetime cache that is consulted
+   FIRST: the System vault is the canonical credential store (owner decision
+   2026-10-12, #18094). The env var / ``ssot_config`` value is only a logged
+   migration fallback for a name the vault does not hold, so no provider key
+   becomes unreachable mid-cutover. It also records a
    ``secret_dependencies`` edge (#10088 Task 8.2) for every name whose
    System-vault secret exists, regardless of whether the value currently
    resolves from the vault or from the env, so rotation-impact analysis
@@ -157,20 +158,43 @@ _CREDENTIAL_CONSUMERS: dict[str, str] = {
 _SYSTEM_VAULT = VaultRef(VaultKind.SYSTEM)
 
 #: Process-lifetime cache of provider keys hydrated from the System vault.
-#: Consulted only when the env var itself is unset (env wins). Never logged,
+#: Consulted first (the vault wins, #18094). Never logged,
 #: never written back to os.environ (child-process env sanitization is a
 #: separate, pre-existing concern -- see services/execution/env_sanitizer.py).
 _hydrated_keys: dict[str, str] = {}
 
+#: Names already reported as resolving from the env fallback, so the warning is
+#: emitted once per name per process rather than on every resolution.
+_env_fallback_logged: set[str] = set()
+
 
 def resolve_provider_key(env_var: str, config_value: str) -> str:
-    """Env var wins (today's authoritative source); else the vault-hydrated cache.
+    """The one resolution order for vault-resolved credentials (#18094, owner decision 2026-10-12).
 
-    Called from ``llm_shared.provider_registry._populate_default_providers`` in
-    place of a bare ``config.<x>_api_key`` read, so a key captured only via the
-    setup wizard (never set as an env var) still resolves at runtime.
+    The System vault (hydrated cache) wins. *config_value* -- the env var as
+    ``ssot_config`` read it -- is a migration fallback used only when the vault
+    holds no value for *env_var*, and that fallback is logged by name, never by
+    value. Every caller (LLM, search, integrations, image generation) goes
+    through here, so the order has exactly one definition.
     """
-    return config_value or _hydrated_keys.get(env_var, "")
+    vaulted = _hydrated_keys.get(env_var, "")
+    if vaulted:
+        return vaulted
+    if config_value:
+        _log_env_fallback(env_var)
+    return config_value
+
+
+def _log_env_fallback(name: str) -> None:
+    """Warn once that *name* resolved from the environment, not the secrets manager."""
+    if name in _env_fallback_logged:
+        return
+    _env_fallback_logged.add(name)
+    # Only a registry label is ever logged (same construction as the mirror warning, #16444).
+    label = "".join(VAULT_RESOLVED_CREDENTIAL_NAMES & {name}) or "<unregistered name>"
+    logger.warning(
+        "provider-key-vault: %s resolved from the environment (migration fallback); store it in the vault", label
+    )
 
 
 def resolve_image_provider_key(name: str) -> str:
@@ -178,7 +202,7 @@ def resolve_image_provider_key(name: str) -> str:
 
     Accepts only :data:`IMAGE_PROVIDER_KEY_NAMES` and raises ``ValueError``
     for anything else, so the plugin cannot read an arbitrary secret through
-    it. Precedence is :func:`resolve_provider_key`'s: env first, then vault.
+    it. Precedence is :func:`resolve_provider_key`'s: vault first, env as a logged fallback.
     Returns ``""`` when unset, as ``os.environ.get(name, "")`` did.
 
     Not a sandbox: plugins run in-process (``exec_module``), so a loaded plugin
@@ -251,10 +275,10 @@ async def capture_provider_key(
 def _refresh_hydrated_key(name: str, plaintext: str) -> None:
     """Keep the process cache in step with a successful vault write (never logs the value).
 
-    Env stays authoritative, so the cache is touched only when the env var is
-    unset; it was only ever consulted in that case anyway.
+    The vault wins at resolution (#18094), so a captured value takes effect at
+    once, whether or not the env var is also set.
     """
-    if name in VAULT_RESOLVED_CREDENTIAL_NAMES and not os.environ.get(name):
+    if name in VAULT_RESOLVED_CREDENTIAL_NAMES:
         _hydrated_keys[name] = plaintext
 
 
@@ -322,14 +346,13 @@ async def _hydrate_one_key(
 
 
 async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: bytes | None = None) -> list[str]:
-    """Populate the process cache from the System vault for any unset env var.
+    """Populate the process cache from the System vault for every name it holds.
 
-    Called once at FastAPI startup, after the DB is initialised. Env vars
-    always win (the cache is skipped entirely when already set) -- an
-    Ansible-provisioned deployment is byte-identical to before this change.
-    A ``secret_dependencies`` edge is recorded for every name whose vault
-    secret exists, independent of the env-var check, so rotation-impact
-    analysis sees a consumer even while its env var currently wins. Returns
+    Called once at FastAPI startup, after the DB is initialised. The vault
+    wins at resolution (#18094), so a name is hydrated whether or not its env
+    var is also set; the env var is only the fallback for a name the vault
+    lacks. A ``secret_dependencies`` edge is recorded for every name whose
+    vault secret exists, so rotation-impact analysis sees the consumer. Returns
     the list of names actually hydrated into the cache (for startup logging
     -- never the values). ``root_key`` defaults to loading
     ``AUTOBOT_SECRETS_ROOT_KEY`` (production behaviour); tests pass an
@@ -345,8 +368,8 @@ async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: b
         if secret_id is not None:
             await _register_credential_dependency(session, name=name, secret_id=secret_id)
             any_dependency_registered = True
-        if os.environ.get(name) or secret_id is None:
-            continue  # env wins -- irreducible/authoritative today
+        if secret_id is None:
+            continue  # nothing vaulted: resolution falls back to the env var
         if await _hydrate_one_key(session, service, name=name, secret_id=secret_id):
             hydrated.append(name)
     if any_dependency_registered:

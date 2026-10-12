@@ -4,8 +4,8 @@
 # Author: mrveiss
 """Image-generation provider keys resolve through provider_key_vault (#18094).
 
-Pins: the names are registered in the one resolver, precedence stays env then
-vault, the resolver handed to the plugin is scoped to image names, and no key
+Pins: the names are registered in the one resolver, the vault wins and the env var
+is only a logged fallback (owner decision 2026-10-12), the resolver handed to the plugin is scoped to image names, and no key
 value reaches a log record or an exception message.
 """
 
@@ -26,6 +26,7 @@ _VAULT_VALUE = "vault-value-98f00b20"  # pragma: allowlist secret
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     pkv._hydrated_keys.clear()
+    monkeypatch.setattr(pkv, "_env_fallback_logged", set())
     for name in _IMAGE:
         monkeypatch.delenv(name, raising=False)
     yield
@@ -45,10 +46,31 @@ def test_owner_map_covers_the_image_only_names_and_keeps_the_llm_owner() -> None
 
 
 @pytest.mark.parametrize("name", _IMAGE)
-def test_env_wins_over_the_vault(monkeypatch, name) -> None:
+def test_the_vault_wins_over_a_conflicting_env_var(monkeypatch, caplog, name) -> None:
     monkeypatch.setenv(name, _ENV_VALUE)
     pkv._hydrated_keys[name] = _VAULT_VALUE
-    assert pkv.resolve_image_provider_key(name) == _ENV_VALUE
+    with caplog.at_level(logging.WARNING):
+        assert pkv.resolve_image_provider_key(name) == _VAULT_VALUE
+    assert "migration fallback" not in caplog.text
+
+
+@pytest.mark.parametrize("name", _IMAGE)
+def test_env_is_a_logged_fallback_only_when_the_vault_lacks_the_key(monkeypatch, caplog, name) -> None:
+    monkeypatch.setenv(name, _ENV_VALUE)
+    with caplog.at_level(logging.WARNING):
+        assert pkv.resolve_image_provider_key(name) == _ENV_VALUE
+        assert pkv.resolve_image_provider_key(name) == _ENV_VALUE
+    fallback = [r for r in caplog.records if "migration fallback" in r.getMessage()]
+    assert len(fallback) == 1 and name in fallback[0].getMessage(), "logged once, by name"
+    assert _ENV_VALUE not in caplog.text
+
+
+def test_llm_and_image_keys_share_one_order(monkeypatch) -> None:
+    """resolve_provider_key is the one order: the LLM path agrees with the image path."""
+    monkeypatch.setenv("OPENAI_API_KEY", _ENV_VALUE)
+    pkv._hydrated_keys["OPENAI_API_KEY"] = _VAULT_VALUE
+    assert pkv.resolve_provider_key("OPENAI_API_KEY", _ENV_VALUE) == _VAULT_VALUE
+    assert pkv.resolve_image_provider_key("OPENAI_API_KEY") == _VAULT_VALUE
 
 
 @pytest.mark.parametrize("name", _IMAGE)
@@ -82,6 +104,28 @@ async def test_a_vault_only_key_is_hydrated_and_resolves() -> None:
     ):
         hydrated = await pkv.hydrate_provider_keys_from_vault(session, root_key=b"k" * 32)
     assert hydrated == ["FLUX_API_KEY"]
+    assert pkv.resolve_image_provider_key("FLUX_API_KEY") == _VAULT_VALUE
+
+
+@pytest.mark.asyncio
+async def test_hydration_loads_a_vaulted_key_even_when_its_env_var_is_set(monkeypatch) -> None:
+    """Before #18094's precedence decision hydration skipped such names, so env silently won."""
+    from services.envelope_secrets_service import EnvelopeSecretsService
+
+    monkeypatch.setenv("FLUX_API_KEY", _ENV_VALUE)
+    service = MagicMock(spec=EnvelopeSecretsService, instance=True)
+    service.read = AsyncMock(return_value=_VAULT_VALUE.encode("utf-8"))
+    session = MagicMock(commit=AsyncMock())
+
+    async def _only_flux(_session, name):
+        return "secret-id" if name == "FLUX_API_KEY" else None
+
+    with (
+        patch("services.envelope_secrets_service.EnvelopeSecretsService", autospec=True, return_value=service),
+        patch.object(pkv, "_find_system_secret_id", side_effect=_only_flux),
+        patch.object(pkv, "_register_credential_dependency", AsyncMock()),
+    ):
+        assert await pkv.hydrate_provider_keys_from_vault(session, root_key=b"k" * 32) == ["FLUX_API_KEY"]
     assert pkv.resolve_image_provider_key("FLUX_API_KEY") == _VAULT_VALUE
 
 
@@ -124,11 +168,10 @@ async def test_list_providers_resolves_through_the_vault_and_hides_the_value(cap
 
 
 @pytest.mark.asyncio
-async def test_list_providers_env_still_wins(monkeypatch) -> None:
+async def test_list_providers_falls_back_to_env(monkeypatch) -> None:
     from api import image_generation as api
 
     monkeypatch.setenv("OPENAI_API_KEY", _ENV_VALUE)
-    pkv._hydrated_keys["OPENAI_API_KEY"] = _VAULT_VALUE
     with patch.object(api, "resolve_image_provider_key", wraps=pkv.resolve_image_provider_key) as spy:
         response = await api.list_providers.__wrapped__(current_user=None)
     assert {p.name: p.available for p in response.providers}["dalle"] is True
@@ -166,7 +209,7 @@ async def test_a_capture_refreshes_the_cache_when_env_is_unset(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_capture_leaves_the_cache_alone_when_env_holds_the_name(monkeypatch) -> None:
+async def test_a_capture_wins_even_when_env_holds_the_name(monkeypatch) -> None:
     monkeypatch.setenv("FLUX_API_KEY", _ENV_VALUE)
     service = MagicMock(rotate_value=AsyncMock())
     with (
@@ -174,5 +217,4 @@ async def test_a_capture_leaves_the_cache_alone_when_env_holds_the_name(monkeypa
         patch("services.envelope_secrets_service.EnvelopeSecretsService", return_value=service),
     ):
         await pkv.capture_provider_key(MagicMock(), name="FLUX_API_KEY", plaintext=_VAULT_VALUE, created_by=None)
-    assert "FLUX_API_KEY" not in pkv._hydrated_keys or pkv._hydrated_keys["FLUX_API_KEY"] != _VAULT_VALUE
-    assert pkv.resolve_image_provider_key("FLUX_API_KEY") == _ENV_VALUE
+    assert pkv.resolve_image_provider_key("FLUX_API_KEY") == _VAULT_VALUE

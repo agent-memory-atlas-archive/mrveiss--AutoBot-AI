@@ -124,7 +124,7 @@ def _populate_default_providers(registry: CapabilityRegistry) -> None:
 
     Mirrors ``agent_loop.search.registry``: import lazily, skip silently when
     credentials are absent. Slack/Discord bot tokens now route through
-    ``resolve_provider_key`` (env wins; else System vault) -- the third
+    ``resolve_provider_key`` (vault first; env as a logged fallback) -- the third
     ``CredentialGatedRegistry`` sibling named in
     ``autobot_shared/credential_gated_registry.py``'s own docstring, and the
     only one of the three never migrated to the seam until now.
