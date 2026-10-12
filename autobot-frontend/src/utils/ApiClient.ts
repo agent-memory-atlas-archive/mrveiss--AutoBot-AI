@@ -5,7 +5,7 @@ import { createLogger } from '@/utils/debugUtils';
 import { getApiBase } from '@/config/ssot-config';
 import { getSelectedCompanyId } from '@/utils/orgContext';
 import { isRealAuthToken } from '@/utils/authToken';
-import { runWithCircuitBreaker } from '@/utils/apiCircuitBreaker';
+import { CircuitBreakerError, runWithCircuitBreaker } from '@/utils/apiCircuitBreaker';
 import { extractErrorInfo } from '@/utils/apiErrorInfo';
 
 // Create scoped logger for ApiClient
@@ -414,7 +414,7 @@ export class ApiClient {
         );
 
         // Don't retry 4xx client errors — they won't succeed on retry.
-        if (lastError.message.includes('HTTP 4')) {
+        if (lastError.message.includes('HTTP 4') || lastError instanceof CircuitBreakerError) {
           break;
         }
 

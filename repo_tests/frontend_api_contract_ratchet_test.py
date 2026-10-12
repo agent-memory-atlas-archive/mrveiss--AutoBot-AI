@@ -131,7 +131,6 @@ _RAW_FETCH_EXCEPTIONS: dict[str, str] = {
     "autobot-frontend/src/components/artifact-cells/CodeCell.stories.ts": "false positive: `fetch(` inside a sample-code string in a story",
     "autobot-frontend/src/components/canvas/CodeCell.stories.ts": "false positive: `fetch(` inside a sample-code string in a story",
     "autobot-frontend/src/composables/useTimeout.ts": "false positive: `fetch(` inside a JSDoc example",
-    "autobot-frontend/src/composables/usePrometheusMetrics.ts": "false positive: a local function named `fetch`, not window.fetch",
 }
 
 _APP_SRC = {

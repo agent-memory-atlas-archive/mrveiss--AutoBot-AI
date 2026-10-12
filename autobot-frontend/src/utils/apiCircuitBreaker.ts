@@ -8,9 +8,11 @@
  * fail fast with a CircuitBreakerError until `recoveryTimeMs` has elapsed,
  * then one HALF_OPEN probe decides whether to close it again. Opt-in per
  * request via `RequestOptions.circuitBreaker` (a key naming the dependency),
- * so default ApiClient behaviour is unchanged.
+ * so default ApiClient behaviour is unchanged. Thresholds come from the SSOT
+ * config (`timeout.circuitFailureThreshold`, `timeout.circuitRecoveryMs`).
  */
 import { createLogger } from '@/utils/debugUtils';
+import { getConfig } from '@/config/ssot-config';
 
 const logger = createLogger('CircuitBreaker');
 
@@ -21,8 +23,6 @@ export interface CircuitBreakerOptions {
   recoveryTimeMs?: number;
 }
 
-export const DEFAULT_FAILURE_THRESHOLD = 3;
-export const DEFAULT_RECOVERY_MS = 30_000;
 
 /** Response statuses that mean the dependency itself is unavailable. */
 const UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
@@ -44,8 +44,8 @@ export class ApiCircuitBreaker {
   private readonly recoveryTimeMs: number;
 
   constructor(options: CircuitBreakerOptions = {}) {
-    this.failureThreshold = options.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
-    this.recoveryTimeMs = options.recoveryTimeMs ?? DEFAULT_RECOVERY_MS;
+    this.failureThreshold = options.failureThreshold ?? getConfig().timeout.circuitFailureThreshold;
+    this.recoveryTimeMs = options.recoveryTimeMs ?? getConfig().timeout.circuitRecoveryMs;
   }
 
   canExecute(): boolean {
