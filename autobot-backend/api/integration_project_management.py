@@ -97,7 +97,7 @@ def _get_integration(provider: str, config: IntegrationConfig):
     Helper for _get_integration (Issue #61).
     """
     if provider == "jira":
-        return JiraIntegration(config)
+        return JiraIntegration(config, instance_host=True)
     elif provider == "trello":
         return TrelloIntegration(config)
     elif provider == "asana":

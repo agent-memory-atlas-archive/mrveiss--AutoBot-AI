@@ -72,7 +72,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/analytics_quality.py": 1729,
     "autobot-backend/api/analytics_root_cause_test.py": 628,
     "autobot-backend/api/api_endpoint_migrations_test.py": 31020,
-    "autobot-backend/api/auth.py": 734,
+    "autobot-backend/api/auth.py": 731,
     "autobot-backend/api/batch_jobs.py": 964,
     "autobot-backend/api/browser_mcp.py": 1340,
     "autobot-backend/api/cache_management.py": 779,
@@ -154,7 +154,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/chat_workflow/chat_intent_detector_test.py": 621,
     "autobot-backend/chat_workflow/graph.py": 1682,
     "autobot-backend/chat_workflow/llm_handler.py": 1343,
-    "autobot-backend/chat_workflow/manager.py": 3975,  # #18293: transcript_dir retired
+    "autobot-backend/chat_workflow/manager.py": 3887,  # #17273: graph turn lifecycle moved to turn_control
     "autobot-backend/chat_workflow/tool_handler.py": 3731,  # #11542 dispatch merge + #14068 mirror
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,
     "autobot-backend/chat_workflow/workflow_plan_approval_test.py": 624,
@@ -207,10 +207,10 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/hardware_acceleration.py": 609,
     "autobot-backend/initialization/lifespan.py": 2340,
     "autobot-backend/initialization/router_registry/feature_routers.py": 779,
-    "autobot-backend/integrations/cloud_integration.py": 630,
+    "autobot-backend/integrations/cloud_integration.py": 616,
     "autobot-backend/integrations/communication_integration.py": 605,
-    "autobot-backend/integrations/microsoft365_integration.py": 633,
-    "autobot-backend/integrations/project_management_integration.py": 746,
+    "autobot-backend/integrations/microsoft365_integration.py": 632,
+    "autobot-backend/integrations/project_management_integration.py": 743,
     "autobot-backend/integrations/slack_integration.py": 739,
     "autobot-backend/integrations/whatsapp_integration.py": 754,
     "autobot-backend/intelligence/goal_processor.py": 609,
@@ -442,7 +442,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/api/security.py": 962,
     "autobot-slm-backend/api/services.py": 1101,
     "autobot-slm-backend/api/setup_wizard.py": 1352,
-    "autobot-slm-backend/api/stateful.py": 688,
+    "autobot-slm-backend/api/stateful.py": 687,
     "autobot-slm-backend/api/tls.py": 994,
     "autobot-slm-backend/api/updates.py": 1107,
     "autobot-slm-backend/main.py": 781,  # #16375: secret seeding consolidated into services/generated_system_secrets.py
