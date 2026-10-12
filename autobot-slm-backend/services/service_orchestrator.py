@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from autobot_shared.ssot_config import config
 from autobot_shared.time_utils import utc_timestamp
 from models.database import Node, Service, SystemdState
-from services.orchestrator_ssh import report_ssh, spawn_ssh, ssh_base_cmd, systemctl_sudo_call
+from services.orchestrator_ssh import report_ssh, spawn_ssh, ssh_base_cmd, systemctl_sudo_call, systemctl_user_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -819,7 +819,7 @@ class ServiceOrchestrator:
     ) -> Tuple[bool, str]:
         """Run a systemctl action on a remote host."""
         if not requires_sudo:
-            return await self._run_ssh_command(host, f"systemctl --user {action} {service}", requires_sudo=False)
+            return await self._run_ssh_command(host, systemctl_user_cmd(action, service), requires_sudo=False)
         async with self._ssh_semaphore:
             base = ssh_base_cmd(self.ssh_user, self.ssh_key, host)
             return await report_ssh(systemctl_sudo_call(base, action, service))

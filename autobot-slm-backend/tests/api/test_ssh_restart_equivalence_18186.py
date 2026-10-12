@@ -132,7 +132,7 @@ async def test_orchestrator_argv_has_no_dash_n_one_call_all_units_and_literal_60
         "-i",
         str(usable_key),
         "svc@node.example.test",
-        "sudo systemctl restart a.service b.service",
+        "sudo systemctl restart -- a.service b.service",
     ]
     assert run.kwargs == {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.STDOUT}
     assert run.timeout == 60
@@ -186,7 +186,7 @@ async def _execute(category="restart"):
 async def test_roles_argv_has_dash_n_one_call_all_units_and_timeout_120(monkeypatch, roles_role):
     run = _Runner(monkeypatch, out=b"OUT", err=b"ERR")
     body = await _execute()
-    assert run.argv == [*_FULL_SSH_PREFIX, "sudo -n systemctl restart a.service b.service"]
+    assert run.argv == [*_FULL_SSH_PREFIX, "sudo -n systemctl restart -- a.service b.service"]
     assert run.kwargs == {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE}
     assert run.timeout == 120.0
     assert body == {"success": True, "node_id": "n1", "role_name": "r", "category": "restart", "output": "OUTERR"}
@@ -220,7 +220,7 @@ async def test_roles_restart_without_units_is_422_and_the_other_category_is_unto
 async def test_service_restart_argv_has_dash_n_one_unit_per_call_and_the_env_timeout(monkeypatch):
     run = _Runner(monkeypatch, out=b"o", err=b"e")
     result = await service_restart.run_ansible_service_action(_NODE, "x.service", "stop")
-    assert run.argv == [*_FULL_SSH_PREFIX, "sudo -n systemctl stop x.service"]
+    assert run.argv == [*_FULL_SSH_PREFIX, "sudo -n systemctl stop -- x.service"]
     assert run.kwargs == {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE}
     assert run.timeout == service_restart._RESTART_SSH_TIMEOUT_SECONDS
     assert result == (True, "Service x.service stop completed")

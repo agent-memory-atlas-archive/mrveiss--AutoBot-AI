@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence, Tuple
@@ -46,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.ssot_config import config
 from models.database import Node, Service, SystemdState
+from services.unit_names import validate_unit_name
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +108,32 @@ class SystemctlResult:
     stderr: bytes | None
 
 
+# systemctl verbs the executor will put on a remote command line (#18359).
+ALLOWED_SYSTEMCTL_ACTIONS = frozenset({"start", "stop", "restart", "status", "reload"})
+
+
+def systemctl_remote_command(
+    action: str,
+    units: Sequence[str],
+    *,
+    use_noninteractive_sudo: bool = True,
+    tolerate_failure: bool = False,
+    user_scope: bool = False,
+) -> str:
+    """The ONE remote shell line for ``systemctl <action> -- <units>``: validated, units quoted (#18359).
+
+    ``user_scope`` builds ``systemctl --user`` (no sudo) for the per-user manager.
+    """
+    if action not in ALLOWED_SYSTEMCTL_ACTIONS:
+        raise ValueError(f"systemctl action not allowed: {action!r}")
+    quoted = " ".join(shlex.quote(validate_unit_name(unit)) for unit in units)
+    tail = " || true" if tolerate_failure else ""
+    if user_scope:
+        return f"systemctl --user {action} -- {quoted}{tail}"
+    sudo = "sudo -n" if use_noninteractive_sudo else "sudo"
+    return f"{sudo} systemctl {action} -- {quoted}{tail}"
+
+
 async def run_systemctl_over_ssh(
     ssh_base_cmd: list,
     action: str,
@@ -114,18 +142,21 @@ async def run_systemctl_over_ssh(
     use_noninteractive_sudo: bool,
     timeout: float,
     merge_stderr: bool = False,
-    shell_suffix: str = "",
+    tolerate_failure: bool = False,
 ) -> SystemctlResult:
-    """The ONE place an SSH `sudo [-n] systemctl <action> <units>` command is built and run (#18186).
+    """The ONE place an SSH `sudo [-n] systemctl <action> -- <units>` command is built and run (#18186).
 
     `units` are joined into a single call (#16025). `ssh_base_cmd` is the caller's ssh argv up
     to the host, so each caller keeps the builder it already used. Nothing is caught here: a
     timeout or spawn error propagates, because each site reports failure its own way
     (the unification of the `-n` flag, the timeout and that contract is #17455's decision).
-    `shell_suffix` is appended verbatim to the remote command (e.g. ` || true`).
+    `action` is allowlisted and each unit validated and `shlex.quote`d (#18359), so a bad value
+    raises ValueError before anything is spawned. `tolerate_failure` appends exactly ` || true`.
     """
-    sudo = "sudo -n" if use_noninteractive_sudo else "sudo"
-    ssh_cmd = [*ssh_base_cmd, f"{sudo} systemctl {action} {' '.join(units)}{shell_suffix}"]
+    remote_cmd = systemctl_remote_command(
+        action, units, use_noninteractive_sudo=use_noninteractive_sudo, tolerate_failure=tolerate_failure
+    )
+    ssh_cmd = [*ssh_base_cmd, remote_cmd]
     process = await asyncio.create_subprocess_exec(
         *ssh_cmd,
         stdout=asyncio.subprocess.PIPE,

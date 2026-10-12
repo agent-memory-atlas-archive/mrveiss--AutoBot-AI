@@ -123,7 +123,7 @@ def _backup():
 async def test_backup_stop_redis_argv_no_dash_n_merged_stderr_timeout_30(monkeypatch):
     run = _Runner(monkeypatch)
     await _backup()._stop_redis_for_restore("node.example.test", "svc", 2222)
-    assert run.argv == [*_BACKUP_PREFIX, f"sudo systemctl stop {backup.REDIS_UNIT}"]
+    assert run.argv == [*_BACKUP_PREFIX, f"sudo systemctl stop -- {backup.REDIS_UNIT}"]
     assert run.kwargs.get("stdin") is None
     assert (run.kwargs["stdout"], run.kwargs["stderr"]) == (asyncio.subprocess.PIPE, asyncio.subprocess.STDOUT)
     assert run.timeouts == [30]
@@ -149,7 +149,7 @@ async def test_backup_stop_redis_timeout_and_error_text(monkeypatch, failure, te
 async def test_backup_start_redis_argv_then_verify_and_failure_text(monkeypatch):
     run = _Runner(monkeypatch, script=((0, b"", b""), (0, b"PONG\n7", b"")))
     assert await _backup()._start_and_verify_redis("node.example.test", "svc", 2222) == (True, "PONG\n7")
-    assert run.spawns[0][0] == [*_BACKUP_PREFIX, f"sudo systemctl start {backup.REDIS_UNIT}"]
+    assert run.spawns[0][0] == [*_BACKUP_PREFIX, f"sudo systemctl start -- {backup.REDIS_UNIT}"]
     assert run.timeouts == [30, 15]
     _Runner(monkeypatch, script=((1, b"bad", b""),))
     assert await _backup()._start_and_verify_redis("h", "svc", 22) == (False, "Failed to start Redis: bad")
@@ -178,7 +178,7 @@ def _bg():
 async def test_blue_green_stop_argv_no_dash_n_pipe_pipe_timeout_30(monkeypatch):
     run = _Runner(monkeypatch, script=((0, b"", b""),))
     assert await _bg()._stop_service_via_ssh("node.example.test", "svc", 2222, "autobot-x") is True
-    assert run.argv == [*_BG_PREFIX, "sudo systemctl stop autobot-x"]
+    assert run.argv == [*_BG_PREFIX, "sudo systemctl stop -- autobot-x"]
     assert (run.kwargs["stdout"], run.kwargs["stderr"]) == (asyncio.subprocess.PIPE, asyncio.subprocess.PIPE)
     assert run.timeouts == [30.0]
 
@@ -217,7 +217,7 @@ async def test_code_distributor_restart_argv_or_true_merged_stderr_timeout_60(mo
     await dist._restart_slm_agent("n1", "node.example.test", "svc", 2222)
     assert run.argv == [
         "ssh", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=30", "-p", "2222",
-        "-i", str(key), "svc@node.example.test", "sudo systemctl restart slm-agent || true",
+        "-i", str(key), "svc@node.example.test", "sudo systemctl restart -- slm-agent || true",
     ]  # fmt: skip
     assert (run.kwargs["stdout"], run.kwargs["stderr"]) == (asyncio.subprocess.PIPE, asyncio.subprocess.STDOUT)
     assert run.timeouts == [60.0]
@@ -262,7 +262,7 @@ async def test_orchestrator_systemctl_action_argv_dash_n_pipe_pipe_timeout_30(mo
     run = _Runner(monkeypatch, script=((0, b"done", b""),))
     result = await _orch(tmp_path)._systemctl_action("node.example.test", "x.service", "restart")
     assert result == (True, "done")
-    assert run.argv == [*_orch_prefix(tmp_path), "sudo -n systemctl restart x.service"]
+    assert run.argv == [*_orch_prefix(tmp_path), "sudo -n systemctl restart -- x.service"]
     assert (run.kwargs["stdout"], run.kwargs["stderr"]) == (asyncio.subprocess.PIPE, asyncio.subprocess.PIPE)
     assert run.timeouts == [30.0]
 
@@ -271,7 +271,22 @@ async def test_orchestrator_systemctl_action_user_scope_is_untouched(monkeypatch
     run = _Runner(monkeypatch, script=((0, b"", b""),))
     result = await _orch(tmp_path)._systemctl_action("h", "x.service", "stop", requires_sudo=False)
     assert result == (True, "Command completed successfully")
-    assert run.argv[-1] == "systemctl --user stop x.service"
+    assert run.argv[-1] == "systemctl --user stop -- x.service"
+
+
+@pytest.mark.parametrize("unit", ["x;id", "$(id)", "`id`", "a b", "-H", "a\nid"])
+async def test_orchestrator_user_scope_refuses_a_hostile_unit_before_spawning(monkeypatch, tmp_path, unit):
+    run = _Runner(monkeypatch, script=((0, b"", b""),))
+    with pytest.raises(ValueError):
+        await _orch(tmp_path)._systemctl_action("h", unit, "stop", requires_sudo=False)
+    assert run.spawns == []
+
+
+async def test_orchestrator_user_scope_refuses_a_non_allowlisted_action(monkeypatch, tmp_path):
+    run = _Runner(monkeypatch, script=((0, b"", b""),))
+    with pytest.raises(ValueError):
+        await _orch(tmp_path)._systemctl_action("h", "x.service", "enable", requires_sudo=False)
+    assert run.spawns == []
 
 
 @pytest.mark.parametrize(

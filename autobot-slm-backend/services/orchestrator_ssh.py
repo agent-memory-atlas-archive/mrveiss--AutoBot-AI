@@ -17,7 +17,7 @@ import asyncio
 import logging
 from typing import Tuple
 
-from services.service_restart import run_systemctl_over_ssh
+from services.service_restart import run_systemctl_over_ssh, systemctl_remote_command
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,11 @@ async def systemctl_sudo_call(ssh_base: list, action: str, service: str) -> tupl
         ssh_base, action, [service], use_noninteractive_sudo=True, timeout=_SSH_TIMEOUT_S
     )
     return done.returncode, done.stdout, done.stderr
+
+
+def systemctl_user_cmd(action: str, service: str) -> str:
+    """`systemctl --user <action> -- <service>` from the one builder; ValueError on a hostile value (#18359)."""
+    return systemctl_remote_command(action, [service], user_scope=True)
 
 
 async def report_ssh(call) -> Tuple[bool, str]:

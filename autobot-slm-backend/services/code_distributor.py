@@ -13,6 +13,8 @@ import hashlib
 import io
 import logging
 import os
+import re
+import shlex
 import tarfile
 from pathlib import Path
 from typing import Tuple
@@ -34,6 +36,9 @@ AGENT_CODE_PATH = "autobot-slm-backend/slm/agent"  # Relative to repo root
 DEFAULT_REPO_PATH = os.environ.get("SLM_REPO_PATH", "/opt/autobot")
 # Remote agent installation path on managed nodes
 REMOTE_AGENT_PATH = "/opt/slm-agent"
+# A git object name. The commit comes from the `slm_agent_latest_commit` setting, which is data a
+# settings write can change, so it is checked before it is written into a remote command (#18359).
+_COMMIT_SHA_RE = re.compile(r"[0-9a-f]{7,64}")
 # SSH key for connecting to managed nodes
 SSH_KEY_PATH = config.path.ssh_key_path  # canonical inter-node key (#12429)
 
@@ -168,7 +173,7 @@ class CodeDistributor:
         mkdir_cmd = self._build_ssh_command(ssh_port)
         mkdir_script = (
             f"sudo mkdir -p {REMOTE_AGENT_PATH}/slm/agent && "
-            f"sudo chown -R {ssh_user}:{ssh_user} {REMOTE_AGENT_PATH}"
+            f"sudo chown -R {shlex.quote(f'{ssh_user}:{ssh_user}')} {REMOTE_AGENT_PATH}"
         )
         mkdir_cmd.extend([f"{ssh_user}@{ip_address}", mkdir_script])
 
@@ -299,6 +304,9 @@ class CodeDistributor:
             ssh_port: SSH port
             commit_hash: Current commit hash
         """
+        if not _COMMIT_SHA_RE.fullmatch(commit_hash or ""):
+            logger.warning("Refusing to write version.json on %s: not a hex commit SHA", node_id)
+            return
         version_json = (
             f'{{"commit": "{commit_hash}", ' f'"synced_at": "{utc_timestamp()}", ' f'"source": "fleet-sync"}}'
         )
@@ -306,7 +314,7 @@ class CodeDistributor:
         version_cmd.extend(
             [
                 f"{ssh_user}@{ip_address}",
-                f"echo '{version_json}' | sudo tee /var/lib/slm-agent/version.json > /dev/null",
+                f"echo {shlex.quote(version_json)} | sudo tee /var/lib/slm-agent/version.json > /dev/null",
             ]
         )
 
@@ -343,7 +351,7 @@ class CodeDistributor:
                 use_noninteractive_sudo=False,
                 timeout=60.0,
                 merge_stderr=True,
-                shell_suffix=" || true",
+                tolerate_failure=True,
             )
             restart_output = done.stdout.decode("utf-8", errors="replace")
 
