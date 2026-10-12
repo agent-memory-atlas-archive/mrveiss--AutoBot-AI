@@ -37,7 +37,7 @@ from user_management.models.base import Base
 from user_management.services import TenantContext
 
 COMPANY, OTHER = uuid.uuid4(), uuid.uuid4()
-OWNER, MEMBER, AGENT = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+OWNER, MEMBER, AGENT, ADMIN2 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 PERSON = {"auth_method": "session"}
 AGENT_CREDENTIAL = {"auth_method": "run_jwt", "username": "run:abc"}
 
@@ -85,15 +85,16 @@ def _client(factory, *, user: uuid.UUID, org: uuid.UUID = COMPANY, credential: d
 
 @pytest.fixture(autouse=True)
 def _outside_world(factory):
+    audit = AsyncMock(return_value=True)
     with (
         patch("services.ai_line_change_proposal.get_async_session_factory", lambda: factory),
-        patch("services.ai_line_change_action.audit_log", AsyncMock(return_value=True)),
+        patch("services.ai_line_change_action.audit_log", audit),
         patch("services.ai_line_view.gated_categories", AsyncMock(return_value=["writing files"])),
         patch("events.bus.publish_event", AsyncMock()),
         patch("llc.api.approvals.ApprovalService.publish_decided", AsyncMock()),
         patch("llc.api.approvals.ApprovalService.log_decision_to_kb", AsyncMock()),
     ):
-        yield
+        yield audit
 
 
 async def _rows(factory, model):
@@ -224,3 +225,68 @@ async def test_approving_twice_does_not_rewrite_or_duplicate_the_line(factory):
     assert _decide(client, approval_id).status_code == 200
     assert _decide(client, approval_id).status_code == 409
     assert len(await _rows(factory, LLCAiLine)) == 1
+
+
+# -- four eyes (owner decision, #18430) ------------------------------------------------------------------------
+
+
+async def _add_admin(factory, user, role=MembershipRole.ADMIN):
+    async with factory() as session:
+        session.add(LLCCompanyMembership(id=uuid.uuid4(), company_id=COMPANY, user_id=user, role=role.value))
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_self_approval_with_two_or_more_admins_is_refused(factory):
+    await _add_admin(factory, ADMIN2)
+    owner = _client(factory, user=OWNER)
+    approval_id = _propose(owner).json()["approval_id"]
+    assert _decide(owner, approval_id).status_code == 200  # the decision is recorded ...
+    assert await _rows(factory, LLCAiLine) == []  # ... the line does not move
+    assert any("did not complete" in c.body for c in await _rows(factory, ApprovalComment))
+
+
+@pytest.mark.asyncio
+async def test_a_self_approval_by_the_only_admin_is_allowed_and_flagged(factory, _outside_world):
+    owner = _client(factory, user=OWNER)  # the fixture company has exactly one owner/admin
+    approval_id = _propose(owner).json()["approval_id"]
+    assert _decide(owner, approval_id).status_code == 200
+    [row] = await _rows(factory, LLCAiLine)
+    assert row.decided_by == str(OWNER)
+    assert _outside_world.await_args.kwargs["details"]["self_approval"] is True
+    assert any("self-approved" in c.body for c in await _rows(factory, ApprovalComment))
+
+
+@pytest.mark.asyncio
+async def test_another_admin_approving_is_allowed_and_not_flagged(factory, _outside_world):
+    await _add_admin(factory, ADMIN2)
+    approval_id = _propose(_client(factory, user=OWNER)).json()["approval_id"]
+    assert _decide(_client(factory, user=ADMIN2), approval_id).status_code == 200
+    assert len(await _rows(factory, LLCAiLine)) == 1
+    assert _outside_world.await_args.kwargs["details"]["self_approval"] is False
+
+
+# -- the decide route runs the AI-line change and nothing else (#17161) --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_decide_route_does_not_execute_any_other_registered_action(factory):
+    from services.approval_execution import _PROPOSERS, _REGISTRY, register_post_approval_action
+
+    ran = AsyncMock()
+    register_post_approval_action("test.other_action_18430", ran, proposed_by="test")
+    try:
+        async with factory() as session:
+            other = Approval(
+                title="x", approval_type="workflow_gate", status="pending", company_id=COMPANY, requested_by_agent="x",
+                context={"action": "test.other_action_18430"},
+            )  # fmt: skip
+            session.add(other)
+            await session.commit()
+            approval_id = str(other.id)
+        assert _decide(_client(factory, user=OWNER), approval_id).status_code == 200
+    finally:
+        _REGISTRY.pop("test.other_action_18430", None)
+        _PROPOSERS.pop("test.other_action_18430", None)
+    ran.assert_not_awaited()
+    assert any("only its allowed actions" in c.body for c in await _rows(factory, ApprovalComment))

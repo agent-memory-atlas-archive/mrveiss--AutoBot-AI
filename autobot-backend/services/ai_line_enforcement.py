@@ -30,7 +30,9 @@ category, and an approval that cannot be recorded still leaves the action un-run
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -39,6 +41,7 @@ from typing import Any, Iterable, Mapping, Optional
 from sqlalchemy import select
 
 from autobot_shared.ai_lines import (
+    VERIFIED_COMPANY_KEY,
     AiLine,
     LineResolution,
     action_key,
@@ -47,6 +50,7 @@ from autobot_shared.ai_lines import (
 )
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.secret_redaction import redact_nested
+from autobot_shared.ssot_config import config as ssot_config
 from autobot_shared.tool_catalogue import approval_category_for, valid_approval_categories
 from llc.services.ai_lines import stored_line
 from models.approval import Approval, ApprovalStatus, ApprovalType
@@ -129,7 +133,8 @@ async def resolve_action_line(
 ) -> LineResolution:
     """Resolve the effective line for one action. Read-only: creates nothing, runs nothing."""
     key = action_key(tool_name, params)
-    stored, unavailable = await _stored(_parse_company(company_id), key)
+    company = _parse_company(company_id)
+    stored, unavailable = await _stored(company, key)
     category = approval_category_for(tool_name, await gated_categories(declared_categories))
     return resolve_line(
         key,
@@ -138,6 +143,7 @@ async def resolve_action_line(
         baseline_category=category,
         role_requires_approval=role_requires_approval,
         store_unavailable=unavailable,
+        company_missing=company is None,
     )
 
 
@@ -150,14 +156,33 @@ async def call_needs_approval(tool_call: Mapping[str, Any], ctx: Any) -> bool:
     resolution = await resolve_action_line(
         tool_call.get("name", ""),
         params if isinstance(params, dict) else {},
-        (getattr(ctx, "context", None) or {}).get("company_id"),
+        (getattr(ctx, "context", None) or {}).get(VERIFIED_COMPANY_KEY),
         declared_categories=getattr(ctx, "requires_approval_before", None) or (),
     )
     return resolution.line is not AiLine.AUTONOMOUS
 
 
-def _fingerprint(key: str, params: Mapping[str, Any]) -> str:
-    return hashlib.sha256(json.dumps({"k": key, "p": params}, sort_keys=True, default=str).encode()).hexdigest()
+def _fingerprint_key() -> bytes:
+    """Per-process HMAC key derived from the app's existing signing secret; never a literal.
+
+    With no configured secret it is random for this process, so a fingerprint then simply cannot be matched
+    after a restart: an approval bound to it has to be given again, which is the safe direction.
+    """
+    secret = ssot_config.jwt_secret or ssot_config.secret_key
+    return hashlib.sha256(b"ai-line-fingerprint:" + (secret or "").encode()).digest() if secret else _PROCESS_KEY
+
+
+_PROCESS_KEY = secrets.token_bytes(32)
+
+
+def shown_call_fingerprint(tool_name: str, params: Optional[Mapping[str, Any]]) -> str:
+    """HMAC of the RAW call (tool + params), so a person's yes is bound to exactly what they were shown.
+
+    Raw, not redacted: two calls that differ only in a masked credential are different calls (#18430). The
+    digest does not reveal the params.
+    """
+    body = json.dumps({"k": action_key(tool_name, params), "p": dict(params or {})}, sort_keys=True, default=str)
+    return hmac.new(_fingerprint_key(), body.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 async def _existing_hold(session, company_id: Optional[uuid.UUID], requester: str, fingerprint: str) -> Approval | None:
@@ -186,7 +211,7 @@ async def _file_hold(
     """
     requester = f"{REQUESTER_PREFIX}:{requested_by}"
     safe_params = redact_nested(dict(params))
-    fingerprint = _fingerprint(resolution.key, safe_params)
+    fingerprint = shown_call_fingerprint(resolution.key.split(":", 1)[0], params)
     async with get_async_session_factory()() as session:
         existing = await _existing_hold(session, company_id, requester, fingerprint)
         if existing is not None:
@@ -232,13 +257,14 @@ async def enforce_line(
     declared_categories: Iterable[str] = (),
     role_requires_approval: bool = False,
     hold_in_approvals: bool = True,
-    person_approved: bool = False,
+    approved_fingerprints: frozenset[str] = frozenset(),
 ) -> LineVerdict:
     """Decide and apply the line for one agent action: line 1 RUN (reported), 2 HOLD, 3 REFUSE.
 
     ``hold_in_approvals=False`` is for a surface that holds the action in its own live queue (the terminal):
-    the decision is still made here, the hold is not duplicated. ``person_approved`` means a person already
-    said yes to THIS action in the surface's own interrupt: it satisfies line 2 and never lifts line 3.
+    the decision is still made here, the hold is not duplicated. ``approved_fingerprints`` are the
+    calls a person was SHOWN and said yes to in the surface's own interrupt: a call whose :func:`shown_call_fingerprint`
+    is in the set satisfies line 2; nothing satisfies line 3.
     """
     resolution = await resolve_action_line(
         tool_name,
@@ -249,7 +275,7 @@ async def enforce_line(
     )
     if resolution.line is AiLine.NEVER:
         verdict = LineVerdict(Outcome.REFUSE, resolution)
-    elif resolution.line is AiLine.AUTONOMOUS or person_approved:
+    elif resolution.line is AiLine.AUTONOMOUS or shown_call_fingerprint(tool_name, params) in approved_fingerprints:
         verdict = LineVerdict(Outcome.RUN, resolution)
     else:
         verdict = await _hold(resolution, params or {}, company_id, requested_by, surface, hold_in_approvals)

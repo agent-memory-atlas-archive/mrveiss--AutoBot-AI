@@ -22,6 +22,7 @@ from api.user_management.human_decider import require_interactive_human
 from autobot_shared.logging_manager import get_logger
 from llc.deps import assert_company_access, get_session, load_authorized, service_dep
 from models.approval import Approval
+from services.ai_line_change_action import ACTION as LINE_CHANGE_ACTION
 from services.approval_execution import run_post_approval_actions
 from user_management.services import TenantContext
 
@@ -181,10 +182,10 @@ async def decide_approval(
     await svc.publish_decided(approval, body.decision)
     await svc.log_decision_to_kb(approval)  # GH#8243: index to decisions KB
     if body.decision == ApprovalStatus.APPROVED:
-        # #18430: this route decided an approval without ever running what it proposed, so a
-        # request approved HERE was recorded as approved and did nothing. Same dispatcher as the
-        # generic route; it records its own failures and never fails the decision.
-        await run_post_approval_actions(approval, session)
+        # #18430: this route decided an approval without ever running what it proposed. Same dispatcher as
+        # the generic route, but ONLY for the AI-line change: approvals here are self-created with arbitrary
+        # payloads, and running any registered action from one is the #17161 class.
+        await run_post_approval_actions(approval, session, only=frozenset({LINE_CHANGE_ACTION}))
     return _to_response(approval)
 
 

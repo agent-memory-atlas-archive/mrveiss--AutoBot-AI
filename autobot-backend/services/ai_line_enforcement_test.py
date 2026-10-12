@@ -28,7 +28,7 @@ from llc.services.ai_lines import record_approved_line, stored_line
 from llc.tests import _e2e_harness as harness
 from models.approval import Approval, ApprovalComment, ApprovalStatus, TaskApprovalLink
 from services import ai_line_enforcement as enforcement
-from services.ai_line_enforcement import Outcome, enforce_line
+from services.ai_line_enforcement import Outcome, enforce_line, shown_call_fingerprint
 from user_management.models.base import Base
 
 COMPANY, OTHER_COMPANY = uuid.uuid4(), uuid.uuid4()
@@ -89,6 +89,10 @@ async def _approvals(factory) -> list[Approval]:
         return list((await session.execute(sa.select(Approval))).scalars().all())
 
 
+def _shown(tool, params):
+    return frozenset({shown_call_fingerprint(tool, params)})
+
+
 async def _act(tool, params=None, company=COMPANY, **kw):
     return await enforce_line(
         tool_name=tool, params=params or {}, company_id=str(company), requested_by="agent-1", surface="test", **kw
@@ -138,7 +142,7 @@ async def test_line_two_creates_a_pending_approval_and_does_not_run(factory, wor
 async def test_line_three_refuses_even_when_a_person_approved_in_the_interrupt(factory, world):
     await _set(factory, "crm:delete", L3)
     plain = await _act("crm", {"action": "delete"})
-    approved = await _act("crm", {"action": "delete"}, person_approved=True)
+    approved = await _act("crm", {"action": "delete"}, approved_fingerprints=_shown("crm", {"action": "delete"}))
     assert plain.outcome is approved.outcome is Outcome.REFUSE
     assert await _approvals(factory) == []
 
@@ -146,7 +150,12 @@ async def test_line_three_refuses_even_when_a_person_approved_in_the_interrupt(f
 async def test_a_person_approved_batch_satisfies_line_two_only(factory, world):
     await _set(factory, "crm:send", L2)
     assert (await _act("crm", {"action": "send"})).outcome is Outcome.HOLD
-    assert (await _act("crm", {"action": "send"}, person_approved=True)).outcome is Outcome.RUN
+    assert (
+        await _act("crm", {"action": "send"}, approved_fingerprints=_shown("crm", {"action": "send"}))
+    ).outcome is Outcome.RUN
+    # A yes bound to a DIFFERENT call (other params) does not carry over.
+    elsewhere = _shown("crm", {"action": "send", "to": "someone-else"})
+    assert (await _act("crm", {"action": "send"}, approved_fingerprints=elsewhere)).outcome is Outcome.HOLD
 
 
 async def test_the_tool_level_line_is_the_fallback_for_an_action_with_no_line_of_its_own(factory, world):
@@ -229,9 +238,9 @@ async def test_a_line_is_per_company(factory, world):
     await _set(factory, "crm:read", L1)
     await _set(factory, "crm:send", L3, company=OTHER_COMPANY)
     assert (await _act("crm", {"action": "read"})).outcome is Outcome.RUN
-    assert (await _act("crm", {"action": "read"}, company=OTHER_COMPANY)).resolution.source == "unmanaged"
+    assert (await _act("crm", {"action": "read"}, company=OTHER_COMPANY)).resolution.source == "default"
     assert (await _act("crm", {"action": "send"}, company=OTHER_COMPANY)).outcome is Outcome.REFUSE
-    assert (await _act("crm", {"action": "send"})).resolution.source == "unmanaged"  # company A never set it
+    assert (await _act("crm", {"action": "send"})).resolution.source == "default"  # company A never set it
 
 
 async def test_the_same_held_call_files_one_approval(factory, world):
@@ -303,3 +312,38 @@ async def test_the_handler_refuses_an_approval_that_is_not_approved_or_has_no_co
             with pytest.raises(ValueError):
                 await execute_line_change(approval, session)
         assert await stored_line(session, COMPANY, "crm") is None
+
+
+# -- company scope, unknown tools, the HMAC fingerprint ---------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", [None, "", "not-a-uuid"])
+async def test_a_missing_or_malformed_company_refuses_a_mutating_action(factory, world, bad):
+    world["relaxed"] = ALL_RELAXED
+    refused = await enforce_line(tool_name="write_file", params={}, company_id=bad, requested_by="a", surface="t")
+    read = await enforce_line(tool_name="read_file", params={}, company_id=bad, requested_by="a", surface="t")
+    assert refused.outcome is Outcome.REFUSE and refused.resolution.source == "no_verified_company"
+    assert read.outcome is Outcome.RUN  # contrast: a tool the catalogue knows is a read
+
+
+async def test_an_unknown_tool_is_held_when_unset_and_runs_once_a_line_one_is_set(factory, world):
+    held = await _act("some_mcp_tool", {"x": 1})
+    await _set(factory, "some_mcp_tool", L1)
+    world["relaxed"] = ALL_RELAXED
+    freed = await _act("some_mcp_tool", {"x": 1})
+    assert held.outcome is Outcome.HOLD and held.resolution.source == "default"
+    assert freed.outcome is Outcome.RUN
+
+
+def test_the_fingerprint_is_an_hmac_of_the_raw_call_and_is_not_the_plain_hash():
+    import hashlib
+    import json
+
+    params = {"action": "send", "api_key": "k1"}  # pragma: allowlist secret
+    fp = shown_call_fingerprint("crm", params)
+    plain = hashlib.sha256(json.dumps({"k": "crm:send", "p": params}, sort_keys=True).encode()).hexdigest()
+    assert fp != plain and len(fp) == 64
+    assert fp == shown_call_fingerprint("crm", dict(params))
+    assert fp != shown_call_fingerprint("crm", {**params, "api_key": "k2"})  # pragma: allowlist secret
+    with patch.object(enforcement, "_fingerprint_key", lambda: b"another-key-" * 3):
+        assert shown_call_fingerprint("crm", params) != fp  # keyed: the digest cannot be recomputed without the secret

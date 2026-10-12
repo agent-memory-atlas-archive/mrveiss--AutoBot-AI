@@ -14,14 +14,19 @@ from types import SimpleNamespace
 import pytest
 
 from autobot_shared.ai_lines import AiLine
-from tests.unit.chat_workflow.test_ai_line_support import arun_guard
+from tests.unit.chat_workflow.test_ai_line_support import VERIFIED_COMPANY, arun_guard
 
 L1, L2, L3 = AiLine.AUTONOMOUS, AiLine.DRAFT_THEN_SEND, AiLine.NEVER
 RELAXED = ["pushing commits", "sending externally"]
 
 
 def _ctx(**kw) -> SimpleNamespace:
-    base = {"requires_approval_before": [], "work_item_id": None, "context": {"company_id": "co-1"}, "session_id": "s"}
+    base = {
+        "requires_approval_before": [],
+        "work_item_id": None,
+        "context": {"verified_company_id": VERIFIED_COMPANY},
+        "session_id": "s",
+    }
     return SimpleNamespace(**{**base, **kw})
 
 
@@ -57,21 +62,63 @@ async def test_a_held_call_reports_its_approval_so_the_person_can_find_it():
 
 
 @pytest.mark.asyncio
-async def test_a_persons_yes_in_the_interrupt_satisfies_line_two_and_never_line_three():
+async def test_a_persons_yes_covers_only_the_calls_they_were_shown_and_never_line_three():
+    from services.ai_line_enforcement import shown_call_fingerprint
+
     lines = {"crm:send": L2, "crm:delete": L3}
-    send = {"name": "crm", "params": {"action": "send"}}
+    send = {"name": "crm", "params": {"action": "send", "to": "a"}}
+    other = {"name": "crm", "params": {"action": "send", "to": "b"}}
     delete = {"name": "crm", "params": {"action": "delete"}}
+    shown = frozenset({shown_call_fingerprint("crm", send["params"]), shown_call_fingerprint("crm", delete["params"])})
     held, _ = await arun_guard(send, _ctx(), [], stored=lines)
-    passed, _ = await arun_guard(send, _ctx(person_approved=True), [], stored=lines)
-    refused, _ = await arun_guard(delete, _ctx(person_approved=True), [], stored=lines)
-    assert (held.type, passed, refused.type) == ("approval_required", None, "error")
+    passed, _ = await arun_guard(send, _ctx(approved_fingerprints=shown), [], stored=lines)
+    not_shown, _ = await arun_guard(other, _ctx(approved_fingerprints=shown), [], stored=lines)
+    refused, _ = await arun_guard(delete, _ctx(approved_fingerprints=shown), [], stored=lines)
+    assert (held.type, passed, not_shown.type, refused.type) == (
+        "approval_required",
+        None,
+        "approval_required",
+        "error",
+    )
 
 
 @pytest.mark.asyncio
 async def test_a_request_cannot_satisfy_line_two_through_its_own_context():
-    ctx = _ctx(context={"company_id": "co-1", "person_approved": True, "ai_line_person_approved": True})
+    ctx = _ctx(
+        context={"verified_company_id": VERIFIED_COMPANY, "approved_fingerprints": ["x"], "person_approved": True}
+    )
     message, _ = await arun_guard({"name": "crm", "params": {"action": "send"}}, ctx, [], stored={"crm:send": L2})
     assert message is not None and message.type == "approval_required"
+
+
+@pytest.mark.asyncio
+async def test_the_requests_own_company_claim_never_scopes_a_decision():
+    """A caller naming another company (or none) must not skip the stored `never` of the authenticated one."""
+    ctx = _ctx(context={"company_id": "00000000-0000-0000-0000-000000000099"})
+    message, _ = await arun_guard(
+        {"name": "crm", "params": {"action": "delete"}}, ctx, [], verified_company=False, stored={"crm:delete": L3}
+    )
+    assert message.type == "error" and message.metadata["line"] == "never"  # no verified company: refused outright
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", [None, "", "not-a-uuid", "12345"])
+async def test_a_missing_or_malformed_verified_company_refuses_a_mutating_action(bad):
+    ctx = _ctx(context={"verified_company_id": bad})
+    message, filed = await arun_guard({"name": "write_file", "params": {}}, ctx, [], verified_company=False, stored=L1)
+    assert message.type == "error" and filed == 0
+    # Contrast: a tool the catalogue knows is a read still runs without a company.
+    read, _ = await arun_guard({"name": "read_file", "params": {}}, ctx, [], verified_company=False)
+    assert read is None
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_tool_is_held_when_unset_and_a_known_read_runs():
+    held, filed = await arun_guard({"name": "some_mcp_tool", "params": {}}, _ctx(), [])
+    free, _ = await arun_guard({"name": "get_text", "params": {}}, _ctx(), [])
+    reply, _ = await arun_guard({"name": "respond", "params": {}}, _ctx(), [])
+    assert held.type == "approval_required" and filed == 1
+    assert free is None and reply is None
 
 
 @pytest.mark.asyncio

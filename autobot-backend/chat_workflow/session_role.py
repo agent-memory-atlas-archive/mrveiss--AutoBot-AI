@@ -19,6 +19,7 @@ import json
 import os
 from typing import List, Optional
 
+from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY
 from autobot_shared.env_utils import env_int
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_mixin import AsyncRedisClientMixin
@@ -61,7 +62,7 @@ AUTH_ROLE_CONTEXT_KEY = "auth_role"
 DEFAULT_AUTH_ROLE = "user"
 
 
-def apply_auth_role(context: "dict | None", role: Optional[str]) -> "dict | None":
+def apply_auth_role(context: "dict | None", role: Optional[str], org_id: Optional[str] = None) -> "dict | None":
     """Overlay the trusted authenticated *role* onto *context* (#13821).
 
     Unlike ``apply_role``, a falsy *role* **strips** the key rather than leaving
@@ -71,8 +72,15 @@ def apply_auth_role(context: "dict | None", role: Optional[str]) -> "dict | None
     would let exactly that value survive into the tool seam and grant the
     privileges it names. Every path therefore writes or removes the key — the
     caller's value is never the one that reaches ``dispatch()``.
+
+    #18430: the authenticated *org_id* is overlaid the same way as ``verified_company_id`` -- the company the
+    AI lines are decided for. The request's own ``company_id`` is a client claim and never scopes a decision.
     """
     merged = {**(context or {})}
+    if org_id:
+        merged[VERIFIED_COMPANY_KEY] = str(org_id)
+    else:
+        merged.pop(VERIFIED_COMPANY_KEY, None)
     if role:
         merged[AUTH_ROLE_CONTEXT_KEY] = role
     else:

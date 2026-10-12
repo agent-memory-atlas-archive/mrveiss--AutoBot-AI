@@ -68,14 +68,13 @@ def test_shallow_copy_isolates_graph_state():
     assert "delegations_this_turn" not in state["context"]  # original untouched
 
 
-def test_a_persons_yes_in_the_interrupt_reaches_the_seam_and_a_request_cannot_forge_it():
-    """#18430: only an approved interrupt decision satisfies line 2 for the batch, and not via the request's bag."""
+def test_only_a_bound_approved_decision_reaches_the_seam_and_a_request_cannot_forge_it():
+    """#18430: the seam gets exactly the fingerprints request_approval bound, and never the request's own."""
     build = _build()
-    approved = _state({"company_id": "co-1"}) | {"approval_decision": {"approved": True, "reason": ""}}
-    denied = _state({"company_id": "co-1"}) | {"approval_decision": {"approved": False, "reason": "no"}}
-    assert build(approved).person_approved is True
-    assert build(denied).person_approved is False
-    assert build(_state({"company_id": "co-1"})).person_approved is False
-    # A request cannot satisfy line 2 for itself by naming the flag in its own context.
-    for key in ("person_approved", "ai_line_person_approved"):
-        assert build(_state({key: True})).person_approved is False
+    bound = {"approved": True, "reason": "", "bound": ["fp1", "fp2"]}
+    assert build(_state({}) | {"approval_decision": bound}).approved_fingerprints == frozenset({"fp1", "fp2"})
+    denied = {"approved": False, "reason": "no", "bound": ["fp1"]}
+    assert build(_state({}) | {"approval_decision": denied}).approved_fingerprints == frozenset()
+    assert build(_state({})).approved_fingerprints == frozenset()
+    for key in ("approved_fingerprints", "bound", "person_approved"):
+        assert build(_state({key: ["fp1"]})).approved_fingerprints == frozenset()

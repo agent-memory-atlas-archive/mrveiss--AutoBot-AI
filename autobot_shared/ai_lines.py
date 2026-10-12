@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional
 
-from autobot_shared.tool_catalogue import ToolEffect, canonical_tool_name, has_effect
+from autobot_shared.tool_catalogue import ToolEffect, canonical_tool_name, tool_effect
 
 
 class AiLine(str, Enum):
@@ -44,6 +44,10 @@ _RANKS = {AiLine.AUTONOMOUS: 1, AiLine.DRAFT_THEN_SEND: 2, AiLine.NEVER: 3}
 #: A line nobody set. Owner rule: counts as line 2 until the owner role decides.
 DEFAULT_LINE = AiLine.DRAFT_THEN_SEND
 
+#: ``context`` key holding the company of the AUTHENTICATED principal (#18430). The request's own
+#: ``company_id`` is a client claim and never scopes a policy decision; only this key does.
+VERIFIED_COMPANY_KEY = "verified_company_id"
+
 #: Why a line resolved the way it did (shown to the person; also what the tests assert on).
 SOURCE_STORED = "stored"
 SOURCE_DEFAULT = "default"
@@ -51,6 +55,7 @@ SOURCE_BASELINE = "baseline_floor"
 SOURCE_ROLE = "role_floor"
 SOURCE_UNAVAILABLE = "store_unavailable"
 SOURCE_UNMANAGED = "unmanaged"
+SOURCE_NO_COMPANY = "no_verified_company"
 
 
 def strictest(*lines: AiLine) -> AiLine:
@@ -85,9 +90,21 @@ def fallback_keys(key: str) -> tuple[str, ...]:
     return (key,) if tool == key else (key, tool)
 
 
+#: The two ways the AI talks to the person. Gating them would stall the conversation or file an approval
+#: to ask for approval; they change nothing in the world.
+CONVERSATION_TOOLS = frozenset({"respond", "request_approval"})
+
+
 def is_mutating(tool_name: str) -> bool:
-    """Whether the tool-effect SSOT classifies *tool_name* as changing something."""
-    return has_effect(tool_name, ToolEffect.MUTATING)
+    """Whether *tool_name* may change something: anything the tool-effect SSOT does not KNOW is read-only.
+
+    Fail closed (#18430): an unknown tool (MCP, plugin, a new builtin) counts as mutating, so an unset line
+    holds it. Only a tool the catalogue declares with no mutating effect, or a conversation tool, is free.
+    """
+    if tool_name in CONVERSATION_TOOLS:
+        return False
+    declared = tool_effect(tool_name)
+    return declared is None or bool(declared & ToolEffect.MUTATING)
 
 
 @dataclass(frozen=True)
@@ -106,6 +123,8 @@ class LineResolution:
             return f"approval baseline category '{self.floor_category}' can never be autonomous"
         if self.source == SOURCE_ROLE:
             return "the agent role's policy requires approval for this risk"
+        if self.source == SOURCE_NO_COMPANY:
+            return "no verified company scopes this action, so it cannot be allowed"
         if self.source == SOURCE_UNAVAILABLE:
             return "the line store could not be read, so the action fails closed"
         if self.source == SOURCE_DEFAULT:
@@ -123,6 +142,7 @@ def resolve_line(
     baseline_category: Optional[str] = None,
     role_requires_approval: bool = False,
     store_unavailable: bool = False,
+    company_missing: bool = False,
 ) -> LineResolution:
     """Decide the effective line for one action. Pure; every floor can only tighten.
 
@@ -132,7 +152,11 @@ def resolve_line(
     * Baseline-sensitive categories (#18294) can never be line 1, whatever is stored.
     * A role policy that requires approval (#17463) can never be line 1 either.
     * An unreadable store fails closed: ``never``.
+    * No verified company (missing or malformed) refuses a mutating action: there is no scope its line could be
+      read from, and the request's own claim is not one (#18430).
     """
+    if company_missing and mutating:
+        return LineResolution(key, AiLine.NEVER, SOURCE_NO_COMPANY)
     if store_unavailable:
         return LineResolution(key, AiLine.NEVER, SOURCE_UNAVAILABLE)
     if stored is AiLine.NEVER:

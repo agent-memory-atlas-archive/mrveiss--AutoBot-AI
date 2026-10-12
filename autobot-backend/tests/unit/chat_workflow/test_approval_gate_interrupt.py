@@ -352,10 +352,10 @@ async def test_tool_call_needs_approval_asks_the_single_resolver():
     from types import SimpleNamespace
 
     from autobot_shared.ai_lines import AiLine
-    from tests.unit.chat_workflow.test_ai_line_support import ai_line_world
+    from tests.unit.chat_workflow.test_ai_line_support import VERIFIED_COMPANY, ai_line_world
 
     graph = _graph_module()
-    ctx = SimpleNamespace(requires_approval_before=[], context={})
+    ctx = SimpleNamespace(requires_approval_before=[], context={"verified_company_id": VERIFIED_COMPANY})
     relaxed = ["destructive operations", "executing code"]
 
     with ai_line_world():

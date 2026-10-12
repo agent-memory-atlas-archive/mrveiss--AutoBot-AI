@@ -7,7 +7,7 @@
 #17463 found three approval policies of which one was enforced: ``needs_approval()`` (role flags, no
 caller), the ``minimal`` guard profile (approval switched off, in a dormant loop) and the live gate.
 #18430 made the three AI lines THE policy, resolved in ``services/ai_line_enforcement.py``. This keeps
-a fourth from landing the way the others did, with five checks:
+a fourth from landing the way the others did, with six checks:
 
 1. **The inventory of approval-decision functions is closed.** Every ``def`` named ``needs_approval`` /
    ``requires_approval`` / ``_requires_approval`` / ``*_needs_approval`` in production source is listed
@@ -19,7 +19,9 @@ a fourth from landing the way the others did, with five checks:
    so no agent path can change a line.
 4. **The retired work-item hold stays retired.** The dispatch seam asks ``_enforce_ai_line`` and nothing
    else for an approval hold.
-5. **The dormant loop stays dormant.** ``AgentLoop`` has no production caller, and ``minimal`` (approval
+5. **The entry points are a closed set** (chat seam, terminal, realtime/voice bridge). A2A is not one: its
+   executor hands the request to the orchestrator and runs no tool itself (``a2a/task_executor.py``).
+6. **The dormant loop stays dormant.** ``AgentLoop`` has no production caller, and ``minimal`` (approval
    off) is documented dev-only; wiring the loop in must first make that profile unable to disable approval.
 
 What this cannot see, stated so an empty result is read correctly: an approval decision spelled with a
@@ -50,6 +52,8 @@ _GRAPH = "autobot-backend/chat_workflow/graph.py"
 _HANDLER = "autobot-backend/services/ai_line_change_action.py"
 _STORE = "autobot-backend/llc/services/ai_lines.py"
 _DISPATCH = "autobot-backend/chat_workflow/tool_handler.py"
+_BRIDGE = "autobot-backend/services/realtime_mcp_bridge.py"
+_VOICE_ROUTES = ("autobot-backend/api/voice.py", "autobot-backend/api/realtime_session.py")
 
 #: Every approval-decision function in production, and what it is. Adding one means saying which of these
 #: it is; none of them may be a policy of its own.
@@ -154,7 +158,7 @@ def _callers(name: str, *, skip: frozenset[str] = frozenset()) -> set[str]:
 
 def test_the_scan_is_not_vacuous() -> None:
     sources = _sources()
-    for rel in (_ENFORCEMENT, _TERMINAL, _GUARDS, _GRAPH, _HANDLER, _STORE, _DISPATCH):
+    for rel in (_ENFORCEMENT, _TERMINAL, _GUARDS, _GRAPH, _HANDLER, _STORE, _DISPATCH, _BRIDGE, *_VOICE_ROUTES):
         assert rel in sources, f"the scan never read {rel}"
 
 
@@ -187,6 +191,34 @@ def test_the_chat_seam_and_the_terminal_call_the_enforcement_point() -> None:
     assert calls_of(sources[_GUARDS], "enforce_line"), "the chat seam no longer resolves a tool's line"
     assert calls_of(sources[_TERMINAL], "enforce_line"), "the agent terminal no longer resolves a command's line"
     assert calls_of(sources[_GRAPH], "call_needs_approval"), "the plan-time interrupt decides without the point"
+
+
+def test_exactly_the_known_entry_points_enforce_a_line() -> None:
+    """The set of places that decide a line is closed: chat seam, terminal, realtime/voice bridge (#18430)."""
+    callers = _callers("enforce_line", skip=frozenset({_ENFORCEMENT}))
+    assert callers == {_GUARDS, _TERMINAL, _BRIDGE}, (
+        f"#18430: enforce_line is called from {sorted(callers)}. A new entry point that executes an agent's "
+        "tool must resolve its line there; list it here once it does."
+    )
+
+
+def test_the_realtime_bridge_is_reached_only_by_routes_that_pass_the_authenticated_company() -> None:
+    users = _callers("get_realtime_bridge", skip=frozenset({_BRIDGE}))
+    assert users == set(
+        _VOICE_ROUTES
+    ), f"#18430: a new caller of the realtime bridge: {sorted(users - set(_VOICE_ROUTES))}"
+    for rel in _VOICE_ROUTES:
+        sites = [
+            node
+            for node in ast.walk(ast.parse(_sources()[rel]))
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "call_tool"
+        ]
+        assert sites, f"{rel} no longer calls the bridge"
+        for site in sites:
+            company = next((kw.value for kw in site.keywords if kw.arg == "company_id"), None)
+            assert company is not None and "org_id" in ast.unparse(
+                company
+            ), f"#18430: {rel}:{site.lineno} calls the bridge without the authenticated org_id as company_id"
 
 
 def test_the_role_policy_is_consulted_by_the_terminal_and_only_there() -> None:

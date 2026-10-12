@@ -259,6 +259,22 @@ TOOL_EFFECTS: "dict[str, ToolEffect]" = {
     **_entries(("semantic_search", "search_knowledge"), _E.READ),
     **_entries(("web_search", "scrape_url", "map_site", "extract_structured_data"), _E.READ | _E.ISOLATED_READ),
     **_entries(("sleep", "wait", "poll", "check_status"), _E.POLL),
+    # #18430: tools the live seam dispatches that were declared nowhere. The AI lines treat an unknown tool as
+    # mutating (fail closed), so every builtin that only observes must be KNOWN to be a read.
+    **_entries(
+        (
+            "get_text",
+            "get_attribute",
+            "screenshot",
+            "browser_state",
+            "wait_for_selector",
+            "hover",
+            "extract_content",
+            "crawl_site",
+            "read_spilled_output",
+        ),
+        _E.READ,
+    ),
 }
 
 #: Tools whose arguments name a file path (artifact capture, config guard, fact-forcing).
@@ -275,6 +291,11 @@ for _tool in _IN_PLACE_EDIT_TOOLS:
 TOOL_ALIASES: "dict[str, str]" = {
     "delete_directory": "remove_directory",
     "list_dir": "list_directory",
+    # #18430: the index-addressed browser variants are the same action as their selector form.
+    "click_index": "click",
+    "fill_index": "fill",
+    "select_index": "select",
+    "hover_index": "hover",
 }
 
 

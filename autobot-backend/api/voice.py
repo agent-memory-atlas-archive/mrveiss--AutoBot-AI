@@ -118,6 +118,7 @@ async def voice_realtime_call_tool(
         body.arguments,
         user_id=user_id,
         session_id=session_id,
+        company_id=current_user.get("org_id"),  # #18430: the authenticated company, never the model's
     )
     return {"is_error": result.is_error, "content": result.content}
 

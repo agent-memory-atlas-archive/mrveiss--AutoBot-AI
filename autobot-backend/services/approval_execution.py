@@ -96,8 +96,14 @@ def registered_action_proposers() -> dict[str, str]:
     return dict(_PROPOSERS)
 
 
-async def run_post_approval_actions(approval: "Approval", session: "AsyncSession") -> None:
+async def run_post_approval_actions(
+    approval: "Approval", session: "AsyncSession", *, only: "frozenset[str] | None" = None
+) -> None:
     """Dispatch on ``approval.context["action"]``.
+
+    ``only`` restricts a CALLER to a named set of actions (#18430): an action outside it is not run and leaves a
+    durable comment saying so. The LLC decide route passes it, because that route's approvals are self-created
+    with arbitrary payloads (#17161).
 
     Called only after the transition to APPROVED already committed -- see
     ``ApprovalGateService.approve()`` -- so nothing here can prevent or roll
@@ -108,6 +114,11 @@ async def run_post_approval_actions(approval: "Approval", session: "AsyncSession
     """
     action = (approval.context or {}).get("action")
     if not action:
+        return
+    if only is not None and action not in only:
+        await _record_dispatch_failure(
+            approval, session, action=action, reason="this decision route runs only its allowed actions (#17161)"
+        )
         return
     handler = _REGISTRY.get(action)
     if handler is None:

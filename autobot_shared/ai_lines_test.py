@@ -10,6 +10,7 @@ from autobot_shared.ai_lines import (
     DEFAULT_LINE,
     SOURCE_BASELINE,
     SOURCE_DEFAULT,
+    SOURCE_NO_COMPANY,
     SOURCE_ROLE,
     SOURCE_STORED,
     SOURCE_UNAVAILABLE,
@@ -50,7 +51,22 @@ def test_a_tool_action_key_is_per_action_with_the_tool_as_fallback():
 
 def test_only_catalogued_mutating_tools_count_as_mutating():
     assert is_mutating("write_file") and is_mutating("execute_command")
-    assert not is_mutating("read_file") and not is_mutating("no_such_tool")
+    assert not is_mutating("read_file") and not is_mutating("get_text") and not is_mutating("respond")
+
+
+def test_an_unknown_tool_is_treated_as_mutating_so_an_unset_line_holds_it():
+    """Fail closed (#18430): MCP and plugin tools have no catalogue entry and must not run as 'reads'."""
+    assert is_mutating("some_mcp_tool") and is_mutating("no_such_tool")
+    got = resolve_line("some_mcp_tool", stored=None, mutating=is_mutating("some_mcp_tool"))
+    assert (got.line, got.source) == (L2, SOURCE_DEFAULT)
+    # Contrast: a tool the catalogue KNOWS is read-only runs when unset.
+    assert resolve_line("get_text", stored=None, mutating=is_mutating("get_text")).line is L1
+
+
+def test_no_verified_company_refuses_a_mutating_action_and_leaves_a_known_read_alone():
+    refused = resolve_line("write_file", stored=L1, mutating=True, company_missing=True)
+    assert (refused.line, refused.source) == (L3, SOURCE_NO_COMPANY)
+    assert resolve_line("read_file", stored=None, mutating=False, company_missing=True).line is L1
 
 
 @pytest.mark.parametrize("stored", [L1, L2, L3])

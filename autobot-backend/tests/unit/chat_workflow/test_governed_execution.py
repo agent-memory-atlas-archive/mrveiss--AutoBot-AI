@@ -16,7 +16,7 @@ import pytest
 
 from chat_workflow.models import build_governed_identity
 from chat_workflow.tool_handler import ToolHandlerMixin, _approval_category_for
-from tests.unit.chat_workflow.test_ai_line_support import run_guard
+from tests.unit.chat_workflow.test_ai_line_support import VERIFIED_COMPANY, ai_line_world, run_guard
 
 
 def _mixin() -> ToolHandlerMixin:
@@ -131,17 +131,13 @@ async def test_dispatch_holds_approval_gated_tool():
     mixin = _mixin()
     results: list[dict] = []
     messages = []
-    async for item in mixin._dispatch_tool_call(
-        {"name": "bash", "params": {"command": "rm -rf /"}},
-        "s",
-        "t",
-        "http://x",
-        "m",
-        results,
-        [],
-        ctx=_ctx(categories=["destructive operations"], work_item_id="wi-9"),
-    ):
-        messages.append(item)
+    ctx = _ctx(categories=["destructive operations"], work_item_id="wi-9")
+    ctx.context = {"verified_company_id": VERIFIED_COMPANY}
+    with ai_line_world():
+        async for item in mixin._dispatch_tool_call(
+            {"name": "bash", "params": {"command": "rm -rf /"}}, "s", "t", "http://x", "m", results, [], ctx=ctx
+        ):
+            messages.append(item)
     assert len(messages) == 1
     assert messages[0].type == "approval_required"
     assert results[0]["status"] == "pending_approval"

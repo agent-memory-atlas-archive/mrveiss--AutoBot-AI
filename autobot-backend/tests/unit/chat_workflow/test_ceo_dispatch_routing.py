@@ -31,6 +31,15 @@ from middleware.manager import get_extension_manager, reset_extension_manager
 
 
 @pytest.fixture(autouse=True)
+def _line_one_for_routing():
+    """These tests are about routing and permissions; the AI-line decision has its own suite (#18430)."""
+    from chat_workflow.tool_handler import ToolHandlerMixin
+
+    with patch.object(ToolHandlerMixin, "_enforce_ai_line", AsyncMock(return_value=None)):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _real_permission_enforcement():
     """Register the real extension on the real singleton every hook call reads.
 

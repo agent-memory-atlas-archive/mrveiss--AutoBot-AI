@@ -28,6 +28,7 @@ from services.command_approval_manager import AgentPermissions, AgentRole, Comma
 pytestmark = pytest.mark.asyncio
 
 ALL_RELAXED = sorted(valid_approval_categories())
+TENANT = "00000000-0000-0000-0000-000000018430"
 
 
 def _service(permissions=None):
@@ -51,7 +52,7 @@ def _service(permissions=None):
 
 def _session(role=AgentRole.CHAT_AGENT):
     return AgentTerminalSession(
-        session_id="s", agent_id="agent-1", agent_role=role, conversation_id=None, tenant_id=None
+        session_id="s", agent_id="agent-1", agent_role=role, conversation_id=None, tenant_id=TENANT
     )
 
 
@@ -123,3 +124,13 @@ async def test_the_role_flag_alone_never_lets_a_command_run():
     """A permissive role with no line set is still line 2: the role policy only tightens."""
     svc = _service({AgentRole.CHAT_AGENT: AgentPermissions(max_risk=CommandRisk.MODERATE, auto_approve_safe=True)})
     assert (await _run(svc, None, ALL_RELAXED)) == {"status": "pending_approval"}
+
+
+async def test_a_session_with_no_verified_company_is_refused_even_on_line_one():
+    svc = _service()
+    session = _session()
+    session.tenant_id = None
+    svc.get_session = AsyncMock(return_value=session)
+    result = await _run(svc, stored=AiLine.AUTONOMOUS, relaxed=ALL_RELAXED)
+    assert result["status"] == "error" and "verified company" in result["error"]
+    svc._execute_auto_approved_command.assert_not_awaited()

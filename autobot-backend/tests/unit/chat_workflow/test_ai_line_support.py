@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY
 from chat_workflow import approval_baseline as ab
 from chat_workflow.tool_dispatch_guards import enforce_ai_line
 
@@ -31,8 +32,19 @@ def ai_line_world(stored=None, slm_relaxed=None, store_unavailable=False):
         yield filed
 
 
-async def arun_guard(tool_call, ctx, results, **world):
-    """``enforce_ai_line`` under :func:`ai_line_world`; returns ``(message, approvals_filed)``."""
+VERIFIED_COMPANY = str(uuid.UUID(int=18430))
+
+
+async def arun_guard(tool_call, ctx, results, verified_company=True, **world):
+    """``enforce_ai_line`` under :func:`ai_line_world`; returns ``(message, approvals_filed)``.
+
+    The ctx gets a server-verified company unless ``verified_company=False``, because that is the one thing a
+    mutating action needs to be decided at all (#18430). A client-claimed ``company_id`` never counts.
+    """
+    if verified_company:
+        bag = dict(getattr(ctx, "context", None) or {})
+        bag.setdefault(VERIFIED_COMPANY_KEY, VERIFIED_COMPANY)
+        ctx.context = bag
     with ai_line_world(**world) as filed:
         message = await enforce_ai_line(tool_call, ctx, results)
     return message, filed.await_count

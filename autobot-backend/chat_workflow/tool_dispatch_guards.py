@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from async_chat_workflow import WorkflowMessage
+from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.tool_catalogue import SENSITIVE_TOOLS, match_tool_name
 
@@ -316,11 +317,11 @@ async def enforce_ai_line(
     verdict = await enforce_line(
         tool_name=tool_name,
         params=_call_params(tool_call),
-        company_id=context.get("company_id"),
+        company_id=context.get(VERIFIED_COMPANY_KEY),  # server-verified, never the request's claim
         requested_by=str(getattr(ctx, "session_id", None) or "chat"),
         surface="chat_tool",
         declared_categories=getattr(ctx, "requires_approval_before", None) or (),
-        person_approved=bool(getattr(ctx, "person_approved", False)),
+        approved_fingerprints=getattr(ctx, "approved_fingerprints", frozenset()),
     )
     if verdict.outcome is Outcome.RUN:
         return None
