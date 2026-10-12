@@ -9,7 +9,8 @@ matcher and the data it is judged against live in different files.
 
 **What counts as an outbound call** (kind in brackets): manager methods on the shared client
 (``manager``), session verbs on an aiohttp session (``session``), and the call surface of ``httpx``,
-``requests`` and ``urllib.request.urlopen``. Receivers are recognised by name heuristics **and** by
+``requests``, ``urllib.request.urlopen`` and ``websockets`` (incl. ``ws_no_redirect.connect_no_redirect``).
+Receivers are recognised by name heuristics **and** by
 binding: a name bound by ``with ... as X`` or ``X = aiohttp.ClientSession(...)`` /
 ``httpx.AsyncClient(...)`` / ``requests.Session()`` / ``get_http_client()`` is a client of that kind.
 Import aliases resolve (``import requests as r``, ``from urllib.request import urlopen as uo``).
@@ -63,6 +64,8 @@ _POLICY_VALUES = {"EGRESS_POLICY", "VENDOR_API_EGRESS", "CONTENT_URL_EGRESS", "i
 _POLICY_MODULES = {"base", "egress", "http_egress_guard"}
 _EGRESS_MODULES = {"egress", "http_egress_guard"}
 _URL_AT_1 = {"request", "tracked_request", "stream"}
+#: The ``websockets`` connect wrapper that refuses handshake redirects: still a websocket outbound call.
+_NO_REDIRECT_CONNECTS = frozenset({"connect_no_redirect", "NoRedirectConnect"})
 
 
 class Site(NamedTuple):
@@ -192,13 +195,18 @@ def _request(call: ast.Call, ctx: _Ctx) -> _Req | None:
     return None
 
 
+def _is_no_redirect_connect(canon: str) -> bool:
+    """``autobot_shared.ws_no_redirect``'s connect wrapper (or its class), however it was imported (#17576)."""
+    return canon.startswith("autobot_shared.ws_no_redirect.") and canon.rsplit(".", 1)[-1] in _NO_REDIRECT_CONNECTS
+
+
 def _kind(call: ast.Call, req: _Req | None, ctx: _Ctx) -> str | None:
     """Client kind of an outbound call, or ``None`` when *call* is not one."""
     canon = _canon(call.func, ctx.aliases)
     head, _, verb = canon.rpartition(".")
     if canon == "urllib.request.urlopen":
         return "urllib"
-    if canon.startswith("websockets.") and verb == "connect":
+    if (canon.startswith("websockets.") and verb == "connect") or _is_no_redirect_connect(canon):
         return "websocket"
     if head in ("requests", "httpx") and verb in _VERBS:
         return head

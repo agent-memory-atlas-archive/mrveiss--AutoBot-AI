@@ -201,6 +201,15 @@ _FIXTURES_UNGUARDED = {
         "    return urllib.request.urlopen(u)\n"
     ),
     "websocket": "import websockets\nasync def f(u):\n    return websockets.connect(u)\n",
+    "ws-no-redirect": (
+        "from autobot_shared.ws_no_redirect import connect_no_redirect\nasync def f(u):\n    return connect_no_redirect(u)\n"
+    ),
+    "ws-no-redirect-alias": (
+        "from autobot_shared.ws_no_redirect import connect_no_redirect as c\nasync def f(u):\n    return c(u)\n"
+    ),
+    "ws-no-redirect-class-attr": (
+        "from autobot_shared import ws_no_redirect as w\nasync def f(u):\n    return w.NoRedirectConnect(u)\n"
+    ),
     "websocket-alias": "from websockets.asyncio.client import connect as wsc\nasync def f(u):\n    return wsc(u)\n",
     "websocket-client-attr": "import websockets.client\nasync def f(u):\n    return websockets.client.connect(u)\n",
     "attr-policy-from-base-module": (
@@ -274,6 +283,15 @@ _FIXTURES_GUARDED = {
     "websocket": (
         _POLICY_IMPORT + "import websockets\nasync def f(u):\n    await assert_egress_policy(u)\n"
         "    return websockets.connect(u)\n"
+    ),
+    "ws-no-redirect": (
+        _POLICY_IMPORT + "from autobot_shared.ws_no_redirect import connect_no_redirect\n"
+        "async def f(u):\n    await assert_egress_policy(u)\n    return connect_no_redirect(u)\n"
+    ),
+    "wrapper-inner-call-literal-policy": (
+        "from knowledge.connectors.egress import VENDOR_API_EGRESS\n"
+        "def _vendor_request(method, url, **kw):\n"
+        "    return get_http_client().tracked_request(method, url, guard_egress=VENDOR_API_EGRESS, **kw)\n"
     ),
     "attr-policy-from-egress-module": (
         "from autobot_shared import http_egress_guard as g\n"
