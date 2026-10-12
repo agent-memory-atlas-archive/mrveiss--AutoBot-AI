@@ -83,7 +83,7 @@ export interface ChatMessageResponse {
   data?: Record<string, unknown>;
 }
 
-// Enhanced ApiClient — consolidated from JS and TS implementations (#810)
+// Enhanced ApiClient (#810). Which client to use when: docs/developer/FRONTEND_API_CLIENTS.md (#11682)
 // Issue #598: All timeouts sourced from AppConfig (SINGLE SOURCE OF TRUTH)
 // Convenience methods (get/post/put/delete) return parsed JSON data.
 // Use rawRequest() for raw Response access (streaming, blobs).
