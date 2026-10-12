@@ -436,7 +436,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/workflow_scheduler.py": 1070,
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
     "autobot-slm-backend/ansible/roles/slm_agent/files/slm/agent/agent.py": 630,
-    "autobot-slm-backend/api/code_source.py": 719,
+    "autobot-slm-backend/api/code_source.py": 710,
     "autobot-slm-backend/api/code_sync.py": 5829,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 724,
@@ -448,9 +448,9 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/api/performance.py": 894,
     "autobot-slm-backend/api/roles.py": 685,
     "autobot-slm-backend/api/security.py": 962,
-    "autobot-slm-backend/api/services.py": 1101,
-    "autobot-slm-backend/api/setup_wizard.py": 1352,
-    "autobot-slm-backend/api/stateful.py": 688,
+    "autobot-slm-backend/api/services.py": 1097,
+    "autobot-slm-backend/api/setup_wizard.py": 1341,
+    "autobot-slm-backend/api/stateful.py": 686,
     "autobot-slm-backend/api/tls.py": 994,
     "autobot-slm-backend/api/updates.py": 1107,
     "autobot-slm-backend/main.py": 798,  # merge #16444+#17113: local admin socket lifespan wiring + shared 422 handler
@@ -460,8 +460,8 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/monitoring/performance_benchmark.py": 1073,
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,
     "autobot-slm-backend/monitoring/performance_optimizer.py": 773,
-    "autobot-slm-backend/services/backup.py": 789,
-    "autobot-slm-backend/services/blue_green.py": 1286,
+    "autobot-slm-backend/services/backup.py": 777,
+    "autobot-slm-backend/services/blue_green.py": 1282,
     "autobot-slm-backend/services/deployment.py": 1016,
     "autobot-slm-backend/services/drift_checker.py": 839,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
@@ -471,9 +471,9 @@ RATCHET_BASELINE: dict[str, int] = {
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 843,
-    "autobot-slm-backend/services/replication.py": 828,
+    "autobot-slm-backend/services/replication.py": 826,
     "autobot-slm-backend/services/role_registry.py": 713,
-    "autobot-slm-backend/services/service_orchestrator.py": 919,
+    "autobot-slm-backend/services/service_orchestrator.py": 915,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
     "autobot-slm-backend/tests/api/test_drift_resolve.py": 606,

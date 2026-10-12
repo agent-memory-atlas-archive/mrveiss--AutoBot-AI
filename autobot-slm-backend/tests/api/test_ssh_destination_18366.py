@@ -22,12 +22,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 _real_orm = importlib.import_module("_real_orm_import")
 SLM_ROOT = _real_orm.SLM_ROOT
 
-service_restart, orchestrator_ssh, ssh_utils, schemas = _real_orm.import_modules_with_real_orm(
+service_restart, orchestrator_ssh, ssh_utils, backup_ssh, schemas = _real_orm.import_modules_with_real_orm(
     (),
     path_loaded={
         "services.service_restart": SLM_ROOT / "services" / "service_restart.py",
         "services.orchestrator_ssh": SLM_ROOT / "services" / "orchestrator_ssh.py",
         "services.ssh_utils": SLM_ROOT / "services" / "ssh_utils.py",
+        "services.backup_ssh": SLM_ROOT / "services" / "backup_ssh.py",
         "models.schemas": SLM_ROOT / "models" / "schemas.py",
     },
 )
@@ -191,3 +192,21 @@ def test_the_api_answers_422_for_an_injected_user_or_host(path, body):
 def test_the_api_accepts_the_valid_contrast():
     reply = _client().post("/nodes", json={"hostname": "n", "ip_address": "10.0.0.5", "ssh_user": "autobot"})
     assert reply.status_code == 200 and reply.json() == {"ssh_user": "autobot", "ip_address": "10.0.0.5"}
+
+
+def test_the_scp_builders_put_the_validated_operand_after_a_double_dash():
+    up = backup_ssh.scp_upload_command("10.0.0.5", "autobot", 22, "/b/x.rdb", "/tmp/restore.rdb")
+    down = backup_ssh.scp_download_command("10.0.0.5", "autobot", 22, "/var/x.rdb", "/b/x.rdb")
+    assert up[-3:] == ["--", "/b/x.rdb", "autobot@10.0.0.5:/tmp/restore.rdb"]
+    assert down[-3:] == ["--", "autobot@10.0.0.5:/var/x.rdb", "/b/x.rdb"] and "ConnectTimeout=30" in down
+
+
+@pytest.mark.parametrize("user", [_INJECTED, "-o", "a b"])
+def test_the_scp_builders_refuse_an_injected_user(user):
+    for build in (
+        lambda: backup_ssh.scp_upload_command("10.0.0.5", user, 22, "/b", "/t"),
+        lambda: backup_ssh.scp_download_command("10.0.0.5", user, 22, "/t", "/b"),
+        lambda: backup_ssh.ssh_base_command("10.0.0.5", user, 22),
+    ):
+        with _refused():
+            build()

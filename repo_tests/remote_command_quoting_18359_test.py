@@ -208,36 +208,65 @@ def test_an_allowance_is_keyed_to_its_enclosing_function() -> None:
 
 # --- #18366: an ssh destination is built by the one validator, never inline ----------------------
 
-_DESTINATION_BUILDERS = (
-    "autobot-slm-backend/services/ssh_utils.py",
-    "autobot-slm-backend/services/service_restart.py",
-    "autobot-slm-backend/services/orchestrator_ssh.py",
-)
 _DESTINATION_OWNER = ("autobot-slm-backend/services/ssh_utils.py", "ssh_destination")
+_SLM_ROOT = "autobot-slm-backend"
+
+
+def _slm_production_python() -> list[str]:
+    """Every non-test .py under the SLM backend, as repo-relative paths."""
+    root = repo_root()
+    found = [
+        p.relative_to(root).as_posix()
+        for p in (root / _SLM_ROOT).rglob("*.py")
+        if "tests" not in p.parts and not p.name.endswith("_test.py") and not p.name.startswith("test_")
+    ]
+    return sorted(found)
 
 
 def inline_destinations(source: str, rel: str) -> list[str]:
-    """Every ``f"{user}@{host}"`` outside ``ssh_utils.ssh_destination``: unvalidated, a leading ``-`` is an option."""
+    """Every ``f"{user}@{host}"`` / ``f"user@{host}"`` outside ``ssh_utils.ssh_destination``.
+
+    Such a destination is unvalidated and a leading ``-`` is read as an ssh option. A URL-shaped
+    f-string (``scheme://...``) is a connection string, not an ssh destination.
+    """
     bad: list[str] = []
     for node, scope in _scoped_nodes(ast.parse(source)):
         if not isinstance(node, ast.JoinedStr) or (rel, scope) == _DESTINATION_OWNER:
             continue
-        kinds = ["v" if isinstance(p, ast.FormattedValue) else getattr(p, "value", "") for p in node.values]
-        if any(a == "v" and b == "@" and c == "v" for a, b, c in zip(kinds, kinds[1:], kinds[2:])):
-            bad.append(f"{rel}:{node.lineno}")
+        parts = node.values
+        if any(isinstance(p, ast.Constant) and "://" in str(p.value) for p in parts):
+            continue
+        for prev, part, after in zip([None, *parts], parts, [*parts[1:], None]):
+            at_end = isinstance(part, ast.Constant) and isinstance(part.value, str) and part.value.endswith("@")
+            joined = isinstance(prev, ast.FormattedValue) and getattr(part, "value", None) == "@"
+            if (at_end or joined) and isinstance(after, ast.FormattedValue) and (len(str(part.value)) > 1 or joined):
+                bad.append(f"{rel}:{node.lineno}")
+                break
     return bad
 
 
-@pytest.mark.parametrize("rel", _DESTINATION_BUILDERS)
-def test_the_ssh_base_builders_build_the_destination_only_through_the_validator(rel: str) -> None:
-    assert inline_destinations((repo_root() / rel).read_text(encoding="utf-8"), rel) == []
+def test_the_destination_scan_reaches_the_production_files() -> None:
+    files = _slm_production_python()
+    assert _DESTINATION_OWNER[0] in files and len(files) > 100, len(files)
+
+
+def test_no_slm_production_code_builds_an_ssh_destination_inline() -> None:
+    bad = [
+        hit
+        for rel in _slm_production_python()
+        for hit in inline_destinations((repo_root() / rel).read_text(encoding="utf-8"), rel)
+    ]
+    assert bad == []
 
 
 @pytest.mark.parametrize(
     ("label", "source", "expected_bad"),
     [
         ("the old inline destination", 'def b(u, h):\n    return [f"{u}@{h}"]\n', 1),
-        ("a destination with a literal user", 'def b(h):\n    return [f"autobot@{h}"]\n', 0),
+        ("a literal user and a variable host", 'def b(h):\n    return [f"autobot@{h}"]\n', 1),
+        ("a remote path operand", 'def b(u, h, p):\n    return [f"{u}@{h}:{p}"]\n', 1),
+        ("a connection string", 'def b(u, pw, h):\n    return f"postgresql://{u}:{pw}@{h}/db"\n', 0),
+        ("a user-only prefix", 'def b(u):\n    return f"{u}@"\n', 0),
         ("the validator call", "def b(u, h):\n    return [ssh_destination(u, h)]\n", 0),
     ],
 )

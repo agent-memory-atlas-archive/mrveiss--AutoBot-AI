@@ -81,6 +81,25 @@ def ssh_destination(user: object, host: object) -> str:
     return f"{validate_ssh_user(user)}@{validate_ssh_host(host)}"
 
 
+def ssh_destination_args(user: object, host: object) -> list[str]:
+    """``["--", "user@host"]``: the validated destination, after the end-of-options marker.
+
+    ssh, scp and rsync all read ``--`` as "no more options"; every direct-exec argv splices this in
+    where the destination goes so a value that slipped past validation still cannot be an option.
+    """
+    return ["--", ssh_destination(user, host)]
+
+
+def ssh_options(*options: str) -> list[str]:
+    """``["-o", opt, "-o", opt, ...]``: one ``-o`` per ssh option."""
+    return [part for option in options for part in ("-o", option)]
+
+
+def ssh_remote_path(user: object, host: object, path: str) -> str:
+    """``user@host:path``, the scp/rsync remote operand, with the same validated destination."""
+    return f"{ssh_destination(user, host)}:{path}"
+
+
 # Pydantic field types: the node create/update/test-connection schemas reject a bad value with 422.
 SshUser = Annotated[str, AfterValidator(validate_ssh_user)]
 SshHost = Annotated[str, AfterValidator(validate_ssh_host)]

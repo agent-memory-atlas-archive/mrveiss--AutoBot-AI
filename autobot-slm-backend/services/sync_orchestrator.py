@@ -23,7 +23,7 @@ from models.database import CodeSource, Node, NodeRole, Role, RoleStatus
 from services.database import db_service
 from services.deploy_artifacts import rsync_artifact_excludes
 from services.post_sync_timeouts import POST_SYNC_TIMEOUT_S
-from services.ssh_utils import _ssh_key_usable
+from services.ssh_utils import _ssh_key_usable, ssh_destination_args, ssh_remote_path
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +172,9 @@ class SyncOrchestrator:
             *[arg for pattern in rsync_artifact_excludes() for arg in ("--exclude", pattern)],
             "-e",
             ssh_opts,
+            "--",
             rsync_src,
-            f"{ctx.node_user}@{ctx.node_ip}:{ctx.target_path}/",
+            ssh_remote_path(ctx.node_user, ctx.node_ip, f"{ctx.target_path}/"),
         ]
 
         try:
@@ -289,7 +290,8 @@ class SyncOrchestrator:
             ".venv",
             "-e",
             ssh_opts,
-            f"{node_user}@{node_ip}:{repo_path}/",
+            "--",
+            ssh_remote_path(node_user, node_ip, f"{repo_path}/"),
             f"{cache_path}/",
         ]
 
@@ -319,7 +321,7 @@ class SyncOrchestrator:
 
         ssh_cmd.extend(
             [
-                f"{node_user}@{node_ip}",
+                *ssh_destination_args(node_user, node_ip),
                 f"git -C {repo_path} rev-parse HEAD 2>/dev/null || echo ''",
             ]
         )

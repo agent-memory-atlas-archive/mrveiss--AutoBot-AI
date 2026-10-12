@@ -115,7 +115,7 @@ from services.git_tracker import DEFAULT_BRANCH, DEFAULT_REPO_PATH, get_git_trac
 from services.playbook_executor import get_playbook_executor
 from services.slm_frontend_build import build_slm_frontend as _build_slm_frontend
 from services.slm_frontend_build import write_slm_deployed_commit_marker as _write_slm_deployed_commit_marker
-from services.ssh_utils import _ssh_key_usable
+from services.ssh_utils import _ssh_key_usable, ssh_remote_path
 from services.sync_orchestrator import get_sync_orchestrator
 
 logger = logging.getLogger(__name__)
@@ -1399,8 +1399,8 @@ async def _rsync_component(
         "--rsync-path=sudo rsync",  # source may need root to read e.g. /home/${USER:-autobot}/  # noqa
     ]
     cmd.extend(_rsync_exclude_args(excludes, component))
-    cmd.append(f"{source_user}@{source_ip}:{source_path}/{component}/")
-    cmd.append(f"/opt/autobot/{component}/")
+    remote_source = ssh_remote_path(source_user, source_ip, f"{source_path}/{component}/")
+    cmd.extend(["--", remote_source, f"/opt/autobot/{component}/"])
 
     try:
         proc = await asyncio.create_subprocess_exec(
