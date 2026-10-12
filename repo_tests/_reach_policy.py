@@ -251,6 +251,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
+    "github-api-single-module": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
     "architecture-family-definition-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -350,6 +355,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
+    "pr-comment-upsert-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow YAML and non-test python under five roots; each root grows and shrinks independently.",
     ),
     "gateway-adapter-package-scan": (
         ABSOLUTE,
