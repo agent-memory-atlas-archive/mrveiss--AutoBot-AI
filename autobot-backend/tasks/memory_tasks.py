@@ -74,6 +74,59 @@ async def _async_extract_facts(session_id: str, conversation_text: str, user_id:
     return result.get("facts_count", 0) if isinstance(result, dict) else 0
 
 
+async def _upsert_graph_entity(graph, entity: dict, session_id: str) -> None:
+    """Create the entity, or append observations when it already exists (#18414)."""
+    name = entity.get("name", "")
+    observations = [f"{k}: {v}" for k, v in (entity.get("properties") or {}).items()]
+    existing = await graph.get_entity(entity_name=name)
+    if existing and existing.get("_resolution") == "exact":
+        if observations:
+            await graph.add_observations(entity_name=name, observations=observations)
+        return
+    await graph.create_entity(
+        entity_type=entity.get("type", "unknown"),
+        name=name,
+        observations=observations,
+        metadata={"session_id": session_id},
+    )
+
+
+async def _write_graph_entities(graph, entities: list, session_id: str) -> tuple[int, int]:
+    """Write entities; every failure is logged with the item name and counted."""
+    written = failed = 0
+    for entity in entities:
+        try:
+            await _upsert_graph_entity(graph, entity, session_id)
+            written += 1
+        except Exception as ent_exc:
+            failed += 1
+            logger.warning("memory.update_graph: entity write failed (%s): %s", entity.get("name"), ent_exc)
+    return written, failed
+
+
+async def _write_graph_relations(graph, relations: list, session_id: str) -> tuple[int, int]:
+    """Write relations; every failure is logged with both endpoints and counted."""
+    written = failed = 0
+    for relation in relations:
+        try:
+            await graph.create_relation(
+                from_entity=relation.get("source", ""),
+                to_entity=relation.get("target", ""),
+                relation_type=relation.get("relation_type", "related_to"),
+                metadata={**(relation.get("properties") or {}), "session_id": session_id},
+            )
+            written += 1
+        except Exception as rel_exc:
+            failed += 1
+            logger.warning(
+                "memory.update_graph: relation write failed (%s->%s): %s",
+                relation.get("source"),
+                relation.get("target"),
+                rel_exc,
+            )
+    return written, failed
+
+
 async def _async_update_graph(session_id: str, entities: list, relations: list) -> dict:
     """Write entities and relations into AutoBotMemoryGraph."""
     from autobot_memory_graph import AutoBotMemoryGraph
@@ -81,47 +134,15 @@ async def _async_update_graph(session_id: str, entities: list, relations: list) 
     graph = AutoBotMemoryGraph()
     await graph.initialize()
 
-    entities_written = 0
-    relations_written = 0
-
-    for entity in entities:
-        try:
-            await graph.add_or_update_entity(
-                name=entity.get("name", ""),
-                entity_type=entity.get("type", "unknown"),
-                properties=entity.get("properties", {}),
-                session_id=session_id,
-            )
-            entities_written += 1
-        except Exception as ent_exc:
-            logger.warning(
-                "memory.update_graph: entity write failed (%s): %s",
-                entity.get("name"),
-                ent_exc,
-            )
-
-    for relation in relations:
-        try:
-            await graph.add_relation(
-                source=relation.get("source", ""),
-                target=relation.get("target", ""),
-                relation_type=relation.get("relation_type", "related_to"),
-                properties=relation.get("properties", {}),
-                session_id=session_id,
-            )
-            relations_written += 1
-        except Exception as rel_exc:
-            logger.warning(
-                "memory.update_graph: relation write failed (%s→%s): %s",
-                relation.get("source"),
-                relation.get("target"),
-                rel_exc,
-            )
+    entities_written, entities_failed = await _write_graph_entities(graph, entities, session_id)
+    relations_written, relations_failed = await _write_graph_relations(graph, relations, session_id)
 
     return {
-        "status": "ok",
+        "status": "partial" if entities_failed or relations_failed else "ok",
         "entities_written": entities_written,
         "relations_written": relations_written,
+        "entities_failed": entities_failed,
+        "relations_failed": relations_failed,
     }
 
 
