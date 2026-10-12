@@ -14,6 +14,7 @@ AgentStatus values. Cross-reference: GH#7504.
 
 from enum import Enum
 
+from autobot_shared.status_enums import Priority
 from models.approval import ApprovalStatus, ApprovalType  # noqa: F401
 
 
@@ -60,13 +61,19 @@ class WorkItemStatus(str, Enum):
     BLOCKED = "blocked"
 
 
-class WorkItemPriority(str, Enum):
-    """Priority of an LLC work item (GH#8213)."""
+#: The four rungs a work item is ranked on, in declaration order. Members are DERIVED from the
+#: canonical `Priority` (#18098), not re-typed: the vocabulary has one home. Deliberately a
+#: subset -- the database enum `workitempriority` has exactly these four labels and the API
+#: accepts exactly these four, so `normal` and `urgent` must not become valid here.
+_WORK_ITEM_PRIORITIES = (Priority.CRITICAL, Priority.HIGH, Priority.MEDIUM, Priority.LOW)
 
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
+WorkItemPriority = Enum(
+    "WorkItemPriority",
+    [(p.name, p.value) for p in _WORK_ITEM_PRIORITIES],
+    type=str,
+    module=__name__,
+)
+WorkItemPriority.__doc__ = "Priority of an LLC work item (GH#8213)."
 
 
 class BudgetMode(str, Enum):

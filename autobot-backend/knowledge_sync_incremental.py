@@ -18,7 +18,6 @@ Features:
 
 import asyncio
 import glob
-import hashlib
 import json
 import os
 import sys
@@ -36,6 +35,7 @@ from autobot_shared.ssot_config import config
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from autobot_shared.async_compat import run_or_schedule
+from autobot_shared.content_digest import content_digest
 from autobot_shared.logging_manager import get_llm_logger
 from constants.threshold_constants import TimingConstants
 from knowledge.ingestion_visibility import stamp_if_document
@@ -321,7 +321,7 @@ class IncrementalKnowledgeSync:
 
     def _compute_content_hash(self, content: str) -> str:
         """Compute SHA-256 hash of file content for change detection."""
-        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+        return content_digest(content)
 
     async def _scan_files(self) -> List[Path]:
         """Scan for files matching documentation patterns."""

@@ -19,7 +19,6 @@ Key Features:
 
 import ast
 import asyncio
-import hashlib
 import json
 import re
 from typing import Any, Dict, List, Set, Tuple
@@ -54,6 +53,7 @@ from api.schemas_code import (
 )
 from api.system_health import ComponentHealth, register_health_probe
 from auth_middleware import check_admin_permission, get_current_user
+from autobot_shared.content_digest import content_digest
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_redis_client
@@ -308,7 +308,7 @@ class IDEIntegrationEngine:
         import time as _time
 
         start_time = _time.time()
-        content_hash = hashlib.sha256(request.content.encode()).hexdigest()[:16]
+        content_hash = content_digest(request.content, width=16)
         cache_key = f"{request.file_path}:{content_hash}"
 
         cached = self._get_cached_analysis(cache_key, content_hash, request.file_path)

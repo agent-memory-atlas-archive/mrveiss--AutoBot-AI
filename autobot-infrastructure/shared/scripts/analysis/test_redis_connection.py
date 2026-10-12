@@ -10,12 +10,19 @@ This addresses the original Redis connection issue
 
 import logging
 import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
-sys.path.insert(0, ".")
+# A backend tool (#18289): it deliberately drives backend internals. It puts the backend and the
+# repository root (for `autobot_shared`) on its own path, so it runs from any directory with no
+# PYTHONPATH; the backend's Python dependencies must be installed.
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+for _root in (_REPO_ROOT / "autobot-backend", _REPO_ROOT):
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
 
 
 def test_redis_connection():

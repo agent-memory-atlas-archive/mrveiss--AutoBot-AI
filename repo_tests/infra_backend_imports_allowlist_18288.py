@@ -4,14 +4,12 @@
 # Author: mrveiss
 """Infrastructure modules allowed to import backend-only packages, each with its reason (#18288).
 
-Data module for ``infra_scripts_no_backend_imports_18288_test.py``. Three kinds of entry:
+Data module for ``infra_scripts_no_backend_imports_18288_test.py``. Two kinds of entry:
 
 ``BACKEND_TOOLS``
     Audited: the module drives backend internals on purpose, and bootstraps ``autobot-backend`` plus
     the repository root onto its own path, so it runs from any directory with no PYTHONPATH. The guard
     imports each one in a clean interpreter to prove it.
-``PENDING``
-    Owned by another open PR (the same-file rule); classified once that PR merges.
 ``UNCLASSIFIED``
     Found by the class guard beyond the ten #18288 names, not yet audited. Frozen here so none can be
     added silently; each leaves by a recorded decision under #18289.
@@ -25,6 +23,27 @@ _P = "autobot-infrastructure/shared/scripts/"
 
 BACKEND_TOOLS: dict[str, str] = {
     _P + "analysis/test_service_registry.py": "backend tool: deliberately exercises utils.service_registry",
+    _P + "analysis/debug_circuit_breaker.py": "backend tool: inspects the backend's circuit-breaker manager state",
+    _P + "analysis/demo_secure_web_research.py": "backend tool: demonstrates the backend's secure web research",
+    _P + "analysis/main.py": "backend tool: starts the backend app via app_factory",
+    _P + "analysis/simple_kb_test.py": "backend tool: checks the backend's KnowledgeBase",
+    _P + "analysis/test_autobot_identity.py": "backend tool: checks the backend's KnowledgeBase",
+    _P + "analysis/test_bypass_classification.py": "backend tool: drives the backend's LLM failsafe agent",
+    _P
+    + "analysis/test_chat_debug.py": "backend tool: debugs the backend's classification agent and async chat workflow",
+    _P + "analysis/test_chat_simple.py": "backend tool: runs a message through the backend's async chat workflow",
+    _P + "analysis/test_failsafe_sequence.py": "backend tool: drives the backend's LLMInterface failsafe sequence",
+    _P + "analysis/test_kb_documentation.py": "backend tool: checks the backend's KnowledgeBase documentation search",
+    _P + "analysis/test_kb_search.py": "backend tool: drives the backend's ChatWorkflowManager and KnowledgeBase",
+    _P + "analysis/test_llm_config.py": "backend tool: checks the backend's LLM configuration and LLMInterface",
+    _P + "analysis/test_llm_direct.py": "backend tool: drives the backend's LLM failsafe and classification agents",
+    _P + "analysis/test_npu_code_search.py": "backend tool: drives the backend's NPU code search agents",
+    _P + "analysis/test_redis_connection.py": "backend tool: exercises the backend's utils.service_registry",
+    _P + "analysis/test_research_dialogue.py": "backend tool: research dialogue via the async chat workflow",
+    _P + "analysis/test_research_disabled.py": "backend tool: ChatWorkflowManager, research disabled",
+    _P + "analysis/test_web_research_security.py": "backend tool: tests the backend's web research security components",
+    _P + "analysis/npu_performance_measurement.py": "backend tool: benchmarks the NPU semantic search",
+    _P + "verify_knowledge_consistency.py": "backend tool: verifies KnowledgeBase embedding consistency",
     _P
     + "apply_memory_optimizations.py": (
         "backend tool: drives utils.memory_optimization, its only importer; that module needs "
@@ -54,13 +73,6 @@ BACKEND_TOOLS: dict[str, str] = {
     ),
 }
 
-_PENDING_18230 = "pending-#18230: open PR #18230 edits this file (same-file rule); classified after it merges"
-
-PENDING: dict[str, str] = {
-    _P + "analysis/npu_performance_measurement.py": _PENDING_18230,
-    _P + "verify_knowledge_consistency.py": _PENDING_18230,
-}
-
 _UNCLASSIFIED_REASON = "not yet classified as shared, backend tool or dead: #18289"
 
 UNCLASSIFIED: frozenset[str] = frozenset(
@@ -69,31 +81,6 @@ UNCLASSIFIED: frozenset[str] = frozenset(
         "autobot-infrastructure/shared/docker/ai-stack/ai_api_server.py",
         "autobot-infrastructure/shared/mcp/tools/knowledge-base-mcp/autobot_knowledge_mcp/embedded.py",
         "autobot-infrastructure/shared/scripts/ai-ml/model_reference_validator.py",
-        "autobot-infrastructure/shared/scripts/analysis/debug_circuit_breaker.py",
-        "autobot-infrastructure/shared/scripts/analysis/demo_secure_web_research.py",
-        "autobot-infrastructure/shared/scripts/analysis/main.py",
-        "autobot-infrastructure/shared/scripts/analysis/redis_final_analysis.py",
-        "autobot-infrastructure/shared/scripts/analysis/redis_vector_analysis.py",
-        "autobot-infrastructure/shared/scripts/analysis/simple_kb_test.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_autobot_identity.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_bypass_classification.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_chat_debug.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_chat_simple.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_failsafe_sequence.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_frontend_errors.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_gui_chat_visual.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_kb_documentation.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_kb_search.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_llm_config.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_llm_direct.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_llm_interface_direct.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_minimal_backend.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_npu_code_search.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_redis_comparison.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_redis_connection.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_research_dialogue.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_research_disabled.py",
-        "autobot-infrastructure/shared/scripts/analysis/test_web_research_security.py",
         "autobot-infrastructure/shared/scripts/automated_testing_procedure.py",
         "autobot-infrastructure/shared/scripts/comprehensive_log_aggregator.py",
         "autobot-infrastructure/shared/scripts/demo/demo_codebase_indexing.py",
@@ -168,6 +155,5 @@ UNCLASSIFIED: frozenset[str] = frozenset(
 
 ALLOWLIST: dict[str, str] = {
     **{rel: _UNCLASSIFIED_REASON for rel in UNCLASSIFIED},
-    **PENDING,
     **BACKEND_TOOLS,
 }

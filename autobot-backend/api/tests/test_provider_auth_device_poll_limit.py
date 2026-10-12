@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import provider_auth as mod
+from api import provider_auth_poll_limit as limit
 from api.user_management.dependencies import get_db_session
 from auth_middleware import check_admin_permission, get_current_user
 
@@ -73,6 +74,7 @@ def ctx(monkeypatch, single_use_fake_redis):
     # #11497 finding #2: the outbound POST is now IP-pinned. Stub the resolve so the
     # test never does real DNS on the fake token host.
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))  # no DNS in unit tests (#17576)
 
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
@@ -94,7 +96,7 @@ def _body(device_code="dev-code-1"):
 def test_poll_too_fast_returns_429_before_provider_call(ctx):
     tc, fake_redis = ctx
     # A poll happened "just now" — the next one is inside the interval window.
-    fake_redis.store[mod._device_poll_key("dev-code-1")] = json.dumps(
+    fake_redis.store[limit.device_poll_key("dev-code-1")] = json.dumps(
         {"interval": 5, "count": 1, "last_ts": time.time()}
     )
     resp = tc.post(_POLL, json=_body())
@@ -104,8 +106,8 @@ def test_poll_too_fast_returns_429_before_provider_call(ctx):
 
 def test_poll_attempts_exhausted_returns_429(ctx):
     tc, fake_redis = ctx
-    fake_redis.store[mod._device_poll_key("dev-code-1")] = json.dumps(
-        {"interval": 5, "count": mod._DEVICE_POLL_MAX_ATTEMPTS, "last_ts": 0.0}
+    fake_redis.store[limit.device_poll_key("dev-code-1")] = json.dumps(
+        {"interval": 5, "count": limit._DEVICE_POLL_MAX_ATTEMPTS, "last_ts": 0.0}
     )
     resp = tc.post(_POLL, json=_body())
     assert resp.status_code == 429
@@ -118,7 +120,7 @@ def test_first_poll_allowed_and_persists_state(ctx, monkeypatch):
     resp = tc.post(_POLL, json=_body())
     assert resp.status_code == 200
     assert resp.json()["stored"] is False  # authorization_pending
-    saved = json.loads(fake_redis.store[mod._device_poll_key("dev-code-1")])
+    saved = json.loads(fake_redis.store[limit.device_poll_key("dev-code-1")])
     assert saved["count"] == 1 and saved["last_ts"] > 0
 
 
@@ -130,15 +132,15 @@ def test_slow_down_backs_off_interval(ctx, monkeypatch):
 
     monkeypatch.setattr("aiohttp.ClientSession", _SlowSession)
     # Pre-existing state whose window has elapsed so the poll is allowed through.
-    fake_redis.store[mod._device_poll_key("dev-code-1")] = json.dumps({"interval": 5, "count": 1, "last_ts": 0.0})
+    fake_redis.store[limit.device_poll_key("dev-code-1")] = json.dumps({"interval": 5, "count": 1, "last_ts": 0.0})
     resp = tc.post(_POLL, json=_body())
     assert resp.status_code == 200
-    saved = json.loads(fake_redis.store[mod._device_poll_key("dev-code-1")])
-    assert saved["interval"] == 5 + mod._DEVICE_POLL_BACKOFF  # backed off +5s
+    saved = json.loads(fake_redis.store[limit.device_poll_key("dev-code-1")])
+    assert saved["interval"] == 5 + limit._DEVICE_POLL_BACKOFF  # backed off +5s
     assert saved["count"] == 2
 
 
 def test_poll_key_hashes_device_code(ctx):
-    key = mod._device_poll_key("super-secret-code")
+    key = limit.device_poll_key("super-secret-code")
     assert "super-secret-code" not in key
     assert key.startswith("llm-auth:device:poll:")
