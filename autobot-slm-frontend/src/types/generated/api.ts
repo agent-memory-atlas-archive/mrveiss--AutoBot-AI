@@ -9963,6 +9963,30 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * LedgerSourceStatus
+         * @description What the SLM can and cannot read, so a screen never shows a gap as 'none'.
+         */
+        LedgerSourceStatus: {
+            /** Reachable */
+            reachable: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Source */
+            source: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** LedgerSourcesResponse */
+        LedgerSourcesResponse: {
+            /** Sources */
+            sources: components["schemas"]["LedgerSourceStatus"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * LedgerUnavailable
          * @description The typed 503 body: the source could not be read, which is not 'nothing there'.
          */
@@ -13240,30 +13264,6 @@ export interface components {
             description?: string | null;
             /** Value */
             value: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * SourceStatus
-         * @description What the SLM can and cannot read, so a screen never shows a gap as 'none'.
-         */
-        SourceStatus: {
-            /** Reachable */
-            reachable: boolean;
-            /**
-             * Reason
-             * @default
-             */
-            reason: string;
-            /** Source */
-            source: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** SourcesResponse */
-        SourcesResponse: {
-            /** Sources */
-            sources: components["schemas"]["SourceStatus"][];
         } & {
             [key: string]: unknown;
         };
@@ -19649,7 +19649,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SourcesResponse"];
+                    "application/json": components["schemas"]["LedgerSourcesResponse"];
                 };
             };
             /** @description The ledger could not be read (not the same as empty) */

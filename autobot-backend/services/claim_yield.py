@@ -38,7 +38,12 @@ from typing import Any
 
 from a2a.task_manager import get_task_manager
 from autobot_shared.coordination.claim_waitlist import Waiter, next_waiter
-from autobot_shared.coordination.ledger_events import YIELD_ANSWERED, YIELD_REQUESTED, YIELD_TIMEOUT_S, record_event
+from autobot_shared.coordination.ledger_events import (
+    YIELD_ANSWERED,
+    YIELD_REQUESTED,
+    YIELD_TIMEOUT_S,
+    record_ledger_event,
+)
 from autobot_shared.coordination.work_claims import ClaimUnavailable, Scope
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
@@ -124,7 +129,7 @@ async def request_yield(
 async def _record(event_type: str, **fields: Any) -> None:
     """Mirror a yield step into the ledger (#18391). Best-effort: the negotiation is the fact."""
     try:
-        await record_event(await _redis(), event_type, **fields)
+        await record_ledger_event(await _redis(), event_type, **fields)
     except ClaimUnavailable:
         logger.warning("claim_yield: ledger event %s not recorded; Redis unavailable", event_type)
 

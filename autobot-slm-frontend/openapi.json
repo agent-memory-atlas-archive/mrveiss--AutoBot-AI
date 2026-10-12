@@ -5873,6 +5873,46 @@
         "title": "LLMTestResponse",
         "type": "object"
       },
+      "LedgerSourceStatus": {
+        "description": "What the SLM can and cannot read, so a screen never shows a gap as 'none'.",
+        "properties": {
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "reachable"
+        ],
+        "title": "LedgerSourceStatus",
+        "type": "object"
+      },
+      "LedgerSourcesResponse": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerSourceStatus"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "LedgerSourcesResponse",
+        "type": "object"
+      },
       "LedgerUnavailable": {
         "description": "The typed 503 body: the source could not be read, which is not 'nothing there'.",
         "properties": {
@@ -12666,46 +12706,6 @@
           "value"
         ],
         "title": "SettingUpdate",
-        "type": "object"
-      },
-      "SourceStatus": {
-        "description": "What the SLM can and cannot read, so a screen never shows a gap as 'none'.",
-        "properties": {
-          "reachable": {
-            "title": "Reachable",
-            "type": "boolean"
-          },
-          "reason": {
-            "default": "",
-            "title": "Reason",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source",
-          "reachable"
-        ],
-        "title": "SourceStatus",
-        "type": "object"
-      },
-      "SourcesResponse": {
-        "properties": {
-          "sources": {
-            "items": {
-              "$ref": "#/components/schemas/SourceStatus"
-            },
-            "title": "Sources",
-            "type": "array"
-          }
-        },
-        "required": [
-          "sources"
-        ],
-        "title": "SourcesResponse",
         "type": "object"
       },
       "StepCompleteRequest": {
@@ -23809,7 +23809,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SourcesResponse"
+                  "$ref": "#/components/schemas/LedgerSourcesResponse"
                 }
               }
             },

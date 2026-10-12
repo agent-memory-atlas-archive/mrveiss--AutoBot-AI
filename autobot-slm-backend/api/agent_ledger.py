@@ -37,8 +37,8 @@ from autobot_shared.coordination.ledger_schemas import (
     ContentionResponse,
     DevLoopHistoryResponse,
     DevLoopIssuesResponse,
-    SourcesResponse,
-    SourceStatus,
+    LedgerSourcesResponse,
+    LedgerSourceStatus,
     WaitlistsResponse,
 )
 from services.auth import require_permission
@@ -60,8 +60,8 @@ UNREACHABLE_SOURCES = {
 }
 
 
-@router.get("/sources", response_model=SourcesResponse)
-async def ledger_sources() -> SourcesResponse:
+@router.get("/sources", response_model=LedgerSourcesResponse)
+async def ledger_sources() -> LedgerSourcesResponse:
     """Which coordination stores this view can read right now, and which it never can."""
     probes = {
         ledger_read.SOURCE_CLAIMS: ledger_read.claims,
@@ -73,11 +73,11 @@ async def ledger_sources() -> SourcesResponse:
     for source, probe in probes.items():
         try:
             await probe()
-            rows.append(SourceStatus(source=source, reachable=True))
+            rows.append(LedgerSourceStatus(source=source, reachable=True))
         except ledger_read.LedgerUnreadable as exc:
-            rows.append(SourceStatus(source=source, reachable=False, reason=exc.detail))
-    rows += [SourceStatus(source=name, reachable=False, reason=why) for name, why in UNREACHABLE_SOURCES.items()]
-    return SourcesResponse(sources=rows)
+            rows.append(LedgerSourceStatus(source=source, reachable=False, reason=exc.detail))
+    rows += [LedgerSourceStatus(source=name, reachable=False, reason=why) for name, why in UNREACHABLE_SOURCES.items()]
+    return LedgerSourcesResponse(sources=rows)
 
 
 @router.get("/claims", response_model=ClaimsResponse)

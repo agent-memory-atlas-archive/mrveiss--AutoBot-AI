@@ -168,7 +168,7 @@ class DevLoopIssuesResponse(BaseModel):
     count: int
 
 
-class SourceStatus(BaseModel):
+class LedgerSourceStatus(BaseModel):
     """What the SLM can and cannot read, so a screen never shows a gap as 'none'."""
 
     source: str
@@ -176,5 +176,5 @@ class SourceStatus(BaseModel):
     reason: str = ""
 
 
-class SourcesResponse(BaseModel):
-    sources: list[SourceStatus]
+class LedgerSourcesResponse(BaseModel):
+    sources: list[LedgerSourceStatus]

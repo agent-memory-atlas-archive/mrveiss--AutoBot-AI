@@ -54,7 +54,7 @@ YIELD_TIMEOUT_S = env_int_clamped("AUTOBOT_WORK_CLAIM_YIELD_TIMEOUT_S", 30, min_
 EVENT_TYPES = frozenset({CLAIM_EXPIRED, RELEASE_REFUSED, YIELD_REQUESTED, YIELD_ANSWERED})
 
 
-async def record_event(client: Any, event_type: str, **fields: Any) -> bool:
+async def record_ledger_event(client: Any, event_type: str, **fields: Any) -> bool:
     """Append one event. ``False`` means it was not recorded; never raises."""
     if event_type not in EVENT_TYPES:
         raise ValueError(f"unknown ledger event {event_type!r}; events are {sorted(EVENT_TYPES)}")
@@ -77,7 +77,7 @@ async def record_expired_members(client: Any, kind: str, members: list[str]) -> 
         path, _, rest = member.partition("|")
         agent_id, _, task_id = rest.partition("|")
         # The claim's payload is gone with its TTL, and with it the company: install-wide by default.
-        await record_event(
+        await record_ledger_event(
             client, CLAIM_EXPIRED, scope=f"{kind}:{path}", agent_id=agent_id, task_id=task_id, company_id=None
         )
 
@@ -98,7 +98,7 @@ async def note_refused_release(
     except Exception:  # noqa: BLE001 -- observing a refusal must not turn it into a raise
         return
     for claim in held:
-        await record_event(
+        await record_ledger_event(
             client,
             RELEASE_REFUSED,
             scope=scope,
