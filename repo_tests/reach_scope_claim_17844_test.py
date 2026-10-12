@@ -235,9 +235,9 @@ _DECLARED_SCOPES = {
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "conftest-stubset-primitives": (
         "autobot-backend",
+        "autobot-infrastructure",
+        "autobot-npu-worker",
         "autobot-slm-backend",
-        "autobot-tts-worker",
-        "autobot_shared",
         "repo_tests",
     ),
     "root-resolver-depth-scan": (

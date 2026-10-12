@@ -33,7 +33,7 @@ from repo_tests._reach import declare
 
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
-_ROOTS = ("autobot-backend", "autobot-slm-backend", "autobot-tts-worker", "autobot_shared", "repo_tests")
+_ROOTS = ("autobot-backend", "autobot-infrastructure", "autobot-npu-worker", "autobot-slm-backend", "repo_tests")
 
 #: Conftests that still hand-roll the primitives. THIS LIST ONLY SHRINKS; each value is why
 #: the file is not migrated yet.
