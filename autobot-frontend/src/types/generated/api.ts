@@ -3785,10 +3785,10 @@ export interface paths {
         head?: never;
         /**
          * Update User Preferences
-         * @description Update current user's preferences.
+         * @description Update current user's preferences (partial: omitted fields keep stored values).
          *
          *     Args:
-         *         preferences: New preference values
+         *         preferences: Preference values; only fields present in the body are written
          *
          *     Returns:
          *         DataResponse with updated preferences
@@ -100913,6 +100913,24 @@ export interface components {
              * @default auto
              */
             theme_preset: string;
+            /**
+             * Ui Mode
+             * @description Shell UI mode (minimal, full)
+             * @default full
+             */
+            ui_mode: string;
+            /**
+             * Ui Start
+             * @description Which UI mode to open in on sign-in (last, minimal, full)
+             * @default last
+             */
+            ui_start: string;
+            /**
+             * Theme Variant
+             * @description Theme variant id: 'default', a built-in, or an installed theme id
+             * @default default
+             */
+            theme_variant: string;
         } & {
             [key: string]: unknown;
         };
