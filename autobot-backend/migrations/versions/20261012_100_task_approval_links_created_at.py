@@ -15,15 +15,16 @@ freshly migrated database every ``selectinload(Approval.task_links)`` -- which i
 ``column task_approval_links.created_at does not exist``. Found by running the S1 inbox
 query against ``alembic upgrade head``.
 
-Idempotent (``IF NOT EXISTS`` + ``has_table``) like 063, so it is safe on a database whose
+Idempotent (``has_column`` guard) like 063, so it is safe on a database whose
 column was added by hand. Forward-only: dropping it would re-break the ORM read path.
 """
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
-from migrations.guards import has_table
+from migrations.guards import has_column, has_table
 
 revision: str = "20261012_100"
 down_revision: Union[str, None] = "20261012_099"
@@ -32,10 +33,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    if has_table("task_approval_links"):
-        op.execute(
-            "ALTER TABLE task_approval_links "
-            "ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
+    # A literal add_column (not raw SQL) so the baseline probe ladder can observe this
+    # revision; has_column keeps it idempotent for a database patched by hand.
+    if has_table("task_approval_links") and not has_column("task_approval_links", "created_at"):
+        op.add_column(
+            "task_approval_links",
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         )
 
 
