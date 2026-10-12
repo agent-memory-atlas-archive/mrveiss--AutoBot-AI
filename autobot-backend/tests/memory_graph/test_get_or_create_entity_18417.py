@@ -5,6 +5,7 @@
 """get_or_create_entity is atomic and never reads a Redis error as 'absent' (#18417)."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,6 +18,36 @@ class FakeRedis:
 
     def __init__(self):
         self.strings, self.docs, self.down = {}, {}, False
+        self.search_down = False
+        self.eval_gate = None  # an Event the FIRST eval caller waits on, to stall it mid-flight
+        self._first_eval = True
+
+    async def eval(self, script, numkeys, index_key, doc_key, new_id, doc_json, prefix):
+        """Python mirror of CLAIM_AND_WRITE_LUA. No await between read and write = atomic, like the script."""
+        from autobot_memory_graph import entity_upsert
+
+        assert script == entity_upsert.CLAIM_AND_WRITE_LUA
+        if self._first_eval and self.eval_gate is not None:
+            self._first_eval = False
+            await self.eval_gate.wait()
+        self._check()
+        existing = self.strings.get(index_key)
+        if existing and f"{prefix}{existing}" in self.docs:
+            return existing
+        self.strings[index_key] = new_id
+        self.docs[doc_key] = json.loads(doc_json)
+        return new_id
+
+    async def execute_command(self, *args):
+        self._check()
+        if self.search_down:
+            raise RuntimeError("RediSearch index missing")
+        return [0]
+
+    async def scan_iter(self, match=None):
+        self._check()
+        for key in list(self.docs):
+            yield key
 
     async def set(self, key, value, nx=False):
         await asyncio.sleep(0)  # yield, so concurrent callers genuinely interleave
@@ -60,7 +91,8 @@ def _graph(redis, existing_by_name=None):
     graph._initialized = True
     graph.redis_client = redis
     graph.knowledge_base = None
-    graph.get_entity = AsyncMock(return_value=existing_by_name)
+    if existing_by_name is not None:
+        graph.get_entity = AsyncMock(return_value=existing_by_name)
     return graph
 
 
@@ -106,6 +138,7 @@ async def test_legacy_entity_without_index_is_adopted_not_duplicated():
     legacy = {"id": "old-1", "name": "Redis", "_resolution": "exact"}
     redis.docs["memory:entity:old-1"] = legacy
     graph = _graph(redis, existing_by_name=legacy)
+    redis.strings.clear()
 
     entity, created = await graph.get_or_create_entity("TASK", "Redis", [])
 
@@ -114,12 +147,100 @@ async def test_legacy_entity_without_index_is_adopted_not_duplicated():
 
 
 @pytest.mark.asyncio
-async def test_failed_write_releases_the_claim():
+async def test_a_racer_stalled_between_lookup_and_write_cannot_duplicate():
+    """The claim and the write are one step: there is no 'claimed, not yet written' state to repair."""
+    redis = FakeRedis()
+    redis.eval_gate = asyncio.Event()
+    graph = _graph(redis)
+
+    stalled = asyncio.ensure_future(graph.get_or_create_entity("TASK", "Redis", ["a"]))
+    await asyncio.sleep(0.01)  # the first racer is now parked inside eval
+    fast_entity, fast_created = await graph.get_or_create_entity("TASK", "Redis", ["b"])
+    redis.eval_gate.set()
+    slow_entity, slow_created = await stalled
+
+    assert len(redis.docs) == 1
+    assert fast_created is True and slow_created is False
+    assert slow_entity["id"] == fast_entity["id"]
+
+
+@pytest.mark.asyncio
+async def test_a_dangling_claim_is_repaired_atomically_not_duplicated():
     redis = FakeRedis()
     graph = _graph(redis)
-    graph._write_new_entity = AsyncMock(side_effect=RuntimeError("boom"))
+    from autobot_memory_graph import entity_upsert
 
-    with pytest.raises(RuntimeError):
+    redis.strings[entity_upsert.name_index_key("Redis")] = "gone-id"  # index points at a deleted document
+    entity, created = await graph.get_or_create_entity("TASK", "Redis", [])
+
+    assert created is True and list(redis.docs) == [f"memory:entity:{entity['id']}"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_lookup_error_raises_and_creates_nothing():
+    """The index read succeeds (nothing there), then the legacy lookup cannot read: no create (#18417 H1)."""
+    redis = FakeRedis()
+    redis.search_down = True
+    graph = _graph(redis)
+
+    async def scan_fails(match=None):
+        raise ConnectionError("redis down mid-lookup")
+        yield  # pragma: no cover
+
+    redis.scan_iter = scan_fails
+
+    with pytest.raises(ConnectionError):
         await graph.get_or_create_entity("TASK", "Redis", [])
 
-    assert redis.strings == {}, "a failed create must not leave a claim that blocks retries"
+    assert redis.docs == {}
+
+
+@pytest.mark.asyncio
+async def test_get_entity_strict_raises_where_default_returns_none():
+    """Contrast: the default swallows a read error; strict surfaces it."""
+    redis = FakeRedis()
+    redis.down = True
+    graph = AutoBotMemoryGraph()
+    graph._initialized = True
+    graph.redis_client = redis
+
+    assert await graph.get_entity(entity_id="x") is None
+    with pytest.raises(ConnectionError):
+        await graph.get_entity(entity_id="x", strict=True)
+    with pytest.raises(ConnectionError):
+        await graph.get_entity(entity_name="x", strict=True)
+
+
+@pytest.mark.asyncio
+async def test_delete_entity_drops_the_name_index():
+    from autobot_memory_graph import entity_upsert
+
+    redis = FakeRedis()
+    graph = _graph(redis)
+    entity, _ = await graph.get_or_create_entity("TASK", "Redis", [])
+    graph.get_entity = AsyncMock(return_value={**entity, "_resolution": "exact"})
+
+    async def delete_all(*keys):
+        for key in keys:
+            redis.strings.pop(key, None)
+            redis.docs.pop(key, None)
+        return 1
+
+    redis.delete = delete_all
+    assert await graph.delete_entity("Redis") is True
+
+    assert entity_upsert.name_index_key("Redis") not in redis.strings
+    graph.get_entity = AsyncMock(return_value=None)  # the entity is gone
+    _, created = await graph.get_or_create_entity("TASK", "Redis", [])
+    assert created is True
+
+
+@pytest.mark.asyncio
+async def test_delete_does_not_drop_an_index_that_points_elsewhere():
+    from autobot_memory_graph import entity_upsert
+
+    redis = FakeRedis()
+    graph = _graph(redis)
+    redis.strings[entity_upsert.name_index_key("Redis")] = "someone-else"
+    await entity_upsert.release_name(graph, "Redis", "mine")
+    assert redis.strings[entity_upsert.name_index_key("Redis")] == "someone-else"

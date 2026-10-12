@@ -95,6 +95,10 @@ _THE_REGISTRY = "autobot_shared/coordination/work_claims.py"
 #: old stale-entry check only fired when a file lost its LAST primitive, so
 #: going from two to one was invisible in both directions at once.
 _ALLOWED: dict[str, tuple[int, str]] = {
+    "autobot-backend/autobot_memory_graph/entity_upsert.py": (
+        1,
+        "#18417 — a dedup name index, not a work claim: SETNX adopts a pre-index entity so a name maps to one entity.",
+    ),
     "autobot-backend/events/channel_stream.py": (
         1,
         "#14815 — a watermark, not a lock: SETNX keeps the LOWEST broken event id for a channel.",
