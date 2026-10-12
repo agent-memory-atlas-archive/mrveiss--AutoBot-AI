@@ -228,7 +228,7 @@ def raise_db_error(error_code: str = "DB_0003", context: str | None = None) -> N
 # Direct raise helpers for common HTTP error patterns
 
 
-def raise_resource_not_found(resource_type: str, resource_id: str | None = None) -> None:
+def raise_not_found(resource_type: str, resource_id: str | None = None) -> None:
     """
     Raise 404 HTTPException for a missing resource.
 
@@ -240,8 +240,8 @@ def raise_resource_not_found(resource_type: str, resource_id: str | None = None)
         HTTPException: 404 with detail "<resource_type> not found[: <resource_id>]"
 
     Example:
-        raise_resource_not_found("Worker", worker_id)
-        raise_resource_not_found("File")
+        raise_not_found("Worker", worker_id)
+        raise_not_found("File")
     """
     detail = f"{resource_type} not found"
     if resource_id is not None:
@@ -292,7 +292,7 @@ def raise_invalid_input(field: str, reason: str = "invalid value") -> None:
     )
 
 
-def raise_internal_error_with_context(context: str = "") -> None:
+def raise_internal_error(context: str = "") -> None:
     """
     Raise 500 HTTPException for unexpected internal errors.
 
@@ -303,8 +303,8 @@ def raise_internal_error_with_context(context: str = "") -> None:
         HTTPException: 500 with detail "Internal server error[: <context>]"
 
     Example:
-        raise_internal_error_with_context("Failed to retrieve workers")
-        raise_internal_error_with_context()
+        raise_internal_error("Failed to retrieve workers")
+        raise_internal_error()
     """
     detail = f"Internal server error: {context}" if context else "Internal server error"
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail)
