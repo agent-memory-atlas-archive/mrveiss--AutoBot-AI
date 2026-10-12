@@ -16,6 +16,7 @@ import asyncio
 import hashlib
 import importlib.util
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -95,10 +96,13 @@ class _Remote:
         self.fail_scp = fail_scp
 
     async def __call__(self, cmd, timeout=60, stdin=None):
-        self.calls.append(list(cmd))
+        self.calls.append(list(cmd[4:] if cmd[0] == "/bin/sh" else cmd))
+        if cmd[0] == "/bin/sh":  # the scp child runs under `umask 077`
+            assert cmd[1:4] == ["-c", 'umask 077 && exec "$@"', "sh"]
+            cmd = cmd[4:]
         if cmd[0].endswith("scp"):
             if self.fail_scp:
-                return False, "connection reset"
+                return False, "alice@192.0.2.10:/var/lib/autobot/x: connection reset"
             await asyncio.to_thread(Path(cmd[-1]).write_bytes, PAYLOAD + (b"x" if self.corrupt_copy else b""))
             return True, ""
         remote = cmd[-1]
@@ -227,11 +231,11 @@ def test_the_slm_unit_renders_both_from_the_backend_role_variables():
 
 async def test_the_snapshot_runs_as_the_service_user_via_non_interactive_sudo(mods, service, monkeypatch):
     _, sb = mods
-    monkeypatch.setattr(sb, "SERVICE_USER", "svc user")
+    monkeypatch.setattr(sb, "SERVICE_USER", "svc-user")
     row, node = _Row(), _node(["backend"])
     assert (await sb.execute_secrets_backup(service, _DB(row), "bk1", node))[0]
     snapshot = service.remote.remote_commands()[1]
-    assert "sudo -n -u 'svc user' python3 -c " in snapshot
+    assert "sudo -n -u svc-user python3 -c " in snapshot
     assert snapshot.rstrip().endswith(f"> {STAGING}/snapshot.db")
 
 
@@ -276,3 +280,163 @@ def test_a_typod_timeout_env_does_not_stop_the_module_loading(monkeypatch):
     monkeypatch.setenv("SLM_SECRETS_BACKUP_REMOVE_TIMEOUT_S", "-4")
     module = _load("_real_secrets_snapshot_typo_18281", "services/secrets_store_snapshot.py")
     assert module.SNAPSHOT_TIMEOUT_S == 300 and module.REMOVE_TIMEOUT_S == 5
+
+
+@pytest.mark.parametrize("name", ["autobot", "_svc", "svc-1_x", "svc$"])
+def test_valid_service_users(mods, name):
+    assert mods[1].valid_service_user(name)
+
+
+@pytest.mark.parametrize("name", ["", "-n", "-u root", "Root", "a b", "a;b", "a" * 33, "1abc", "$x", "a$b"])
+def test_invalid_service_users(mods, name):
+    assert not mods[1].valid_service_user(name)
+
+
+async def test_an_invalid_service_user_refuses_before_any_ssh(mods, service, monkeypatch):
+    _, sb = mods
+    monkeypatch.setattr(sb, "SERVICE_USER", "-n")
+    row = _Row()
+    ok, message = await sb.execute_secrets_backup(service, _DB(row), "bk1", _node(["backend"]))
+    assert not ok and "not a valid account name" in message and row.status == "failed"
+    assert service.remote.calls == []
+
+
+async def test_the_row_and_logs_never_carry_the_remote_location(mods, service, caplog):
+    _, sb = mods
+    service.remote.fail_scp = True
+    row = _Row()
+    with caplog.at_level("DEBUG"):
+        await sb.execute_secrets_backup(service, _DB(row), "bk1", _node(["backend"]))
+    assert row.error == "Secrets backup failed: scp failed"
+    for leaked in ("192.0.2.10", "alice@", "/var/lib/autobot"):
+        assert leaked not in row.error and leaked not in caplog.text
+
+
+async def test_the_scp_child_runs_under_a_private_umask(mods, service):
+    _, sb = mods
+    seen = []
+    inner = service._run_command
+
+    async def spy(cmd, timeout=60, stdin=None):
+        seen.append(list(cmd))
+        return await inner(cmd, timeout, stdin)
+
+    service._run_command = spy
+    await sb.execute_secrets_backup(service, _DB(_Row()), "bk1", _node(["backend"]))
+    wrapped = [c for c in seen if c[0] == "/bin/sh"]
+    assert len(wrapped) == 1 and wrapped[0][4].endswith("scp")
+
+
+class _RetentionDB:
+    """Serves _run_backup's three reads in order: the backup row, its node, then the completed rows."""
+
+    def __init__(self, row, node, old):
+        self.answers = [[row], [node], old]
+        self.deleted = []
+
+    async def execute(self, _q):
+        rows = self.answers.pop(0)
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: rows[0] if rows else None, scalars=lambda: SimpleNamespace(all=lambda: rows)
+        )
+
+    async def delete(self, obj):
+        self.deleted.append(obj)
+
+    async def commit(self):
+        return None
+
+
+class _Session:
+    def __init__(self, db):
+        self.db = db
+
+    async def __aenter__(self):
+        return self.db
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _old_backups(mods, tmp_path, service_type):
+    files = []
+    rows = []
+    for i in range(14):
+        f = tmp_path / f"old{i}.bin"
+        f.write_bytes(b"x")
+        files.append(f)
+        rows.append(
+            SimpleNamespace(
+                backup_id=f"old{i}",
+                node_id="n1",
+                service_type=service_type,
+                status="completed",
+                backup_path=str(f),
+                created_at=datetime(2020, 1, 1 + i, tzinfo=timezone.utc),
+            )
+        )
+    return files, rows
+
+
+def _real_run_backup(namespace: dict):
+    """Compile api/stateful.py's own ``_run_backup`` against *namespace* (the module itself needs the full app)."""
+    import ast
+    import logging
+
+    tree = ast.parse((ROOT / "api" / "stateful.py").read_text(encoding="utf-8"))
+    fn = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "_run_backup")
+    chain = SimpleNamespace(where=lambda *a: None)
+    base = {
+        "select": lambda *a: chain,
+        "Backup": SimpleNamespace(backup_id=None, node_id=None),
+        "Node": SimpleNamespace(node_id=None),
+        "logger": logging.getLogger("stateful-test"),
+        "datetime": datetime,
+        "timezone": timezone,
+    }
+    scope = {**base, **namespace}
+    exec(compile(ast.Module([fn], []), "stateful_run_backup", "exec"), scope)
+    return scope["_run_backup"]
+
+
+async def _run_through_stateful(mods, monkeypatch, tmp_path, service_type, kind):
+    backup, _ = mods
+    enums = _load("_real_enums_ret_18281", "status_enums.py")
+    svc = backup.BackupService.__new__(backup.BackupService)
+    files, old = _old_backups(mods, tmp_path, kind)
+    row = SimpleNamespace(backup_id="new", node_id="n1", service_type=kind, status="completed")
+
+    async def ran(db, backup_id, node):
+        return True, "ok"
+
+    svc.execute_redis_backup = ran
+    monkeypatch.setitem(sys.modules, "services.backup", SimpleNamespace(backup_service=svc))
+    db = _RetentionDB(row, _node(["backend"]), old)
+    session = SimpleNamespace(session=lambda: _Session(db))
+    monkeypatch.setitem(sys.modules, "services.database", SimpleNamespace(db_service=session))
+    monkeypatch.setattr(backup.settings, "backup_retention_count", 10, raising=False)
+    monkeypatch.setattr(backup.settings, "backup_retention_days", 30, raising=False)
+    run = _real_run_backup(
+        {
+            "BackupStatus": enums.BackupStatus,
+            "BackupServiceType": enums.BackupServiceType,
+            "secrets_runner": lambda _svc: ran,
+        }
+    )
+    await run("new", "192.0.2.10", getattr(enums.BackupServiceType, kind.upper()))
+    return files, db
+
+
+async def test_a_secrets_run_deletes_nothing_that_already_exists(mods, monkeypatch, tmp_path):
+    files, db = await _run_through_stateful(mods, monkeypatch, tmp_path, None, "secrets")
+    assert db.deleted == [] and all(f.exists() for f in files)
+
+
+async def test_a_redis_run_still_prunes_as_before(mods, monkeypatch, tmp_path):
+    files, db = await _run_through_stateful(mods, monkeypatch, tmp_path, None, "redis")
+    assert len(db.deleted) == 14 and not any(f.exists() for f in files)
+
+
+def test_the_retention_skip_is_in_the_dispatch():
+    source = (ROOT / "api" / "stateful.py").read_text(encoding="utf-8")
+    assert "elif service_type is not BackupServiceType.SECRETS:" in source

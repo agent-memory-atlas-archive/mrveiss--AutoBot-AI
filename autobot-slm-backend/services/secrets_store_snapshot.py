@@ -26,9 +26,11 @@ must carry a backend role.
 from __future__ import annotations
 
 import asyncio
+import copy
 import functools
 import logging
 import os
+import re
 import shlex
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,6 +65,9 @@ CHECKSUM_TIMEOUT_S = env_utils.env_int_clamped("SLM_SECRETS_BACKUP_CHECKSUM_TIME
 STAGED_NAME = "snapshot.db"
 STAGING_PREFIX = "slm-secrets-"
 
+#: A POSIX account name (no leading "-", which sudo would read as an option); at most 32 characters.
+_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*[$]?$")
+USERNAME_MAX_LEN = 32
 NO_BACKEND_NODE = "no registered backend node: the secrets store lives on a node with the backend role"
 
 # Run with: python3 -c <script> <source>, as the backend service user (the data directory is 0750 to
@@ -128,7 +133,7 @@ async def _make_staging_dir(service: "BackupService", node: "Node") -> str:
     ok, out = await service._run_command(cmd, timeout=REMOVE_TIMEOUT_S)
     path = out.strip()
     if not ok or "\n" in path or not path.startswith(STAGING_DIR.rstrip("/") + "/"):
-        raise RuntimeError(f"could not create a staging directory on the node: {out.strip()[:200]}")
+        raise RuntimeError("could not create a staging directory on the node")
     return path
 
 
@@ -152,18 +157,40 @@ async def _remote_sha256(service: "BackupService", node: "Node", path: str) -> s
     return digest or None
 
 
+def _private_copy(service: "BackupService") -> "BackupService":
+    """A copy of *service* whose scp child runs under ``umask 077``, so the file lands owner-only.
+
+    Child-only (not ``os.umask`` and not a unit-wide ``UMask=``): the SLM writes other files that
+    other accounts may need to read, and a process umask is shared with every concurrent task.
+    """
+    private = copy.copy(service)
+
+    async def _run(cmd: list, timeout: int = 60, stdin: bytes | None = None):
+        return await service._run_command(["/bin/sh", "-c", 'umask 077 && exec "$@"', "sh", *cmd], timeout, stdin)
+
+    private._run_command = _run
+    return private
+
+
+def valid_service_user(name: str) -> bool:
+    """Whether *name* is a safe POSIX account name to hand to ``sudo -u``."""
+    return len(name) <= USERNAME_MAX_LEN and bool(_USERNAME_RE.match(name))
+
+
 async def _fetch_verified(service: "BackupService", node: "Node", backup_id: str, remote: str) -> Tuple[Path, str]:
     """Copy the staged snapshot to SLM storage; return (path, sha256), raising on any mismatch."""
     host, user, port = node.ip_address, node.ssh_user or "autobot", node.ssh_port or 22
     remote_sum = await _remote_sha256(service, node, remote)
-    ok, path, err = await service._copy_backup_to_storage(host, user, port, remote, backup_id, suffix=STORED_SUFFIX)
+    ok, path, _ = await _private_copy(service)._copy_backup_to_storage(
+        host, user, port, remote, backup_id, suffix=STORED_SUFFIX
+    )
     try:
-        if not ok:
-            raise RuntimeError(f"copy to SLM storage failed: {err}")
+        if not ok:  # the scp output names user@host:path; keep it out of the row and the logs
+            raise RuntimeError("scp failed")
         path.chmod(0o600)  # before anything else can fail: ciphertext is owner-only from the moment it lands
         local_sum = await service._calculate_checksum(path)
         if not local_sum or local_sum != remote_sum:
-            raise RuntimeError("checksum of the copied snapshot does not match the node's")
+            raise RuntimeError("checksum mismatch")
     except BaseException:
         path.unlink(missing_ok=True)  # an unverified file with no row would never be pruned by retention
         raise
@@ -178,7 +205,7 @@ async def _snapshot(service: "BackupService", node: "Node", remote: str) -> None
     )
     ok, out = await service._run_command(cmd, timeout=SNAPSHOT_TIMEOUT_S)
     if not ok:
-        raise RuntimeError(f"snapshot failed: {out.strip()[:200]}")
+        raise RuntimeError("snapshot failed on the node")
 
 
 async def execute_secrets_backup(
@@ -190,6 +217,8 @@ async def execute_secrets_backup(
         return False, "Backup not found"
     if not is_backend_node(node):
         return await service._fail_backup(db, backup, NO_BACKEND_NODE)
+    if not valid_service_user(SERVICE_USER):
+        return await service._fail_backup(db, backup, "SLM_BACKEND_SERVICE_USER is not a valid account name")
     staging = None
     try:
         staging = await _make_staging_dir(service, node)

@@ -556,10 +556,9 @@ async def _run_backup(backup_id: str, host: str, service_type: BackupServiceType
             success, message = await runner(db, backup_id, node)
             if not success:
                 logger.error("Backup %s failed: %s", backup_id, message)
-            else:
-                # #13307: prune here rather than on a timer — a new good backup
-                # is the only moment it is safe to drop an old one, and it keeps
-                # retention working without a scheduler this service does not have.
+            elif service_type is not BackupServiceType.SECRETS:
+                # #13307: prune on a good backup (no scheduler here). Never SECRETS: no agent deletes stored
+                # credential data on its own (#17038); pruning those is an approval-queue proposal.
                 await backup_service.apply_retention(db, backup.node_id, service_type.value)
         else:
             # For unsupported service types, mark as failed
