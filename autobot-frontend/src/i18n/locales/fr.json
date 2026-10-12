@@ -763,7 +763,8 @@
       "files": "Fichiers",
       "terminal": "Terminal",
       "browser": "Navigateur",
-      "novnc": "Bureau à distance"
+      "novnc": "Bureau à distance",
+      "ariaLabel": "Sections du chat"
     }
   },
   "settings": {

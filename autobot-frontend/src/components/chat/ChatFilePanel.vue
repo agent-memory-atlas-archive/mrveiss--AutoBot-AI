@@ -1,5 +1,11 @@
 <template>
-  <div class="chat-file-panel h-full flex flex-col bg-autobot-bg-card border-l border-autobot-border">
+  <div
+    class="chat-file-panel h-full flex flex-col bg-autobot-bg-card border-l border-autobot-border"
+    role="complementary"
+    :aria-label="$t('chat.filePanel.title')"
+    tabindex="-1"
+    @keydown.escape.self="$emit('close')"
+  >
     <!-- Header -->
     <div class="flex items-center justify-between p-3 border-b border-autobot-border shrink-0">
       <div class="flex items-center gap-2">

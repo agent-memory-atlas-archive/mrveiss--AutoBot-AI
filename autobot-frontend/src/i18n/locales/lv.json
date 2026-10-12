@@ -763,7 +763,8 @@
       "files": "Faili",
       "terminal": "Terminālis",
       "browser": "Pārlūks",
-      "novnc": "Attālā darbvirsma"
+      "novnc": "Attālā darbvirsma",
+      "ariaLabel": "Tērzēšanas sadaļas"
     }
   },
   "settings": {

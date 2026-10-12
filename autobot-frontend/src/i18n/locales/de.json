@@ -763,7 +763,8 @@
       "files": "Dateien",
       "terminal": "Terminal",
       "browser": "Browser",
-      "novnc": "Remotedesktop"
+      "novnc": "Remotedesktop",
+      "ariaLabel": "Chat-Bereiche"
     }
   },
   "settings": {
