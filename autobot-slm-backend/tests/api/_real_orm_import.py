@@ -132,6 +132,7 @@ def import_modules_with_real_orm(import_names: tuple, path_loaded: dict | None =
     touched = tuple(path_loaded) + tuple(import_names)
     saved = {name: sys.modules.get(name) for name in touched}
     bindings = _parent_bindings(touched)
+    before = set(sys.modules)
     try:
         with real_modules_swapped():
             loaded = [load_real_module(name, path) for name, path in path_loaded.items()]
@@ -145,7 +146,24 @@ def import_modules_with_real_orm(import_names: tuple, path_loaded: dict | None =
                 sys.modules[name] = mod
             else:
                 sys.modules.pop(name, None)
+        _drop_modules_first_imported_since(before)
         _restore_parent_bindings(bindings)
+
+
+def _drop_modules_first_imported_since(before: set) -> None:
+    """Remove every module the swap imported that was not loaded beforehand, and its parent attribute.
+
+    Loading e.g. ``services.post_sync_recorder`` transitively imports real submodules
+    (``models.post_sync_schemas``, ``services.post_sync_*``...). Left in ``sys.modules`` they
+    give a later stub-installing test an inconsistent ``models`` package (#17455: it broke
+    test_colocated_managed_update_11605 at collection). Callers keep their returned references.
+    """
+    for name in [n for n in sys.modules if n not in before]:
+        mod = sys.modules.pop(name)
+        parent_name, _, attr = name.rpartition(".")
+        parent = sys.modules.get(parent_name) if parent_name else None
+        if parent is not None and getattr(parent, "__dict__", {}).get(attr) is mod:
+            delattr(parent, attr)
 
 
 _UNBOUND = object()
