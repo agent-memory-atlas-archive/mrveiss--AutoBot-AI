@@ -109,6 +109,12 @@ from knowledge.schemas.stats import (
     KnowledgeMainCategoriesResponse,
     KnowledgeStatsBasic,
 )
+from knowledge.upload_rejections import (
+    UploadRejection,
+    UploadRejectionCode,
+    extract_within_deadline,
+)
+from knowledge.upload_rejections import no_text_rejection as _no_text_rejection
 
 # NOTE: Pydantic models moved to knowledge_maintenance.py (Issue #185 - split oversized files)
 # NOTE: Tag-related models moved to knowledge_tags.py
@@ -834,22 +840,25 @@ def _validate_file_upload(filename: str, file_size: int) -> None:
 
     # Check file size
     if file_size > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE_MB}MB",
+        raise UploadRejection(
+            UploadRejectionCode.TOO_LARGE,
+            f"File too large. Maximum size is {MAX_FILE_SIZE_MB}MB",
+            max_mb=MAX_FILE_SIZE_MB,
         )
 
     # Check extension
     ext = os.path.splitext(filename.lower())[1]
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
+        allowed = sorted(ALLOWED_EXTENSIONS)
+        raise UploadRejection(
+            UploadRejectionCode.UNSUPPORTED_TYPE,
+            f"File type not allowed. Allowed: {', '.join(allowed)}",
+            allowed=allowed,
         )
 
     # Check for path traversal
     if contains_path_traversal(filename):
-        raise HTTPException(status_code=400, detail="Invalid filename")
+        raise UploadRejection(UploadRejectionCode.INVALID_FILENAME, "Invalid filename")
 
 
 @router.post("/facts", response_model=AddFactResponse)
@@ -1018,7 +1027,7 @@ def _extract_pdf_document(filename: str, file_content: bytes) -> "ExtractedDocum
     Issue #620. Returns the structured :class:`ExtractedDocument` rather than
     its flattened text so the caller can consult ``has_usable_text_layer``
     instead of a ``.strip()`` check a page-number-stamped scan would pass
-    (#13884) — and so ``_no_text_detail`` can reuse this parse instead of
+    (#13884) — and so ``_no_text_rejection`` can reuse this parse instead of
     running a second one (#13884 review).
 
     Args:
@@ -1037,10 +1046,12 @@ def _extract_pdf_document(filename: str, file_content: bytes) -> "ExtractedDocum
         return extract_pdf(file_content)
     except DocumentDependencyError as e:
         logger.error("PDF support unavailable for %s: %s", filename, e)
-        raise HTTPException(status_code=400, detail="PDF support requires pypdf library")
+        raise UploadRejection(
+            UploadRejectionCode.PARSER_UNAVAILABLE, "PDF support requires pypdf library", library="pypdf"
+        )
     except DocumentExtractionError as e:
         logger.error("PDF parse error for %s: %s", filename, e)
-        raise HTTPException(status_code=400, detail="Failed to parse PDF file")
+        raise UploadRejection(UploadRejectionCode.PARSE_FAILED, "Failed to parse PDF file", format="pdf")
 
 
 def _extract_docx_document(filename: str, file_content: bytes) -> "ExtractedDocument":
@@ -1067,10 +1078,12 @@ def _extract_docx_document(filename: str, file_content: bytes) -> "ExtractedDocu
         return extract_docx(file_content)
     except DocumentDependencyError as e:
         logger.error("DOCX support unavailable for %s: %s", filename, e)
-        raise HTTPException(status_code=400, detail="DOCX support requires python-docx library")
+        raise UploadRejection(
+            UploadRejectionCode.PARSER_UNAVAILABLE, "DOCX support requires python-docx library", library="python-docx"
+        )
     except DocumentExtractionError as e:
         logger.error("DOCX parse error for %s: %s", filename, e)
-        raise HTTPException(status_code=400, detail="Failed to parse DOCX file")
+        raise UploadRejection(UploadRejectionCode.PARSE_FAILED, "Failed to parse DOCX file", format="docx")
 
 
 def _extract_file_content(filename: str, file_content: bytes) -> "tuple[str, ExtractedDocument | None]":
@@ -1175,31 +1188,6 @@ def _page_provenance_metadata(extracted: "ExtractedDocument | None") -> dict:
     }
 
 
-def _no_text_detail(extracted: "ExtractedDocument | None") -> str:
-    """Explain *why* no text was extracted, not merely that none was (#13884).
-
-    Consumes the extraction ``_extract_file_content`` already performed
-    instead of re-parsing the file: a second ``extract_pdf`` call doubled
-    parse cost on a user-triggerable path and used a different dispatch route
-    (magic-byte sniffing) than the extension-based one above it, which could
-    disagree with it.
-
-    A paginated document that parsed cleanly but carries no text layer is a
-    scan; telling the user that is the difference between "try OCR" and "try
-    another file". A DOCX or a non-document format gets the generic message —
-    OCR is not the fix for an empty markdown file.
-    """
-    if extracted is None or extracted.format != "pdf":
-        return "No text content could be extracted from file"
-
-    if extracted.page_count:
-        return (
-            f"No text layer found in any of the {extracted.page_count} page(s). "
-            "The document appears to be scanned or image-only and needs OCR."
-        )
-    return "No text content could be extracted from file"
-
-
 def _parse_upload_tags(tags_str) -> list:
     """Parse and validate tags from upload form."""
     try:
@@ -1242,7 +1230,7 @@ async def upload_file_to_knowledge(
     form = await req.form()
     file = form.get("file")
     if not file or not hasattr(file, "read"):
-        raise HTTPException(status_code=400, detail="File is required")
+        raise UploadRejection(UploadRejectionCode.FILE_REQUIRED, "File is required")
 
     # Get filename and sanitize (Issue #549 Code Review: Security)
     filename = os.path.basename(getattr(file, "filename", "unknown"))
@@ -1255,34 +1243,12 @@ async def upload_file_to_knowledge(
     category = form.get("category", "uploads")
     tags = _parse_upload_tags(form.get("tags", "[]"))
 
-    # #14754: _extract_file_content does blocking CPU work — PDF parsing plus pdfplumber layout analysis on every page
-    # — and this handler is async, so a large upload held the worker's event loop for the whole extraction and stalled
-    # every other coroutine on it, health endpoints included.
-    from media.document.ocr import extraction_timeout
-
-    _deadline = extraction_timeout()
-    try:
-        content, extracted_doc = await asyncio.wait_for(
-            asyncio.to_thread(_extract_file_content, filename, file_content),
-            timeout=_deadline,
-        )
-    except asyncio.TimeoutError:
-        # The deadline is what makes the offload safe: to_thread frees the loop but the default executor's slots are
-        # process-wide and shared with the OCR path, so an extraction that never returns holds one indefinitely.
-        # Reported as a rejected upload rather than left to hang (#14754).
-        logger.warning("Extraction of %s exceeded %ss", filename, _deadline)
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Could not read {filename!r} within {_deadline}s. The document may be "
-                "unusually large or complex; try splitting it."
-            ),
-        )
+    content, extracted_doc = await extract_within_deadline(_extract_file_content, filename, file_content)
     if not _has_usable_content(content, extracted_doc):
         # #13884: distinguish "we could not read it" from "it is empty". A scanned
         # PDF parses fine and yields nothing, and a generic message left the user
         # with no way to tell that OCR — not a different file — is what is needed.
-        raise HTTPException(status_code=400, detail=_no_text_detail(extracted_doc))
+        raise _no_text_rejection(extracted_doc)
 
     # Issue #5064: sanitize against prompt injection; #13708: also the redact_content chokepoint,
     # since this endpoint's own extraction path skips content_extraction.py's redacted wrappers.

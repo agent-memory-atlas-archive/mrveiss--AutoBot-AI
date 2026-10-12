@@ -536,3 +536,30 @@ register_env_var(
         component="knowledge",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_KB_CHUNK_MAX_TOKENS",
+        type=int,
+        default=800,
+        description=(
+            "Token budget (~4 chars per token) per stored chunk when KnowledgeBase.add_document "
+            "splits a long document; read by knowledge/document_ingest.py (#17830)."
+        ),
+        component="knowledge",
+        range=(50, 100000),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_KB_INGEST_RECORD_TTL_SECONDS",
+        type=int,
+        default=2592000,
+        description=(
+            "Seconds a per-document ingest status record (success/partial/timeout) is kept so a "
+            "retry can resume after the last stored chunk; read by knowledge/document_ingest.py (#17986)."
+        ),
+        component="knowledge",
+    )
+)
