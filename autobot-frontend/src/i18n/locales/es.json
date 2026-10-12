@@ -763,7 +763,8 @@
       "files": "Archivos",
       "terminal": "Terminal",
       "browser": "Navegador",
-      "novnc": "Escritorio remoto"
+      "novnc": "Escritorio remoto",
+      "ariaLabel": "Secciones del chat"
     }
   },
   "settings": {

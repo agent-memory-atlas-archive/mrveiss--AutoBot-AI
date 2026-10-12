@@ -5840,7 +5840,8 @@
       "files": "קבצים",
       "terminal": "טרמינל",
       "browser": "דפדפן",
-      "novnc": "שולחן עבודה מרוחק"
+      "novnc": "שולחן עבודה מרוחק",
+      "ariaLabel": "מקטעי הצ׳אט"
     }
   },
   "serviceMessages": {

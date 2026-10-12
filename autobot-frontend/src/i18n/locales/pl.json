@@ -763,7 +763,8 @@
       "files": "Pliki",
       "terminal": "Terminal",
       "browser": "Przeglądarka",
-      "novnc": "Pulpit zdalny"
+      "novnc": "Pulpit zdalny",
+      "ariaLabel": "Sekcje czatu"
     }
   },
   "settings": {

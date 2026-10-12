@@ -5840,7 +5840,8 @@
       "files": "فائلیں",
       "terminal": "ٹرمینل",
       "browser": "براؤزر",
-      "novnc": "ریموٹ ڈیسک ٹاپ"
+      "novnc": "ریموٹ ڈیسک ٹاپ",
+      "ariaLabel": "چیٹ کے حصے"
     }
   },
   "serviceMessages": {

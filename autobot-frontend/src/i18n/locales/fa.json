@@ -5840,7 +5840,8 @@
       "files": "پرونده‌ها",
       "terminal": "پایانه",
       "browser": "مرورگر",
-      "novnc": "میزکار راه دور"
+      "novnc": "میزکار راه دور",
+      "ariaLabel": "بخش‌های گفتگو"
     }
   },
   "serviceMessages": {
