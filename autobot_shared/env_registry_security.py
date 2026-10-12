@@ -62,3 +62,60 @@ register_env_var(
         component="security",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_INGEST_RATE_LIMIT",
+        type=int,
+        default=120,
+        description=(
+            "Requests per client address per minute accepted by the anonymous RUM ingest "
+            "routes, /api/rum/event and /api/rum/metrics (#16375). Over it the caller gets 429 "
+            "and nothing is written."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_EVENT_MAX_BYTES",
+        type=int,
+        default=16384,
+        description="Largest request body /api/rum/event accepts; larger is refused with 413 (#16375).",
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_METRICS_MAX_BYTES",
+        type=int,
+        default=65536,
+        description="Largest request body /api/rum/metrics accepts; larger is refused with 413 (#16375).",
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_MAX_EVENTS",
+        type=int,
+        default=5000,
+        description="RUM events held in memory; the oldest is dropped as each new one arrives (#16375).",
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RUM_MAX_SESSIONS",
+        type=int,
+        default=1000,
+        description=(
+            "RUM session tallies held in memory (#16375). An anonymous caller mints a session id "
+            "per request at will, so the table is capped and the oldest session is evicted."
+        ),
+        component="security",
+    )
+)
