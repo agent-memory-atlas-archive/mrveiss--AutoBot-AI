@@ -211,9 +211,10 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("autobot-backend/task_handlers/knowledge_base_handlers.py", "KBSearchHandler.execute"): _T2,
     ("autobot-backend/tools/tool_registry.py", "ToolRegistry.get_fact"): _T2,
     ("autobot-backend/tools/tool_registry.py", "ToolRegistry.search_knowledge_base"): _T2,
-    ("autobot-backend/utils/hybrid_search.py", "HybridSearchEngine._fallback_semantic_search"): _T2,
-    ("autobot-backend/utils/hybrid_search.py", "HybridSearchEngine.explain_search"): _T2,
-    ("autobot-backend/utils/hybrid_search.py", "HybridSearchEngine.search"): _T2,
+    (
+        "autobot-backend/utils/system_validator.py",
+        "SystemValidator.validate_hybrid_search",
+    ): "NOT_USER_FACING: a health check that only times a probe query",
     (
         "autobot-backend/utils/system_validator.py",
         "SystemValidator._validate_kb_integration",

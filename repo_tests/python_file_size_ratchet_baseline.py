@@ -154,7 +154,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/auth_middleware.py": 1088,  # #16457: bearer parsing moved to websocket_subprotocol.py
     "autobot-backend/autobot_memory_graph/property_graph.py": 630,
     "autobot-backend/autobot_memory_graph/relations.py": 641,
-    "autobot-backend/autobot_memory_graph/semantic_search.py": 716,
+    "autobot-backend/autobot_memory_graph/semantic_search.py": 706,
     "autobot-backend/benchmarks/benchmark_belief_state.py": 742,
     "autobot-backend/chat_history/context_overflow.py": 845,
     "autobot-backend/chat_history/session.py": 939,
@@ -425,7 +425,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/utils/performance_monitoring/monitor.py": 718,
     "autobot-backend/utils/request_batcher.py": 752,
     "autobot-backend/utils/service_discovery.py": 677,
-    "autobot-backend/utils/system_validator.py": 1415,
+    "autobot-backend/utils/system_validator.py": 1349,
     "autobot-backend/utils/task_queue.py": 890,
     "autobot-backend/utils/timeout_migration_examples.py": 1024,
     "autobot-backend/utils/todowrite_optimizer.py": 806,
