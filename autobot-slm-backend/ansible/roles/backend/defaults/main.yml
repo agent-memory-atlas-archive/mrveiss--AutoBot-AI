@@ -113,6 +113,10 @@ backend_cors_origins: "*"
 # Internal API key shared with SLM backend for proxy authentication (#1779, #3512).
 # REQUIRED for personality and voice proxies — set via Ansible Vault or inventory.
 autobot_internal_api_key: ""
+# #16375: read-only token Prometheus presents to /api/metrics/prometheus. Its home
+# is the SLM secret store (`prometheus_scrape_token`, delivered as an extra var by
+# fetch_deploy_secrets); never set a literal here. Empty refuses every scrape.
+backend_prometheus_scrape_token: "{{ prometheus_scrape_token | default('') }}"
 
 # #14758: root key for the canonical envelope secret store. Read back from
 # slm-secrets.env at deploy time so the backend and the SLM derive the same vault
