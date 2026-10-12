@@ -455,7 +455,11 @@ class TriggerService:
         return hmac.compare_digest(expected_sig, signature)
 
     def invalid_schedules(self) -> Dict[str, str]:
-        """Cron triggers skipped as invalid, as ``{trigger_id: error_code}``."""
+        """Cron triggers skipped as invalid, as ``{trigger_id: error_code}``.
+
+        Per-process state: rebuilt from the stored crons each time the service starts,
+        never persisted.
+        """
         return dict(self._invalid_schedules)
 
     def serialise_triggers(self, triggers: List[TriggerDefinition]) -> List[Dict[str, Any]]:
@@ -516,6 +520,20 @@ class TriggerService:
     # Background loops
     # ------------------------------------------------------------------
 
+    def _next_run_or_flag_invalid(self, trigger_id: str, expression: str, now: datetime) -> datetime | None:
+        """Next fire time, or None after flagging the trigger invalid.
+
+        Only the cron computation is guarded: a ValueError from anywhere else in the
+        loop (a workflow launch, say) is not a schedule problem and must not be
+        labelled one. The flag is per-process, rebuilt from the stored crons at start.
+        """
+        try:
+            return next_cron_run(expression, after=now)
+        except ValueError as exc:
+            self._invalid_schedules[trigger_id] = INVALID_CRON_ERROR_CODE
+            logger.warning("Trigger %s stopped: %s (%s)", trigger_id, exc, INVALID_CRON_ERROR_CODE)
+            return None
+
     async def _cron_loop(self, tdef: TriggerDefinition) -> None:
         """Sleep until next cron run, fire, repeat."""
         expression: str = tdef.config.get("cron_expression", "")
@@ -524,7 +542,9 @@ class TriggerService:
         while True:
             try:
                 now = now_utc()
-                next_run = next_cron_run(expression, after=now)
+                next_run = self._next_run_or_flag_invalid(tdef.id, expression, now)
+                if next_run is None:
+                    return
                 delay = (next_run - now).total_seconds()
                 logger.debug(
                     "Cron trigger %s: next run in %.1fs at %s",
@@ -545,15 +565,6 @@ class TriggerService:
 
             except asyncio.CancelledError:
                 logger.info("Cron loop cancelled: trigger=%s", tdef.id)
-                return
-            except ValueError as exc:
-                self._invalid_schedules[tdef.id] = INVALID_CRON_ERROR_CODE
-                logger.warning(
-                    "Trigger %s stopped: %s (%s)",
-                    tdef.id,
-                    exc,
-                    INVALID_CRON_ERROR_CODE,
-                )
                 return
             except Exception:
                 logger.exception("Cron loop error for trigger %s (continuing)", tdef.id)

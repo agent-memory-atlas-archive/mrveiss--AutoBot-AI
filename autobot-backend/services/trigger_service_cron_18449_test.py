@@ -26,6 +26,17 @@ def test_every_expression_the_validator_accepts_has_a_next_run():
         assert next_cron_run(expr, after=BASE) > BASE
 
 
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("*/5 * * * *", datetime(2026, 10, 12, 12, 5, tzinfo=timezone.utc)),
+        ("0 9 * * 1-5", datetime(2026, 10, 13, 9, 0, tzinfo=timezone.utc)),
+    ],
+)
+def test_common_expressions_have_the_expected_next_run(expression, expected):
+    assert next_cron_run(expression, after=BASE) == expected
+
+
 def test_day_names_now_schedule():
     assert next_cron_run("0 9 * * MON", after=BASE) == datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)
 
@@ -125,3 +136,30 @@ def test_list_serialisation_surfaces_the_schedule_error():
     }
     assert by_id["bad"]["schedule_error"] == "schedule.invalid_cron"
     assert "schedule_error" not in by_id["ok"]
+
+
+@pytest.mark.asyncio
+async def test_a_value_error_from_the_workflow_launch_is_not_a_schedule_error(monkeypatch):
+    """Only the cron computation may flag a trigger; a launch failure keeps the loop alive."""
+    svc = TriggerService()
+    tdef = _cron_def("launch-fails", "*/5 * * * *")
+    calls = {"n": 0}
+
+    async def _load(_id):
+        return tdef
+
+    async def _launch(_tdef, _payload):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("workflow rejected the payload")
+        raise asyncio.CancelledError
+
+    async def _no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(svc, "_load_trigger", _load)
+    monkeypatch.setattr(svc, "_launch_workflow", _launch)
+    monkeypatch.setattr(trigger_service.asyncio, "sleep", _no_sleep)
+    await asyncio.wait_for(svc._cron_loop(tdef), timeout=5)
+    assert calls["n"] == 2  # survived the ValueError and fired again
+    assert svc.invalid_schedules() == {}
