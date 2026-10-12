@@ -43,7 +43,11 @@ class VideoGenerationPlugin(BasePlugin):
         self._logger.info("VideoGenerationPlugin: initializing")
 
         set_credential_resolver(self.credential_resolver)
-        usable = [self._key_usable(name) for name in ("RUNWAY_API_KEY", "SORA_API_KEY", "KLING_API_KEY")]
+        usable = [
+            self._key_usable("RUNWAY_API_KEY"),
+            self._key_usable("SORA_API_KEY"),
+            self._key_usable("KLING_API_KEY"),
+        ]
 
         if not any(usable):
             self._logger.warning(

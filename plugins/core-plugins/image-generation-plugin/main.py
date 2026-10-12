@@ -42,7 +42,11 @@ class ImageGenerationPlugin(BasePlugin):
         self._logger.info("ImageGenerationPlugin: initializing")
 
         set_credential_resolver(self.credential_resolver)
-        usable = [self._key_usable(name) for name in ("OPENAI_API_KEY", "FLUX_API_KEY", "STABILITY_API_KEY")]
+        usable = [
+            self._key_usable("OPENAI_API_KEY"),
+            self._key_usable("FLUX_API_KEY"),
+            self._key_usable("STABILITY_API_KEY"),
+        ]
 
         if not any(usable):
             self._logger.warning(
