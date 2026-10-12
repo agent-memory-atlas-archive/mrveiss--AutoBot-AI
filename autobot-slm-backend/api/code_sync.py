@@ -61,6 +61,7 @@ from api.venv_reconcile import (
     refuse_explicit_list,
 )
 from autobot_shared.async_compat import fire_and_forget
+from autobot_shared.cron_expression import validate_cron_expression
 from autobot_shared.db_url import assemble_postgres_url
 from autobot_shared.env_utils import env_float, env_int, env_int_clamped
 from autobot_shared.secret_redaction import redact_mapping
@@ -3918,17 +3919,6 @@ async def notify_code_version(
 # =============================================================================
 
 
-def _validate_cron_expression(expression: str) -> bool:
-    """Validate a cron expression using croniter."""
-    try:
-        from croniter import croniter
-
-        croniter(expression)
-        return True
-    except (ValueError, KeyError):
-        return False
-
-
 def _calculate_next_run(expression: str, base: datetime = None) -> datetime:
     """Calculate next run time from cron expression."""
     from croniter import croniter
@@ -3964,7 +3954,7 @@ async def create_schedule(
     Requires admin role.
     """
     # Validate cron expression
-    if not _validate_cron_expression(schedule.cron_expression):
+    if not validate_cron_expression(schedule.cron_expression):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid cron expression",
@@ -4043,7 +4033,7 @@ async def update_schedule(
 
     # Validate cron expression if provided
     if update.cron_expression is not None:
-        if not _validate_cron_expression(update.cron_expression):
+        if not validate_cron_expression(update.cron_expression):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid cron expression",

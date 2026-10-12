@@ -371,7 +371,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/slm_client_test.py": 659,
     "autobot-backend/services/temporal_invalidation_service.py": 997,
     "autobot-backend/services/tool_output_filter.py": 639,
-    "autobot-backend/services/trigger_service.py": 978,
+    "autobot-backend/services/trigger_service.py": 838,
     "autobot-backend/services/wake_word_service.py": 615,
     "autobot-backend/services/workflow_automation/executor.py": 1104,
     "autobot-backend/services/workflow_export_test.py": 611,
@@ -437,7 +437,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
     "autobot-slm-backend/ansible/roles/slm_agent/files/slm/agent/agent.py": 630,
     "autobot-slm-backend/api/code_source.py": 719,
-    "autobot-slm-backend/api/code_sync.py": 5860,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
+    "autobot-slm-backend/api/code_sync.py": 5850,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 724,
     "autobot-slm-backend/api/monitoring.py": 1087,

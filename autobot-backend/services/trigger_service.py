@@ -18,7 +18,7 @@ Design:
   - TriggerConfig  — plain dataclass; validated at registration time
   - TriggerDefinition — runtime record stored in Redis (workflows:triggers:*)
   - TriggerService — async lifecycle: register / unregister / list / fire
-  - Inline cron parser — pure-Python next-run calculation (validate_cron_expression, next_cron_run)
+  - Cron next-run calculation (croniter; validate_cron_expression is the shared 5-field validator)
   - WebhookHandler — generates stable per-trigger URLs; validates incoming POSTs
 
 Redis layout (database "workflows"):
@@ -39,6 +39,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List
 
+from croniter import CroniterBadDateError, croniter
+
+from autobot_shared.cron_expression import INVALID_CRON_ERROR_CODE, validate_cron_expression
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_redis_client
 from autobot_shared.time_utils import now_utc
@@ -215,99 +218,8 @@ def _evaluate_conditions(conditions: List[Dict[str, Any]], payload: Dict[str, An
 
 
 # ---------------------------------------------------------------------------
-# Pure-Python cron parser (no external deps)
+# Cron next-run (croniter, via the shared 5-field validator -- #18449, #18432)
 # ---------------------------------------------------------------------------
-
-_CRON_RANGES = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 6)]
-
-
-def _parse_cron_field(field_str: str, min_val: int, max_val: int) -> List[int]:
-    """
-    Parse one cron field into a sorted list of matching integers.
-
-    Supports: *, N, */step, N-M, N-M/step, comma-separated combinations.
-    Raises ValueError for malformed fields.
-    """
-    values: set = set()
-    for part in field_str.split(","):
-        part = part.strip()
-        if part == "*":
-            values.update(range(min_val, max_val + 1))
-        elif "/" in part:
-            base, step_str = part.split("/", 1)
-            step = int(step_str)
-            if step <= 0:
-                raise ValueError(f"Step must be > 0 in cron field '{field_str}'")
-            if base == "*":
-                start, end = min_val, max_val
-            elif "-" in base:
-                s, e = base.split("-", 1)
-                start, end = int(s), int(e)
-            else:
-                start, end = int(base), max_val
-            values.update(range(start, end + 1, step))
-        elif "-" in part:
-            s, e = part.split("-", 1)
-            values.update(range(int(s), int(e) + 1))
-        else:
-            values.add(int(part))
-
-    out = sorted(v for v in values if min_val <= v <= max_val)
-    if not out:
-        raise ValueError(f"Cron field '{field_str}' resolved to no values")
-    return out
-
-
-def _normalize_dow_field(field: str) -> str:
-    """Normalize day-of-week: replace 7 with 0 (both mean Sunday).
-
-    Handles scalars (7->0), lists (0,7->0,0), ranges (1-7->1-6,0),
-    range-steps (1-7/2->1-6/2,0), and steps (*/7 left unchanged).
-    """
-    import re
-
-    def _replace_token(token: str) -> str:
-        # Range-step like "1-7/2" or "5-7/2"
-        m = re.fullmatch(r"(\d+)-(\d+)/(\d+)", token)
-        if m:
-            lo, hi, step = int(m.group(1)), int(m.group(2)), m.group(3)
-            if hi == 7:
-                if lo == 0:
-                    return f"0-6/{step}"
-                return f"{lo}-6/{step},0"  # wrap: range excludes 7, add Sunday(0)
-            return token
-        # Range like "1-7" or "0-7"
-        m = re.fullmatch(r"(\d+)-(\d+)", token)
-        if m:
-            lo, hi = int(m.group(1)), int(m.group(2))
-            if hi == 7:
-                if lo == 0:
-                    return "0-6"
-                return f"{lo}-6,0"  # wrap: Mon-Sun = Mon-Sat + Sun(0)
-            return token
-        # Step like "*/7" -- leave as-is (unusual but not invalid)
-        if re.fullmatch(r"\*/\d+", token):
-            return token
-        # Scalar
-        return "0" if token == "7" else token  # nosec B105  # 'token' is a cron field token (string segment), not a
-
-    # Split on comma, normalize each part, rejoin
-    return ",".join(_replace_token(part) for part in field.split(","))
-
-
-def validate_cron_expression(expression: str) -> bool:
-    """Return True when *expression* is a valid 5-field cron string."""
-    try:
-        parts = expression.split()
-        if len(parts) != 5:
-            return False
-        for i, (part, (lo, hi)) in enumerate(zip(parts, _CRON_RANGES)):
-            if i == 4:
-                part = _normalize_dow_field(part)
-            _parse_cron_field(part, lo, hi)
-        return True
-    except (ValueError, TypeError):
-        return False
 
 
 def next_cron_run(expression: str, after: datetime | None = None) -> datetime:
@@ -315,68 +227,16 @@ def next_cron_run(expression: str, after: datetime | None = None) -> datetime:
     Return the next UTC datetime when *expression* fires after *after*.
 
     *after* defaults to utcnow().  The returned datetime is always in UTC
-    and always strictly after *after* (minimum 1-minute advance).
+    and always strictly after *after*.
 
-    Raises ValueError for invalid expressions.
+    Raises ValueError for invalid expressions (anything but standard 5-field cron).
     """
-    parts = expression.split()
-    if len(parts) != 5:
-        raise ValueError(f"Cron expression must have 5 fields, got: '{expression}'")
-
-    minutes = _parse_cron_field(parts[0], 0, 59)
-    hours = _parse_cron_field(parts[1], 0, 23)
-    days = _parse_cron_field(parts[2], 1, 31)
-    months = _parse_cron_field(parts[3], 1, 12)
-    weekdays = _parse_cron_field(_normalize_dow_field(parts[4]), 0, 6)
-
-    base = after or now_utc()
-    # Advance by at least one minute
-    from datetime import timedelta
-
-    candidate = base.replace(second=0, microsecond=0) + timedelta(minutes=1)
-
-    # Iterate up to ~4 years to find a match (avoids infinite loop for impossible combos)
-    max_iterations = 60 * 24 * 366 * 4
-    for _ in range(max_iterations):
-        if candidate.month not in months:
-            # Fast-forward to the first valid month in the next year if needed
-            next_month = next((m for m in months if m > candidate.month), months[0])
-            if next_month <= candidate.month:
-                candidate = candidate.replace(year=candidate.year + 1, month=next_month, day=1, hour=0, minute=0)
-            else:
-                candidate = candidate.replace(month=next_month, day=1, hour=0, minute=0)
-            continue
-
-        if candidate.day not in days or candidate.weekday() not in [(w - 1) % 7 for w in weekdays]:
-            candidate += timedelta(days=1)
-            candidate = candidate.replace(hour=0, minute=0)
-            continue
-
-        if candidate.hour not in hours:
-            next_hour = next((h for h in hours if h > candidate.hour), None)
-            if next_hour is None:
-                candidate += timedelta(days=1)
-                candidate = candidate.replace(hour=0, minute=0)
-            else:
-                candidate = candidate.replace(hour=next_hour, minute=minutes[0])
-            continue
-
-        if candidate.minute not in minutes:
-            next_min = next((m for m in minutes if m > candidate.minute), None)
-            if next_min is None:
-                next_hour = next((h for h in hours if h > candidate.hour), None)
-                if next_hour is None:
-                    candidate += timedelta(days=1)
-                    candidate = candidate.replace(hour=hours[0], minute=minutes[0])
-                else:
-                    candidate = candidate.replace(hour=next_hour, minute=minutes[0])
-            else:
-                candidate = candidate.replace(minute=next_min)
-            continue
-
-        return candidate
-
-    raise ValueError(f"Could not find next run time for cron expression '{expression}'")
+    if not validate_cron_expression(expression):
+        raise ValueError(f"Invalid cron expression ({INVALID_CRON_ERROR_CODE}): '{expression}'")
+    try:
+        return croniter(expression, after or now_utc()).get_next(datetime)
+    except CroniterBadDateError as exc:
+        raise ValueError(f"Could not find next run time for cron expression '{expression}'") from exc
 
 
 # ---------------------------------------------------------------------------

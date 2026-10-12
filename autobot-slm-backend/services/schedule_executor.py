@@ -31,23 +31,6 @@ _executor_running = False
 _executor_task: asyncio.Task | None = None
 
 
-def validate_cron_expression(expression: str) -> bool:
-    """
-    Validate a cron expression syntax.
-
-    Args:
-        expression: Cron expression string (e.g., "0 2 * * *")
-
-    Returns:
-        True if valid, False otherwise
-    """
-    try:
-        croniter(expression)
-        return True
-    except (ValueError, KeyError):
-        return False
-
-
 def calculate_next_run(expression: str, base: datetime = None) -> datetime:
     """
     Calculate the next run time from a cron expression.

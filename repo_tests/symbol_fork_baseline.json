@@ -294,7 +294,6 @@
     "start_fleet_service",
     "stop_fleet_service",
     "validate_config",
-    "validate_cron_expression",
     "validate_url",
     "verify_internal_api_key",
     "verify_webhook_signature",

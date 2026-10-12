@@ -428,3 +428,25 @@ and `utils/ollama_connection_pool_test.py` can be deleted outright — tracked
 in #16539.
 
 **Grep check:** `grep -rln "OllamaConnectionPool\|get_ollama_pool" autobot-backend/ | grep -v ollama_connection_pool` should show only `llm_shared/adapters/ollama_adapter_test.py` or nothing — no new production caller should appear without updating this entry.
+
+## Per-Service `User`, `Organization` and `UserService` Bindings
+
+**Files:** `autobot-backend/user_management/models/{user,organization}.py`, `autobot-slm-backend/user_management/models/{user,organization}.py`, `autobot-backend/user_management/services/user_service.py`, `autobot-slm-backend/user_management/services/user_service.py`
+**Shared core:** `autobot_shared/user_management/models/user.py` (`UserCore`) and `autobot_shared/user_management/user_service*.py`
+**Issues:** #12647, #15068, #17312 (symbol-fork ratchet), #18449
+
+**Pattern bypassed:** "One definition per concept" as measured by `repo_tests/symbol_fork_baseline.json`.
+
+**Reason:** these names are NOT second implementations. The behaviour has exactly one
+definition in `autobot_shared`; each service keeps a thin binding that must be a concrete,
+separately mapped class: the two services attach different SQLAlchemy relationships and
+columns (backend: activity tracking and LLC columns; SLM: none) and register in different
+mapper registries, so one shared mapped class would break `configure_mappers()` on one side.
+`UserService` bindings only set `user_model` and, in the backend, two hooks.
+`repo_tests/one_user_service_15068_test.py` pins that shape by behaviour: a class carrying the
+account-handling methods anywhere else is a failure whatever it is called.
+
+**Revisit when:** the two services share one SQLAlchemy registry, or the detector learns to
+treat a subclass of a shared definition as a binding rather than a second definition.
+
+**Grep check:** `grep -rn "^class \(User\|Organization\|UserService\)\b" autobot-backend/user_management autobot-slm-backend/user_management autobot_shared/user_management` should list `UserService` in `autobot_shared` plus one `UserService`, `User` and `Organization` subclass binding per service.
