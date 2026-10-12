@@ -31,7 +31,7 @@ from multimodal_processor import (
 )
 from task_execution_tracker import get_task_tracker
 
-from .classifiers import ContextAnalyzer, ElementClassifier, TemplateMatchingEngine
+from .classifiers import ElementClassifier, ScreenContextAnalyzer, TemplateMatchingEngine
 from .collections import ProcessingResultExtractor, UIElementCollection
 from .types import ElementType, InteractionType, ScreenState, UIElement
 
@@ -73,7 +73,7 @@ class ScreenAnalyzer:
         """Initialize analyzer with template matcher and classifiers."""
         self.template_matcher = TemplateMatchingEngine()
         self.element_classifier = ElementClassifier()
-        self.context_analyzer = ContextAnalyzer()
+        self.context_analyzer = ScreenContextAnalyzer()
 
         # Multi-modal processor integration
         self.multimodal_processor = processor

@@ -67,6 +67,20 @@ _BOTH_MODES = (
     "check_git_write_env_scrubbed.py",
 )
 
+#: Checkers on the shared ``run_check`` harness (#14896): a vacuous scan exits 2,
+#: distinct from the 1 that means findings. The others still exit 1.
+_HARNESS_CHECKERS = frozenset(
+    {
+        "check_no_kb_aioredis_access.py",
+        "check_no_utcnow_isoformat.py",
+        "check_no_live_install_sys_path_default.py",
+        "check_no_hardcoded_ip_fallbacks.py",
+        "check_no_llm_response_dict_access.py",
+        "check_no_src_mock_path.py",
+        "check_no_local_schemas.py",
+    }
+)
+
 #: A file every checker in :data:`_BOTH_MODES` must rule clean, so the argv
 #: assertion measures the floor and not some unrelated finding.
 _CLEAN_SAMPLE = '''"""A module with nothing any of these hooks bans."""
@@ -154,7 +168,8 @@ def test_a_full_repo_sweep_below_the_floor_refuses(thin_repo: Path, checker: str
     """The defect #14896 names: a clean verdict from a sweep that reached nothing."""
     result = _run(thin_repo, checker)
 
-    assert result.returncode == 1, f"{checker} passed a sweep it never made: {result.stdout}{result.stderr}"
+    expected = 2 if checker in _HARNESS_CHECKERS else 1
+    assert result.returncode == expected, f"{checker} passed a sweep it never made: {result.stdout}{result.stderr}"
     assert _REFUSAL in result.stderr, f"{checker} failed without saying why:\n{result.stderr}"
 
 
@@ -230,7 +245,7 @@ def test_the_getenv_drift_checker_refuses_a_lost_sweep(thin_repo: Path, tmp_path
 
     result = _run(repo, "check_getenv_ssot_drift.py")
 
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     assert _REFUSAL in result.stderr
 
 
@@ -247,7 +262,7 @@ def test_the_field_defaults_checker_refuses_a_sweep_that_matched_nothing(tmp_pat
 
     result = _run(repo, "check_field_defaults.py")
 
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     assert _REFUSAL in result.stderr
 
 
@@ -279,3 +294,206 @@ def test_the_ansible_reference_checker_refuses_when_nothing_resolved(tmp_path: P
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert _REFUSAL in result.stderr
+
+
+# --- checkers on the shared run_check harness (#14896) -----------------------
+
+#: ``(checker, source that violates it, finding text the output must carry, path to plant it at)``.
+#: Banned literals are assembled from fragments so this file does not trip the
+#: hooks it exercises.
+_PLANTED = (
+    ("check_no_kb_aioredis_access.py", "x = kb." + "_aioredis_client\n", "kb-private-aioredis-client", "planted.py"),
+    (
+        "check_no_utcnow_isoformat.py",
+        "from datetime import datetime\nts = datetime." + "utcnow().isoformat()\n",
+        "isoformat",
+        "planted.py",
+    ),
+    (
+        "check_no_live_install_sys_path_default.py",
+        "import os, sys\nsys.path.insert(0, os.environ.get('X', '/opt/" + "autobot/code'))\n",
+        "defaults to the live deployed install",
+        "planted.py",
+    ),
+    (
+        "check_no_hardcoded_ip_fallbacks.py",
+        "import os\nh = os.getenv('H', '172.16." + "168.5')\n",
+        "hardcoded fallback",
+        "planted.py",
+    ),
+    (
+        "check_no_llm_response_dict_access.py",
+        "from m import LLMResponse\n\n\nasync def f(s):\n    r = await s.chat(1)\n    return r.get('content')\n",
+        "LLMResponse is a Pydantic model",
+        "planted.py",
+    ),
+    (
+        "check_no_src_mock_path.py",
+        "from unittest.mock import patch\n\npatch('sr" + "c.foo.bar')\n",
+        "has no `src/` package",
+        "planted_test.py",
+    ),
+    (
+        "check_no_local_schemas.py",
+        "from pydantic import BaseModel\n\n\nclass Foo(BaseModel):\n    x: int\n",
+        "Local BaseModel subclass",
+        "autobot-backend/api/planted.py",
+    ),
+)
+_PLANTED_CHECKERS = [row[0] for row in _PLANTED]
+
+
+def _run_isolated(repo: Path, checker: str, *args: str) -> subprocess.CompletedProcess:
+    """Like :func:`_run`, but git may not climb out of *repo* into a parent checkout."""
+    return subprocess.run(  # nosec B603  # fixed argv, no shell
+        [sys.executable, str(repo / "tools" / "lint" / checker), *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**scrubbed_git_env(), "PYTHONPATH": str(_REPO_ROOT), "GIT_CEILING_DIRECTORIES": str(repo.parent)},
+    )
+
+
+@pytest.mark.parametrize(("checker", "source", "finding", "rel"), _PLANTED)
+def test_a_planted_violation_still_exits_one(
+    thin_repo: Path, checker: str, source: str, finding: str, rel: str
+) -> None:
+    planted = thin_repo / rel
+    planted.parent.mkdir(parents=True, exist_ok=True)
+    planted.write_text(source, encoding="utf-8")
+    try:
+        result = _run(thin_repo, checker, rel)
+    finally:
+        planted.unlink()
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"{rel}:" in result.stderr and finding in result.stderr
+
+
+@pytest.mark.parametrize("checker", _PLANTED_CHECKERS)
+def test_a_non_git_root_exits_two(tmp_path: Path, checker: str) -> None:
+    """Copied beside no repository, the checker has no root to scan: not a clean pass."""
+    _seed(tmp_path)
+
+    result = _run_isolated(tmp_path, checker, "sample.py")
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "cannot anchor the scan" in result.stderr
+
+
+@pytest.mark.parametrize("checker", _PLANTED_CHECKERS)
+def test_a_full_repo_sweep_that_enumerates_nothing_exits_two(tmp_path: Path, checker: str) -> None:
+    """A repository tracking no Python at all: nothing was scanned, so nothing may read clean."""
+    _git(tmp_path, "init", "-q")
+    _seed(tmp_path)
+    (tmp_path / "notes.txt").write_text("x\n", encoding="utf-8")
+    _git(tmp_path, "add", "notes.txt")  # the checkers themselves stay untracked
+
+    result = _run_isolated(tmp_path, checker)
+
+    assert result.returncode == 2, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("checker", _PLANTED_CHECKERS)
+def test_the_checker_answers_the_same_from_a_subdirectory(thin_repo: Path, checker: str) -> None:
+    """The root comes from the checker's own file (``resolve_root``), never the launch directory.
+
+    A full-repo run below the floor prints how many files it reached, so equal
+    stderr from the repo root and from ``tools/`` means equal reach. A root
+    taken from the cwd would name ``tools/`` here, which is not a toplevel, and
+    the two runs would differ.
+    """
+    script = thin_repo / "tools" / "lint" / checker
+    runs = [
+        subprocess.run(  # nosec B603  # fixed argv, no shell
+            [sys.executable, str(script)],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env={**scrubbed_git_env(), "PYTHONPATH": str(_REPO_ROOT)},
+        )
+        for cwd in (thin_repo, thin_repo / "tools")
+    ]
+
+    assert runs[0].returncode == runs[1].returncode == 2
+    assert "reached only" in runs[0].stderr
+    assert (runs[0].stdout, runs[0].stderr) == (runs[1].stdout, runs[1].stderr)
+
+
+def test_an_untracked_script_on_disk_is_not_mistaken_for_a_failed_enumeration(tmp_path: Path) -> None:
+    """A doc names ``scripts/x.sh``; the file exists but git does not track it.
+
+    That is "not executable" (a finding, exit 1), not a broken enumeration
+    (exit 2). Run as a subprocess so it goes through the real import paths:
+    this script imports ``tools.lint._scan_helpers`` while the harness imports
+    ``_scan_helpers`` bare, and two module copies mean two ``EmptyEnumeration``
+    classes -- an ``except`` against one never matches the other.
+    """
+    _git(tmp_path, "init", "-q")
+    _seed(tmp_path)
+    shutil.copy2(_REPO_ROOT / "tools" / "__init__.py", tmp_path / "tools" / "__init__.py")
+    (tmp_path / "scripts").mkdir()
+    shutil.copy2(
+        _REPO_ROOT / "scripts" / "check_script_exec_bits.py", tmp_path / "scripts" / "check_script_exec_bits.py"
+    )
+    (tmp_path / "scripts" / "x.sh").write_text("#!/bin/sh\n", encoding="utf-8")  # on disk, never staged
+    (tmp_path / "README.md").write_text("run scripts/x.sh -v\n", encoding="utf-8")
+    _git(tmp_path, "add", "README.md")
+
+    result = subprocess.run(  # nosec B603  # fixed argv, no shell
+        [sys.executable, str(tmp_path / "scripts" / "check_script_exec_bits.py")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**scrubbed_git_env(), "GIT_CEILING_DIRECTORIES": str(tmp_path.parent)},
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "runs scripts/x.sh directly" in result.stdout
+
+
+def _load_by_path(path: Path, name: str):
+    import importlib.util  # noqa: PLC0415
+
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_nosec_format_does_not_pass_when_git_cannot_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """It ignored git's return code, so a non-checkout read as zero files and exit 0."""
+    module = _load_by_path(_REPO_ROOT / "scripts" / "check_nosec_format.py", "_nosec_probe_nongit")
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+
+    assert module.main() == 2
+
+
+def test_nosec_format_does_not_pass_when_git_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_by_path(_REPO_ROOT / "scripts" / "check_nosec_format.py", "_nosec_probe_rc")
+
+    class _Failed:
+        returncode = 128
+        stdout = ""
+        stderr = "fatal: not a git repository"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Failed())
+
+    assert module.main() == 2
+
+
+def test_script_exec_bits_does_not_pass_when_git_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_by_path(_REPO_ROOT / "scripts" / "check_script_exec_bits.py", "_exec_bits_probe_rc")
+
+    class _Failed:
+        returncode = 128
+        stdout = ""
+        stderr = "fatal: not a git repository"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Failed())
+
+    assert module.main() == 2
