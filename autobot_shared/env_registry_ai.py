@@ -580,3 +580,14 @@ register_env_var(
         component="voice",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_RAG_GRAPH_WEIGHT",
+        type=float,
+        default=0.3,
+        description="Graph-signal weight in the one pre-rerank vector+graph blend (RAGConfig.graph_weight, #18141).",
+        component="rag",
+        range=(0.0, 1.0),
+    )
+)

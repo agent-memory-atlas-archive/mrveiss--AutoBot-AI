@@ -6,7 +6,7 @@
 
 Routes queries by complexity:
   SIMPLE     -> semantic search only (~50 ms fast path)
-  MODERATE   -> hybrid search + 1-hop PPR expansion
+  MODERATE   -> hybrid search + PPR expansion (fewer iterations)
   COMPLEX    -> full pipeline: hybrid + anchor lookup + PPR + rerank
   MULTI_HOP  -> same as COMPLEX
 """
@@ -18,6 +18,9 @@ from typing import Any, Callable, Coroutine, Protocol
 
 from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.logging_manager import get_logger
+from knowledge.search_components.graph_blend import blend_graph_score
+from services.rag_config import RAGConfig, get_rag_config
+from services.rag_mesh_results import coerce_ranked_results
 
 logger = get_logger(__name__)
 
@@ -72,6 +75,10 @@ class MeshRetrievalResult:
     anchor_used: bool = False
     nodes_explored: int = 0
 
+    def ranked_chunks(self) -> list:
+        """``chunks`` as ``RankedResult`` objects -- the one shape every RAG branch returns (#18141)."""
+        return coerce_ranked_results(self.chunks)
+
 
 # =============================================================================
 # Retriever
@@ -98,6 +105,7 @@ class NeuralMeshRetriever:
         classifier: Any,
         mesh_db: Any,
         llm: Callable[..., Coroutine[Any, Any, str]] | None = None,
+        config: RAGConfig | None = None,
     ) -> None:
         """Inject all dependencies.
 
@@ -109,6 +117,8 @@ class NeuralMeshRetriever:
             reranker:       ResultReranker instance.
             classifier:     QueryClassifier instance.
             mesh_db:        Object satisfying _AnchorDB protocol.
+            config:         ``RAGConfig`` supplying ``rerank_weights`` (blend and MMR, applied on
+                            every rerank) and ``graph_weight``; None uses the shared one (#18141).
             llm:            Optional async callable(prompt) -> str for A-RAG
                             ReAct loop (#2136). When None, agentic path is off.
         """
@@ -120,6 +130,7 @@ class NeuralMeshRetriever:
         self.classifier = classifier
         self.mesh_db = mesh_db
         self.llm = llm
+        self.config = config or get_rag_config()
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -160,14 +171,14 @@ class NeuralMeshRetriever:
         return MeshRetrievalResult(chunks=results, expanded=False, complexity="simple")
 
     async def _moderate_retrieve(self, query: str, top_k: int) -> MeshRetrievalResult:
-        """Hybrid search + 1-hop PPR expansion. Issue #2058."""
+        """Hybrid search + PPR expansion with fewer iterations. Issue #2058."""
         seeds = await self.hybrid_search(query, top_k * 2)
         seed_ids = [self._chunk_id(r) for r in seeds[:5]]
 
         expanded_scores = await self.ppr.rank(seed_ids, top_k=top_k * 3, max_iterations=5)
         merged = self._merge_with_expansion(seeds, expanded_scores)
 
-        ranked = await self.reranker.rerank(query, merged, top_k=top_k)
+        ranked = await self._rerank(query, merged, top_k)
         self._fire_learner(query, ranked)
         return MeshRetrievalResult(
             chunks=ranked,
@@ -189,7 +200,7 @@ class NeuralMeshRetriever:
         expanded_scores = await self.ppr.rank(seed_ids, top_k=top_k * 4)
         merged = self._merge_with_expansion(seeds, expanded_scores)
 
-        ranked = await self.reranker.rerank(query, merged, top_k=top_k)
+        ranked = await self._rerank(query, merged, top_k)
         self._fire_learner(query, ranked)
         return MeshRetrievalResult(
             chunks=ranked,
@@ -257,7 +268,7 @@ class NeuralMeshRetriever:
             if cid not in seen:
                 seen.add(cid)
                 unique.append(r)
-        return await self.reranker.rerank(query, unique, top_k=top_k)
+        return await self._rerank(query, unique, top_k)
 
     async def _select_next_action(self, query: str, context_so_far: list) -> dict:
         """Ask the LLM which tool to invoke next. Issue #2136.
@@ -401,7 +412,13 @@ class NeuralMeshRetriever:
 
         for node_id, ppr_score in expanded_scores:
             if node_id not in seen_ids:
-                merged.append({"chunk_id": node_id, "score": ppr_score, "content": ""})
+                merged.append(
+                    {
+                        "chunk_id": node_id,
+                        "score": blend_graph_score(0.0, ppr_score, self.config.graph_weight),
+                        "content": "",
+                    }
+                )
 
         return merged
 
@@ -445,26 +462,29 @@ class NeuralMeshRetriever:
         meta = getattr(result, "metadata", {}) or {}
         return meta.get("chunk_id") or getattr(result, "source_path", "")
 
-    @staticmethod
-    def _as_dict(result: Any, ppr_boost: float = 0.0) -> dict:
-        """Normalise a result to a dict, optionally applying a PPR score boost.
+    async def _rerank(self, query: str, results: list, top_k: int) -> list:
+        """Rerank with the shared ``RAGConfig`` blend weights and MMR (#18141)."""
+        return await self.reranker.rerank(query, results, top_k=top_k, weights=self.config.rerank_weights)
+
+    def _as_dict(self, result: Any, ppr_boost: float = 0.0) -> dict:
+        """Normalise a result to a dict, blending in the PPR score.
 
         Args:
             result:    A dict or SearchResult-like object.
-            ppr_boost: PPR score from expansion; added to the base score.
+            ppr_boost: PPR score from expansion, blended by ``blend_graph_score``.
 
         Returns:
             A dict suitable for the reranker.
         """
         if isinstance(result, dict):
             out = dict(result)
-            out["score"] = out.get("score", 0.0) + ppr_boost
+            out["score"] = blend_graph_score(out.get("score", 0.0), ppr_boost, self.config.graph_weight)
             return out
         base_score = getattr(result, "score", 0.0) or 0.0
         return {
             "chunk_id": getattr(result, "source_path", ""),
             "content": getattr(result, "content", ""),
-            "score": base_score + ppr_boost,
+            "score": blend_graph_score(base_score, ppr_boost, self.config.graph_weight),
             "metadata": getattr(result, "metadata", {}),
             "source_path": getattr(result, "source_path", ""),
         }

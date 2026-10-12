@@ -172,6 +172,7 @@ class RAGService:
                     self._mesh_retriever = NeuralMeshRetriever(
                         chroma_search=_chroma,
                         hybrid_search=_hybrid,
+                        config=self.config,
                         **_shared_mesh_components,
                     )
                     self.config.mesh_retriever_enabled = True
@@ -641,12 +642,11 @@ class RAGService:
         """Delegate retrieval to NeuralMeshRetriever and emit feedback. Issue #2059.
 
         Called only when mesh_retriever_enabled=True and _mesh_retriever is set.
-        The mesh retriever returns RankedResult-compatible chunks directly; this
-        helper handles feedback emission so the caller stays clean.
+        Drops stale chunks like every other branch (#18141), then emits feedback.
         """
         logger.info("Using NeuralMeshRetriever for query (mesh_retriever_enabled=True)")
         mesh_result = await self._mesh_retriever.retrieve(query, max_results)
-        results: List[RankedResult] = mesh_result.chunks
+        results = await self._filter_stale_chunks(mesh_result.ranked_chunks())
         metrics = RAGMetrics()
         metrics.final_results_count = len(results)
 

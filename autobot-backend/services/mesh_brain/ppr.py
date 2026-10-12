@@ -5,6 +5,7 @@
 """Personalized PageRank over the mesh graph for importance-weighted expansion (#1994, #2057)."""
 
 from autobot_shared.logging_manager import get_logger
+from constants.rag_graph_constants import RAG_PPR_MAX_HOPS
 from services.mesh_brain.neighbor_store import NeighborStore
 
 logger = get_logger(__name__)
@@ -62,9 +63,10 @@ class PersonalizedPageRank:
         max_iterations: int = 20,
         min_weight: float = 0.3,
         top_k: int = 20,
+        max_hops: int = RAG_PPR_MAX_HOPS,
     ) -> list[tuple[str, float]]:
         """Run PPR from seed nodes. Returns [(node_id, ppr_score), ...] sorted desc."""
-        subgraph = await self._load_subgraph(seed_node_ids, max_hops=3, min_weight=min_weight)
+        subgraph = await self._load_subgraph(seed_node_ids, max_hops=max_hops, min_weight=min_weight)
         if not subgraph.nodes:
             return self._uniform_seed_scores(seed_node_ids)
         scores = self._init_scores(seed_node_ids, subgraph.nodes)
