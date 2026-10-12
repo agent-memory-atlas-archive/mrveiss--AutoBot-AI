@@ -38,6 +38,7 @@ from llc.services.company_os.processes import ProcessService
 from llc.services.company_os.workflows import CompanyOsWorkflowService
 from user_management.services import TenantContext
 
+from ._common import actor_id
 from .company_os_schemas import (
     CompanyWorkflowCreate,
     CompanyWorkflowResponse,
@@ -54,11 +55,6 @@ router = APIRouter(prefix="/company-os", tags=["llc-company-os"])
 _processes = ProcessService()
 _workflows = CompanyOsWorkflowService()
 _graphs = GraphService()
-
-
-def acting_user_id(current_user: dict) -> uuid.UUID:
-    """The acting user, from the authenticated session and never from a body."""
-    return uuid.UUID(str(current_user.get("id") or current_user.get("user_id")))
 
 
 def http_error(exc: Exception) -> HTTPException:
@@ -98,7 +94,7 @@ async def create_process(
     ctx: TenantContext = Depends(require_org_context),
 ) -> ProcessResponse:
     try:
-        row = await _processes.create(session, ctx.org_id, actor=acting_user_id(user), **body.model_dump())
+        row = await _processes.create(session, ctx.org_id, actor=actor_id(user), **body.model_dump())
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
     await session.commit()
@@ -128,7 +124,7 @@ async def update_process(
 ) -> ProcessResponse:
     try:
         row = await _processes.update(
-            session, ctx.org_id, process_key, actor=acting_user_id(user), **body.model_dump(exclude_unset=True)
+            session, ctx.org_id, process_key, actor=actor_id(user), **body.model_dump(exclude_unset=True)
         )
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
@@ -144,7 +140,7 @@ async def delete_process(
     ctx: TenantContext = Depends(require_org_context),
 ) -> None:
     try:
-        await _processes.delete(session, ctx.org_id, process_key, actor=acting_user_id(user))
+        await _processes.delete(session, ctx.org_id, process_key, actor=actor_id(user))
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
     await session.commit()
@@ -175,7 +171,7 @@ async def create_workflow(
     data = body.model_dump()
     data["kind"] = body.kind.value
     try:
-        row = await _workflows.create(session, ctx.org_id, actor=acting_user_id(user), **data)
+        row = await _workflows.create(session, ctx.org_id, actor=actor_id(user), **data)
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
     await session.commit()
@@ -205,7 +201,7 @@ async def update_workflow(
 ) -> CompanyWorkflowResponse:
     try:
         row = await _workflows.update(
-            session, ctx.org_id, workflow_id, actor=acting_user_id(user), **body.model_dump(exclude_unset=True)
+            session, ctx.org_id, workflow_id, actor=actor_id(user), **body.model_dump(exclude_unset=True)
         )
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
@@ -221,7 +217,7 @@ async def delete_workflow(
     ctx: TenantContext = Depends(require_org_context),
 ) -> None:
     try:
-        await _workflows.delete(session, ctx.org_id, workflow_id, actor=acting_user_id(user))
+        await _workflows.delete(session, ctx.org_id, workflow_id, actor=actor_id(user))
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
     await session.commit()
@@ -254,7 +250,7 @@ async def put_graph(
     ctx: TenantContext = Depends(require_org_context),
 ) -> GraphResponse:
     try:
-        report = await _graphs.replace(session, ctx.org_id, workflow_id, body, actor=acting_user_id(user))
+        report = await _graphs.replace(session, ctx.org_id, workflow_id, body, actor=actor_id(user))
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
     await session.commit()
