@@ -39,6 +39,7 @@ from .rdp import node_rdp_router, rdp_router
 from .redis_service import router as redis_service_router
 from .scim import router as scim_router
 from .secrets import router as secrets_router
+from .secrets_backup_status import router as secrets_backup_status_router
 from .security import router as security_router
 from .services import fleet_router as fleet_services_router
 from .services import router as services_router
@@ -82,6 +83,7 @@ __all__ = [
     "external_agents_router",
     "health_router",
     "llm_config_router",
+    "secrets_backup_status_router",
     "stateful_router",
     "updates_router",
     "websocket_router",

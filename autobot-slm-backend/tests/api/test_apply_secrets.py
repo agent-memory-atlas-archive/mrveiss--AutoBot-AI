@@ -90,6 +90,7 @@ class _BackupServiceType(str, Enum):
 
     REDIS = "redis"
     POSTGRES = "postgres"
+    SECRETS = "secrets"  # pragma: allowlist secret
 
 
 class _Permission:

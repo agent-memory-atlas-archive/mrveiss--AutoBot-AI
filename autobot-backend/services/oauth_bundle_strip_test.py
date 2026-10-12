@@ -90,8 +90,12 @@ def locks(monkeypatch):
 
 @pytest.fixture
 def backup_verified(monkeypatch):
-    """The seam patched to True: stands in for a future #18281 verifier."""
-    monkeypatch.setattr(oauth_bundle_strip_action, "verify_backup", lambda reference: True)
+    """The verifier patched to True: its own behaviour is tested in secrets_backup_verifier_test.py (#18281)."""
+
+    async def _verified(reference):
+        return True
+
+    monkeypatch.setattr(oauth_bundle_strip_action, "verify_backup", _verified)
 
 
 @pytest.fixture
@@ -415,7 +419,11 @@ async def test_unverifiable_backup_refuses_execution_records_why_and_touches_not
     async def _audit(op, **kw):
         audited.append(kw)
 
+    async def _unverified(reference):
+        return False
+
     monkeypatch.setattr(oauth_bundle_strip_action, "audit_log", _audit)
+    monkeypatch.setattr(oauth_bundle_strip_action, "verify_backup", _unverified)
     approval = Approval(context={"backup_reference": "snap-looks-real"}, id=uuid.uuid4(), decided_by_user="human")
     with pytest.raises(ValueError, match="18281"):
         await oauth_bundle_strip_action.execute_oauth_bundle_strip(approval, session)
@@ -437,5 +445,7 @@ async def test_the_same_request_runs_once_the_seam_verifies(configured, backup_v
     assert svc.writes == ["s-legacy"]
 
 
-def test_the_seam_has_no_verifier_yet_and_no_bypass():
-    assert oauth_bundle_strip_action.verify_backup("anything") is False
+async def test_an_unverifiable_reference_refuses_with_no_flag_to_skip(monkeypatch):
+    """The real verifier, with no SLM reachable and no internal key, fails closed: the strip is refused."""
+    monkeypatch.delenv("AUTOBOT_INTERNAL_API_KEY", raising=False)
+    assert await oauth_bundle_strip_action.verify_backup("anything") is False
