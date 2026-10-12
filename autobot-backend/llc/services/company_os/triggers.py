@@ -12,14 +12,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
-from llc.models.company_os_enums import TriggerType, WorkflowKind
+from llc.models.company_os_enums import WorkflowKind, WorkflowTriggerKind
 
 from .errors import CompanyOsError
 
-_REQUIRED_KEYS: Dict[TriggerType, Tuple[str, ...]] = {
-    TriggerType.WORK_ITEM_STATUS: ("status",),
-    TriggerType.FOLDER_FILE_ADDED: ("path",),
-    TriggerType.PROCESS_RESULT: ("process_key", "result"),
+_REQUIRED_KEYS: Dict[WorkflowTriggerKind, Tuple[str, ...]] = {
+    WorkflowTriggerKind.WORK_ITEM_STATUS: ("status",),
+    WorkflowTriggerKind.FOLDER_FILE_ADDED: ("path",),
+    WorkflowTriggerKind.PROCESS_RESULT: ("process_key", "result"),
 }
 _RESULTS = ("success", "failure")
 
@@ -34,12 +34,12 @@ def validate_trigger(
             raise CompanyOsError("a meta skill has no trigger")
         return None, {}
     try:
-        trigger = TriggerType(trigger_type or TriggerType.MANUAL.value)
+        trigger = WorkflowTriggerKind(trigger_type or WorkflowTriggerKind.MANUAL.value)
     except ValueError as exc:
         raise CompanyOsError(f"unknown trigger type {trigger_type!r}") from exc
     for key in _REQUIRED_KEYS.get(trigger, ()):
         if not isinstance(config.get(key), str) or not config[key].strip():
             raise CompanyOsError(f"a {trigger.value} trigger needs config.{key}")
-    if trigger == TriggerType.PROCESS_RESULT and config["result"] not in _RESULTS:
+    if trigger == WorkflowTriggerKind.PROCESS_RESULT and config["result"] not in _RESULTS:
         raise CompanyOsError(f"config.result must be one of {_RESULTS}")
     return trigger.value, config

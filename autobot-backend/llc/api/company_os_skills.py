@@ -23,7 +23,7 @@ from llc.services.company_os.errors import CompanyOsError
 from llc.services.company_os.role_skills import RoleSkillService
 from user_management.services import TenantContext
 
-from .company_os import actor_id, http_error
+from .company_os import acting_user_id, http_error
 from .company_os_schemas import (
     GrantResponse,
     HeldSkillResponse,
@@ -85,7 +85,7 @@ async def grant_role_skill(
             session,
             ctx.org_id,
             role_id,
-            actor=actor_id(user),
+            actor=acting_user_id(user),
             skill_name=body.skill_name,
             meta_skill_id=body.meta_skill_id,
         )
@@ -104,7 +104,7 @@ async def revoke_role_skill(
     ctx: TenantContext = Depends(require_org_context),
 ) -> None:
     try:
-        await _skills.revoke(session, ctx.org_id, role_id, grant_id, actor=actor_id(user))
+        await _skills.revoke(session, ctx.org_id, role_id, grant_id, actor=acting_user_id(user))
     except (CompanyOsError, NotAuthorisedError) as exc:
         raise http_error(exc) from exc
     await session.commit()

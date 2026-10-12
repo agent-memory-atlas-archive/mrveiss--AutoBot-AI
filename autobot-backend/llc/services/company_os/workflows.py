@@ -19,14 +19,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llc.models.company_os import LLCRoleSkill, LLCWorkflowNode, LLCWorkflowTransition
-from llc.models.company_os_enums import TriggerType, WorkflowKind
+from llc.models.company_os_enums import WorkflowKind, WorkflowTriggerKind
 from llc.services.authz import require_company_admin
 from llc.services.base import LLCServiceBase
 from llc.services.workflow import WorkflowConflictError, WorkflowService
 from models.workflow import Workflow
 
 from .errors import CompanyOsConflict, CompanyOsError
-from .loaders import get_process_row, get_workflow_row, require_role
+from .loaders import get_process_row, get_workflow_row, require_role_in_company
 from .triggers import validate_trigger
 
 
@@ -84,12 +84,12 @@ class CompanyOsWorkflowService(LLCServiceBase):
             return
         if owner_role_id is None:
             raise CompanyOsError("a workflow belongs to exactly one role: owner_role_id is required")
-        await require_role(session, company_id, owner_role_id)
+        await require_role_in_company(session, company_id, owner_role_id)
 
     async def _check_trigger_refs(
         self, session: AsyncSession, company_id: uuid.UUID, trigger_type: Optional[str], config: dict
     ) -> None:
-        if trigger_type == TriggerType.PROCESS_RESULT.value:
+        if trigger_type == WorkflowTriggerKind.PROCESS_RESULT.value:
             await get_process_row(session, company_id, config["process_key"])
 
     async def get(self, session: AsyncSession, company_id: uuid.UUID, workflow_id: str) -> Workflow:

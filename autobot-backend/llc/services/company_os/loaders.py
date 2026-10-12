@@ -26,7 +26,7 @@ from .errors import CompanyOsNotFound
 from .skill_resolution import MetaSkillDef
 
 
-async def require_role(session: AsyncSession, company_id: uuid.UUID, role_id: uuid.UUID) -> None:
+async def require_role_in_company(session: AsyncSession, company_id: uuid.UUID, role_id: uuid.UUID) -> None:
     result = await session.execute(select(Role.id).where(Role.id == role_id, Role.org_id == company_id))
     if result.scalar_one_or_none() is None:
         raise CompanyOsNotFound(f"role {role_id} does not exist in this company")

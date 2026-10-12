@@ -22,7 +22,7 @@ class WorkflowKind(str, Enum):
     META_SKILL = "meta_skill"
 
 
-class TriggerType(str, Enum):
+class WorkflowTriggerKind(str, Enum):
     """What starts a workflow. One per workflow."""
 
     MANUAL = "manual"
@@ -70,6 +70,6 @@ __all__ = [
     "EndOutcome",
     "NodeKind",
     "TransitionKind",
-    "TriggerType",
+    "WorkflowTriggerKind",
     "WorkflowKind",
 ]

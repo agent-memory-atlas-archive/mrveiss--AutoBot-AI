@@ -26,7 +26,7 @@ from llc.services.base import LLCServiceBase
 from models.workflow import Workflow
 
 from .errors import CompanyOsConflict, CompanyOsError, CompanyOsNotFound
-from .loaders import get_workflow_row, load_meta_skills, require_role
+from .loaders import get_workflow_row, load_meta_skills, require_role_in_company
 from .skill_resolution import HeldSkill, resolve_held_skills
 
 logger = get_logger(__name__)
@@ -37,7 +37,7 @@ class RoleSkillService(LLCServiceBase):
 
     async def held_skills(self, session: AsyncSession, company_id: uuid.UUID, role_id: uuid.UUID) -> List[HeldSkill]:
         """Every skill the role holds, transitively, each with its sources."""
-        await require_role(session, company_id, role_id)
+        await require_role_in_company(session, company_id, role_id)
         grants = await self.list_grants(session, company_id, role_id)
         metas = await load_meta_skills(session, company_id)
         row_to_id = await self._meta_ids(
@@ -84,7 +84,7 @@ class RoleSkillService(LLCServiceBase):
         await require_company_admin(session, company_id, actor)
         if (skill_name is None) == (meta_skill_id is None):
             raise CompanyOsError("give exactly one of skill_name and meta_skill_id")
-        await require_role(session, company_id, role_id)
+        await require_role_in_company(session, company_id, role_id)
         meta_row_id = await self._meta_row(session, company_id, meta_skill_id)
         grant = LLCRoleSkill(
             company_id=company_id,

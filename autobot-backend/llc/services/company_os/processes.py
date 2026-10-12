@@ -20,13 +20,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llc.models.company_os import LLCProcess, LLCWorkflowNode
-from llc.models.company_os_enums import TriggerType
+from llc.models.company_os_enums import WorkflowTriggerKind
 from llc.services.authz import require_company_admin
 from llc.services.base import LLCServiceBase
 from models.workflow import Workflow
 
 from .errors import CompanyOsConflict, CompanyOsError
-from .loaders import get_process_row, require_role
+from .loaders import get_process_row, require_role_in_company
 
 
 def _clean_skills(skills: Optional[List[str]]) -> List[str]:
@@ -50,7 +50,7 @@ class ProcessService(LLCServiceBase):
         required_skills: Optional[List[str]] = None,
     ) -> LLCProcess:
         await require_company_admin(session, company_id, actor)
-        await require_role(session, company_id, owner_role_id)
+        await require_role_in_company(session, company_id, owner_role_id)
         row = LLCProcess(
             company_id=company_id,
             process_key=process_key,
@@ -92,7 +92,7 @@ class ProcessService(LLCServiceBase):
         await require_company_admin(session, company_id, actor)
         row = await get_process_row(session, company_id, process_key)
         if fields.get("owner_role_id") is not None:
-            await require_role(session, company_id, fields["owner_role_id"])
+            await require_role_in_company(session, company_id, fields["owner_role_id"])
         if "required_skills" in fields:
             fields["required_skills"] = _clean_skills(fields["required_skills"])
         for key in ("name", "description", "owner_role_id", "required_skills"):
@@ -119,7 +119,7 @@ class ProcessService(LLCServiceBase):
     async def _is_trigger_source(self, session: AsyncSession, company_id: uuid.UUID, process_key: str) -> bool:
         rows = await session.execute(
             select(Workflow.trigger_config).where(
-                Workflow.company_id == company_id, Workflow.trigger_type == TriggerType.PROCESS_RESULT.value
+                Workflow.company_id == company_id, Workflow.trigger_type == WorkflowTriggerKind.PROCESS_RESULT.value
             )
         )
         return any((cfg or {}).get("process_key") == process_key for (cfg,) in rows)
