@@ -101,7 +101,7 @@ psutil>=7.2.2
 paramiko>=5.0.0
 
 # Cron expression parsing (Issue #741 - Scheduled updates)
-croniter>=6.2.4
+croniter  # version from constraints/shared.txt
 
 # SSO Integration (Issue #576 Phase 4)
 authlib>=1.8.0  # OAuth2/OIDC client

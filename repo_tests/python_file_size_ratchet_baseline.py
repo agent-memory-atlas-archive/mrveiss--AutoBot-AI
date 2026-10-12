@@ -351,7 +351,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/knowledge/test_kb_synthesizer.py": 802,
     "autobot-backend/services/llm_cost_tracker.py": 1166,  # #16230: MODEL_PRICING table removed
     "autobot-backend/services/llm_service.py": 1199,  # #16845: _track_usage delegated to llm_usage_recording
-    "autobot-backend/services/load_balancer.py": 693,
+    "autobot-backend/services/load_balancer.py": 685,
     "autobot-backend/services/nl_database_service.py": 775,
     "autobot-backend/services/notification_service.py": 634,
     "autobot-backend/services/npu_worker_manager.py": 1419,
@@ -368,7 +368,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/slm_client_test.py": 659,
     "autobot-backend/services/temporal_invalidation_service.py": 997,
     "autobot-backend/services/tool_output_filter.py": 639,
-    "autobot-backend/services/trigger_service.py": 976,
+    "autobot-backend/services/trigger_service.py": 876,
     "autobot-backend/services/wake_word_service.py": 615,
     "autobot-backend/services/workflow_automation/executor.py": 1104,
     "autobot-backend/services/workflow_export_test.py": 611,
@@ -434,7 +434,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
     "autobot-slm-backend/ansible/roles/slm_agent/files/slm/agent/agent.py": 630,
     "autobot-slm-backend/api/code_source.py": 719,
-    "autobot-slm-backend/api/code_sync.py": 5860,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
+    "autobot-slm-backend/api/code_sync.py": 5850,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 724,
     "autobot-slm-backend/api/monitoring.py": 1087,

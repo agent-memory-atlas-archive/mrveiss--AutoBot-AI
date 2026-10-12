@@ -103,7 +103,7 @@ class SiteMapResponse(BaseModel):
     count: int
 
 
-class ExtractRequest(BaseModel):
+class ExtractPageRequest(BaseModel):
     """Request body for POST /knowledge/extract.
 
     The field ``json_schema`` is serialised as ``schema`` on the wire via

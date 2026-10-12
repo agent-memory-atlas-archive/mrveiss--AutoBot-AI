@@ -27269,15 +27269,15 @@ class TestBatch110TerminalCOMPLETE(unittest.TestCase):
         from api import npu_workers
 
         # Verify models are imported
-        self.assertTrue(hasattr(npu_workers, "NPUWorkerConfig"))
+        self.assertTrue(hasattr(npu_workers, "NPUWorkerDefinition"))
         self.assertTrue(hasattr(npu_workers, "NPUWorkerDetails"))
-        self.assertTrue(hasattr(npu_workers, "NPUWorkerMetrics"))
+        self.assertTrue(hasattr(npu_workers, "NPUWorkerLoadMetrics"))
         self.assertTrue(hasattr(npu_workers, "LoadBalancingConfig"))
         self.assertTrue(hasattr(npu_workers, "WorkerTestResult"))
 
         # Verify models are used in endpoints
         add_source = inspect.getsource(npu_workers.add_worker)
-        self.assertIn("NPUWorkerConfig", add_source)
+        self.assertIn("NPUWorkerDefinition", add_source)
 
         test_source = inspect.getsource(npu_workers.test_worker)
         self.assertIn("WorkerTestResult", test_source)
