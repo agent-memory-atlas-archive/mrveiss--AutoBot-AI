@@ -9,7 +9,7 @@ Provides detection, image extraction, local ML inference (ONNX on NPU/CPU),
 and a layered pipeline that falls back from local ML to human-in-the-loop.
 
 Classes:
-    CaptchaType          — enumeration of supported CAPTCHA kinds
+    CaptchaType          — imported from autobot_shared.captcha_types (the one taxonomy)
     CaptchaDetector      — keyword/selector detection + element screenshot extraction
     LocalCaptchaSolver   — ONNX-based OCR running on NPU/CPU; math expression eval
     SolveResult          — result dataclass returned by the pipeline
@@ -39,9 +39,9 @@ import io
 import re
 import time
 from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 
+from autobot_shared.captcha_types import CaptchaType
 from autobot_shared.logging_manager import get_logger
 from services.captcha_human_loop import get_captcha_human_loop
 
@@ -83,17 +83,6 @@ _TRAILING_EQUALS_RE = re.compile(r"\s*[=?]+\s*$")
 # ---------------------------------------------------------------------------
 # Enumerations and result types
 # ---------------------------------------------------------------------------
-
-
-class CaptchaType(Enum):
-    """Enumeration of CAPTCHA types that can be detected and solved."""
-
-    TEXT_IMAGE = "text_image"  # Distorted text rendered as an image
-    MATH = "math"  # Simple arithmetic expression
-    SLIDER = "slider"  # Drag-slider challenge
-    RECAPTCHA = "recaptcha"  # Google reCAPTCHA v2 / v3
-    HCAPTCHA = "hcaptcha"  # hCaptcha
-    UNKNOWN = "unknown"  # Could not be classified
 
 
 @dataclass
@@ -186,7 +175,7 @@ class CaptchaDetector:
                 logger.debug("CaptchaDetector: math CAPTCHA pattern found")
                 return CaptchaType.MATH
             logger.debug("CaptchaDetector: generic text-image CAPTCHA keyword found")
-            return CaptchaType.TEXT_IMAGE
+            return CaptchaType.TEXT
 
         logger.debug("CaptchaDetector: no CAPTCHA pattern matched")
         return CaptchaType.UNKNOWN
@@ -289,9 +278,9 @@ class LocalCaptchaSolver:
             captcha_type: The type of CAPTCHA to check.
 
         Returns:
-            True for TEXT_IMAGE and MATH; False for reCAPTCHA, hCaptcha, SLIDER.
+            True for TEXT and MATH; False for reCAPTCHA, hCaptcha, SLIDER.
         """
-        return captcha_type in (CaptchaType.TEXT_IMAGE, CaptchaType.MATH)
+        return captcha_type in (CaptchaType.TEXT, CaptchaType.MATH)
 
     async def solve_text_image(self, image_bytes: bytes) -> str | None:
         """Run ONNX inference on *image_bytes* and return the decoded text.
@@ -682,7 +671,7 @@ class CaptchaSolverPipeline:
             CSS selector string.
         """
         mapping = {
-            CaptchaType.TEXT_IMAGE: CaptchaDetector._TEXT_IMAGE_SELECTORS[0],
+            CaptchaType.TEXT: CaptchaDetector._TEXT_IMAGE_SELECTORS[0],
             CaptchaType.MATH: CaptchaDetector._TEXT_IMAGE_SELECTORS[0],
             CaptchaType.SLIDER: CaptchaDetector._SLIDER_SELECTORS[0],
             CaptchaType.RECAPTCHA: CaptchaDetector._RECAPTCHA_SELECTORS[0],
@@ -695,7 +684,7 @@ class CaptchaSolverPipeline:
 
         Args:
             image_bytes:  Raw image bytes.
-            captcha_type: Type being solved (TEXT_IMAGE or MATH).
+            captcha_type: Type being solved (TEXT or MATH).
 
         Returns:
             SolveResult with method_used="local_ml".

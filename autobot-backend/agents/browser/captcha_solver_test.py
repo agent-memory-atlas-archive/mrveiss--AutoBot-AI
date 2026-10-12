@@ -78,11 +78,11 @@ class TestCaptchaDetectorDetect:
 
     def test_text_image_detected_by_keyword(self):
         html = '<img id="captcha" src="/captcha.png">'
-        assert self.detector.detect(html) == CaptchaType.TEXT_IMAGE
+        assert self.detector.detect(html) == CaptchaType.TEXT
 
     def test_text_image_detected_verify_phrase(self):
         html = "<p>Verification required</p><img class='captcha' src='/c.png'>"
-        assert self.detector.detect(html) == CaptchaType.TEXT_IMAGE
+        assert self.detector.detect(html) == CaptchaType.TEXT
 
     def test_unknown_when_no_pattern(self):
         html = "<p>Hello world</p>"
@@ -147,7 +147,7 @@ class TestLocalCaptchaSolverCanSolve:
     @pytest.mark.parametrize(
         "captcha_type, expected",
         [
-            (CaptchaType.TEXT_IMAGE, True),
+            (CaptchaType.TEXT, True),
             (CaptchaType.MATH, True),
             (CaptchaType.RECAPTCHA, False),
             (CaptchaType.HCAPTCHA, False),
@@ -314,7 +314,7 @@ class TestCaptchaSolverPipeline:
         page.content = AsyncMock(return_value="<p>no expression here</p>")
 
         pipeline = self._make_pipeline(solver=solver, detector=detector)
-        result = await pipeline.solve(page, CaptchaType.TEXT_IMAGE)
+        result = await pipeline.solve(page, CaptchaType.TEXT)
 
         assert result.success is True
         assert result.answer == "ABCD12"
@@ -337,7 +337,7 @@ class TestCaptchaSolverPipeline:
         page.content = AsyncMock(return_value="<img class='captcha'>")
 
         pipeline = self._make_pipeline(solver=solver, detector=detector)
-        result = await pipeline.solve(page, CaptchaType.TEXT_IMAGE)
+        result = await pipeline.solve(page, CaptchaType.TEXT)
 
         assert result.success is True
         assert result.answer == "CACHED"
@@ -367,7 +367,7 @@ class TestCaptchaSolverPipeline:
             mock_get_loop.return_value = loop_instance
 
             pipeline = self._make_pipeline(solver=solver, detector=detector)
-            result = await pipeline.solve(page, CaptchaType.TEXT_IMAGE)
+            result = await pipeline.solve(page, CaptchaType.TEXT)
 
         assert result.success is True
         assert result.method_used == "human_loop"
@@ -441,7 +441,7 @@ class TestCaptchaSolverPipeline:
             mock_get_loop.return_value = loop_instance
 
             pipeline = self._make_pipeline(solver=solver, detector=detector)
-            result = await pipeline.solve(page, CaptchaType.TEXT_IMAGE)
+            result = await pipeline.solve(page, CaptchaType.TEXT)
 
         assert result.success is True
         assert result.method_used == "human_loop"
@@ -454,11 +454,11 @@ class TestCaptchaSolverPipeline:
             answer="TEST",
             method_used="local_ml",
             confidence=0.95,
-            captcha_type=CaptchaType.TEXT_IMAGE,
+            captcha_type=CaptchaType.TEXT,
         )
         assert r.success is True
         assert r.answer == "TEST"
         assert r.method_used == "local_ml"
         assert r.confidence == 0.95
-        assert r.captcha_type == CaptchaType.TEXT_IMAGE
+        assert r.captcha_type == CaptchaType.TEXT
         assert r.error is None

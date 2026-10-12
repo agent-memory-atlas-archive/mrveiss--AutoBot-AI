@@ -19,7 +19,6 @@ Falls back to human-in-the-loop system (captcha_human_loop.py)
 
 Usage:
     from services.captcha_solver import CaptchaSolver
-from autobot_shared.logging_manager import get_logger
 
     solver = CaptchaSolver()
     result = await solver.attempt_solve(page, captcha_type="text")
@@ -41,6 +40,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from autobot_shared.captcha_types import CaptchaType
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.slug import sanitize_token
@@ -58,16 +58,10 @@ _TRAILING_EQUALS_RE = re.compile(r"=\s*\??\s*$")
 _MATH_EXPR_RE = re.compile(r"(\d+)\s*([+\-*/])\s*(\d+)")
 
 
-class CaptchaType(Enum):
-    """Types of CAPTCHAs that can be encountered"""
-
-    TEXT = "text"  # Simple distorted text
-    MATH = "math"  # Math equation to solve
-    IMAGE_SELECT = "image_select"  # Select specific images
-    RECAPTCHA = "recaptcha"  # Google reCAPTCHA
-    HCAPTCHA = "hcaptcha"  # hCaptcha
-    CLOUDFLARE = "cloudflare"  # Cloudflare challenge
-    UNKNOWN = "unknown"
+#: Kinds OCR cannot attempt; routed straight to human intervention.
+_HUMAN_ONLY_TYPES = frozenset(
+    {CaptchaType.RECAPTCHA, CaptchaType.HCAPTCHA, CaptchaType.CLOUDFLARE, CaptchaType.SLIDER, CaptchaType.IMAGE_SELECT}
+)
 
 
 class SolverConfidence(Enum):
@@ -166,11 +160,7 @@ class CaptchaSolver:
             return await self._solve_text_captcha(image, expected_length, char_set)
         if captcha_type == CaptchaType.MATH:
             return await self._solve_math_captcha(image)
-        if captcha_type in (
-            CaptchaType.RECAPTCHA,
-            CaptchaType.HCAPTCHA,
-            CaptchaType.CLOUDFLARE,
-        ):
+        if captcha_type in _HUMAN_ONLY_TYPES:
             return CaptchaSolveResult(
                 success=False,
                 captcha_type=captcha_type,
