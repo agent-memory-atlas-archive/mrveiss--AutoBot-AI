@@ -828,9 +828,9 @@ class SecurityMemoryIntegration:
         host_entity = host_results[0]
 
         # Get related entities (services, vulnerabilities)
-        related = await self._memory_graph.traverse_relations(
+        related = await self._memory_graph.get_related_entities(
             entity_name=host_entity.get("name", f"Host: {host_ip}"),
-            depth=depth,
+            max_depth=depth,
         )
 
         return {
