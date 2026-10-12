@@ -40,12 +40,17 @@ that endpoint never had:
    read at hydration is different: :func:`resolve_provider_key` refuses it with
    :class:`VaultKeyUnavailableError` rather than falling back to an env value
    that may have been rotated out (owner decision 2026-10-12). A later
-   successful hydration or capture clears the refusal. A vault that cannot be
-   reached at startup (configured -- ``AUTOBOT_SECRETS_ROOT_KEY`` set -- but the
-   DB or decryption fails) leaves "does it hold this key?" unknown, so every
-   name is refused until a hydration succeeds. Env is allowed only where the
-   vault answered "no such key", where no vault is configured (root key unset),
-   or in a process that never hydrates (no backend lifespan). It also records a
+   successful hydration or capture clears the refusal. Listing rows needs no
+   root key, so a held name with no usable root key is refused too. A vault
+   whose rows cannot be listed (DB unreachable, session factory failing) leaves
+   "does it hold this key?" unknown, so every name is refused until a hydration
+   succeeds. Env is used only where the listing found no row for that name, or
+   in a process that has not hydrated AND has no root key configured (nothing
+   can say which names are held there). Every non-lifespan process hydrates on
+   first resolution when a root key is set, and Celery workers on
+   ``worker_process_init`` (``services.provider_key_process_init``). Hydration
+   builds a new cache and swaps it in, so readers never see a half-filled one
+   and a deleted row leaves no stale value. It also records a
    ``secret_dependencies`` edge (#10088 Task 8.2) for every name whose
    System-vault secret exists, regardless of whether the value currently
    resolves from the vault or from the env, so rotation-impact analysis
@@ -192,16 +197,16 @@ _env_fallback_logged: set[str] = set()
 #: the vault": these are refused, never resolved from the environment (#18094).
 _unreadable_keys: set[str] = set()
 
-#: What this process knows about the vault (#18094). Only ``unreachable`` refuses
-#: every name; the others defer to the per-name state above.
-VAULT_NOT_HYDRATED = "not_hydrated"  # no hydration in this process (no backend lifespan)
-VAULT_NOT_CONFIGURED = "not_configured"  # no root key: this deployment has no vault
-VAULT_REACHABLE = "reachable"  # hydration completed: absent names really are absent
-VAULT_UNREACHABLE = "unreachable"  # configured but hydration failed: held-state unknown
+#: What this process knows about the vault (#18094). ``unreachable`` refuses every
+#: name; ``reachable`` defers to the per-name state above; ``not_hydrated`` triggers
+#: a one-time hydration on first resolution when a root key is configured.
+VAULT_NOT_HYDRATED = "not_hydrated"  # this process has not read the vault yet
+VAULT_REACHABLE = "reachable"  # rows were listed: an absent name really is absent
+VAULT_UNREACHABLE = "unreachable"  # listing the rows failed: held-state unknown
 _vault_state: str = VAULT_NOT_HYDRATED
 
 _UNREADABLE = "is stored in the secrets manager but could not be read"
-_UNREACHABLE = "may be stored in the secrets manager, which could not be reached at startup"
+_UNREACHABLE = "may be stored in the secrets manager, which could not be reached"
 
 
 class VaultKeyUnavailableError(CredentialUnavailableError):
@@ -212,6 +217,12 @@ class VaultKeyUnavailableError(CredentialUnavailableError):
         super().__init__(
             f"vault unavailable: {self.name} {why}; refusing the environment fallback, which may hold a rotated-out key"
         )
+
+
+def _root_key_configured() -> bool:
+    from autobot_shared.secrets_envelope import ROOT_KEY_ENV
+
+    return bool(os.environ.get(ROOT_KEY_ENV))
 
 
 def _label(name: str) -> str:
@@ -233,6 +244,15 @@ def resolve_provider_key(env_var: str, config_value: str) -> str:
     vaulted = _hydrated_keys.get(env_var, "")
     if vaulted:
         return vaulted
+    if _vault_state == VAULT_NOT_HYDRATED and _root_key_configured():
+        # A non-lifespan process (CLI, script, MCP server, a worker before its init hook):
+        # read the vault once rather than serve env for a key it may hold.
+        from services.provider_key_process_init import hydrate_this_process
+
+        hydrate_this_process()
+        vaulted = _hydrated_keys.get(env_var, "")
+        if vaulted:
+            return vaulted
     if _vault_state == VAULT_UNREACHABLE:
         logger.error("provider-key-vault: %s vault unreachable: refusing the environment fallback", _label(env_var))
         raise VaultKeyUnavailableError(env_var, _UNREACHABLE)
@@ -428,38 +448,41 @@ async def _register_credential_dependency(session: AsyncSession, *, name: str, s
         logger.warning("provider-key-vault: dependency registration failed name=%s: %s", name, type(exc).__name__)
 
 
-async def _hydrate_one_key(
-    session: AsyncSession, service: EnvelopeSecretsService, *, name: str, secret_id: uuid.UUID
-) -> bool:
-    """Decrypt *secret_id* into ``_hydrated_keys[name]``. Returns whether it hydrated.
-
-    A failed read marks *name* unreadable (resolution then refuses it rather than
-    using the env value); a successful one clears that mark.
-    """
+async def _read_one_key(
+    session: AsyncSession, service: EnvelopeSecretsService | None, *, name: str, secret_id: uuid.UUID
+) -> str | None:
+    """Decrypt *secret_id*; ``None`` when it cannot be read (no usable root key, or the read fails)."""
+    if service is None:
+        return None
     try:
         value = await service.read(session, secret_id=secret_id, accessible_vaults={_SYSTEM_VAULT})
     except Exception as exc:  # noqa: BLE001 - defensive, one bad row must not break the rest
         logger.warning("provider-key-vault: hydrate failed name=%s: %s", name, type(exc).__name__)
-        _hydrated_keys.pop(name, None)
-        _unreadable_keys.add(name)
-        return False
-    _hydrated_keys[name] = value.decode("utf-8")
-    _unreadable_keys.discard(name)
-    return True
+        return None
+    return value.decode("utf-8")
+
+
+def _decrypting_service(root_key: bytes | None) -> EnvelopeSecretsService | None:
+    """The envelope service, or ``None`` when no usable root key exists -- rows are still listed then."""
+    from services.envelope_secrets_service import EnvelopeSecretsService
+
+    try:
+        return EnvelopeSecretsService(root_key=root_key)
+    except RuntimeError as exc:  # load_root_key: unset or malformed AUTOBOT_SECRETS_ROOT_KEY
+        logger.warning("provider-key-vault: cannot decrypt (%s); every vault-held key is refused", type(exc).__name__)
+        return None
 
 
 async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: bytes | None = None) -> list[str]:
-    """Populate the process cache from the System vault for every name it holds.
+    """Rebuild the process cache from the System vault: every name it holds, readable or not.
 
-    Called once at FastAPI startup, after the DB is initialised. The vault
-    wins at resolution (#18094), so a name is hydrated whether or not its env
-    var is also set; the env var is only the fallback for a name the vault
-    lacks. A ``secret_dependencies`` edge is recorded for every name whose
-    vault secret exists, so rotation-impact analysis sees the consumer. Returns
-    the list of names actually hydrated into the cache (for startup logging
-    -- never the values). ``root_key`` defaults to loading
-    ``AUTOBOT_SECRETS_ROOT_KEY`` (production behaviour); tests pass an
-    explicit key.
+    The vault wins at resolution (#18094): a held name is hydrated whether or not its env
+    var is set; a held name that cannot be decrypted -- including when no root key is
+    configured -- is recorded as unreadable and refused; only a name with no row falls
+    back to env. The new state is built aside and swapped in at the end, so a reader never
+    sees a half-filled cache and a row deleted since the last run leaves no stale value. A
+    ``secret_dependencies`` edge is recorded for every held name. Returns the names
+    hydrated (never values). ``root_key`` defaults to ``AUTOBOT_SECRETS_ROOT_KEY``.
     """
     global _vault_state
     try:
@@ -472,52 +495,46 @@ async def hydrate_provider_keys_from_vault(session: AsyncSession, *, root_key: b
 
 
 async def _hydrate_all(session: AsyncSession, root_key: bytes | None) -> list[str]:
-    """The hydration loop; any exception means the vault's held-state is unknown."""
-    from services.envelope_secrets_service import EnvelopeSecretsService
-
-    service = EnvelopeSecretsService(root_key=root_key)
-    hydrated: list[str] = []
+    """List and read every held name into a new cache, then swap it in; any exception = held-state unknown."""
+    global _hydrated_keys, _unreadable_keys
+    service = _decrypting_service(root_key)
+    keys: dict[str, str] = {}
+    unreadable: set[str] = set()
     any_dependency_registered = False
     for name in VAULT_RESOLVED_CREDENTIAL_NAMES:
         secret_id = await _find_system_secret_id(session, name)
-        if secret_id is not None:
-            await _register_credential_dependency(session, name=name, secret_id=secret_id)
-            any_dependency_registered = True
         if secret_id is None:
-            _unreadable_keys.discard(name)
             continue  # nothing vaulted: resolution falls back to the env var
-        if await _hydrate_one_key(session, service, name=name, secret_id=secret_id):
-            hydrated.append(name)
+        await _register_credential_dependency(session, name=name, secret_id=secret_id)
+        any_dependency_registered = True
+        value = await _read_one_key(session, service, name=name, secret_id=secret_id)
+        if value is None:
+            unreadable.add(name)
+        else:
+            keys[name] = value
     if any_dependency_registered:
         await session.commit()
-    return hydrated
+    _hydrated_keys, _unreadable_keys = keys, unreadable
+    return list(keys)
 
 
 async def hydrate_at_startup(get_session_factory: Callable[[], Callable]) -> list[str]:
-    """Startup hydration that classifies the vault before anything resolves a key (#18094).
+    """Hydration that classifies the vault before anything resolves a key (#18094); never raises.
 
-    No root key configured: there is no vault, keys resolve from env (WARNING).
-    Configured but the DB or decryption fails: the vault is unreachable and every
-    vault-resolved name is refused until a hydration succeeds (ERROR). Never raises:
-    an outage must not stop startup, it must stop keys silently coming from env. Building the
-    session factory is inside the classification too: it is the DB.
+    Rows are listed even without a root key (listing needs none): a held name that cannot be
+    decrypted is refused. If the rows cannot be listed -- DB unreachable, the session factory
+    itself failing -- the vault is unreachable and every vault-resolved name is refused until a
+    hydration succeeds (ERROR). An outage must not stop startup; it must stop keys silently
+    coming from env.
     """
     global _vault_state
-    from autobot_shared.secrets_envelope import ROOT_KEY_ENV
-
-    if not os.environ.get(ROOT_KEY_ENV):
-        _vault_state = VAULT_NOT_CONFIGURED
-        logger.warning(
-            "provider-key-vault: no vault configured (%s unset): provider keys resolve from env", ROOT_KEY_ENV
-        )
-        return []
     try:
         async with get_session_factory()() as session:
             return await hydrate_provider_keys_from_vault(session)
     except Exception as exc:  # noqa: BLE001 - classified and reported; startup continues with keys refused
         _vault_state = VAULT_UNREACHABLE
         logger.error(
-            "provider-key-vault: vault unreachable at startup (%s): every vault-resolved provider key is refused, "
+            "provider-key-vault: vault unreachable (%s): every vault-resolved provider key is refused, "
             "never taken from env, until a hydration succeeds",
             type(exc).__name__,
         )

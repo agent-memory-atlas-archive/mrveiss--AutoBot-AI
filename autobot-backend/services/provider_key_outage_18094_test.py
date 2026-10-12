@@ -54,7 +54,7 @@ async def test_an_outage_refuses_every_key_even_with_env_present(monkeypatch, ca
             pkv.resolve_provider_key(_NAME, _ENV_VALUE)
     assert pkv._vault_state == pkv.VAULT_UNREACHABLE
     assert "could not be reached" in str(exc.value)
-    assert "vault unreachable at startup (ConnectionRefusedError)" in caplog.text
+    assert "vault unreachable (ConnectionRefusedError)" in caplog.text
     assert any(r.levelno == logging.ERROR for r in caplog.records)
     assert _ENV_VALUE not in caplog.text and _ENV_VALUE not in str(exc.value)
 
@@ -72,14 +72,63 @@ async def test_a_failure_inside_hydration_is_an_outage_too(monkeypatch) -> None:
         pkv.resolve_provider_key(_NAME, _ENV_VALUE)
 
 
+def _rows_for(*held: str):
+    async def _find(_session, name):
+        return f"id-{name}" if name in held else None
+
+    return _find
+
+
 @pytest.mark.asyncio
-async def test_no_vault_configured_resolves_from_env_with_a_warning(monkeypatch, caplog) -> None:
+async def test_root_key_unset_refuses_the_names_the_vault_holds_and_only_those(monkeypatch, caplog) -> None:
+    """Contrast: before, an unset root key meant "no vault" and every key came from env."""
     monkeypatch.delenv(ROOT_KEY_ENV, raising=False)
-    with caplog.at_level(logging.WARNING):
-        assert await pkv.hydrate_at_startup(_db_down) == []
-        assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == _ENV_VALUE
-    assert pkv._vault_state == pkv.VAULT_NOT_CONFIGURED
-    assert "no vault configured" in caplog.text
+    with (
+        patch.object(pkv, "_find_system_secret_id", side_effect=_rows_for(_NAME)),
+        patch.object(pkv, "_register_credential_dependency", AsyncMock()),
+        caplog.at_level(logging.WARNING),
+    ):
+        assert await pkv.hydrate_at_startup(_factory_with(MagicMock(commit=AsyncMock()))) == []
+    assert pkv._vault_state == pkv.VAULT_REACHABLE
+    with pytest.raises(pkv.VaultKeyUnavailableError, match="could not be read"):
+        pkv.resolve_provider_key(_NAME, _ENV_VALUE)
+    assert pkv.resolve_provider_key("MISTRAL_API_KEY", "mistral-env") == "mistral-env"  # pragma: allowlist secret
+    assert "cannot decrypt (RuntimeError)" in caplog.text and _ENV_VALUE not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_vault_row_leaves_no_stale_cached_value(monkeypatch) -> None:
+    monkeypatch.setenv(ROOT_KEY_ENV, "configured")
+    pkv._hydrated_keys[_NAME] = "stale-vault-value"  # pragma: allowlist secret
+    with (
+        patch("services.envelope_secrets_service.EnvelopeSecretsService", autospec=True),
+        patch.object(pkv, "_find_system_secret_id", AsyncMock(return_value=None)),
+    ):
+        await pkv.hydrate_at_startup(_factory_with(MagicMock(commit=AsyncMock())))
+    assert _NAME not in pkv._hydrated_keys
+    assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == _ENV_VALUE
+
+
+@pytest.mark.asyncio
+async def test_hydration_swaps_the_cache_atomically(monkeypatch) -> None:
+    """A reader during hydration sees the previous complete cache, never a half-filled one."""
+    monkeypatch.setenv(ROOT_KEY_ENV, "configured")
+    previous = {"MISTRAL_API_KEY": "old"}  # pragma: allowlist secret
+    monkeypatch.setattr(pkv, "_hydrated_keys", previous)
+    seen = []
+
+    async def _find(_session, name):
+        seen.append(pkv._hydrated_keys is previous)
+        return "id" if name == _NAME else None
+
+    service = MagicMock(read=AsyncMock(return_value=b"new-vault-value"))
+    with (
+        patch("services.envelope_secrets_service.EnvelopeSecretsService", return_value=service),
+        patch.object(pkv, "_find_system_secret_id", side_effect=_find),
+        patch.object(pkv, "_register_credential_dependency", AsyncMock()),
+    ):
+        assert await pkv.hydrate_at_startup(_factory_with(MagicMock(commit=AsyncMock()))) == [_NAME]
+    assert all(seen) and pkv._hydrated_keys == {_NAME: "new-vault-value"}
 
 
 @pytest.mark.asyncio
@@ -109,9 +158,82 @@ async def test_a_successful_hydration_after_an_outage_restores_resolution(monkey
     assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == _ENV_VALUE
 
 
-def test_a_process_that_never_hydrates_keeps_the_env_fallback() -> None:
-    assert pkv._vault_state == pkv.VAULT_NOT_HYDRATED
+def test_an_unhydrated_process_with_a_root_key_hydrates_before_resolving(monkeypatch) -> None:
+    """Contrast: before, a process outside the lifespan (a Celery worker) served env unread."""
+    from services import provider_key_process_init as init
+
+    monkeypatch.setenv(ROOT_KEY_ENV, "configured")
+    calls = []
+
+    def _outage():
+        calls.append(1)
+        pkv._vault_state = pkv.VAULT_UNREACHABLE
+        return []
+
+    monkeypatch.setattr(init, "hydrate_this_process", _outage)
+    with pytest.raises(pkv.VaultKeyUnavailableError, match="could not be reached"):
+        pkv.resolve_provider_key(_NAME, _ENV_VALUE)
+    assert calls == [1]
+
+
+def test_a_lazily_hydrated_vault_value_wins(monkeypatch) -> None:
+    from services import provider_key_process_init as init
+
+    monkeypatch.setenv(ROOT_KEY_ENV, "configured")
+
+    def _hydrate():
+        pkv._hydrated_keys[_NAME] = "vault-value"  # pragma: allowlist secret
+        pkv._vault_state = pkv.VAULT_REACHABLE
+        return [_NAME]
+
+    monkeypatch.setattr(init, "hydrate_this_process", _hydrate)
+    assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == "vault-value"
+
+
+def test_without_a_root_key_an_unhydrated_process_uses_env_and_does_not_touch_the_db(monkeypatch) -> None:
+    """The stated residual: no root key and no hydration means nothing can say which names are held."""
+    from services import provider_key_process_init as init
+
+    monkeypatch.delenv(ROOT_KEY_ENV, raising=False)
+    monkeypatch.setattr(init, "hydrate_this_process", lambda: pytest.fail("must not hydrate without a root key"))
     assert pkv.resolve_provider_key(_NAME, _ENV_VALUE) == _ENV_VALUE
+
+
+def test_the_private_engine_path_classifies_a_db_failure_as_an_outage(monkeypatch) -> None:
+    from services import provider_key_process_init as init
+
+    def _no_db():
+        raise ConnectionRefusedError("db down")
+
+    monkeypatch.setattr("user_management.database.get_deployment_config", _no_db)
+    assert init.hydrate_this_process() == []
+    assert pkv._vault_state == pkv.VAULT_UNREACHABLE
+    assert init.hydrate_this_process() == []  # once per process: no second attempt
+
+
+@pytest.mark.asyncio
+async def test_hydrate_this_process_is_safe_inside_a_running_loop(monkeypatch) -> None:
+    from services import provider_key_process_init as init
+
+    monkeypatch.setattr("user_management.database.get_deployment_config", _db_down)
+    assert init.hydrate_this_process() == []
+    assert pkv._vault_state == pkv.VAULT_UNREACHABLE
+
+
+def test_the_celery_worker_hydrates_on_process_init() -> None:
+    """``celery_app`` is stubbed under test (conftest, #7766), so the hook is checked in the source."""
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse((Path(__file__).resolve().parents[1] / "celery_app.py").read_text(encoding="utf-8"))
+    hooks = [
+        fn
+        for fn in tree.body
+        if isinstance(fn, ast.FunctionDef)
+        and any(ast.unparse(d) == "worker_process_init.connect" for d in fn.decorator_list)
+        and any(isinstance(c, ast.Call) and ast.unparse(c.func) == "hydrate_this_process" for c in ast.walk(fn))
+    ]
+    assert len(hooks) == 1
 
 
 # --- the readers this round routed through the resolver ------------------------------------------

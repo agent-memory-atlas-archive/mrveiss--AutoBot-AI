@@ -19,9 +19,9 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from autobot_shared.secrets_vault import VaultKind, VaultRef
+from services import provider_key_vault
 from services.envelope_secrets_service import EnvelopeSecretsService
 from services.provider_key_vault import (
-    _hydrated_keys,
     capture_provider_key,
     hydrate_provider_keys_from_vault,
     resolve_provider_key,
@@ -47,11 +47,11 @@ async def session(fresh_db_url):
 
 
 @pytest.fixture(autouse=True)
-def _clear_hydration_cache():
-    """The process-lifetime hydration cache must not leak between tests."""
-    _hydrated_keys.clear()
-    yield
-    _hydrated_keys.clear()
+def _clear_hydration_cache(monkeypatch):
+    """The process-lifetime hydration state must not leak between tests (hydration swaps the cache, #18094)."""
+    monkeypatch.setattr(provider_key_vault, "_hydrated_keys", {})
+    monkeypatch.setattr(provider_key_vault, "_unreadable_keys", set())
+    monkeypatch.setattr(provider_key_vault, "_vault_state", provider_key_vault.VAULT_NOT_HYDRATED)
 
 
 async def test_capture_lands_in_system_vault(session):
@@ -121,7 +121,7 @@ async def test_hydrate_loads_the_vault_even_when_env_var_is_set(session, monkeyp
     )
     await session.commit()
 
-    _hydrated_keys.clear()  # prove hydration (not the capture-time refresh) loads it
+    provider_key_vault._hydrated_keys.clear()  # prove hydration (not the capture-time refresh) loads it
     hydrated = await hydrate_provider_keys_from_vault(session, root_key=_ROOT)
     assert "GROQ_API_KEY" in hydrated
     assert resolve_provider_key("GROQ_API_KEY", "env-value") == "vault-value"
@@ -227,7 +227,7 @@ async def test_search_credential_vault_wins_over_env(session, monkeypatch):
     )
     await session.commit()
 
-    _hydrated_keys.clear()
+    provider_key_vault._hydrated_keys.clear()
     hydrated = await hydrate_provider_keys_from_vault(session, root_key=_ROOT)
     assert "SEARXNG_TOKEN" in hydrated
     assert resolve_provider_key("SEARXNG_TOKEN", "env-value") == "vault-value"
