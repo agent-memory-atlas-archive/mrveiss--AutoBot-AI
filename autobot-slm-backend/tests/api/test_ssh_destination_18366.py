@@ -35,7 +35,20 @@ service_restart, orchestrator_ssh, ssh_utils, schemas = _real_orm.import_modules
 _INJECTED = "-oProxyCommand=touch /tmp/pwned"
 # "" is not here: service_restart documents an empty user as the "autobot" default; the schemas refuse it below.
 _BAD_USERS = [_INJECTED, "-o", "a@b", "a b", "a;id", "$(id)", "-", "a\nb", "x" * 33, "ünï"]
-_BAD_HOSTS = ["-oProxyCommand=x", "-p", "h ost", "h@st", "h;id", "$(id)", "", "-1.2.3.4", "a..b", "h\n", "a" * 254, "[::1]"]
+_BAD_HOSTS = [
+    "-oProxyCommand=x",
+    "-p",
+    "h ost",
+    "h@st",
+    "h;id",
+    "$(id)",
+    "",
+    "-1.2.3.4",
+    "a..b",
+    "h\n",
+    "a" * 254,
+    "[::1]",
+]
 _GOOD = [("autobot", "10.0.0.5"), ("root", "node-1.example.net"), ("_svc.user-1", "fe80::1"), ("u", "h")]
 
 
@@ -149,6 +162,7 @@ def _client():
     from fastapi.testclient import TestClient
 
     app = FastAPI()
+
     @app.post("/nodes")
     def create(node: schemas.NodeCreate) -> dict:
         return {"ssh_user": node.ssh_user, "ip_address": node.ip_address}

@@ -238,7 +238,7 @@ def test_the_ssh_base_builders_build_the_destination_only_through_the_validator(
     [
         ("the old inline destination", 'def b(u, h):\n    return [f"{u}@{h}"]\n', 1),
         ("a destination with a literal user", 'def b(h):\n    return [f"autobot@{h}"]\n', 0),
-        ("the validator call", 'def b(u, h):\n    return [ssh_destination(u, h)]\n', 0),
+        ("the validator call", "def b(u, h):\n    return [ssh_destination(u, h)]\n", 0),
     ],
 )
 def test_the_destination_detector_has_contrast_fixtures(label: str, source: str, expected_bad: int) -> None:

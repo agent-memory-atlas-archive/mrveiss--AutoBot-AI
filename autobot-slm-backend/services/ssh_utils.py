@@ -41,6 +41,7 @@ def _warn_once(path: str, detail: str) -> None:
         detail,
     )
 
+
 # --- The one validator for an ssh destination (#18366) -----------------------------------------
 # A node row's ssh_user / ip_address go into the local ssh argv. A value starting with '-' is
 # parsed by OpenSSH as an OPTION (``-oProxyCommand=<cmd>`` runs <cmd> on the SLM host before any
