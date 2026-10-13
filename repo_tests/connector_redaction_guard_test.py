@@ -213,20 +213,22 @@ def test_the_audio_api_bypass_also_reaches_store_fact():
 def _audio_sink_chain() -> list[tuple[str, tuple[str, str]]]:
     """(link name, (its source, the call the next link needs)) for _store_fact_in_kb -> store_fact.
 
-    _store_fact_in_kb -> kb.add_document -> ingest_document -> kb._add_document_internal
+    _store_fact_in_kb -> ingest_in_kb -> kb.add_document -> ingest_document -> kb._add_document_internal
     -> kb.store_fact -> sanitize_fact_content (the redaction). Every link is read from source.
     """
     from api.knowledge import _store_fact_in_kb
     from knowledge.document_ingest import ingest_document
     from knowledge.documents import DocumentsMixin
     from knowledge.facts import FactsMixin
+    from knowledge.kb_ingest_result import ingest_in_kb
 
-    return _chain_links(_store_fact_in_kb, ingest_document, DocumentsMixin, FactsMixin)
+    first = ("_store_fact_in_kb", (inspect.getsource(_store_fact_in_kb), "ingest_in_kb("))
+    return [first] + _chain_links(ingest_in_kb, ingest_document, DocumentsMixin, FactsMixin)
 
 
 def _chain_links(store_fn, ingest_fn, documents_cls, facts_cls):
     return [
-        ("_store_fact_in_kb", (inspect.getsource(store_fn), "kb.add_document(")),
+        ("ingest_in_kb", (inspect.getsource(store_fn), "kb.add_document(")),
         ("DocumentsMixin.add_document", (inspect.getsource(documents_cls.add_document), "ingest_document(")),
         ("document_ingest", (inspect.getsource(inspect.getmodule(ingest_fn)), "kb._add_document_internal(")),
         (
@@ -251,10 +253,10 @@ def test_negative_control_a_sink_chain_that_skips_redaction_is_caught():
         async def _add_document_internal(self, content, metadata=None, doc_id=None):
             return await self.store_fact(content, metadata, doc_id)
 
-    from api.knowledge import _store_fact_in_kb
     from knowledge.document_ingest import ingest_document
+    from knowledge.kb_ingest_result import ingest_in_kb
 
-    links = dict(_chain_links(_store_fact_in_kb, ingest_document, _SkipDocs, _NoRedactFacts))
+    links = dict(_chain_links(ingest_in_kb, ingest_document, _SkipDocs, _NoRedactFacts))
     broken = [name for name, (src, call) in links.items() if call not in src]
     assert broken == ["DocumentsMixin.add_document", "FactsMixin.store_fact"]
 
