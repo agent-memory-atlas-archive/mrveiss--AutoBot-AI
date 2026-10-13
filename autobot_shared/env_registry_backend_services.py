@@ -582,5 +582,3 @@ register_env_var(
         component="backend",
     )
 )
-
-# The knowledge-component registrations live in their own module (file-size ceiling).
