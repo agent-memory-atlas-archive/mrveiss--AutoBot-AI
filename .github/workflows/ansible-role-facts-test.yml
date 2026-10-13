@@ -2,7 +2,7 @@
 #
 # Runs the test playbook (autobot-slm-backend/ansible/tests/playbooks/
 # test_role_active_facts.yml) against synthetic inventories that exercise
-# every code path in inventory/group_vars/all/role_active_facts.yml.
+# every code path in inventory/group_vars/all.yml.
 #
 # Catches:
 #   - Forgotten `autobot-X` variant when adding a new role
@@ -45,6 +45,7 @@ on:
       - 'autobot-slm-backend/ansible/deploy.yml'
       - 'tools/lint/check_role_facts_single_source.py'
       - 'tools/lint/check_test_inventory_is_generated.py'
+      - 'tools/lint/check_group_vars_no_shadow.py'
       - '.github/workflows/ansible-role-facts-test.yml'
   push:
     branches:
@@ -71,6 +72,7 @@ on:
       - 'autobot-slm-backend/ansible/deploy.yml'
       - 'tools/lint/check_role_facts_single_source.py'
       - 'tools/lint/check_test_inventory_is_generated.py'
+      - 'tools/lint/check_group_vars_no_shadow.py'
 
 # #14434: without this, every push left its predecessors queued. 42 of a 271-run
 # sample were for commits no longer at their branch tip - work nothing would ever
@@ -138,6 +140,11 @@ jobs:
         working-directory: autobot-slm-backend/ansible
         run: |
           python3 ../../tools/lint/check_test_inventory_is_generated.py
+
+      - name: "Assert no group_vars/<name>.yml is shadowed by a group_vars/<name>/ directory (#18514)"
+        working-directory: autobot-slm-backend/ansible
+        run: |
+          python3 ../../tools/lint/check_group_vars_no_shadow.py
 
       - name: Run role_*_active facts test (group_vars codepath)
         working-directory: autobot-slm-backend/ansible

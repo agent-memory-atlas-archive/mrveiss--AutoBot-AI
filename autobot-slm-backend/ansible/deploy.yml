@@ -23,8 +23,8 @@
   # already-combined host reclaimed the unit from redis on every run, even though
   # redis was never touched (#4090).
   #
-  # #14678: inventory/group_vars/all/role_active_facts.yml is the ONLY
-  # definition of the role-active facts. Inventories with a group_vars/
+  # #14678/#18514: inventory/group_vars/all.yml (never a group_vars/all/ directory,
+  # which would shadow it) holds the ONLY definition of the role-active facts. Inventories with a group_vars/
   # directory beside them (every dynamic-inventory builder links one,
   # #11781, #14286) discover it on their own; this play cannot rely on
   # that: its only two callers, services/deployment.py
@@ -35,7 +35,7 @@
   # copy. Dropping it needs those callers to write a real inventory first
   # (#15348).
   vars_files:
-    - inventory/group_vars/all/role_active_facts.yml
+    - inventory/group_vars/all.yml
 
   tasks:
     - name: Parse target roles

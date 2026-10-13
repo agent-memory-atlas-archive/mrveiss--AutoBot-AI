@@ -18,7 +18,7 @@ Blocked patterns:
     when: "'frontend' in node_roles"
     # ... etc. for all deprecated aliases
 
-Allowlist: group_vars/all.yml and group_vars/all/role_active_facts.yml must maintain
+Allowlist: group_vars/all.yml must maintain
 the OR-chains for backward compat with existing hosts — those files are
 excluded from this check.
 
@@ -59,7 +59,6 @@ ALLOWLIST: frozenset[str] = frozenset(
     {
         # The facts themselves must check both forms for backward compat.
         "autobot-slm-backend/ansible/inventory/group_vars/all.yml",
-        "autobot-slm-backend/ansible/inventory/group_vars/all/role_active_facts.yml",
         # #14678: the CI test inventory's group_vars/ is GENERATED from
         # inventory/group_vars/ (never tracked), so it carries the same
         # OR-chains. `tools/lint/check_test_inventory_is_generated.py` asserts the
@@ -67,7 +66,7 @@ ALLOWLIST: frozenset[str] = frozenset(
         # `tools/lint/check_role_facts_single_source.py` asserts no tracked second
         # definition exists. "Fixing" the OR-chains in the copy would only be
         # overwritten at the next CI run.
-        "autobot-slm-backend/ansible/tests/inventory/group_vars/all/role_active_facts.yml",
+        "autobot-slm-backend/ansible/tests/inventory/group_vars/all.yml",
         # This file and its test.
         "tools/lint/check_canonical_role_names.py",
         "tools/lint/check_canonical_role_names_test.py",

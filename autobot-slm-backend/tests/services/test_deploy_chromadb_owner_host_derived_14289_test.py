@@ -56,8 +56,8 @@ def test_deploy_yml_loads_the_shared_role_active_facts():
     `vars_files` load makes chromadb_service_owner resolve correctly there."""
     play = _deploy_play()
     vars_files = [str(v) for v in play.get("vars_files") or []]
-    assert any(v.endswith("role_active_facts.yml") for v in vars_files), (
-        "deploy.yml no longer loads inventory/group_vars/all/role_active_facts.yml -- a caller with "
+    assert any(v.endswith("group_vars/all.yml") for v in vars_files), (
+        "deploy.yml no longer loads inventory/group_vars/all.yml -- a caller with "
         "no group_vars sibling would see role_redis_active/role_ai_stack_active as undefined"
     )
 
@@ -107,7 +107,7 @@ def test_group_vars_and_deploy_yml_read_the_same_single_definition():
     `tools/lint/check_role_facts_single_source.py`). deploy.yml's
     `vars_files` entry must point at that SAME file, so the formula cannot
     differ between a run that discovers group_vars and one that does not."""
-    canonical = _ANSIBLE / "inventory" / "group_vars" / "all" / "role_active_facts.yml"
+    canonical = _ANSIBLE / "inventory" / "group_vars" / "all.yml"
     text = canonical.read_text(encoding="utf-8")
     owner_line = next(ln for ln in text.splitlines() if ln.startswith("chromadb_service_owner:"))
     assert "role_redis_active" in owner_line, f"{canonical} no longer derives ownership from host state"

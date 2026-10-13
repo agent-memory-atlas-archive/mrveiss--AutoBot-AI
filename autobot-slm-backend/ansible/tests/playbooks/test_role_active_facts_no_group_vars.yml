@@ -28,9 +28,9 @@
   # Critical: load via vars_files (NOT group_vars symlink).
   # Path is relative to this playbook file:
   #   tests/playbooks/test_role_active_facts_no_group_vars.yml
-  #     ../../inventory/group_vars/all/role_active_facts.yml
+  #     ../../inventory/group_vars/all.yml
   vars_files:
-    - ../../inventory/group_vars/all/role_active_facts.yml
+    - ../../inventory/group_vars/all.yml
 
   tasks:
     - name: "role_backend_active matches expected"
