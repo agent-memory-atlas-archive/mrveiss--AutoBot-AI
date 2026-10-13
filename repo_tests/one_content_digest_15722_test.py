@@ -111,7 +111,7 @@ def _source_population(root: Path) -> list[str]:
 REACH = declare(
     "one-content-digest-scan",
     discover=_source_population,
-    floor=2580,
+    floor=2702,
     # Mid-window, from REACH.window(): 2730 measured, growth 300 -> 150 of headroom each way.,
     what="non-test python source",
     roots=_ROOTS,

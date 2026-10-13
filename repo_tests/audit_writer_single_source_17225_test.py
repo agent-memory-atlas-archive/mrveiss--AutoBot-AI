@@ -214,7 +214,7 @@ REACH = declare(
     "audit-writer-single-source",
     discover=_population,
     # Mid-window, from REACH.window(): window (2697, 2997, 2847) at authoring.
-    floor=2847,
+    floor=2979,
     what="non-test python source",
     roots=("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     growth=300,
