@@ -72816,7 +72816,7 @@ export interface components {
          * @description Shape of ``GET /api/knowledge_base/docs/categories``.
          *
          *     Sorted descending by ``count``; metadata comes from
-         *     ``scripts.utilities.index_documentation.CATEGORY_TAXONOMY``.
+         *     ``services.knowledge.doc_taxonomy.CATEGORY_TAXONOMY``.
          */
         DocsCategoriesResponse: {
             /**
