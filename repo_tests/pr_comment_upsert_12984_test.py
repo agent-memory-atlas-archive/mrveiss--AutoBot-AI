@@ -54,6 +54,9 @@ def _load():
 helper = _load()
 
 
+_LIST_PATH = f"/repos/{_REPO}/issues/{_PR}/comments"
+
+
 class FakeGitHub:
     """A comments API: pages by `per_page`/`page`, `Link: rel="next"`, records writes."""
 
@@ -86,7 +89,8 @@ class FakeGitHub:
                 fake.reads.append(self.path)
                 chunk = fake.comments[(page - 1) * size : page * size]
                 more = page * size < len(fake.comments)
-                link = f'<{fake.base}{url.path}?per_page={size}&page={page + 1}>; rel="next"' if more else None
+                # The next-page link names the one listing route, never echoes the request path into a header.
+                link = f'<{fake.base}{_LIST_PATH}?per_page={size}&page={page + 1}>; rel="next"' if more else None
                 self._reply(200, chunk, link)
 
             def _body(self) -> dict:

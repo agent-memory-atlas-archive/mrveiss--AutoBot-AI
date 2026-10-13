@@ -147,7 +147,13 @@ def filter_source(raw: str, read: ReadFile) -> dict:
 #: `_changes.yml`; so editing it now runs the suite. Nothing else about any path set moves.
 ALLOWED_ADDITIONS = {
     #  + #17822: the migration-gate guard reads migration-gate.yml, so editing it must run the suite.
-    ".github/filters/python-paths.yml": {"python": [f"{WORKFLOWS}/_changes.yml", f"{WORKFLOWS}/migration-gate.yml"]},
+    ".github/filters/python-paths.yml": {
+        "python": [
+            f"{WORKFLOWS}/_changes.yml",
+            f"{WORKFLOWS}/migration-gate.yml",
+            f"{WORKFLOWS}/ai-security-review.yml",
+        ]
+    },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
     # `_changes.yml` entry the workflow gained has to be here too.
     ".github/filters/frontend-paths.yml": {"frontend": [f"{WORKFLOWS}/_changes.yml"]},
