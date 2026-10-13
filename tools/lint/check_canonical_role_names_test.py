@@ -106,7 +106,6 @@ def test_the_test_inventory_is_allowlisted() -> None:
 
     It is a copy of the single definition, regenerated each CI run (#14678).
     """
-    assert "autobot-slm-backend/ansible/tests/inventory/group_vars/all/role_active_facts.yml" in ALLOWLIST
+    assert "autobot-slm-backend/ansible/tests/inventory/group_vars/all.yml" in ALLOWLIST
     assert "autobot-slm-backend/ansible/inventory/group_vars/all.yml" in ALLOWLIST
-    assert "autobot-slm-backend/ansible/inventory/group_vars/all/role_active_facts.yml" in ALLOWLIST
     assert "autobot-slm-backend/ansible/playbooks/vars/role_active_facts.yml" not in ALLOWLIST
