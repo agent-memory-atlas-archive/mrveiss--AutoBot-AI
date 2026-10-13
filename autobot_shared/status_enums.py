@@ -359,7 +359,7 @@ class SecretType(str, Enum):
         return frozenset(wanted)
 
 
-class Priority(Enum):
+class Priority(str, Enum):
     """
     Priority level enumeration.
 

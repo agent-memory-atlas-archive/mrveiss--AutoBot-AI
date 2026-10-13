@@ -236,7 +236,11 @@ class AnthropicProvider(BaseProvider):
             raise ValueError(
                 "Anthropic API key not configured. " "Set ANTHROPIC_API_KEY or provide api_key in provider settings."
             )
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        kwargs: Dict[str, Any] = {"api_key": api_key}
+        http_client = self._headroom_http_client(getattr(anthropic, "DefaultAsyncHttpxClient", None))
+        if http_client is not None:
+            kwargs["http_client"] = http_client  # #15026: harvest rate-limit headers
+        self._client = anthropic.AsyncAnthropic(**kwargs)
         return self._client
 
     def _split_messages(self, messages: list) -> tuple[str, list]:

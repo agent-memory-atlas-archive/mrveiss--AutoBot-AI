@@ -259,7 +259,6 @@ def _load_sso_auth_with_real_endpoints() -> object:
 
     A fresh spec/module is created on every call so tests are isolated.
     """
-    Path(__file__).parent.parent.parent
 
     # ---- fastapi stub with identity router decorators ----
     class _MockHTTPException(Exception):
@@ -334,6 +333,7 @@ def _load_sso_auth_with_real_endpoints() -> object:
         "user_management.services.base_service": MagicMock(),
         "user_management.services.sso_service": MagicMock(),
         "services.auth": MagicMock(),
+        "services.sso_exchange_code": MagicMock(issue_exchange_code=AsyncMock(return_value="code123")),
     }
     prev = {k: sys.modules.get(k) for k in stubs}
     sys.modules.update(stubs)

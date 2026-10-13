@@ -207,14 +207,9 @@ class PortConfig(RedactedSettings):
     redis: int = Field(default=6379, alias="AUTOBOT_REDIS_PORT")
     ollama: int = Field(default=11434, alias="AUTOBOT_OLLAMA_PORT")
     vnc: int = Field(default=6080, alias="AUTOBOT_VNC_PORT")
-    # Raw VNC protocol port (x11vnc via vncserver), NOT the noVNC web port
-    # above (#14173). autobot-slm-backend/ansible/roles/vnc/defaults/main.yml
-    # computes this as 5900 + vnc_display, and vnc_display defaults to 1 ->
-    # 5901; vm-management/status-all-vms.sh independently hardcodes the same
-    # "VNC Client: localhost:5901" line. network/network-config.sh's own
-    # AUTOBOT_VNC_SERVER_PORT literal was 5902 -- one off from every other
-    # source of truth in the repo -- so 5901 here is a correction, not a
-    # preserved literal.
+    # Raw VNC protocol port (x11vnc), NOT the noVNC web port above (#14173):
+    # roles/vnc/defaults/main.yml computes 5900 + vnc_display (default 1 -> 5901),
+    # as does status-all-vms.sh. network-config.sh's old 5902 was the outlier.
     vnc_server: int = Field(default=5901, alias="AUTOBOT_VNC_SERVER_PORT")
     browser: int = Field(default=9001, alias="AUTOBOT_BROWSER_SERVICE_PORT")  # Issue #4052: 9001; 3000 is Grafana
     aistack: int = Field(default=8080, alias="AUTOBOT_AI_STACK_PORT")
@@ -1692,6 +1687,7 @@ class MiscConfig(RedactedSettings):
     inference_profiling: str = Field(default="", alias="AUTOBOT_INFERENCE_PROFILING")
     input_timeout: int = Field(default=0, alias="AUTOBOT_INPUT_TIMEOUT")
     internal_api_key: str = Field(default="", alias="AUTOBOT_INTERNAL_API_KEY")
+    prometheus_scrape_token: str = Field(default="", alias="AUTOBOT_PROMETHEUS_SCRAPE_TOKEN")  # #16375
     jaeger_endpoint: str = Field(default="", alias="AUTOBOT_JAEGER_ENDPOINT")
     jwt_secret: str = Field(default="", alias="AUTOBOT_JWT_SECRET")
     jwt_private_key: str = Field(
@@ -2650,6 +2646,11 @@ class AutoBotConfig(RedactedSettings):
     def vnc_url(self) -> str:
         """Get the VNC desktop URL."""
         return f"http://{self.vm.main}:{self.port.vnc}/vnc.html"
+
+    @property
+    def browser_vnc_url(self) -> str:
+        """Browser VM noVNC (browser-vnc-websockify); not ``vnc_url``, the backend desktop VNC (#18094)."""
+        return f"http://{self.vm.browser}:{self.port.vnc}/vnc.html"
 
     @property
     def slm_url(self) -> str:

@@ -352,6 +352,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/sso/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange Sso Code
+         * @description Exchange a single-use SSO code for the session token (#18394).
+         */
+        post: operations["exchange_sso_code_api_auth_sso_exchange_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/sso/ldap/login": {
         parameters: {
             query?: never;
@@ -6514,6 +6534,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/stateful/secrets-backups/{backup_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Secrets Backup Status
+         * @description Facts about one backup: its status, type, completion time and on-disk integrity.
+         */
+        get: operations["get_secrets_backup_status_api_stateful_secrets_backups__backup_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stateful/verify": {
         parameters: {
             query?: never;
@@ -7965,7 +8005,7 @@ export interface components {
          *     this enum is the boundary that decides what may enter.
          * @enum {string}
          */
-        BackupServiceType: "redis" | "postgres";
+        BackupServiceType: "redis" | "postgres" | "secrets";
         /**
          * BlueGreenActionResponse
          * @description Blue-green action response.
@@ -8133,6 +8173,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** Body_exchange_sso_code_api_auth_sso_exchange_post */
+        Body_exchange_sso_code_api_auth_sso_exchange_post: {
+            /** Code */
+            code: string;
         } & {
             [key: string]: unknown;
         };
@@ -10598,8 +10645,8 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** NavigateRequest */
-        NavigateRequest: {
+        /** NavigateBrowserRequest */
+        NavigateBrowserRequest: {
             /** Url */
             url: string;
         } & {
@@ -12558,6 +12605,22 @@ export interface components {
             description?: string | null;
             /** Value */
             value?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * SecretsBackupStatus
+         * @description What the verifier needs to decide, and nothing else (no path, no checksum).
+         */
+        SecretsBackupStatus: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Integrity Ok */
+            integrity_ok: boolean;
+            /** Service Type */
+            service_type: string | null;
+            /** Status */
+            status: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -15371,6 +15434,39 @@ export interface operations {
             };
         };
     };
+    exchange_sso_code_api_auth_sso_exchange_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_exchange_sso_code_api_auth_sso_exchange_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ldap_login_api_auth_sso_ldap_login_post: {
         parameters: {
             query?: never;
@@ -16351,7 +16447,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NavigateRequest"];
+                "application/json": components["schemas"]["NavigateBrowserRequest"];
             };
         };
         responses: {
@@ -25950,6 +26046,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataVerifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_secrets_backup_status_api_stateful_secrets_backups__backup_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path: {
+                backup_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretsBackupStatus"];
                 };
             };
             /** @description Validation Error */
