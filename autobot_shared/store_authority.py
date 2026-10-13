@@ -201,6 +201,21 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "four tables stay, empty, for the cascade-delete-safety reason #16464 fixed, "
         "independent of whether anything writes to them.",
     ),
+    "audit_trail": Concept(
+        name="audit_trail",
+        system_of_record=Store.POSTGRES,
+        projections=(Store.REDIS,),
+        write_sites=(
+            "autobot-backend/services/audit/store.py",
+            "autobot-backend/services/audit/projection.py",
+            "autobot_shared/user_management/audit_rows.py",
+        ),
+        rebuilt_by="services.audit.audit.rebuild_projection() replays audit_logs rows into the "
+        "audit:unified and audit:category:* sorted sets; nothing reads those keys as an answer.",
+        note="#17225 D1: the owner chose to extend the existing audit_logs table rather than add "
+        "a second Postgres audit table. Every audit_logs row is built by audit_rows.audit_row, "
+        "whether the canonical service or a shared RBAC/org/team writer records it.",
+    ),
     "verbatim_memory": Concept(
         name="verbatim_memory",
         system_of_record=Store.CHROMADB,
@@ -307,6 +322,24 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "one crashed agent into a permanently blocked project, which is worse than the collision "
         "claims exist to prevent. Every claim carries a TTL and is renewed by its holder, so the "
         "durable record of the work is the a2a Task, never the claim.",
+    ),
+    "approval": Concept(
+        name="approval",
+        system_of_record=Store.POSTGRES,
+        projections=(),
+        write_sites=(
+            "autobot-backend/services/approval_gate_service.py",
+            "autobot-backend/llc/services/approval.py",
+        ),
+        rebuilt_by="Nothing yet rebuilds a copy: no projection is declared (see note).",
+        note="One approval record for every surface (#13421): the `approvals` row is the decision; "
+        "any Redis state a surface keeps is a live projection of a PENDING row, never the record of "
+        "a decision. Owner decision 2026-10-12: terminal approvals stay live in Redis (hot path, TTL) "
+        "and write a mirror row resolved on decide. That Redis state exists today as "
+        "`command_approval_manager` and is NOT yet declared a projection here, because its rebuild "
+        "from the row does not exist -- slice S2a (#13421) must add it, or this entry is wrong. "
+        "`autoresearch_proposal` below is a separate Redis-authoritative concept until S2e/S4 "
+        "migrates it.",
     ),
     "autoresearch_proposal": Concept(
         name="autoresearch_proposal",
