@@ -95,7 +95,7 @@
     # component's own bootstrap plan needs full history
     # (services/sync_deletions.py's `git log --diff-filter=AR`), so this
     # runs once here, before any component's plan, through the same
-    # scrubbed-env git helper (services/git_subprocess.py:run_git) the
+    # scrubbed-env git helper (services/git_subprocess.py:run_git_capture) the
     # planner itself uses -- never an ad-hoc `git fetch` in this playbook.
     - name: "[PRE-FLIGHT] Ensure code_source has full history, not a shallow clone (#16310)"
       ansible.builtin.command:

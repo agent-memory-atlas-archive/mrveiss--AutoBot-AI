@@ -70,3 +70,18 @@ register_env_var(
         component="testing",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_UPSERT_COMMENT_TIMEOUT",
+        type=float,
+        default=30.0,
+        description=(
+            "Seconds each GitHub API call made by the shared sticky-PR-comment action waits before "
+            "giving up (.github/actions/upsert-pr-comment/upsert_pr_comment.py, #12984). A value "
+            "that is not a finite number above zero is rejected with a warning and the default is "
+            "used, since 0, NaN and a negative would mean no timer or an expired one."
+        ),
+        component="tooling",
+    )
+)

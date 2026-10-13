@@ -102,8 +102,8 @@ def test_exit_code_helper_returns_nonzero_on_any_failure_structurally():
 def test_migrations_list_reaches_the_last_entry_after_seed_agents():
     """Regression for the reachability half of #14326.
 
-    ``seed_agents`` sits mid-list; ``add_node_capability_profiles_table``
-    (#15495) is no longer last (``add_post_sync_action_runs_table``, #17455, is). ``run_all_migrations`` breaks on the first failure, so if
+    ``seed_agents`` sits mid-list; ``add_audit_logs_canonical_columns`` (#17225) is no longer
+    last (``add_post_sync_action_runs_table``, #17455, is). ``run_all_migrations`` breaks on the first failure, so if
     ``seed_agents`` cannot import (the ``autobot_shared`` gap) nothing after
     it, including the newest migration, was ever exercised by the gate.
     """

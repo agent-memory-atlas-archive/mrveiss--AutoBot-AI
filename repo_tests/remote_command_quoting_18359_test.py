@@ -33,6 +33,7 @@ _SCANNED = (
     "autobot-slm-backend/services/service_orchestrator.py",
     "autobot-slm-backend/services/code_distributor.py",
     "autobot-slm-backend/api/services.py",
+    "autobot-slm-backend/services/secrets_store_snapshot.py",
 )
 _REMOTE_WORDS = re.compile(r"\b(?:sudo|systemctl|journalctl|ssh|bash\s+-c|sh\s+-c)\b")
 _LOG_METHODS = frozenset({"debug", "info", "warning", "error", "exception", "critical", "log"})

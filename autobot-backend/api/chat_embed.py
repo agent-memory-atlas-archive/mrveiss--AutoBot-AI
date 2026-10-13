@@ -36,6 +36,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.proxy_utils import get_client_ip
 from autobot_shared.rate_limiter import RateLimiter
 
 logger = get_logger(__name__)
@@ -80,17 +81,10 @@ def _get_client_ip(request: Request) -> str:
     Only trusts X-Forwarded-For when the immediate peer is in AUTOBOT_EMBED_TRUSTED_PROXIES
     to prevent rate-limit bypass via header spoofing (GH#9117).
     """
-    peer_ip = request.client.host if request.client else "unknown"
-
-    # Only honor X-Forwarded-For if the immediate connection is from a trusted proxy
-    if _TRUSTED_PROXIES and peer_ip in _TRUSTED_PROXIES:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            # X-Forwarded-For can be comma-separated; use the first (client) IP
-            return forwarded.split(",")[0].strip()
-
-    # Default: use the direct connection IP (untrusted proxies or no XFF)
-    return peer_ip
+    # #17848: the shared rule, with this router's own trusted set. The copy here
+    # took the LEFTMOST X-Forwarded-For element, which a client behind the
+    # trusted proxy writes itself; the shared helper reads the chain from the right.
+    return get_client_ip(request, trusted_proxies=_TRUSTED_PROXIES) or "unknown"
 
 
 # ---------------------------------------------------------------------------

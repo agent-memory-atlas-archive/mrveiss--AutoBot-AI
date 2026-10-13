@@ -73,6 +73,11 @@ REASON_CODES = frozenset(
 #: `reach_declarations_test` fails on a new one that does not -- so the pattern cannot be
 #: re-added without someone writing down why (#17914 AC4).
 ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
+    "brand-mark-announcer-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .ts/.vue/.js source is a subset of tracked files under three roots; the test-file share drifts.",
+    ),
     "migration-gate-test-import-sweep": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -226,6 +231,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "One frontend tree's source, against all tracked `.vue`/`.ts`/`.js` including the other frontend.",
     ),
+    "container-hardening-inline": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
     "credential-field-name-only-callers": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -236,10 +246,60 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "provider-key-env-read-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "one-internal-api-key-reader-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
     "one-content-digest-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
+    "one-doc-indexer": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under six roots; the test-file share drifts.",
+    ),
+    "llc-actor-id-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
+    "conftest-stubset-primitives": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "conftest.py files are a proper subset of tracked files under the pytest roots; no reference co-moves.",
+    ),
+    "root-resolver-depth-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked Python under seven roots, against all tracked Python in the repository.",
+    ),
+    "github-api-single-module": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
+    "architecture-family-definition-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under four roots; the test-file share drifts.",
+    ),
+    "optimization-taxonomy-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source of one package directory, against all tracked Python under it.",
+    ),
+    "single-attribute-writer-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .ts/.vue/.js source is a subset of tracked files under the user frontend; test share drifts.",
     ),
     "post-commit-seed-scan": (
         ABSOLUTE,
@@ -331,6 +391,36 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
     ),
+    "one-claim-model-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "sync-command-result-mapping-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
+    "pr-comment-upsert-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow YAML and non-test python under five roots; each root grows and shrinks independently.",
+    ),
+    "gateway-adapter-package-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python files under one gateway directory; tests and new adapters drift the count.",
+    ),
+    "provenance-accessor-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under autobot-backend; the test-file share drifts.",
+    ),
+    "audit-writer-single-source": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
     "import-hermeticity": (
         ABSOLUTE,
         "NOT_PATHS",
@@ -396,6 +486,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "tooling, SLM, tests, docs scripts) grow independently, so a share of the whole sinks "
         "with nothing wrong. The guard needs the roots reached, not a share of the repository.",
     ),
+    "captcha-type-fork-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked Python under two roots against all tracked Python: the other roots grow independently, "
+        "so a share of the whole sinks with nothing wrong. The guard needs the roots reached.",
+    ),
     "slm-frontend-locale-keys": (
         ABSOLUTE,
         "NOT_PATHS",
@@ -445,70 +541,3 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
 #: (RATCHET_BASELINES.md rule 4). SHRINKS ONLY -- an entry leaves when its declaration converts,
 #: and nothing may add one.
 CONVERTIBLE_BACKLOG = frozenset({"tracked-key-material"})
-
-#: Declarations whose `what=` names no scope, because their discovery does not return paths a
-#: prefix can describe, or because the population genuinely is the whole tree (`_reach_scope`'s
-#: docstring states why `roots=` is opt-in). Compared as a SET in both directions, so a
-#: declaration that gains `roots=` must be removed here and a new declaration has to make the
-#: decision rather than inherit silence. SHRINKS ONLY.
-#:
-#: An earlier version of this was a `len(...) <= MAX_UNSCOPED` ceiling whose own comment claimed
-#: a set comparison. A comment claiming a stronger check than the code performs is worse than no
-#: comment, and a reviewer caught it; the names are frozen here instead.
-UNSCOPED = frozenset(
-    {
-        "ansible-apt-repo-budget-override-sweep",
-        "ansible-inventory-shell-sweep",
-        "audio-extension-allowlist",
-        "blanket-skip-test-module-sweep",
-        "chromadb-bind-host-override-candidates",
-        "chromadb-bind-launch-sites",
-        "chromadb-compose-files",
-        "chromadb-compose-port-sites",
-        "chromadb-compose-services",
-        "collectable-modules-inert-on-import",
-        "component-style-block-sweep",
-        "config-router-auth-coverage",
-        "conflict-marker-scanned-files",
-        "connector-redaction-sweep",
-        "detect-environment-env-files",
-        "docstring-restatement-scan",
-        "dpkg-ansible-registrations",
-        "dpkg-list-call-sites",
-        "enum-hand-copy-census",
-        "env-var-bare-cast",
-        "excluded-tree-size-debt",
-        "fastapi-validation-handler",
-        "git-repo-root-call-site-files",
-        "hardcoded-colour-scan",
-        "hooks-path-override",
-        "import-hermeticity",
-        "important-declaration-sweep",
-        "kb-content-redaction-chokepoint",
-        "nginx-play-level-yml-sweep",
-        "no-created-by-admin-literal",
-        "nosec-b615-suppression-sweep",
-        "npm-audit-workspace-coverage",
-        "post-sync-branch-functions",
-        "prompt-injection-detector-strict-mode",
-        "redaction-concept-census",
-        "redis-config-path-census",
-        "reduced-motion-animate-call",
-        "reduced-motion-animate-option",
-        "reduced-motion-apex-animations",
-        "reduced-motion-smooth-scroll",
-        "response-model-secret-scan",
-        "router-auth-coverage",
-        "slm-frontend-components",
-        "slm-frontend-locale-keys",
-        "slm-scripts-importing-services",
-        "sqlalchemy-requirements-files",
-        "tracked-key-material",
-        "tts-address-env-name-sweep",
-        "undefined-css-var-scan",
-        "vnc-password-not-in-frontend-source",
-        "websocket-subprotocol-echo",
-        "workflow-job-parse-sweep",
-        "workflow-rc-capture",
-    }
-)

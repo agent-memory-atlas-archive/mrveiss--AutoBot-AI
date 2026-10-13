@@ -564,11 +564,22 @@ repos:
         stages: [pre-commit]
         description: "Block requests.* and Path.read_text/write_text inside async def bodies (#7444)"
 
+  # AutoBot custom: #18514 group_vars/<name>.yml shadowed by group_vars/<name>/.
+  - repo: local
+    hooks:
+      - id: group-vars-no-shadow
+        name: group_vars file must not coexist with same-named directory (#18514)
+        entry: tools/lint/check_group_vars_no_shadow.py
+        language: python
+        files: ^autobot-slm-backend/ansible/.*(group_vars|host_vars)
+        pass_filenames: false
+        stages: [pre-commit]
+
   # AutoBot custom: regression-prevention for #7053 Ansible role-name drift.
   # Short-form role names ('backend', 'frontend', etc.) in node_roles checks
   # are deprecated; canonical form is 'autobot-X'. New gates must use the
   # role_X_active shared facts or the canonical 'autobot-X' form directly.
-  # Allowlist: group_vars/all.yml and vars/role_active_facts.yml (OR-chains
+  # Allowlist: group_vars/all.yml (OR-chains
   # maintained for backward compat with existing hosts).
   - repo: local
     hooks:

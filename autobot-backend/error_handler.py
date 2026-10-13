@@ -141,7 +141,7 @@ def with_default_on_error(
     return decorator
 
 
-class CircuitBreaker:
+class CircuitBreakerDecorator:
     """
     Circuit breaker pattern for handling external service failures.
     """
@@ -308,7 +308,7 @@ def get_user_data(user_id: str) -> list:
     return fetch_from_database(user_id)
 
 # Using circuit breaker
-@CircuitBreaker(failure_threshold=5, recovery_timeout=TimingConstants.STANDARD_TIMEOUT)
+@CircuitBreakerDecorator(failure_threshold=5, recovery_timeout=TimingConstants.STANDARD_TIMEOUT)
 def unstable_service_call():
     # After 5 failures, circuit opens for 60 seconds
     return external_service.call()
