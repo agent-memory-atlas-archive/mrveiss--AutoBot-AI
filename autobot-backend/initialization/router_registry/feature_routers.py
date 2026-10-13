@@ -680,10 +680,10 @@ FEATURE_ROUTER_CONFIGS: List[Tuple[str, str, List[str], str]] = [
     ("api.chat_embed", "", ["chat", "embed"], "chat_embed"),
     # GH#8987: conversation folders and collections
     ("api.chat_folders", "", ["chat-folders"], "chat_folders"),
+    ("api.chat_turn", "", ["chat"], "chat_turn"),  # #17273: cancel the current turn
     # Issue #5061: First-run onboarding presets + doctor
     ("api.onboarding", "/onboarding", ["onboarding"], "onboarding"),
-    # NOTE (#4203): api.diagnostics removed — already registered in monitoring_routers.py
-    # at prefix "" (routes define their own /diagnostics path prefix internally).
+    # NOTE (#4203): api.diagnostics lives in monitoring_routers.py (routes carry their own /diagnostics prefix).
     (
         "api.presence_ws",
         "",

@@ -20,12 +20,12 @@ stored chunk instead of restarting.
 """
 
 import asyncio
-import hashlib
-import os
 import time
 from typing import Any, Dict, List
 
+from autobot_shared.content_digest import content_digest
 from autobot_shared.doc_chunking import chunk_plain_text
+from autobot_shared.env_utils import env_int
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.status_enums import OperationOutcome
 from knowledge.chunk_provenance import chunk_page_metadata, locate_chunks
@@ -34,8 +34,8 @@ logger = get_logger(__name__)
 
 INGEST_RECORD_PREFIX = "kb:ingest:"
 # Token budget per stored chunk (~4 chars/token) and how long a per-document ingest record is kept for resume.
-KB_CHUNK_MAX_TOKENS = int(os.getenv("AUTOBOT_KB_CHUNK_MAX_TOKENS", "800"))
-KB_INGEST_RECORD_TTL_SECONDS = int(os.getenv("AUTOBOT_KB_INGEST_RECORD_TTL_SECONDS", str(30 * 24 * 3600)))
+KB_CHUNK_MAX_TOKENS = env_int("AUTOBOT_KB_CHUNK_MAX_TOKENS", 800)
+KB_INGEST_RECORD_TTL_SECONDS = env_int("AUTOBOT_KB_INGEST_RECORD_TTL_SECONDS", 30 * 24 * 3600)
 
 
 def chunk_fact_id(doc_id: str, index: int) -> str:
@@ -130,7 +130,7 @@ async def ingest_document(kb, content: str, metadata: Dict[str, Any], doc_id: st
     total = len(chunks)
     if total == 1:
         return await _ingest_single(kb, content, metadata, doc_id, budget)
-    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    digest = content_digest(content)
     stored, resumed, first_id = await _plan(kb, doc_id, digest, total)
     offsets = locate_chunks(content, chunks) if "page_spans" in metadata else [None] * total
     deadline = time.monotonic() + budget

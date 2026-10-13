@@ -178,11 +178,8 @@ async def login(request: Request, login_data: LoginRequest):
         password_warning: PasswordWarning | None = None
         if weakness_reason:
             password_warning = PasswordWarning(reason=weakness_reason)
-            logger.info(
-                "Login soft-warning for user '%s': weak password detected (%s)",
-                login_data.username,
-                weakness_reason,
-            )
+            # The reason is derived from the password, so it goes to the user only, never the log.
+            logger.info("Login soft-warning for user '%s': weak password detected", login_data.username)
 
         _emit_event(
             EventType.USER_LOGIN,

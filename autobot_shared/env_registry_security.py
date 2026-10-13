@@ -217,3 +217,21 @@ register_env_var(
         component="security",
     )
 )
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_SECRETS_BACKUP_MAX_AGE_S",
+        type=int,
+        default=86400,
+        description=(
+            "Longest age, in seconds, of a secrets-store backup that a destructive secrets "
+            "proposal (e.g. the OAuth bundle strip) accepts as its safety net (#18281). Older "
+            "backups are refused, so the verifier fails closed. Default is one day: long enough "
+            "to cover human approval latency, short enough that few secrets changed since. "
+            "Lowering it demands a fresher backup before each destructive action."
+        ),
+        component="security",
+        range=(60, 2592000),
+    )
+)

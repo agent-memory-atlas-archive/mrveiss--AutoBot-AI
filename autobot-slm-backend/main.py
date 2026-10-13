@@ -49,6 +49,7 @@ from api import (
     rdp_router,
     redis_service_router,
     scim_router,
+    secrets_backup_status_router,
     secrets_router,
     security_router,
     services_router,
@@ -600,10 +601,8 @@ install_middleware(app, cors_origins=settings.cors_origins)  # the whole stack, 
 #   sso_router      — SSO provider list; accessed before credentials are available
 #   sso_auth_router — OAuth callback; must complete before a token exists
 #   websocket_router — out of scope (#10198); has separate async auth handling
-#   scim_router     — authenticated per route by _require_scim_bearer, not by
-#       this gate; all 11 routes carry it. Declared here because "no
-#       service.management gate" is what this list tracks, and it was already
-#       absent before #14339 added the check below
+#   scim_router     — authenticated per route by _require_scim_bearer (all 11 carry it), not by this gate;
+#       declared here because that is what this list tracks, and it was absent before #14339 added the check below
 #   performance_metrics_router — prometheus scrape surface; a scraper cannot
 #       authenticate, so the gate returned 401 on every scrape (#14339)
 #
@@ -658,6 +657,7 @@ app.include_router(deployments_router, prefix="/api", dependencies=_SM)
 app.include_router(blue_green_router, prefix="/api", dependencies=_SM)
 app.include_router(settings_router, prefix="/api", dependencies=_SM)
 app.include_router(stateful_router, prefix="/api", dependencies=_SM)
+app.include_router(secrets_backup_status_router, prefix="/api", dependencies=_SM_OR_AGENT)
 app.include_router(updates_router, prefix="/api", dependencies=_SM)
 app.include_router(maintenance_router, prefix="/api", dependencies=_SM)
 app.include_router(monitoring_router, prefix="/api", dependencies=_SM)

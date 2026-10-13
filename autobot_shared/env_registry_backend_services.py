@@ -539,27 +539,49 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
-        name="AUTOBOT_KB_CHUNK_MAX_TOKENS",
-        type=int,
-        default=800,
+        name="AUTOBOT_CHAT_TURN_TIMEOUT_SECONDS",
+        type=float,
+        default=1800.0,
         description=(
-            "Token budget (~4 chars per token) per stored chunk when KnowledgeBase.add_document "
-            "splits a long document; read by knowledge/document_ingest.py (#17830)."
+            "Total wall-clock budget for one LangGraph chat turn, across every LLM call and tool "
+            "step in it (chat_workflow/turn_control.py, #17273). A turn that exceeds it is "
+            "cancelled, its checkpoint dropped, and the client told the model took too long. A "
+            "turn parked on a command-approval interrupt has returned, so the wait for a human "
+            "is not counted against it."
         ),
-        component="knowledge",
-        range=(50, 100000),
+        component="backend",
     )
 )
 
 register_env_var(
     EnvVarSpec(
-        name="AUTOBOT_KB_INGEST_RECORD_TTL_SECONDS",
-        type=int,
-        default=2592000,
+        name="AUTOBOT_CHAT_LLM_CALL_TIMEOUT_SECONDS",
+        type=float,
+        default=600.0,
         description=(
-            "Seconds a per-document ingest status record (success/partial/timeout) is kept so a "
-            "retry can resume after the last stored chunk; read by knowledge/document_ingest.py (#17986)."
+            "Total timeout for a single streaming chat LLM request, connect included "
+            "(chat_workflow/turn_control.py, #17273). The request previously set a connect "
+            "timeout only, so a model that accepted the connection and then stalled held the "
+            "turn forever."
         ),
-        component="knowledge",
+        component="backend",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_CHAT_TURN_CANCEL_ACK_TIMEOUT_SECONDS",
+        type=float,
+        default=5.0,
+        description=(
+            "How long a chat turn-cancel request waits for the other backend workers that were "
+            "listening to confirm they stopped their turn (chat_workflow/turn_cancel_bus.py, "
+            "#18448). A worker that does not answer in time makes the response report "
+            "'unconfirmed' rather than a false 'no_active_turn'. Must be positive and finite."
+        ),
+        component="backend",
+    )
+)
+
+# The knowledge-component registrations live in their own module (file-size ceiling).
+from autobot_shared import env_registry_knowledge  # noqa: E402,F401
