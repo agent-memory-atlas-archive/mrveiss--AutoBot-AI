@@ -92,8 +92,8 @@ def _entries(views) -> List[AiLineEntry]:
 def _personal_scope(current_user: dict) -> uuid.UUID:
     """The signed-in user's own id: the key of their personal lines. Never taken from the URL or the body."""
     try:
-        return uuid.UUID(str(current_user.get("id") or current_user.get("user_id")))
-    except ValueError as exc:
+        return actor_id(current_user)
+    except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=403, detail="Personal lines need a signed-in user account") from exc
 
 

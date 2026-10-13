@@ -12,7 +12,7 @@ asserts the opposite -- that no second tracked definition can exist at all.
 Rules, each checked over the tracked ``*.yml``/``*.yaml`` files under ansible/:
 
 1. ``role_*_active`` / ``chromadb_service_owner`` are defined as top-level keys
-   in exactly one file, ``inventory/group_vars/all/role_active_facts.yml``,
+   in exactly one file, ``inventory/group_vars/all.yml``,
    and that file defines every one of them it is expected to (non-empty set).
 2. No other tracked file is named ``role_active_facts.yml``.
 3. Every ``vars_files:`` entry that loads a facts file loads the canonical one.
@@ -40,12 +40,14 @@ sys.path.insert(0, str(REPO))
 from autobot_shared.paths import scrubbed_git_env  # noqa: E402
 
 ANSIBLE = REPO / "autobot-slm-backend" / "ansible"
-CANONICAL = "inventory/group_vars/all/role_active_facts.yml"
+CANONICAL = "inventory/group_vars/all.yml"
 FACTS_FILENAME = "role_active_facts.yml"
 
 _FACT_KEY = re.compile(r"^(role_\w+_active|chromadb_service_owner):", re.MULTILINE)
 _ROLE_DEFAULTS = re.compile(r"^roles/[^/]+/defaults/")
-_VARS_FILES_ENTRY = re.compile(r"^\s*-\s*['\"]?([^\s'\"#]*" + re.escape(FACTS_FILENAME) + r")['\"]?\s*$", re.MULTILINE)
+_VARS_FILES_ENTRY = re.compile(
+    r"^\s*-\s*['\"]?([^\s'\"#]*(?:" + re.escape(FACTS_FILENAME) + r"|group_vars/all\.yml))['\"]?\s*$", re.MULTILINE
+)
 
 
 def defined_facts(text: str) -> set[str]:

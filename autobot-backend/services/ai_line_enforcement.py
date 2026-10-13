@@ -60,6 +60,7 @@ from llc.services.ai_lines import stored_line
 from models.approval import Approval, ApprovalStatus, ApprovalType
 from services.approval_gate_service import ApprovalGateService
 from services.audit_logger import audit_log
+from services.provider_key_vault import VaultKeyUnavailableError, resolve_provider_key
 from user_management.database import get_async_session_factory
 
 logger = get_logger(__name__)
@@ -165,13 +166,19 @@ async def call_needs_approval(tool_call: Mapping[str, Any], ctx: Any) -> bool:
 
 
 def _fingerprint_key() -> bytes:
-    """Per-process HMAC key derived from the app's existing signing secret; never a literal.
+    """Per-process HMAC key derived from the app's existing signing secret, resolved through the secrets manager
+    (``resolve_provider_key``, vault first); never a literal.
 
     With no configured secret it is random for this process, so a fingerprint then simply cannot be matched
     after a restart: an approval bound to it has to be given again, which is the safe direction.
     """
-    secret = ssot_config.jwt_secret or ssot_config.secret_key
-    return hashlib.sha256(b"ai-line-fingerprint:" + (secret or "").encode()).digest() if secret else _PROCESS_KEY
+    try:
+        secret = resolve_provider_key("AUTOBOT_JWT_SECRET", ssot_config.jwt_secret) or resolve_provider_key(
+            "SECRET_KEY", ssot_config.secret_key
+        )
+    except VaultKeyUnavailableError:  # the vault holds the key but cannot be read: never fall back to a guess
+        return _PROCESS_KEY
+    return hashlib.sha256(b"ai-line-fingerprint:" + secret.encode()).digest() if secret else _PROCESS_KEY
 
 
 _PROCESS_KEY = secrets.token_bytes(32)

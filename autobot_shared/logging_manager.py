@@ -187,6 +187,8 @@ class LoggingManager:
 
     _initialized = False
     _loggers: Dict[str, logging.Logger] = {}
+    # Set by set_level(): wins over the configured level for every logger, existing and future.
+    _level_override: int | None = None
     # Re-entrant: get_logger() holds this lock while the lazy config-manager
     # import chain it triggers (config -> network_constants -> redis -> metrics
     # -> monitoring) calls get_logger() again on the same thread. A plain Lock
@@ -259,7 +261,7 @@ class LoggingManager:
             # never been a "logging.level" key, so this lookup always fell
             # through to the "INFO" default regardless of configuration.
             log_level = getattr(logging, _get_config_manager().get_nested("logging.log_level", "INFO").upper())
-            logger.setLevel(log_level)
+            logger.setLevel(cls._level_override if cls._level_override is not None else log_level)
 
             # Flood guard (#15774): attached to the logger, not the handlers,
             # so one filter covers the file, stdout and stderr handlers at once.
@@ -269,6 +271,14 @@ class LoggingManager:
 
             cls._loggers[logger_key] = logger
             return logger
+
+    @classmethod
+    def set_level(cls, level: int) -> None:
+        """Run every logger this manager has made, and every one it makes later, at *level* (e.g. a CLI --verbose)."""
+        with cls._lock:
+            cls._level_override = level
+            for logger in cls._loggers.values():
+                logger.setLevel(level)
 
     @classmethod
     def _setup_logging_internal(cls) -> None:

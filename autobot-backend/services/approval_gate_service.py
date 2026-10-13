@@ -499,7 +499,11 @@ class ApprovalGateService:
         event_type: str,
         approval: Approval,
     ) -> None:
-        """Publish WebSocket notification via get_event_manager()."""
+        """Publish the notification: the approval on ``global``, its workflow identity on ``workflow:{id}``.
+
+        ``global`` reaches every authenticated client, so it carries no workflow id (#17354); a subscriber that is
+        entitled to a workflow reads those two fields from that workflow's own channel.
+        """
         try:
             from events.bus import PersistStrategy, publish_event
 
@@ -513,14 +517,24 @@ class ApprovalGateService:
                     "status": approval.status,
                     "requested_by_agent": approval.requested_by_agent,
                     "decided_by_user": approval.decided_by_user,
-                    "workflow_id": approval.workflow_id,
-                    "workflow_step": approval.workflow_step,
                     "source": approval.source,
                     "risk_tier": approval.risk_tier,
                     "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
                 },
                 persist=PersistStrategy.NONE,
             )
+            if approval.workflow_id:
+                await publish_event(
+                    f"workflow:{approval.workflow_id}",
+                    event_type=event_type,
+                    payload={
+                        "approval_id": str(approval.id),
+                        "status": approval.status,
+                        "workflow_id": approval.workflow_id,
+                        "workflow_step": approval.workflow_step,
+                    },
+                    persist=PersistStrategy.NONE,
+                )
         except Exception as exc:
             logger.warning(
                 "Failed to publish %s notification: %s",

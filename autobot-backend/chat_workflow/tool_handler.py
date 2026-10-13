@@ -26,7 +26,13 @@ from autobot_shared.auth.mcp_tool_permissions import required_permission
 from autobot_shared.auth.permissions import Permission
 from autobot_shared.env_utils import env_flag, env_int
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.tool_catalogue import APPROVAL_CATEGORY_TOOLS, approval_category_for
+from autobot_shared.tool_catalogue import (
+    APPROVAL_CATEGORY_TOOLS,
+    BROWSER_ACTION_TOOLS,
+    BROWSER_INDEXED_TOOLS,
+    BROWSER_READ_TOOLS,
+    approval_category_for,
+)
 from chat_workflow.browser_tool_handler import (
     extract_browser_image,
     format_browser_action_text,
@@ -538,45 +544,45 @@ BROWSER_STATE_SCHEMA: dict = {
 # path passes through validate_tool_arguments() before execution.
 # Issue #4726: inline dicts replaced with named constants above; schema content
 # is unchanged.
-_BUILTIN_TOOL_SCHEMAS: dict[str, dict] = {
-    "execute_command": EXECUTE_COMMAND_SCHEMA,
-    "read_spilled_output": READ_SPILLED_OUTPUT_SCHEMA,
-    "web_search": WEB_SEARCH_SCHEMA,
-    "navigate": NAVIGATE_SCHEMA,
-    "click": CLICK_SCHEMA,
-    "fill": FILL_SCHEMA,
-    "select": SELECT_SCHEMA,
-    "hover": HOVER_SCHEMA,
-    "screenshot": SCREENSHOT_SCHEMA,
-    "evaluate": EVALUATE_SCHEMA,
-    "get_text": GET_TEXT_SCHEMA,
-    "get_attribute": GET_ATTRIBUTE_SCHEMA,
-    "wait_for_selector": WAIT_FOR_SELECTOR_SCHEMA,
+_BUILTIN_TOOL_SCHEMAS: dict[str, dict] = dict(
+    execute_command=EXECUTE_COMMAND_SCHEMA,
+    read_spilled_output=READ_SPILLED_OUTPUT_SCHEMA,
+    web_search=WEB_SEARCH_SCHEMA,
+    navigate=NAVIGATE_SCHEMA,
+    click=CLICK_SCHEMA,
+    fill=FILL_SCHEMA,
+    select=SELECT_SCHEMA,
+    hover=HOVER_SCHEMA,
+    screenshot=SCREENSHOT_SCHEMA,
+    evaluate=EVALUATE_SCHEMA,
+    get_text=GET_TEXT_SCHEMA,
+    get_attribute=GET_ATTRIBUTE_SCHEMA,
+    wait_for_selector=WAIT_FOR_SELECTOR_SCHEMA,
     # Issue #11537: indexed interactive-element actions.
-    "click_index": CLICK_INDEX_SCHEMA,
-    "fill_index": FILL_INDEX_SCHEMA,
-    "select_index": SELECT_INDEX_SCHEMA,
-    "hover_index": HOVER_INDEX_SCHEMA,
-    "browser_state": BROWSER_STATE_SCHEMA,
+    click_index=CLICK_INDEX_SCHEMA,
+    fill_index=FILL_INDEX_SCHEMA,
+    select_index=SELECT_INDEX_SCHEMA,
+    hover_index=HOVER_INDEX_SCHEMA,
+    browser_state=BROWSER_STATE_SCHEMA,
     # Imported from tools.code_interpreter — single source of truth for the schema.
     # Issue #4561: was missing, causing code_interpreter args to bypass validation
     # (Issue #4562).  All future built-in tool schemas should follow this pattern:
     # define the schema constant in the tool module and import it here.
-    "code_interpreter": CODE_INTERPRETER_SCHEMA["parameters"],
+    code_interpreter=CODE_INTERPRETER_SCHEMA["parameters"],
     # Issue #7509: Web research tools — direct internal dispatch via web_fetch package.
-    "scrape_url": SCRAPE_URL_SCHEMA,
-    "crawl_site": CRAWL_SITE_SCHEMA,
-    "map_site": MAP_SITE_SCHEMA,
-    "extract_structured_data": EXTRACT_STRUCTURED_DATA_SCHEMA,
+    scrape_url=SCRAPE_URL_SCHEMA,
+    crawl_site=CRAWL_SITE_SCHEMA,
+    map_site=MAP_SITE_SCHEMA,
+    extract_structured_data=EXTRACT_STRUCTURED_DATA_SCHEMA,
     # Issue #11540: goal-directed extraction from the current live page.
-    "extract_content": EXTRACT_CONTENT_SCHEMA,
+    extract_content=EXTRACT_CONTENT_SCHEMA,
     # #10932: Unified content_reach gateway (5 source chains).
-    "content_reach": CONTENT_REACH_SCHEMA,
+    content_reach=CONTENT_REACH_SCHEMA,
     # #11501: LLC board/CEO-chat work-object tools (create_task, update_goal,
     # request_approval, record_decision). Company-scoped; dispatched to the
     # existing llc/services. Merged below so they validate like any built-in.
     **LLC_TOOL_SCHEMAS,
-}
+)
 
 # GH#11568: compose tool — sandboxed Python script with injectable RPC shims.
 COMPOSE_TOOL_SCHEMA: dict = {
@@ -638,26 +644,7 @@ def _validate_builtin_tool_arguments(tool_name: str, tool_call: dict[str, Any]) 
 # Issue #1368: Browser tool names that route to browser_mcp handlers.
 # Exported (no leading underscore) so ToolRegistry can derive its list from this
 # single source of truth rather than maintaining a duplicate. Issue #2609.
-BROWSER_TOOL_NAMES: frozenset[str] = frozenset(
-    {
-        "navigate",
-        "click",
-        "fill",
-        "select",
-        "hover",
-        "screenshot",
-        "evaluate",
-        "get_text",
-        "get_attribute",
-        "wait_for_selector",
-        # Issue #11537: indexed interactive-element actions.
-        "click_index",
-        "fill_index",
-        "select_index",
-        "hover_index",
-        "browser_state",
-    }
-)
+BROWSER_TOOL_NAMES: frozenset[str] = frozenset(BROWSER_ACTION_TOOLS + BROWSER_READ_TOOLS + BROWSER_INDEXED_TOOLS)
 
 # Issue #7509: web research tools — direct internal dispatch via web_fetch.
 WEB_RESEARCH_TOOL_NAMES: frozenset[str] = frozenset({"scrape_url", "crawl_site", "map_site", "extract_structured_data"})

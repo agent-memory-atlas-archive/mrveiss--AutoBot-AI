@@ -79,6 +79,9 @@ CODE_EXEC_TOOLS = ("code_interpreter",)
 PROCESS_EXEC_TOOLS = ("run_shell", "start_process", "stop_process", "manage_service")
 DATA_WRITE_TOOLS = ("set_redis_value", "insert_database")
 BROWSER_ACTION_TOOLS = ("navigate", "click", "fill", "select", "evaluate")
+#: #18430: browser tools that only observe the page (and hover), and the index-addressed form of the actions.
+BROWSER_READ_TOOLS = ("hover", "screenshot", "get_text", "get_attribute", "wait_for_selector", "browser_state")
+BROWSER_INDEXED_TOOLS = ("click_index", "fill_index", "select_index", "hover_index")
 DELEGATION_TOOLS = ("compose", "delegate")
 
 # --- composed catalogues (each reproduces its former literal exactly) ------
@@ -261,20 +264,7 @@ TOOL_EFFECTS: "dict[str, ToolEffect]" = {
     **_entries(("sleep", "wait", "poll", "check_status"), _E.POLL),
     # #18430: tools the live seam dispatches that were declared nowhere. The AI lines treat an unknown tool as
     # mutating (fail closed), so every builtin that only observes must be KNOWN to be a read.
-    **_entries(
-        (
-            "get_text",
-            "get_attribute",
-            "screenshot",
-            "browser_state",
-            "wait_for_selector",
-            "hover",
-            "extract_content",
-            "crawl_site",
-            "read_spilled_output",
-        ),
-        _E.READ,
-    ),
+    **_entries(BROWSER_READ_TOOLS + ("extract_content", "crawl_site", "read_spilled_output"), _E.READ),
 }
 
 #: Tools whose arguments name a file path (artifact capture, config guard, fact-forcing).

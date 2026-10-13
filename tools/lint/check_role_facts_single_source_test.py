@@ -19,7 +19,7 @@ guard = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(guard)
 
 _FACTS = "role_a_active: >-\n  {{ true }}\n\nchromadb_service_owner: x\n"
-_GOOD = {guard.CANONICAL: _FACTS, "deploy.yml": "vars_files:\n  - inventory/group_vars/all/role_active_facts.yml\n"}
+_GOOD = {guard.CANONICAL: _FACTS, "deploy.yml": "vars_files:\n  - inventory/group_vars/all.yml\n"}
 
 
 def test_the_live_tree_has_exactly_one_definition():
@@ -63,7 +63,7 @@ def test_contrast_vars_files_pointing_elsewhere_is_a_violation():
 def test_contrast_relative_vars_files_to_the_canonical_file_passes():
     files = {
         **_GOOD,
-        "tests/playbooks/t.yml": "vars_files:\n  - ../../inventory/group_vars/all/role_active_facts.yml\n",
+        "tests/playbooks/t.yml": "vars_files:\n  - ../../inventory/group_vars/all.yml\n",
     }
     assert guard.violations(files) == []
 
@@ -72,6 +72,8 @@ def test_an_empty_tree_is_a_violation_not_a_pass():
     assert guard.violations({})
 
 
-def test_group_vars_all_yml_no_longer_defines_any_fact():
+def test_group_vars_all_yml_is_the_single_definition():
+    """#18514: the facts live IN all.yml; a sibling all/ directory would shadow it."""
     text = (_ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text(encoding="utf-8")
-    assert guard.defined_facts(text) == set()
+    assert len(guard.defined_facts(text)) >= 2
+    assert not (_ANSIBLE / "inventory" / "group_vars" / "all").exists()

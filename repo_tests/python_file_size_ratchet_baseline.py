@@ -104,7 +104,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/git_mcp.py": 1356,
     "autobot-backend/api/http_client_mcp.py": 963,
     "autobot-backend/api/ide_integration.py": 928,
-    "autobot-backend/api/knowledge.py": 3414,
+    "autobot-backend/api/knowledge.py": 3316,
     "autobot-backend/api/knowledge_api_integration_test.py": 623,
     "autobot-backend/api/knowledge_categories.py": 674,
     "autobot-backend/api/knowledge_collections.py": 726,
@@ -160,7 +160,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/chat_workflow/graph.py": 1680,
     "autobot-backend/chat_workflow/llm_handler.py": 1343,
     "autobot-backend/chat_workflow/manager.py": 3887,  # #17273: graph turn lifecycle moved to turn_control
-    "autobot-backend/chat_workflow/tool_handler.py": 3720,  # #11542 dispatch merge + #14068 mirror
+    "autobot-backend/chat_workflow/tool_handler.py": 3707,  # #11542 dispatch merge + #14068 mirror
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,
     "autobot-backend/chat_workflow/workflow_plan_approval_test.py": 624,
     "autobot-backend/circuit_breaker.py": 689,
@@ -249,7 +249,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/knowledge_sync_incremental.py": 884,
     "autobot-backend/llc/adapters/tests/test_claude_code_adapter.py": 602,
     "autobot-backend/llc/api/companies.py": 1727,
-    "autobot-backend/llc/api/roles.py": 741,
+    "autobot-backend/llc/api/roles.py": 713,
     "autobot-backend/llc/api/sprints.py": 1223,
     "autobot-backend/llc/api/work_items.py": 1416,
     "autobot-backend/llc/scheduler/heartbeat_scheduler.py": 1028,  # #16818 onto #17726
@@ -344,7 +344,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/graph_rag_service_test.py": 895,
     "autobot-backend/services/knowledge/autonomous_loop.py": 798,
     "autobot-backend/services/knowledge/code_indexer.py": 1179,
-    "autobot-backend/services/knowledge/doc_indexer.py": 1274,
+    "autobot-backend/services/knowledge/doc_indexer.py": 1263,
     "autobot-backend/services/knowledge/service.py": 851,
     "autobot-backend/services/knowledge/test_autonomous_loop.py": 708,
     "autobot-backend/services/knowledge/test_doc_indexer.py": 1466,
