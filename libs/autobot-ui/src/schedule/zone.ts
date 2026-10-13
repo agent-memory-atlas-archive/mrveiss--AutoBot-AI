@@ -70,9 +70,12 @@ export function localToUtc(p: LocalParts, zone: string): number {
   return valid.length ? Math.min(...valid) : wall - before
 }
 
+/** `Intl.supportedValuesOf` is ES2022; the SLM frontend compiles the kit against an older `lib`. */
+type IntlWithZones = typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] }
+
 /** Selectable IANA zones, always including `include` and UTC. */
 export function listZones(...include: string[]): string[] {
-  const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
+  const all = (Intl as IntlWithZones).supportedValuesOf?.('timeZone') ?? []
   return [...new Set([...include.filter(Boolean), 'UTC', ...all])].sort((a, b) => a.localeCompare(b))
 }
 
