@@ -132,7 +132,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_code.py": 3265,
     "autobot-backend/api/schemas_knowledge.py": 5155,
     "autobot-backend/api/schemas_system.py": 4362,  # #13051: SecretModel ownership fields
-    "autobot-backend/api/schemas_workflows.py": 3011,
+    "autobot-backend/api/schemas_workflows.py": 2917,
     "autobot-backend/api/secrets.py": 1216,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
     "autobot-backend/api/settings.py": 881,
@@ -326,7 +326,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/services/captcha_human_loop.py": 631,
     "autobot-backend/services/causal_inference_engine.py": 756,
     "autobot-backend/services/chat_knowledge_service_test.py": 775,
-    "autobot-backend/services/claim_verifier.py": 830,
+    "autobot-backend/services/claim_verifier.py": 792,
     "autobot-backend/services/codebase_indexing_service.py": 1010,
     "autobot-backend/services/command_approval_manager.py": 649,
     "autobot-backend/services/config_service.py": 605,

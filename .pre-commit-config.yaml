@@ -568,7 +568,7 @@ repos:
   # Short-form role names ('backend', 'frontend', etc.) in node_roles checks
   # are deprecated; canonical form is 'autobot-X'. New gates must use the
   # role_X_active shared facts or the canonical 'autobot-X' form directly.
-  # Allowlist: group_vars/all.yml and vars/role_active_facts.yml (OR-chains
+  # Allowlist: group_vars/all.yml and group_vars/all/role_active_facts.yml (OR-chains
   # maintained for backward compat with existing hosts).
   - repo: local
     hooks:
