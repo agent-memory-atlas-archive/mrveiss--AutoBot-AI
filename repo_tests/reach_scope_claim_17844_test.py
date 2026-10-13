@@ -52,6 +52,7 @@ import repo_tests.model_tier_single_definition_15502_test as _model_tier_guard  
 import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_bm25_formula_18183_test as _bm25_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_brand_mark_and_announcer_18240_test as _brand_mark_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_claim_model_18086_test as _claim_model_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_content_digest_15722_test as _content_digest_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_deployment_mode_detector_12771_test as _deployment_mode_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_fact_read_authorization_18184_test as _fact_read_guard  # noqa: F401 -- registers its scope
@@ -294,6 +295,7 @@ _DECLARED_SCOPES = {
     "one-hybrid-search": ("autobot-backend", "autobot_shared"),
     "pr-comment-upsert-sweep": (".github/workflows", "scripts", "tools", "pipeline-scripts", "autobot_shared"),
     "sync-command-result-mapping-scan": ("autobot-backend",),
+    "one-claim-model-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),

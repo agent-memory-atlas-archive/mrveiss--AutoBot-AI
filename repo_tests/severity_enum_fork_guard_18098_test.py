@@ -80,14 +80,12 @@ DISTINCT_VOCABULARIES = {
     ),
 }
 
-#: Flagged by the value probe and NOT aliased, each with the concrete reason. `KnowledgePriority`
-#: and `MaintenancePriority` were aliased to the canonical `Priority`, and `WorkItemPriority` is
-#: derived from it (pinned in `llc/tests/test_work_item_priority_derived_18098.py`); they left this list.
-UNCLASSIFIED_VALUE_MATCHES = {
-    "autobot-backend/api/knowledge_grounding_models.py::ReviewTicketPriority": (
-        "file owned by issue-18086-claim-models (#18098); analysed SAFE to alias to Priority"
-    ),
-}
+#: Flagged by the value probe and NOT aliased, each with the concrete reason. `KnowledgePriority`,
+#: `MaintenancePriority` and `ReviewTicketPriority` were aliased to the canonical `Priority`
+#: (the last pinned in `autobot-backend/review_ticket_priority_alias_18086_test.py`), and
+#: `WorkItemPriority` is derived from it (pinned in `llc/tests/test_work_item_priority_derived_18098.py`);
+#: they left this list. Empty now: a new match is a fork to alias, not an entry to add.
+UNCLASSIFIED_VALUE_MATCHES: dict[str, str] = {}
 
 #: Named non-forks that overlap the canonical with a non-canonical tail, so the value probe
 #: must NOT flag them. Canonical has no `success` or `suggestion` rung. Asserted unflagged
