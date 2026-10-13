@@ -126,7 +126,7 @@ from .types import (
 )
 from .variable_resolver import StepOutput, VariableResolver, resolve_variables
 from .workflow_documentation import WorkflowDocumenter
-from .workflow_executor import WorkflowExecutor
+from .workflow_executor import LegacyWorkflowExecutor
 from .workflow_memory import WorkflowMemory
 from .workflow_planner import WorkflowPlanner
 from .workflow_planning import StrategyPlanner
@@ -156,7 +156,7 @@ __all__ = [
     "AgentRouter",
     # Workflow components (single-workflow)
     "WorkflowDocumenter",
-    "WorkflowExecutor",
+    "LegacyWorkflowExecutor",
     "WorkflowMemory",
     "WorkflowPlanner",
     # Multi-agent coordination (folded in from enhanced_orchestration #10666 B3)

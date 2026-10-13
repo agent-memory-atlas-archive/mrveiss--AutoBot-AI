@@ -584,4 +584,3 @@ register_env_var(
 )
 
 # The knowledge-component registrations live in their own module (file-size ceiling).
-from autobot_shared import env_registry_knowledge  # noqa: E402,F401

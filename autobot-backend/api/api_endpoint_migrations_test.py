@@ -27269,15 +27269,15 @@ class TestBatch110TerminalCOMPLETE(unittest.TestCase):
         from api import npu_workers
 
         # Verify models are imported
-        self.assertTrue(hasattr(npu_workers, "NPUWorkerConfig"))
+        self.assertTrue(hasattr(npu_workers, "NPUWorkerDefinition"))
         self.assertTrue(hasattr(npu_workers, "NPUWorkerDetails"))
-        self.assertTrue(hasattr(npu_workers, "NPUWorkerMetrics"))
+        self.assertTrue(hasattr(npu_workers, "NPUWorkerLoadMetrics"))
         self.assertTrue(hasattr(npu_workers, "LoadBalancingConfig"))
         self.assertTrue(hasattr(npu_workers, "WorkerTestResult"))
 
         # Verify models are used in endpoints
         add_source = inspect.getsource(npu_workers.add_worker)
-        self.assertIn("NPUWorkerConfig", add_source)
+        self.assertIn("NPUWorkerDefinition", add_source)
 
         test_source = inspect.getsource(npu_workers.test_worker)
         self.assertIn("WorkerTestResult", test_source)
@@ -27556,18 +27556,18 @@ class TestBatch110TerminalCOMPLETE(unittest.TestCase):
         self.assertIn("workflow_template_manager.get_template", details_source)
 
     def test_batch_160_migration_preserves_template_category_enum(self):
-        """Verify migration preserves TemplateCategory enum usage"""
+        """Verify migration preserves WorkflowTemplateCategory enum usage"""
         from api import templates
 
-        # Verify TemplateCategory is imported
-        self.assertTrue(hasattr(templates, "TemplateCategory"))
+        # Verify WorkflowTemplateCategory is imported
+        self.assertTrue(hasattr(templates, "WorkflowTemplateCategory"))
 
         # Verify it's used in endpoints
         list_source = inspect.getsource(templates.list_workflow_templates)
-        self.assertIn("TemplateCategory", list_source)
+        self.assertIn("WorkflowTemplateCategory", list_source)
 
         categories_source = inspect.getsource(templates.list_template_categories)
-        self.assertIn("TemplateCategory", categories_source)
+        self.assertIn("WorkflowTemplateCategory", categories_source)
 
     def test_batch_160_migration_preserves_task_complexity_enum(self):
         """Verify migration preserves TaskComplexity enum usage"""

@@ -42,6 +42,7 @@ import repo_tests.credential_field_name_only_17336_test as _credential_field_gua
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.egress_default_guard_17576_test as _egress_default_guard  # noqa: F401 -- registers its scope
 import repo_tests.embedding_model_preserved_15502_test as _embedding_render_guard  # noqa: F401 -- registers its scope
+import repo_tests.github_api_single_module_15411_test as _github_api_guard  # noqa: F401 -- registers its scope
 import repo_tests.infra_scripts_no_backend_imports_18288_test as _infra_backend_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
 import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_parse_guard  # noqa: F401 -- registers its scope
@@ -53,12 +54,17 @@ import repo_tests.one_brand_mark_and_announcer_18240_test as _brand_mark_guard  
 import repo_tests.one_content_digest_15722_test as _content_digest_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_deployment_mode_detector_12771_test as _deployment_mode_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_fact_read_authorization_18184_test as _fact_read_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_gateway_adapter_package_15024_test as _gateway_adapter_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_hybrid_search_17599_test as _hybrid_search_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_internal_api_key_reader_17856_test as _internal_key_reader_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_paths_filter_job_15360_test as _paths_filter_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_semantic_chunker_14485_test as _semantic_chunker_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_ssh_restart_executor_18186_test as _ssh_restart_guard
+import repo_tests.optimization_taxonomies_13049_test as _taxonomy_guard  # noqa: F401 -- registers its scope
+import repo_tests.pr_comment_upsert_12984_test as _pr_comment_guard  # noqa: F401 -- registers its scope
+import repo_tests.provider_key_env_reads_route_through_vault_18094_test as _provider_key_env_guard  # noqa: F401 -- registers its scope
 import repo_tests.single_attribute_writer_18240_test as _attribute_writer_guard  # noqa: F401 -- registers its scope
 from repo_tests._paths import repo_root
 from repo_tests._reach import Reach, ReachScopeError, declare
@@ -193,6 +199,8 @@ _DECLARED_SCOPES = {
     "container-hardening-inline": ("autobot-backend", "autobot_shared"),
     "brand-mark-announcer-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
     "one-content-digest-scan": ("autobot-backend", "autobot_shared"),
+    "one-internal-api-key-reader-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "provider-key-env-read-scan": ("autobot-backend", "autobot_shared", "plugins"),
     "semantic-chunker-fork-scan": ("autobot-backend", "autobot_shared"),
     "migration-gate-test-import-sweep": ("autobot-backend/tests/migrations",),
     "paths-filter-workflow-sweep": (".github/workflows",),
@@ -244,9 +252,19 @@ _DECLARED_SCOPES = {
     ),
     "ansible-concept-forks-17856-scan": ("autobot-slm-backend/ansible",),
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "gateway-adapter-package-scan": ("autobot-backend/services/gateway",),
+    "architecture-family-definition-scan": (
+        "autobot-backend",
+        "autobot-npu-worker",
+        "autobot-slm-backend",
+        "autobot_shared",
+    ),
+    "optimization-taxonomy-scan": ("autobot-backend/llm_shared/optimization",),
+    "github-api-single-module": ("pipeline-scripts", "scripts"),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "infra-backend-import-scan": ("autobot-infrastructure",),
+    "captcha-type-fork-scan": ("autobot-backend", "autobot_shared"),
     "severity-enum-fork-scan": ("autobot-backend", "autobot_shared", "autobot-infrastructure"),
     "session-ownership-validator-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),
@@ -263,6 +281,7 @@ _DECLARED_SCOPES = {
         "tools",
         "scripts",
     ),
+    "pr-comment-upsert-sweep": (".github/workflows", "scripts", "tools", "pipeline-scripts", "autobot_shared"),
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),

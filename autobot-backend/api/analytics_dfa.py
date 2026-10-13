@@ -120,7 +120,7 @@ class TaintedPath:
 
 
 @dataclass
-class SecurityVulnerability:
+class DFATaintVulnerability:
     """Detected security vulnerability."""
 
     vulnerability_type: VulnerabilityType
@@ -144,7 +144,7 @@ class DataFlowGraph:
     def_use_chains: List[DefUseChain] = field(default_factory=list)
     edges: List[DataFlowEdge] = field(default_factory=list)
     tainted_paths: List[TaintedPath] = field(default_factory=list)
-    vulnerabilities: List[SecurityVulnerability] = field(default_factory=list)
+    vulnerabilities: List[DFATaintVulnerability] = field(default_factory=list)
 
 
 # =============================================================================
@@ -310,7 +310,7 @@ class DataFlowAnalyzer(ast.NodeVisitor):
         # Data flow tracking
         self.edges: List[DataFlowEdge] = []
         self.tainted_paths: List[TaintedPath] = []
-        self.vulnerabilities: List[SecurityVulnerability] = []
+        self.vulnerabilities: List[DFATaintVulnerability] = []
 
     def analyze(self) -> List[DataFlowGraph]:
         """Analyze the source code and return data flow graphs."""
@@ -600,7 +600,7 @@ class DataFlowAnalyzer(ast.NodeVisitor):
         variable: str,
         sink_function: str,
         taint_level: TaintLevel,
-    ) -> SecurityVulnerability:
+    ) -> DFATaintVulnerability:
         """Create a security vulnerability record."""
         recommendations = {
             VulnerabilityType.SQL_INJECTION: "Use parameterized queries or an ORM",
@@ -613,7 +613,7 @@ class DataFlowAnalyzer(ast.NodeVisitor):
             VulnerabilityType.HARDCODED_SECRET: "Use environment variables or a secrets manager",
         }
 
-        vuln = SecurityVulnerability(
+        vuln = DFATaintVulnerability(
             vulnerability_type=vuln_type,
             severity=severity,
             line=line,

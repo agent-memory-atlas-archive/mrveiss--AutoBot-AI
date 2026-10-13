@@ -6506,7 +6506,7 @@
         "title": "NPUWorkerMetrics",
         "type": "object"
       },
-      "NavigateRequest": {
+      "NavigateBrowserRequest": {
         "properties": {
           "url": {
             "title": "Url",
@@ -6516,7 +6516,7 @@
         "required": [
           "url"
         ],
-        "title": "NavigateRequest",
+        "title": "NavigateBrowserRequest",
         "type": "object"
       },
       "NodeActionsResponse": {
@@ -17840,7 +17840,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NavigateRequest"
+                "$ref": "#/components/schemas/NavigateBrowserRequest"
               }
             }
           },

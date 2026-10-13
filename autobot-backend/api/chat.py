@@ -79,13 +79,13 @@ from type_defs.common import STREAMING_MESSAGE_TYPES, Metadata
 # Import reusable chat utilities - Phase 1 Utility Extraction
 from utils.chat_utils import (
     create_chat_response,
-    create_error_response,
     generate_message_id,
     generate_request_id,
     get_chat_history_manager,
     log_chat_event,
     validate_chat_session_id,
 )
+from utils.response_helpers import create_error_response
 
 # Import models - DISABLED: Models don't exist yet
 # from backend.models.conversation import ConversationModel
