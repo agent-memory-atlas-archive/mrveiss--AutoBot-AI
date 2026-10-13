@@ -57,7 +57,10 @@ from advanced_rag_optimizer import RAGMetrics, RankedResult
 from autobot_memory_graph import AutoBotMemoryGraph
 from autobot_shared.error_boundaries import error_boundary
 from autobot_shared.logging_manager import get_llm_logger
+from constants.rag_graph_constants import RAG_GRAPH_TRAVERSAL_DEPTH
+from knowledge.search_components.graph_blend import blend_graph_score
 from knowledge.search_components.reranking import provenance_adjustment
+from services.rag_config import get_rag_config
 from services.rag_service import RAGService
 
 logger = get_llm_logger("graph_rag_service")
@@ -162,7 +165,7 @@ class GraphRAGService:
         self,
         rag_service: RAGService,
         memory_graph: AutoBotMemoryGraph,
-        graph_weight: float = 0.3,
+        graph_weight: float | None = None,
         enable_entity_extraction: bool = True,
     ) -> None:
         """
@@ -171,7 +174,7 @@ class GraphRAGService:
         Args:
             rag_service: Existing RAG service instance (dependency injection)
             memory_graph: Existing memory graph instance (dependency injection)
-            graph_weight: Weight for graph proximity in hybrid scoring (0.0-1.0)
+            graph_weight: Override for the shared ``RAGConfig.graph_weight`` (0.0-1.0); None reads it
             enable_entity_extraction: Whether to extract entities from results
 
         Design Notes:
@@ -181,7 +184,7 @@ class GraphRAGService:
         """
         self.rag = rag_service
         self.graph = memory_graph
-        self.graph_weight = graph_weight
+        self.graph_weight = get_rag_config().graph_weight if graph_weight is None else graph_weight
         self.enable_entity_extraction = enable_entity_extraction
 
         # Result deduplication cache
@@ -189,7 +192,7 @@ class GraphRAGService:
 
         logger.info(
             "GraphRAGService initialized (graph_weight=%s, entity_extraction=%s)",
-            graph_weight,
+            self.graph_weight,
             enable_entity_extraction,
         )
 
@@ -216,7 +219,7 @@ class GraphRAGService:
         self,
         query: str,
         start_entity: str | None = None,
-        max_depth: int = 2,
+        max_depth: int = RAG_GRAPH_TRAVERSAL_DEPTH,
         max_results: int = 5,
         enable_reranking: bool = True,
         timeout: float | None = None,
@@ -240,7 +243,7 @@ class GraphRAGService:
 
         try:
             self._seen_content.clear()
-
+            timeout = timeout or get_rag_config().graph_timeout_seconds
             rag_results = await self._perform_initial_rag_search(query, max_results, enable_reranking, timeout, metrics)
 
             all_results = await self._extract_and_expand_graph(
@@ -630,11 +633,7 @@ class GraphRAGService:
         base_score: float,
         max_depth: int,
     ) -> RankedResult | None:
-        """
-        Create RankedResult from a related graph entity.
-
-        Issue #281: Extracted from _expand_via_graph.
-        """
+        """Create RankedResult from a related graph entity (Issue #281: extracted from _expand_via_graph)."""
         observations = related_entity.get("observations", [])
         if not observations:
             return None
@@ -642,9 +641,7 @@ class GraphRAGService:
         content = "\n".join(observations)
 
         relationship_strength = relation.get("metadata", {}).get("strength", 1.0)
-        proximity_score = base_score * relationship_strength
-
-        hybrid_score = (1.0 - self.graph_weight) * base_score + self.graph_weight * proximity_score
+        hybrid_score = blend_graph_score(base_score, base_score * relationship_strength, self.graph_weight)
 
         _origin = relation.get("metadata", {}).get("origin", "inferred")
         _provenance: str = _origin if _origin in ("extracted", "inferred", "ambiguous") else "inferred"
@@ -724,17 +721,13 @@ class GraphRAGService:
         return result
 
     async def get_metrics(self) -> Dict[str, Any]:
-        """
-        Get service health and performance metrics.
-
-        Returns:
-            Dictionary with service metrics including RAG and graph statistics
-        """
+        """Get service health and performance metrics (RAG and graph statistics)."""
         rag_stats = await self.rag.get_metrics() if hasattr(self.rag, "get_metrics") else {}
 
         return {
             "service": "GraphRAGService",
             "graph_weight": self.graph_weight,
+            "graph_timeout_seconds": get_rag_config().graph_timeout_seconds,
             "entity_extraction_enabled": self.enable_entity_extraction,
             "rag_service": rag_stats,
             "graph_initialized": self.graph.initialized,

@@ -5,6 +5,8 @@ import { createLogger } from '@/utils/debugUtils';
 import { getApiBase } from '@/config/ssot-config';
 import { getSelectedCompanyId } from '@/utils/orgContext';
 import { isRealAuthToken } from '@/utils/authToken';
+import { CircuitBreakerError, runWithCircuitBreaker } from '@/utils/apiCircuitBreaker';
+import { extractErrorInfo } from '@/utils/apiErrorInfo';
 
 // Create scoped logger for ApiClient
 const logger = createLogger('ApiClient');
@@ -30,6 +32,8 @@ export interface RequestOptions {
    * (optional widgets, health probes) so they don't generate console noise.
    */
   suppressErrorLog?: boolean;
+  /** Opt in to fail-fast circuit breaking, keyed by the dependency name (#11682). */
+  circuitBreaker?: string;
 }
 
 export interface ChatMessageOptions {
@@ -79,7 +83,7 @@ export interface ChatMessageResponse {
   data?: Record<string, unknown>;
 }
 
-// Enhanced ApiClient — consolidated from JS and TS implementations (#810)
+// Enhanced ApiClient (#810). Which client to use when: docs/developer/FRONTEND_API_CLIENTS.md (#11682)
 // Issue #598: All timeouts sourced from AppConfig (SINGLE SOURCE OF TRUTH)
 // Convenience methods (get/post/put/delete) return parsed JSON data.
 // Use rawRequest() for raw Response access (streaming, blobs).
@@ -272,6 +276,15 @@ export class ApiClient {
     method?: string;
     body?: unknown;
   } = {}): Promise<Response> {
+    const key = options.circuitBreaker;
+    if (!key) return this._send(endpoint, options);
+    return runWithCircuitBreaker(key, () => this._send(endpoint, options));
+  }
+
+  private async _send(endpoint: string, options: RequestOptions & {
+    method?: string;
+    body?: unknown;
+  }): Promise<Response> {
     const {
       method = 'GET',
       headers = {},
@@ -371,27 +384,6 @@ export class ApiClient {
   // CONVENIENCE METHODS — return parsed JSON data (not Response)
   // ==================================================================================
 
-  private async _extractErrorInfo(response: Response): Promise<ErrorInfo> {
-    try {
-      const errorData = await response.json();
-      return {
-        status: response.status,
-        message: (() => {
-          const raw = errorData.error || errorData.message || errorData.detail;
-          if (raw == null) return JSON.stringify(errorData) || 'Unknown error';
-          return typeof raw === 'string' ? raw : JSON.stringify(raw);
-        })(),
-        details: errorData,
-      };
-    } catch {
-      return {
-        status: response.status,
-        message: response.statusText || 'Unknown error',
-        details: null,
-      };
-    }
-  }
-
   // GET with retry logic and exponential backoff
   async get<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     let lastError: Error | undefined;
@@ -406,7 +398,7 @@ export class ApiClient {
         });
 
         if (!response.ok) {
-          const errorData = await this._extractErrorInfo(response);
+          const errorData = await extractErrorInfo(response);
           throw new Error(
             `HTTP ${response.status}: ${errorData.message}`
           );
@@ -422,7 +414,7 @@ export class ApiClient {
         );
 
         // Don't retry 4xx client errors — they won't succeed on retry.
-        if (lastError.message.includes('HTTP 4')) {
+        if (lastError.message.includes('HTTP 4') || lastError instanceof CircuitBreakerError) {
           break;
         }
 
@@ -450,7 +442,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      const errorData = await this._extractErrorInfo(response);
+      const errorData = await extractErrorInfo(response);
       throw new Error(`HTTP ${response.status}: ${errorData.message}`);
     }
 
@@ -469,7 +461,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      const errorData = await this._extractErrorInfo(response);
+      const errorData = await extractErrorInfo(response);
       throw new Error(`HTTP ${response.status}: ${errorData.message}`);
     }
 
@@ -488,7 +480,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      const errorData = await this._extractErrorInfo(response);
+      const errorData = await extractErrorInfo(response);
       throw new Error(`HTTP ${response.status}: ${errorData.message}`);
     }
 
@@ -506,7 +498,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      const errorData = await this._extractErrorInfo(response);
+      const errorData = await extractErrorInfo(response);
       throw new Error(`HTTP ${response.status}: ${errorData.message}`);
     }
 
@@ -590,7 +582,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      const errorData = await this._extractErrorInfo(response);
+      const errorData = await extractErrorInfo(response);
       throw new Error(`HTTP ${response.status}: ${errorData.message}`);
     }
 

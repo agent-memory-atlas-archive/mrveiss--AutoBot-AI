@@ -342,7 +342,7 @@ class RateLimitHandler:
 
 
 # Convenience decorator for rate-limited functions
-def with_retry(
+def with_rate_limit_retry(
     provider: str = "default",
     max_retries: int = 3,
     handler: RateLimitHandler = None,
@@ -378,7 +378,7 @@ __all__ = [
     "RateLimitError",
     "RetryStrategy",
     "RetryMetrics",
-    "with_retry",
+    "with_rate_limit_retry",
     "llm_rate_limiter",
 ]
 

@@ -71,9 +71,12 @@
               </button>
               <!-- Voice Conversation (#1029) -->
               <button
-                @click="openVoiceConversation"
+                ref="voiceBtnRef"
+                @click="toggleVoiceConversation"
                 class="header-btn"
-                :class="{ 'bg-electric-100 text-electric-600': showVoiceOverlay || showVoicePanel }"
+                :class="{ 'bg-electric-100 text-electric-600': voiceExpanded }"
+                :aria-expanded="voiceExpanded"
+                :aria-controls="voiceControlsId"
                 :title="$t('chat.interface.voiceChat')"
               >
                 <Icon name="headset" />
@@ -83,8 +86,11 @@
             <div class="header-btn-divider" aria-hidden="true"></div>
             <button
               v-if="store.currentSessionId"
-              @click="toggleFilePanel"
+              ref="fileBtnRef"
+              @click="togglePanel('files')"
               class="header-btn"
+              :aria-expanded="showFilePanel"
+              aria-controls="chat-panel-files"
               :class="{ 'bg-electric-100 text-electric-600': showFilePanel }"
               :title="$t('chat.interface.toggleFilePanel')"
             >
@@ -102,12 +108,12 @@
             </button>
             <!-- #16443: collaboration panel toggle, collaborative sessions only -->
             <button
-              v-if="isCollaborativeSession"
-              @click="toggleCollaborationPanel"
+              v-if="isCollaborativeSession" ref="collabBtnRef"
+              @click="togglePanel('collaboration')"
               class="header-btn"
               :class="{ 'bg-electric-100 text-electric-600': showCollaborationPanel }"
               :title="$t('collaboration.panel.title')"
-              :aria-pressed="showCollaborationPanel"
+              :aria-expanded="showCollaborationPanel" aria-controls="chat-panel-collaboration"
             >
               <Icon name="users" />
             </button>
@@ -153,15 +159,17 @@
       <Transition name="slide-left">
         <ChatFilePanel
           v-if="showFilePanel && store.currentSessionId"
+          id="chat-panel-files"
           :session-id="store.currentSessionId"
           @close="showFilePanel = false"
         />
         <VoiceConversationPanel
           v-else-if="showVoicePanel"
-          @close="closeVoicePanel"
+          id="chat-panel-voice"
+          @close="showVoicePanel = false"
         />
         <ChatCollaborationPanel
-          v-else-if="showCollaborationPanel && isCollaborativeSession"
+          id="chat-panel-collaboration" v-else-if="showCollaborationPanel && isCollaborativeSession"
           @close="showCollaborationPanel = false"
         />
       </Transition>
@@ -318,6 +326,7 @@ const logger = createLogger('ChatInterface')
 import ErrorBoundary from '@/components/common/ErrorBoundary.vue'
 import ChatSidebar from './ChatSidebar.vue'
 import ChatHeader from './ChatHeader.vue'
+import { useChatSidePanels } from '@/composables/useChatSidePanels'
 import ChatTabs from './ChatTabs.vue'
 import ChatTabContent from './ChatTabContent.vue'
 import ChatFilePanel from './ChatFilePanel.vue'
@@ -505,13 +514,13 @@ const {
 // Voice conversation (#1029)
 const voiceConversation = useVoiceConversation()
 const showVoiceOverlay = ref(false)
-const showVoicePanel = ref(false)
+// One right-hand panel at a time; focus handled in the composable (#18243)
+const { showFilePanel, showVoicePanel, showCollaborationPanel, fileBtnRef, voiceBtnRef,
+  collabBtnRef, voiceExpanded, voiceControlsId, toggle: togglePanel, closeAll: closeAllPanels } = useChatSidePanels(showVoiceOverlay)
 const { voiceDisplayMode, contextOverflowMode } = usePreferences()
 
 function openVoiceConversation(): void {
   if (voiceDisplayMode.value === 'sidepanel') {
-    showFilePanel.value = false
-    showCollaborationPanel.value = false
     showVoicePanel.value = true
   } else {
     showVoiceOverlay.value = true
@@ -519,7 +528,11 @@ function openVoiceConversation(): void {
   voiceConversation.activate()
 }
 
-function closeVoicePanel(): void {
+// Side-panel mode: the header button toggles (aria-expanded); overlay mode
+// stays open-only, it has its own close control.
+function toggleVoiceConversation(): void {
+  if (!showVoicePanel.value) return openVoiceConversation()
+  voiceConversation.deactivate()
   showVoicePanel.value = false
 }
 
@@ -575,9 +588,8 @@ const showComparePanel = ref(false)
 const showKnowledgeDialog = ref(false)
 const showCommandDialog = ref(false)
 const showWorkflowProgress = ref(false)
-const showFilePanel = ref(false)
+
 // #16443: collaboration panel (participants/activity/notifications)
-const showCollaborationPanel = ref(false)
 // Mobile sidebar overlay (#1804)
 const showMobileSidebar = ref(false)
 // Chat settings modal (MVA-2006)
@@ -741,20 +753,9 @@ const sessionInfo = computed(() => {
 
 
 // Methods
-const toggleFilePanel = () => {
-  showVoicePanel.value = false
-  showCollaborationPanel.value = false
-  showFilePanel.value = !showFilePanel.value
-}
 
 // #16443
 const isCollaborativeSession = computed(() => store.currentSession?.mode === 'collaborative')
-
-const toggleCollaborationPanel = () => {
-  showVoicePanel.value = false
-  showFilePanel.value = false
-  showCollaborationPanel.value = !showCollaborationPanel.value
-}
 
 const exportSession = async () => {
   if (!store.currentSessionId) return
@@ -1065,7 +1066,7 @@ const handleKeyboardShortcuts = (event: KeyboardEvent) => {
       case 'f':
         if (store.currentSessionId) {
           event.preventDefault()
-          toggleFilePanel()
+          togglePanel('files')
         }
         break
     }
@@ -1281,9 +1282,7 @@ watch(() => store.currentSessionId, (newSessionId, oldSessionId) => {
     loadNovncUrl()
 
     // Close file panel when switching sessions
-    showFilePanel.value = false
-    showVoicePanel.value = false
-    showCollaborationPanel.value = false
+    closeAllPanels()
 
     // Prime TTS cursor to end of new session's last speakable message (#1488).
     // Without this the TTS watcher fires, sees current.id !== _lastStreamingMsgId,
