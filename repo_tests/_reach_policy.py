@@ -261,6 +261,16 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
+    "conftest-stubset-primitives": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "conftest.py files are a proper subset of tracked files under the pytest roots; no reference co-moves.",
+    ),
+    "root-resolver-depth-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked Python under seven roots, against all tracked Python in the repository.",
+    ),
     "github-api-single-module": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -362,6 +372,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
     "ssh-restart-executor-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
+    "sync-command-result-mapping-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
