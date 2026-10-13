@@ -24,6 +24,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from autobot_shared.audio_params import STT_CHANNELS
+from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.logging_manager import get_logger
 
 from .ffmpeg_service import ALLOWED_EXTENSIONS, get_ffmpeg_service
@@ -37,7 +38,7 @@ CONVERTER_UNAVAILABLE_CODE = "voice.converter_unavailable"
 #: The reference is a short prompt; the model resamples it itself, so this only has to be above telephone quality.
 REFERENCE_SAMPLE_RATE = 24_000
 #: Bounds a decompression bomb: a long recording is cut, not rejected.
-REFERENCE_MAX_SECONDS = 120.0
+REFERENCE_MAX_SECONDS = env_float_clamped("AUTOBOT_VOICE_REFERENCE_MAX_SECONDS", 120.0, positive_finite=True)
 
 
 def is_wav(data: bytes) -> bool:
