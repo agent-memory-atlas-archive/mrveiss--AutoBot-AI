@@ -119,7 +119,7 @@ def _source_population(root: Path) -> list[str]:
 REACH = declare(
     "shared-authority-callers-scan",
     discover=_source_population,
-    floor=2846,
+    floor=2988,  # re-pinned mid-window: population 3138, window [2838, 3138]
     what="non-test python source",
     roots=("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     growth=300,
@@ -163,8 +163,8 @@ _CONSUMERS: tuple[tuple[str, str | None, frozenset[str], frozenset[str]], ...] =
     ("autobot-backend/memory/essential_story.py", None, frozenset({"env_flag", "env_float"}), frozenset(_ENV_READS)),
     ("autobot-backend/agent_loop/tool_output_spill.py", None, frozenset({"env_int", "env_flag"}), frozenset()),
     ("autobot-backend/knowledge/facts.py", None, frozenset({"env_int", "env_float"}), frozenset()),
-    ("autobot-slm-backend/services/git_subprocess.py", "run_git", frozenset({"start_git"}), frozenset({"create_subprocess_exec"})),
-    ("autobot-slm-backend/services/git_tracker.py", None, frozenset({"run_git"}), frozenset({"create_subprocess_exec", "scrubbed_git_env"})),
+    ("autobot-slm-backend/services/git_subprocess.py", "run_git_capture", frozenset({"start_git"}), frozenset({"create_subprocess_exec"})),
+    ("autobot-slm-backend/services/git_tracker.py", None, frozenset({"run_git_capture"}), frozenset({"create_subprocess_exec", "scrubbed_git_env"})),
     ("autobot-backend/security/enterprise/compliance_manager.py", "_get_encryption_key", frozenset({"ensure_and_read_shared_key"}), frozenset({"generate_key"})),
     ("autobot-backend/api/push.py", "_check_ssrf", frozenset({"is_public_url_async"}), frozenset({"ip_address", "getaddrinfo"})),
     ("autobot-slm-backend/api/nodes_execution.py", None, frozenset(), frozenset({"gethostbyname", "gethostname"})),
