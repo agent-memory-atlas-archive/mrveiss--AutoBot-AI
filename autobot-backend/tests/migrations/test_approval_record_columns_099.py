@@ -94,8 +94,10 @@ async def test_downgrade_refuses_once_a_new_column_holds_a_value(fresh_db_url, c
     assert run_alembic(["upgrade", _REV], fresh_db_url).returncode == 0
     await _seed(fresh_db_url)
     await _run(
-        fresh_db_url, f"UPDATE approvals SET {column} = {value} WHERE id = :id", {"id": _ROWS[0]["id"]}
-    )  # nosec B608
+        fresh_db_url,
+        f"UPDATE approvals SET {column} = {value} WHERE id = :id",  # nosec B608
+        {"id": _ROWS[0]["id"]},
+    )
 
     down = run_alembic(["downgrade", _PRE], fresh_db_url)
     assert down.returncode != 0
