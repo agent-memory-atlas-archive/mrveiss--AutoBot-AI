@@ -7,7 +7,7 @@
 guard. That guard worked, but enforcing copies is not a fix, and the issue it
 was waiting on (#7095) was closed without the fix landing.
 
-There is now one tracked definition, `inventory/group_vars/all/role_active_facts.yml`
+There is now one tracked definition, `inventory/group_vars/all.yml`
 (`tools/lint/check_role_facts_single_source.py` enforces that). The test inventory needs
 real files beside it (a tracked symlink is materialised as a plain-text path
 string on `core.symlinks=false` checkouts and silently resolves zero

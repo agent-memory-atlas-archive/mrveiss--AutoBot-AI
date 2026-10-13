@@ -47,7 +47,7 @@ remain in place; only new code must use the canonical prefix.
 New gate conditions must use the `role_X_active` boolean facts rather than
 raw `node_roles` string checks. These facts have exactly ONE definition (#14678):
 
-- `autobot-slm-backend/ansible/inventory/group_vars/all/role_active_facts.yml`
+- `autobot-slm-backend/ansible/inventory/group_vars/all.yml`
   (loaded automatically wherever a `group_vars/` directory sits beside the
   inventory; `deploy.yml` loads the same file explicitly via `vars_files:`
   because its callers pass a bare `-i "<host>,"` string)
@@ -87,8 +87,7 @@ when: "'autobot-backend' in node_roles"
 when: role_backend_active
 ```
 
-Files in the backward-compat allowlist (`group_vars/all.yml`,
-`group_vars/all/role_active_facts.yml`) are excluded from this check because they
+The backward-compat allowlist file (`group_vars/all.yml`) is excluded from this check because it
 must maintain the OR-chains for existing hosts.
 
 ## Adding a New Role
@@ -99,7 +98,7 @@ When adding a new role, update **all** of the following:
    the role has no `autobot-` equivalent by convention, like `vnc`/`llm`).
 2. Add the canonical name to the table in this document.
 3. Add a `role_<name>_active` fact to the single definition,
-   `inventory/group_vars/all/role_active_facts.yml`.
+   `inventory/group_vars/all.yml`.
 4. If the role has a deprecated short-form alias, add it to the
    `_role_aliases` dict in `group_vars/all.yml` and to
    `DEPRECATED_SHORT_FORMS` in `tools/lint/check_canonical_role_names.py`.
