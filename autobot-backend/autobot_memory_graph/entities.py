@@ -19,6 +19,7 @@ from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
 
+from . import entity_upsert
 from .core import ENTITY_TYPES, AutoBotMemoryGraphCore
 
 logger = get_logger(__name__)
@@ -161,22 +162,46 @@ class EntityOperationsMixin:
         self._validate_entity_inputs(entity_type, name)
 
         try:
-            entity_id = str(uuid.uuid4())
-            entity_metadata = self._prepare_entity_metadata(metadata, tags)
-            entity = self._build_entity_document(entity_id, entity_type, name, observations, entity_metadata)
-
-            await self._store_entity_in_redis(entity_id, entity)
-            logger.info(
-                "Created entity: %s (%s) with ID %s",
-                name,
-                entity_type,
-                entity_id[:8] + "...",
-            )
-            return entity
-
+            return await self._write_new_entity(str(uuid.uuid4()), entity_type, name, observations, metadata, tags)
         except Exception as e:
             logger.error("Failed to create entity: %s", e)
             raise RuntimeError("Entity creation failed") from e
+
+    async def _write_new_entity(
+        self: AutoBotMemoryGraphCore,
+        entity_id: str,
+        entity_type: str,
+        name: str,
+        observations: List[str],
+        metadata: Dict[str, Any] | None,
+        tags: List[str] | None,
+    ) -> Dict[str, Any]:
+        """Build and store one entity document under a caller-chosen id (#18417)."""
+        entity_metadata = self._prepare_entity_metadata(metadata, tags)
+        entity = self._build_entity_document(entity_id, entity_type, name, observations, entity_metadata)
+        await self._store_entity_in_redis(entity_id, entity)
+        # The name can be anything a caller stored, a credential included; the type and id identify the row.
+        logger.info("Created entity of type %s with ID %s", entity_type, entity_id[:8] + "...")
+        return entity
+
+    async def get_or_create_entity(
+        self: AutoBotMemoryGraphCore,
+        entity_type: str,
+        name: str,
+        observations: List[str],
+        metadata: Dict[str, Any] | None = None,
+        tags: List[str] | None = None,
+    ) -> tuple[Dict[str, Any], bool]:
+        """Atomically return the entity called ``name``, creating it if absent (#18417).
+
+        Claiming the name and writing the document are one Lua script
+        (``entity_upsert``), so concurrent callers cannot both create and no claim
+        is visible without its document. Redis errors propagate; an unreadable
+        lookup is never 'not found'. Entities that predate the name index are
+        adopted into it. Returns ``(entity, created)``.
+        """
+        self.ensure_initialized()
+        return await entity_upsert.get_or_create(self, entity_type, name, observations, metadata, tags)
 
     # How many relevance hits to scan for an exact name before giving up (#13761).
     # The query *is* the name, so an exact match ranks at or near the top; this is
@@ -187,6 +212,7 @@ class EntityOperationsMixin:
     async def _resolve_entity_by_name(
         self: AutoBotMemoryGraphCore,
         entity_name: str,
+        strict: bool = False,
     ) -> Dict[str, Any] | None:
         """Resolve a name to an entity, preferring an exact match (#13761).
 
@@ -202,7 +228,10 @@ class EntityOperationsMixin:
         result carries ``_resolution`` so callers can tell the difference and warn
         rather than render it silently.
         """
-        results = await self.search_entities(query=entity_name, limit=self._NAME_RESOLUTION_CANDIDATES)
+        if strict:
+            results = await entity_upsert.strict_search_by_name(self, entity_name, self._NAME_RESOLUTION_CANDIDATES)
+        else:
+            results = await self.search_entities(query=entity_name, limit=self._NAME_RESOLUTION_CANDIDATES)
         if not results:
             return None
 
@@ -227,6 +256,7 @@ class EntityOperationsMixin:
         entity_id: str | None = None,
         entity_name: str | None = None,
         include_relations: bool = False,
+        strict: bool = False,
     ) -> Dict[str, Any] | None:
         """
         Retrieve entity by ID or name.
@@ -235,6 +265,9 @@ class EntityOperationsMixin:
             entity_id: UUID of entity to retrieve
             entity_name: Name of entity to retrieve (alternative to ID)
             include_relations: Include related entities in response
+            strict: Raise on a read error instead of returning None, so "not
+                found" and "could not read" are distinguishable (#18417). Name
+                lookups then use a search path that does not swallow errors.
 
         Returns:
             Entity data or None if not found. When resolved by name the dict
@@ -248,7 +281,7 @@ class EntityOperationsMixin:
                 entity_key = f"memory:entity:{entity_id}"
                 entity = await self.redis_client.json().get(entity_key)
             elif entity_name:
-                entity = await self._resolve_entity_by_name(entity_name)
+                entity = await self._resolve_entity_by_name(entity_name, strict=strict)
                 if entity is None:
                     return None
                 entity_id = entity["id"]
@@ -270,6 +303,8 @@ class EntityOperationsMixin:
 
         except Exception as e:
             logger.error("Failed to get entity: %s", e)
+            if strict:
+                raise
             return None
 
     async def _append_observations_to_entity(
@@ -423,6 +458,7 @@ class EntityOperationsMixin:
             # Delete entity
             entity_key = f"memory:entity:{entity_id}"
             deleted = await self.redis_client.delete(entity_key)
+            await entity_upsert.release_name(self, entity["name"], entity_id)
 
             # Clear cache
             self.search_cache.clear()
