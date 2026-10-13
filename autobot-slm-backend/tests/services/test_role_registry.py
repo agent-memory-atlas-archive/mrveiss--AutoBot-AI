@@ -509,7 +509,7 @@ def _activation_sources() -> dict:
     the node-roles half unguarded -- which is how the `redis` gap survived
     the first version of this rule.
     """
-    facts_file = _ANSIBLE_DIR / "playbooks" / "vars" / "role_active_facts.yml"
+    facts_file = _ANSIBLE_DIR / "inventory" / "group_vars" / "all" / "role_active_facts.yml"
     text = facts_file.read_text(encoding="utf-8")
 
     activating: dict = {}
