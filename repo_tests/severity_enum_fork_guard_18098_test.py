@@ -70,6 +70,10 @@ PENDING_REASONS: dict[str, str] = {}
 #: ladder. Only enums the probe actually flags belong here: an entry it does not flag is
 #: exempting nothing, and `test_every_distinct_entry_is_still_flagged` fails on it.
 DISTINCT_VOCABULARIES = {
+    "autobot_shared/risk_tier.py::RiskTier": (
+        "grades how much scrutiny an approval request needs (low..critical, no info rung); it ranks "
+        "a requested action's blast radius, not a finding someone detected"
+    ),
     "autobot-backend/secure_sandbox_executor.py::SandboxSecurityLevel": (
         "configures how strictly a sandbox isolates a run (low/medium/high); it grades a "
         "setting the caller picks, not a finding someone detected"
