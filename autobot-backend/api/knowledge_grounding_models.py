@@ -244,6 +244,11 @@ class Conflict:
     chosen_fact: str | None = None
     reasoning: str = ""
 
+    def __post_init__(self):
+        """Require one producer's identity: claim_1_id, or both kb_says and agent_says."""
+        if not self.claim_1_id and (self.kb_says is None or self.agent_says is None):
+            raise ValueError("Conflict needs claim_1_id (claim-vs-KB) or both kb_says and agent_says (resolver)")
+
     def max_confidence(self) -> float:
         """Get highest confidence across all sources.
 

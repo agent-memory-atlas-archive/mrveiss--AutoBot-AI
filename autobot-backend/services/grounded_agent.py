@@ -286,22 +286,37 @@ Format as JSON array of objects with fields: claim_text, subject, predicate, obj
 
             claims = []
             for item in claims_data:
-                if isinstance(item, dict):
-                    claims.append(
-                        Claim(
-                            claim_text=item.get("claim_text", ""),
-                            subject=item.get("subject", ""),
-                            predicate=item.get("predicate", ""),
-                            object=item.get("object", ""),
-                            confidence=float(item.get("confidence", 0.0)),
-                        )
-                    )
+                claim = self._build_claim(item)
+                if claim is not None:
+                    claims.append(claim)
 
             return claims
 
         except Exception as e:
             logger.error("Error extracting claims: %s", e)
             return []
+
+    @staticmethod
+    def _build_claim(item) -> "Claim | None":
+        """Build one Claim from raw LLM JSON; a bad item is skipped, never fatal.
+
+        Items with a malformed field (non-numeric or out-of-range confidence) are
+        skipped with a WARNING, matching how a non-dict item is skipped, so one
+        bad item cannot drop the good claims in the same response.
+        """
+        if not isinstance(item, dict):
+            return None
+        try:
+            return Claim(
+                claim_text=item.get("claim_text", ""),
+                subject=item.get("subject", ""),
+                predicate=item.get("predicate", ""),
+                object=item.get("object", ""),
+                confidence=float(item.get("confidence", 0.0)),
+            )
+        except (ValueError, TypeError) as e:
+            logger.warning("Skipping malformed claim item: %s", e)
+            return None
 
     async def _classify_and_verify_claim(self, claim: Claim) -> VerifiedClaim:
         """Classify claim against KB and verify if needed.

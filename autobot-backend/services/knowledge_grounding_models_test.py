@@ -216,6 +216,14 @@ class TestTheMergedVerifiedClaimAndConflictKeepTheirWireShapes:
         vc = VerifiedClaim(claim=Claim(claim_text="x"), kb_status=ClaimStatus.IN_KB, kb_source="f1", evidence=["e"])
         assert VerifiedClaim.from_dict(vc.to_dict()) == vc
 
+    def test_conflict_without_either_producers_identity_raises(self):
+        import pytest
+
+        from api.knowledge_grounding_models import Conflict
+
+        with pytest.raises(ValueError):
+            Conflict()
+
     def test_both_conflict_producers_build_the_same_class(self):
         from api.knowledge_grounding_models import Conflict, ConflictResolution
 

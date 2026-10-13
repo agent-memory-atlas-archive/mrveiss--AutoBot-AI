@@ -36,3 +36,10 @@ def test_the_persisted_ticket_and_queue_key_are_byte_identical():
         priority = ReviewTicketPriority[name]
         assert json.dumps({"priority": priority.value}) == '{"priority": "%s"}' % wire
         assert f"review_queue:{priority.value}" == f"review_queue:{wire}"
+
+
+def test_members_still_equal_their_wire_strings():
+    from api.knowledge_grounding_models import ReviewTicketPriority
+
+    for name, wire in OLD_WIRE.items():
+        assert ReviewTicketPriority[name] == wire
