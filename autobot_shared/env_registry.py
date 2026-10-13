@@ -66,15 +66,15 @@ def env(name: str, default: Any = None) -> Any:
 # grandfathered file-size ceiling (#14236) with no slack left inline: ai (#14856), terminal/
 # testing (#14961), slm (#15620), npu (#18094), and agent_runtime / backend_services (#15710,
 # the os.environ.get sweep the registry checker had never seen either). Importing each here -- after
-# EnvVarSpec/register_env_var/REGISTRY are defined above, and before
-# anything below can observe the registry -- is a side effect that fully
-# populates that module's entries; see each sibling's own docstring for why
-# its variables live there instead of inline.
+# EnvVarSpec/register_env_var/REGISTRY are defined above, and before anything below can observe
+# the registry -- is a side effect that fully populates that module's entries; see each
+# sibling's own docstring for why its variables live there instead of inline.
 
 from autobot_shared import env_registry_agent_runtime  # noqa: E402,F401
 from autobot_shared import env_registry_ai  # noqa: E402,F401
 from autobot_shared import env_registry_backend  # noqa: E402,F401
 from autobot_shared import env_registry_backend_services  # noqa: E402,F401
+from autobot_shared import env_registry_knowledge  # noqa: E402,F401
 from autobot_shared import env_registry_llc  # noqa: E402,F401
 from autobot_shared import env_registry_logging  # noqa: E402,F401
 from autobot_shared import env_registry_npu  # noqa: E402,F401
