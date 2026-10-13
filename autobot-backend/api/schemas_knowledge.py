@@ -20,6 +20,7 @@ from autobot_memory_graph.core import (
     canonical_relation_type,
 )
 from autobot_shared.env_utils import env_float
+from constants.rag_graph_constants import RAG_GRAPH_TRAVERSAL_DEPTH as RAG_DEPTH
 from constants.threshold_constants import CategoryDefaults, QueryDefaults
 from knowledge.ownership import AccessLevel, VisibilityLevel
 from type_defs.common import Metadata
@@ -4386,7 +4387,7 @@ class TraverseRequest(BaseModel):
     """Request model for graph traversal."""
 
     start_fact_id: str = Field(..., description="Starting fact ID for traversal")
-    max_depth: int = Field(2, ge=1, le=5, description="Maximum traversal depth")
+    max_depth: int = Field(RAG_DEPTH, ge=1, le=5, description="Maximum traversal depth")
     relation_types: List[str] | None = Field(None, description="Optional list of relation types to follow")
     include_fact_details: bool = Field(False, description="Include full fact content in results")
 
@@ -4548,7 +4549,7 @@ class GraphRequest(BaseModel):
     """Request model for multi-source knowledge graph."""
 
     max_facts: int = Field(50, ge=1, le=200, description="Maximum facts to include")
-    max_depth: int = Field(2, ge=1, le=3, description="Maximum relation depth")
+    max_depth: int = Field(RAG_DEPTH, ge=1, le=3, description="Maximum relation depth")
     include_categories: bool = Field(True, description="Include category nodes")
     include_relations: bool = Field(True, description="Include fact relations")
     category_filter: str | None = Field(None, description="Filter by category path")
@@ -4602,10 +4603,8 @@ class GraphRAGSearchRequest(BaseModel):
     """Request model for graph-aware RAG search."""
 
     query: str = Field(..., min_length=1, max_length=1000, description="Search query string")
-    start_entity: str | None = Field(
-        None, max_length=200, description="Optional starting entity name for graph traversal"
-    )
-    max_depth: int = Field(2, ge=1, le=3, description="Maximum graph traversal depth (1-3 hops)")
+    start_entity: str | None = Field(None, max_length=200, description="Optional start entity name for graph traversal")
+    max_depth: int = Field(RAG_DEPTH, ge=1, le=3, description="Maximum traversal depth (1-3 hops)")
     max_results: int = Field(5, ge=1, le=20, description="Maximum number of results to return")
     enable_reranking: bool = Field(True, description="Whether to apply cross-encoder reranking")
     timeout: float | None = Field(None, ge=1.0, le=30.0, description="Optional timeout in seconds (1-30s)")

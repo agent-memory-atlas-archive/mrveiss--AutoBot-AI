@@ -9,7 +9,8 @@ matcher and the data it is judged against live in different files.
 
 **What counts as an outbound call** (kind in brackets): manager methods on the shared client
 (``manager``), session verbs on an aiohttp session (``session``), and the call surface of ``httpx``,
-``requests`` and ``urllib.request.urlopen``. Receivers are recognised by name heuristics **and** by
+``requests``, ``urllib.request.urlopen`` and ``websockets`` (incl. ``ws_no_redirect.connect_no_redirect``).
+Receivers are recognised by name heuristics **and** by
 binding: a name bound by ``with ... as X`` or ``X = aiohttp.ClientSession(...)`` /
 ``httpx.AsyncClient(...)`` / ``requests.Session()`` / ``get_http_client()`` is a client of that kind.
 Import aliases resolve (``import requests as r``, ``from urllib.request import urlopen as uo``).
@@ -27,7 +28,8 @@ file, under-matching is the confident zero this guard exists to prevent.
   where ``<expr>`` is the same expression as the request's URL argument. A module-level policy call
   never counts. It also needs redirects refused: a literal ``allow_redirects=False`` (aiohttp,
   requests) or no ``follow_redirects`` opt-in (httpx, whose default is off). ``urlopen`` can never
-  be guarded this way; a websocket handshake is not redirected.
+  be guarded this way; a websocket counts only through ``ws_no_redirect.connect_no_redirect`` (websockets follows
+  handshake redirects).
 """
 
 from __future__ import annotations
@@ -63,6 +65,8 @@ _POLICY_VALUES = {"EGRESS_POLICY", "VENDOR_API_EGRESS", "CONTENT_URL_EGRESS", "i
 _POLICY_MODULES = {"base", "egress", "http_egress_guard"}
 _EGRESS_MODULES = {"egress", "http_egress_guard"}
 _URL_AT_1 = {"request", "tracked_request", "stream"}
+#: The ``websockets`` connect wrapper that refuses handshake redirects: still a websocket outbound call.
+_NO_REDIRECT_CONNECTS = frozenset({"connect_no_redirect", "NoRedirectConnect"})
 
 
 class Site(NamedTuple):
@@ -192,13 +196,18 @@ def _request(call: ast.Call, ctx: _Ctx) -> _Req | None:
     return None
 
 
+def _is_no_redirect_connect(canon: str) -> bool:
+    """``autobot_shared.ws_no_redirect``'s connect wrapper (or its class), however it was imported (#17576)."""
+    return canon.startswith("autobot_shared.ws_no_redirect.") and canon.rsplit(".", 1)[-1] in _NO_REDIRECT_CONNECTS
+
+
 def _kind(call: ast.Call, req: _Req | None, ctx: _Ctx) -> str | None:
     """Client kind of an outbound call, or ``None`` when *call* is not one."""
     canon = _canon(call.func, ctx.aliases)
     head, _, verb = canon.rpartition(".")
     if canon == "urllib.request.urlopen":
         return "urllib"
-    if canon.startswith("websockets.") and verb == "connect":
+    if (canon.startswith("websockets.") and verb == "connect") or _is_no_redirect_connect(canon):
         return "websocket"
     if head in ("requests", "httpx") and verb in _VERBS:
         return head
@@ -238,6 +247,10 @@ def _url_arg(call: ast.Call, req: _Req | None) -> ast.expr | None:
 
 def _accepted_policy(value: ast.expr, ctx: _Ctx) -> bool:
     """``False``, ``EGRESS_POLICY`` or a canonical policy value imported from the egress modules."""
+    if isinstance(
+        value, ast.IfExp
+    ):  # ``instance_host_egress() if self.admin else CONTENT_URL_EGRESS``: both arms canonical
+        return _accepted_policy(value.body, ctx) and _accepted_policy(value.orelse, ctx)
     if isinstance(value, ast.Constant):
         return value.value is False
     if isinstance(value, ast.Call):
@@ -275,10 +288,11 @@ def _redirects_refused(kind: str, call: ast.Call, req: _Req | None, ctx: _Ctx) -
 
     aiohttp and requests follow redirects by default, so only a literal ``allow_redirects=False``
     counts. httpx does not follow by default: refused unless the call or its client opts in.
-    ``urlopen`` has no switch at all. A websocket handshake is not followed.
+    ``urlopen`` has no switch at all. A websocket handshake is followed by ``websockets.connect``;
+    only the ``ws_no_redirect`` wrapper refuses it.
     """
-    if kind == "websocket":
-        return True
+    if kind == "websocket":  # ``websockets.connect`` follows handshake redirects; only the wrapper refuses them
+        return _is_no_redirect_connect(_canon(call.func, ctx.aliases))
     if kind == "httpx":
         opted_in = any(kw.arg == "follow_redirects" for kw in call.keywords)
         if opted_in:

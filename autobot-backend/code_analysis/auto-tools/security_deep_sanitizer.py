@@ -118,7 +118,7 @@ from tool_base import (  # noqa: E402
 )
 
 
-class SecurityFixAgent(SecurityFixToolBase):
+class DeepSecurityFixAgent(SecurityFixToolBase):
     """
     Enhanced automated security fix agent for comprehensive XSS vulnerability remediation.
 
@@ -870,7 +870,7 @@ The Enhanced Security Fix Agent implements a multi-layered defense strategy:
 
 def main():
     """Main entry point."""
-    SecurityFixAgent.cli_main()
+    DeepSecurityFixAgent.cli_main()
 
 
 if __name__ == "__main__":

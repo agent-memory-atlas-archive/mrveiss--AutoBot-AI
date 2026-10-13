@@ -22,7 +22,7 @@ from code_analyzer import CodeAnalyzer
 # `CodeQualityDashboard` could not be imported.
 from env_analyzer import EnvironmentAnalyzer
 from performance_analyzer import PerformanceAnalyzer
-from security_analyzer import SecurityAnalyzer
+from security_analyzer import LegacySecurityAnalyzer
 from testing_coverage_analyzer import TestingCoverageAnalyzer
 
 from autobot_shared.async_compat import run_or_schedule
@@ -92,7 +92,7 @@ class CodeQualityDashboard:
         self.code_analyzer = CodeAnalyzer(self.redis_client)
         self.env_analyzer = EnvironmentAnalyzer(self.redis_client)
         self.performance_analyzer = PerformanceAnalyzer(self.redis_client)
-        self.security_analyzer = SecurityAnalyzer(self.redis_client)
+        self.security_analyzer = LegacySecurityAnalyzer(self.redis_client)
         self.api_analyzer = APIConsistencyAnalyzer(self.redis_client)
         self.testing_analyzer = TestingCoverageAnalyzer(self.redis_client)
         self.architecture_analyzer = ArchitecturalPatternAnalyzer(self.redis_client)

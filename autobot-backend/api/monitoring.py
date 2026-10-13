@@ -1176,7 +1176,7 @@ async def realtime_monitoring_websocket(websocket: WebSocket):
 # Helper functions
 # Performance monitoring decorator endpoint
 @router.post("/test/performance", response_model=TestPerformanceResponse)
-@monitor_performance("api_test")
+@monitor_performance("api_test", client_provider=lambda: performance_monitor.redis_client)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="test_performance_monitoring",

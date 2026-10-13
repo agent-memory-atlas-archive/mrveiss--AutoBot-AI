@@ -217,3 +217,51 @@ register_env_var(
         component="security",
     )
 )
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_SECRETS_BACKUP_MAX_AGE_S",
+        type=int,
+        default=86400,
+        description=(
+            "Longest age, in seconds, of a secrets-store backup that a destructive secrets "
+            "proposal (e.g. the OAuth bundle strip) accepts as its safety net (#18281). Older "
+            "backups are refused, so the verifier fails closed. Default is one day: long enough "
+            "to cover human approval latency, short enough that few secrets changed since. "
+            "Lowering it demands a fresher backup before each destructive action."
+        ),
+        component="security",
+        range=(60, 2592000),
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_PROVIDER_KEY_HYDRATION_TIMEOUT_S",
+        type=int,
+        default=30,
+        description=(
+            "Seconds a process waits for its one-time provider-key vault hydration before treating the "
+            "vault as unreachable (#18094). On timeout every vault-resolved key is refused (fail closed); a "
+            "hydration that finishes later still swaps its result in."
+        ),
+        component="security",
+    )
+)
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_PROVIDER_KEY_REHYDRATE_BACKOFF_S",
+        type=int,
+        default=30,
+        description=(
+            "First delay before a process whose provider-key vault was unreachable tries to hydrate again on a "
+            "later key resolution (#18094). Doubles after each failed retry, capped at 20x this value; a "
+            "successful hydration resets it. Until a retry succeeds, keys stay refused, never served from env."
+        ),
+        component="security",
+    )
+)

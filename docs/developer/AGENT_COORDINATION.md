@@ -142,7 +142,7 @@ merges, and between those two moments the scope is unclaimed but not safe
 - **The chain is bounded.** Unbounded handoff recreates, inside one branch, the
   pile of unlanded work the worktree ceiling exists to prevent — and hides it,
   because a growing branch looks like progress.
-- **No TTL decides this.** An interest ends when its branch does. `prune` takes
+- **No TTL decides this.** An interest ends when its branch does. `prune_closed_branches` takes
   the live-branch set from a caller with a GitHub client, because this package
   has none and must not grow one.
 

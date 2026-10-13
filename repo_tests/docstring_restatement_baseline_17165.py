@@ -73,11 +73,9 @@ KNOWN_RESTATEMENTS: dict[str, frozenset[str]] = {
     ),
     "autobot-backend/api/schemas_workflows.py": frozenset(
         {
-            "ApprovalGateResponse",
             "BatchJobStatus",
             "BatchJobType",
             "SystemValidationRequestModel",
-            "TaskApprovalLinkResponse",
         }
     ),
     "autobot-backend/api/sequential_thinking_mcp.py": frozenset({"clear_thinking_session"}),
@@ -109,7 +107,7 @@ KNOWN_RESTATEMENTS: dict[str, frozenset[str]] = {
     "autobot-backend/security/enterprise/sso_integration.py": frozenset({"invalidate_sso_session"}),
     "autobot-backend/security/enterprise/threat_detection/models.py": frozenset({"count_recent_api_requests"}),
     "autobot-backend/security/input_validator.py": frozenset(
-        {"sanitize_web_content", "validate_research_query", "validate_url"}
+        {"sanitize_web_content", "validate_research_query", "validate_url_report"}
     ),
     "autobot-backend/security/secure_web_research.py": frozenset({"reset_security_statistics"}),
     "autobot-backend/services/agent_analytics.py": frozenset({"get_all_agents_metrics"}),

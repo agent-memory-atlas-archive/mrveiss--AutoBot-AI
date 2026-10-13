@@ -63,23 +63,25 @@ def env(name: str, default: Any = None) -> Any:
 # ---------------------------------------------------------------------------
 
 # Split into per-component sibling modules as this file reaches its
-# grandfathered file-size ceiling (#14236) with no slack left inline: ai
-# (#14856), terminal/testing (#14961), slm (#15620), and agent_runtime /
-# backend_services (#15710, the os.environ.get sweep the registry checker
-# had never seen either). Importing each here -- after
-# EnvVarSpec/register_env_var/REGISTRY are defined above, and before
-# anything below can observe the registry -- is a side effect that fully
-# populates that module's entries; see each sibling's own docstring for why
-# its variables live there instead of inline.
+# grandfathered file-size ceiling (#14236) with no slack left inline: ai (#14856), terminal/
+# testing (#14961), slm (#15620), npu (#18094), and agent_runtime / backend_services (#15710,
+# the os.environ.get sweep the registry checker had never seen either). Importing each here -- after
+# EnvVarSpec/register_env_var/REGISTRY are defined above, and before anything below can observe
+# the registry -- is a side effect that fully populates that module's entries; see each
+# sibling's own docstring for why its variables live there instead of inline.
 
 from autobot_shared import env_registry_agent_runtime  # noqa: E402,F401
 from autobot_shared import env_registry_ai  # noqa: E402,F401
 from autobot_shared import env_registry_backend  # noqa: E402,F401
 from autobot_shared import env_registry_backend_services  # noqa: E402,F401
+from autobot_shared import env_registry_knowledge  # noqa: E402,F401
 from autobot_shared import env_registry_llc  # noqa: E402,F401
 from autobot_shared import env_registry_logging  # noqa: E402,F401
+from autobot_shared import env_registry_npu  # noqa: E402,F401
+from autobot_shared import env_registry_rag  # noqa: E402,F401
 from autobot_shared import env_registry_security  # noqa: E402,F401
 from autobot_shared import env_registry_slm  # noqa: E402,F401
+from autobot_shared import env_registry_tls  # noqa: E402,F401
 from autobot_shared import env_registry_analytics, env_registry_terminal, env_registry_testing  # noqa: E402,F401
 
 # --- events (#14817, #14818) -------------------------------------------------
@@ -495,47 +497,7 @@ register_env_var(
     )
 )
 
-# --- tls --------------------------------------------------------------------
-
-register_env_var(
-    EnvVarSpec(
-        name="AUTOBOT_TLS_CA_PATH",
-        type=str,
-        default=None,
-        description="Path to the CA certificate file for TLS verification.",
-        component="tls",
-    )
-)
-
-register_env_var(
-    EnvVarSpec(
-        name="AUTOBOT_TLS_CERT_DIR",
-        type=str,
-        default="/etc/autobot/certs",
-        description="Directory containing TLS certificate and key files.",
-        component="tls",
-    )
-)
-
-register_env_var(
-    EnvVarSpec(
-        name="AUTOBOT_TLS_CERT_PATH",
-        type=str,
-        default=None,
-        description="Path to the TLS client/server certificate file.",
-        component="tls",
-    )
-)
-
-register_env_var(
-    EnvVarSpec(
-        name="AUTOBOT_TLS_KEY_PATH",
-        type=str,
-        default=None,
-        description="Path to the TLS private key file.",
-        component="tls",
-    )
-)
+# --- tls: env_registry_tls.py ------------------------------------------
 
 # --- network ----------------------------------------------------------------
 

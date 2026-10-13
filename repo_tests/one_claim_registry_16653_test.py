@@ -95,6 +95,10 @@ _THE_REGISTRY = "autobot_shared/coordination/work_claims.py"
 #: old stale-entry check only fired when a file lost its LAST primitive, so
 #: going from two to one was invisible in both directions at once.
 _ALLOWED: dict[str, tuple[int, str]] = {
+    "autobot-backend/autobot_memory_graph/entity_upsert.py": (
+        1,
+        "#18417 — a dedup name index, not a work claim: SETNX adopts a pre-index entity so a name maps to one entity.",
+    ),
     "autobot-backend/events/channel_stream.py": (
         1,
         "#14815 — a watermark, not a lock: SETNX keeps the LOWEST broken event id for a channel.",
@@ -201,7 +205,7 @@ REACH = declare(
     # the bottom tenth of `growth`, because that is zero tolerance dressed as an allowance.
     # Re-measured by the mechanism itself, not carried across (#15928); the arithmetic is in
     # the commit message, which cannot drift from the tree it describes.
-    floor=3113,  # re-pinned mid-window: population 3114, window [3064, 3114]
+    floor=3175,  # re-pinned mid-window: population 3114, window [3064, 3114]
     what="Python modules swept for claim-or-lock primitives",
     growth=50,
     # Scope as data (#17844). Five trees, including `scripts/` and `pipeline-scripts/` that no
