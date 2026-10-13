@@ -60,6 +60,7 @@ from chat_workflow.tool_dispatch_guards import (
     enforce_repetition,
     is_registered_tool,
     llc_scope_error,
+    unknown_tool_error,
 )
 from chat_workflow.tool_permission_gate import permission_denial
 from llc.agent_tools import LLC_TOOL_NAMES, LLC_TOOL_SCHEMAS, LLCToolError, dispatch_llc_tool
@@ -1095,8 +1096,12 @@ async def _try_mcp_dispatch(
     role: str = "user",
     session_id: str = "",
     max_schema_retries: int = _DEFAULT_SCHEMA_RETRIES,
+    ctx: "LLMIterationContext | None" = None,
 ) -> WorkflowMessage | None:
     """Attempt to dispatch tool_name via the MCP registry. Issue #2513.
+
+    #18430: a tool FOUND here is resolved against its AI line again, so one that registered after the seam looked
+    can never run unlined.
 
     Issue #4482: Validates arguments against the tool's input_schema before
     dispatch.  On failure the error is returned as a structured WorkflowMessage
@@ -1117,12 +1122,13 @@ async def _try_mcp_dispatch(
     from services.mcp_dispatch import get_mcp_dispatcher
 
     dispatcher = get_mcp_dispatcher()
-    if not dispatcher._cache_loaded:
-        await dispatcher.refresh_tool_cache()
+    await dispatcher.ensure_loaded()
 
     tool = dispatcher.find_tool(tool_name)
     if tool is None:
         return None
+    if (held := await enforce_ai_line({**tool_call, "name": tool_name}, ctx, execution_results)) is not None:
+        return held
 
     arguments = tool_call.get("arguments", {})
 
@@ -3171,24 +3177,8 @@ class ToolHandlerMixin:
         ctx: "LLMIterationContext" | None,
         execution_results: list[dict[str, Any]],
     ) -> WorkflowMessage:
-        """Build error message for an unknown tool call (#2305, #2310)."""
-        # GH#11489: derive from the routing SSOT so the hint never drifts.
-        known_tools = sorted({"respond", "delegate"} | _UNIFORM_BUILTIN_TOOLS)
-        if ctx is not None:
-            ctx.consecutive_invalid_tool_calls += 1
-        consecutive = ctx.consecutive_invalid_tool_calls if ctx is not None else 0
-        error_msg = f'Error: Tool "{tool_name}" not found. Available tools: {", ".join(known_tools)}'
-        logger.warning(
-            "[Issue #2305] Unknown tool call reported to agent: %s (consecutive_invalid=%d)",
-            tool_name,
-            consecutive,
-        )
-        execution_results.append({"tool": tool_name, "status": "error", "error": error_msg})
-        return WorkflowMessage(
-            type="error",
-            content=error_msg,
-            metadata={"message_type": "unknown_tool", "tool_name": tool_name},
-        )
+        """Build error message for an unknown tool call (#2305, #2310); see ``unknown_tool_error``."""
+        return unknown_tool_error(tool_name, ctx, execution_results, _UNIFORM_BUILTIN_TOOLS)
 
     # #14495: the six seam enforcers below moved to tool_dispatch_guards.py to
     # bring this file under its file-size ceiling (see that module's docstring
@@ -3261,11 +3251,10 @@ class ToolHandlerMixin:
         ctx: "LLMIterationContext" | None,
         execution_results: list[dict[str, Any]],
     ) -> WorkflowMessage | None:
-        """Resolve the action's AI line (#18430); a name registered nowhere falls through to unknown_tool."""
-        if not await is_registered_tool(
-            tool_call.get("name", ""), _BUILTIN_TOOL_SCHEMAS.keys() | _UNIFORM_BUILTIN_TOOLS
-        ):
-            return None
+        """Resolve the action's AI line (#18430); a name registered nowhere gets the unknown_tool error here."""
+        name, builtin = tool_call.get("name", ""), _BUILTIN_TOOL_SCHEMAS.keys() | _UNIFORM_BUILTIN_TOOLS
+        if not await is_registered_tool(name, builtin):
+            return self._build_unknown_tool_error(name, ctx, execution_results)  # explicit: never reaches MCP dispatch
         return await enforce_ai_line(tool_call, ctx, execution_results)
 
     def _enforce_peer_messages(self, ctx: "LLMIterationContext" | None) -> None:
@@ -3474,7 +3463,9 @@ class ToolHandlerMixin:
         """
         # Issue #2513: Check MCP registry before reporting unknown tool.
         # Issue #2629: Forward RBAC role so admin-only tools are enforced.
-        mcp_result = await _try_mcp_dispatch(tool_name, tool_call, execution_results, role=role, session_id=session_id)
+        mcp_result = await _try_mcp_dispatch(
+            tool_name, tool_call, execution_results, role=role, session_id=session_id, ctx=ctx
+        )
         if mcp_result is not None:
             yield mcp_result
             return

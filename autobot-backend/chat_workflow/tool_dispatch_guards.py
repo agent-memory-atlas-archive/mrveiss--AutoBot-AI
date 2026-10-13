@@ -359,13 +359,32 @@ async def is_registered_tool(tool_name: str, builtin_names: Collection[str]) -> 
     try:
         from services.mcp_dispatch import get_mcp_dispatcher
 
-        dispatcher = get_mcp_dispatcher()
-        if not dispatcher._cache_loaded:
-            await dispatcher.refresh_tool_cache()
-        return dispatcher.find_tool(tool_name) is not None
+        return await get_mcp_dispatcher().has_tool(tool_name)
     except Exception as exc:  # noqa: BLE001 - unreadable registry: keep the line
         logger.warning("MCP registry unreadable while checking %r: %s", tool_name, exc)
         return True
+
+
+def unknown_tool_error(
+    tool_name: str,
+    ctx: "LLMIterationContext | None",
+    execution_results: list[dict[str, Any]],
+    uniform_builtin_tools: Collection[str],
+) -> WorkflowMessage:
+    """The error for an unknown tool call (#2305, #2310), moved here unchanged from ``ToolHandlerMixin``."""
+    # GH#11489: derive from the routing SSOT so the hint never drifts.
+    known_tools = sorted({"respond", "delegate"} | set(uniform_builtin_tools))
+    if ctx is not None:
+        ctx.consecutive_invalid_tool_calls += 1
+    consecutive = ctx.consecutive_invalid_tool_calls if ctx is not None else 0
+    error_msg = f'Error: Tool "{tool_name}" not found. Available tools: {", ".join(known_tools)}'
+    logger.warning(
+        "[Issue #2305] Unknown tool call reported to agent: %s (consecutive_invalid=%d)", tool_name, consecutive
+    )
+    execution_results.append({"tool": tool_name, "status": "error", "error": error_msg})
+    return WorkflowMessage(
+        type="error", content=error_msg, metadata={"message_type": "unknown_tool", "tool_name": tool_name}
+    )
 
 
 NO_VERIFIED_COMPANY_ERROR = (
