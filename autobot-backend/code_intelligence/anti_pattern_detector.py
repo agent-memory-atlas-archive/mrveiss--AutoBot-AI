@@ -54,10 +54,10 @@ from .anti_pattern_detection import (  # Types and enums; Data models; Severity 
     DEFAULT_IGNORE_PATTERNS,
     SNAKE_CASE_RE,
     AnalysisReport,
+    AnalyzedClassInfo,
     AntiPatternResult,
     AntiPatternSeverity,
     BloaterDetector,
-    ClassInfo,
     CouplerDetector,
     DispensableDetector,
     FunctionInfo,
@@ -100,7 +100,7 @@ __all__ = [
     # Data models
     "AntiPatternResult",
     "AnalysisReport",
-    "ClassInfo",
+    "AnalyzedClassInfo",
     "FunctionInfo",
     "ImportInfo",
     # Severity utilities
