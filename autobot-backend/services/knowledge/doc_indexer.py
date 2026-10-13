@@ -41,7 +41,8 @@ from autobot_shared.ssot_config import get_ollama_url
 from constants.path_constants import PATH
 from constants.threshold_constants import CategoryDefaults
 from knowledge.query_sanitizer import sanitize_document as _sanitize_document
-from services.knowledge.doc_taxonomy import detect_category
+from services.knowledge.doc_index_orphans import chunk_base_id, reindex_file
+from services.knowledge.doc_taxonomy import category_of
 from services.knowledge.synthesis_schema_loader import SynthesisSchema, load_synthesis_schema
 
 logger = get_logger(__name__)
@@ -482,7 +483,7 @@ def _select_files(root_dir: Path, tier: int | None = None, category: str | None 
     """Discover files for ``tier`` (None = all), keeping only those in ``category`` when given (#18129)."""
     files = _discover_files(root_dir, tier)
     if category:
-        files = [(p, t) for p, t in files if detect_category(Path(p)) == category]
+        files = [(p, t) for p, t in files if category_of(p, root_dir) == category]
     return files
 
 
@@ -851,6 +852,7 @@ class DocIndexerService:
         rel_path: str,
         file_tags: List[str],
         tier: int,
+        index_run: str = "",
     ) -> bool:
         """Index a single chunk into ChromaDB.
 
@@ -863,9 +865,7 @@ class DocIndexerService:
         Returns True when at least one (sub-)chunk was stored successfully.
         """
         priority_map = {1: "critical", 2: "high", 3: "medium"}
-        chunk_id = hashlib.md5(
-            f"{rel_path}:{chunk['section']}:{chunk_index}".encode(), usedforsecurity=False
-        ).hexdigest()[:12]
+        chunk_id = chunk_base_id(rel_path, chunk["section"], chunk_index)
 
         metadata: Dict[str, Any] = {
             "source": "autobot_documentation",
@@ -879,6 +879,7 @@ class DocIndexerService:
             "title": chunk["title"],
             "tags": ",".join(str(t) for t in file_tags),
             "indexed_at": datetime.now(tz=timezone.utc).isoformat(),
+            "index_run": index_run,
             "chunk_index": chunk_index,
             "total_chunks": total_chunks,
             # Issue #4681: evolutionary lineage fields.
@@ -925,13 +926,8 @@ class DocIndexerService:
 
         file_tags = _extract_tags(body, file_str)
         file_tags = list(dict.fromkeys(fm_tags + fm_aliases + file_tags))[:20]
-        # Ids hash the section name: drop the file's prior chunks so a renamed section leaves no orphan.
-        await asyncio.to_thread(self._collection.delete, where={"file_path": rel_path})
-        indexed = 0
-        for i, chunk in enumerate(chunks):
-            ok = await asyncio.to_thread(self._index_chunk, chunk, i, len(chunks), rel_path, file_tags, tier)
-            if ok:
-                indexed += 1
+        # Ids hash the section name: a renamed section leaves an orphan, dropped only once the new chunks are stored.
+        indexed = await reindex_file(self._collection, self._index_chunk, chunks, rel_path, file_tags, tier)
         return indexed, len(chunks)
 
     async def index_file(self, file_path: Path, tier: int = 3, force: bool = False) -> IndexResult:

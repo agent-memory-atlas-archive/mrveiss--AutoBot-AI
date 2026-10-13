@@ -67,7 +67,7 @@ from autobot_shared.secret_redaction import redact_content
 from autobot_shared.ssot_constants import SecurityConstants
 from constants.threshold_constants import CategoryDefaults, QueryDefaults
 from exceptions import InternalError
-from knowledge.ingestion_visibility import stamp_if_document
+from knowledge.kb_ingest_result import ingest_in_kb, partial_note
 from knowledge.query_sanitizer import sanitize_document as _sanitize_document
 from knowledge.schemas.documents import (
     DocsBrowseResponse,
@@ -686,13 +686,8 @@ async def add_text_to_knowledge(
 
 
 async def _store_fact_in_kb(kb, content: str, metadata: dict) -> str:
-    """Store *content* under *metadata* and return the fact id (#549). An admin file upload, the only
-    caller writing ``type: file``, is a document: SYSTEM unless something already claims it (#16693)."""
-    if metadata.get("type") == "file":
-        stamp_if_document(metadata)
-    # The one ingest path (#18407): long input is chunked, with per-chunk page_spans.
-    result = await kb.add_document(content, metadata)
-    return result.get("fact_id")
+    """Store *content* under *metadata* and return the fact id (#549); see :func:`ingest_in_kb`."""
+    return (await ingest_in_kb(kb, content, metadata))["fact_id"]
 
 
 def _fallback_html_strip(html_content: str) -> tuple:
@@ -1243,7 +1238,8 @@ async def upload_file_to_knowledge(
     }
     fact_metadata.update(page_metadata)
 
-    fact_id = await _store_fact_in_kb(kb_to_use, content, fact_metadata)
+    ingested = await ingest_in_kb(kb_to_use, content, fact_metadata)
+    fact_id = ingested["fact_id"]
 
     _user = get_auth_middleware().get_user_from_request(req)
     audit_record(
@@ -1263,7 +1259,7 @@ async def upload_file_to_knowledge(
         title=title,
         content=content[:100] + "..." if len(content) > 100 else content,
         word_count=word_count,
-        message=f"File uploaded ({word_count} words)",
+        **{"message": f"File uploaded ({word_count} words)", **partial_note(ingested)},
     )
 
 

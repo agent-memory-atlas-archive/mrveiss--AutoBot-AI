@@ -182,7 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     """Entry point. `--incremental` is the default when no mode is given."""
     args = parse_args(argv)
     if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+        from autobot_shared.logging_manager import LoggingManager
+
+        LoggingManager.set_level(logging.DEBUG)
     return asyncio.run(run_index(force=args.force, rebuild=args.rebuild, args=args))
 
 
