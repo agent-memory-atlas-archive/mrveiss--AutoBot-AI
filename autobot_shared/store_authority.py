@@ -154,6 +154,21 @@ STORE_AUTHORITY: dict[str, Concept] = {
         "run rows; the checkout keys are NX locks with a TTL and the H2A brief is a TTL cache. "
         "GoalService.upsert re-embeds a goal row, so the collection is rebuildable from Postgres.",
     ),
+    "company_os_model": Concept(
+        name="company_os_model",
+        system_of_record=Store.POSTGRES,
+        projections=(),
+        write_sites=(
+            "autobot-backend/llc/services/company_os/processes.py",
+            "autobot-backend/llc/services/company_os/workflows.py",
+            "autobot-backend/llc/services/company_os/graphs.py",
+            "autobot-backend/llc/services/company_os/role_skills.py",
+        ),
+        rebuilt_by="Postgres is the only copy: roles -> workflows -> processes live in the workflows "
+        "table (the existing Automation store, extended with kind, owner role and trigger) and the "
+        "llc_processes, llc_workflow_nodes, llc_workflow_transitions and llc_role_skills tables. "
+        "There is no projection to rebuild (#18390).",
+    ),
     "device_credentials": Concept(
         name="device_credentials",
         system_of_record=Store.POSTGRES,
