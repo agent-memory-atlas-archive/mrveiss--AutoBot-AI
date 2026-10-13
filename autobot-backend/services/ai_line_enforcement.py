@@ -29,6 +29,7 @@ category, and an approval that cannot be recorded still leaves the action un-run
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import json
@@ -60,7 +61,6 @@ from llc.services.ai_lines import stored_line
 from models.approval import Approval, ApprovalStatus, ApprovalType
 from services.approval_gate_service import ApprovalGateService
 from services.audit_logger import audit_log
-from services.provider_key_vault import VaultKeyUnavailableError, resolve_provider_key
 from user_management.database import get_async_session_factory
 
 logger = get_logger(__name__)
@@ -166,19 +166,26 @@ async def call_needs_approval(tool_call: Mapping[str, Any], ctx: Any) -> bool:
 
 
 def _fingerprint_key() -> bytes:
-    """Per-process HMAC key derived from the app's existing signing secret, resolved through the secrets manager
-    (``resolve_provider_key``, vault first); never a literal.
+    """HMAC key derived from the platform session-signing secret, the way the auth middleware resolves it.
 
-    With no configured secret it is random for this process, so a fingerprint then simply cannot be matched
-    after a restart: an approval bound to it has to be given again, which is the safe direction.
+    ``ssot_config.jwt_secret``, else ``ssot_config.secret_key`` (``auth_middleware._get_jwt_secret``); the digest
+    is domain-separated so the signing secret itself is never the HMAC key. With neither set it is random for
+    this process: a fingerprint then cannot be matched after a restart, so an approval bound to it has to be
+    given again, which is the safe direction. That choice is logged once, naming the setting and never a value.
     """
-    try:
-        secret = resolve_provider_key("AUTOBOT_JWT_SECRET", ssot_config.jwt_secret) or resolve_provider_key(
-            "SECRET_KEY", ssot_config.secret_key
-        )
-    except VaultKeyUnavailableError:  # the vault holds the key but cannot be read: never fall back to a guess
-        return _PROCESS_KEY
-    return hashlib.sha256(b"ai-line-fingerprint:" + secret.encode()).digest() if secret else _PROCESS_KEY
+    secret = ssot_config.jwt_secret or ssot_config.secret_key
+    if secret:
+        return hashlib.sha256(b"ai-line-fingerprint:" + secret.encode()).digest()
+    _warn_random_key_once()
+    return _PROCESS_KEY
+
+
+@functools.lru_cache(maxsize=1)
+def _warn_random_key_once() -> None:
+    logger.error(
+        "AUTOBOT_JWT_SECRET (and SECRET_KEY) are unset: AI-line approvals are bound with a random per-process key "
+        "and must be given again after a restart"
+    )
 
 
 _PROCESS_KEY = secrets.token_bytes(32)
