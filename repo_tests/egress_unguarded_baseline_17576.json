@@ -133,7 +133,7 @@
   "debug/debug_terminal.py": 5,
   "debug/debug_terminal_advanced.py": 4,
   "debug/debug_terminal_detailed.py": 3,
-  "pipeline-scripts/ci_dispatch_watchdog.py": 1,
+  "pipeline-scripts/github_api.py": 1,
   "plugins/core-plugins/image-generation-plugin/tools/generate_image.py": 3,
   "plugins/core-plugins/video-generation-plugin/tools/providers.py": 6,
   "scripts/audit_api_wiring.py": 1,

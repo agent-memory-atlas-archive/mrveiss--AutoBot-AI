@@ -19,3 +19,7 @@ numpy>=2.5.3,<3.0.0
 # every dependabot bump failed CI until the other six were hand-edited (#15408).
 # `openvino-dev` has no release compatible with this floor -- see #14447/#14452/#14453.
 openvino>=2026.4.1
+
+# croniter: the cron engine behind the shared 5-field validator, the backend triggers, the LLC
+# routine scheduler and the SLM schedule executor (#18449). Was declared in two files.
+croniter>=6.2.4

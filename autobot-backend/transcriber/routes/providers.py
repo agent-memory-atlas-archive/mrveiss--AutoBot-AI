@@ -19,9 +19,9 @@ from pydantic import BaseModel
 from autobot_shared.logging_manager import get_logger
 from transcriber.deps import authenticate, require_admin
 from voice_processing.providers.selection import (
-    get_active_provider_id,
+    get_active_asr_provider_id,
     list_available_providers,
-    set_active_provider,
+    set_active_asr_provider,
 )
 
 logger = get_logger(__name__)
@@ -53,7 +53,7 @@ async def list_providers() -> Dict[str, Any]:
     """
     providers = list_available_providers()
     return {
-        "selected": get_active_provider_id(),
+        "selected": get_active_asr_provider_id(),
         "providers": providers,
     }
 
@@ -69,12 +69,12 @@ async def set_provider(body: SetProviderRequest) -> Dict[str, Any]:
     Pass {"provider": null} to clear the selection (fall back to local providers).
     """
     try:
-        set_active_provider(body.provider)
+        set_active_asr_provider(body.provider)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     logger.info("Cloud ASR provider updated to: %s", body.provider)
     providers = list_available_providers()
     return {
-        "selected": get_active_provider_id(),
+        "selected": get_active_asr_provider_id(),
         "providers": providers,
     }

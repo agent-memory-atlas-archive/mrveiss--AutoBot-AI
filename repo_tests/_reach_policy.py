@@ -246,10 +246,35 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "provider-key-env-read-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "one-internal-api-key-reader-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
     "one-content-digest-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
+    "github-api-single-module": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
+    ),
+    "architecture-family-definition-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under four roots; the test-file share drifts.",
+    ),
+    "optimization-taxonomy-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source of one package directory, against all tracked Python under it.",
     ),
     "single-attribute-writer-scan": (
         ABSOLUTE,
@@ -341,6 +366,16 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
     ),
+    "pr-comment-upsert-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow YAML and non-test python under five roots; each root grows and shrinks independently.",
+    ),
+    "gateway-adapter-package-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Python files under one gateway directory; tests and new adapters drift the count.",
+    ),
     "provenance-accessor-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -415,6 +450,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "Tracked Python under three roots against all tracked Python: the other roots (frontend "
         "tooling, SLM, tests, docs scripts) grow independently, so a share of the whole sinks "
         "with nothing wrong. The guard needs the roots reached, not a share of the repository.",
+    ),
+    "captcha-type-fork-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked Python under two roots against all tracked Python: the other roots grow independently, "
+        "so a share of the whole sinks with nothing wrong. The guard needs the roots reached.",
     ),
     "slm-frontend-locale-keys": (
         ABSOLUTE,
