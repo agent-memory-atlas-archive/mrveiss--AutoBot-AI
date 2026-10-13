@@ -53694,6 +53694,170 @@ export interface paths {
         patch: operations["update_workflow_status_api_llc_workflows__company_id___workflow_id__patch"];
         trace?: never;
     };
+    "/api/llc/company-os/processes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Processes */
+        get: operations["list_processes_api_llc_company_os_processes_get"];
+        put?: never;
+        /** Create Process */
+        post: operations["create_process_api_llc_company_os_processes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/company-os/processes/{process_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Process */
+        get: operations["get_process_api_llc_company_os_processes__process_key__get"];
+        put?: never;
+        post?: never;
+        /** Delete Process */
+        delete: operations["delete_process_api_llc_company_os_processes__process_key__delete"];
+        options?: never;
+        head?: never;
+        /** Update Process */
+        patch: operations["update_process_api_llc_company_os_processes__process_key__patch"];
+        trace?: never;
+    };
+    "/api/llc/company-os/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workflows */
+        get: operations["list_workflows_api_llc_company_os_workflows_get"];
+        put?: never;
+        /** Create Workflow */
+        post: operations["create_workflow_api_llc_company_os_workflows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/company-os/workflows/{workflow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workflow */
+        get: operations["get_workflow_api_llc_company_os_workflows__workflow_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Workflow */
+        delete: operations["delete_workflow_api_llc_company_os_workflows__workflow_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Workflow */
+        patch: operations["update_workflow_api_llc_company_os_workflows__workflow_id__patch"];
+        trace?: never;
+    };
+    "/api/llc/company-os/workflows/{workflow_id}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Graph */
+        get: operations["get_graph_api_llc_company_os_workflows__workflow_id__graph_get"];
+        /** Put Graph */
+        put: operations["put_graph_api_llc_company_os_workflows__workflow_id__graph_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/company-os/workflows/{workflow_id}/graph/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Graph Body */
+        post: operations["validate_graph_body_api_llc_company_os_workflows__workflow_id__graph_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/company-os/workflows/{workflow_id}/validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Validate Stored Graph */
+        get: operations["validate_stored_graph_api_llc_company_os_workflows__workflow_id__validation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/company-os/roles/{role_id}/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Role Skills
+         * @description Every skill the role holds, directly or through a meta skill, with sources.
+         */
+        get: operations["get_role_skills_api_llc_company_os_roles__role_id__skills_get"];
+        put?: never;
+        /** Grant Role Skill */
+        post: operations["grant_role_skill_api_llc_company_os_roles__role_id__skills_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/company-os/roles/{role_id}/skills/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Role Skill */
+        delete: operations["revoke_role_skill_api_llc_company_os_roles__role_id__skills__grant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llc/health": {
         parameters: {
             query?: never;
@@ -64985,6 +65149,71 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** CompanyWorkflowCreate */
+        CompanyWorkflowCreate: {
+            /** Workflow Id */
+            workflow_id: string;
+            /** @default workflow */
+            kind: components["schemas"]["WorkflowKind"];
+            /** Name */
+            name?: string | null;
+            /** Owner Role Id */
+            owner_role_id?: string | null;
+            /** Trigger Type */
+            trigger_type?: string | null;
+            /** Trigger Config */
+            trigger_config?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /** CompanyWorkflowResponse */
+        CompanyWorkflowResponse: {
+            /** Workflow Id */
+            workflow_id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string | null;
+            /** Status */
+            status: string;
+            /** Owner Role Id */
+            owner_role_id: string | null;
+            /** Trigger Type */
+            trigger_type: string | null;
+            /** Trigger Config */
+            trigger_config: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CompanyWorkflowUpdate */
+        CompanyWorkflowUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Owner Role Id */
+            owner_role_id?: string | null;
+            /** Trigger Type */
+            trigger_type?: string | null;
+            /** Trigger Config */
+            trigger_config?: {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * CompareRequest
          * @description Request body for /api/chat/compare multi-model comparison.
@@ -72587,7 +72816,7 @@ export interface components {
          * @description Shape of ``GET /api/knowledge_base/docs/categories``.
          *
          *     Sorted descending by ``count``; metadata comes from
-         *     ``scripts.utilities.index_documentation.CATEGORY_TAXONOMY``.
+         *     ``services.knowledge.doc_taxonomy.CATEGORY_TAXONOMY``.
          */
         DocsCategoriesResponse: {
             /**
@@ -73253,6 +73482,11 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * EndOutcome
+         * @enum {string}
+         */
+        EndOutcome: "done" | "failed";
         /**
          * EnforcementMode
          * @description Access control enforcement modes for gradual rollout
@@ -76378,6 +76612,20 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** GrantResponse */
+        GrantResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Skill Name */
+            skill_name: string | null;
+            /** Meta Skill Id */
+            meta_skill_id: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * GraphRAGHealthResponse
          * @description Response model for health check.
@@ -76655,6 +76903,31 @@ export interface components {
              * @description Filter by category path
              */
             category_filter?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GraphResponse */
+        GraphResponse: {
+            graph: components["schemas"]["GraphSpec"];
+            validation: components["schemas"]["GraphValidation"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** GraphSpec */
+        GraphSpec: {
+            /** Nodes */
+            nodes?: components["schemas"]["NodeSpec"][];
+            /** Transitions */
+            transitions?: components["schemas"]["TransitionSpec"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** GraphValidation */
+        GraphValidation: {
+            /** Errors */
+            errors: string[];
+            /** Warnings */
+            warnings: string[];
         } & {
             [key: string]: unknown;
         };
@@ -77224,6 +77497,15 @@ export interface components {
             agent_id: string;
             /** Status */
             status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** HeldSkillResponse */
+        HeldSkillResponse: {
+            /** Skill */
+            skill: string;
+            /** Sources */
+            sources: components["schemas"]["SkillSourceResponse"][];
         } & {
             [key: string]: unknown;
         };
@@ -85996,6 +86278,26 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * NodeKind
+         * @enum {string}
+         */
+        NodeKind: "start" | "process" | "meta_skill" | "end";
+        /** NodeSpec */
+        NodeSpec: {
+            /** Key */
+            key: string;
+            kind: components["schemas"]["NodeKind"];
+            /** Label */
+            label?: string | null;
+            /** Process Key */
+            process_key?: string | null;
+            /** Meta Skill Id */
+            meta_skill_id?: string | null;
+            end_outcome?: components["schemas"]["EndOutcome"] | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** NoteCreate */
         NoteCreate: {
             /** Content */
@@ -89197,6 +89499,24 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ProcessCreate */
+        ProcessCreate: {
+            /** Process Key */
+            process_key: string;
+            /** Name */
+            name: string;
+            /**
+             * Owner Role Id
+             * Format: uuid
+             */
+            owner_role_id: string;
+            /** Description */
+            description?: string | null;
+            /** Required Skills */
+            required_skills?: string[];
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ProcessNode
          * @description One workflow a role runs, as an org-chart-adjacent node.
@@ -89228,6 +89548,34 @@ export interface components {
         ProcessNodesResponse: {
             /** Nodes */
             nodes: components["schemas"]["ProcessNode"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** ProcessResponse */
+        ProcessResponse: {
+            /** Process Key */
+            process_key: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Owner Role Id
+             * Format: uuid
+             */
+            owner_role_id: string;
+            /** Required Skills */
+            required_skills: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         } & {
             [key: string]: unknown;
         };
@@ -89330,6 +89678,19 @@ export interface components {
              * @default default
              */
             session_id: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ProcessUpdate */
+        ProcessUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Owner Role Id */
+            owner_role_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Required Skills */
+            required_skills?: string[] | null;
         } & {
             [key: string]: unknown;
         };
@@ -91975,6 +92336,32 @@ export interface components {
             hourly_rate: number | string;
             /** Currency */
             currency: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * RoleSkillGrant
+         * @description Exactly one of the two fields.
+         */
+        RoleSkillGrant: {
+            /** Skill Name */
+            skill_name?: string | null;
+            /** Meta Skill Id */
+            meta_skill_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RoleSkillsResponse */
+        RoleSkillsResponse: {
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+            /** Skills */
+            skills: components["schemas"]["HeldSkillResponse"][];
+            /** Grants */
+            grants: components["schemas"]["GrantResponse"][];
         } & {
             [key: string]: unknown;
         };
@@ -95963,6 +96350,19 @@ export interface components {
             synced: number;
             /** Repo */
             repo: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SkillSourceResponse */
+        SkillSourceResponse: {
+            /** Kind */
+            kind: string;
+            /** Meta Skill Id */
+            meta_skill_id?: string | null;
+            /** Meta Skill Name */
+            meta_skill_name?: string | null;
+            /** Via */
+            via?: string[];
         } & {
             [key: string]: unknown;
         };
@@ -100087,9 +100487,33 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * TransitionKind
+         * @description The typed edges of a workflow graph.
+         * @enum {string}
+         */
+        TransitionKind: "success" | "failure" | "if" | "else" | "timeout" | "handoff";
         /** TransitionRequest */
         TransitionRequest: {
             status: components["schemas"]["WorkItemStatus"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransitionSpec */
+        TransitionSpec: {
+            /** From Node */
+            from_node: string;
+            kind: components["schemas"]["TransitionKind"];
+            /** To Node */
+            to_node?: string | null;
+            /** Retry Max */
+            retry_max?: number | null;
+            /** Condition */
+            condition?: string | null;
+            /** Timeout Seconds */
+            timeout_seconds?: number | null;
+            /** Handoff Workflow Id */
+            handoff_workflow_id?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -103728,6 +104152,12 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * WorkflowKind
+         * @description What a row of the ``workflows`` table is.
+         * @enum {string}
+         */
+        WorkflowKind: "workflow" | "meta_skill";
         /**
          * WorkflowListResponse
          * @description Response shape for GET /workflows.
@@ -178581,6 +179011,553 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WorkflowResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_processes_api_llc_company_os_processes_get: {
+        parameters: {
+            query?: {
+                owner_role_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_process_api_llc_company_os_processes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_process_api_llc_company_os_processes__process_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_process_api_llc_company_os_processes__process_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_process_api_llc_company_os_processes__process_key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                process_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workflows_api_llc_company_os_workflows_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["WorkflowKind"] | null;
+                owner_role_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyWorkflowResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_workflow_api_llc_company_os_workflows_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyWorkflowCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyWorkflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_api_llc_company_os_workflows__workflow_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyWorkflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_workflow_api_llc_company_os_workflows__workflow_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workflow_api_llc_company_os_workflows__workflow_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyWorkflowUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyWorkflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_graph_api_llc_company_os_workflows__workflow_id__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_graph_api_llc_company_os_workflows__workflow_id__graph_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphSpec"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_graph_body_api_llc_company_os_workflows__workflow_id__graph_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphSpec"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphValidation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_stored_graph_api_llc_company_os_workflows__workflow_id__validation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphValidation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_role_skills_api_llc_company_os_roles__role_id__skills_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleSkillsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_role_skill_api_llc_company_os_roles__role_id__skills_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleSkillGrant"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_role_skill_api_llc_company_os_roles__role_id__skills__grant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -17,6 +17,7 @@ from .company import (
     CompanyUpdate,
 )
 from .company_ceo import LLCCompanyCEO
+from .company_os import LLCProcess, LLCRoleSkill, LLCWorkflowNode, LLCWorkflowTransition
 from .company_tool import LLCCompanyTool
 from .contact import LLCContact
 from .enums import (
@@ -106,6 +107,10 @@ __all__ = [
     "LLCRoleCredential",
     "LLCRoleTool",
     "LLCCompanyCEO",
+    "LLCProcess",
+    "LLCRoleSkill",
+    "LLCWorkflowNode",
+    "LLCWorkflowTransition",
     "LLCReportingLine",
     "LLCRoleRate",
     "LLCRoleWorkflow",

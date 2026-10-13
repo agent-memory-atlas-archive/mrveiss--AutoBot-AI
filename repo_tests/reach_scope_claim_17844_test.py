@@ -50,6 +50,7 @@ import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_par
 import repo_tests.migration_gate_filter_covers_what_its_tests_import_test as _migration_gate_guard  # noqa: F401 -- registers its scope
 import repo_tests.model_tier_single_definition_15502_test as _model_tier_guard  # noqa: F401 -- registers its scope
 import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_actor_id_15754_test as _actor_id_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_bm25_formula_18183_test as _bm25_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_brand_mark_and_announcer_18240_test as _brand_mark_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_claim_model_18086_test as _claim_model_guard  # noqa: F401 -- registers its scope
@@ -281,6 +282,7 @@ _DECLARED_SCOPES = {
         "scripts",
         "tools",
     ),
+    "llc-actor-id-scan": ("autobot-backend/llc",),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "infra-backend-import-scan": ("autobot-infrastructure",),
@@ -293,6 +295,14 @@ _DECLARED_SCOPES = {
     "frontend-model-literal-scan": ("autobot-frontend/src",),
     "one-bm25-formula": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "one-hybrid-search": ("autobot-backend", "autobot_shared"),
+    "one-doc-indexer": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "autobot-infrastructure",
+        "tools",
+        "scripts",
+    ),
     "pr-comment-upsert-sweep": (".github/workflows", "scripts", "tools", "pipeline-scripts", "autobot_shared"),
     "sync-command-result-mapping-scan": ("autobot-backend",),
     "one-claim-model-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),

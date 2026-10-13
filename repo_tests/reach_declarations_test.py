@@ -42,7 +42,8 @@ from pathlib import Path
 
 import pytest
 from repo_tests._reach import REGISTRY, Reach, ReachFloorError, declare
-from repo_tests._reach_policy import ALLOWANCE_VERDICTS, UNSCOPED
+from repo_tests._reach_policy import ALLOWANCE_VERDICTS
+from repo_tests._reach_unscoped import UNSCOPED
 
 from autobot_shared.paths import scrubbed_git_env
 
@@ -463,11 +464,10 @@ def test_the_unscoped_declarations_are_recorded_and_shrinking() -> None:
     unscoped = {name for name, reach in _live().items() if reach.roots is None}
     added = sorted(unscoped - UNSCOPED)
     assert not added, (
-        "declaration(s) with no `roots=` and no entry in repo_tests/_reach_policy.UNSCOPED:\n  "
+        "declaration(s) with no `roots=` and no entry in repo_tests/_reach_unscoped.UNSCOPED:\n  "
         + "\n  ".join(added)
-        + "\n\nGive it `roots=(...)`. If its discovery does not return paths a prefix can "
-        "describe, add it to UNSCOPED and say so -- the list only shrinks, so that is a "
-        "recorded decision a reviewer sees, not a default."
+        + "\n\nGive it `roots=(...)`. If its discovery does not return paths a prefix can describe, add it "
+        "to UNSCOPED and say so -- the list only shrinks, so that is a recorded decision a reviewer sees, not a default."
     )
     scoped_since = sorted(UNSCOPED - unscoped)
     assert not scoped_since, (
