@@ -17,12 +17,13 @@ one honors.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Collection
 
 from async_chat_workflow import WorkflowMessage
-from autobot_shared.ai_lines import VERIFIED_COMPANY_KEY, VERIFIED_USER_KEY, resolve_scope
+from autobot_shared.ai_lines import CONVERSATION_TOOLS, VERIFIED_COMPANY_KEY, VERIFIED_USER_KEY, resolve_scope
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.tool_catalogue import SENSITIVE_TOOLS, match_tool_name
+from autobot_shared.tool_catalogue import SENSITIVE_TOOLS, match_tool_name, tool_effect
+from llc.agent_tools import LLC_TOOL_NAMES
 
 if TYPE_CHECKING:
     from .models import LLMIterationContext
@@ -343,6 +344,28 @@ async def enforce_ai_line(
         content=verdict.message,
         metadata={**meta, "error": refused, "approval_required": not refused},
     )
+
+
+async def is_registered_tool(tool_name: str, builtin_names: Collection[str]) -> bool:
+    """Whether *tool_name* is a builtin, a catalogued tool, or in the MCP registry (#18430).
+
+    A name registered nowhere is not an action and has no line; the dispatcher reports it as an unknown tool.
+    Fails closed: a registry that cannot be read counts as registered, so the AI line still applies.
+    """
+    if tool_name in builtin_names or tool_name in LLC_TOOL_NAMES or tool_name in CONVERSATION_TOOLS:
+        return True
+    if tool_effect(tool_name) is not None:
+        return True
+    try:
+        from services.mcp_dispatch import get_mcp_dispatcher
+
+        dispatcher = get_mcp_dispatcher()
+        if not dispatcher._cache_loaded:
+            await dispatcher.refresh_tool_cache()
+        return dispatcher.find_tool(tool_name) is not None
+    except Exception as exc:  # noqa: BLE001 - unreadable registry: keep the line
+        logger.warning("MCP registry unreadable while checking %r: %s", tool_name, exc)
+        return True
 
 
 NO_VERIFIED_COMPANY_ERROR = (

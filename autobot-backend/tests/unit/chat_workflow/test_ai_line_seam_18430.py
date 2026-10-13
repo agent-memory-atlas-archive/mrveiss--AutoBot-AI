@@ -166,3 +166,51 @@ async def test_a_user_with_no_company_runs_a_read_and_a_forged_company_is_still_
         {"name": "write_file", "params": {}}, forged, [], verified_company=False, stored=L1
     )
     assert refused.type == "error" and filed == 0
+
+
+# -- an unregistered name is not an action (it reaches the unknown_tool error), a registered MCP tool is ---------
+
+
+def _mcp(found, raises=False):
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    dispatcher = MagicMock(_cache_loaded=True)
+    dispatcher.find_tool = (
+        MagicMock(side_effect=RuntimeError("registry down")) if raises else MagicMock(return_value=found)
+    )
+    dispatcher.refresh_tool_cache = AsyncMock()
+    return patch("services.mcp_dispatch.get_mcp_dispatcher", return_value=dispatcher)
+
+
+async def _line_guard(name, mcp):
+    from chat_workflow.tool_handler import ToolHandlerMixin
+
+    handler = ToolHandlerMixin.__new__(ToolHandlerMixin)
+    with mcp:
+        message, _ = await arun_guard_via(handler, {"name": name, "params": {}})
+    return message
+
+
+async def arun_guard_via(handler, call):
+    from tests.unit.chat_workflow.test_ai_line_support import ai_line_world
+
+    ctx = _ctx()
+    with ai_line_world():
+        return await handler._enforce_ai_line(call, ctx, []), 0
+
+
+@pytest.mark.asyncio
+async def test_a_name_registered_nowhere_has_no_line_and_reaches_the_unknown_tool_path():
+    assert await _line_guard("no_such_tool", _mcp(None)) is None
+
+
+@pytest.mark.asyncio
+async def test_a_tool_registered_with_mcp_but_absent_from_the_catalogue_is_still_held_when_unset():
+    held = await _line_guard("some_registered_mcp_tool", _mcp({"name": "some_registered_mcp_tool"}))
+    assert held is not None and held.type == "approval_required"
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_registry_keeps_the_line_rather_than_dropping_it():
+    held = await _line_guard("some_registered_mcp_tool", _mcp(None, raises=True))
+    assert held is not None and held.type == "approval_required"

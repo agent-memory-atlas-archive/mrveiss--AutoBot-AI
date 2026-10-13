@@ -26,13 +26,7 @@ from autobot_shared.auth.mcp_tool_permissions import required_permission
 from autobot_shared.auth.permissions import Permission
 from autobot_shared.env_utils import env_flag, env_int
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.tool_catalogue import (
-    APPROVAL_CATEGORY_TOOLS,
-    BROWSER_ACTION_TOOLS,
-    BROWSER_INDEXED_TOOLS,
-    BROWSER_READ_TOOLS,
-    approval_category_for,
-)
+from autobot_shared.tool_catalogue import APPROVAL_CATEGORY_TOOLS, BROWSER_TOOLS, approval_category_for
 from chat_workflow.browser_tool_handler import (
     extract_browser_image,
     format_browser_action_text,
@@ -64,6 +58,7 @@ from chat_workflow.tool_dispatch_guards import (
     enforce_peer_messages,
     enforce_pre_action_verifier,
     enforce_repetition,
+    is_registered_tool,
     llc_scope_error,
 )
 from chat_workflow.tool_permission_gate import permission_denial
@@ -644,7 +639,7 @@ def _validate_builtin_tool_arguments(tool_name: str, tool_call: dict[str, Any]) 
 # Issue #1368: Browser tool names that route to browser_mcp handlers.
 # Exported (no leading underscore) so ToolRegistry can derive its list from this
 # single source of truth rather than maintaining a duplicate. Issue #2609.
-BROWSER_TOOL_NAMES: frozenset[str] = frozenset(BROWSER_ACTION_TOOLS + BROWSER_READ_TOOLS + BROWSER_INDEXED_TOOLS)
+BROWSER_TOOL_NAMES: frozenset[str] = frozenset(BROWSER_TOOLS)
 
 # Issue #7509: web research tools — direct internal dispatch via web_fetch.
 WEB_RESEARCH_TOOL_NAMES: frozenset[str] = frozenset({"scrape_url", "crawl_site", "map_site", "extract_structured_data"})
@@ -3266,7 +3261,11 @@ class ToolHandlerMixin:
         ctx: "LLMIterationContext" | None,
         execution_results: list[dict[str, Any]],
     ) -> WorkflowMessage | None:
-        """Resolve the action's AI line (#18430); see ``tool_dispatch_guards.enforce_ai_line``."""
+        """Resolve the action's AI line (#18430); a name registered nowhere falls through to unknown_tool."""
+        if not await is_registered_tool(
+            tool_call.get("name", ""), _BUILTIN_TOOL_SCHEMAS.keys() | _UNIFORM_BUILTIN_TOOLS
+        ):
+            return None
         return await enforce_ai_line(tool_call, ctx, execution_results)
 
     def _enforce_peer_messages(self, ctx: "LLMIterationContext" | None) -> None:
