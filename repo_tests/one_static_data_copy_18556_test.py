@@ -32,7 +32,10 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 _SINGLE_PATH = {"error_messages.yaml": "autobot-backend/static/error_messages.yaml"}
 _NO_IDENTICAL_COPIES = ("prometheus.yml", "permission_rules.yaml")
 _WATCHED = frozenset(_SINGLE_PATH) | frozenset(_NO_IDENTICAL_COPIES)
-_ROOTS = ("autobot-backend", "autobot-slm-backend", "autobot-infrastructure", "autobot-monitoring", "docker")
+#: Roots that hold a watched file today: the reach claim (every one must be populated).
+_ROOTS = ("autobot-backend", "autobot-slm-backend", "autobot-infrastructure", "autobot-monitoring")
+#: Swept too: docker/ holds none today, but a copy reappearing there must still be caught.
+_SWEEP = _ROOTS + ("docker",)
 
 
 def _name(rel: str) -> str:
@@ -61,7 +64,7 @@ def _violations(paths: Iterable[str], read: Callable[[str], bytes]) -> list[str]
 
 def _population(root: Path) -> list[str]:
     try:
-        tracked = tracked_paths(root, *_ROOTS)
+        tracked = tracked_paths(root, *_SWEEP)
     except EmptyEnumeration:
         return []
     return [rel for rel in tracked if _name(rel) in _WATCHED]

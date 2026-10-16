@@ -291,7 +291,6 @@ _DECLARED_SCOPES = {
         "autobot-slm-backend",
         "autobot-infrastructure",
         "autobot-monitoring",
-        "docker",
     ),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "fact-read-authorization-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
