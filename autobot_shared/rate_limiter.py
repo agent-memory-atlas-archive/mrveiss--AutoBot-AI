@@ -134,6 +134,9 @@ class RateLimiter:
         used.
     redis_database:
         Redis logical database name (default ``"main"``).
+    log_label:
+        When set, ``acquire_window`` logs a warning (label, limit, window --
+        never the key) on each rejection; the default keeps it silent.
     """
 
     def __init__(
@@ -143,8 +146,10 @@ class RateLimiter:
         requests_per_minute: int | None = None,
         requests_per_hour: int | None = None,
         redis_database: str = "main",
+        log_label: str | None = None,
     ) -> None:
         self._prefix = scope_prefix
+        self._log_label = log_label
         self._db = redis_database
         tier_defaults = _get_tier_defaults()
         if default_tier not in tier_defaults:
@@ -400,6 +405,7 @@ class RateLimiter:
         max_requests: int,
         window_seconds: int,
         wait: bool = False,
+        log_label: str | None = None,
     ) -> bool:
         """Atomic check+record against a single, arbitrary-size window.
 
@@ -412,10 +418,16 @@ class RateLimiter:
         When *wait* is True, blocks (async sleep) and retries until a slot
         frees up instead of returning False — matches the blocking-retry
         behavior of the forks above, none of which ever rejected a caller.
+
+        A rejection is logged (label, limit, window; never *key*) only when
+        *log_label* or the constructor's ``log_label`` is set (#18087).
         """
         while True:
             allowed, retry_after = await self._try_acquire_window(key, max_requests, window_seconds)
             if allowed or not wait:
+                label = log_label or self._log_label
+                if label and not allowed:
+                    logger.warning("Rate limit exceeded: %s over %s requests/%ss", label, max_requests, window_seconds)
                 return allowed
             await asyncio.sleep(max(retry_after, 0.05))
 
