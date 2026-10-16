@@ -1356,12 +1356,12 @@
       "ask": "Poproś właściciela o zwolnienie",
       "askAria": "Poproś właściciela {scope} o zwolnienie",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "Wysyłanie…",
+        "sent": "Prośba wysłana — decyduje właściciel; milczenie oznacza trzymanie.",
+        "tooSoon": "Pytałeś o tę rezerwację przed chwilą; spróbuj ponownie za minutę.",
+        "notFound": "To zadanie nie trzyma już tej rezerwacji — odśwież, aby zobaczyć, kto ją trzyma.",
+        "unavailable": "Nie można połączyć się z rejestrem; nic nie wysłano.",
+        "error": "Coś poszło nie tak i nie udało się potwierdzić doręczenia. Odśwież, aby sprawdzić, czy blokada jest nadal utrzymywana."
       },
       "conflict": {
         "release_refused": "Odmówiono zwolnienia",

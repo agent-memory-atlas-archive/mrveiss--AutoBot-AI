@@ -1356,12 +1356,12 @@
       "ask": "Lūgt turētāju atbrīvot",
       "askAria": "Lūgt {scope} turētāju to atbrīvot",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "Sūta…",
+        "sent": "Lūgums nosūtīts — lemj turētājs; klusēšana nozīmē turēšanu.",
+        "tooSoon": "Jūs tikko jau lūdzāt par šo pieprasījumu; mēģiniet vēlreiz pēc minūtes.",
+        "notFound": "Šis uzdevums vairs netur šo pieprasījumu — atsvaidziniet, lai redzētu, kurš to tur tagad.",
+        "unavailable": "Neizdevās sasniegt žurnālu; nekas netika nosūtīts.",
+        "error": "Radās kļūda, un piegādi nevarēja apstiprināt. Atsvaidziniet, lai redzētu, vai rezervācija joprojām ir spēkā."
       },
       "conflict": {
         "release_refused": "Atbrīvošana tika atteikta",

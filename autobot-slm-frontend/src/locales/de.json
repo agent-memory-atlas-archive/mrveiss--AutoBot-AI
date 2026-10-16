@@ -1356,12 +1356,12 @@
       "ask": "Inhaber um Freigabe bitten",
       "askAria": "Den Inhaber von {scope} um Freigabe bitten",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "Wird gesendet…",
+        "sent": "Anfrage gesendet — der Inhaber entscheidet; Schweigen heißt Halten.",
+        "tooSoon": "Sie haben gerade erst nach diesem Anspruch gefragt; versuchen Sie es in einer Minute erneut.",
+        "notFound": "Diese Aufgabe hält den Anspruch nicht mehr — aktualisieren Sie, um den aktuellen Inhaber zu sehen.",
+        "unavailable": "Ledger nicht erreichbar; es wurde nichts gesendet.",
+        "error": "Etwas ist schiefgelaufen, und die Zustellung konnte nicht bestätigt werden. Aktualisieren Sie, um zu sehen, ob der Claim noch gehalten wird."
       },
       "conflict": {
         "release_refused": "Eine Freigabe wurde verweigert",

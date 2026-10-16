@@ -1356,12 +1356,12 @@
       "ask": "مالک سے رہائی کی درخواست کریں",
       "askAria": "{scope} کے مالک سے اسے چھوڑنے کی درخواست کریں",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "بھیجا جا رہا ہے…",
+        "sent": "درخواست بھیج دی گئی — فیصلہ مالک کا ہے؛ خاموشی کا مطلب روکے رکھنا ہے۔",
+        "tooSoon": "آپ نے ابھی اس دعوے کے بارے میں پوچھا تھا؛ ایک منٹ بعد دوبارہ کوشش کریں۔",
+        "notFound": "یہ کام اب اس دعوے کو نہیں رکھتا — یہ دیکھنے کے لیے ریفریش کریں کہ اب اسے کون رکھتا ہے۔",
+        "unavailable": "لیجر تک رسائی نہیں ہو سکی؛ کچھ نہیں بھیجا گیا۔",
+        "error": "کچھ غلط ہو گیا اور ترسیل کی تصدیق نہیں ہو سکی۔ یہ دیکھنے کے لیے ریفریش کریں کہ آیا دعویٰ اب بھی برقرار ہے۔"
       },
       "conflict": {
         "release_refused": "ایک رہائی مسترد ہوئی",

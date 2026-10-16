@@ -1356,12 +1356,12 @@
       "ask": "از دارنده بخواهید آزاد کند",
       "askAria": "از دارنده {scope} بخواهید آن را آزاد کند",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "در حال ارسال…",
+        "sent": "درخواست ارسال شد — تصمیم با دارنده است؛ سکوت یعنی نگه‌داشتن.",
+        "tooSoon": "همین الان دربارهٔ این ادعا پرسیدید؛ یک دقیقه دیگر دوباره تلاش کنید.",
+        "notFound": "این وظیفه دیگر این ادعا را در اختیار ندارد — برای دیدن دارندهٔ فعلی بازخوانی کنید.",
+        "unavailable": "دسترسی به دفتر ممکن نشد؛ چیزی ارسال نشد.",
+        "error": "خطایی رخ داد و تحویل تأیید نشد. صفحه را تازه کنید تا ببینید آیا ادعا هنوز نگه داشته شده است."
       },
       "conflict": {
         "release_refused": "یک آزادسازی رد شد",

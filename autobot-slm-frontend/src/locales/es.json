@@ -1356,12 +1356,12 @@
       "ask": "Pedir al titular que la libere",
       "askAria": "Pedir al titular de {scope} que lo libere",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "Enviando…",
+        "sent": "Solicitud enviada: el titular decide; el silencio significa retener.",
+        "tooSoon": "Ya preguntaste por esta reserva hace un momento; inténtalo de nuevo en un minuto.",
+        "notFound": "Esta tarea ya no tiene esa reserva; actualiza para ver quién la tiene ahora.",
+        "unavailable": "No se pudo contactar con el registro; no se envió nada.",
+        "error": "Algo salió mal y no se pudo confirmar la entrega. Actualiza para ver si la reserva sigue activa."
       },
       "conflict": {
         "release_refused": "Se rechazó una liberación",

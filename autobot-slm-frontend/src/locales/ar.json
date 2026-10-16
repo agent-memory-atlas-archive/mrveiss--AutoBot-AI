@@ -1356,12 +1356,12 @@
       "ask": "اطلب من المالك الإفراج",
       "askAria": "اطلب من مالك {scope} الإفراج عنه",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "جارٍ الإرسال…",
+        "sent": "أُرسل الطلب — القرار للمالك؛ الصمت يعني الاحتفاظ.",
+        "tooSoon": "سألت عن هذا الحجز للتو؛ حاول مرة أخرى بعد دقيقة.",
+        "notFound": "لم تعد هذه المهمة تحتفظ بالحجز — حدّث الصفحة لترى من يحتفظ به الآن.",
+        "unavailable": "تعذّر الوصول إلى السجل؛ لم يُرسل شيء.",
+        "error": "حدث خطأ ولم يمكن تأكيد التسليم. حدّث الصفحة لمعرفة ما إذا كانت المطالبة لا تزال محجوزة."
       },
       "conflict": {
         "release_refused": "رُفض إفراج",

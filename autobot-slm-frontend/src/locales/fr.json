@@ -1356,12 +1356,12 @@
       "ask": "Demander au détenteur de libérer",
       "askAria": "Demander au détenteur de {scope} de le libérer",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "Envoi…",
+        "sent": "Demande envoyée — le détenteur décide ; le silence vaut maintien.",
+        "tooSoon": "Vous venez déjà de demander pour cette réservation ; réessayez dans une minute.",
+        "notFound": "Cette tâche ne détient plus la réservation — actualisez pour voir qui la détient.",
+        "unavailable": "Impossible de joindre le registre ; rien n'a été envoyé.",
+        "error": "Un problème est survenu et la remise n'a pas pu être confirmée. Actualisez pour voir si la réservation est toujours détenue."
       },
       "conflict": {
         "release_refused": "Une libération a été refusée",

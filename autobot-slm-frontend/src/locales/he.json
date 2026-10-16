@@ -1356,12 +1356,12 @@
       "ask": "בקשו מהמחזיק לשחרר",
       "askAria": "בקשו ממחזיק {scope} לשחרר אותו",
       "askState": {
-        "sending": "Sending…",
-        "sent": "Request sent — the holder decides; silence means hold.",
-        "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
-        "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
-        "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "sending": "שולח…",
+        "sent": "הבקשה נשלחה — המחזיק מחליט; שתיקה פירושה החזקה.",
+        "tooSoon": "שאלתם על התפיסה הזו לפני רגע; נסו שוב בעוד דקה.",
+        "notFound": "המשימה הזו כבר לא מחזיקה בתפיסה — רעננו כדי לראות מי מחזיק בה כעת.",
+        "unavailable": "לא ניתן היה להגיע ליומן; דבר לא נשלח.",
+        "error": "משהו השתבש ולא ניתן היה לאשר את המסירה. רעננו כדי לראות אם התביעה עדיין מוחזקת."
       },
       "conflict": {
         "release_refused": "שחרור נדחה",
