@@ -158,7 +158,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/chat_workflow/tool_handler.py": 3697,  # #11542 dispatch merge + #14068 mirror
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,
     "autobot-backend/chat_workflow/workflow_plan_approval_test.py": 624,
-    "autobot-backend/circuit_breaker.py": 689,
     "autobot-backend/code_intelligence/analytics_infrastructure.py": 805,
     "autobot-backend/code_intelligence/anti_pattern_detection/analyzer.py": 772,
     "autobot-backend/code_intelligence/bug_predictor.py": 1501,
@@ -476,6 +475,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/tests/services/test_sso_service.py": 1257,
     "autobot-slm-backend/tests/test_cleanup_never_destroys_data_14856.py": 981,
     "autobot-slm-backend/user_management/services/sso_service.py": 775,
+    "autobot_shared/circuit_breaker.py": 689,
     "autobot_shared/env_registry.py": 1176,  # #13602: +1 sibling import, -14 registration
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 616,
