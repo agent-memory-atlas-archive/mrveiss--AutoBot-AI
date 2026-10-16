@@ -104,6 +104,22 @@ describe('AgentLedgerMonitor', () => {
     expect(card.get('ol').text()).toContain('reviewer — draft')
   })
 
+  it('says it is reading the ledger while a section has not answered yet', async () => {
+    rawRequest.mockImplementation(() => new Promise<Response>(() => {}))
+    const w = await mountView()
+    expect(w.get('[data-testid="ledger-loading"]').text()).toBe(L.state.loading)
+    expect(w.find('[data-testid="ledger-empty"]').exists()).toBe(false)
+    expect(w.get('[data-testid="slm-ledger-tab-contention"]').text()).toBe(L.tabs.contention)
+  })
+
+  it('says nothing is contended only when the ledger was read and holds nothing', async () => {
+    routes['/contention'] = () => jsonResponse({ resources: [], count: 0 })
+    const w = await mountView()
+    expect(w.get('[data-testid="ledger-empty"]').text()).toContain(L.empty.contention)
+    expect(w.find('[data-testid="ledger-unavailable"]').exists()).toBe(false)
+    expect(w.get('[data-testid="slm-ledger-tab-contention"]').text()).toBe(`${L.tabs.contention} (0)`)
+  })
+
   it('reads an unreachable contention store as unavailable, never as nothing contended', async () => {
     routes['/contention'] = () => errorResponse(503, { error: 'ledger_unavailable', source: 'waitlists', detail: 'x' })
     const w = await mountView()
