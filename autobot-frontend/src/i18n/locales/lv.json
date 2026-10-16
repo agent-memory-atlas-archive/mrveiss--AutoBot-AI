@@ -4818,8 +4818,8 @@
     "settings": "Terminal Settings",
     "fontSize": "Font Size",
     "theme": "Theme",
-    "dark": "Dark",
-    "light": "Light",
+    "dark": "Tumšs",
+    "light": "Gaišs",
     "cursorStyle": "Cursor Style",
     "block": "Block",
     "underline": "Underline",
@@ -5908,8 +5908,8 @@
       "selectTheme": "Select theme",
       "switchToLight": "Switch to light mode",
       "switchToDark": "Switch to dark mode",
-      "light": "Light",
-      "dark": "Dark"
+      "light": "Gaišs",
+      "dark": "Tumšs"
     },
     "toastContainer": {
       "notifications": "Notifications",
