@@ -70,7 +70,11 @@ _PINNED: dict[tuple[str, str], dict[str, str]] = {
 
 
 def _members(rel: str, cls: str) -> dict[str, str]:
-    tree = ast.parse((_ROOT / rel).read_text(encoding="utf-8"))
+    return _members_from_source((_ROOT / rel).read_text(encoding="utf-8"), cls, rel)
+
+
+def _members_from_source(source: str, cls: str, rel: str = "<source>") -> dict[str, str]:
+    tree = ast.parse(source)
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and node.name == cls:
             return {
@@ -91,10 +95,15 @@ def test_renamed_axis_enum_keeps_its_wire_values(site: tuple[str, str], expected
 
 
 def test_contrast_pair_a_changed_value_is_detected() -> None:
-    """The pin fails when a value drifts (so a passing run is not vacuous)."""
-    live = _members("autobot-backend/models/heartbeat.py", "HeartbeatStatus")
-    drifted = {**live, "PAUSED": "suspended"}
-    assert drifted != _PINNED[("autobot-backend/models/heartbeat.py", "HeartbeatStatus")]
+    """The real extractor, run on the real file with one value edited, no longer matches the pin."""
+    rel = "autobot-backend/models/heartbeat.py"
+    source = (_ROOT / rel).read_text(encoding="utf-8")
+    pinned = _PINNED[(rel, "HeartbeatStatus")]
+    assert _members_from_source(source, "HeartbeatStatus", rel) == pinned
+    old_value = pinned["PAUSED"]
+    drifted = source.replace(f'"{old_value}"', '"suspended"', 1)
+    assert drifted != source, "the contrast edit must change the source"
+    assert _members_from_source(drifted, "HeartbeatStatus", rel) != pinned
 
 
 def test_the_ambiguous_names_no_longer_name_a_second_axis() -> None:
