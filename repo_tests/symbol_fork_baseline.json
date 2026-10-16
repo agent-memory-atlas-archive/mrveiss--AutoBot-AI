@@ -155,7 +155,6 @@
     "audit_log",
     "can_access",
     "check_admin_permission",
-    "check_rate_limit",
     "detect_language",
     "ensure_sandbox_root",
     "get_audit_db",
