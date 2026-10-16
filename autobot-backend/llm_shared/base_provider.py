@@ -18,14 +18,14 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from autobot_shared.async_compat import fire_and_forget
-from autobot_shared.coordination.run_progress import record_progress
-from autobot_shared.logging_manager import get_logger
-from circuit_breaker import (
+from autobot_shared.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerOpenError,
     get_circuit_breaker_manager,
 )
+from autobot_shared.coordination.run_progress import record_progress
+from autobot_shared.logging_manager import get_logger
 from constants import CircuitBreakerDefaults
 
 from .cross_worker_rate_limiter import get_llm_rate_limiter
