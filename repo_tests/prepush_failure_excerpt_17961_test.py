@@ -97,6 +97,23 @@ def test_an_unknown_shape_falls_back_to_the_tail_rather_than_nothing() -> None:
     assert "something went wrong" in out
 
 
-def test_the_excerpt_is_bounded() -> None:
+def test_pytest_assertion_detail_and_a_cross_mark_failure_are_shown() -> None:
+    out = _excerpt(_PYTEST_FAILURE.replace("FAILED", "E   assert 1 == 2\nFAILED", 1))
+    assert "E   assert 1 == 2" in out
+    assert "✗ src/b.test.ts > broke" in _excerpt(" ✗ src/b.test.ts > broke\n" + _FLOOR)
+
+
+def test_the_excerpt_is_bounded_and_keeps_the_summary_past_the_cap() -> None:
     noisy = "".join(f" FAIL  src/t{i}.test.ts > case\n" for i in range(500))
-    assert len(_excerpt(noisy).splitlines()) <= 60
+    out = _excerpt(noisy + " Test Files  500 failed (500)\n      Tests  500 failed (500)\n" + _FLOOR)
+    assert len(out.splitlines()) <= 64
+    assert "Tests  500 failed (500)" in out
+
+
+def test_every_report_site_uses_the_excerpt() -> None:
+    """Reverting one site to a fixed tail fails here, not silently."""
+    source = _HOOK.read_text(encoding="utf-8")
+    calls = re.findall(r'failure_excerpt "\$(\w+)" >&2', source)
+    assert sorted(calls) == ["group_output", "kit_output", "vitest_output"]
+    body = _FUNC.search(source).group(0)
+    assert source.count("tail -25") == body.count("tail -25") == 1

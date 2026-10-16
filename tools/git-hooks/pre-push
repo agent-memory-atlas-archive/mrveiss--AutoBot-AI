@@ -150,16 +150,20 @@ vitest_ran_nothing() {
 # summary counts. An output in no shape it knows falls back to the tail, so a
 # failure is never reported with nothing under it.
 failure_excerpt() {
-  local excerpt
-  excerpt=$(printf '%s\n' "$1" | sed 's/\x1b\[[0-9;]*m//g' | awk -v cap="${FAILURE_EXCERPT_LINES:-60}" '
+  local clean excerpt summary
+  clean=$(printf '%s\n' "$1" | sed 's/\x1b\[[0-9;]*m//g')
+  # Summary counts are collected apart and always appended, so a long failure
+  # list cannot crowd them out of the cap.
+  summary=$(printf '%s\n' "$clean" | grep -E '^ +(Test Files|Tests|Errors) |^=+ .*(failed|error)' | tail -4)
+  excerpt=$(printf '%s\n' "$clean" | awk -v cap="${FAILURE_EXCERPT_LINES:-60}" '
     /Unhandled (Error|Rejection)/ { ctx = 8 }
-    ctx > 0 || /^ *(FAIL |× |FAILED |ERROR )/ || /AssertionError|Error: |Test timed out/ \
-      || /^ +(Test Files|Tests|Errors) / || /^=+ .*(failed|error)/ {
+    ctx > 0 || /^ *(FAIL |× |✗ |FAILED |ERROR )/ || /^E   / \
+      || /AssertionError|Error: |Test timed out/ {
       if (!seen[$0]++ && n < cap) { print; n++ }
       if (ctx > 0) ctx--
     }')
-  if [ -n "$excerpt" ]; then
-    printf '%s\n' "$excerpt"
+  if [ -n "$excerpt$summary" ]; then
+    printf '%s\n' "$excerpt" "$summary" | grep -v '^$'
   else
     printf '%s\n' "$1" | tail -25
   fi
