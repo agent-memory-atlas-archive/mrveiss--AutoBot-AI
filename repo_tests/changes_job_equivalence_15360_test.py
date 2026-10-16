@@ -170,6 +170,8 @@ ALLOWED_ADDITIONS = {
             # #18549: one_playwright_server_18549_test.py reads the canonical server and its store.
             "autobot-browser-worker/playwright-server.js",
             "autobot-browser-worker/session-store.js",
+            # #18553: redis_direct_constructor_18553_test.py scans this installer for direct redis constructors.
+            "autobot-backend/code_analysis/install.sh",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the

@@ -73,6 +73,7 @@ import repo_tests.one_sync_command_runner_18180_test as _sync_runner_guard  # no
 import repo_tests.optimization_taxonomies_13049_test as _taxonomy_guard  # noqa: F401 -- registers its scope
 import repo_tests.pr_comment_upsert_12984_test as _pr_comment_guard  # noqa: F401 -- registers its scope
 import repo_tests.provider_key_env_reads_route_through_vault_18094_test as _provider_key_env_guard  # noqa: F401 -- registers its scope
+import repo_tests.redis_direct_constructor_18553_test as _redis_constructor_guard  # noqa: F401 -- registers its scope
 import repo_tests.root_resolver_single_source_18101_test as _root_resolver_guard  # noqa: F401 -- registers its scope
 import repo_tests.single_attribute_writer_18240_test as _attribute_writer_guard  # noqa: F401 -- registers its scope
 from repo_tests._paths import repo_root
@@ -296,6 +297,21 @@ _DECLARED_SCOPES = {
         "autobot-monitoring",
     ),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "redis-direct-constructor-scan": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "autobot-infrastructure",
+        "autobot-npu-worker",
+        "autobot-tts-worker",
+        "autobot-browser-worker",
+        "scripts",
+        "pipeline-scripts",
+        "tools",
+        "plugins",
+        "libs",
+        "debug",
+    ),
     "one-playwright-server-scan": (
         "autobot-browser-worker",
         "autobot-infrastructure",

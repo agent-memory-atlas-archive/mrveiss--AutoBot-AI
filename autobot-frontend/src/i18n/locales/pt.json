@@ -8043,7 +8043,8 @@
       "tip": "Interface mínima — oculta os recursos avançados",
       "announceMinimal": "Interface mínima ativada. Recursos avançados ocultos.",
       "announceFull": "Interface completa ativada. Todos os recursos exibidos."
-    }
+    },
+    "llcLedger": "Registo de agentes"
   },
   "llcCompanyStatus": {
     "showArchived": "Mostrar arquivadas",
@@ -8931,6 +8932,63 @@
       "retry": "Tentar novamente",
       "loadingItem": "A carregar item de trabalho…",
       "itemLoadFailed": "Não foi possível carregar este item"
+    },
+    "ledger": {
+      "title": "Registo de agentes",
+      "subtitle": "Quem está a trabalhar em quê nesta empresa, e quem espera.",
+      "tabsAria": "Vistas do registo",
+      "tabs": {
+        "now": "A trabalhar agora",
+        "claims": "Reservas",
+        "contention": "Contenção",
+        "activity": "Atividade"
+      },
+      "col": {
+        "agent": "Agente",
+        "kind": "Tipo",
+        "status": "Estado",
+        "detail": "Detalhe",
+        "scope": "Âmbito",
+        "mode": "Modo",
+        "intent": "Intenção",
+        "expires": "Expira",
+        "renewals": "Renovações"
+      },
+      "busy": "Ocupado",
+      "idle": "Inativo",
+      "peerMessages": "Mensagens entre pares pendentes",
+      "idleSubscribers": "Subscrições de inatividade",
+      "pendingFor": "{n} pendentes para {name}",
+      "waitsForIdle": "{who} espera que {target} fique inativo",
+      "heldBy": "Retido por {agent}",
+      "waitlistAria": "Lista de espera por ordem",
+      "silenceMeansHold": "Pedir não é libertar: o silêncio significa manter, e uma reserva não renovada expira sozinha.",
+      "ask": "Pedir ao titular que liberte",
+      "askAria": "Pedir ao titular de {scope} que o liberte",
+      "askUnavailable": "Ainda não disponível: o pedido está a ser adicionado ao registo.",
+      "conflicts": "Conflitos",
+      "recent": "Atividade recente",
+      "conflict": {
+        "release_refused": "Uma libertação foi recusada",
+        "claim_expired": "Uma reserva expirou enquanto retida",
+        "yield_unanswered": "Um pedido de cedência ficou sem resposta",
+        "claim_lapsed_during_action": "Uma reserva expirou durante uma ação"
+      },
+      "empty": {
+        "presence": "Nenhum agente se registou",
+        "peerMessages": "Sem mensagens pendentes",
+        "idleSubscribers": "Sem subscrições de inatividade",
+        "claims": "Sem reservas",
+        "contention": "Nada está em contenção",
+        "conflicts": "Sem conflitos",
+        "activity": "Sem atividade recente"
+      },
+      "state": {
+        "loading": "A ler o registo…",
+        "unavailableTitle": "Não foi possível ler o registo",
+        "unavailableBody": "O armazenamento {source} não respondeu. Não é o mesmo que não ter entradas.",
+        "errorTitle": "Ocorreu um erro ao carregar esta secção"
+      }
     }
   },
   "code": {

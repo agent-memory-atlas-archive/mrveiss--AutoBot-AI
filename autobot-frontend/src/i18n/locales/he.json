@@ -224,7 +224,8 @@
       "tip": "ממשק מינימלי — הסתרת יכולות מתקדמות",
       "announceMinimal": "הממשק המינימלי הופעל. יכולות מתקדמות מוסתרות.",
       "announceFull": "הממשק המלא הופעל. כל היכולות מוצגות."
-    }
+    },
+    "llcLedger": "יומן הסוכנים"
   },
   "llcCompanyStatus": {
     "showArchived": "הצג בארכיון",
@@ -8931,6 +8932,63 @@
       "retry": "נסה שוב",
       "loadingItem": "טוען פריט עבודה…",
       "itemLoadFailed": "לא ניתן לטעון את פריט העבודה הזה"
+    },
+    "ledger": {
+      "title": "יומן הסוכנים",
+      "subtitle": "מי עובד על מה בחברה הזו, ומי ממתין.",
+      "tabsAria": "תצוגות היומן",
+      "tabs": {
+        "now": "עובדים כעת",
+        "claims": "תפיסות",
+        "contention": "תחרות",
+        "activity": "פעילות"
+      },
+      "col": {
+        "agent": "סוכן",
+        "kind": "סוג",
+        "status": "מצב",
+        "detail": "פרטים",
+        "scope": "היקף",
+        "mode": "מצב פעולה",
+        "intent": "כוונה",
+        "expires": "פג תוקף",
+        "renewals": "חידושים"
+      },
+      "busy": "עסוק",
+      "idle": "פנוי",
+      "peerMessages": "הודעות עמיתים ממתינות",
+      "idleSubscribers": "מינויי זמן סרק",
+      "pendingFor": "{n} ממתינות עבור {name}",
+      "waitsForIdle": "{who} ממתין עד ש-{target} יתפנה",
+      "heldBy": "מוחזק על ידי {agent}",
+      "waitlistAria": "רשימת המתנה לפי הסדר",
+      "silenceMeansHold": "בקשה אינה שחרור: שתיקה פירושה החזקה, ותפיסה שלא חודשה פגה מעצמה.",
+      "ask": "בקשו מהמחזיק לשחרר",
+      "askAria": "בקשו ממחזיק {scope} לשחרר אותו",
+      "askUnavailable": "עדיין לא זמין: הבקשה מתווספת ליומן.",
+      "conflicts": "התנגשויות",
+      "recent": "פעילות אחרונה",
+      "conflict": {
+        "release_refused": "שחרור נדחה",
+        "claim_expired": "תפיסה פגה בזמן החזקה",
+        "yield_unanswered": "בקשת ויתור נותרה ללא מענה",
+        "claim_lapsed_during_action": "תפיסה פגה במהלך פעולה"
+      },
+      "empty": {
+        "presence": "אף סוכן לא דיווח",
+        "peerMessages": "אין הודעות ממתינות",
+        "idleSubscribers": "אין מינויי זמן סרק",
+        "claims": "אין תפיסות",
+        "contention": "אין תחרות",
+        "conflicts": "אין התנגשויות",
+        "activity": "אין פעילות אחרונה"
+      },
+      "state": {
+        "loading": "קורא את היומן…",
+        "unavailableTitle": "לא ניתן היה לקרוא את היומן",
+        "unavailableBody": "המאגר {source} לא הגיב. זה לא כמו שאין רשומות.",
+        "errorTitle": "אירעה שגיאה בטעינת הקטע הזה"
+      }
     }
   },
   "code": {
