@@ -40,7 +40,7 @@ from repo_tests._paths import repo_root
 _ROOT = repo_root()
 _ANSIBLE = _ROOT / "autobot-slm-backend" / "ansible"
 _DEFINITION_FILES = [
-    *_ANSIBLE.rglob("*.yml"),
+    *_ROOT.glob("autobot-slm-backend/ansible/**/*.yml"),
     _ROOT / "install.sh",
 ]
 _BUILDER = _ROOT / "autobot-slm-backend/services/inventory_builder.py"
@@ -114,7 +114,7 @@ def test_ansible_stops_with_the_hint_when_the_subnet_is_unset(tmp_path: Path) ->
 def test_no_use_of_network_subnet_supplies_its_own_default() -> None:
     uses = [
         f"{p.relative_to(_ROOT)}:{n}"
-        for p in _ANSIBLE.rglob("*.y*ml")
+        for p in _ROOT.glob("autobot-slm-backend/ansible/**/*.yml")
         for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
         if re.search(r"network_(subnet|gateway)\s*\|\s*default", line)
     ]
