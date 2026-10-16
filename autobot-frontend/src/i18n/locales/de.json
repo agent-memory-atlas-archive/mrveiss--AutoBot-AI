@@ -8994,7 +8994,7 @@
         "tooSoon": "Sie haben gerade erst nach diesem Anspruch gefragt; versuchen Sie es in einer Minute erneut.",
         "notFound": "Diese Aufgabe hält den Anspruch nicht mehr — aktualisieren Sie, um den aktuellen Inhaber zu sehen.",
         "unavailable": "Ledger nicht erreichbar; es wurde nichts gesendet.",
-        "error": "Etwas ist schiefgelaufen; es wurde nichts gesendet."
+        "error": "Etwas ist schiefgelaufen, und die Zustellung konnte nicht bestätigt werden. Aktualisieren Sie, um zu sehen, ob der Claim noch gehalten wird."
       }
     }
   },

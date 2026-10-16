@@ -8994,7 +8994,7 @@
         "tooSoon": "Acabou de pedir por esta reserva; tente novamente dentro de um minuto.",
         "notFound": "Esta tarefa já não detém a reserva — atualize para ver quem a detém agora.",
         "unavailable": "Não foi possível contactar o registo; nada foi enviado.",
-        "error": "Ocorreu um erro; nada foi enviado."
+        "error": "Ocorreu um erro e não foi possível confirmar a entrega. Atualize para ver se a reserva ainda está ativa."
       }
     }
   },
