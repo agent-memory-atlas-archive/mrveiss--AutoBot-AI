@@ -10,9 +10,9 @@ import asyncio
 import os
 import time
 
+from autobot_shared.circuit_breaker import CircuitBreakerOpenError, get_circuit_breaker_manager
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.singleton_factory import lazy_singleton
-from circuit_breaker import CircuitBreakerOpenError, get_circuit_breaker_manager
 from content_reach.base import ContentRequest, ContentResult
 from content_reach.chain import ContentSourceChain
 from source_attribution import SourceKind, track_source
