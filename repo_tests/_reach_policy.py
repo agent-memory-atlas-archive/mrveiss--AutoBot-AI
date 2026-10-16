@@ -317,6 +317,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Watched-basename files are a subset of tracked files under five roots; same-named unrelated files drift.",
     ),
+    "redis-direct-constructor-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .py/.sh under the scan roots is a subset of tracked files; the test-file share drifts.",
+    ),
     "post-commit-seed-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
