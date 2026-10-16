@@ -39,7 +39,9 @@ def _kit_budget(project: Path) -> int:
     func = re.search(r"^kit_related_budget\(\) \{\n(?:.*\n)*?\}$", _source(), re.MULTILINE)
     assert func, "the hook no longer defines kit_related_budget"
     prelude = "\n".join(f"{n}={_constant(n)}" for n in ("TEST_TIMEOUT", "MAX_BUDGET", "VITEST_COST_PER_FILE"))
-    script = f"{prelude}\n{func.group(0)}\nkit_related_budget {project}"
+    script = (
+        f". {repo_root() / 'scripts' / 'lib' / 'git-root.sh'}\n{prelude}\n{func.group(0)}\nkit_related_budget {project}"
+    )
     done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=scrubbed_git_env())
     return int(done.stdout)
 
@@ -91,6 +93,18 @@ def test_kit_related_budget_grows_with_the_projects_tests(tmp_path: Path) -> Non
     assert small == _constant("TEST_TIMEOUT"), "a tiny project still gets the base budget"
     assert large == 150 * per_file
     assert _kit_budget(_project_with_tests(tmp_path / "huge", 2000)) == _constant("MAX_BUDGET")
+
+
+def test_the_count_is_right_even_when_git_exports_GIT_DIR(tmp_path: Path) -> None:
+    """Inside a hook git exports GIT_DIR, which outranks `-C`; the count must not follow it."""
+    project = _project_with_tests(tmp_path / "p", 150)
+    func = re.search(r"^kit_related_budget\(\) \{\n(?:.*\n)*?\}$", _source(), re.MULTILINE).group(0)
+    prelude = "\n".join(f"{n}={_constant(n)}" for n in ("TEST_TIMEOUT", "MAX_BUDGET", "VITEST_COST_PER_FILE"))
+    env = scrubbed_git_env()
+    env["GIT_DIR"] = str(repo_root() / ".git")
+    script = f". {repo_root() / 'scripts' / 'lib' / 'git-root.sh'}\n{prelude}\n{func}\nkit_related_budget {project}"
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=env)
+    assert int(done.stdout) == 150 * _constant("VITEST_COST_PER_FILE")
 
 
 def test_the_kit_step_uses_its_own_budget() -> None:

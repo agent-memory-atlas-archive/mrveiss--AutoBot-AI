@@ -21,6 +21,19 @@ set -uo pipefail  # NOT -e: we want to capture exit codes and report
 # `unset GIT_DIR` (#15246). Same resolution as the commit-msg hook (#17032).
 REPO_ROOT="$PWD"
 
+# #18578: git_tracked_files (scripts/lib/git-root.sh) -- `git ls-files` with the
+# ambient GIT_DIR & co. unset; inside a hook git exports GIT_DIR, which outranks
+# `-C` (#14896, #15506). Located from the HOOK's own path, not $REPO_ROOT: two
+# levels up is the repository both for tools/git-hooks/pre-push and for the
+# installed .git/hooks/pre-push, while a push from a fixture repo has no
+# scripts/lib of its own.
+_HOOK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/scripts/lib/git-root.sh"
+# shellcheck source=../../scripts/lib/git-root.sh
+if ! . "$_HOOK_LIB"; then
+    echo "[pre-push FAIL] cannot load $_HOOK_LIB" >&2
+    exit 1
+fi
+
 # Time-box each check; we'd rather warn than block forever.
 TEST_TIMEOUT=120
 
@@ -56,7 +69,7 @@ VITEST_COST_PER_FILE=2
 # VITEST_COST_PER_FILE, at least TEST_TIMEOUT, capped at MAX_BUDGET.
 kit_related_budget() {
     local files budget
-    files=$(git -C "$1" ls-files -- '*.test.ts' '*.spec.ts' '*.test.tsx' '*.spec.tsx' '*.test.mts' '*.spec.mts' \
+    files=$(git_tracked_files "$1" -- '*.test.ts' '*.spec.ts' '*.test.tsx' '*.spec.tsx' '*.test.mts' '*.spec.mts' \
         '*.test.js' '*.spec.js' 2>/dev/null | grep -c .)
     budget=$(( files * VITEST_COST_PER_FILE ))
     [ "$budget" -lt "$TEST_TIMEOUT" ] && budget=$TEST_TIMEOUT
