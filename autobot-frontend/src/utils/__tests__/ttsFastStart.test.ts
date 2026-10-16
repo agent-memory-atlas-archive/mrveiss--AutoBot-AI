@@ -59,6 +59,13 @@ describe('extractOpeningChunk (#13103)', () => {
     expect(extractOpeningChunk('Short opening with no pause')).toBeNull()
   })
 
+  it('honours injected minimums, which the listening test renders (#13103)', () => {
+    const text = 'Looking at your logs, the failure starts somewhere in the parser'
+    expect(extractOpeningChunk(text, { clauseMinChars: 24, wordMinChars: 999 })).toBeNull()
+    expect(extractOpeningChunk(text, { clauseMinChars: 8, wordMinChars: 999 })!.spans[0]).toBe('Looking at your logs, ')
+    expect(createTtsStream(false, { clauseMinChars: 24, wordMinChars: 999 }).next(text)).toEqual({ spans: [], consumed: 0 })
+  })
+
   it('stays out of the way once any sentence has terminated', () => {
     // "Hi there." is shorter than the standard bar, so it is HELD for merging;
     // an early opening must not jump ahead of it.

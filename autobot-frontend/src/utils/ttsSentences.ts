@@ -240,6 +240,17 @@ export const OPENING_CLAUSE_MIN_CHARS = 16
 /** With no early clause boundary, the opening goes out at a word boundary once this long. */
 export const OPENING_WORD_MIN_CHARS = 48
 
+/** The two opening-chunk minimums. Injectable so the listening test can render candidates. */
+export interface OpeningThresholds {
+  clauseMinChars: number
+  wordMinChars: number
+}
+
+const DEFAULT_OPENING: OpeningThresholds = {
+  clauseMinChars: OPENING_CLAUSE_MIN_CHARS,
+  wordMinChars: OPENING_WORD_MIN_CHARS,
+}
+
 interface SpeechChunk {
   spans: string[]
   consumed: number
@@ -254,16 +265,19 @@ const insideLink = (span: string): boolean => /\[[^\]]*$|\]\([^)]*$/.test(span)
  * text, and a short terminated sentence there is HELD for merging -- an early
  * opening must never jump ahead of it.
  */
-export function extractOpeningChunk(text: string): SpeechChunk | null {
+export function extractOpeningChunk(
+  text: string,
+  min: OpeningThresholds = DEFAULT_OPENING,
+): SpeechChunk | null {
   if (/[.!?]\s/.test(text)) return null
   const clause = /[,;:—–]\s+/g
   let m: RegExpExecArray | null
   while ((m = clause.exec(text)) !== null) {
     const end = m.index + m[0].length
-    if (m.index + 1 < OPENING_CLAUSE_MIN_CHARS || insideLink(text.slice(0, end))) continue
+    if (m.index + 1 < min.clauseMinChars || insideLink(text.slice(0, end))) continue
     return { spans: [text.slice(0, end)], consumed: end }
   }
-  if (text.length < OPENING_WORD_MIN_CHARS) return null
+  if (text.length < min.wordMinChars) return null
   const lastGap = /\s+(?=\S*$)/.exec(text)
   if (!lastGap || lastGap.index === 0) return null
   const end = lastGap.index + lastGap[0].length
@@ -279,8 +293,9 @@ export function extractOpeningChunk(text: string): SpeechChunk | null {
  *
  * @param alreadyOpened  true for a reply already under way (e.g. voice enabled
  *                       mid-reply), which must not get a second "opening".
+ * @param min            opening-chunk minimums; production uses the defaults.
  */
-export function createTtsStream(alreadyOpened = false) {
+export function createTtsStream(alreadyOpened = false, min: OpeningThresholds = DEFAULT_OPENING) {
   let opened = alreadyOpened
   return {
     next(text: string): SpeechChunk {
@@ -289,7 +304,7 @@ export function createTtsStream(alreadyOpened = false) {
         opened = true
         return { spans: standard.spans, consumed: standard.consumed }
       }
-      const opening = extractOpeningChunk(text)
+      const opening = extractOpeningChunk(text, min)
       if (opening) opened = true
       return opening ?? { spans: [], consumed: 0 }
     },
