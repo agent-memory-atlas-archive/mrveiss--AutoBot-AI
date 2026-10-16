@@ -8043,7 +8043,8 @@
       "tip": "Minimale Oberfläche — erweiterte Funktionen ausblenden",
       "announceMinimal": "Minimale Oberfläche aktiv. Erweiterte Funktionen ausgeblendet.",
       "announceFull": "Vollständige Oberfläche aktiv. Alle Funktionen angezeigt."
-    }
+    },
+    "llcLedger": "Agenten-Ledger"
   },
   "llcCompanyStatus": {
     "showArchived": "Archivierte anzeigen",
@@ -8931,6 +8932,63 @@
       "retry": "Erneut versuchen",
       "loadingItem": "Arbeitselement wird geladen…",
       "itemLoadFailed": "Dieses Arbeitselement konnte nicht geladen werden"
+    },
+    "ledger": {
+      "title": "Agenten-Ledger",
+      "subtitle": "Wer in diesem Unternehmen woran arbeitet und wer wartet.",
+      "tabsAria": "Ledger-Ansichten",
+      "tabs": {
+        "now": "Arbeitet gerade",
+        "claims": "Ansprüche",
+        "contention": "Konkurrenz",
+        "activity": "Aktivität"
+      },
+      "col": {
+        "agent": "Agent",
+        "kind": "Art",
+        "status": "Status",
+        "detail": "Details",
+        "scope": "Bereich",
+        "mode": "Modus",
+        "intent": "Absicht",
+        "expires": "Läuft ab",
+        "renewals": "Verlängerungen"
+      },
+      "busy": "Beschäftigt",
+      "idle": "Untätig",
+      "peerMessages": "Ausstehende Peer-Nachrichten",
+      "idleSubscribers": "Untätigkeits-Abos",
+      "pendingFor": "{n} ausstehend für {name}",
+      "waitsForIdle": "{who} wartet, bis {target} untätig ist",
+      "heldBy": "Gehalten von {agent}",
+      "waitlistAria": "Warteliste in Reihenfolge",
+      "silenceMeansHold": "Bitten ist keine Freigabe: Schweigen heißt Halten, und ein nicht verlängerter Anspruch läuft von selbst ab.",
+      "ask": "Inhaber um Freigabe bitten",
+      "askAria": "Den Inhaber von {scope} um Freigabe bitten",
+      "askUnavailable": "Noch nicht verfügbar: die Anfrage wird dem Ledger hinzugefügt.",
+      "conflicts": "Konflikte",
+      "recent": "Letzte Aktivität",
+      "conflict": {
+        "release_refused": "Eine Freigabe wurde verweigert",
+        "claim_expired": "Ein Anspruch lief während des Haltens ab",
+        "yield_unanswered": "Eine Freigabebitte blieb unbeantwortet",
+        "claim_lapsed_during_action": "Ein Anspruch lief während einer Aktion ab"
+      },
+      "empty": {
+        "presence": "Keine Agenten gemeldet",
+        "peerMessages": "Keine ausstehenden Nachrichten",
+        "idleSubscribers": "Keine Untätigkeits-Abos",
+        "claims": "Keine Ansprüche",
+        "contention": "Nichts ist umkämpft",
+        "conflicts": "Keine Konflikte",
+        "activity": "Keine aktuelle Aktivität"
+      },
+      "state": {
+        "loading": "Ledger wird gelesen…",
+        "unavailableTitle": "Ledger konnte nicht gelesen werden",
+        "unavailableBody": "Der Speicher {source} hat nicht geantwortet. Das ist nicht dasselbe wie keine Einträge.",
+        "errorTitle": "Beim Laden dieses Abschnitts ist ein Fehler aufgetreten"
+      }
     }
   },
   "code": {
