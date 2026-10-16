@@ -19,7 +19,8 @@ from autobot_shared.time_utils import now_utc, parse_utc_iso
 
 
 class PlanStepStatus(Enum):
-    """Status of a plan step"""
+    """Lifecycle of one step in a planner Plan: pending until started, then completed,
+    failed, skipped or blocked on an unfinished dependency (#14263; the overseer has its own axis)."""
 
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
