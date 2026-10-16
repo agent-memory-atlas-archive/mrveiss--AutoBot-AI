@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""Pre-push budgets follow their work, not the changeset (#18578).
+
+vue-tsc type-checks the whole project, so a changeset-scaled budget was shortest
+for the smallest PRs: 99 s for 3 files against a measured 111 s idle, which blocked
+every small frontend push. A kit change's `vitest related` runs every test reaching
+the kit, so its budget comes from the project's test files, not the changed files.
+Runs the hook's own function, as the other pre-push tests do.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+from pathlib import Path
+
+from repo_tests._paths import repo_root
+
+from autobot_shared.paths import scrubbed_git_env
+
+_HOOK = repo_root() / "tools" / "git-hooks" / "pre-push"
+
+
+def _source() -> str:
+    return _HOOK.read_text(encoding="utf-8")
+
+
+def _constant(name: str) -> int:
+    match = re.search(rf"^{name}=(\d+)$", _source(), re.MULTILINE)
+    assert match, f"{name} is no longer a plain constant in the hook"
+    return int(match.group(1))
+
+
+def _kit_budget(project: Path) -> int:
+    func = re.search(r"^kit_related_budget\(\) \{\n(?:.*\n)*?\}$", _source(), re.MULTILINE)
+    assert func, "the hook no longer defines kit_related_budget"
+    prelude = "\n".join(f"{n}={_constant(n)}" for n in ("TEST_TIMEOUT", "MAX_BUDGET", "VITEST_COST_PER_FILE"))
+    script = f"{prelude}\n{func.group(0)}\nkit_related_budget {project}"
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=scrubbed_git_env())
+    return int(done.stdout)
+
+
+def _project_with_tests(tmp_path: Path, count: int) -> Path:
+    env = scrubbed_git_env()
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, env=env)
+    for i in range(count):
+        (tmp_path / f"t{i}.test.ts").write_text("", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, env=env)
+    return tmp_path
+
+
+def test_vue_tsc_budget_is_not_scaled_by_the_changeset() -> None:
+    assert not re.search(r"TYPE_CHECK_TIMEOUT=\$\(\(.*changed_count", _source())
+    assert _constant("TYPE_CHECK_TIMEOUT") >= 111 * 2, "below twice the measured idle vue-tsc time"
+    assert _constant("TYPE_CHECK_TIMEOUT") <= _constant("MAX_BUDGET")
+
+
+def test_the_old_changeset_formula_could_never_pass_a_small_pr() -> None:
+    """Contrast: 90 + 3 files x 3 s = 99 s, under the 111 s vue-tsc measured idle."""
+    assert 90 + 3 * 3 < 111
+
+
+def test_kit_related_budget_grows_with_the_projects_tests(tmp_path: Path) -> None:
+    per_file = _constant("VITEST_COST_PER_FILE")
+    small = _kit_budget(_project_with_tests(tmp_path / "small", 10))
+    large = _kit_budget(_project_with_tests(tmp_path / "large", 150))
+    assert small == _constant("TEST_TIMEOUT"), "a tiny project still gets the base budget"
+    assert large == 150 * per_file
+    assert _kit_budget(_project_with_tests(tmp_path / "huge", 2000)) == _constant("MAX_BUDGET")
+
+
+def test_the_kit_step_uses_its_own_budget() -> None:
+    src = _source()
+    assert 'timeout "$kit_timeout" npx vitest related' in src
+    assert 'did_not_run "vitest related (${project})" "${kit_timeout}"' in src
