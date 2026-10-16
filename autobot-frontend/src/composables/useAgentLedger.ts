@@ -85,6 +85,38 @@ export function groupByScope(claims: ClaimRow[], waiters: WaiterRow[]): ScopeVie
   return [...byScope.values()].sort((a, b) => b.waiters.length - a.waiters.length || a.scope.localeCompare(b.scope))
 }
 
+/**
+ * What happened to a request that the holder release a claim (#18391 AC4, route #18599).
+ * Asking never releases anything: `sent` means the request was delivered and the
+ * holder decides -- silence means hold. Each failure stays distinguishable.
+ */
+export type AskOutcome =
+  | { state: 'sent'; token: string }
+  | { state: 'too-soon' } // 429: this person asked about this scope within the window
+  | { state: 'not-found' } // 404: no such claim for this company, or it changed hands
+  | { state: 'unavailable' } // typed 503: the ledger store could not be read
+  | { state: 'error' }
+
+/** Ask the holder of `scope` to release it -- the same yield request an agent sends. */
+export async function askHolderToRelease(scope: string, holderTaskId: string, reason = ''): Promise<AskOutcome> {
+  try {
+    const response = await apiClient.rawRequest(`${getApiBase()}${LEDGER}/claims/yield-request`, {
+      method: 'POST',
+      body: { scope, holder_task_id: holderTaskId, reason },
+    })
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    if (response.ok && typeof body?.token === 'string') return { state: 'sent', token: body.token }
+    if (response.status === 429) return { state: 'too-soon' }
+    if (response.status === 404) return { state: 'not-found' }
+    if (response.status === 503 && body?.error === 'ledger_unavailable') return { state: 'unavailable' }
+    logger.warn(`yield request answered ${response.status}`)
+    return { state: 'error' }
+  } catch (err: unknown) {
+    logger.warn('yield request failed:', err)
+    return { state: 'error' }
+  }
+}
+
 export function useAgentLedger() {
   const presence: Ref<LedgerSection<PresenceRow>> = ref(emptySection())
   const claims: Ref<LedgerSection<ClaimRow>> = ref(emptySection())
