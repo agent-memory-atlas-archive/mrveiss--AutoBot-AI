@@ -4,6 +4,8 @@
 // Author: mrveiss
 const { chromium } = require('playwright');
 const express = require('express');
+// Default frontend for the /test-frontend* routes; one place, env-overridable.
+const FRONTEND_URL = process.env.AUTOBOT_FRONTEND_URL || 'http://localhost:5173';
 const { SessionStore } = require('./session-store');
 const { collectIndexedElements, resolveElementByIndex } = require('./element-index');
 const app = express();
@@ -478,7 +480,7 @@ app.post('/search', async (req, res) => {
 app.post('/send-test-message', async (req, res) => {
   logger.info('Received message test request:', req.body);
   try {
-    const { frontend_url = 'http://localhost:5173', message = 'what network scanning tools do we have available?' } = req.body;
+    const { frontend_url = FRONTEND_URL, message = 'what network scanning tools do we have available?' } = req.body;
 
     const browser = await initBrowser();
     const page = await browser.newPage();
@@ -658,7 +660,7 @@ app.post('/send-test-message', async (req, res) => {
 app.post('/test-frontend', async (req, res) => {
   logger.info('Received frontend test request:', req.body);
   try {
-    const { frontend_url = 'http://localhost:5173' } = req.body;
+    const { frontend_url = FRONTEND_URL } = req.body;
 
     const browser = await initBrowser();
     const page = await browser.newPage();
@@ -1144,7 +1146,6 @@ app.post('/automation', async (req, res) => {
 });
 
 // --- Frontend connectivity probe (merged from the retired infrastructure copy, #18549) ---
-const FRONTEND_URL = process.env.AUTOBOT_FRONTEND_URL || 'http://localhost:5173';
 
 const NAVIGATION_CONFIG = {
   defaultTimeout: 60000,
