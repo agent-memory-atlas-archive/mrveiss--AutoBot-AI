@@ -105,6 +105,8 @@ def test_ansible_stops_with_the_hint_when_the_subnet_is_unset(tmp_path: Path) ->
     unset = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=base)
     assert unset.returncode != 0, unset.stdout
     assert "never falls back to an open range" in unset.stdout + unset.stderr, unset.stdout + unset.stderr
+    blank = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env={**base, "NETWORK_SUBNET": "  "})
+    assert blank.returncode != 0, "a whitespace-only NETWORK_SUBNET was accepted as a value"
     given = subprocess.run(
         cmd, capture_output=True, text=True, timeout=120, env={**base, "NETWORK_SUBNET": "198.51.100.0/24"}
     )
@@ -157,6 +159,15 @@ def test_detects_the_subnet_and_gateway_of_the_install_ip() -> None:
     assert "SUBNET=192.0.2.0/26 GATEWAY=192.0.2.1" in out.stdout, out.stdout + out.stderr
 
 
+def test_a_given_value_that_is_not_a_network_stops_the_install() -> None:
+    out = _detect(
+        "    inet 192.0.2.10/26 scope global eth0",
+        "default via 192.0.2.1 dev eth0",
+        env="NETWORK_SUBNET=' ' NETWORK_GATEWAY=192.0.2.1",
+    )
+    assert out.returncode != 0 and "FATAL: No usable network" in out.stdout, out.stdout + out.stderr
+
+
 def test_given_values_win_over_detection() -> None:
     out = _detect(
         "    inet 192.0.2.10/26 scope global eth0",
@@ -169,7 +180,7 @@ def test_given_values_win_over_detection() -> None:
 def test_an_undetectable_network_stops_the_install_instead_of_guessing() -> None:
     out = _detect("    inet 203.0.113.5/24 scope global eth0", "")
     assert out.returncode != 0
-    assert "FATAL: Could not detect the network of 192.0.2.10" in out.stdout, out.stdout + out.stderr
+    assert "FATAL: No usable network for 192.0.2.10" in out.stdout, out.stdout + out.stderr
     assert "192.0.2.0/24" not in out.stdout, "the old /24-from-the-IP guess came back"
 
 
@@ -239,6 +250,13 @@ def test_the_pick_never_overlaps_a_used_range() -> None:
     used = [ipaddress.ip_network(n) for n in ("10.200.0.0/24", "10.200.1.0/24", "10.200.3.0/24")]
     for seed in range(20):
         assert picker.pick(used, pool, random.Random(seed)) == "10.200.2"
+
+
+@pytest.mark.parametrize("pool", ["127.0.0.0/8", "169.254.0.0/16", "8.8.0.0/16", "10.0.0.0/25"])
+def test_a_pool_that_is_not_a_private_lan_block_is_refused(pool: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTOBOT_DOCKER_MGMT_POOL", pool)
+    with pytest.raises(SystemExit, match="AUTOBOT_DOCKER_MGMT_POOL must be"):
+        _picker().main()
 
 
 def test_a_full_pool_is_a_refusal_not_a_collision() -> None:

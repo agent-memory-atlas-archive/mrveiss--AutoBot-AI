@@ -91,10 +91,11 @@ def main() -> None:
         pool = ipaddress.ip_network(raw_pool)
     except ValueError as exc:
         raise SystemExit(f"AUTOBOT_DOCKER_MGMT_POOL is not a network: {raw_pool}") from exc
-    if not isinstance(pool, Network) or pool.prefixlen > 24 or not pool.is_private:
+    usable = isinstance(pool, Network) and pool.is_private and not (pool.is_loopback or pool.is_link_local)
+    if not usable or pool.prefixlen > 24:
         raise SystemExit(f"AUTOBOT_DOCKER_MGMT_POOL must be a private IPv4 block of /24 or larger, not {pool}")
     try:
-        routes = _command_lines(["ip", "-4", "route", "show"])
+        routes = _command_lines(["ip", "-4", "route", "show", "table", "all"])
     except FileNotFoundError as exc:
         raise SystemExit("cannot read host routes (no `ip`): set AUTOBOT_DOCKER_MGMT_PREFIX by hand") from exc
     used = routes_in_use(routes) + docker_subnets()

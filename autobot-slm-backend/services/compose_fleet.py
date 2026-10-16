@@ -18,6 +18,7 @@ import asyncio
 import logging
 import os
 
+from autobot_shared.env_registry import env
 from config import settings
 from services.database import db_service
 from services.reconciler import reconciler_service
@@ -85,7 +86,7 @@ _SLM_MGMT_HOST = 16  # autobot-slm
 
 def mgmt_ip(host: int) -> str:
     """The autobot-mgmt address of compose host number `host` (#16833)."""
-    prefix = os.getenv("AUTOBOT_DOCKER_MGMT_PREFIX", "").strip()
+    prefix = env("AUTOBOT_DOCKER_MGMT_PREFIX").strip()
     if not prefix:
         raise RuntimeError("AUTOBOT_DOCKER_MGMT_PREFIX is unset: run docker/generate-secrets.sh (#16833)")
     return f"{prefix}.{host}"
