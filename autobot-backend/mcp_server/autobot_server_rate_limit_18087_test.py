@@ -94,3 +94,18 @@ async def test_rate_limit_fails_open_when_redis_is_down(monkeypatch, caplog):
         for _ in range(3):
             assert "result" in await srv.handle_request("tools/list", {}, VALID_TOKEN)
     assert any("redis down" in x.getMessage() for x in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_tokens_sharing_a_16_char_prefix_have_independent_quotas(shared_redis, monkeypatch):
+    """The key hashes the WHOLE token: a common JWT header prefix must not merge two callers' quotas."""
+    from mcp_server import autobot_server as mod
+
+    monkeypatch.setattr(mod, "_RATE_LIMIT", 2)
+    tok_a, tok_b = VALID_TOKEN + ":a", VALID_TOKEN + ":b"
+    assert tok_a[:16] == tok_b[:16]
+    srv = make_server()
+    for _ in range(2):
+        assert "result" in await srv.handle_request("tools/list", {}, tok_a)
+    assert (await srv.handle_request("tools/list", {}, tok_a))["error"]["code"] == -32029
+    assert "result" in await srv.handle_request("tools/list", {}, tok_b)

@@ -60,6 +60,7 @@ Slack 1/sec, Discord 10/sec). Folded in from
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 
@@ -67,6 +68,12 @@ from autobot_shared.redis_client import get_async_redis_client
 from autobot_shared.ssot_constants import TTL_2_HOURS
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_key(key: str) -> str:
+    """Return a short sha256 prefix of *key* for logs; keys carry usernames/IPs (#18087)."""
+    return hashlib.sha256(str(key).encode("utf-8")).hexdigest()[:12]
+
 
 # ---------------------------------------------------------------------------
 # Default tiered limits
@@ -200,7 +207,7 @@ class RateLimiter:
                 logger.warning(
                     "rate_limiter: Redis unavailable for key '%s:%s'; allowing request",
                     self._prefix,
-                    key,
+                    _redact_key(key),
                 )
                 return True
 
@@ -209,7 +216,7 @@ class RateLimiter:
                 logger.debug(
                     "rate_limiter: minute limit hit for %s:%s (%d/%d)",
                     self._prefix,
-                    key,
+                    _redact_key(key),
                     minute_count,
                     rpm,
                 )
@@ -220,7 +227,7 @@ class RateLimiter:
                 logger.debug(
                     "rate_limiter: hour limit hit for %s:%s (%d/%d)",
                     self._prefix,
-                    key,
+                    _redact_key(key),
                     hour_count,
                     rph,
                 )
@@ -231,7 +238,7 @@ class RateLimiter:
             logger.warning(
                 "rate_limiter: Redis error for key '%s:%s': %s; allowing request",
                 self._prefix,
-                key,
+                _redact_key(key),
                 exc,
             )
             return True
@@ -261,7 +268,7 @@ class RateLimiter:
             logger.warning(
                 "rate_limiter: failed to record request for '%s:%s': %s",
                 self._prefix,
-                key,
+                _redact_key(key),
                 exc,
             )
 
@@ -287,7 +294,7 @@ class RateLimiter:
                 logger.warning(
                     "rate_limiter: Redis unavailable for key '%s:%s'; allowing request",
                     self._prefix,
-                    key,
+                    _redact_key(key),
                 )
                 return True
 
@@ -326,7 +333,7 @@ class RateLimiter:
                 logger.debug(
                     "rate_limiter: limit hit for %s:%s (rpm=%d, rph=%d)",
                     self._prefix,
-                    key,
+                    _redact_key(key),
                     rpm,
                     rph,
                 )
@@ -337,7 +344,7 @@ class RateLimiter:
             logger.warning(
                 "rate_limiter: Redis error for key '%s:%s': %s; allowing request",
                 self._prefix,
-                key,
+                _redact_key(key),
                 exc,
             )
             return True
@@ -390,7 +397,7 @@ class RateLimiter:
             logger.warning(
                 "rate_limiter: get_retry_after failed for '%s:%s': %s",
                 self._prefix,
-                key,
+                _redact_key(key),
                 exc,
             )
             return 0
@@ -473,7 +480,7 @@ class RateLimiter:
             logger.warning(
                 "rate_limiter: window acquire error for '%s:%s': %s",
                 self._prefix,
-                key,
+                _redact_key(key),
                 exc,
             )
             return True, 0.0
@@ -497,7 +504,7 @@ class RateLimiter:
             logger.warning(
                 "rate_limiter: get_remaining error for '%s:%s': %s",
                 self._prefix,
-                key,
+                _redact_key(key),
                 exc,
             )
             return max_requests

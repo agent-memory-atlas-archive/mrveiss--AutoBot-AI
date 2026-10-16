@@ -191,3 +191,16 @@ async def test_password_change_redis_down_fails_open(monkeypatch, caplog):
         for _ in range(3):
             await auth._check_password_change_rate_limit("alice", "1.2.3.4")
     assert any("redis down" in r.getMessage() for r in caplog.records)
+    assert "alice" not in caplog.text and "1.2.3.4" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_password_change_redis_error_log_never_carries_the_key(monkeypatch, caplog):
+    async def _down(database: str = "main"):
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(rl_mod, "get_async_redis_client", _down)
+    with caplog.at_level(logging.WARNING):
+        await auth._check_password_change_rate_limit("alice", "1.2.3.4")
+    assert [r for r in caplog.records if "window acquire error" in r.getMessage()]
+    assert "alice" not in caplog.text and "1.2.3.4" not in caplog.text
