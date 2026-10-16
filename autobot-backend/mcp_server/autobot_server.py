@@ -560,13 +560,13 @@ class AutoBotMCPServer:
 
         # Bucket key is captured before _authenticate pops run_jwt out of params.
         run_jwt_preview = params.get("run_jwt") if isinstance(params, dict) else None
-        rate_key = (run_jwt_preview or auth_token or "")[:16]
+        rate_key = run_jwt_preview or auth_token or ""
 
         scopes, using_run_jwt, auth_error = await self._authenticate(params, auth_token, req_id, ip)
         if auth_error is not None:
             return auth_error
 
-        # Post-auth bucket stays keyed on the token prefix: it is only reachable
+        # Post-auth bucket is keyed on the whole token (hashed in _is_rate_limited): it is only reachable
         # by an authenticated caller, so the key space cannot be grown by an
         # anonymous attacker (#13268).
         if await self._is_rate_limited(rate_key):
