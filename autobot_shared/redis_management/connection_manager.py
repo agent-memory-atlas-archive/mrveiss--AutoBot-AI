@@ -735,11 +735,8 @@ class RedisConnectionManager:
 
     def _check_circuit_breaker(self, database_name: str) -> bool:
         """Check if circuit breaker is open for a database."""
-        # #14299: a config error (blank host) is permanent for this process —
-        # nothing here re-reads the environment, so it cannot resolve
-        # differently on a later call. Skip the time-based reset entirely so a
-        # config error does not cycle open/closed roughly once a minute
-        # forever; it stays open until a restart picks up corrected config.
+        # #14299: a blank-host config error is permanent for this process; skip
+        # the time-based reset so it stays open until a restart.
         if database_name in self._config_broken:
             return True
 
@@ -754,6 +751,9 @@ class RedisConnectionManager:
                 logger.info(f"Circuit breaker reset for database '{database_name}' after timeout")
                 self._circuit_open[database_name] = False
                 self._failure_counts[database_name] = 0
+                # #18553: health must not keep reporting "open" after the reset.
+                if database_name in self._metrics:
+                    self._metrics[database_name].circuit_breaker_state = "closed"
 
         return self._circuit_open[database_name]
 
