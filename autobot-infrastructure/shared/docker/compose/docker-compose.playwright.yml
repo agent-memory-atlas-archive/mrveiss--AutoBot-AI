@@ -8,6 +8,7 @@ services:
       - DISPLAY=${DISPLAY:-:0}
       - XAUTHORITY=${XAUTHORITY:-/home/${USER:-autobot}/.Xauthority}
       - HEADLESS=${HEADLESS:-false}
+      - PLAYWRIGHT_PORT=3000  # the canonical server defaults to 9001; healthcheck and callers expect 3000 (#18549)
     volumes:
       # One canonical server + its two local modules (#18549)
       - ../../../../autobot-browser-worker/playwright-server.js:/app/server.js

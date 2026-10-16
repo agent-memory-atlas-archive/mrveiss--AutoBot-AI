@@ -8,6 +8,7 @@ services:
     environment:
       - DISPLAY=:99
       - HEADLESS=false
+      - PLAYWRIGHT_PORT=3000  # the canonical server defaults to 9001; healthcheck and port map expect 3000 (#18549)
       - VNC_SERVER_PASSWORD=${VNC_PASSWORD:-autobot123}
       - SCREEN_WIDTH=1920
       - SCREEN_HEIGHT=1080

@@ -17,6 +17,7 @@ merely names the file is not.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -82,3 +83,40 @@ def test_exactly_one_tracked_playwright_server() -> None:
         f"#18549: tracked playwright-server.js files: {copies}; the only one is {_CANONICAL}. "
         "Point the unit, compose file or script at it instead of copying it."
     )
+
+
+_COMPOSE_DIR = "autobot-infrastructure/shared/docker/compose"
+_MOUNTERS = ("docker-compose.playwright.yml", "docker-compose.playwright-vnc.yml")
+
+
+def _port_mismatch(text: str) -> str | None:
+    """Why a compose file that mounts the canonical server would listen on the wrong port, or None.
+
+    The canonical server listens on ``PLAYWRIGHT_PORT`` (default 9001); the compose
+    healthchecks probe ``localhost:<port>/health``. Both must name the same port.
+    """
+    if _CANONICAL not in text:
+        return None
+    env = re.search(r"PLAYWRIGHT_PORT=(\d+)", text)
+    health = re.search(r"localhost:(\d+)/health", text)
+    if env is None:
+        return "mounts the canonical server but does not set PLAYWRIGHT_PORT"
+    if health is not None and health.group(1) != env.group(1):
+        return f"PLAYWRIGHT_PORT={env.group(1)} but the healthcheck probes {health.group(1)}"
+    return None
+
+
+@pytest.mark.parametrize("name", _MOUNTERS)
+def test_compose_sets_the_port_its_healthcheck_probes(name):
+    text = (repo_root() / _COMPOSE_DIR / name).read_text(encoding="utf-8")
+    assert _CANONICAL in text, f"{name} no longer mounts the canonical server; update _MOUNTERS"
+    assert _port_mismatch(text) is None, f"{name}: {_port_mismatch(text)}"
+
+
+def test_port_matcher_contrast():
+    mounted = f"- ../{_CANONICAL}:/app/server.js\n"
+    probe = 'test: ["CMD", "curl", "-f", "http://localhost:3000/health"]\n'
+    assert _port_mismatch(mounted + probe) == "mounts the canonical server but does not set PLAYWRIGHT_PORT"
+    assert "probes 3000" in _port_mismatch(mounted + "- PLAYWRIGHT_PORT=9001\n" + probe)
+    assert _port_mismatch(mounted + "- PLAYWRIGHT_PORT=3000\n" + probe) is None
+    assert _port_mismatch(probe) is None
