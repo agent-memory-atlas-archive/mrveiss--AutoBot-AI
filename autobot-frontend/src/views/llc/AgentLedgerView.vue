@@ -77,14 +77,14 @@
       <LedgerSectionState :section="ledger.contention.value" :empty="t('llc.ledger.empty.contention')">
         <article v-for="(s, i) in ledger.contention.value.rows" :key="s.scope" class="p-3 rounded border border-autobot-border" data-testid="ledger-scope">
           <h3 class="m-0 mb-2 text-sm"><code>{{ s.scope }}</code></h3>
-          <div v-for="h in s.holders" :key="h.task_id" class="flex flex-wrap items-center gap-2">
+          <div v-for="(h, hi) in s.holders" :key="h.task_id" class="flex flex-wrap items-center gap-2">
             <span>{{ t('llc.ledger.heldBy', { agent: h.agent_id }) }}</span>
             <button type="button" class="ms-auto px-3 py-1 rounded border border-autobot-border text-autobot-text-primary"
               data-testid="ledger-ask" :aria-label="t('llc.ledger.askAria', { scope: s.scope })"
-              :aria-describedby="`ledger-ask-status-${i}`" :disabled="asks[askKey(s.scope, h.task_id)] === 'sending'"
+              :aria-describedby="`ledger-ask-status-${i}-${hi}`" :disabled="asks[askKey(s.scope, h.task_id)] === 'sending'"
               @click="ask(s.scope, h.task_id)"
             >{{ t('llc.ledger.ask') }}</button>
-            <span :id="`ledger-ask-status-${i}`" class="w-full text-sm text-autobot-text-secondary" role="status" data-testid="ledger-ask-status">
+            <span :id="`ledger-ask-status-${i}-${hi}`" class="w-full text-sm text-autobot-text-secondary" role="status" data-testid="ledger-ask-status">
               {{ askText(asks[askKey(s.scope, h.task_id)]) }}
             </span>
           </div>

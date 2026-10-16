@@ -5,9 +5,9 @@
 /**
  * #18391 on screen: an unreadable ledger says "couldn't read the ledger" and
  * names the store -- never the empty "No claims" -- and an empty one says the
- * opposite (AC3). "Ask holder to release" is present but disabled until its
- * route lands (#18599), with its reason exposed to assistive tech. Activity is
- * a Full-mode tab, as in the mockup.
+ * opposite (AC3). "Ask holder to release" sends the yield request (#18599) and
+ * announces its outcome per holder; asking never releases anything (AC4).
+ * Activity is a Full-mode tab, as in the mockup.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -98,6 +98,17 @@ describe('AgentLedgerView (#18391)', () => {
     expect(status_.attributes('role')).toBe('status')
     // Asking never releases anything: the claim is still listed as held.
     expect(w.text()).toContain(L.heldBy.replace('{agent}', 'research-agent'))
+  })
+
+  it('each holder of a shared scope has its own ask status, and its button names that one', async () => {
+    serve({ claims: json(200, { claims: [CLAIM, { ...CLAIM, agent_id: 'writer-agent', task_id: 't2', mode: 'shared' }], count: 2 }) })
+    const w = await mountOn('contention')
+    const buttons = w.findAll('[data-testid="ledger-ask"]')
+    const statuses = w.findAll('[data-testid="ledger-ask-status"]')
+    expect(statuses).toHaveLength(2)
+    const ids = statuses.map((s) => s.attributes('id'))
+    expect(new Set(ids).size).toBe(2)
+    expect(buttons.map((b) => b.attributes('aria-describedby'))).toEqual(ids)
   })
 
   it('tabs follow WAI-ARIA: one Tab stop, arrows and Home/End move selection and focus, panels are wired', async () => {
