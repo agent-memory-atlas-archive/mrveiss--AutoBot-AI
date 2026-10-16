@@ -30,8 +30,9 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 _KIT_BACKOFF = "libs/autobot-ui/src/utils/backoff.ts"
 _ROOTS = ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src")
 _SUFFIXES = (".ts", ".vue", ".js")
-#: `Math.pow(2, n)` or `2 ** n` -- the doubling every copy used.
-_DOUBLING = re.compile(r"Math\.pow\(\s*2\s*,|\b2\s*\*\*\s*[\w(]")
+#: `Math.pow(2, n)`, `2 ** n`, `1 << n` and `x *= 2` -- every way to double a delay. A shift of
+#: anything but 1 is bit packing or hashing (colour channels, string hashes), not a power of two.
+_DOUBLING = re.compile(r"Math\.pow\(\s*2\s*,|\b2\s*\*\*\s*[\w(]|\b1\s*<<\s*[\w(]|\*=\s*2\b")
 
 
 def _doubles(source: str, name: str = "source.ts") -> bool:
@@ -78,7 +79,12 @@ def _doubling_files() -> tuple[str, ...]:
         ("exponent of a call", "const d = base * 2 ** Math.max(0, n)\n", True),
         ("a helper call", "const d = backoffDelay(n, { base })\n", False),
         ("a comment", "// delay * 2^attempts, Math.pow(2, n)\n", False),
+        ("a power-of-two shift", "const d = base * (1 << attempt)\n", True),
+        ("colour packing", "return ((r << 16) | (g << 8) | b).toString(16)\n", False),
+        ("a string hash", "hash = (hash << 5) - hash + char\n", False),
+        ("doubling in place", "delay *= 2\n", True),
         ("other powers", "const area = Math.pow(r, 2)\n", False),
+        ("a multiply by 20", "delay *= 20\n", False),
     ],
 )
 def test_the_matcher_tells_a_doubling_from_anything_else(label: str, source: str, expected: bool) -> None:

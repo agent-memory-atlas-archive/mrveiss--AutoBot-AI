@@ -26,9 +26,14 @@ function randomBelow(limit: number): number {
   return crypto.getRandomValues(new Uint32Array(1))[0] % limit
 }
 
-/** `min(base * 2^exponent + jitter, max)`; a negative exponent counts as 0. */
+const finiteOr = (value: number, fallback: number): number => (Number.isFinite(value) ? value : fallback)
+
+/**
+ * `min(base * 2^exponent + jitter, max)`. A negative or NaN exponent counts as 0, a NaN base as 0,
+ * and a non-finite `max` as uncapped -- a bad config never yields a NaN delay.
+ */
 export function backoffDelay(exponent: number, { base, max = Infinity, jitterMs = 0 }: BackoffOptions): number {
-  const raw = base * 2 ** Math.max(0, exponent)
+  const raw = finiteOr(base, 0) * 2 ** Math.max(0, finiteOr(exponent, 0))
   const jitter = jitterMs > 0 ? randomBelow(jitterMs) : 0
-  return Math.min(raw + jitter, max)
+  return Math.min(raw + jitter, Number.isNaN(max) ? Infinity : max)
 }

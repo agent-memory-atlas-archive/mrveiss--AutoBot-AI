@@ -40,4 +40,10 @@ describe('backoffDelay', () => {
     backoffDelay(2, { base: 500, max: 10000 })
     expect(spy).not.toHaveBeenCalled()
   })
+
+  it('never returns NaN for a bad config', () => {
+    expect(backoffDelay(2, { base: 1000, max: Number.NaN })).toBe(4000)
+    expect(backoffDelay(Number.NaN, { base: 1000, max: 5000 })).toBe(1000)
+    expect(backoffDelay(2, { base: Number.NaN, max: 5000 })).toBe(0)
+  })
 })
