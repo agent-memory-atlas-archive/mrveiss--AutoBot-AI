@@ -124,7 +124,6 @@
     "agentActivity": "فعالیت عامل",
     "mainNavigation": "ناوبری اصلی",
     "plugins": "Plugins",
-    "switchLanguage": "Switch language",
     "automation": "Automation",
     "secrets": "Secrets",
     "skipToContent": "رفتن به محتوای اصلی",
@@ -4804,7 +4803,6 @@
   "profile": {
     "confirmNewPassword": "Confirm new password",
     "newPassword": "New password",
-    "themeDark": "Dark",
     "changing": "Changing...",
     "tabGeneral": "General",
     "enableAnimations": "Enable animations",
@@ -4812,7 +4810,6 @@
     "soundNotifications": "Sound notifications",
     "tabSecurity": "Security",
     "voiceProfiles": "Voice Profiles",
-    "theme": "Theme",
     "pwFillAll": "Please fill in all password fields",
     "lastLogin": "Last Login:",
     "tabAppearance": "Appearance & Voice",
@@ -4820,7 +4817,6 @@
     "notifications": "Notifications",
     "emailNotifications": "Email notifications",
     "accountInfo": "Account Information",
-    "appearance": "Appearance",
     "savePreferences": "Save Preferences",
     "role": "Role:",
     "changePassword": "Change Password",
@@ -4830,7 +4826,6 @@
     "preferencesSaved": "Preferences saved!",
     "pwMismatch": "Passwords do not match",
     "fullScreen": "Full-screen",
-    "themeLight": "Light",
     "email": "Email:",
     "interface": "Interface",
     "pwTooShort": "Password must be at least 8 characters",
@@ -4840,7 +4835,6 @@
     "compactMode": "Compact mode",
     "voiceChatDisplay": "Voice Chat Display",
     "closeAria": "Close profile",
-    "themeAuto": "Auto",
     "pwChanged": "Password changed successfully!",
     "username": "Username:",
     "tabDevices": "Tab devices"
@@ -4921,11 +4915,6 @@
       "feedbackDescription": "Help improve AutoBot by explaining your decision",
       "title": "Command Permission Required",
       "comment": "Comment"
-    },
-    "darkModeToggle": {
-      "toggleDarkMode": "Toggle dark mode",
-      "switchToLight": "Switch to light mode",
-      "switchToDark": "Switch to dark mode"
     },
     "messageStatus": {
       "sending": "Sending",
