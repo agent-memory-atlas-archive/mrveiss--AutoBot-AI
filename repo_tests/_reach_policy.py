@@ -170,6 +170,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "Non-test modules under `autobot-backend/api`; the api package's tests grow at their own "
         "rate, so a share of all its `.py` files would drift with nothing wrong (#18316).",
     ),
+    "compat-module-needs-importer": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test backend modules whose docstring declares backward compatibility; a subset of the "
+        "backend's `.py` files whose share drifts as facades are retired (#18552).",
+    ),
     "chromadb-compose-port-sites": (ABSOLUTE, "NOT_PATHS", "Parsed `ports:` entries, not files."),
     "chromadb-compose-services": (ABSOLUTE, "NOT_PATHS", "Parsed compose services, not files."),
     "collectable-modules-inert-on-import": (
