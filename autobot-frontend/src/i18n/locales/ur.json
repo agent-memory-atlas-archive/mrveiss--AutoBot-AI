@@ -9709,7 +9709,7 @@
       "servicesDown": "{n} سروس بند ہے | {n} سروسز بند ہیں",
       "warnings": "{n} انتباہ | {n} انتباہات",
       "withWarnings": "{n} سروس میں انتباہات | {n} سروسز میں انتباہات",
-      "downAndWarnings": "{down}، {warnings}",
+      "downAndWarnings": "{down} اور {warnings}",
       "ok": "تمام سروسز معمول کے مطابق چل رہی ہیں"
     },
     "service": {

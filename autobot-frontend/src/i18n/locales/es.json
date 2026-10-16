@@ -9709,7 +9709,7 @@
       "servicesDown": "{n} servicio caído | {n} servicios caídos",
       "warnings": "{n} advertencia | {n} advertencias",
       "withWarnings": "{n} servicio con advertencias | {n} servicios con advertencias",
-      "downAndWarnings": "{down}, {warnings}",
+      "downAndWarnings": "{down} y {warnings}",
       "ok": "Todos los servicios funcionan con normalidad"
     },
     "service": {

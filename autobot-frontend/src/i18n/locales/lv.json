@@ -9709,7 +9709,7 @@
       "servicesDown": "{n} pakalpojums nedarbojas | {n} pakalpojumi nedarbojas",
       "warnings": "{n} brīdinājums | {n} brīdinājumi",
       "withWarnings": "{n} pakalpojums ar brīdinājumiem | {n} pakalpojumi ar brīdinājumiem",
-      "downAndWarnings": "{down}, {warnings}",
+      "downAndWarnings": "{down} un {warnings}",
       "ok": "Visi pakalpojumi darbojas normāli"
     },
     "service": {

@@ -9709,7 +9709,7 @@
       "servicesDown": "שירות {n} מושבת | {n} שירותים מושבתים",
       "warnings": "אזהרה {n} | {n} אזהרות",
       "withWarnings": "שירות {n} עם אזהרות | {n} שירותים עם אזהרות",
-      "downAndWarnings": "{down}, {warnings}",
+      "downAndWarnings": "{down} ו-{warnings}",
       "ok": "כל השירותים פועלים כרגיל"
     },
     "service": {
