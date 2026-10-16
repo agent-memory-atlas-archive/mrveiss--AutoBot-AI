@@ -24,13 +24,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException
+from redis.exceptions import RedisError
 
 from autobot_shared.coordination import ledger_read
 from autobot_shared.coordination.ledger_events import YIELD_REQUESTED, cap_text
-from autobot_shared.coordination.ledger_read import Company
-from autobot_shared.coordination.work_claims import Scope
+from autobot_shared.coordination.ledger_read import GENERIC_DETAIL, Company, LedgerUnreadable
+from autobot_shared.coordination.work_claims import ClaimUnavailable, Scope
 from autobot_shared.env_utils import env_int_clamped
+from autobot_shared.logging_manager import get_logger
 from autobot_shared.rate_limiter import RateLimiter
+
+logger = get_logger(__name__)
 
 #: Window over which a person may ask about one scope at most :data:`ASK_LIMIT` times.
 ASK_WINDOW_S = env_int_clamped("AUTOBOT_LEDGER_YIELD_ASK_WINDOW_S", 60, min_v=1, max_v=86400)
@@ -135,11 +139,16 @@ async def ask_holder_to_release(
     held = await _held_by(company, scope, holder_task_id)
     if not await _limiter.acquire_window(f"{user_id}:{held}", ASK_LIMIT, ASK_WINDOW_S):
         raise HTTPException(status_code=429, detail=RATE_LIMITED_DETAIL)
-    request = await issue(
-        held,
-        holder_task_id=holder_task_id,
-        requester_agent_id=f"user:{user_id}",
-        requester_task_id=f"ui:{uuid.uuid4()}",
-        reason=reason,
-    )
+    try:
+        request = await issue(
+            held,
+            holder_task_id=holder_task_id,
+            requester_agent_id=f"user:{user_id}",
+            requester_task_id=f"ui:{uuid.uuid4()}",
+            reason=reason,
+        )
+    except (ClaimUnavailable, RedisError, OSError) as exc:
+        # Same typed 503 as the read routes (serve_ledger), never a 500; the cause stays in the log.
+        logger.warning("agent ledger: yield request for %s not sent: %s", held, exc)
+        raise LedgerUnreadable("yield", GENERIC_DETAIL) from exc
     return request.token

@@ -238,3 +238,18 @@ async def test_the_yield_request_is_admin_only_and_404s_for_a_wrong_holder_or_no
     assert _ask("readonly").status_code == 403
     assert _ask("admin", holder="other").status_code == 404
     assert _ask("admin", scope="path:none/f").status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_store_while_asking_is_the_typed_503_not_a_500_18599(yield_env, monkeypatch):
+    from autobot_shared.coordination.work_claims import ClaimUnavailable
+
+    await try_acquire("path:u/f", agent_id="dev-session", task_id="t-u", intent="x")
+
+    async def _down(*_args, **_kwargs):
+        raise ClaimUnavailable("redis down")
+
+    monkeypatch.setattr(ledger_api, "_publish", _down)
+    response = _ask("admin")
+    assert response.status_code == 503
+    assert "redis down" not in response.text  # the cause stays in the log
