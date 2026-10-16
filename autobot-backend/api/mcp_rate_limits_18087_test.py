@@ -13,6 +13,7 @@ instance on the same Redis) sees the first one's count; Redis down lets the requ
 from __future__ import annotations
 
 import logging
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -192,6 +193,7 @@ async def test_password_change_redis_down_fails_open(monkeypatch, caplog):
             await auth._check_password_change_rate_limit("alice", "1.2.3.4")
     assert any("redis down" in r.getMessage() for r in caplog.records)
     assert "alice" not in caplog.text and "1.2.3.4" not in caplog.text
+    assert not re.search(r"\b[0-9a-f]{12}\b", caplog.text)  # no key digest either
 
 
 @pytest.mark.asyncio
@@ -204,3 +206,4 @@ async def test_password_change_redis_error_log_never_carries_the_key(monkeypatch
         await auth._check_password_change_rate_limit("alice", "1.2.3.4")
     assert [r for r in caplog.records if "window acquire error" in r.getMessage()]
     assert "alice" not in caplog.text and "1.2.3.4" not in caplog.text
+    assert not re.search(r"\b[0-9a-f]{12}\b", caplog.text)  # no key digest either

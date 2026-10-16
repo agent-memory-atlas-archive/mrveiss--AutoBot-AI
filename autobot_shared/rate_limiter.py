@@ -60,7 +60,6 @@ Slack 1/sec, Discord 10/sec). Folded in from
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import time
 
@@ -68,11 +67,6 @@ from autobot_shared.redis_client import get_async_redis_client
 from autobot_shared.ssot_constants import TTL_2_HOURS
 
 logger = logging.getLogger(__name__)
-
-
-def _redact_key(key: str) -> str:
-    """Return a short sha256 prefix of *key* for logs; keys carry usernames/IPs (#18087)."""
-    return hashlib.sha256(str(key).encode("utf-8")).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +151,8 @@ class RateLimiter:
     ) -> None:
         self._prefix = scope_prefix
         self._log_label = log_label
+        # Logs name the limiter only (prefix + optional label), never a key (#18087).
+        self._log_scope = f"{scope_prefix}/{log_label}" if log_label else scope_prefix
         self._db = redis_database
         tier_defaults = _get_tier_defaults()
         if default_tier not in tier_defaults:
@@ -205,18 +201,16 @@ class RateLimiter:
             redis = await get_async_redis_client(database=self._db)
             if redis is None:
                 logger.warning(
-                    "rate_limiter: Redis unavailable for key '%s:%s'; allowing request",
-                    self._prefix,
-                    _redact_key(key),
+                    "rate_limiter: Redis unavailable for limiter '%s'; allowing request",
+                    self._log_scope,
                 )
                 return True
 
             minute_count = await self._window_count(redis, key, "minute", now, 60)
             if minute_count >= rpm:
                 logger.debug(
-                    "rate_limiter: minute limit hit for %s:%s (%d/%d)",
-                    self._prefix,
-                    _redact_key(key),
+                    "rate_limiter: minute limit hit for %s (%d/%d)",
+                    self._log_scope,
                     minute_count,
                     rpm,
                 )
@@ -225,9 +219,8 @@ class RateLimiter:
             hour_count = await self._window_count(redis, key, "hour", now, 3600)
             if hour_count >= rph:
                 logger.debug(
-                    "rate_limiter: hour limit hit for %s:%s (%d/%d)",
-                    self._prefix,
-                    _redact_key(key),
+                    "rate_limiter: hour limit hit for %s (%d/%d)",
+                    self._log_scope,
                     hour_count,
                     rph,
                 )
@@ -236,9 +229,8 @@ class RateLimiter:
             return True
         except Exception as exc:
             logger.warning(
-                "rate_limiter: Redis error for key '%s:%s': %s; allowing request",
-                self._prefix,
-                _redact_key(key),
+                "rate_limiter: Redis error for limiter '%s': %s; allowing request",
+                self._log_scope,
                 exc,
             )
             return True
@@ -266,9 +258,8 @@ class RateLimiter:
             await pipe.execute()
         except Exception as exc:
             logger.warning(
-                "rate_limiter: failed to record request for '%s:%s': %s",
-                self._prefix,
-                _redact_key(key),
+                "rate_limiter: failed to record request for '%s': %s",
+                self._log_scope,
                 exc,
             )
 
@@ -292,9 +283,8 @@ class RateLimiter:
             redis = await get_async_redis_client(database=self._db)
             if redis is None:
                 logger.warning(
-                    "rate_limiter: Redis unavailable for key '%s:%s'; allowing request",
-                    self._prefix,
-                    _redact_key(key),
+                    "rate_limiter: Redis unavailable for limiter '%s'; allowing request",
+                    self._log_scope,
                 )
                 return True
 
@@ -331,9 +321,8 @@ class RateLimiter:
 
             if not allowed:
                 logger.debug(
-                    "rate_limiter: limit hit for %s:%s (rpm=%d, rph=%d)",
-                    self._prefix,
-                    _redact_key(key),
+                    "rate_limiter: limit hit for %s (rpm=%d, rph=%d)",
+                    self._log_scope,
                     rpm,
                     rph,
                 )
@@ -342,9 +331,8 @@ class RateLimiter:
 
         except Exception as exc:
             logger.warning(
-                "rate_limiter: Redis error for key '%s:%s': %s; allowing request",
-                self._prefix,
-                _redact_key(key),
+                "rate_limiter: Redis error for limiter '%s': %s; allowing request",
+                self._log_scope,
                 exc,
             )
             return True
@@ -395,9 +383,8 @@ class RateLimiter:
             return max(0, int(wait) + 1)  # +1 for safe rounding
         except Exception as exc:
             logger.warning(
-                "rate_limiter: get_retry_after failed for '%s:%s': %s",
-                self._prefix,
-                _redact_key(key),
+                "rate_limiter: get_retry_after failed for '%s': %s",
+                self._log_scope,
                 exc,
             )
             return 0
@@ -478,9 +465,8 @@ class RateLimiter:
             return bool(result[0]), max(0.0, float(result[1]))
         except Exception as exc:
             logger.warning(
-                "rate_limiter: window acquire error for '%s:%s': %s",
-                self._prefix,
-                _redact_key(key),
+                "rate_limiter: window acquire error for '%s': %s",
+                self._log_scope,
                 exc,
             )
             return True, 0.0
@@ -502,9 +488,8 @@ class RateLimiter:
             return max(0, max_requests - int(count))
         except Exception as exc:
             logger.warning(
-                "rate_limiter: get_remaining error for '%s:%s': %s",
-                self._prefix,
-                _redact_key(key),
+                "rate_limiter: get_remaining error for '%s': %s",
+                self._log_scope,
                 exc,
             )
             return max_requests
