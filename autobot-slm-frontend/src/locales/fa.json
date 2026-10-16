@@ -14,7 +14,7 @@
     "availableRolesAria": "Available roles",
     "cancel": "لغو",
     "closeDialogAria": "بستن کادر گفتگو",
-    "connectionFailed": "Connection Failed",
+    "connectionFailed": "اتصال ناموفق",
     "connectionInformation": "Connection Information",
     "connectionSuccessful": "Connection Successful",
     "deployPKICertificatesAfter": "Deploy PKI certificates after update",
@@ -162,7 +162,7 @@
       "noProcessesFoundForAgentValue0": "No processes found for agent \"{value0}\"",
       "processValue0Logs": "Process {value0}... Logs",
       "queued": "Queued",
-      "running": "Running",
+      "running": "در حال اجرا",
       "scriptPyFlag": "script.py --flag",
       "spawn": "Spawn",
       "spawnNewProcess": "Spawn New Process",
@@ -693,7 +693,7 @@
     },
     "nPUDetailsPanel": {
       "alertOnly": "Alert Only",
-      "available": "Available",
+      "available": "در دسترس",
       "avgLatency": "Avg Latency",
       "close": "بستن",
       "currentUtilization": "Current Utilization",
@@ -907,7 +907,7 @@
     "closeServicesPanelAria": "Close services panel",
     "confirmReboot": "Reboot node \"{hostname}\"? The node will go offline temporarily.",
     "confirmReenroll": "Re-enroll node \"{hostname}\"? This will reset it to pending status for fresh enrollment.",
-    "connectionFailed": "Connection Failed",
+    "connectionFailed": "اتصال ناموفق",
     "connectionSuccessful": "Connection Successful",
     "connectionTestResultAria": "Connection test result",
     "cpu": "CPU",
@@ -1144,7 +1144,7 @@
       "recommendationsValue0": "Recommendations ({value0})",
       "refresh": "Refresh",
       "totalAlerts": "Total Alerts",
-      "warning": "Warning",
+      "warning": "هشدار",
       "recommendationsUnavailable": "Recommendations are not available yet: the SLM has no source for them."
     },
     "errorMonitor": {
@@ -1250,7 +1250,7 @@
         "severityDebug": "Debug",
         "severityError": "خطا",
         "severityInfo": "اطلاعات",
-        "severityWarning": "Warning",
+        "severityWarning": "هشدار",
         "showingCountOfTotalEntries": "Showing {count} of {total} entries",
         "time": "Time"
       },
@@ -1452,7 +1452,7 @@
     "roles2": "نقش‌ها",
     "runAnsiblePlaybook": "Run Ansible Playbook",
     "runAnsiblePlaybookForFullRole": "Run Ansible playbook for full role installation",
-    "running": "Running",
+    "running": "در حال اجرا",
     "searchServices": "Search services...",
     "selectANode": "Select a node...",
     "selectANodeAboveToManage": "Select a node above to manage its roles.",
@@ -1997,7 +1997,7 @@
     "aPISettings": {
       "aPIEndpoints": "API Endpoints",
       "autoBotBackendProxied": "AutoBot Backend (Proxied)",
-      "backendAPI": "Backend API",
+      "backendAPI": "API بک‌اند",
       "configurationReference": "Configuration Reference",
       "connectionStatus": "Connection Status",
       "copyToClipboard": "Copy to clipboard",
@@ -2201,7 +2201,7 @@
         "update": "Update",
         "username": "نام کاربری",
         "varLogAutobotForwardedLog": "/var/log/autobot-forwarded.log",
-        "warning": "Warning",
+        "warning": "هشدار",
         "statusUnknown": "Unknown"
       },
       "nPUWorkersSettings": {
@@ -2576,7 +2576,7 @@
       "bindAddress": "Bind address",
       "checking": "در حال بررسی...",
       "connectedToBackend": "Connected to Backend",
-      "connectionFailed": "Connection Failed",
+      "connectionFailed": "اتصال ناموفق",
       "currentBackendAPIURL": "Current backend API URL",
       "debug": "Debug",
       "error": "خطا",
@@ -2593,7 +2593,7 @@
       "test": "Test",
       "theseSettingsAreRead": "These settings are read-only and configured in the backend.",
       "timeBeforeANode": "Time before a node is marked offline (seconds)",
-      "warning": "Warning"
+      "warning": "هشدار"
     },
     "disposalPolicySettings": {
       "controlsHowCompanyOSProjectsAre": "Controls how Company OS projects are disposed after archiving. Default: immediate, no approval.",
@@ -3097,7 +3097,7 @@
         "refresh": "Refresh",
         "reportGeneration": "Report Generation",
         "retry": "Retry",
-        "running": "Running",
+        "running": "در حال اجرا",
         "started": "شروع‌شده",
         "totalJobs": "Total Jobs",
         "value0Value1ItemsValue2": "{value0} / {value1} items ({value2}%)"
