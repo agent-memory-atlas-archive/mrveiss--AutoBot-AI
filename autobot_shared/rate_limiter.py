@@ -68,6 +68,7 @@ from autobot_shared.ssot_constants import TTL_2_HOURS
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
 # Default tiered limits
 # These are read at class-instantiation time from ssot_config when present,
@@ -134,6 +135,9 @@ class RateLimiter:
         used.
     redis_database:
         Redis logical database name (default ``"main"``).
+    log_label:
+        When set, ``acquire_window`` logs a warning (label, limit, window --
+        never the key) on each rejection; the default keeps it silent.
     """
 
     def __init__(
@@ -143,8 +147,12 @@ class RateLimiter:
         requests_per_minute: int | None = None,
         requests_per_hour: int | None = None,
         redis_database: str = "main",
+        log_label: str | None = None,
     ) -> None:
         self._prefix = scope_prefix
+        self._log_label = log_label
+        # Logs name the limiter only (prefix + optional label), never a key (#18087).
+        self._log_scope = f"{scope_prefix}/{log_label}" if log_label else scope_prefix
         self._db = redis_database
         tier_defaults = _get_tier_defaults()
         if default_tier not in tier_defaults:
@@ -193,18 +201,16 @@ class RateLimiter:
             redis = await get_async_redis_client(database=self._db)
             if redis is None:
                 logger.warning(
-                    "rate_limiter: Redis unavailable for key '%s:%s'; allowing request",
-                    self._prefix,
-                    key,
+                    "rate_limiter: Redis unavailable for limiter '%s'; allowing request",
+                    self._log_scope,
                 )
                 return True
 
             minute_count = await self._window_count(redis, key, "minute", now, 60)
             if minute_count >= rpm:
                 logger.debug(
-                    "rate_limiter: minute limit hit for %s:%s (%d/%d)",
-                    self._prefix,
-                    key,
+                    "rate_limiter: minute limit hit for %s (%d/%d)",
+                    self._log_scope,
                     minute_count,
                     rpm,
                 )
@@ -213,9 +219,8 @@ class RateLimiter:
             hour_count = await self._window_count(redis, key, "hour", now, 3600)
             if hour_count >= rph:
                 logger.debug(
-                    "rate_limiter: hour limit hit for %s:%s (%d/%d)",
-                    self._prefix,
-                    key,
+                    "rate_limiter: hour limit hit for %s (%d/%d)",
+                    self._log_scope,
                     hour_count,
                     rph,
                 )
@@ -224,9 +229,8 @@ class RateLimiter:
             return True
         except Exception as exc:
             logger.warning(
-                "rate_limiter: Redis error for key '%s:%s': %s; allowing request",
-                self._prefix,
-                key,
+                "rate_limiter: Redis error for limiter '%s': %s; allowing request",
+                self._log_scope,
                 exc,
             )
             return True
@@ -254,9 +258,8 @@ class RateLimiter:
             await pipe.execute()
         except Exception as exc:
             logger.warning(
-                "rate_limiter: failed to record request for '%s:%s': %s",
-                self._prefix,
-                key,
+                "rate_limiter: failed to record request for '%s': %s",
+                self._log_scope,
                 exc,
             )
 
@@ -280,9 +283,8 @@ class RateLimiter:
             redis = await get_async_redis_client(database=self._db)
             if redis is None:
                 logger.warning(
-                    "rate_limiter: Redis unavailable for key '%s:%s'; allowing request",
-                    self._prefix,
-                    key,
+                    "rate_limiter: Redis unavailable for limiter '%s'; allowing request",
+                    self._log_scope,
                 )
                 return True
 
@@ -319,9 +321,8 @@ class RateLimiter:
 
             if not allowed:
                 logger.debug(
-                    "rate_limiter: limit hit for %s:%s (rpm=%d, rph=%d)",
-                    self._prefix,
-                    key,
+                    "rate_limiter: limit hit for %s (rpm=%d, rph=%d)",
+                    self._log_scope,
                     rpm,
                     rph,
                 )
@@ -330,9 +331,8 @@ class RateLimiter:
 
         except Exception as exc:
             logger.warning(
-                "rate_limiter: Redis error for key '%s:%s': %s; allowing request",
-                self._prefix,
-                key,
+                "rate_limiter: Redis error for limiter '%s': %s; allowing request",
+                self._log_scope,
                 exc,
             )
             return True
@@ -383,9 +383,8 @@ class RateLimiter:
             return max(0, int(wait) + 1)  # +1 for safe rounding
         except Exception as exc:
             logger.warning(
-                "rate_limiter: get_retry_after failed for '%s:%s': %s",
-                self._prefix,
-                key,
+                "rate_limiter: get_retry_after failed for '%s': %s",
+                self._log_scope,
                 exc,
             )
             return 0
@@ -400,6 +399,7 @@ class RateLimiter:
         max_requests: int,
         window_seconds: int,
         wait: bool = False,
+        log_label: str | None = None,
     ) -> bool:
         """Atomic check+record against a single, arbitrary-size window.
 
@@ -412,10 +412,16 @@ class RateLimiter:
         When *wait* is True, blocks (async sleep) and retries until a slot
         frees up instead of returning False — matches the blocking-retry
         behavior of the forks above, none of which ever rejected a caller.
+
+        A rejection is logged (label, limit, window; never *key*) only when
+        *log_label* or the constructor's ``log_label`` is set (#18087).
         """
         while True:
             allowed, retry_after = await self._try_acquire_window(key, max_requests, window_seconds)
             if allowed or not wait:
+                label = log_label or self._log_label
+                if label and not allowed:
+                    logger.warning("Rate limit exceeded: %s over %s requests/%ss", label, max_requests, window_seconds)
                 return allowed
             await asyncio.sleep(max(retry_after, 0.05))
 
@@ -459,9 +465,8 @@ class RateLimiter:
             return bool(result[0]), max(0.0, float(result[1]))
         except Exception as exc:
             logger.warning(
-                "rate_limiter: window acquire error for '%s:%s': %s",
-                self._prefix,
-                key,
+                "rate_limiter: window acquire error for '%s': %s",
+                self._log_scope,
                 exc,
             )
             return True, 0.0
@@ -483,9 +488,8 @@ class RateLimiter:
             return max(0, max_requests - int(count))
         except Exception as exc:
             logger.warning(
-                "rate_limiter: get_remaining error for '%s:%s': %s",
-                self._prefix,
-                key,
+                "rate_limiter: get_remaining error for '%s': %s",
+                self._log_scope,
                 exc,
             )
             return max_requests

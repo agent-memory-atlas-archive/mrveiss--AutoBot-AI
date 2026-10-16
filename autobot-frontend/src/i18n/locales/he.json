@@ -223,7 +223,8 @@
       "tip": "ממשק מינימלי — הסתרת יכולות מתקדמות",
       "announceMinimal": "הממשק המינימלי הופעל. יכולות מתקדמות מוסתרות.",
       "announceFull": "הממשק המלא הופעל. כל היכולות מוצגות."
-    }
+    },
+    "llcLedger": "יומן הסוכנים"
   },
   "llcCompanyStatus": {
     "showArchived": "הצג בארכיון",
@@ -8920,6 +8921,70 @@
       "retry": "נסה שוב",
       "loadingItem": "טוען פריט עבודה…",
       "itemLoadFailed": "לא ניתן לטעון את פריט העבודה הזה"
+    },
+    "ledger": {
+      "title": "יומן הסוכנים",
+      "subtitle": "מי עובד על מה בחברה הזו, ומי ממתין.",
+      "tabsAria": "תצוגות היומן",
+      "tabs": {
+        "now": "עובדים כעת",
+        "claims": "תפיסות",
+        "contention": "תחרות",
+        "activity": "פעילות"
+      },
+      "col": {
+        "agent": "סוכן",
+        "kind": "סוג",
+        "status": "מצב",
+        "detail": "פרטים",
+        "scope": "היקף",
+        "mode": "מצב פעולה",
+        "intent": "כוונה",
+        "expires": "פג תוקף",
+        "renewals": "חידושים"
+      },
+      "busy": "עסוק",
+      "idle": "פנוי",
+      "peerMessages": "הודעות עמיתים ממתינות",
+      "idleSubscribers": "מינויי זמן סרק",
+      "pendingFor": "{n} ממתינות עבור {name}",
+      "waitsForIdle": "{who} ממתין עד ש-{target} יתפנה",
+      "heldBy": "מוחזק על ידי {agent}",
+      "waitlistAria": "רשימת המתנה לפי הסדר",
+      "silenceMeansHold": "בקשה אינה שחרור: שתיקה פירושה החזקה, ותפיסה שלא חודשה פגה מעצמה.",
+      "ask": "בקשו מהמחזיק לשחרר",
+      "askAria": "בקשו ממחזיק {scope} לשחרר אותו",
+      "conflicts": "התנגשויות",
+      "recent": "פעילות אחרונה",
+      "conflict": {
+        "release_refused": "שחרור נדחה",
+        "claim_expired": "תפיסה פגה בזמן החזקה",
+        "yield_unanswered": "בקשת ויתור נותרה ללא מענה",
+        "claim_lapsed_during_action": "תפיסה פגה במהלך פעולה"
+      },
+      "empty": {
+        "presence": "אף סוכן לא דיווח",
+        "peerMessages": "אין הודעות ממתינות",
+        "idleSubscribers": "אין מינויי זמן סרק",
+        "claims": "אין תפיסות",
+        "contention": "אין תחרות",
+        "conflicts": "אין התנגשויות",
+        "activity": "אין פעילות אחרונה"
+      },
+      "state": {
+        "loading": "קורא את היומן…",
+        "unavailableTitle": "לא ניתן היה לקרוא את היומן",
+        "unavailableBody": "המאגר {source} לא הגיב. זה לא כמו שאין רשומות.",
+        "errorTitle": "אירעה שגיאה בטעינת הקטע הזה"
+      },
+      "askState": {
+        "sending": "שולח…",
+        "sent": "הבקשה נשלחה — המחזיק מחליט; שתיקה פירושה החזקה.",
+        "tooSoon": "שאלתם על התפיסה הזו לפני רגע; נסו שוב בעוד דקה.",
+        "notFound": "המשימה הזו כבר לא מחזיקה בתפיסה — רעננו כדי לראות מי מחזיק בה כעת.",
+        "unavailable": "לא ניתן היה להגיע ליומן; דבר לא נשלח.",
+        "error": "משהו השתבש ולא ניתן היה לאשר את המסירה. רעננו כדי לראות אם התביעה עדיין מוחזקת."
+      }
     }
   },
   "code": {
@@ -9677,5 +9742,161 @@
       "pushFailed": "לא ניתן היה להוסיף הקלטה זו למסד הידע. נסה שוב.",
       "collectionNotJoined": "נשמר, אך האוסף שציינת לא נמצא — התמלול נמצא במאגר הידע אך לא באוסף הזה."
     }
+  },
+  "systemStatus": {
+    "summary": {
+      "issues": "זוהו בעיות במערכת",
+      "warnings": "אזהרות מערכת",
+      "ok": "כל המערכות פועלות"
+    },
+    "tooltip": {
+      "issues": "לחצו להצגת בעיות המערכת",
+      "warnings": "לחצו להצגת אזהרות המערכת",
+      "ok": "לחצו להצגת מצב המערכת - כל השירותים פועלים"
+    },
+    "aria": {
+      "issues": "מצב המערכת: זוהו בעיות",
+      "warnings": "מצב המערכת: קיימות אזהרות",
+      "ok": "מצב המערכת: כל השירותים פועלים"
+    },
+    "description": {
+      "servicesDown": "שירות {n} מושבת | {n} שירותים מושבתים",
+      "warnings": "אזהרה {n} | {n} אזהרות",
+      "withWarnings": "שירות {n} עם אזהרות | {n} שירותים עם אזהרות",
+      "downAndWarnings": "{down} ו-{warnings}",
+      "ok": "כל השירותים פועלים כרגיל"
+    },
+    "service": {
+      "backend": "API של השרת",
+      "frontend": "ממשק קדמי",
+      "websocket": "WebSocket",
+      "redis": "Redis",
+      "ollama": "Ollama",
+      "npu_worker": "עובד NPU",
+      "browser": "שירות דפדפן",
+      "chromadb": "מחסנית בינה מלאכותית (ChromaDB)",
+      "other": "שירותים אחרים"
+    },
+    "state": {
+      "running": "פועל",
+      "connected": "מחובר",
+      "statusUnknown": "המצב לא ידוע",
+      "connectionFailed": "החיבור נכשל",
+      "timeout": "תם הזמן",
+      "connectionRefused": "החיבור נדחה",
+      "unreachable": "לא נגיש",
+      "unhealthy": "לא תקין",
+      "warning": "אזהרה",
+      "pending": "ממתין",
+      "available": "זמין",
+      "unavailable": "לא זמין",
+      "http": "HTTP {code}"
+    },
+    "probe": {
+      "degraded": "פגוע — בדיקות המצב חרגו מהזמן, השרת מגיב",
+      "degradedAsOf": "פגוע — בדיקות המצב חרגו מהזמן, השרת מגיב — מצב נכון ל-{time}",
+      "unreachable": "לא נגיש — מצב השירותים לא ידוע",
+      "unreachableAsOf": "לא נגיש — מצב השירותים לא ידוע — מצב נכון ל-{time}"
+    },
+    "lastKnown": "{text} (ידוע לאחרונה)"
+  },
+  "schedule": {
+    "title": "תזמון",
+    "repeats": "חזרה",
+    "repeat": {
+      "minutes": "כל כמה דקות",
+      "hourly": "כל שעה",
+      "daily": "יומי",
+      "weekly": "שבועי",
+      "monthly": "חודשי",
+      "once": "פעם אחת"
+    },
+    "every": "כל",
+    "minutesUnit": "דקות",
+    "onlyBetween": "רק בין",
+    "windowFrom": "מ־",
+    "windowTo": "עד",
+    "and": "ו",
+    "onDays": "בימים (אופציונלי)",
+    "daysHintAny": "אם לא נבחר דבר, התזמון חל בכל יום.",
+    "onDaysRequired": "בימים",
+    "atMinute": "בדקה",
+    "at": "בשעה",
+    "hour": "שעה",
+    "minute": "דקה",
+    "weekdaysOnly": "ימי עבודה בלבד",
+    "monthly": {
+      "which": "איזה יום בחודש",
+      "day": "יום בחודש",
+      "lastDay": "היום האחרון",
+      "nth": "יום בשבוע בחודש",
+      "onDay": "ביום",
+      "onThe": "ב־"
+    },
+    "nth": {
+      "1": "הראשון",
+      "2": "השני",
+      "3": "השלישי",
+      "4": "הרביעי",
+      "last": "האחרון"
+    },
+    "weekday": "יום בשבוע",
+    "shortMonths": "חודשים שאין בהם יום זה ירוצו ביום האחרון של החודש.",
+    "date": "תאריך",
+    "timezone": "אזור זמן",
+    "zone": {
+      "company": "שעון החברה",
+      "usesCompany": "משתמש באזור הזמן של החברה."
+    },
+    "summary": {
+      "minutes": "כל {every} דקות",
+      "minutesWeekdays": "כל {every} דקות בימי עבודה",
+      "minutesDays": "כל {every} דקות, בימים: {days}",
+      "minutesWindow": "כל {every} דקות בין {from} ל־{to}",
+      "minutesWindowWeekdays": "כל {every} דקות בין {from} ל־{to} בימי עבודה",
+      "minutesWindowDays": "כל {every} דקות בין {from} ל־{to}, בימים: {days}",
+      "hourly": "כל שעה בדקה {minute}",
+      "daily": "כל יום בשעה {time}",
+      "dailyWeekdays": "כל יום עבודה בשעה {time}",
+      "weekly": "כל שבוע: {days}, בשעה {time}",
+      "monthlyDay": "ביום {day} בכל חודש בשעה {time}",
+      "monthlyLastDay": "ביום האחרון של כל חודש בשעה {time}",
+      "monthlyNth1": "ב{weekday} הראשון של כל חודש בשעה {time}",
+      "monthlyNth2": "ב{weekday} השני של כל חודש בשעה {time}",
+      "monthlyNth3": "ב{weekday} השלישי של כל חודש בשעה {time}",
+      "monthlyNth4": "ב{weekday} הרביעי של כל חודש בשעה {time}",
+      "monthlyNthLast": "ב{weekday} האחרון של כל חודש בשעה {time}",
+      "once": "פעם אחת ב־{date} בשעה {time}",
+      "withZone": "{summary} ({zone})",
+      "custom": "תזמון מותאם אישית"
+    },
+    "customNote": "לא ניתן להציג תזמון זה באמצעות לחיצות.",
+    "editCron": "עריכה כ־cron",
+    "doneEditing": "סיום העריכה",
+    "nextRuns": "ההרצות הבאות",
+    "noRuns": "אין הרצות קרובות.",
+    "previewLoading": "בודק מול השרת...",
+    "previewApprox": "משוער: השרת מאשר את השעות המדויקות בעת השמירה.",
+    "previewUnavailable": "לא ניתן להציג תצוגה מקדימה לתזמון זה.",
+    "advanced": "מתקדם: נשמר כ־",
+    "saved": {
+      "cron": "cron רגיל",
+      "calendar": "כלל לוח שנה",
+      "once": "הרצה חד־פעמית"
+    },
+    "savedAs": "התזמון שנשמר",
+    "savedNote": {
+      "once": "רץ פעם אחת. לא נשמר cron חוזר."
+    },
+    "cronLabel": "ביטוי cron",
+    "cronHint": "cron רגיל בעל חמישה שדות בלבד: דקה, שעה, יום בחודש, חודש, יום בשבוע. הבורר והשדה הזה נשארים מסונכרנים.",
+    "cron_extension_unsupported": "{token} אינו cron רגיל. השתמשו בבורר לתזמונים כמו יום שישי האחרון בחודש.",
+    "invalid_timezone": "אזור הזמן הזה אינו מוכר.",
+    "once_in_past": "התאריך והשעה האלה כבר עברו.",
+    "invalid_rrule": "כלל לוח השנה הזה אינו תקין.",
+    "invalid_cron": "הזינו cron רגיל בעל חמישה שדות, למשל 0 9 * * 1-5.",
+    "invalid_generic": "התזמון הזה אינו תקין.",
+    "conflicting_fields": "תזמון נשמר כ־cron או ככלל לוח שנה או כהרצה חד־פעמית, אף פעם לא כשניהם.",
+    "gatedNote": "היום האחרון, יום בשבוע בחודש, הימים 29 עד 31 והרצות חד־פעמיות יהיו זמינים לאחר עדכון המתזמן."
   }
 }

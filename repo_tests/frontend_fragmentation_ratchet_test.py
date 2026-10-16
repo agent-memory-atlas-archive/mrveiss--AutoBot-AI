@@ -99,18 +99,18 @@ BASELINE = {
     # cross-referencing sibling admin views) -- this pair is documented above
     # as measuring page SIZE, not duplication, and is interim until #15455
     # replaces them with a real duplication measure.
-    "distinct_class_names": 5596,  # #17565: App.vue's hand-rolled .skip-links/.skip-link
+    "distinct_class_names": 5594,  # #17565: App.vue's hand-rolled .skip-links/.skip-link
     # replaced by the shared kit SkipLink (lowered from 5615). Earlier: #17020,
     # Terminal.vue removed -- pure deletion of dead code, lowered, not held.
-    # #18354: DarkModeToggle and the main-app LanguageSwitcher left for the kit (5613 -> 5596).
+    # #18354: DarkModeToggle and the main-app LanguageSwitcher left for the kit (5611 -> 5594).
     # Total CSS rule declarations.
     #
     # #16972/#15455: same owner-approved, one-off exception as distinct_class_names
     # directly above -- see that comment.
-    "css_rule_declarations": 9357,  # #14785: density reuses the existing
+    "css_rule_declarations": 9354,  # #14785: density reuses the existing
     # [data-layout-density] attribute (no .density-* classes), and the dead
     # assets/main.css .sr-only rule went with that file (lowered from 9379).
-    # #18354: DarkModeToggle and the main-app LanguageSwitcher left for the kit (9374 -> 9357).
+    # #18354: DarkModeToggle and the main-app LanguageSwitcher left for the kit (9371 -> 9354).
     # #17565: the App.vue skip-link rules moved to the kit (lowered from 9381);
     # #18240: App.vue scoped style + ThemePresetPicker .sr-only + LoginForm .logo-mark (lowered from 9378);
     # earlier #17020, same reason as distinct_class_names
