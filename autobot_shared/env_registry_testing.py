@@ -73,6 +73,21 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT",
+        type=int,
+        default=450,
+        description=(
+            "Seconds the pre-push gate allows vue-tsc per frontend project. vue-tsc checks the "
+            "whole project whatever the changeset (111 s idle, ~294 s under load measured), so "
+            "the budget is project-sized, not changeset-scaled. A non-integer or zero value falls "
+            "back to 450 with a warning; capped at the hook's MAX_BUDGET (#18578)."
+        ),
+        component="testing",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_PREPUSH_PYTEST_WORKERS",
         type=int,
         default=4,
