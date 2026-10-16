@@ -458,7 +458,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/monitoring/performance_optimizer.py": 773,
     "autobot-slm-backend/services/backup.py": 777,
     "autobot-slm-backend/services/blue_green.py": 1282,
-    "autobot-slm-backend/services/deployment.py": 1016,
+    "autobot-slm-backend/services/deployment.py": 712,
     "autobot-slm-backend/services/drift_checker.py": 839,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,
