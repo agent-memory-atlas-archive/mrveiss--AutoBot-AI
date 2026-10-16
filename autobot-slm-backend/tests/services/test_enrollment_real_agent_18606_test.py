@@ -124,6 +124,41 @@ def test_autobot_shared_is_installed_before_the_agent_without_a_handler() -> Non
     assert install < next(i for i, t in enumerate(tasks) if "ansible.builtin.import_role" in t)
     assert "notify" not in tasks[install]
     assert "ansible.builtin.copy" in tasks[install]
+    assert tasks[install]["ansible.builtin.copy"]["mode"] == "u=rwX,g=rX,o=rX"
+    dirs = next(t for t in tasks if t["name"].startswith("Create the autobot_shared directories"))
+    assert dirs["ansible.builtin.file"]["mode"] == "u=rwX,g=rX,o=rX"
+
+
+def _filter_task() -> dict:
+    return next(t for t in _tasks() if t["name"].startswith("Filter out caches"))
+
+
+def _role_rsync_excludes() -> set[str]:
+    role = yaml.safe_load((_ROLES / "autobot_shared" / "tasks" / "main.yml").read_text(encoding="utf-8"))
+    sync = next(t for t in role if "ansible.posix.synchronize" in t)["ansible.posix.synchronize"]
+    return {o.split("=", 1)[1] for o in sync["rsync_opts"] if o.startswith("--exclude=")}
+
+
+def _kept(paths: list[str]) -> list[str]:
+    """Render the playbook's own filter expression with jinja2 over synthetic find results."""
+    import jinja2
+
+    task = _filter_task()
+    expr = task["ansible.builtin.set_fact"]["shared_rels"]
+    ctx = {**task["vars"], "shared_src": "/src/autobot_shared"}
+    ctx["shared_found"] = {"files": [{"path": "/src/autobot_shared/" + p} for p in paths]}
+    return [r for r in jinja2.Template(expr).render(**ctx).split("\n") if r]
+
+
+def test_shared_excludes_equal_the_roles_rsync_excludes() -> None:
+    assert set(_filter_task()["vars"]["shared_excludes"]) == _role_rsync_excludes()
+
+
+def test_the_filter_drops_caches_env_egg_info_and_git_but_keeps_sources() -> None:
+    dropped = ["__pycache__/x.pyc", ".env", "x.egg-info/PKG-INFO", ".git/config", "sub/__pycache__/y.py", "a/prod.env"]
+    kept = ["redis_client.py", "sub/pkg/__init__.py"]
+    assert _kept(dropped + kept) == kept
+    assert _kept(dropped) == []
 
 
 def test_no_synchronize_on_the_enrollment_path() -> None:
@@ -175,9 +210,20 @@ def test_the_template_and_its_helpers_are_gone(deployment) -> None:
 _SECRET = "s3cr3t-pw-18606"  # pragma: allowlist secret
 
 
+class _UnsafeLoader(yaml.SafeLoader):
+    """Understands `!unsafe`: yields the literal string, wrapped so the tag is checkable."""
+
+
+class _Unsafe(str):
+    pass
+
+
+_UnsafeLoader.add_constructor("!unsafe", lambda ld, node: _Unsafe(ld.construct_scalar(node)))
+
+
 def _inspect(path: Path) -> tuple[int, dict]:
-    """Mode and JSON content of the secrets file, read synchronously."""
-    return stat.S_IMODE(os.stat(path).st_mode), json.loads(path.read_text(encoding="utf-8"))
+    """Mode and parsed content of the secrets file, read synchronously."""
+    return stat.S_IMODE(os.stat(path).st_mode), yaml.load(path.read_text(encoding="utf-8"), Loader=_UnsafeLoader)
 
 
 def _run_enrollment(deployment, monkeypatch, tmp_path, returncode: int):
@@ -227,3 +273,16 @@ def test_secrets_leave_argv_and_the_file_is_private_and_removed(deployment, monk
     assert seen["content"] == {"ansible_ssh_pass": _SECRET, "ansible_become_pass": _SECRET}
     assert not seen["path"].exists(), "the secrets file must be deleted after the run, failure included"
     assert seen.get("raised", False) == (returncode != 0)
+
+
+def test_a_templating_password_round_trips_as_an_unsafe_literal(deployment, monkeypatch, tmp_path) -> None:
+    tricky = "p{{ lookup('env','HOME') }}%x{% if 1 %}\"\\"
+    monkeypatch.setattr(deployment.shutil, "which", lambda _n: "/usr/bin/sshpass")
+    path = Path(deployment.DeploymentService()._write_enrollment_secrets(tricky))
+    try:
+        mode, content = _inspect(path)
+    finally:
+        path.unlink()
+    assert mode == 0o600
+    assert all(type(v) is _Unsafe for v in content.values())
+    assert content == {"ansible_ssh_pass": tricky, "ansible_become_pass": tricky}

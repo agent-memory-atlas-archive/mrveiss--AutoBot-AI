@@ -586,18 +586,16 @@ class DeploymentService:
         ]
 
     def _write_enrollment_secrets(self, ssh_password: str) -> str:
-        """Write the SSH/become password to a 0600 JSON vars file; return its path.
-
-        Secrets go via `-e @file`, never argv, where `ps` would show them. The caller
-        deletes the file once the playbook ends.
-        """
+        """Write the password to a 0600 `!unsafe` YAML vars file (`-e @file`, never argv); return its path."""
         if not shutil.which("sshpass"):
             raise RuntimeError("Password auth requires 'sshpass'. Install: sudo apt install sshpass")
-        fd, path = tempfile.mkstemp(prefix="enroll-secrets-", suffix=".json")
+        fd, path = tempfile.mkstemp(prefix="enroll-secrets-", suffix=".yml")
         try:
             os.fchmod(fd, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump({"ansible_ssh_pass": ssh_password, "ansible_become_pass": ssh_password}, handle)
+                handle.write(
+                    "ansible_ssh_pass: !unsafe {0}\nansible_become_pass: !unsafe {0}\n".format(json.dumps(ssh_password))
+                )
         except BaseException:
             Path(path).unlink(missing_ok=True)
             raise
