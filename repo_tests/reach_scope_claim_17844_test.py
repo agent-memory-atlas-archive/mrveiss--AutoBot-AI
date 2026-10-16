@@ -54,6 +54,7 @@ import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  
 import repo_tests.one_actor_id_15754_test as _actor_id_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_bm25_formula_18183_test as _bm25_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_brand_mark_and_announcer_18240_test as _brand_mark_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_circuit_breaker_18554_test as _circuit_breaker_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_claim_model_18086_test as _claim_model_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_content_digest_15722_test as _content_digest_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_deployment_mode_detector_12771_test as _deployment_mode_guard  # noqa: F401 -- registers its scope
@@ -76,6 +77,7 @@ import repo_tests.provider_key_env_reads_route_through_vault_18094_test as _prov
 import repo_tests.redis_direct_constructor_18553_test as _redis_constructor_guard  # noqa: F401 -- registers its scope
 import repo_tests.root_resolver_single_source_18101_test as _root_resolver_guard  # noqa: F401 -- registers its scope
 import repo_tests.single_attribute_writer_18240_test as _attribute_writer_guard  # noqa: F401 -- registers its scope
+import repo_tests.slm_backend_no_embedded_playbook_18606_test as _embedded_playbook_guard  # noqa: F401 -- registers its scope
 from repo_tests._paths import repo_root
 from repo_tests._reach import Reach, ReachScopeError, declare
 from repo_tests._reach_scope import relative_paths, scope_complaint
@@ -296,6 +298,16 @@ _DECLARED_SCOPES = {
         "autobot-infrastructure",
         "autobot-monitoring",
     ),
+    "hand-rolled-circuit-breaker-scan": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "autobot-npu-worker",
+        "autobot-tts-worker",
+        "autobot-browser-worker",
+        "plugins",
+        "libs",
+    ),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "redis-direct-constructor-scan": (
         "autobot-backend",
@@ -312,6 +324,7 @@ _DECLARED_SCOPES = {
         "libs",
         "debug",
     ),
+    "slm-backend-embedded-playbook-scan": ("autobot-slm-backend",),
     "one-playwright-server-scan": (
         "autobot-browser-worker",
         "autobot-infrastructure",

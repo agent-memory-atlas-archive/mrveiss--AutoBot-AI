@@ -104,6 +104,9 @@ export type { DurationStyle } from './src/utils/duration'
 export { log, createLogger } from './src/utils/logger'
 export type { LogLevel } from './src/utils/logger'
 
+export { default as SchedulePicker } from './src/components/SchedulePicker.vue'
+export * from './src/schedule'
+
 // Agent-ledger answers and their section states (#18391) — one reading of the
 // shared response shapes for the Company OS and SLM ledger views.
 export {
