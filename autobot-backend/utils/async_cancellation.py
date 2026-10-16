@@ -86,6 +86,18 @@ class OperationCancelledException(Exception):
         self.message: str = message
 
 
+def _redis_breaker_open(database: str = "main") -> bool:
+    """True when the canonical Redis breaker for *database* is open (#18553).
+
+    Reads cached manager state (no ping); ``circuit_breaker_state`` is set to
+    "open" when the breaker trips and back to "closed" on the next success.
+    """
+    from autobot_shared.redis_client import get_redis_health
+
+    db_health = get_redis_health().get("databases", {}).get(database, {})
+    return db_health.get("metrics", {}).get("circuit_breaker_state") == "open"
+
+
 class ResourceMonitor:
     """Monitor resource availability to trigger cancellation"""
 
@@ -113,9 +125,7 @@ class ResourceMonitor:
 
         # Quick Redis check
         try:
-            from utils.redis_immediate_connection import redis_circuit_breaker
-
-            self.redis_available = not redis_circuit_breaker.is_circuit_open
+            self.redis_available = not _redis_breaker_open()
         except Exception:
             self.redis_available = False
 
