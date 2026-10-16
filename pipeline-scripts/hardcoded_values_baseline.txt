@@ -350,7 +350,6 @@
 1|other|autobot-backend/llc/services/work_product_service.py|50
 1|other|autobot-backend/llc/tests/conftest.py|"/opt/autobot/data/code-sources/{source_id}/
 1|other|autobot-backend/llc/tests/conftest.py|http://test
-3|other|autobot-backend/llm_multi_provider.py|"user"
 1|other|autobot-backend/llm_shared/adapters/ai_stack_adapter.py|"user"
 1|other|autobot-backend/llm_shared/adapters/layer_inference_adapter.py|"user"
 1|other|autobot-backend/llm_shared/adapters/process_adapter.py|"system"

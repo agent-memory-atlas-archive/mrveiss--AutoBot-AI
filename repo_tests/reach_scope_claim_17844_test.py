@@ -35,6 +35,7 @@ import repo_tests.audit_writer_single_source_17225_test as _audit_writer_guard  
 import repo_tests.chat_history_async_calls_awaited_18316_test as _chat_async_guard  # noqa: F401 -- registers its scope
 import repo_tests.chat_single_delete_implementation_18316_test as _chat_delete_guard  # noqa: F401 -- registers its scope
 import repo_tests.chunker_private_embedding_hooks_18185_test as _chunker_hooks_guard  # noqa: F401 -- registers its scope
+import repo_tests.compat_module_needs_importer_18552_test as _compat_importer_guard  # noqa: F401 -- registers its scope
 import repo_tests.concept_forks_17856_test as _concept_forks_guard  # noqa: F401 -- registers its scope
 import repo_tests.conftest_stubset_primitives_13596_test as _conftest_stubset_guard  # noqa: F401 -- registers its scope
 import repo_tests.container_hardening_single_source_17267_test as _hardening_guard  # noqa: F401 -- registers its scope
@@ -211,6 +212,7 @@ _DECLARED_SCOPES = {
     "migration-gate-test-import-sweep": ("autobot-backend/tests/migrations",),
     "paths-filter-workflow-sweep": (".github/workflows",),
     "anti-pattern-type-emitters": ("autobot-backend/code_analysis", "autobot-backend/code_intelligence"),
+    "compat-module-needs-importer": ("autobot-backend",),
     "chat-history-async-calls-awaited": ("autobot-backend/api",),
     "chat-single-delete-implementation": ("autobot-backend/api",),
     "ai-line-single-policy": ("autobot-backend", "autobot_shared"),
