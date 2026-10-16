@@ -10,37 +10,59 @@ is the canonical ``get_redis_health()`` payload shape.
 """
 
 import asyncio
+import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from autobot_shared.redis_management.connection_manager import RedisConnectionManager
 from utils.async_cancellation import ResourceMonitor
 
-_HEALTH = "autobot_shared.redis_client.get_redis_health"
+
+def _with_manager(factory):
+    """Patch the REAL redis_client's manager getter (the conftest stand-in delegates to it)."""
+    from autobot_shared import redis_client as stand_in
+
+    return patch.dict(stand_in.is_redis_circuit_open.__globals__, {"_get_connection_manager": factory})
 
 
-def _health(main_state: str) -> dict:
-    return {"databases": {"main": {"state": "failed", "metrics": {"circuit_breaker_state": main_state}}}}
+def _manager(open_: bool, age_s: float) -> RedisConnectionManager:
+    m = object.__new__(RedisConnectionManager)
+    m._config_broken = set()
+    m._circuit_open = {"main": open_}
+    m._failure_counts = {"main": 5}
+    m._last_failure_times = {"main": time.time() - age_s}
+    m._pool_config = SimpleNamespace(circuit_breaker_timeout=60)
+    return m
 
 
-def _redis_available() -> bool:
-    return asyncio.run(ResourceMonitor().check_resources())["redis"]
+def _redis_available(manager) -> bool:
+    with _with_manager(lambda: manager):
+        return asyncio.run(ResourceMonitor().check_resources())["redis"]
 
 
-def test_open_canonical_breaker_means_redis_unavailable():
-    with patch(_HEALTH, return_value=_health("open")):
-        assert _redis_available() is False
+def test_open_breaker_before_timeout_means_redis_unavailable():
+    assert _redis_available(_manager(True, age_s=1)) is False
 
 
-def test_closed_canonical_breaker_means_redis_available():
-    with patch(_HEALTH, return_value=_health("closed")):
-        assert _redis_available() is True
+def test_open_breaker_past_timeout_with_no_traffic_means_available():
+    m = _manager(True, age_s=120)
+    assert _redis_available(m) is True
+    assert m._circuit_open["main"] is True  # the read has no side effects
+
+
+def test_closed_breaker_means_redis_available():
+    assert _redis_available(_manager(False, age_s=1)) is True
 
 
 def test_other_database_breaker_does_not_flip_main():
-    health = {"databases": {"knowledge": {"metrics": {"circuit_breaker_state": "open"}}}}
-    with patch(_HEALTH, return_value=health):
-        assert _redis_available() is True
+    m = _manager(False, age_s=1)
+    m._circuit_open["knowledge"] = True
+    assert _redis_available(m) is True
 
 
-def test_unreadable_health_keeps_the_prior_unavailable_fallback():
-    with patch(_HEALTH, side_effect=RuntimeError("manager down")):
-        assert _redis_available() is False
+def test_unreadable_manager_keeps_the_prior_unavailable_fallback():
+    def _down():
+        raise RuntimeError("manager down")
+
+    with _with_manager(_down):
+        assert asyncio.run(ResourceMonitor().check_resources())["redis"] is False
