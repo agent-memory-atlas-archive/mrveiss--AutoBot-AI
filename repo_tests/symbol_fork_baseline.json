@@ -158,7 +158,6 @@
     "check_rate_limit",
     "detect_language",
     "ensure_sandbox_root",
-    "get_async_redis_client",
     "get_audit_db",
     "get_audit_logger",
     "get_autobot_db",
