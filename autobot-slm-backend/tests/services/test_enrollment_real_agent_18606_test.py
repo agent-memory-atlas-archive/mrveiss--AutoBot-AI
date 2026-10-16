@@ -51,7 +51,7 @@ _PLAYBOOK = _ANSIBLE / "playbooks" / "enroll-slm-agent.yml"
 _ROLES = _ANSIBLE / "roles"
 _DEPLOY_PLAYBOOK = _ANSIBLE / "playbooks" / "deploy-slm-agent.yml"
 _SHARED_TASKS = _ROLES / "_shared" / "tasks" / "install_agent_autobot_shared.yml"
-_SHARED_INCLUDE = "roles/_shared/tasks/install_agent_autobot_shared.yml"
+_SHARED_INCLUDE = "../roles/_shared/tasks/install_agent_autobot_shared.yml"
 
 
 def _tasks() -> list[dict]:
@@ -125,7 +125,7 @@ def _shared_block() -> dict:
 
 
 def _include_index(tasks: list[dict]) -> int:
-    return next(i for i, t in enumerate(tasks) if t.get("ansible.builtin.include_tasks") == _SHARED_INCLUDE)
+    return next(i for i, t in enumerate(tasks) if t.get("ansible.builtin.import_tasks") == _SHARED_INCLUDE)
 
 
 def _shared_tasks() -> list[dict]:
@@ -393,7 +393,7 @@ def _role_order_index(tasks: list[dict]) -> int:
 
 
 def test_deploy_contrast_an_agent_before_the_install_is_caught() -> None:
-    inc = {"ansible.builtin.include_tasks": _SHARED_INCLUDE}
+    inc = {"ansible.builtin.import_tasks": _SHARED_INCLUDE}
     role = {"ansible.builtin.import_role": {"name": "slm_agent"}}
     assert _include_index([inc, role]) < _role_order_index([inc, role])
     assert not _include_index([role, inc]) < _role_order_index([role, inc])
@@ -423,3 +423,17 @@ def test_a_lone_surrogate_password_is_refused_with_422_before_any_playbook_runs(
     schemas = (_BACKEND / "models" / "schemas.py").read_text(encoding="utf-8")
     assert schemas.count("ssh_password: SshPassword | None = None") == 2
     assert "ssh_password: str" not in schemas
+
+
+def test_the_shared_include_resolves_from_each_playbook_dir() -> None:
+    """Ansible resolves a playbook-level task file against the playbook's own directory."""
+    for playbook in (_PLAYBOOK, _DEPLOY_PLAYBOOK):
+        play = yaml.safe_load(playbook.read_text(encoding="utf-8"))[0]["tasks"]
+        ref = play[_include_index(play)]["ansible.builtin.import_tasks"]
+        assert (playbook.parent / ref).resolve() == _SHARED_TASKS.resolve(), (playbook.name, ref)
+        assert (playbook.parent / ref).is_file()
+
+
+def test_include_resolution_contrast() -> None:
+    wrong = _PLAYBOOK.parent / "roles/_shared/tasks/install_agent_autobot_shared.yml"
+    assert not wrong.is_file()  # the path #18620's first head used: playbooks/roles/... does not exist
