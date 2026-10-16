@@ -81,6 +81,14 @@
         group: "{{ slm_agent_group }}"
         mode: '0755'
 
+    # The real agent imports autobot_shared (health_collector -> redis_client); the
+    # unit's PYTHONPATH includes {{ autobot.base_dir }}, where this role syncs it
+    # (/opt/autobot/autobot_shared). The stand-in agent needed none of it, so
+    # without this a fresh enrollee would crash-loop until a later code-sync.
+    - name: Deploy autobot_shared for the agent (autobot_shared role)
+      ansible.builtin.import_role:
+        name: autobot_shared
+
     - name: Deploy the SLM agent (slm_agent role)
       ansible.builtin.import_role:
         name: slm_agent

@@ -47,7 +47,7 @@ def test_the_enrollment_playbook_is_a_tracked_file() -> None:
 def test_the_playbook_includes_the_slm_agent_role_and_embeds_no_agent() -> None:
     tasks = _tasks()
     roles = [t["ansible.builtin.import_role"]["name"] for t in tasks if "ansible.builtin.import_role" in t]
-    assert roles == ["slm_agent"]
+    assert roles == ["autobot_shared", "slm_agent"]
     text = (_ANSIBLE / deployment._ENROLLMENT_PLAYBOOK).read_text(encoding="utf-8")
     assert "class SLMAgent" not in text
     assert all(t.get("when") is not False for t in tasks), "a disabled task is dead code"
@@ -86,3 +86,20 @@ def test_the_template_and_its_helpers_are_gone() -> None:
         assert not hasattr(deployment, name)
     for name in ("_create_enrollment_playbook", "_get_enrollment_playbook_content"):
         assert not hasattr(DeploymentService, name)
+
+
+def _role_order(tasks: list[dict]) -> list[str]:
+    return [t["ansible.builtin.import_role"]["name"] for t in tasks if "ansible.builtin.import_role" in t]
+
+
+def test_autobot_shared_is_deployed_before_the_agent_that_imports_it() -> None:
+    """The real agent imports autobot_shared; a fresh enrollee must get it in the same run."""
+    roles = _role_order(_tasks())
+    assert "autobot_shared" in roles and "slm_agent" in roles
+    assert roles.index("autobot_shared") < roles.index("slm_agent")
+
+
+def test_role_order_contrast() -> None:
+    role = lambda name: {"ansible.builtin.import_role": {"name": name}}  # noqa: E731
+    assert _role_order([role("autobot_shared"), role("slm_agent")]) == ["autobot_shared", "slm_agent"]
+    assert "autobot_shared" not in _role_order([role("slm_agent")])
