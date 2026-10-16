@@ -23,6 +23,7 @@ from repo_tests._paths import repo_root
 from autobot_shared.paths import scrubbed_git_env
 
 _HOOK = repo_root() / "tools" / "git-hooks" / "pre-push"
+_GIT_ROOT_LIB = repo_root() / "scripts" / "lib" / "git-root.sh"
 
 
 def _source() -> str:
@@ -39,11 +40,17 @@ def _kit_budget(project: Path) -> int:
     func = re.search(r"^kit_related_budget\(\) \{\n(?:.*\n)*?\}$", _source(), re.MULTILINE)
     assert func, "the hook no longer defines kit_related_budget"
     prelude = "\n".join(f"{n}={_constant(n)}" for n in ("TEST_TIMEOUT", "MAX_BUDGET", "VITEST_COST_PER_FILE"))
-    script = (
-        f". {repo_root() / 'scripts' / 'lib' / 'git-root.sh'}\n{prelude}\n{func.group(0)}\nkit_related_budget {project}"
-    )
-    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=scrubbed_git_env())
+    script = f'. "$1"\n{prelude}\n{func.group(0)}\nkit_related_budget "$2"'
+    # Paths go in as positional args, never into the script text: a space in the tmp
+    # path would split, and the budget would silently fall back to TEST_TIMEOUT.
+    argv = ["bash", "-c", script, "kit_related_budget", str(_GIT_ROOT_LIB), str(project)]
+    done = subprocess.run(argv, capture_output=True, text=True, check=True, env=scrubbed_git_env())
     return int(done.stdout)
+
+
+def test_a_project_path_with_a_space_is_counted_not_split(tmp_path: Path) -> None:
+    """CodeRabbit on #18589: an unquoted path would split and fall back to TEST_TIMEOUT."""
+    assert _kit_budget(_project_with_tests(tmp_path / "has space", 150)) == 150 * _constant("VITEST_COST_PER_FILE")
 
 
 def _project_with_tests(tmp_path: Path, count: int) -> Path:
@@ -102,8 +109,9 @@ def test_the_count_is_right_even_when_git_exports_GIT_DIR(tmp_path: Path) -> Non
     prelude = "\n".join(f"{n}={_constant(n)}" for n in ("TEST_TIMEOUT", "MAX_BUDGET", "VITEST_COST_PER_FILE"))
     env = scrubbed_git_env()
     env["GIT_DIR"] = str(repo_root() / ".git")
-    script = f". {repo_root() / 'scripts' / 'lib' / 'git-root.sh'}\n{prelude}\n{func}\nkit_related_budget {project}"
-    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=env)
+    script = f'. "$1"\n{prelude}\n{func}\nkit_related_budget "$2"'
+    argv = ["bash", "-c", script, "kit_related_budget", str(_GIT_ROOT_LIB), str(project)]
+    done = subprocess.run(argv, capture_output=True, text=True, check=True, env=env)
     assert int(done.stdout) == 150 * _constant("VITEST_COST_PER_FILE")
 
 
