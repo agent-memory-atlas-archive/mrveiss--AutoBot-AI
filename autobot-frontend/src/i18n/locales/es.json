@@ -8043,7 +8043,8 @@
       "tip": "Interfaz mínima: oculta las funciones avanzadas",
       "announceMinimal": "Interfaz mínima activada. Funciones avanzadas ocultas.",
       "announceFull": "Interfaz completa activada. Se muestran todas las funciones."
-    }
+    },
+    "llcLedger": "Registro de agentes"
   },
   "llcCompanyStatus": {
     "showArchived": "Mostrar archivadas",
@@ -8931,6 +8932,63 @@
       "retry": "Reintentar",
       "loadingItem": "Cargando elemento de trabajo…",
       "itemLoadFailed": "No se pudo cargar este elemento de trabajo"
+    },
+    "ledger": {
+      "title": "Registro de agentes",
+      "subtitle": "Quién trabaja en qué en esta empresa y quién espera.",
+      "tabsAria": "Vistas del registro",
+      "tabs": {
+        "now": "Trabajando ahora",
+        "claims": "Reservas",
+        "contention": "Contención",
+        "activity": "Actividad"
+      },
+      "col": {
+        "agent": "Agente",
+        "kind": "Tipo",
+        "status": "Estado",
+        "detail": "Detalle",
+        "scope": "Ámbito",
+        "mode": "Modo",
+        "intent": "Intención",
+        "expires": "Caduca",
+        "renewals": "Renovaciones"
+      },
+      "busy": "Ocupado",
+      "idle": "Inactivo",
+      "peerMessages": "Mensajes entre pares pendientes",
+      "idleSubscribers": "Suscripciones de inactividad",
+      "pendingFor": "{n} pendientes para {name}",
+      "waitsForIdle": "{who} espera a que {target} quede inactivo",
+      "heldBy": "Retenido por {agent}",
+      "waitlistAria": "Lista de espera en orden",
+      "silenceMeansHold": "Pedir no es liberar: el silencio significa retener, y una reserva no renovada caduca sola.",
+      "ask": "Pedir al titular que la libere",
+      "askAria": "Pedir al titular de {scope} que lo libere",
+      "askUnavailable": "Aún no disponible: la solicitud se está añadiendo al registro.",
+      "conflicts": "Conflictos",
+      "recent": "Actividad reciente",
+      "conflict": {
+        "release_refused": "Se rechazó una liberación",
+        "claim_expired": "Una reserva caducó mientras se retenía",
+        "yield_unanswered": "Una solicitud de cesión quedó sin respuesta",
+        "claim_lapsed_during_action": "Una reserva caducó durante una acción"
+      },
+      "empty": {
+        "presence": "Ningún agente se ha reportado",
+        "peerMessages": "No hay mensajes pendientes",
+        "idleSubscribers": "No hay suscripciones de inactividad",
+        "claims": "No hay reservas",
+        "contention": "Nada está en contención",
+        "conflicts": "No hay conflictos",
+        "activity": "No hay actividad reciente"
+      },
+      "state": {
+        "loading": "Leyendo el registro…",
+        "unavailableTitle": "No se pudo leer el registro",
+        "unavailableBody": "El almacén {source} no respondió. No es lo mismo que no tener entradas.",
+        "errorTitle": "Algo salió mal al cargar esta sección"
+      }
     }
   },
   "code": {
