@@ -82,7 +82,8 @@ _LUA_LEASE_TOKEN = re.compile(r"['\"](EX|PX|NX)['\"]", re.I)
 _LUA_EXPIRY_CALL = re.compile(r"redis\.call\(\s*['\"]P?EXPIRE(?:AT)?['\"]", re.I)
 
 #: THE registry. Not an exemption -- the subject.
-_THE_REGISTRY = "autobot_shared/coordination/work_claims.py"
+#: The Lua acquire/lease moved to work_claims_lua.py (size ceiling); work_claims.py itself holds none.
+_THE_REGISTRY = "autobot_shared/coordination/work_claims_lua.py"
 
 #: Every file allowed to hold a claim-or-lock primitive, with HOW MANY it holds
 #: and why. The count is the half a filename-only registry could not express
@@ -140,9 +141,9 @@ _ALLOWED: dict[str, tuple[int, str]] = {
         1,
         "#11607 — Celery task dedup by task id.",
     ),
-    "autobot_shared/coordination/work_claims.py": (
+    "autobot_shared/coordination/work_claims_lua.py": (
         2,
-        "#15947 — THE claim registry. Every agent scope claim goes through it.",
+        "#15947 — THE claim registry (its Lua acquire/lease scripts, split out of work_claims.py). Every agent scope claim goes through it.",
     ),
     "autobot_shared/idempotency.py": (
         2,
@@ -205,7 +206,7 @@ REACH = declare(
     # the bottom tenth of `growth`, because that is zero tolerance dressed as an allowance.
     # Re-measured by the mechanism itself, not carried across (#15928); the arithmetic is in
     # the commit message, which cannot drift from the tree it describes.
-    floor=3175,  # re-pinned mid-window: population 3114, window [3064, 3114]
+    floor=3206,  # re-pinned mid-window: population 3114, window [3064, 3114]
     what="Python modules swept for claim-or-lock primitives",
     growth=50,
     # Scope as data (#17844). Five trees, including `scripts/` and `pipeline-scripts/` that no

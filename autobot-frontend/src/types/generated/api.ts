@@ -11317,7 +11317,7 @@ export interface paths {
         put?: never;
         /**
          * Call Realtime Tool
-         * @description Route a Realtime tool call through the MCP bridge (#7343).
+         * @description Route a Realtime tool call through the MCP bridge (#7343); its AI line is resolved first (#18430).
          */
         post: operations["call_realtime_tool_api_voice_realtime_tools_call_post"];
         delete?: never;
@@ -17570,6 +17570,169 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/coordination/ledger/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Presence
+         * @description The company's live agents plus shared infrastructure, busy or idle.
+         */
+        get: operations["ledger_presence_api_coordination_ledger_presence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Claims
+         * @description The company's held claims: scope, mode, intent, expiry and renewals.
+         */
+        get: operations["ledger_claims_api_coordination_ledger_claims_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/waitlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Waitlists
+         * @description The company's agents queued behind a scope someone else holds, in position order.
+         */
+        get: operations["ledger_waitlists_api_coordination_ledger_waitlists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Conflicts
+         * @description Refused releases, claims that expired while held, and unanswered yield requests.
+         */
+        get: operations["ledger_conflicts_api_coordination_ledger_conflicts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Activity
+         * @description Recent coordination activity for the company, newest first.
+         */
+        get: operations["ledger_activity_api_coordination_ledger_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/peer-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Peer Messages
+         * @description Messages waiting for the company's agents' next turn. Counts and senders, never content.
+         *
+         *     Reads without draining. Only inboxes owned by this company: a shared
+         *     infrastructure agent's inbox is not the company's to inspect.
+         */
+        get: operations["ledger_peer_messages_api_coordination_ledger_peer_messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/idle-subscribers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Idle Subscribers
+         * @description Agents currently waiting to be told a company peer next goes idle.
+         */
+        get: operations["ledger_idle_subscribers_api_coordination_ledger_idle_subscribers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/ledger/claims/yield-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ledger Yield Request
+         * @description Ask the holder of one of the company's claims to release it. Publishes a request; releases nothing.
+         */
+        post: operations["ledger_yield_request_api_coordination_ledger_claims_yield_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/coordination/claims": {
         parameters: {
             query?: never;
@@ -17579,7 +17742,7 @@ export interface paths {
         };
         /**
          * Get Claims
-         * @description The live claim table, optionally filtered.
+         * @description The caller's company's live claim table, optionally filtered (install-wide claims are SLM-only).
          *
          *     A malformed `scope` or unknown `kind` is the caller's error and is reported
          *     as 400 rather than silently returning everything -- a filter that fails open
@@ -49788,6 +49951,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/llc/ai-lines/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read My Lines
+         * @description The signed-in user's own lines: the scope of a user with no company (#18430).
+         */
+        get: operations["read_my_lines_api_llc_ai_lines_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/ai-lines/me/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose My Change
+         * @description Propose a change to a personal line. Only the same person can approve it (self-approval, audit-flagged).
+         */
+        post: operations["propose_my_change_api_llc_ai_lines_me_changes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/ai-lines/{company_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Lines */
+        get: operations["read_lines_api_llc_ai_lines__company_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/ai-lines/{company_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Propose Change */
+        post: operations["propose_change_api_llc_ai_lines__company_id__changes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llc/approvals": {
         parameters: {
             query?: never;
@@ -54864,6 +55101,35 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ActivityResponse */
+        ActivityResponse: {
+            /** Activity */
+            activity: components["schemas"]["ActivityRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ActivityRow */
+        ActivityRow: {
+            /** At */
+            at: string;
+            /** Type */
+            type: string;
+            /** Scope */
+            scope?: string | null;
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Task Id */
+            task_id?: string | null;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ActorType
          * @description Who triggered the action recorded in an activity log row.
@@ -57118,6 +57384,44 @@ export interface components {
             action: "summarize" | "key_facts" | "protocol" | "custom";
             /** Custom Question */
             custom_question?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * AiLine
+         * @description The three lines. ``rank`` orders them from loosest to strictest.
+         * @enum {string}
+         */
+        AiLine: "autonomous" | "draft_then_send" | "never";
+        /**
+         * AiLineEntry
+         * @description One tool action: the stored line (if any), what it really resolves to, and why.
+         */
+        AiLineEntry: {
+            /** Action Key */
+            action_key: string;
+            stored_line?: components["schemas"]["AiLine"] | null;
+            effective_line: components["schemas"]["AiLine"];
+            /** Is Set */
+            is_set: boolean;
+            /** Reason */
+            reason: string;
+            /** Floor Category */
+            floor_category?: string | null;
+            /** Approval Id */
+            approval_id?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AiLinesResponse */
+        AiLinesResponse: {
+            /** Company Id */
+            company_id: string;
+            default_line: components["schemas"]["AiLine"];
+            /** Entries */
+            entries: components["schemas"]["AiLineEntry"][];
         } & {
             [key: string]: unknown;
         };
@@ -63363,6 +63667,47 @@ export interface components {
         CircuitBreakerStatusResponse: {
             [key: string]: unknown;
         };
+        /** ClaimRow */
+        ClaimRow: {
+            /** Scope */
+            scope: string;
+            /** Kind */
+            kind: string;
+            /** Agent Id */
+            agent_id: string;
+            /** Task Id */
+            task_id: string;
+            /** Mode */
+            mode: string;
+            /** Intent */
+            intent: string;
+            /** Acquired At */
+            acquired_at: string;
+            /** Expires At */
+            expires_at: string;
+            /**
+             * Renewals
+             * @description Explicit renewals since the claim was acquired
+             * @default 0
+             */
+            renewals: number;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ClaimsResponse */
+        ClaimsResponse: {
+            /** Claims */
+            claims: components["schemas"]["ClaimRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ClassificationResult
          * @description Data payload for POST /ai-stack/classification/classify.
@@ -65568,6 +65913,43 @@ export interface components {
              * @default true
              */
             validate: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConflictRow */
+        ConflictRow: {
+            /** At */
+            at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "release_refused" | "claim_expired" | "yield_unanswered" | "claim_lapsed_during_action";
+            /** Scope */
+            scope?: string | null;
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Task Id */
+            task_id?: string | null;
+            /**
+             * Other Agent Id
+             * @description The holder, for a refused release
+             */
+            other_agent_id?: string | null;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConflictsResponse */
+        ConflictsResponse: {
+            /** Conflicts */
+            conflicts: components["schemas"]["ConflictRow"][];
+            /** Count */
+            count: number;
         } & {
             [key: string]: unknown;
         };
@@ -77896,6 +78278,30 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** IdleSubscriberRow */
+        IdleSubscriberRow: {
+            /** Subscriber */
+            subscriber: string;
+            /** Target Kind */
+            target_kind: string;
+            /** Target Name */
+            target_name: string;
+            /** Since */
+            since: number;
+            /** Expires At */
+            expires_at: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdleSubscribersResponse */
+        IdleSubscribersResponse: {
+            /** Subscribers */
+            subscribers: components["schemas"]["IdleSubscriberRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** ImageGenerationRequest */
         ImageGenerationRequest: {
             /** Prompt */
@@ -82187,6 +82593,27 @@ export interface components {
             events_queue_size: number;
             /** Last Event Time */
             last_event_time: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * LedgerUnavailable
+         * @description The typed 503 body: the source could not be read, which is not 'nothing there'.
+         */
+        LedgerUnavailable: {
+            /**
+             * Error
+             * @default ledger_unavailable
+             * @constant
+             */
+            error: "ledger_unavailable";
+            /**
+             * Source
+             * @description Which store could not be read (claims, waitlists, dev_loop, events)
+             */
+            source: string;
+            /** Detail */
+            detail: string;
         } & {
             [key: string]: unknown;
         };
@@ -88057,6 +88484,33 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * PeerMessageRow
+         * @description Pending peer messages for one recipient. Metadata only -- never the content.
+         */
+        PeerMessageRow: {
+            /** Recipient Kind */
+            recipient_kind: string;
+            /** Recipient Name */
+            recipient_name: string;
+            /** Pending */
+            pending: number;
+            /** Senders */
+            senders: string[];
+            /** Oldest At */
+            oldest_at: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PeerMessagesResponse */
+        PeerMessagesResponse: {
+            /** Recipients */
+            recipients: components["schemas"]["PeerMessageRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * PendingApprovalStep
          * @description A single step awaiting user approval.
          */
@@ -89423,6 +89877,32 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** PresenceResponse */
+        PresenceResponse: {
+            /** Agents */
+            agents: components["schemas"]["PresenceRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PresenceRow */
+        PresenceRow: {
+            /** Kind */
+            kind: string;
+            /** Tenant Id */
+            tenant_id: string | null;
+            /** Name */
+            name: string;
+            /** Busy */
+            busy: boolean;
+            /** Detail */
+            detail?: string | null;
+            /** Last Seen */
+            last_seen: number;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * PreserveSessionFactsResponse
          * @description Response for POST /chat/sessions/{session_id}/facts/preserve.
@@ -90134,6 +90614,31 @@ export interface components {
             prompts: unknown[];
             /** Defaults */
             defaults: unknown;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ProposeLineChange */
+        ProposeLineChange: {
+            /**
+             * Action Key
+             * @description '<tool>' or '<tool>:<action>'
+             */
+            action_key: string;
+            line: components["schemas"]["AiLine"];
+            /** Reason */
+            reason?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ProposedLineChange */
+        ProposedLineChange: {
+            /** Approval Id */
+            approval_id: string;
+            /** Status */
+            status: string;
+            /** Action Key */
+            action_key: string;
+            line: components["schemas"]["AiLine"];
         } & {
             [key: string]: unknown;
         };
@@ -102855,6 +103360,46 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** WaiterRow */
+        WaiterRow: {
+            /** Scope */
+            scope: string;
+            /**
+             * Position
+             * @description 1-based position in the scope's queue
+             */
+            position: number;
+            /** Agent Id */
+            agent_id: string;
+            /** Task Id */
+            task_id: string;
+            /** Mode */
+            mode: string;
+            /** Intent */
+            intent: string;
+            /** Priority */
+            priority: number;
+            /** Joined At */
+            joined_at: string;
+            /** Expires At */
+            expires_at: string;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** WaitlistsResponse */
+        WaitlistsResponse: {
+            /** Waiters */
+            waiters: components["schemas"]["WaiterRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * WakeWordCheckRequest
          * @description Request to check text for wake word
@@ -104505,6 +105050,40 @@ export interface components {
              * @description File content to write
              */
             content: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * YieldRequestBody
+         * @description A person asks the holder of a claim to release it (#18599). Asking never releases anything.
+         */
+        YieldRequestBody: {
+            /**
+             * Scope
+             * @description The claimed scope, e.g. `path:src/app.py`
+             */
+            scope: string;
+            /**
+             * Holder Task Id
+             * @description The task that holds the claim, as the claims screen shows it
+             */
+            holder_task_id: string;
+            /**
+             * Reason
+             * @description Why; cut to the ledger's free-text cap
+             * @default
+             */
+            reason: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** YieldRequestResponse */
+        YieldRequestResponse: {
+            /**
+             * Token
+             * @description Identifies the request; the holder's answer is recorded under it
+             */
+            token: string;
         } & {
             [key: string]: unknown;
         };
@@ -128144,6 +128723,288 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    ledger_presence_api_coordination_ledger_presence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_claims_api_coordination_ledger_claims_get: {
+        parameters: {
+            query?: {
+                /** @description Only claims of this scope kind */
+                kind?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_waitlists_api_coordination_ledger_waitlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistsResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_conflicts_api_coordination_ledger_conflicts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictsResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_activity_api_coordination_ledger_activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_peer_messages_api_coordination_ledger_peer_messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerMessagesResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_idle_subscribers_api_coordination_ledger_idle_subscribers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdleSubscribersResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_yield_request_api_coordination_ledger_claims_yield_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YieldRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YieldRequestResponse"];
+                };
+            };
+            /** @description No such claim for this caller */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Asked too recently */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
                 };
             };
         };
@@ -170993,6 +171854,125 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    read_my_lines_api_llc_ai_lines_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiLinesResponse"];
+                };
+            };
+        };
+    };
+    propose_my_change_api_llc_ai_lines_me_changes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeLineChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposedLineChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_lines_api_llc_ai_lines__company_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiLinesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_change_api_llc_ai_lines__company_id__changes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeLineChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposedLineChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

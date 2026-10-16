@@ -1388,6 +1388,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/code-sync/post-sync-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Post Sync Run
+         * @description The rows a sync run recorded, in execution order; 404 when no row carries *run_id*.
+         */
+        get: operations["get_post_sync_run_api_code_sync_post_sync_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/code-sync/pull": {
         parameters: {
             query?: never;
@@ -2816,6 +2836,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/monitoring/agent-ledger/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Activity
+         * @description Recent coordination activity across the install, newest first.
+         */
+        get: operations["ledger_activity_api_monitoring_agent_ledger_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Claims
+         * @description Every held claim across the install: scope, mode, intent, expiry, renewals.
+         */
+        get: operations["ledger_claims_api_monitoring_agent_ledger_claims_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/claims/yield-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ledger Yield Request
+         * @description Ask the holder of any claim to release it. Publishes a request; releases nothing.
+         */
+        post: operations["ledger_yield_request_api_monitoring_agent_ledger_claims_yield_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Conflicts
+         * @description Refused releases, claims expired while held, unanswered yields, lapsed dev-loop actions.
+         */
+        get: operations["ledger_conflicts_api_monitoring_agent_ledger_conflicts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/contention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Contention
+         * @description Shared-resource scopes (provider, cpu, queue): holders and who waits.
+         */
+        get: operations["ledger_contention_api_monitoring_agent_ledger_contention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/dev-loop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Dev Loop Issues
+         * @description Issues the dev loop has a recorded action history for.
+         */
+        get: operations["ledger_dev_loop_issues_api_monitoring_agent_ledger_dev_loop_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/dev-loop/{issue}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Dev Loop History
+         * @description One issue's dev-loop action history, newest first, including refused and skipped attempts.
+         */
+        get: operations["ledger_dev_loop_history_api_monitoring_agent_ledger_dev_loop__issue__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Sources
+         * @description Which coordination stores this view can read right now, and which it never can.
+         */
+        get: operations["ledger_sources_api_monitoring_agent_ledger_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/waitlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Waitlists
+         * @description Every queued agent behind a held scope, in position order.
+         */
+        get: operations["ledger_waitlists_api_monitoring_agent_ledger_waitlists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/monitoring/alerts": {
         parameters: {
             query?: never;
@@ -3993,6 +4193,29 @@ export interface paths {
          * @description Stop a service on a node.
          */
         post: operations["stop_service_api_nodes__node_id__services__service_name__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/nodes/{node_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Node Post Sync Plan
+         * @description Sync every ACTIVE role on a node and run ONE ordered post-sync plan (#17455).
+         *
+         *     A failed install/schema/build aborts the plan (no restarts, no role marked synced); a
+         *     failed restart is recorded and reported in ``actions[*].success`` without failing the sync.
+         */
+        post: operations["sync_node_post_sync_plan_api_nodes__node_id__sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7219,6 +7442,35 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ActivityResponse */
+        ActivityResponse: {
+            /** Activity */
+            activity: components["schemas"]["ActivityRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ActivityRow */
+        ActivityRow: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /** At */
+            at: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /** Scope */
+            scope?: string | null;
+            /** Task Id */
+            task_id?: string | null;
+            /** Type */
+            type: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * AgentCreateRequest
          * @description Request to create an agent.
@@ -8187,6 +8439,47 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ClaimRow */
+        ClaimRow: {
+            /** Acquired At */
+            acquired_at: string;
+            /** Agent Id */
+            agent_id: string;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
+            /** Expires At */
+            expires_at: string;
+            /** Intent */
+            intent: string;
+            /** Kind */
+            kind: string;
+            /** Mode */
+            mode: string;
+            /**
+             * Renewals
+             * @description Explicit renewals since the claim was acquired
+             * @default 0
+             */
+            renewals: number;
+            /** Scope */
+            scope: string;
+            /** Task Id */
+            task_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ClaimsResponse */
+        ClaimsResponse: {
+            /** Claims */
+            claims: components["schemas"]["ClaimRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * CleanupResponse
          * @description Cleanup operation response.
@@ -8504,6 +8797,43 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ConflictRow */
+        ConflictRow: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /** At */
+            at: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "release_refused" | "claim_expired" | "yield_unanswered" | "claim_lapsed_during_action";
+            /**
+             * Other Agent Id
+             * @description The holder, for a refused release
+             */
+            other_agent_id?: string | null;
+            /** Scope */
+            scope?: string | null;
+            /** Task Id */
+            task_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConflictsResponse */
+        ConflictsResponse: {
+            /** Conflicts */
+            conflicts: components["schemas"]["ConflictRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ConnectionTestRequest
          * @description SSH connection test request.
@@ -8546,6 +8876,36 @@ export interface components {
             os_info?: string | null;
             /** Success */
             success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ContentionResponse */
+        ContentionResponse: {
+            /** Count */
+            count: number;
+            /** Resources */
+            resources: components["schemas"]["ContentionRow"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** ContentionRow */
+        ContentionRow: {
+            /**
+             * Contended
+             * @description True when anyone is queued behind this resource
+             */
+            contended: boolean;
+            /** Holders */
+            holders: components["schemas"]["ClaimRow"][];
+            /**
+             * Kind
+             * @description provider, cpu or queue
+             */
+            kind: string;
+            /** Scope */
+            scope: string;
+            /** Waiters */
+            waiters: components["schemas"]["WaiterRow"][];
         } & {
             [key: string]: unknown;
         };
@@ -8724,6 +9084,43 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DevLoopActionRow */
+        DevLoopActionRow: {
+            /** At */
+            at: string;
+            /** Estimated Tokens */
+            estimated_tokens: number;
+            /** Intent */
+            intent: string;
+            /** Issue */
+            issue: number;
+            /** Outcome */
+            outcome: string;
+            /** Reason */
+            reason: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DevLoopHistoryResponse */
+        DevLoopHistoryResponse: {
+            /** Actions */
+            actions: components["schemas"]["DevLoopActionRow"][];
+            /** Count */
+            count: number;
+            /** Issue */
+            issue: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DevLoopIssuesResponse */
+        DevLoopIssuesResponse: {
+            /** Count */
+            count: number;
+            /** Issues */
+            issues: number[];
         } & {
             [key: string]: unknown;
         };
@@ -9672,6 +10069,51 @@ export interface components {
             provider: string;
             /** Success */
             success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * LedgerSourceStatus
+         * @description What the SLM can and cannot read, so a screen never shows a gap as 'none'.
+         */
+        LedgerSourceStatus: {
+            /** Reachable */
+            reachable: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Source */
+            source: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** LedgerSourcesResponse */
+        LedgerSourcesResponse: {
+            /** Sources */
+            sources: components["schemas"]["LedgerSourceStatus"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * LedgerUnavailable
+         * @description The typed 503 body: the source could not be read, which is not 'nothing there'.
+         */
+        LedgerUnavailable: {
+            /** Detail */
+            detail: string;
+            /**
+             * Error
+             * @default ledger_unavailable
+             * @constant
+             */
+            error: "ledger_unavailable";
+            /**
+             * Source
+             * @description Which store could not be read (claims, waitlists, dev_loop, events)
+             */
+            source: string;
         } & {
             [key: string]: unknown;
         };
@@ -10654,6 +11096,44 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * NodePostSyncResponse
+         * @description Result of syncing every ACTIVE role on a node as one ordered plan.
+         */
+        NodePostSyncResponse: {
+            /**
+             * Aborted
+             * @default false
+             */
+            aborted: boolean;
+            /**
+             * Actions
+             * @default []
+             */
+            actions: components["schemas"]["PostSyncActionRunResponse"][];
+            /** Commit */
+            commit?: string | null;
+            /** Message */
+            message: string;
+            /** Node Id */
+            node_id: string;
+            /**
+             * Roles
+             * @default []
+             */
+            roles: components["schemas"]["NodeRoleSyncResult"][];
+            /** Run Id */
+            run_id: string;
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: string[];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * NodeResponse
          * @description Node response.
          */
@@ -10771,6 +11251,20 @@ export interface components {
             status: string;
             /** Unreachable Roles */
             unreachable_roles?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * NodeRoleSyncResult
+         * @description File-sync outcome for one role on the node.
+         */
+        NodeRoleSyncResult: {
+            /** Message */
+            message: string;
+            /** Role Name */
+            role_name: string;
+            /** Success */
+            success: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -11135,6 +11629,61 @@ export interface components {
             role_name: string;
             /** Systemd Service */
             systemd_service?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PostSyncActionRunResponse
+         * @description One recorded post-sync action. `success` is None when the action was only issued.
+         */
+        PostSyncActionRunResponse: {
+            /** Category */
+            category: string;
+            /** Command */
+            command?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Exit Code */
+            exit_code?: number | null;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /** Label */
+            label: string;
+            /** Node Id */
+            node_id: string;
+            /**
+             * Output Tail
+             * @default
+             */
+            output_tail: string;
+            /** Role Name */
+            role_name: string;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Success */
+            success?: boolean | null;
+            /** Units */
+            units?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PostSyncRunResponse
+         * @description Every recorded action of one run, in execution order.
+         */
+        PostSyncRunResponse: {
+            /** Actions */
+            actions: components["schemas"]["PostSyncActionRunResponse"][];
+            /** Run Id */
+            run_id: string;
         } & {
             [key: string]: unknown;
         };
@@ -14192,6 +14741,46 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** WaiterRow */
+        WaiterRow: {
+            /** Agent Id */
+            agent_id: string;
+            /**
+             * Company Id
+             * @description Stamped at write time; null = install-wide or legacy
+             */
+            company_id?: string | null;
+            /** Expires At */
+            expires_at: string;
+            /** Intent */
+            intent: string;
+            /** Joined At */
+            joined_at: string;
+            /** Mode */
+            mode: string;
+            /**
+             * Position
+             * @description 1-based position in the scope's queue
+             */
+            position: number;
+            /** Priority */
+            priority: number;
+            /** Scope */
+            scope: string;
+            /** Task Id */
+            task_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** WaitlistsResponse */
+        WaitlistsResponse: {
+            /** Count */
+            count: number;
+            /** Waiters */
+            waiters: components["schemas"]["WaiterRow"][];
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * WizardStatus
          * @description Current state of the setup wizard.
@@ -14209,6 +14798,40 @@ export interface components {
             }[];
             /** Total Steps */
             total_steps: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * YieldRequestBody
+         * @description A person asks the holder of a claim to release it (#18599). Asking never releases anything.
+         */
+        YieldRequestBody: {
+            /**
+             * Holder Task Id
+             * @description The task that holds the claim, as the claims screen shows it
+             */
+            holder_task_id: string;
+            /**
+             * Reason
+             * @description Why; cut to the ledger's free-text cap
+             * @default
+             */
+            reason: string;
+            /**
+             * Scope
+             * @description The claimed scope, e.g. `path:src/app.py`
+             */
+            scope: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** YieldRequestResponse */
+        YieldRequestResponse: {
+            /**
+             * Token
+             * @description Identifies the request; the holder's answer is recorded under it
+             */
+            token: string;
         } & {
             [key: string]: unknown;
         };
@@ -16712,6 +17335,39 @@ export interface operations {
             };
         };
     };
+    get_post_sync_run_api_code_sync_post_sync_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostSyncRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     pull_from_source_api_code_sync_pull_post: {
         parameters: {
             query?: never;
@@ -19101,6 +19757,330 @@ export interface operations {
             };
         };
     };
+    ledger_activity_api_monitoring_agent_ledger_activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_claims_api_monitoring_agent_ledger_claims_get: {
+        parameters: {
+            query?: {
+                /** @description Only claims of this scope kind */
+                kind?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_yield_request_api_monitoring_agent_ledger_claims_yield_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YieldRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YieldRequestResponse"];
+                };
+            };
+            /** @description No such claim */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Asked too recently */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_conflicts_api_monitoring_agent_ledger_conflicts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictsResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_contention_api_monitoring_agent_ledger_contention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentionResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_dev_loop_issues_api_monitoring_agent_ledger_dev_loop_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevLoopIssuesResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_dev_loop_history_api_monitoring_agent_ledger_dev_loop__issue__get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                issue: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevLoopHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_sources_api_monitoring_agent_ledger_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerSourcesResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_waitlists_api_monitoring_agent_ledger_waitlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistsResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
     get_alerts_api_monitoring_alerts_get: {
         parameters: {
             query?: {
@@ -21116,6 +22096,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["models__schemas__ServiceActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_node_post_sync_plan_api_nodes__node_id__sync_post: {
+        parameters: {
+            query?: {
+                restart?: boolean;
+            };
+            header?: {
+                "X-Internal-API-Key"?: string | null;
+            };
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePostSyncResponse"];
                 };
             };
             /** @description Validation Error */
