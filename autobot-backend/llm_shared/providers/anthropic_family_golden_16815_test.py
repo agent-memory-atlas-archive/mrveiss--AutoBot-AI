@@ -10,6 +10,9 @@ is kept as `{"role", "content"}` with `content` passed through unchanged. They n
 `anthropic_format.split_system_and_chat`. The fixture `golden/anthropic_family_16815.json` was
 generated from the pre-refactor code; these tests assert each provider's request payload is
 byte-identical to it.
+
+The Vertex payloads pin that Claude-on-Vertex sends no `tools`/`tool_choice` today; fixing that
+(#18627) must regenerate exactly those payloads and nothing else.
 """
 
 from __future__ import annotations
