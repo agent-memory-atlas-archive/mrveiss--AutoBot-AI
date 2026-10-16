@@ -115,6 +115,15 @@ describe('createSpeechShaper — fenced code (#13102)', () => {
     expect(shape('- item\n\n    - nested item\n    second para')).toBe('item nested item second para')
   })
 
+  it('drops an indented code block inside a list item, past its content column (#17953)', () => {
+    expect(shape('- item\n\n        secret()\n\nDone.')).toBe('item Done.')
+    expect(shape('1. step\n\n       secret()\n\n   then this')).toBe('step then this')
+  })
+
+  it('keeps a list item paragraph indented less than four past its content (#17953)', () => {
+    expect(shape('- item\n\n    more about it')).toBe('item more about it')
+  })
+
   it('drops an indented block that arrives over several streamed slices (#17953)', () => {
     const shaper = createSpeechShaper(PH)
     const spoken = [shaper.push('Example below.\n\n'), shaper.push('    run()\n'), shaper.push('\nDone.')]

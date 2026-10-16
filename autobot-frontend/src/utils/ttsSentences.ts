@@ -132,35 +132,46 @@ function closesFence(line: string, fence: OpenFence): boolean {
   return !!m && m[1][0] === fence.char && m[1].length >= fence.len && m[2].trim() === ''
 }
 
-const INDENTED_RE = /^(?: {4}| {0,3}\t)/
-const LIST_ITEM_RE = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/
+const LIST_ITEM_RE = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+/
+
+/** Width of `prefix` in columns, a tab advancing to the next multiple of four (CommonMark). */
+function columns(prefix: string): number {
+  let col = 0
+  for (const ch of prefix) col += ch === '\t' ? 4 - (col % 4) : 1
+  return col
+}
 
 /**
- * Indented code blocks (#17953), conservatively: a run of lines indented 4+
- * spaces (or a tab) that follows a blank line and is not list content. An
- * indented line straight after prose continues the paragraph, and indented
- * lines under a list item are nested list content -- both stay spoken.
+ * Indented code blocks (#17953), conservatively: a run of lines that follows a
+ * blank line and is indented 4+ columns past the enclosing block -- the margin,
+ * or the content column of the open list item. An indented line straight after
+ * prose continues the paragraph, and list content indented less than that
+ * (nested items, item paragraphs) stays spoken.
  */
 function createIndentedCodeTracker() {
   let prevBlank = true
-  let inList = false
-  let inCode = false
+  let listCol: number | null = null // content column of the open list item
+  let codeCol: number | null = null // indent that keeps the open code block going
   return {
-    inCode: () => inCode,
+    inCode: () => codeCol !== null,
     /** Records a complete line start; returns whether it is speakable as far as indented code goes. */
     recordLine(line: string, eligible: boolean): boolean {
       const blank = line.trim() === ''
-      const indented = INDENTED_RE.test(line)
-      if (inCode && !blank && !indented) inCode = false
-      if (!inCode && eligible && prevBlank && indented && !blank && !inList) inCode = true
-      if (!blank) inList = LIST_ITEM_RE.test(line) || (inList && indented)
+      const indent = columns(line.match(/^[ \t]*/)?.[0] ?? '')
+      if (codeCol !== null && !blank && indent < codeCol) codeCol = null
+      const codeAt = (listCol ?? 0) + 4
+      if (codeCol === null && eligible && prevBlank && !blank && indent >= codeAt) codeCol = codeAt
+      if (!blank && codeCol === null) {
+        const item = LIST_ITEM_RE.exec(line)
+        listCol = item ? columns(item[0]) : listCol !== null && indent >= listCol ? listCol : null
+      }
       prevBlank = blank
-      return !inCode
+      return codeCol === null
     },
     reset() {
       prevBlank = true
-      inList = false
-      inCode = false
+      listCol = null
+      codeCol = null
     },
   }
 }
