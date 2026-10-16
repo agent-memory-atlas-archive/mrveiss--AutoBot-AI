@@ -34,6 +34,8 @@ const props = withDefaults(
     defaultTimezone?: string
     /** The company's zone, when known: labelled "company time" in summaries. */
     companyTimezone?: string
+    /** Restrict the zones offered, when the consumer can only run some; default every IANA zone. */
+    timezones?: readonly string[]
     preview?: SchedulePreviewFn
     debounceMs?: number
   }>(),
@@ -58,7 +60,9 @@ const REPEATS: RepeatKind[] = ['minutes', 'hourly', 'daily', 'weekly', 'monthly'
 const NTHS = [1, 2, 3, 4, -1] as const
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1)
-const zones = computed(() => listZones(props.defaultTimezone, props.companyTimezone ?? '', timezone.value))
+const zones = computed(() =>
+  props.timezones?.length ? [...props.timezones] : listZones(props.defaultTimezone, props.companyTimezone ?? '', timezone.value),
+)
 const { minutes, hourly, daily, weekly, monthly, once, windowOn, hourOf, setHour, onMinuteDay, onWeekDay, monthlyMode, onDay, onNth } = useScheduleFields(rule)
 const nthKey = (n: number) => (n === -1 ? 'last' : String(n))
 

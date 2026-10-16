@@ -93,7 +93,7 @@
             <span>{{ $t('llc.routines.fieldDescription') }}</span>
             <input v-model="form.description" type="text" />
           </label>
-          <SchedulePickerField v-model="form.schedule" @update:valid="scheduleValid = $event" />
+          <SchedulePickerField v-model="form.schedule" :timezones="ROUTINE_ZONES" @update:valid="scheduleValid = $event" />
           <label class="field">
             <span>{{ $t('llc.routines.fieldAssignee') }}</span>
             <select v-model="form.assignee_agent_id">
@@ -155,7 +155,7 @@ import { formatDateTime, formatDuration } from '@/utils/formatHelpers'
 import { useI18n } from 'vue-i18n'
 import type { ScheduleSpec } from '@autobot/ui'
 import SchedulePickerField from '@/components/schedule/SchedulePickerField.vue'
-import { routineSpec, schedulePayload, useScheduleSummary } from '@/composables/useSchedule'
+import { ROUTINE_ZONES, routineSpec, schedulePayload, useScheduleSummary } from '@/composables/useSchedule'
 
 const props = defineProps<{ companyId?: string }>()
 
