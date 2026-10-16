@@ -224,11 +224,69 @@ def test_the_archive_holds_only_sources_with_fixed_modes(tmp_path) -> None:
     assert all(m.uid == 0 and m.gid == 0 for m in members.values())
 
 
+def _module_names(tasks: list) -> list[str]:
+    """Every task's module keys, recursing into block/rescue/always."""
+    names: list[str] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        names.extend(k for k in task if k.rpartition(".")[2] == "synchronize")
+        for key in ("block", "rescue", "always"):
+            names.extend(_module_names(task.get(key) or []))
+    return names
+
+
+def _enrollment_path_tasks() -> list:
+    plays = yaml.safe_load(_PLAYBOOK.read_text(encoding="utf-8")) + yaml.safe_load(
+        _DEPLOY_PLAYBOOK.read_text(encoding="utf-8")
+    )
+    tasks: list = yaml.safe_load(_SHARED_TASKS.read_text(encoding="utf-8"))
+    for play in plays:
+        for section in ("pre_tasks", "tasks", "post_tasks"):
+            tasks += play.get(section) or []
+    return tasks
+
+
 def test_no_synchronize_on_the_enrollment_path() -> None:
     """synchronize escalates only with passwordless sudo, which password-auth enrollment lacks."""
-    assert not any("synchronize" in t for t in _tasks() + [_shared_block()])
+    assert _module_names(_enrollment_path_tasks()) == []
     for path in (_ROLES / "slm_agent" / "tasks").glob("*.yml"):
-        assert "synchronize:" not in path.read_text(encoding="utf-8"), path.name
+        assert _module_names(yaml.safe_load(path.read_text(encoding="utf-8")) or []) == [], path.name
+
+
+def test_synchronize_contrast_a_nested_block_is_caught() -> None:
+    nested = [{"block": [{"rescue": [{"ansible.posix.synchronize": {"src": "a", "dest": "b"}}]}]}]
+    assert _module_names(nested) == ["ansible.posix.synchronize"]
+    assert _module_names([{"always": [{"synchronize": {}}]}, {"community.general.synchronize": {}}]) == [
+        "synchronize",
+        "community.general.synchronize",
+    ]
+
+
+def _shared_parent(playbook: Path, **extra) -> str:
+    """Render the shared tasks' shared_parent default for a playbook, as Ansible would."""
+    import jinja2
+
+    expr = _shared_block()["vars"]["shared_parent"]
+    env = jinja2.Environment()
+    env.filters["dirname"] = os.path.dirname
+    return env.from_string(expr).render(playbook_dir=str(playbook.parent), autobot={"base_dir": "/x"}, **extra)
+
+
+@pytest.mark.parametrize("playbook", [_PLAYBOOK, _DEPLOY_PLAYBOOK])
+def test_the_source_resolves_to_a_tree_containing_autobot_shared(playbook: Path) -> None:
+    root = Path(_shared_parent(playbook))
+    assert (root / "autobot_shared" / "__init__.py").is_file(), root
+
+
+def test_an_explicit_code_source_dir_wins_and_a_missing_source_fails_clearly() -> None:
+    assert _shared_parent(_PLAYBOOK, code_source_dir="/srv/cs") == "/srv/cs"
+    tasks = _shared_block()["block"]
+    check = next(t for t in tasks if "ansible.builtin.assert" in t)
+    assert "code_source_dir" in check["ansible.builtin.assert"]["fail_msg"]
+    stat_idx = next(i for i, t in enumerate(tasks) if "ansible.builtin.stat" in t)
+    tar_idx = next(i for i, t in enumerate(tasks) if "ansible.builtin.command" in t)
+    assert stat_idx < tasks.index(check) < tar_idx
 
 
 def test_the_play_notifies_only_handlers_the_slm_agent_role_defines() -> None:

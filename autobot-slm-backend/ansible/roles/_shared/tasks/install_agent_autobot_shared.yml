@@ -8,6 +8,12 @@
 # Reads autobot.base_dir (inventory group_vars/all.yml) and optional code_source_dir,
 # slm_agent_user, slm_agent_group (default autobot).
 #
+# Source tree: an explicit code_source_dir, else the tree the playbook itself runs from
+# (playbook_dir is <tree>/autobot-slm-backend/ansible/playbooks, so three dirnames up is
+# <tree>). The SLM backend passes no code_source_dir (services/deployment.py
+# _enrollment_var_args) and runs from settings.ansible_dir, so the playbook's own tree is
+# the one that is certainly present; it need not be under autobot.base_dir/code_source.
+#
 # The real agent imports autobot_shared (health_collector -> redis_client); the
 # unit's PYTHONPATH includes {{ slm_agent_dir | dirname }} (= autobot.base_dir).
 # Not the autobot_shared role: its sync notifies the backend/celery restart
@@ -17,7 +23,7 @@
 # The excludes mirror the autobot_shared role's rsync list (a test pins parity).
 - name: Ship autobot_shared as one filtered archive
   vars:
-    shared_parent: "{{ code_source_dir | default(autobot.base_dir ~ '/code_source') }}"
+    shared_parent: "{{ code_source_dir | default(playbook_dir | dirname | dirname | dirname, true) }}"
     shared_excludes:
       - __pycache__
       - "*.pyc"
@@ -28,6 +34,22 @@
       - ".env.*"
       - .envrc
   block:
+    - name: Check autobot_shared exists in the source tree on the controller
+      ansible.builtin.stat:
+        path: "{{ shared_parent }}/autobot_shared/__init__.py"
+      register: shared_src
+      delegate_to: localhost
+      run_once: true
+      become: false
+
+    - name: Fail clearly when the autobot_shared source tree is missing
+      ansible.builtin.assert:
+        that: shared_src.stat.exists
+        fail_msg: >-
+          autobot_shared not found at {{ shared_parent }}/autobot_shared on the controller.
+          Set code_source_dir to a checkout that contains autobot_shared/.
+      run_once: true
+
     - name: Create a unique controller temp file for the archive
       ansible.builtin.tempfile:
         state: file
