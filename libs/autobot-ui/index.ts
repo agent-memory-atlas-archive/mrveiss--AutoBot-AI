@@ -103,3 +103,16 @@ export type { DurationStyle } from './src/utils/duration'
 // apps' utils/debugUtils.ts re-export these rather than re-declaring them.
 export { log, createLogger } from './src/utils/logger'
 export type { LogLevel } from './src/utils/logger'
+
+// Agent-ledger answers and their section states (#18391) — one reading of the
+// shared response shapes for the Company OS and SLM ledger views.
+export {
+  loadingLedgerSection,
+  ledgerSectionFrom,
+  readLedgerSection,
+  ledgerAskOutcomeFrom,
+  sendLedgerAsk,
+} from './src/utils/ledger'
+export type { LedgerSection, LedgerSectionStatus, LedgerAskOutcome } from './src/utils/ledger'
+export { default as LedgerSectionState } from './src/components/LedgerSectionState.vue'
+export type { LedgerStateLabels } from './src/components/LedgerSectionState.vue'
