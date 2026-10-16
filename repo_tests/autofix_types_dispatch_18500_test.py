@@ -32,8 +32,12 @@ def test_dispatch_runs_the_job_on_the_dispatched_ref() -> None:
     assert "workflow_dispatch" in doc["on"]
     job = doc["jobs"]["autofix-types"]
     assert "github.event_name == 'workflow_dispatch'" in job["if"]
-    checkout = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
-    assert checkout["with"]["ref"] == "${{ github.head_ref || github.ref }}"
+    checkouts = {s.get("if"): s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")}
+    assert set(checkouts) == {"github.event_name == 'workflow_dispatch'", "github.event_name == 'pull_request'"}
+    # The dispatch checkout takes no PR-derived input: its own ref, so CodeQL sees no untrusted
+    # checkout in the privileged run (actions/cache-poisoning/poisonable-step).
+    assert "head_ref" not in str(checkouts["github.event_name == 'workflow_dispatch'"])
+    assert checkouts["github.event_name == 'pull_request'"]["with"]["ref"] == "${{ github.head_ref }}"
     assert (
         "github.head_ref || github.ref" in doc["concurrency"]["group"]
     ), "dispatches on different branches would cancel each other"

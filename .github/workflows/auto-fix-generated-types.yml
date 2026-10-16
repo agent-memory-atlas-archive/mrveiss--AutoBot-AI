@@ -96,10 +96,18 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
+      # Two checkouts, one per event (#18500). A single `ref: head_ref || ref` reads as a
+      # PR-head checkout in a privileged (dispatch) run, and CodeQL flags every step after
+      # it for cache poisoning. A dispatch checks out its own ref, with no PR input at all.
+      - name: Checkout the dispatched branch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v7
+
       - name: Checkout PR branch
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref || github.ref }}
+          ref: ${{ github.head_ref }}
           # #13791: prefer a token attributed to a human. Pushing with the
           # default GITHUB_TOKEN attributes the commit to github-actions[bot],
           # and this repository's fork-PR policy (all_external_contributors)
