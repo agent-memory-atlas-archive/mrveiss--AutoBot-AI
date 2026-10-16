@@ -8,12 +8,14 @@
   by endonym, see utils/locales.ts) and its translated accessible label, and
   applies the change itself on `update:modelValue`. Two variants:
     select -- a labelled native <select> (the SLM sidebar);
-    menu   -- an icon button opening a listbox (a nav bar), closing on an
-              outside click or Escape.
+    menu   -- an icon button opening a listbox (a nav bar). Opening focuses
+              the current language; Arrow keys move (wrapping), Home/End
+              jump, Enter/Space choose; a choice or Escape closes it and
+              returns focus to the button; an outside click closes it.
   Token-only styling.
 -->
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import type { LocaleOption } from '../utils/locales'
 
 const props = withDefaults(
@@ -32,10 +34,43 @@ const emit = defineEmits<{ 'update:modelValue': [code: string] }>()
 const uid = useId()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+/** Indexed by option position (a v-for ref array does not keep source order). */
+const optionEls: HTMLElement[] = []
+/** The option holding the one Tab stop in the open list. */
+const active = ref(0)
+
+function selectedIndex(): number {
+  return Math.max(0, props.options.findIndex((o) => o.code === props.modelValue))
+}
+
+function focusOption(index: number): void {
+  active.value = index
+  nextTick(() => optionEls[index]?.focus())
+}
+
+function toggle(): void {
+  open.value = !open.value
+  if (open.value) focusOption(selectedIndex())
+}
+
+function close(): void {
+  open.value = false
+  nextTick(() => trigger.value?.focus())
+}
 
 function choose(code: string): void {
-  open.value = false
+  if (props.variant === 'menu') close()
   if (code !== props.modelValue) emit('update:modelValue', code)
+}
+
+/** WAI-ARIA listbox: arrows wrap, Home/End jump. */
+function onOptionKey(event: KeyboardEvent, index: number): void {
+  const count = props.options.length
+  const target = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: count - 1 }[event.key]
+  if (target === undefined) return
+  event.preventDefault()
+  focusOption((target + count) % count)
 }
 
 function onOutside(event: MouseEvent): void {
@@ -43,7 +78,7 @@ function onOutside(event: MouseEvent): void {
 }
 
 function onKey(event: KeyboardEvent): void {
-  if (event.key === 'Escape') open.value = false
+  if (event.key === 'Escape' && open.value) close()
 }
 
 onMounted(() => document.addEventListener('click', onOutside))
@@ -65,13 +100,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onOutside))
     </template>
     <template v-else>
       <button
+        ref="trigger"
         type="button"
         class="aui-lang__trigger"
         :aria-label="label"
         :aria-expanded="open"
         aria-haspopup="listbox"
         :aria-controls="`${uid}-list`"
-        @click="open = !open"
+        @click="toggle"
       >
         <svg class="aui-lang__globe" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
@@ -80,10 +116,11 @@ onBeforeUnmount(() => document.removeEventListener('click', onOutside))
       </button>
       <ul v-if="open" :id="`${uid}-list`" role="listbox" class="aui-lang__list" :aria-label="label">
         <li
-          v-for="o in options"
+          v-for="(o, i) in options"
           :key="o.code"
+          :ref="(el) => { if (el) optionEls[i] = el as HTMLElement }"
           role="option"
-          tabindex="0"
+          :tabindex="i === active ? 0 : -1"
           :lang="o.code"
           :aria-selected="o.code === modelValue"
           class="aui-lang__option"
@@ -91,6 +128,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onOutside))
           @click="choose(o.code)"
           @keydown.enter.prevent="choose(o.code)"
           @keydown.space.prevent="choose(o.code)"
+          @keydown="onOptionKey($event, i)"
         >
           {{ o.label }}
         </li>
