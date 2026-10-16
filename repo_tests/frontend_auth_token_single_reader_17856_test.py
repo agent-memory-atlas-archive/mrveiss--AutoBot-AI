@@ -27,6 +27,14 @@ _ROOT = repo_root()
 _MAIN_SRC = _ROOT / "autobot-frontend" / "src"
 _SLM_SRC = _ROOT / "autobot-slm-frontend" / "src"
 
+#: Root-relative, one pair per tree: the python path filter covers both `src/**`
+#: trees, so this guard runs whenever either changes (#15900). A bare `*.ts` would
+#: probe outside them and read as uncovered.
+_GLOBS = {
+    _MAIN_SRC: ("autobot-frontend/src/**/*.ts", "autobot-frontend/src/**/*.vue"),
+    _SLM_SRC: ("autobot-slm-frontend/src/**/*.ts", "autobot-slm-frontend/src/**/*.vue"),
+}
+
 #: A storage access naming the main-app auth key.
 _MAIN_READ = re.compile(r"""localStorage\.getItem\(\s*['"]autobot_auth['"]""")
 #: Any literal naming an SLM session key, or the dead autobot_access_token.
@@ -41,7 +49,7 @@ def _is_test(path: Path) -> bool:
 
 
 def _sources(src: Path):
-    for path in sorted([*src.rglob("*.ts"), *src.rglob("*.vue")]):
+    for path in sorted(p for glob in _GLOBS[src] for p in _ROOT.glob(glob)):
         if not _is_test(path) and "types/generated" not in path.as_posix():
             yield path
 
