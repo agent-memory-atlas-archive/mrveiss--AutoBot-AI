@@ -270,11 +270,8 @@ class RateLimiter:
             pipe.expire(hour_key, TTL_2_HOURS)
             await pipe.execute()
         except Exception as exc:
-            logger.warning(
-                "rate_limiter: failed to record request for '%s': %s",
-                self._log_scope,
-                exc,
-            )
+            # An unrecorded request is effectively fail-open; class name only (#18617).
+            self._warn_fail_open(f"record error ({type(exc).__name__})")
 
     async def acquire(
         self,
@@ -392,11 +389,8 @@ class RateLimiter:
 
             return max(0, int(wait) + 1)  # +1 for safe rounding
         except Exception as exc:
-            logger.warning(
-                "rate_limiter: get_retry_after failed for '%s': %s",
-                self._log_scope,
-                exc,
-            )
+            # Exception text can carry host:port or a key: log the class only (#18617).
+            logger.warning("rate_limiter: get_retry_after failed for '%s' (%s)", self._log_scope, type(exc).__name__)
             return 0
 
     # ------------------------------------------------------------------
@@ -492,17 +486,14 @@ class RateLimiter:
         try:
             redis = await get_async_redis_client(database=self._db)
             if redis is None:
+                self._warn_fail_open("Redis unavailable")
                 return max_requests
 
             win_key = self._redis_key(key, "window")
             count = await redis.zcount(win_key, now - window_seconds, "+inf")
             return max(0, max_requests - int(count))
         except Exception as exc:
-            logger.warning(
-                "rate_limiter: get_remaining error for '%s': %s",
-                self._log_scope,
-                exc,
-            )
+            self._warn_fail_open(f"get_remaining error ({type(exc).__name__})")
             return max_requests
 
     # ------------------------------------------------------------------

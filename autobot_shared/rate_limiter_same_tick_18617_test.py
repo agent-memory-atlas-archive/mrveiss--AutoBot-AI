@@ -101,3 +101,42 @@ async def test_redis_error_fails_open_with_one_label_only_warning(caplog):
     assert all(results)
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
     assert CALLER_ID not in caplog.text
+
+
+def _broken_client():
+    """A client whose every call raises with the caller id and a host:port in the text."""
+    boom = AsyncMock()
+    err = ConnectionError(f"Error connecting to 10.0.0.5:6379 for {CALLER_ID}")
+    for name in ("eval", "zcount", "zrange", "zadd", "pipeline"):
+        getattr(boom, name).side_effect = err
+    boom.pipeline = lambda *a, **k: (_ for _ in ()).throw(err)
+    return boom
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda lim: lim.record(CALLER_ID),
+        lambda lim: lim.get_retry_after_seconds(CALLER_ID),
+        lambda lim: lim.get_remaining_in_window(CALLER_ID, 5, 300),
+    ],
+    ids=["record", "get_retry_after_seconds", "get_remaining_in_window"],
+)
+async def test_every_error_path_logs_the_class_only(call, caplog):
+    """No exception text (host:port, key) reaches the log on any path (#18617 review)."""
+    lim = RateLimiter("t18617")
+    with _patch_redis(_broken_client()), caplog.at_level(logging.WARNING):
+        await call(lim)
+    assert "ConnectionError" in caplog.text
+    assert CALLER_ID not in caplog.text and "10.0.0.5" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_remaining_fails_open_through_the_rate_limited_warning(caplog):
+    lim = RateLimiter("t18617")
+    with _patch_redis(None), caplog.at_level(logging.WARNING):
+        results = [await lim.get_remaining_in_window(CALLER_ID, 5, 300) for _ in range(5)]
+    assert results == [5] * 5
+    warns = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warns) == 1 and "fail-open" in warns[0]
