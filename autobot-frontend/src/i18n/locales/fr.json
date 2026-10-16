@@ -8994,7 +8994,7 @@
         "tooSoon": "Vous venez déjà de demander pour cette réservation ; réessayez dans une minute.",
         "notFound": "Cette tâche ne détient plus la réservation — actualisez pour voir qui la détient.",
         "unavailable": "Impossible de joindre le registre ; rien n'a été envoyé.",
-        "error": "Un problème est survenu ; rien n'a été envoyé."
+        "error": "Un problème est survenu et la remise n'a pas pu être confirmée. Actualisez pour voir si la réservation est toujours détenue."
       }
     }
   },

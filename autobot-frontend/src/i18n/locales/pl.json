@@ -8994,7 +8994,7 @@
         "tooSoon": "Pytałeś o tę rezerwację przed chwilą; spróbuj ponownie za minutę.",
         "notFound": "To zadanie nie trzyma już tej rezerwacji — odśwież, aby zobaczyć, kto ją trzyma.",
         "unavailable": "Nie można połączyć się z rejestrem; nic nie wysłano.",
-        "error": "Coś poszło nie tak; nic nie wysłano."
+        "error": "Coś poszło nie tak i nie udało się potwierdzić doręczenia. Odśwież, aby sprawdzić, czy blokada jest nadal utrzymywana."
       }
     }
   },

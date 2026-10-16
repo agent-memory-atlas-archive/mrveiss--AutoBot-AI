@@ -8994,7 +8994,7 @@
         "tooSoon": "Jūs tikko jau lūdzāt par šo pieprasījumu; mēģiniet vēlreiz pēc minūtes.",
         "notFound": "Šis uzdevums vairs netur šo pieprasījumu — atsvaidziniet, lai redzētu, kurš to tur tagad.",
         "unavailable": "Neizdevās sasniegt žurnālu; nekas netika nosūtīts.",
-        "error": "Radās kļūda; nekas netika nosūtīts."
+        "error": "Radās kļūda, un piegādi nevarēja apstiprināt. Atsvaidziniet, lai redzētu, vai rezervācija joprojām ir spēkā."
       }
     }
   },

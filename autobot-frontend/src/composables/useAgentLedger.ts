@@ -95,7 +95,7 @@ export type AskOutcome =
   | { state: 'too-soon' } // 429: this person asked about this scope within the window
   | { state: 'not-found' } // 404: no such claim for this company, or it changed hands
   | { state: 'unavailable' } // typed 503: the ledger store could not be read
-  | { state: 'error' }
+  | { state: 'error' } // anything else, a lost response included: the request may have been delivered
 
 /** Ask the holder of `scope` to release it -- the same yield request an agent sends. */
 export async function askHolderToRelease(scope: string, holderTaskId: string, reason = ''): Promise<AskOutcome> {

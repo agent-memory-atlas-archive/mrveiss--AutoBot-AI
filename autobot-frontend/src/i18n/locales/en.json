@@ -8982,7 +8982,7 @@
         "tooSoon": "You asked about this claim a moment ago; try again in a minute.",
         "notFound": "That claim is no longer held by this task — refresh to see who holds it now.",
         "unavailable": "Couldn't reach the ledger; nothing was sent.",
-        "error": "Something went wrong; nothing was sent."
+        "error": "Something went wrong and delivery could not be confirmed. Refresh to see whether the claim is still held."
       }
     }
   },

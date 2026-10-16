@@ -8994,7 +8994,7 @@
         "tooSoon": "Ya preguntaste por esta reserva hace un momento; inténtalo de nuevo en un minuto.",
         "notFound": "Esta tarea ya no tiene esa reserva; actualiza para ver quién la tiene ahora.",
         "unavailable": "No se pudo contactar con el registro; no se envió nada.",
-        "error": "Algo salió mal; no se envió nada."
+        "error": "Algo salió mal y no se pudo confirmar la entrega. Actualiza para ver si la reserva sigue activa."
       }
     }
   },
