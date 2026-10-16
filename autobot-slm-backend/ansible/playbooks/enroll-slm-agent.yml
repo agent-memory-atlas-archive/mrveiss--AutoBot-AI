@@ -88,36 +88,9 @@
     # synchronize here: it escalates only with passwordless sudo, which the
     # password-auth enrollment does not have until the sudoers task above ran.
     # The excludes mirror the autobot_shared role's rsync list (a test pins parity).
-    - name: List the controller's autobot_shared files
-      ansible.builtin.find:
-        paths: "{{ shared_src }}"
-        recurse: true
-        file_type: file
-        hidden: true
-      register: shared_found
-      delegate_to: localhost
-      run_once: true
-      become: false
+    - name: Ship autobot_shared as one filtered archive
       vars:
-        shared_src: "{{ code_source_dir | default(autobot.base_dir ~ '/code_source') }}/autobot_shared"
-
-    - name: Filter out caches, VCS and env files (path-component match)
-      ansible.builtin.set_fact:
-        shared_rels: >-
-          {%- set ns = namespace(out=[]) -%}
-          {%- for f in shared_found.files -%}
-          {%- set rel = f.path[(shared_src | length + 1):] -%}
-          {%- set hit = namespace(v=false) -%}
-          {%- for c in rel.split('/') -%}
-          {%- for p in shared_excludes -%}
-          {%- if c == p or (p.startswith('*') and c.endswith(p[1:])) -%}{%- set hit.v = true -%}{%- endif -%}
-          {%- endfor -%}
-          {%- endfor -%}
-          {%- if not hit.v -%}{%- set ns.out = ns.out + [rel] -%}{%- endif -%}
-          {%- endfor -%}
-          {{ ns.out | join('\n') }}
-      vars:
-        shared_src: "{{ code_source_dir | default(autobot.base_dir ~ '/code_source') }}/autobot_shared"
+        shared_parent: "{{ code_source_dir | default(autobot.base_dir ~ '/code_source') }}"
         shared_excludes:
           - __pycache__
           - "*.pyc"
@@ -125,24 +98,55 @@
           - .git
           - .env
           - "*.env"
+      block:
+        - name: Create a unique controller temp file for the archive
+          ansible.builtin.tempfile:
+            state: file
+            prefix: autobot_shared-
+            suffix: .tar.gz
+          register: shared_tar
+          delegate_to: localhost
+          run_once: true
+          become: false
 
-    - name: Create the autobot_shared directories
-      ansible.builtin.file:
-        path: "{{ autobot.base_dir }}/autobot_shared/{{ item }}"
-        state: directory
-        owner: "{{ slm_agent_user }}"
-        group: "{{ slm_agent_group }}"
-        mode: 'u=rwX,g=rX,o=rX'
-      loop: "{{ [''] + (shared_rels.split('\n') | select | map('dirname') | unique | reject('equalto', '') | list) }}"
+        - name: Build the filtered autobot_shared archive on the controller
+          ansible.builtin.command:
+            argv: >-
+              {{ ['tar', '-czf', shared_tar.path]
+                 + (shared_excludes | map('regex_replace', '^', '--exclude=') | list)
+                 + ['--mode=u=rwX,g=rX,o=rX', '--owner=0', '--group=0', '--numeric-owner',
+                    '-C', shared_parent, 'autobot_shared'] }}
+          changed_when: true
+          delegate_to: localhost
+          run_once: true
+          become: false
 
-    - name: Install autobot_shared for the agent (no backend/celery handlers)
-      ansible.builtin.copy:
-        src: "{{ code_source_dir | default(autobot.base_dir ~ '/code_source') }}/autobot_shared/{{ item }}"
-        dest: "{{ autobot.base_dir }}/autobot_shared/{{ item }}"
-        owner: "{{ slm_agent_user }}"
-        group: "{{ slm_agent_group }}"
-        mode: 'u=rwX,g=rX,o=rX'
-      loop: "{{ shared_rels.split('\n') | select | list }}"
+        - name: Ensure the autobot_shared directory exists
+          ansible.builtin.file:
+            path: "{{ autobot.base_dir }}/autobot_shared"
+            state: directory
+            owner: "{{ slm_agent_user }}"
+            group: "{{ slm_agent_group }}"
+            mode: 'u=rwX,g=rX,o=rX'
+
+        - name: Install autobot_shared for the agent (no backend/celery handlers)
+          ansible.builtin.unarchive:
+            src: "{{ shared_tar.path }}"
+            dest: "{{ autobot.base_dir }}/autobot_shared"
+            remote_src: false
+            owner: "{{ slm_agent_user }}"
+            group: "{{ slm_agent_group }}"
+            extra_opts:
+              - --strip-components=1
+      always:
+        - name: Remove the controller temp archive
+          ansible.builtin.file:
+            path: "{{ shared_tar.path }}"
+            state: absent
+          when: shared_tar.path is defined
+          delegate_to: localhost
+          run_once: true
+          become: false
 
     - name: Deploy the SLM agent (slm_agent role)
       ansible.builtin.import_role:

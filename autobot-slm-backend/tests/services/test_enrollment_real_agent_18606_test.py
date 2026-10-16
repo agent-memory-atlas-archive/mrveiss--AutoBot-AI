@@ -116,21 +116,41 @@ def test_the_ssh_key_steps_are_kept() -> None:
         assert kept in names
 
 
+def _shared_block() -> dict:
+    return next(t for t in _tasks() if t["name"].startswith("Ship autobot_shared"))
+
+
+def _shared_tasks() -> list[dict]:
+    return _shared_block()["block"]
+
+
 def test_autobot_shared_is_installed_before_the_agent_without_a_handler() -> None:
     """The agent imports autobot_shared; a fresh enrollee has no backend/celery to restart."""
     tasks = _tasks()
-    names = [t["name"] for t in tasks]
-    install = next(i for i, n in enumerate(names) if n.startswith("Install autobot_shared"))
-    assert install < next(i for i, t in enumerate(tasks) if "ansible.builtin.import_role" in t)
-    assert "notify" not in tasks[install]
-    assert "ansible.builtin.copy" in tasks[install]
-    assert tasks[install]["ansible.builtin.copy"]["mode"] == "u=rwX,g=rX,o=rX"
-    dirs = next(t for t in tasks if t["name"].startswith("Create the autobot_shared directories"))
-    assert dirs["ansible.builtin.file"]["mode"] == "u=rwX,g=rX,o=rX"
+    idx = tasks.index(_shared_block())
+    assert idx < next(i for i, t in enumerate(tasks) if "ansible.builtin.import_role" in t)
+    assert "notify" not in _shared_block() and not _notified(tasks)
+    unarchive = [t for t in _shared_tasks() if "ansible.builtin.unarchive" in t]
+    assert len(unarchive) == 1
+    args = unarchive[0]["ansible.builtin.unarchive"]
+    assert args["remote_src"] is False and args["extra_opts"] == ["--strip-components=1"]
+    assert args["dest"] == "{{ autobot.base_dir }}/autobot_shared"
+    assert _shared_block()["always"][0]["ansible.builtin.file"]["state"] == "absent"
 
 
-def _filter_task() -> dict:
-    return next(t for t in _tasks() if t["name"].startswith("Filter out caches"))
+def test_no_per_file_loop_remains() -> None:
+    def walk(tasks):
+        for t in tasks:
+            yield t
+            for k in ("block", "rescue", "always"):
+                yield from walk(t.get(k, []))
+
+    for t in walk(_tasks()):
+        assert not {"loop", "with_items", "with_fileglob", "with_filetree"} & set(t), t["name"]
+        assert "ansible.builtin.find" not in t, t["name"]
+        if t["name"].startswith(("Install autobot_shared", "Ship autobot_shared")):
+            assert "ansible.builtin.copy" not in t
+    assert sum("ansible.builtin.unarchive" in t for t in walk(_tasks())) == 1
 
 
 def _role_rsync_excludes() -> set[str]:
@@ -139,26 +159,58 @@ def _role_rsync_excludes() -> set[str]:
     return {o.split("=", 1)[1] for o in sync["rsync_opts"] if o.startswith("--exclude=")}
 
 
-def _kept(paths: list[str]) -> list[str]:
-    """Render the playbook's own filter expression with jinja2 over synthetic find results."""
+def _tar_argv(tar_path: str, parent: str) -> list[str]:
+    """Render the playbook's own tar argv template with jinja2 + the play vars."""
     import jinja2
 
-    task = _filter_task()
-    expr = task["ansible.builtin.set_fact"]["shared_rels"]
-    ctx = {**task["vars"], "shared_src": "/src/autobot_shared"}
-    ctx["shared_found"] = {"files": [{"path": "/src/autobot_shared/" + p} for p in paths]}
-    return [r for r in jinja2.Template(expr).render(**ctx).split("\n") if r]
+    block = _shared_block()
+    task = next(t for t in block["block"] if "ansible.builtin.command" in t)
+    expr = task["ansible.builtin.command"]["argv"]
+    ctx = {**block["vars"], "shared_parent": parent, "shared_tar": {"path": tar_path}}
+    env = jinja2.Environment()
+    env.filters["regex_replace"] = lambda v, pat, rep: __import__("re").sub(pat, rep, v)
+    return json.loads(json.dumps(__import__("ast").literal_eval(env.from_string(expr).render(**ctx))))
 
 
-def test_shared_excludes_equal_the_roles_rsync_excludes() -> None:
-    assert set(_filter_task()["vars"]["shared_excludes"]) == _role_rsync_excludes()
+def test_tar_excludes_equal_the_roles_rsync_excludes() -> None:
+    argv = _tar_argv("/t/x.tar.gz", "/src")
+    assert {a.split("=", 1)[1] for a in argv if a.startswith("--exclude=")} == _role_rsync_excludes()
 
 
-def test_the_filter_drops_caches_env_egg_info_and_git_but_keeps_sources() -> None:
-    dropped = ["__pycache__/x.pyc", ".env", "x.egg-info/PKG-INFO", ".git/config", "sub/__pycache__/y.py", "a/prod.env"]
-    kept = ["redis_client.py", "sub/pkg/__init__.py"]
-    assert _kept(dropped + kept) == kept
-    assert _kept(dropped) == []
+def test_the_archive_holds_only_sources_with_fixed_modes(tmp_path) -> None:
+    import subprocess
+    import tarfile
+
+    src = tmp_path / "src" / "autobot_shared"
+    for rel in (
+        "redis_client.py",
+        "sub/pkg/__init__.py",
+        "__pycache__/x.pyc",
+        ".env",
+        "a/prod.env",
+        "x.egg-info/PKG-INFO",
+        ".git/config",
+        "sub/__pycache__/y.py",
+    ):
+        f = src / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x", encoding="utf-8")
+        f.chmod(0o600)
+    for d in src.rglob("*"):
+        if d.is_dir():
+            d.chmod(0o700)
+    out = tmp_path / "out.tar.gz"
+    subprocess.run(_tar_argv(str(out), str(tmp_path / "src")), check=True)
+    with tarfile.open(out) as tar:
+        members = {m.name: m for m in tar.getmembers()}
+    files = {n for n, m in members.items() if m.isfile()}
+    assert files == {"autobot_shared/redis_client.py", "autobot_shared/sub/pkg/__init__.py"}
+    dirs = {n for n, m in members.items() if m.isdir()}
+    # "a" holds only an excluded prod.env: tar keeps it as an empty directory, which is harmless
+    assert dirs == {"autobot_shared", "autobot_shared/a", "autobot_shared/sub", "autobot_shared/sub/pkg"}
+    assert all(m.mode == 0o644 for m in members.values() if m.isfile())
+    assert all(m.mode == 0o755 for m in members.values() if m.isdir())
+    assert all(m.uid == 0 and m.gid == 0 for m in members.values())
 
 
 def test_no_synchronize_on_the_enrollment_path() -> None:
@@ -286,3 +338,24 @@ def test_a_templating_password_round_trips_as_an_unsafe_literal(deployment, monk
     assert mode == 0o600
     assert all(type(v) is _Unsafe for v in content.values())
     assert content == {"ansible_ssh_pass": tricky, "ansible_become_pass": tricky}
+
+
+_TRICKY = "😀é\t\u2028\u0085\ufeff{{ x }}\\ud83d\\ude00\\"
+
+
+@pytest.mark.parametrize("loader_name", ["CSafeLoader", "SafeLoader"])
+def test_non_ascii_passwords_round_trip_in_both_yaml_loaders(deployment, monkeypatch, loader_name) -> None:
+    base = getattr(yaml, loader_name, None)
+    if base is None:
+        pytest.skip(f"{loader_name} unavailable")
+    loader = type("L", (base,), {})
+    loader.add_constructor("!unsafe", lambda ld, node: ld.construct_scalar(node))
+    monkeypatch.setattr(deployment.shutil, "which", lambda _n: "/usr/bin/sshpass")
+    path = Path(deployment.DeploymentService()._write_enrollment_secrets(_TRICKY))
+    try:
+        raw = path.read_bytes()
+        loaded = yaml.load(raw.decode("utf-8"), Loader=loader)
+    finally:
+        path.unlink()
+    raw.decode("ascii")  # every non-ASCII char is escaped, none written raw
+    assert loaded == {"ansible_ssh_pass": _TRICKY, "ansible_become_pass": _TRICKY}

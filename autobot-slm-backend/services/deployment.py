@@ -29,6 +29,7 @@ from models.database import Deployment, DeploymentStatus, Node, NodeStatus
 from models.schemas import DeploymentCreate, DeploymentResponse
 from services.ansible_utils import _find_ansible_playbook as _resolve_ansible_playbook
 from services.encryption import decrypt_data
+from services.yaml_scalar import yaml_double_quoted
 
 logger = logging.getLogger(__name__)
 
@@ -593,9 +594,8 @@ class DeploymentService:
         try:
             os.fchmod(fd, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(
-                    "ansible_ssh_pass: !unsafe {0}\nansible_become_pass: !unsafe {0}\n".format(json.dumps(ssh_password))
-                )
+                quoted = yaml_double_quoted(ssh_password)
+                handle.write(f"ansible_ssh_pass: !unsafe {quoted}\nansible_become_pass: !unsafe {quoted}\n")
         except BaseException:
             Path(path).unlink(missing_ok=True)
             raise
