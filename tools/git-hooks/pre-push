@@ -52,9 +52,16 @@ PYTEST_COST_PARALLEL=3
 # validated like the workers knob and capped at MAX_BUDGET.
 type_check_timeout() {
     local t="${AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT:-450}"
+    # Read as base 10 (no octal from a leading 0) and reject <= 0: `timeout 0` (or 00)
+    # means NO timeout to GNU timeout, which would silently drop the budget.
     case "$t" in
-        ''|*[!0-9]*|0) warn "AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT='${t}' is not a positive integer -- using 450"; t=450 ;;
+        ''|*[!0-9]*) t=0 ;;
+        *) t=$((10#$t)) ;;
     esac
+    if [ "$t" -le 0 ]; then
+        warn "AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT='${AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT}' is not a positive integer -- using 450"
+        t=450
+    fi
     [ "$t" -gt "$MAX_BUDGET" ] && t=$MAX_BUDGET
     printf '%s' "$t"
 }
@@ -194,6 +201,7 @@ pytest_workers() {
     local w="${AUTOBOT_PREPUSH_PYTEST_WORKERS:-4}"
     case "$w" in
         ''|*[!0-9]*) warn "AUTOBOT_PREPUSH_PYTEST_WORKERS='${w}' is not a non-negative integer -- using 4"; w=4 ;;
+        *) w=$((10#$w)) ;;  # base 10: "08" is 8, not an octal error
     esac
     printf '%s' "$w"
 }

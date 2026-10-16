@@ -90,6 +90,11 @@ def test_the_type_check_knob_overrides_validates_and_caps() -> None:
     value, warning = _type_check_timeout("soon")
     assert value == 450 and "AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT" in warning
     assert _type_check_timeout("0")[0] == 450
+    # `timeout 00` is NO timeout to GNU timeout: every all-zero form must fall back too.
+    for zero in ("00", "000"):
+        value, warning = _type_check_timeout(zero)
+        assert value == 450 and "AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT" in warning, zero
+    assert _type_check_timeout("0450")[0] == 450, "a leading zero is decimal, not octal"
     assert _type_check_timeout("5000")[0] == _constant("MAX_BUDGET")
 
 
@@ -119,3 +124,15 @@ def test_the_kit_step_uses_its_own_budget() -> None:
     src = _source()
     assert 'timeout "$kit_timeout" npx vitest related' in src
     assert 'did_not_run "vitest related (${project})" "${kit_timeout}"' in src
+
+
+def test_pytest_workers_reads_a_leading_zero_as_decimal() -> None:
+    """`08`/`09` are not valid octal; the workers knob is read base 10 (#18589 review)."""
+    func = re.search(r"^pytest_workers\(\) \{\n(?:.*\n)*?\}$", _source(), re.MULTILINE)
+    assert func, "the hook no longer defines pytest_workers"
+    for raw, expected in (("08", "8"), ("09", "9"), ("0", "0"), ("4", "4")):
+        env = scrubbed_git_env()
+        env["AUTOBOT_PREPUSH_PYTEST_WORKERS"] = raw
+        script = f'warn() {{ echo "WARN $*" >&2; }}\n{func.group(0)}\npytest_workers'
+        done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=env)
+        assert done.stdout == expected and not done.stderr, raw
