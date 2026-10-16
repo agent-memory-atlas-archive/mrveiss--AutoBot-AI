@@ -296,3 +296,31 @@ def test_control_the_deletion_sweep_must_read_the_find_source_dir(tree: Path) ->
     assert old in text
     path.write_text(text.replace(old, 'sync_deletions_source_dir: "/elsewhere"'), encoding="utf-8")
     assert len(wiring_problems(tree)) == 1
+
+
+def empty_source_is_refused(tasks: list[dict]) -> bool:
+    """True when an assert on the find's ``matched`` count runs after the find and before the copy."""
+    names = [t.get("name", "") for t in tasks]
+    find_at = next((i for i, t in enumerate(tasks) if "ansible.builtin.find" in t), None)
+    copy_at = next((i for i, n in enumerate(names) if "Copy agent source modules" in n), None)
+    if find_at is None or copy_at is None:
+        return False
+    register = tasks[find_at].get("register")
+    return any(
+        "ansible.builtin.assert" in t
+        and any(f"{register}.matched" in str(c) for c in t["ansible.builtin.assert"]["that"])
+        for t in tasks[find_at + 1 : copy_at]
+    )
+
+
+def test_an_empty_or_missing_source_tree_fails_the_deploy():
+    assert empty_source_is_refused(_yaml(REPO_ROOT / ROLE_REL / "tasks" / "main.yml"))
+
+
+def test_empty_source_check_contrast():
+    find = {"name": "Enumerate", "ansible.builtin.find": {}, "register": "mods"}
+    copy = {"name": "Copy agent source modules", "ansible.builtin.copy": {}}
+    guard = {"ansible.builtin.assert": {"that": ["mods.matched | int > 0"]}}
+    assert empty_source_is_refused([find, guard, copy])
+    assert not empty_source_is_refused([find, copy])
+    assert not empty_source_is_refused([find, copy, guard])  # after the copy is too late

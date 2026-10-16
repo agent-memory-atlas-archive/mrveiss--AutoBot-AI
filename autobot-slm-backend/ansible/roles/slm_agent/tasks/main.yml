@@ -179,6 +179,18 @@
   register: slm_agent_source_modules
   tags: ['slm_agent', 'deploy']
 
+# A missing or empty source tree would match nothing and the copy loop would
+# "succeed" with no agent update; fail loudly instead (#18548 review).
+- name: "SLM Agent | Fail when the agent source tree is missing or empty (#18548)"
+  ansible.builtin.assert:
+    that:
+      - slm_agent_source_modules.matched | int > 0
+    fail_msg: >-
+      No agent modules found under {{ slm_agent_source_dir }} on the controller;
+      refusing to report a deploy that copied nothing.
+  run_once: true
+  tags: ['slm_agent', 'deploy']
+
 - name: "SLM Agent | Copy agent source modules from code_source (#18548)"
   ansible.builtin.copy:
     src: "{{ item.path }}"
