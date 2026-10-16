@@ -53,15 +53,35 @@ def _project_with_tests(tmp_path: Path, count: int) -> Path:
     return tmp_path
 
 
-def test_vue_tsc_budget_is_not_scaled_by_the_changeset() -> None:
+def _type_check_timeout(value: str | None) -> tuple[int, str]:
+    """Run the hook's own type_check_timeout() with the knob set to *value*."""
+    func = re.search(r"^type_check_timeout\(\) \{\n(?:.*\n)*?\}$", _source(), re.MULTILINE)
+    assert func, "the hook no longer defines type_check_timeout"
+    script = (
+        f"MAX_BUDGET={_constant('MAX_BUDGET')}\nwarn() {{ echo \"WARN $*\" >&2; }}\n{func.group(0)}\ntype_check_timeout"
+    )
+    env = scrubbed_git_env()
+    env.pop("AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT", None)
+    if value is not None:
+        env["AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT"] = value
+    done = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True, env=env)
+    return int(done.stdout), done.stderr
+
+
+def test_vue_tsc_budget_is_project_sized_not_changeset_scaled() -> None:
+    """The old `90 + 3 x changed` gave 99 s for 3 files against 111 s measured idle."""
     assert not re.search(r"TYPE_CHECK_TIMEOUT=\$\(\(.*changed_count", _source())
-    assert _constant("TYPE_CHECK_TIMEOUT") >= 111 * 2, "below twice the measured idle vue-tsc time"
-    assert _constant("TYPE_CHECK_TIMEOUT") <= _constant("MAX_BUDGET")
+    assert "TYPE_CHECK_TIMEOUT=$(type_check_timeout)" in _source()
+    default, warning = _type_check_timeout(None)
+    assert default == 450 and not warning
 
 
-def test_the_old_changeset_formula_could_never_pass_a_small_pr() -> None:
-    """Contrast: 90 + 3 files x 3 s = 99 s, under the 111 s vue-tsc measured idle."""
-    assert 90 + 3 * 3 < 111
+def test_the_type_check_knob_overrides_validates_and_caps() -> None:
+    assert _type_check_timeout("500")[0] == 500
+    value, warning = _type_check_timeout("soon")
+    assert value == 450 and "AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT" in warning
+    assert _type_check_timeout("0")[0] == 450
+    assert _type_check_timeout("5000")[0] == _constant("MAX_BUDGET")
 
 
 def test_kit_related_budget_grows_with_the_projects_tests(tmp_path: Path) -> None:

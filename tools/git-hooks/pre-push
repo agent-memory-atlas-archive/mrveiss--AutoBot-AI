@@ -33,10 +33,18 @@ PYTEST_COST_SERIAL=6
 PYTEST_COST_PARALLEL=3
 
 # #18578: the other two budgets follow their work too. vue-tsc type-checks the WHOLE
-# project whatever the changeset: measured 111 s idle (load ~5) on autobot-frontend, so
-# a changeset-scaled budget (99 s for 3 files) could never pass a small PR. A fixed
-# budget with load headroom (~2.7x idle), under MAX_BUDGET.
-TYPE_CHECK_TIMEOUT=300
+# project whatever the changeset: measured 111 s idle (load ~5) and ~294 s under load on
+# autobot-frontend, so a changeset-scaled budget (99 s for 3 files) could never pass a
+# small PR. A project-sized budget, AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT (default 450),
+# validated like the workers knob and capped at MAX_BUDGET.
+type_check_timeout() {
+    local t="${AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT:-450}"
+    case "$t" in
+        ''|*[!0-9]*|0) warn "AUTOBOT_PREPUSH_TYPE_CHECK_TIMEOUT='${t}' is not a positive integer -- using 450"; t=450 ;;
+    esac
+    [ "$t" -gt "$MAX_BUDGET" ] && t=$MAX_BUDGET
+    printf '%s' "$t"
+}
 # A libs/autobot-ui change runs `vitest related` over every test that reaches the kit;
 # a barrel change reaches nearly all of them. vitest 4 has no cheap related count
 # (`vitest list` takes no --related), so the selection bound is the project's tracked
@@ -48,7 +56,8 @@ VITEST_COST_PER_FILE=2
 # VITEST_COST_PER_FILE, at least TEST_TIMEOUT, capped at MAX_BUDGET.
 kit_related_budget() {
     local files budget
-    files=$(git -C "$1" ls-files -- '*.test.ts' '*.spec.ts' '*.test.js' '*.spec.js' 2>/dev/null | grep -c .)
+    files=$(git -C "$1" ls-files -- '*.test.ts' '*.spec.ts' '*.test.tsx' '*.spec.tsx' '*.test.mts' '*.spec.mts' \
+        '*.test.js' '*.spec.js' 2>/dev/null | grep -c .)
     budget=$(( files * VITEST_COST_PER_FILE ))
     [ "$budget" -lt "$TEST_TIMEOUT" ] && budget=$TEST_TIMEOUT
     [ "$budget" -gt "$MAX_BUDGET" ] && budget=$MAX_BUDGET
@@ -483,6 +492,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   changed_count=$(printf '%s\n' "$changed" | grep -c . || true)
   TEST_TIMEOUT=$(( TEST_TIMEOUT + (changed_count * 4) ))
   [ "$TEST_TIMEOUT" -gt "$MAX_BUDGET" ] && TEST_TIMEOUT=$MAX_BUDGET
+  TYPE_CHECK_TIMEOUT=$(type_check_timeout)
   log "changeset ${changed_count} file(s) -> vitest budget ${TEST_TIMEOUT}s (pytest is sized after selection, #17451), vue-tsc ${TYPE_CHECK_TIMEOUT}s"
   if [ -z "$changed" ]; then
     log "no changed files in range — skipping Phase 0c"
