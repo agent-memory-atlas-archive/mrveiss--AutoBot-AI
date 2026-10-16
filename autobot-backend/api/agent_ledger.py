@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, Query
 
 from api.user_management.dependencies import get_current_user, require_org_context
 from autobot_shared.coordination import ledger_read
-from autobot_shared.coordination.ledger_http import UNAVAILABLE_RESPONSES, serve_ledger
+from autobot_shared.coordination.ledger_http import UNAVAILABLE_RESPONSES, serve_ledger, valid_kind
 from autobot_shared.coordination.ledger_schemas import (
     ActivityResponse,
     ClaimsResponse,
@@ -83,7 +83,7 @@ async def ledger_claims(
     scope: CompanyScope = Depends(company_scope),
 ) -> ClaimsResponse:
     """The company's held claims: scope, mode, intent, expiry and renewals."""
-    return await ledger_read.claims(scope.org_id, kind)
+    return await ledger_read.claims(scope.org_id, valid_kind(kind))
 
 
 @router.get("/ledger/waitlists", response_model=WaitlistsResponse)

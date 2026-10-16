@@ -51,6 +51,7 @@ from autobot_shared.coordination.work_claims import (
     ClaimMode,
     ClaimUnavailable,
     Scope,
+    ScopeError,
     _require_holder,
 )
 from autobot_shared.env_utils import env_int_clamped
@@ -339,7 +340,11 @@ async def all_waiters() -> dict[str, list[Waiter]]:
     async for raw in client.scan_iter(match=f"{prefix}:*"):
         key = raw.decode() if isinstance(raw, bytes) else raw
         kind, _, path = key[len(prefix) + 1 :].partition(":")
-        scope = Scope.parse(f"{kind}:{path}")
+        try:
+            scope = Scope.parse(f"{kind}:{path}")
+        except ScopeError:
+            logger.warning("claim_waitlist: skipping malformed wait key %r", key)
+            continue
         if queued := await waiters(scope):
             queues[str(scope)] = queued
     return queues

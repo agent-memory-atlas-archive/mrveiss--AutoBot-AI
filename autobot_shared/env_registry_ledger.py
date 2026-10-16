@@ -33,8 +33,8 @@ register_env_var(
         default=604800,
         description=(
             "Idle lifetime of the agent ledger's event list, refreshed by every write (#18391). "
-            "Events older than the retained window are gone either way; this only stops an "
-            "abandoned list outliving the install."
+            "Nothing is aged out individually: only the event cap trims the list, and this TTL "
+            "(reset on every write) only stops an abandoned list outliving the install."
         ),
         component="orchestration",
         range=(3600, 7776000),

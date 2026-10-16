@@ -36,6 +36,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from redis.exceptions import RedisError
+
 from a2a.task_manager import get_task_manager
 from autobot_shared.coordination.claim_waitlist import Waiter, next_waiter
 from autobot_shared.coordination.ledger_events import (
@@ -130,7 +132,7 @@ async def _record(event_type: str, **fields: Any) -> None:
     """Mirror a yield step into the ledger (#18391). Best-effort: the negotiation is the fact."""
     try:
         await record_ledger_event(await _redis(), event_type, **fields)
-    except ClaimUnavailable:
+    except (ClaimUnavailable, RedisError, OSError):
         logger.warning("claim_yield: ledger event %s not recorded; Redis unavailable", event_type)
 
 

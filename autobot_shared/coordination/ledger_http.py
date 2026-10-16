@@ -16,10 +16,12 @@ import functools
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from autobot_shared.coordination.ledger_read import LedgerUnreadable
 from autobot_shared.coordination.ledger_schemas import LedgerUnavailable
+from autobot_shared.coordination.work_claims import VALID_KINDS
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
@@ -34,6 +36,13 @@ def unavailable(exc: LedgerUnreadable) -> JSONResponse:
     logger.warning("agent ledger: %s could not be read: %s", exc.source, exc.detail)
     body = LedgerUnavailable(source=exc.source, detail=exc.detail)
     return JSONResponse(status_code=503, content=body.model_dump())
+
+
+def valid_kind(kind: str | None) -> str | None:
+    """Pass *kind* through when it is a real claim scope kind; otherwise answer 422 (not a 500)."""
+    if kind is not None and kind not in VALID_KINDS:
+        raise HTTPException(status_code=422, detail=f"unknown scope kind; expected one of {sorted(VALID_KINDS)}")
+    return kind
 
 
 def serve_ledger(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:

@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from autobot_shared.auth.permissions import Permission
 from autobot_shared.coordination import ledger_read
-from autobot_shared.coordination.ledger_http import UNAVAILABLE_RESPONSES, serve_ledger
+from autobot_shared.coordination.ledger_http import UNAVAILABLE_RESPONSES, serve_ledger, valid_kind
 from autobot_shared.coordination.ledger_schemas import (
     ActivityResponse,
     ClaimsResponse,
@@ -84,7 +84,7 @@ async def ledger_sources() -> LedgerSourcesResponse:
 @serve_ledger
 async def ledger_claims(kind: str | None = Query(None, description="Only claims of this scope kind")) -> ClaimsResponse:
     """Every held claim across the install: scope, mode, intent, expiry, renewals."""
-    return await ledger_read.claims(None, kind)
+    return await ledger_read.claims(None, valid_kind(kind))
 
 
 @router.get("/waitlists", response_model=WaitlistsResponse)

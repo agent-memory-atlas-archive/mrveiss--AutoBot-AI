@@ -63,6 +63,7 @@ from typing import Any
 
 from autobot_shared.coordination.claim_company import resolve_company
 from autobot_shared.coordination.ledger_events import note_refused_release, record_expired_members
+from autobot_shared.coordination.work_claims_lua import _ACQUIRE_LUA, _RELEASE_LUA, _RENEW_LUA
 from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
@@ -309,77 +310,6 @@ class ClaimConflictError(RuntimeError):
         self.conflict = conflict
 
 
-# ``cjson`` is available in Redis Lua. Each script is one round trip and runs
-# atomically, which is what makes "no two overlapping exclusive claims" true
-# across uvicorn workers -- a read-then-write in Python cannot promise it.
-_ACQUIRE_LUA = """
-local idx, prefix, path = KEYS[1], ARGV[1], ARGV[2]
-local mode, payload, ttl = ARGV[3], ARGV[4], tonumber(ARGV[5])
-local agent, task = ARGV[6], ARGV[7]
-local mine = path .. '|' .. agent .. '|' .. task
-local members = redis.call('SMEMBERS', idx)
-local renewing = false
-local pruned = {}
-for i = 1, #members do
-  local member = members[i]
-  local raw = redis.call('GET', prefix .. member)
-  if not raw then
-    redis.call('SREM', idx, member)
-    pruned[#pruned + 1] = member
-  else
-    local sep = string.find(member, '|', 1, true)
-    local held_path = string.sub(member, 1, sep - 1)
-    local overlaps = held_path == path
-      or string.sub(path, 1, #held_path + 1) == held_path .. '/'
-      or string.sub(held_path, 1, #path + 1) == path .. '/'
-    if overlaps then
-      if member == mine then
-        renewing = true
-      else
-        local held = cjson.decode(raw)
-        local same_holder = held.agent_id == agent and held.task_id == task
-        local both_shared = mode == 'shared' and held.mode == 'shared'
-        if not same_holder and not both_shared then
-          return {'conflict', raw, pruned}
-        end
-      end
-    end
-  end
-end
-redis.call('SET', prefix .. mine, payload, 'EX', ttl)
-redis.call('SADD', idx, mine)
-if renewing then return {'renewed', payload, pruned} end
-return {'acquired', payload, pruned}
-"""
-
-# Ownership is now STRUCTURAL, not checked: a holder's key contains its own
-# identity, so there is no key another holder could delete by mistake. The
-# owner-check these scripts used to carry is gone because it became a
-# tautology, not because the property was dropped.
-_RELEASE_LUA = """
-local idx, prefix = KEYS[1], ARGV[1]
-local mine = ARGV[2] .. '|' .. ARGV[3] .. '|' .. ARGV[4]
-redis.call('SREM', idx, mine)
-return redis.call('DEL', prefix .. mine)
-"""
-
-# Renew rewrites the payload rather than only calling EXPIRE: `expires_at` is
-# read by `list_claims` and by every `ClaimConflict`, so a TTL extended without
-# it leaves a live claim advertising a time in the past, and a refused agent
-# retries immediately against a holder it was told had expired.
-_RENEW_LUA = """
-local prefix, ttl, expires = ARGV[1], tonumber(ARGV[2]), ARGV[3]
-local key = prefix .. ARGV[4] .. '|' .. ARGV[5] .. '|' .. ARGV[6]
-local raw = redis.call('GET', key)
-if not raw then return 0 end
-local held = cjson.decode(raw)
-held.expires_at = expires
-held.renewals = (held.renewals or 0) + 1
-redis.call('SET', key, cjson.encode(held), 'EX', ttl)
-return 1
-"""
-
-
 def _require_holder(agent_id: str, task_id: str) -> None:
     """Reject a holder identity that reentrancy could not safely compare.
 
@@ -576,6 +506,7 @@ async def work_claim(
     mode: ClaimMode = ClaimMode.EXCLUSIVE,
     intent: str,
     ttl_s: int | None = None,
+    company_id: str | None = None,
 ) -> AsyncIterator[WorkClaim]:
     """Hold *scope* for the block, releasing it however the block exits.
 
@@ -588,7 +519,9 @@ async def work_claim(
             the exception as ``.conflict``.
     """
     tid = task_id or f"adhoc-{uuid.uuid4()}"
-    verdict, outcome = await _acquire(scope, agent_id=agent_id, task_id=tid, mode=mode, intent=intent, ttl_s=ttl_s)
+    verdict, outcome = await _acquire(
+        scope, agent_id=agent_id, task_id=tid, mode=mode, intent=intent, ttl_s=ttl_s, company_id=company_id
+    )
     if isinstance(outcome, ClaimConflict):
         raise ClaimConflictError(outcome)
     try:

@@ -304,3 +304,55 @@ async def test_a_yield_reason_is_capped_on_write_and_other_fields_are_not(redis)
     assert row.detail == "x" * ledger_events.TEXT_CAP
     stored = await redis.lindex(ledger_events.EVENTS_KEY, 0)
     assert long_text in stored  # a non-free-text field (an id) is never cut
+
+
+# --- CodeRabbit threads on the read APIs (#18391) -------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_wait_key_is_skipped_not_fatal(redis):
+    await join("path:a/b", agent_id="w", task_id="t", intent="x")
+    await redis.rpush("work_claims:wait:bogus:thing", "x")
+    assert list((await all_waiters()).keys()) == ["path:a/b"]
+
+
+@pytest.mark.asyncio
+async def test_malformed_events_are_filtered_out(redis):
+    good = '{"type": "claim_expired", "at": "2026-01-01T00:00:00+00:00", "scope": "path:a"}'
+    for bad in ('{"type": "claim_expired"}', '{"at": "2026-01-01T00:00:00+00:00"}', '{"type": "x", "at": "nope"}'):
+        await redis.lpush(ledger_events.EVENTS_KEY, bad)
+    await redis.lpush(ledger_events.EVENTS_KEY, good)
+    assert [c.kind for c in (await ledger_read.conflicts("A")).conflicts] == []
+    assert len((await ledger_read.conflicts()).conflicts) == 1
+    assert len((await ledger_read.activity()).activity) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_same_holder_reacquire_carries_the_renewal_count(redis):
+    await _hold("path:a/b", "alpha")
+    assert await renew("path:a/b", agent_id="alpha", task_id="t1")
+    await _hold("path:a/b", "alpha")
+    assert (await ledger_read.claims()).claims[0].renewals == 2
+
+
+@pytest.mark.asyncio
+async def test_work_claim_stamps_the_company_it_is_given(redis):
+    async with wc_mod.work_claim("path:c/d", agent_id="a", intent="x", company_id="acme"):
+        assert [c.company_id for c in (await ledger_read.claims("acme")).claims] == ["acme"]
+
+
+def test_an_unknown_claim_kind_is_a_422():
+    from fastapi import HTTPException
+
+    from autobot_shared.coordination.ledger_http import valid_kind
+
+    assert valid_kind(None) is None and valid_kind("path") == "path"
+    with pytest.raises(HTTPException) as caught:
+        valid_kind("foo")
+    assert caught.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_company_overrides_and_cannot_be_shadowed_by_fields(redis):
+    assert await ledger_events.record_ledger_event(redis, ledger_events.CLAIM_EXPIRED, company_id=None, scope="path:z")
+    assert '"company_id": null' in await redis.lindex(ledger_events.EVENTS_KEY, 0)

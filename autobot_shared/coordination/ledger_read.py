@@ -92,10 +92,22 @@ async def _read(source: str, call: Callable[[], Awaitable[T]]) -> T:
     """Run *call*, turning every 'cannot reach Redis' shape into :class:`LedgerUnreadable`."""
     try:
         return await call()
-    except (ClaimUnavailable, RuntimeError, RedisError, OSError) as exc:
+    except (ClaimUnavailable, RedisError, OSError) as exc:
         # The cause (which may name a Redis host and port) stays in the server log; the caller gets a generic reason.
         logger.warning("agent ledger: %s could not be read: %s", source, exc)
         raise LedgerUnreadable(source, GENERIC_DETAIL) from exc
+
+
+def _dev_loop(call: Callable[[], Awaitable[T]]) -> Callable[[], Awaitable[T]]:
+    """``dev_loop_actions`` signals an unreadable Redis with ``RuntimeError``; say so only for that source."""
+
+    async def _run() -> T:
+        try:
+            return await call()
+        except RuntimeError as exc:
+            raise ClaimUnavailable(f"dev loop store unreadable: {exc}") from exc
+
+    return _run
 
 
 def visible(company: Company, row_company: str | None) -> bool:
@@ -221,10 +233,10 @@ def _yield_conflicts(events: list[dict[str, Any]], company: Company) -> list[Con
 
 async def _lapsed_dev_loop() -> list[ConflictRow]:
     """Dev-loop actions that finished after their exclusive claim had lapsed (install-wide only)."""
-    issues = await _read(SOURCE_DEV_LOOP, dev_loop_actions.issues_with_history)
+    issues = await _read(SOURCE_DEV_LOOP, _dev_loop(dev_loop_actions.issues_with_history))
     rows: list[ConflictRow] = []
     for issue in issues:
-        for a in await _read(SOURCE_DEV_LOOP, functools.partial(dev_loop_actions.recent, issue)):
+        for a in await _read(SOURCE_DEV_LOOP, _dev_loop(functools.partial(dev_loop_actions.recent, issue))):
             if a.outcome == dev_loop_actions.OUTCOME_RAN_CLAIM_LAPSED:
                 rows.append(
                     ConflictRow(
@@ -255,7 +267,20 @@ async def _events() -> list[dict[str, Any]]:
     client = await get_async_redis_client(database="main")
     if client is None:
         raise ClaimUnavailable("ledger events: Redis client unavailable")
-    return await read_events(client)
+    return [e for e in await read_events(client) if _valid_event(e)]
+
+
+def _valid_event(event: Any) -> bool:
+    """An event the readers can order and classify: a dict with a string ``type`` and an ISO ``at``."""
+    try:
+        ok = isinstance(event, dict) and isinstance(event.get("type"), str)
+        if ok:
+            _when(event["at"])
+    except (KeyError, TypeError, ValueError):
+        ok = False
+    if not ok:
+        logger.warning("agent ledger: skipping malformed event %r", event)
+    return ok
 
 
 def _when(iso: str) -> float:
@@ -303,11 +328,11 @@ async def activity(company: Company = None, limit: int = EVENT_CAP) -> ActivityR
 
 
 async def dev_loop_issues() -> DevLoopIssuesResponse:
-    issues = await _read(SOURCE_DEV_LOOP, dev_loop_actions.issues_with_history)
+    issues = await _read(SOURCE_DEV_LOOP, _dev_loop(dev_loop_actions.issues_with_history))
     return DevLoopIssuesResponse(issues=issues, count=len(issues))
 
 
 async def dev_loop_history(issue: int, limit: int = dev_loop_actions.DEFAULT_RECENT_LIMIT) -> DevLoopHistoryResponse:
-    actions = await _read(SOURCE_DEV_LOOP, lambda: dev_loop_actions.recent(issue, limit=limit))
+    actions = await _read(SOURCE_DEV_LOOP, _dev_loop(lambda: dev_loop_actions.recent(issue, limit=limit)))
     rows = [DevLoopActionRow(**dev_loop_actions.action_payload(a)) for a in actions]
     return DevLoopHistoryResponse(issue=issue, actions=rows, count=len(rows))

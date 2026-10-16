@@ -55,15 +55,29 @@ YIELD_ANSWERED = "yield_answered"
 #: `autobot_shared` must not import from the backend.
 YIELD_TIMEOUT_S = env_int_clamped("AUTOBOT_WORK_CLAIM_YIELD_TIMEOUT_S", 30, min_v=1, max_v=600)
 
+_RESOLVE: Any = object()  # sentinel: "take the company from the ambient context"
+
 EVENT_TYPES = frozenset({CLAIM_EXPIRED, RELEASE_REFUSED, YIELD_REQUESTED, YIELD_ANSWERED})
 
 
-async def record_ledger_event(client: Any, event_type: str, **fields: Any) -> bool:
-    """Append one event. ``False`` means it was not recorded; never raises."""
+async def record_ledger_event(
+    client: Any, event_type: str, *, company_id: str | None = _RESOLVE, **fields: Any
+) -> bool:
+    """Append one event. ``False`` means it was not recorded; never raises.
+
+    *company_id* defaults to the ambient company; pass ``None`` to stamp install-wide.
+    """
     if event_type not in EVENT_TYPES:
         raise ValueError(f"unknown ledger event {event_type!r}; events are {sorted(EVENT_TYPES)}")
     capped = {k: v[:TEXT_CAP] if k in _FREE_TEXT_FIELDS and isinstance(v, str) else v for k, v in fields.items()}
-    entry = json.dumps({"type": event_type, "at": utc_timestamp(), "company_id": resolve_company(), **capped})
+    entry = json.dumps(
+        {
+            "type": event_type,
+            "at": utc_timestamp(),
+            "company_id": resolve_company() if company_id is _RESOLVE else company_id,
+            **capped,
+        }
+    )
     try:
         async with client.pipeline(transaction=True) as pipe:
             pipe.lpush(EVENTS_KEY, entry)
