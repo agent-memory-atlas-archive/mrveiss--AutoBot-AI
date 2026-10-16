@@ -21,12 +21,14 @@
 
     <div class="flex gap-2 border-b border-autobot-border" role="tablist" :aria-label="t('llc.ledger.tabsAria')">
       <button
-        v-for="tab in tabs" :key="tab.id" type="button" role="tab" class="px-3 py-2 text-autobot-text-secondary aria-selected:text-autobot-text-primary aria-selected:border-b-2 aria-selected:border-autobot-primary"
+        v-for="(tab, i) in tabs" :id="`ledger-tab-${tab.id}`" :key="tab.id" ref="tabEls" type="button" role="tab"
+        :aria-controls="`ledger-panel-${tab.id}`" :tabindex="active === tab.id ? 0 : -1" @keydown="onTabKey($event, i)"
+        class="px-3 py-2 text-autobot-text-secondary aria-selected:text-autobot-text-primary aria-selected:border-b-2 aria-selected:border-autobot-primary"
         :aria-selected="active === tab.id" :data-testid="`ledger-tab-${tab.id}`" @click="active = tab.id"
       >{{ tab.label }}</button>
     </div>
 
-    <section v-if="active === 'now'" :aria-label="t('llc.ledger.tabs.now')">
+    <section v-if="active === 'now'" id="ledger-panel-now" role="tabpanel" aria-labelledby="ledger-tab-now" tabindex="0">
       <LedgerSectionState :section="ledger.presence.value" :empty="t('llc.ledger.empty.presence')">
         <table class="w-full border-collapse text-start [&_th]:p-2 [&_td]:p-2 [&_th]:text-start [&_tr]:border-b [&_tr]:border-autobot-border">
           <thead><tr><th>{{ t('llc.ledger.col.agent') }}</th><th>{{ t('llc.ledger.col.kind') }}</th><th>{{ t('llc.ledger.col.status') }}</th><th>{{ t('llc.ledger.col.detail') }}</th></tr></thead>
@@ -56,7 +58,7 @@
       </LedgerSectionState>
     </section>
 
-    <section v-else-if="active === 'claims'" :aria-label="t('llc.ledger.tabs.claims')">
+    <section v-else-if="active === 'claims'" id="ledger-panel-claims" role="tabpanel" aria-labelledby="ledger-tab-claims" tabindex="0">
       <LedgerSectionState :section="ledger.claims.value" :empty="t('llc.ledger.empty.claims')">
         <table class="w-full border-collapse text-start [&_th]:p-2 [&_td]:p-2 [&_th]:text-start [&_tr]:border-b [&_tr]:border-autobot-border" data-testid="ledger-claims">
           <thead><tr><th>{{ t('llc.ledger.col.scope') }}</th><th>{{ t('llc.ledger.col.agent') }}</th><th>{{ t('llc.ledger.col.mode') }}</th><th>{{ t('llc.ledger.col.intent') }}</th><th>{{ t('llc.ledger.col.expires') }}</th><th>{{ t('llc.ledger.col.renewals') }}</th></tr></thead>
@@ -70,7 +72,7 @@
       </LedgerSectionState>
     </section>
 
-    <section v-else-if="active === 'contention'" :aria-label="t('llc.ledger.tabs.contention')">
+    <section v-else-if="active === 'contention'" id="ledger-panel-contention" role="tabpanel" aria-labelledby="ledger-tab-contention" tabindex="0">
       <p class="m-0 text-autobot-text-secondary">{{ t('llc.ledger.silenceMeansHold') }}</p>
       <LedgerSectionState :section="ledger.contention.value" :empty="t('llc.ledger.empty.contention')">
         <article v-for="(s, i) in ledger.contention.value.rows" :key="s.scope" class="p-3 rounded border border-autobot-border" data-testid="ledger-scope">
@@ -80,7 +82,8 @@
             <li v-for="w in s.waiters" :key="w.task_id">{{ w.agent_id }} — {{ w.intent }}</li>
           </ol>
           <span v-if="s.holders.length" :title="t('llc.ledger.askUnavailable')">
-            <button type="button" class="px-3 py-1 rounded border border-autobot-border text-autobot-text-secondary" disabled data-testid="ledger-ask"
+            <button type="button" class="px-3 py-1 rounded border border-autobot-border text-autobot-text-secondary cursor-not-allowed"
+              aria-disabled="true" data-testid="ledger-ask" @click.prevent
               :aria-label="t('llc.ledger.askAria', { scope: s.scope })" :aria-describedby="`ledger-ask-why-${i}`"
             >{{ t('llc.ledger.ask') }}</button>
             <span :id="`ledger-ask-why-${i}`" class="sr-only">{{ t('llc.ledger.askUnavailable') }}</span>
@@ -89,7 +92,7 @@
       </LedgerSectionState>
     </section>
 
-    <section v-else :aria-label="t('llc.ledger.tabs.activity')">
+    <section v-else id="ledger-panel-activity" role="tabpanel" aria-labelledby="ledger-tab-activity" tabindex="0">
       <h2 class="mt-3 mb-0 text-base text-autobot-text-primary">{{ t('llc.ledger.conflicts') }}</h2>
       <LedgerSectionState :section="ledger.conflicts.value" :empty="t('llc.ledger.empty.conflicts')">
         <ul class="m-0 ps-4">
@@ -109,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAgentLedger } from '@/composables/useAgentLedger'
 import { useUiMode } from '@/composables/useUiMode'
@@ -121,6 +124,18 @@ const { t } = useI18n()
 const { uiMode } = useUiMode()
 const ledger = useAgentLedger()
 const active = ref<TabId>('now')
+const tabEls = ref<HTMLButtonElement[]>([])
+
+/** WAI-ARIA tabs: arrows move between tabs (wrapping), Home/End jump; focus follows selection. */
+function onTabKey(event: KeyboardEvent, index: number): void {
+  const count = tabs.value.length
+  const target = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: count - 1 }[event.key]
+  if (target === undefined) return
+  event.preventDefault()
+  const next = (target + count) % count
+  active.value = tabs.value[next].id
+  nextTick(() => tabEls.value[next]?.focus())
+}
 
 /** Activity is a Full-mode tab (mockup: `adv`); counts appear once a section is readable. */
 const tabs = computed(() => {

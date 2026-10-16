@@ -103,17 +103,22 @@ export function useAgentLedger() {
   })
 
   async function refresh(): Promise<void> {
-    ;[presence.value, claims.value, waitlists.value, conflicts.value] = await Promise.all([
+    const [p, c, w, x, a, m, i] = await Promise.all([
       fetchSection<PresenceRow>('/presence', 'agents'),
       fetchSection<ClaimRow>('/claims', 'claims'),
       fetchSection<WaiterRow>('/waitlists', 'waiters'),
       fetchSection<ConflictRow>('/conflicts', 'conflicts'),
-    ])
-    ;[activity.value, peerMessages.value, idleSubscribers.value] = await Promise.all([
       fetchSection<ActivityRow>('/activity', 'activity'),
       fetchSection<PeerMessageRow>('/peer-messages', 'recipients'),
       fetchSection<IdleSubscriberRow>('/idle-subscribers', 'subscribers'),
     ])
+    presence.value = p
+    claims.value = c
+    waitlists.value = w
+    conflicts.value = x
+    activity.value = a
+    peerMessages.value = m
+    idleSubscribers.value = i
   }
 
   return { presence, claims, waitlists, conflicts, activity, peerMessages, idleSubscribers, contention, refresh }

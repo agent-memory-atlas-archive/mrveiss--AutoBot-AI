@@ -81,10 +81,40 @@ describe('AgentLedgerView (#18391)', () => {
     serve({ claims: json(200, { claims: [CLAIM], count: 1 }) })
     const w = await mountOn('contention')
     const ask = w.get('[data-testid="ledger-ask"]')
-    expect(ask.attributes('disabled')).toBeDefined()
+    // aria-disabled, not disabled: still a Tab stop, so its linked reason is reachable.
+    expect(ask.attributes('aria-disabled')).toBe('true')
+    expect(ask.attributes('disabled')).toBeUndefined()
+    await ask.trigger('click')
+    expect(rawRequest.mock.calls.every(([, init]) => (init as { method: string }).method === 'GET')).toBe(true)
     expect(ask.text()).toBe(L.ask)
     const why = w.get(`#${ask.attributes('aria-describedby')}`)
     expect(why.text()).toBe(L.askUnavailable)
+  })
+
+  it('tabs follow WAI-ARIA: one Tab stop, arrows and Home/End move selection and focus, panels are wired', async () => {
+    serve({})
+    const w = mount(AgentLedgerView, { global: { plugins: [i18n] }, attachTo: document.body })
+    await flushPromises()
+    const tab = (id: string) => w.get(`[data-testid="ledger-tab-${id}"]`)
+    expect(w.findAll('[role="tab"]').map((t) => t.attributes('tabindex'))).toEqual(['0', '-1', '-1'])
+
+    await tab('now').trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+    expect(tab('claims').attributes('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(tab('claims').element)
+    const panel = w.get('[role="tabpanel"]')
+    expect(panel.attributes('id')).toBe(tab('claims').attributes('aria-controls'))
+    expect(panel.attributes('aria-labelledby')).toBe(tab('claims').attributes('id'))
+
+    await tab('claims').trigger('keydown', { key: 'End' })
+    await flushPromises()
+    expect(tab('contention').attributes('aria-selected')).toBe('true')
+    await tab('contention').trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+    expect(tab('now').attributes('aria-selected')).toBe('true') // wraps
+    await tab('now').trigger('keydown', { key: 'Home' })
+    expect(tab('now').attributes('tabindex')).toBe('0')
+    w.unmount()
   })
 
   it('shows Activity only in Full mode', async () => {
