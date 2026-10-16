@@ -89,13 +89,12 @@ class OperationCancelledException(Exception):
 def _redis_breaker_open(database: str = "main") -> bool:
     """True when the canonical Redis breaker for *database* is open (#18553).
 
-    Reads cached manager state (no ping); ``circuit_breaker_state`` is set to
-    "open" when the breaker trips and back to "closed" on the next success.
+    Side-effect-free read that honours the breaker timeout, so a recovered
+    Redis reads available again without needing a Redis call first.
     """
-    from autobot_shared.redis_client import get_redis_health
+    from autobot_shared.redis_client import is_redis_circuit_open
 
-    db_health = get_redis_health().get("databases", {}).get(database, {})
-    return db_health.get("metrics", {}).get("circuit_breaker_state") == "open"
+    return is_redis_circuit_open(database)
 
 
 class ResourceMonitor:
