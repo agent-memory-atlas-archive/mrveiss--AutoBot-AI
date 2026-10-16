@@ -76,7 +76,7 @@ async def _enrich_user_with_org_context(user_data: Dict) -> Dict:
 
 
 # Global (cross-worker) count per "<username>:<ip>"; fails open when Redis is down (#18087).
-_password_change_limiter = RateLimiter("password_change_session")
+_password_change_limiter = RateLimiter("password_change_session", log_label="password_change_session")
 
 
 async def _authenticate_and_build_user_data(username: str, password: str, ip_address: str) -> Dict:

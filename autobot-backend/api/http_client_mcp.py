@@ -120,7 +120,7 @@ BLOCKED_HEADERS = [
 MAX_REQUESTS_PER_MINUTE = env_int_clamped("AUTOBOT_MCP_HTTP_CLIENT_RATE_LIMIT", 120, min_v=1, max_v=1_000_000)
 RATE_LIMIT_WINDOW_SECONDS = 60
 # One global Redis-backed count shared by every worker (#18087); fails open when Redis is down.
-_rate_limiter = RateLimiter("mcp:http_client")
+_rate_limiter = RateLimiter("mcp:http_client", log_label="mcp:http_client")
 _RATE_LIMIT_KEY = "global"
 
 # Request limits

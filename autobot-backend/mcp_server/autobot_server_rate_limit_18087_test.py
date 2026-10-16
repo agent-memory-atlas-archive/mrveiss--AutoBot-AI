@@ -9,6 +9,7 @@ Moved from autobot_server_test.py (#5072) when the per-instance dict became the 
 now share one count, and Redis down lets requests through.
 """
 
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -49,7 +50,7 @@ def shared_redis(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_after_50_requests(shared_redis):
+async def test_rate_limit_after_50_requests(shared_redis, caplog):
     server = make_server()
     # Exhaust the 50-request window
     for _ in range(50):
@@ -57,10 +58,13 @@ async def test_rate_limit_after_50_requests(shared_redis):
         assert "result" in r, "should succeed within limit"
 
     # 51st request should be rate-limited
-    r = await server.handle_request("tools/list", {}, VALID_TOKEN)
+    with caplog.at_level(logging.WARNING):
+        r = await server.handle_request("tools/list", {}, VALID_TOKEN)
     assert "error" in r
     assert r["error"]["code"] == -32029
     assert r["error"]["message"] == "Rate limit exceeded (50 req/60s)"
+    assert [x for x in caplog.records if "post-auth rate limit exceeded" in x.getMessage()]
+    assert VALID_TOKEN not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -76,7 +80,7 @@ async def test_rate_limit_count_is_shared_between_workers(shared_redis, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_fails_open_when_redis_is_down(monkeypatch):
+async def test_rate_limit_fails_open_when_redis_is_down(monkeypatch, caplog):
     from autobot_shared import rate_limiter as rl_mod
     from mcp_server import autobot_server as mod
 
@@ -86,5 +90,7 @@ async def test_rate_limit_fails_open_when_redis_is_down(monkeypatch):
     monkeypatch.setattr(rl_mod, "get_async_redis_client", _down)
     monkeypatch.setattr(mod, "_RATE_LIMIT", 1)
     srv = make_server()
-    for _ in range(3):
-        assert "result" in await srv.handle_request("tools/list", {}, VALID_TOKEN)
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            assert "result" in await srv.handle_request("tools/list", {}, VALID_TOKEN)
+    assert any("redis down" in x.getMessage() for x in caplog.records)

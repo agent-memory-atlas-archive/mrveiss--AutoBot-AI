@@ -12,6 +12,7 @@ instance on the same Redis) sees the first one's count; Redis down lets the requ
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -36,20 +37,38 @@ SHORT = "Rate limit exceeded. Try again later."
 PLAIN = "Rate limit exceeded"
 
 
+async def _past_limiter(coro, refusal_prefix: str):
+    """Run *coro*; the one expected 403 from the guard AFTER the limiter counts as a normal return.
+
+    Reaching that exact guard proves the limiter admitted the call. Any other exception, or a 403 with a
+    different detail, propagates.
+    """
+    try:
+        return await coro
+    except HTTPException as exc:
+        if exc.status_code == 403 and str(exc.detail).startswith(refusal_prefix):
+            return None
+        raise
+
+
 async def _git():
     return await git_mcp.git_status_mcp(GitStatusRequest())
 
 
 async def _browser():
-    return await browser_mcp.navigate_mcp(BrowserNavigateRequest(url="ftp://example.org/x"))
+    coro = browser_mcp.navigate_mcp(BrowserNavigateRequest(url="ftp://example.org/x"))
+    return await _past_limiter(coro, "Refused: 'ftp' is not a browsable scheme")
 
 
 async def _database():
-    return await database_mcp.database_list_tables_mcp(TableListRequest(database="no-such-db"))
+    coro = database_mcp.database_list_tables_mcp(TableListRequest(database="no-such-db"))
+    return await _past_limiter(coro, "Database not in whitelist")
 
 
 async def _http():
-    return await http_client_mcp.http_get_mcp(HTTPGetRequest(url="http://example.invalid/"))
+    return await _past_limiter(
+        http_client_mcp.http_get_mcp(HTTPGetRequest(url="http://example.invalid/")), "Domain not in allowed whitelist"
+    )
 
 
 # module, handler, limit attr, default limit, detail
@@ -77,14 +96,18 @@ def _use_redis(monkeypatch, server) -> None:
     monkeypatch.setattr(rl_mod, "get_async_redis_client", _client)
 
 
-async def _outcome(call) -> int | None:
-    """The 429 detail if the handler was rate limited, else None (any other result is 'allowed')."""
+async def _outcome(call) -> str | None:
+    """None if the handler returned normally (allowed); the 429 detail if it was rate limited.
+
+    Anything else -- a different status, or any other exception -- propagates, so a test cannot
+    pass by accident on an unrelated failure.
+    """
     try:
         await call()
     except HTTPException as exc:
-        return exc.detail if exc.status_code == 429 else None
-    except Exception:  # noqa: BLE001 -- past the limiter, a later guard may refuse; that is 'allowed'
-        return None
+        if exc.status_code == 429:
+            return exc.detail
+        raise
     return None
 
 
@@ -98,12 +121,17 @@ async def test_default_limits_unchanged(module, call, limit_attr, default, detai
 
 @pytest.mark.parametrize("module, call, limit_attr, default, detail", CASES)
 @pytest.mark.asyncio
-async def test_under_limit_allowed_over_limit_429(monkeypatch, server, module, call, limit_attr, default, detail):
+async def test_under_limit_allowed_over_limit_429(
+    monkeypatch, caplog, server, module, call, limit_attr, default, detail
+):
     _use_redis(monkeypatch, server)
     monkeypatch.setattr(module, limit_attr, 3)
     for _ in range(3):
         assert await _outcome(call) is None
-    assert await _outcome(call) == detail
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        assert await _outcome(call) == detail
+    assert [r for r in caplog.records if "Rate limit exceeded" in r.getMessage() and "3" in r.getMessage()]
 
 
 @pytest.mark.parametrize("module, call, limit_attr, default, detail", CASES)
@@ -121,18 +149,20 @@ async def test_two_workers_share_one_count(monkeypatch, server, module, call, li
 
 @pytest.mark.parametrize("module, call, limit_attr, default, detail", CASES)
 @pytest.mark.asyncio
-async def test_redis_down_fails_open(monkeypatch, module, call, limit_attr, default, detail):
+async def test_redis_down_fails_open(monkeypatch, caplog, module, call, limit_attr, default, detail):
     async def _down(database: str = "main"):
         raise ConnectionError("redis down")
 
     monkeypatch.setattr(rl_mod, "get_async_redis_client", _down)
     monkeypatch.setattr(module, limit_attr, 1)
-    for _ in range(3):
-        assert await _outcome(call) is None
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            assert await _outcome(call) is None
+    assert any("redis down" in r.getMessage() or "fail" in r.getMessage().lower() for r in caplog.records)
 
 
 @pytest.mark.asyncio
-async def test_password_change_limit_is_global_and_429_text_unchanged(monkeypatch, server):
+async def test_password_change_limit_is_global_and_429_text_unchanged(monkeypatch, caplog, server):
     _use_redis(monkeypatch, server)
     monkeypatch.setattr(auth, "SESSION_MAX_ATTEMPTS", 2)
     monkeypatch.setattr(auth, "SESSION_WINDOW_SECONDS", 300)
@@ -140,19 +170,24 @@ async def test_password_change_limit_is_global_and_429_text_unchanged(monkeypatc
     assert await other_worker.acquire_window("alice:1.2.3.4", 2, 300)
     with patch.object(auth, "get_auth_middleware", return_value=MagicMock()):
         await auth._check_password_change_rate_limit("alice", "1.2.3.4")  # second attempt: allowed
-        with pytest.raises(HTTPException) as exc:
+        caplog.clear()
+        with caplog.at_level(logging.WARNING), pytest.raises(HTTPException) as exc:
             await auth._check_password_change_rate_limit("alice", "1.2.3.4")
         await auth._check_password_change_rate_limit("alice", "5.6.7.8")  # another client id: own count
+    assert [r for r in caplog.records if "Rate limit exceeded" in r.getMessage()]
+    assert "alice" not in caplog.text and "1.2.3.4" not in caplog.text
     assert exc.value.status_code == 429
     assert exc.value.detail == "Too many password change attempts. Please try again in 5 minutes."
 
 
 @pytest.mark.asyncio
-async def test_password_change_redis_down_fails_open(monkeypatch):
+async def test_password_change_redis_down_fails_open(monkeypatch, caplog):
     async def _down(database: str = "main"):
         raise ConnectionError("redis down")
 
     monkeypatch.setattr(rl_mod, "get_async_redis_client", _down)
     monkeypatch.setattr(auth, "SESSION_MAX_ATTEMPTS", 1)
-    for _ in range(3):
-        await auth._check_password_change_rate_limit("alice", "1.2.3.4")
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            await auth._check_password_change_rate_limit("alice", "1.2.3.4")
+    assert any("redis down" in r.getMessage() for r in caplog.records)

@@ -136,7 +136,7 @@ DEFAULT_BROWSER_SESSION_ID = "default"
 MAX_REQUESTS_PER_MINUTE = env_int_clamped("AUTOBOT_MCP_BROWSER_RATE_LIMIT", 60, min_v=1, max_v=1_000_000)
 RATE_LIMIT_WINDOW_SECONDS = 60
 # One global Redis-backed count shared by every worker (#18087); fails open when Redis is down.
-_rate_limiter = RateLimiter("mcp:browser")
+_rate_limiter = RateLimiter("mcp:browser", log_label="mcp:browser")
 _RATE_LIMIT_KEY = "global"
 
 # Blocked JavaScript patterns (security) - enhanced to prevent bypass vectors

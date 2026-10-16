@@ -146,7 +146,7 @@ def _stdio_bearer_token() -> str:
 
 # One global Redis-backed count per token prefix, shared by every worker (#18087);
 # fails open when Redis is down. The key is hashed so no token material reaches Redis.
-_post_auth_limiter = RateLimiter("mcp:server")
+_post_auth_limiter = RateLimiter("mcp:server", log_label="mcp:server")
 
 
 # ---------------------------------------------------------------------------

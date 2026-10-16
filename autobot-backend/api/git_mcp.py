@@ -147,7 +147,7 @@ BLOCKED_GIT_COMMANDS = [
 MAX_GIT_OPS_PER_MINUTE = env_int_clamped("AUTOBOT_MCP_GIT_RATE_LIMIT", 60, min_v=1, max_v=1_000_000)
 RATE_LIMIT_WINDOW_SECONDS = 60
 # One global Redis-backed count shared by every worker (#18087); fails open when Redis is down.
-_rate_limiter = RateLimiter("mcp:git")
+_rate_limiter = RateLimiter("mcp:git", log_label="mcp:git")
 _RATE_LIMIT_KEY = "global"
 
 # Output limits
