@@ -26,6 +26,14 @@ REPO_ROOT="$PWD"
 TYPE_CHECK_TIMEOUT=90
 TEST_TIMEOUT=120
 
+# #17451: pytest budget model, defined once. The two per-file costs are measured, not
+# guessed: K=3 s/file parallel from 117.84 s over 46 files under `-n auto`; K=6 s/file
+# serial from the 6-8 s per file seen under `-xvs`. MAX_BUDGET caps every timeout the
+# hook computes (vitest at the changeset, pytest at the selection).
+MAX_BUDGET=600
+PYTEST_COST_SERIAL=6
+PYTEST_COST_PARALLEL=3
+
 # Color helpers (no-op when not a tty)
 if [ -t 1 ]; then
   RED='\033[0;31m'; YEL='\033[0;33m'; GRN='\033[0;32m'; BLU='\033[0;34m'; CLR='\033[0m'
@@ -124,17 +132,36 @@ PYTEST_PYTHON="$(pick_python)"
 # #17451: the pytest budget follows the SELECTED work, not the changeset. A hub file
 # changes one path and selects dozens of guards, so the changed-file count under-sizes
 # exactly the pushes with the widest fan-out. Args: <budget-so-far> <selected> <parallel 0|1>.
-# Per selected file: 6s serial (the observed cost under -xvs), 3s under xdist. Capped at 600.
+# Per selected file: PYTEST_COST_SERIAL or PYTEST_COST_PARALLEL (the mode actually chosen);
+# capped at MAX_BUDGET.
 pytest_budget() {
-    local per_file=6
-    [ "$3" = "1" ] && per_file=3
+    local per_file=$PYTEST_COST_SERIAL
+    [ "$3" = "1" ] && per_file=$PYTEST_COST_PARALLEL
     local budget=$(( $1 + ($2 * per_file) ))
-    [ "$budget" -gt 600 ] && budget=600
+    [ "$budget" -gt "$MAX_BUDGET" ] && budget=$MAX_BUDGET
     printf '%s' "$budget"
 }
 # Parallel only when xdist is importable by the interpreter that runs pytest; else serial.
 pytest_xdist_available() {
     "$PYTEST_PYTHON" -c 'import xdist' 2>/dev/null
+}
+# xdist worker count from AUTOBOT_PREPUSH_PYTEST_WORKERS (default 4; 0 = serial). The box runs
+# many sessions at load 20-30, so `-n auto` is never used. Non-integer or negative -> 4 + warning.
+pytest_workers() {
+    local w="${AUTOBOT_PREPUSH_PYTEST_WORKERS:-4}"
+    case "$w" in
+        ''|*[!0-9]*) warn "AUTOBOT_PREPUSH_PYTEST_WORKERS='${w}' is not a non-negative integer -- using 4"; w=4 ;;
+    esac
+    printf '%s' "$w"
+}
+# Prints the xdist args, or nothing when the run must be serial (workers=0 or xdist missing).
+# loadscope keeps a module's tests on one worker (the suite is proven stable with it, #10398).
+pytest_xdist_args() {
+    local w
+    w="$(pytest_workers)"
+    if [ "$w" -gt 0 ] && pytest_xdist_available; then
+        printf -- '-n %s --dist loadscope' "$w"
+    fi
 }
 
 
@@ -399,7 +426,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # and large ones timed out, so the pushes most worth verifying went unverified.
   changed_count=$(printf '%s\n' "$changed" | grep -c . || true)
   TEST_TIMEOUT=$(( TEST_TIMEOUT + (changed_count * 4) ))
-  [ "$TEST_TIMEOUT" -gt 600 ] && TEST_TIMEOUT=600
+  [ "$TEST_TIMEOUT" -gt "$MAX_BUDGET" ] && TEST_TIMEOUT=$MAX_BUDGET
   TYPE_CHECK_TIMEOUT=$(( TYPE_CHECK_TIMEOUT + (changed_count * 3) ))
   [ "$TYPE_CHECK_TIMEOUT" -gt 450 ] && TYPE_CHECK_TIMEOUT=450
   log "changeset ${changed_count} file(s) -> vitest budget ${TEST_TIMEOUT}s (pytest is sized after selection, #17451), vue-tsc ${TYPE_CHECK_TIMEOUT}s"
@@ -634,15 +661,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [ -n "$all_py_tests" ]; then
     # The selection can outgrow the changeset, so the budget follows it too (#15985).
     selected_count=$(printf '%s\n' "$all_py_tests" | grep -c . || true)
-    PYTEST_XDIST_ARGS=""
+    PYTEST_XDIST_ARGS="$(pytest_xdist_args)"
     pytest_parallel=0
-    if pytest_xdist_available; then
-      pytest_parallel=1
-      # loadscope keeps a module's tests on one worker (the suite is proven stable with it, #10398).
-      PYTEST_XDIST_ARGS="-n auto --dist loadscope"
-    fi
+    [ -n "$PYTEST_XDIST_ARGS" ] && pytest_parallel=1
     PYTEST_TIMEOUT=$(pytest_budget "$TEST_TIMEOUT" "$selected_count" "$pytest_parallel")
-    log "pytest selected ${selected_count} file(s) -> budget ${PYTEST_TIMEOUT}s ($([ "$pytest_parallel" = 1 ] && echo 'parallel, xdist' || echo 'serial, no xdist for '"$PYTEST_PYTHON"))"
+    log "pytest selected ${selected_count} file(s) -> budget ${PYTEST_TIMEOUT}s ($([ "$pytest_parallel" = 1 ] && echo "parallel, ${PYTEST_XDIST_ARGS%% --dist*}" || echo 'serial (AUTOBOT_PREPUSH_PYTEST_WORKERS=0 or no xdist for '"$PYTEST_PYTHON)"))"
 
     # #16069: autobot-slm-backend must be a SEPARATE pytest invocation.
     # pytest.ini says so in as many words: the two backends define top-level
