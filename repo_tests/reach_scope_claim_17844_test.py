@@ -52,6 +52,7 @@ import repo_tests.migration_gate_filter_covers_what_its_tests_import_test as _mi
 import repo_tests.model_tier_single_definition_15502_test as _model_tier_guard  # noqa: F401 -- registers its scope
 import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_actor_id_15754_test as _actor_id_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_anthropic_message_split_16815_test as _anthropic_split_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_bm25_formula_18183_test as _bm25_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_brand_mark_and_announcer_18240_test as _brand_mark_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_claim_model_18086_test as _claim_model_guard  # noqa: F401 -- registers its scope
@@ -297,6 +298,7 @@ _DECLARED_SCOPES = {
         "autobot-infrastructure",
         "autobot-monitoring",
     ),
+    "anthropic-message-split-scan": ("autobot-backend/llm_shared/providers",),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "redis-direct-constructor-scan": (
         "autobot-backend",
