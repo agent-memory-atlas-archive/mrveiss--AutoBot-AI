@@ -828,7 +828,7 @@
   - name: Deploy error catalog to infrastructure config path  # Issue #912
     ansible.builtin.copy:
       # #18556: one copy, in the backend tree (the first path error_catalog reads).
-      src: "{{ role_path }}/../../../../autobot-backend/static/error_messages.yaml"
+      src: "{{ code_source_dir }}/autobot-backend/static/error_messages.yaml"
       dest: "{{ backend_install_dir | dirname }}/infrastructure/shared/config/error_messages.yaml"
       mode: "0644"
       owner: "{{ backend_user }}"
@@ -850,7 +850,7 @@
   - name: "Backend | Deploy permission_rules.yaml to infrastructure config path (#3873)"
     ansible.builtin.copy:
       # #18556: one copy, in the backend tree.
-      src: "{{ role_path }}/../../../../autobot-backend/config/permission_rules.yaml"
+      src: "{{ code_source_dir }}/autobot-backend/config/permission_rules.yaml"
       dest: "{{ backend_install_dir | dirname }}/config/permission_rules.yaml"
       mode: "0644"
       owner: "{{ backend_user }}"
