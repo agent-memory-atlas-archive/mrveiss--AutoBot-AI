@@ -304,7 +304,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.hardened.yml \
             --env-file docker/.env.docker \
-            config --services 2>/dev/null)
+            --profile slm config --services 2>/dev/null)
           services=$(echo "$services" | xargs)
 
           if [ -z "$services" ]; then
@@ -404,10 +404,13 @@ jobs:
 
       - name: Clean up
         if: always()
+        # --profile slm: the SLM-only step's autobot-slm-gui is a profiled service,
+        # which a plain `down` neither stops nor detaches from its networks (#18581)
         run: |
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.hardened.yml \
             --env-file docker/.env.docker \
+            --profile slm \
             down
           rm -rf secrets/

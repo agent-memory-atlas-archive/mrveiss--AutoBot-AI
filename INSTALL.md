@@ -28,7 +28,7 @@ ready to run the core and install modules.
 | OS | Debian 11+ / Ubuntu 22.04+ |
 | Init system | **systemd running as PID 1** — the installer manages every service as a systemd unit |
 | RAM | 1.5 GB (the installer refuses to run below this; SLM control plane only) |
-| Disk | 20 GB free |
+| Disk | 5 GB free (the installer refuses to run below this); 20 GB recommended |
 | Access | Root (or sudo) |
 | Network | Internet access for package downloads |
 

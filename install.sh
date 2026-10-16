@@ -330,7 +330,7 @@ EOF
 # #18583: name the requirement and the way out for this host — not a WSL2-only hint for all
 systemd_missing_hint() {
     local fix="Use a Debian/Ubuntu VM or bare-metal host booted with systemd; in a container or a host without systemd, use the Docker path in INSTALL.md instead."
-    grep -qi microsoft "${PROC_VERSION_FILE}" 2>/dev/null && fix="On WSL2: add [boot] systemd=true to /etc/wsl.conf and restart WSL."
+    grep -qi microsoft "${PROC_VERSION_FILE}" 2>/dev/null && fix="On WSL2 (WSL1 cannot run systemd): add [boot] systemd=true to /etc/wsl.conf and restart WSL."
     echo "systemd must be running as PID 1 (see Requirements in INSTALL.md). ${fix}"
 }
 
