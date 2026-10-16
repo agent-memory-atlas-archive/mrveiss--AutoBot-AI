@@ -111,3 +111,39 @@ def test_main_app_logo_is_not_the_vue_scaffold() -> None:
     assert (
         _SCAFFOLD_PATH not in svg
     ), f"#18240: {_LOGO} is the Vue scaffold logo again; use libs/autobot-ui/src/assets/brand/mark.svg."
+
+
+_MARK = "libs/autobot-ui/src/assets/brand/mark.svg"
+_SVG_ICONS = (
+    "autobot-frontend/public/favicon.svg",
+    "autobot-slm-frontend/public/favicon.svg",
+    _LOGO,
+)
+_ICO = "autobot-frontend/public/favicon.ico"
+#: The frames a browser or OS asks for; the main app's index.html serves the .ico with sizes="any".
+_ICO_FRAMES = {16, 32, 48}
+
+
+@pytest.mark.parametrize("path", _SVG_ICONS)
+def test_svg_icons_are_the_canonical_mark(path: str) -> None:
+    """#15469: every SVG favicon / logo is byte-identical to the kit's mark.svg."""
+    mark = (repo_root() / _MARK).read_bytes()
+    assert (repo_root() / path).read_bytes() == mark, f"#15469: {path} drifted from {_MARK}; copy the mark over it."
+
+
+def _ico_frame_sizes(data: bytes) -> set[int]:
+    """Frame edge sizes from an ICO directory (ICONDIR + ICONDIRENTRY; a 0 byte means 256)."""
+    assert data[:4] == b"\x00\x00\x01\x00", "not an ICO file"
+    count = int.from_bytes(data[4:6], "little")
+    return {data[6 + 16 * i] or 256 for i in range(count)}
+
+
+def test_ico_favicon_carries_the_standard_frames() -> None:
+    """#15469: the .ico the main app serves beside favicon.svg holds 16/32/48 frames of the mark."""
+    frames = _ico_frame_sizes((repo_root() / _ICO).read_bytes())
+    assert _ICO_FRAMES <= frames, f"#15469: {_ICO} has frames {sorted(frames)}; it needs {sorted(_ICO_FRAMES)}"
+
+
+def test_the_ico_reader_rejects_a_non_ico() -> None:
+    with pytest.raises(AssertionError, match="not an ICO"):
+        _ico_frame_sizes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
