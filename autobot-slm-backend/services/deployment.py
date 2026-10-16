@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -413,23 +414,7 @@ class DeploymentService:
 
         logger.debug("Running deployment: %s", " ".join(cmd[:10]) + " ...")
 
-        env = self._get_ansible_environment()
-
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=str(self.ansible_dir),
-            env=env,
-        )
-
-        stdout, _ = await process.communicate()
-        output = stdout.decode("utf-8", errors="replace")
-
-        if process.returncode != 0:
-            raise RuntimeError(f"Ansible playbook failed:\n{output}")
-
-        return output
+        return await self._run_ansible_command(cmd, "Ansible playbook failed")
 
     def _get_effective_password(self, node: Node, ssh_password: str | None) -> str | None:
         """Get SSH password from parameter or decrypt from node storage.
@@ -551,6 +536,33 @@ class DeploymentService:
             await db.commit()
             return False, "Node enrollment failed"
 
+    def _enrollment_var_args(
+        self,
+        host: str,
+        node_id: str,
+        ssh_user: str,
+        ssh_port: int,
+        admin_url: str,
+        slm_pubkey: str,
+    ) -> List[str]:
+        """The non-secret `-e` extra-vars of the enrollment command (#18606).
+
+        The SLM public key travels as a JSON extra-var (it contains spaces), never
+        by substitution into playbook text.
+        """
+        pairs = [
+            f"ansible_host={host}",
+            f"ansible_user={ssh_user}",
+            f"ansible_port={ssh_port}",
+            f"slm_node_id={node_id}",
+            f"slm_admin_url={admin_url}",
+            f"slm_heartbeat_interval={settings.heartbeat_interval}",
+            "ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o ControlPath=none'",
+            "ansible_ssh_pipelining=false",
+            json.dumps({"slm_server_pubkey": slm_pubkey}),
+        ]
+        return [arg for pair in pairs for arg in ("-e", pair)]
+
     def _build_enrollment_command(
         self,
         playbook_path: Path,
@@ -563,52 +575,48 @@ class DeploymentService:
     ) -> List[str]:
         """Build the ansible-playbook command for enrollment.
 
-        The SLM public key travels as a JSON extra-var (it contains spaces), never
-        by substitution into playbook text (#18606).
-
         Helper for _execute_enrollment_playbook (Issue #665).
         """
-        ansible_cmd = self._find_ansible_playbook()
         return [
-            ansible_cmd,
+            self._find_ansible_playbook(),
             str(playbook_path),
             "-i",
             f"{host},",
-            "-e",
-            f"ansible_host={host}",
-            "-e",
-            f"ansible_user={ssh_user}",
-            "-e",
-            f"ansible_port={ssh_port}",
-            "-e",
-            f"slm_node_id={node_id}",
-            "-e",
-            f"slm_admin_url={admin_url}",
-            "-e",
-            f"slm_heartbeat_interval={settings.heartbeat_interval}",
-            "-e",
-            "ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o ControlPath=none'",
-            "-e",
-            "ansible_ssh_pipelining=false",
-            "-e",
-            json.dumps({"slm_server_pubkey": slm_pubkey}),
+            *self._enrollment_var_args(host, node_id, ssh_user, ssh_port, admin_url, slm_pubkey),
         ]
 
-    def _add_enrollment_password_auth(self, cmd: List[str], ssh_password: str) -> None:
-        """Add password authentication options to enrollment command.
+    def _write_enrollment_secrets(self, ssh_password: str) -> str:
+        """Write the SSH/become password to a 0600 JSON vars file; return its path.
 
-        Helper for _execute_enrollment_playbook (Issue #665).
+        Secrets go via `-e @file`, never argv, where `ps` would show them. The caller
+        deletes the file once the playbook ends.
         """
         if not shutil.which("sshpass"):
             raise RuntimeError("Password auth requires 'sshpass'. Install: sudo apt install sshpass")
-        cmd.extend(
-            [
-                "-e",
-                "ansible_ssh_pass=" + ssh_password,
-                "-e",
-                "ansible_become_pass=" + ssh_password,
-            ]
+        fd, path = tempfile.mkstemp(prefix="enroll-secrets-", suffix=".json")
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump({"ansible_ssh_pass": ssh_password, "ansible_become_pass": ssh_password}, handle)
+        except BaseException:
+            Path(path).unlink(missing_ok=True)
+            raise
+        return path
+
+    async def _run_ansible_command(self, cmd: List[str], failure: str) -> str:
+        """Run an ansible-playbook command; return its output or raise on non-zero exit."""
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(self.ansible_dir),
+            env=self._get_ansible_environment(),
         )
+        stdout, _ = await process.communicate()
+        output = stdout.decode("utf-8", errors="replace")
+        if process.returncode != 0:
+            raise RuntimeError(f"{failure}:\n{output}")
+        return output
 
     async def _execute_enrollment_playbook(
         self,
@@ -623,36 +631,19 @@ class DeploymentService:
         if not playbook_path.exists():
             raise FileNotFoundError(f"Enrollment playbook not found: {playbook_path}")
         slm_pubkey = await self._get_slm_public_key()
-
-        # Use external_url from config for the admin URL that nodes will use
-        admin_url = settings.external_url
-
-        # Build the ansible command
-        cmd = self._build_enrollment_command(playbook_path, host, node_id, ssh_user, ssh_port, admin_url, slm_pubkey)
-
-        # Add password authentication if provided
-        if ssh_password:
-            self._add_enrollment_password_auth(cmd, ssh_password)
-
-        logger.debug("Running enrollment: %s", " ".join(cmd[:10]) + " ...")
-
-        # Execute playbook with appropriate environment
-        env = self._get_ansible_environment()
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=str(self.ansible_dir),
-            env=env,
+        # external_url is the admin URL that nodes use
+        cmd = self._build_enrollment_command(
+            playbook_path, host, node_id, ssh_user, ssh_port, settings.external_url, slm_pubkey
         )
-
-        stdout, _ = await process.communicate()
-        output = stdout.decode("utf-8", errors="replace")
-
-        if process.returncode != 0:
-            raise RuntimeError(f"Enrollment playbook failed:\n{output}")
-
-        return output
+        secrets_path = self._write_enrollment_secrets(ssh_password) if ssh_password else None
+        try:
+            if secrets_path:
+                cmd.extend(["-e", "@" + secrets_path])
+            logger.debug("Running enrollment: %s", " ".join(cmd[:10]) + " ...")
+            return await self._run_ansible_command(cmd, "Enrollment playbook failed")
+        finally:
+            if secrets_path:
+                Path(secrets_path).unlink(missing_ok=True)
 
     async def _get_slm_public_key(self) -> str:
         """

@@ -82,12 +82,19 @@
         mode: '0755'
 
     # The real agent imports autobot_shared (health_collector -> redis_client); the
-    # unit's PYTHONPATH includes {{ autobot.base_dir }}, where this role syncs it
-    # (/opt/autobot/autobot_shared). The stand-in agent needed none of it, so
-    # without this a fresh enrollee would crash-loop until a later code-sync.
-    - name: Deploy autobot_shared for the agent (autobot_shared role)
-      ansible.builtin.import_role:
-        name: autobot_shared
+    # unit's PYTHONPATH includes {{ slm_agent_dir | dirname }} (= autobot.base_dir).
+    # Not the autobot_shared role: its sync notifies the backend/celery restart
+    # handlers, which a fresh enrollee lacks, so the run would exit non-zero. And no
+    # synchronize here: it escalates only with passwordless sudo, which the
+    # password-auth enrollment does not have until the sudoers task above ran.
+    - name: Install autobot_shared for the agent (no backend/celery handlers)
+      ansible.builtin.copy:
+        src: "{{ code_source_dir | default(autobot.base_dir ~ '/code_source') }}/autobot_shared/"
+        dest: "{{ autobot.base_dir }}/autobot_shared/"
+        owner: "{{ slm_agent_user }}"
+        group: "{{ slm_agent_group }}"
+        directory_mode: '0755'
+        mode: preserve
 
     - name: Deploy the SLM agent (slm_agent role)
       ansible.builtin.import_role:
