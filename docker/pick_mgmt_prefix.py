@@ -24,6 +24,19 @@ import sys
 # ranges home and office routers hand out most.
 _DEFAULT_POOL = "10.128.0.0/9"
 _ATTEMPTS = 512
+# ip-route(8) route types that precede the destination on a line.
+_ROUTE_TYPES = {
+    "unicast",
+    "blackhole",
+    "unreachable",
+    "prohibit",
+    "throw",
+    "local",
+    "broadcast",
+    "multicast",
+    "nat",
+    "anycast",
+}
 
 Network = ipaddress.IPv4Network
 
@@ -32,9 +45,11 @@ def routes_in_use(route_lines: list[str]) -> list[Network]:
     """Destinations from `ip -4 route show` lines; `default` is not a range."""
     used = []
     for line in route_lines:
-        dst = line.split(" ", 1)[0].strip()
-        if dst and dst != "default":
-            used.append(ipaddress.ip_network(dst, strict=False))
+        tokens = line.split()
+        if tokens and tokens[0] in _ROUTE_TYPES:
+            tokens = tokens[1:]  # `blackhole 10.0.0.0/8`, `unreachable 10.1.0.0/16 ...`
+        if tokens and tokens[0] != "default":
+            used.append(ipaddress.ip_network(tokens[0], strict=False))
     return used
 
 
@@ -62,13 +77,20 @@ def docker_subnets() -> list[Network]:
     except FileNotFoundError:
         return []  # no docker CLI: no Docker networks to collide with
     except subprocess.CalledProcessError as exc:
-        raise SystemExit(f"docker is installed but did not answer ({exc.stderr.strip()}): start it and re-run") from exc
+        raise SystemExit(
+            f"docker did not answer ({exc.stderr.strip()}): start it or fix your access to it, "
+            "or set AUTOBOT_DOCKER_MGMT_PREFIX by hand (INSTALL.md)"
+        ) from exc
     found = [ipaddress.ip_network(s) for line in lines for s in line.split()]
     return [n for n in found if isinstance(n, Network)]
 
 
 def main() -> None:
-    pool = ipaddress.ip_network(os.getenv("AUTOBOT_DOCKER_MGMT_POOL", _DEFAULT_POOL))
+    raw_pool = os.getenv("AUTOBOT_DOCKER_MGMT_POOL", _DEFAULT_POOL)
+    try:
+        pool = ipaddress.ip_network(raw_pool)
+    except ValueError as exc:
+        raise SystemExit(f"AUTOBOT_DOCKER_MGMT_POOL is not a network: {raw_pool}") from exc
     if not isinstance(pool, Network) or pool.prefixlen > 24 or not pool.is_private:
         raise SystemExit(f"AUTOBOT_DOCKER_MGMT_POOL must be a private IPv4 block of /24 or larger, not {pool}")
     try:

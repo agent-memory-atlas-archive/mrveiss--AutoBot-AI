@@ -161,7 +161,7 @@ REQUIRED_GROUPS: frozenset = frozenset(
 
 def _secrets_lookup(key: str, why: str = "") -> str:
     """Env, then the install-time secrets file, else a refusal -- never a default (#17642)."""
-    grep = f"lookup('pipe', 'grep -oP \"{key}=\\\\K.*\" /etc/autobot/slm-secrets.env 2>/dev/null')"
+    grep = f"lookup('pipe', 'grep -oP \"{key}=\\\\K.*\" /etc/autobot/slm-secrets.env 2>/dev/null || true')"
     hint = f"{key.lower()} is unset: set {key} in the environment or in /etc/autobot/slm-secrets.env. {why}(#17642)"
     return f"{{{{ lookup('env', '{key}') or {grep} or undef(hint='{hint}') }}}}"
 

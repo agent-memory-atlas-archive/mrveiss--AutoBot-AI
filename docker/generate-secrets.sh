@@ -84,6 +84,10 @@ if grep -q '^AUTOBOT_DOCKER_MGMT_PREFIX=' "$SECRETS_FILE"; then
     echo "  AUTOBOT_DOCKER_MGMT_PREFIX: already set — keeping existing value"
 else
     prefix="${AUTOBOT_DOCKER_MGMT_PREFIX:-$(python3 "$(dirname "$0")/pick_mgmt_prefix.py")}"
+    if ! [[ "$prefix" =~ ^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){2}$ ]]; then
+        echo "ERROR: AUTOBOT_DOCKER_MGMT_PREFIX must be three octets, e.g. 10.77.3 (got '${prefix}')" >&2
+        exit 1
+    fi
     printf 'AUTOBOT_DOCKER_MGMT_PREFIX=%s\n' "$prefix" >>"$SECRETS_FILE"
     echo "  AUTOBOT_DOCKER_MGMT_PREFIX: ${prefix} (management network ${prefix}.0/24)"
 fi

@@ -82,12 +82,41 @@ def test_the_slm_generated_inventory_refuses_too() -> None:
     assert calls == {"network_subnet": "_secrets_lookup", "network_gateway": "_secrets_lookup"}
 
 
+def test_every_secrets_lookup_reaches_the_refusal() -> None:
+    """grep exits 1 on a missing key; without `|| true` the pipe lookup raises first, hiding the hint."""
+    piped = [(f, d) for f, d in _definitions() if "lookup('pipe'" in d]
+    assert len(piped) >= 11, f"read {len(piped)} secrets-file lookups"
+    assert all("2>/dev/null || true')" in d for _, d in piped), [f for f, d in piped if "|| true" not in d]
+    assert "2>/dev/null || true')" in _BUILDER.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(not shutil.which("ansible"), reason="ansible is not installed on this runner")
+def test_ansible_stops_with_the_hint_when_the_subnet_is_unset(tmp_path: Path) -> None:
+    """The definition itself, evaluated by ansible: unset -> the hint; set -> the value."""
+    definition = next(d for f, d in _definitions() if f == "slm-nodes.yml" and "NETWORK_SUBNET" in d)
+    definition = definition.replace("/etc/autobot/slm-secrets.env", str(tmp_path / "absent.env"))
+    inventory = {
+        "all": {"hosts": {"localhost": {"ansible_connection": "local"}}, "vars": {"network_subnet": definition}}
+    }
+    inv = tmp_path / "inv.yml"
+    inv.write_text(yaml.safe_dump(inventory), encoding="utf-8")
+    cmd = ["ansible", "localhost", "-i", str(inv), "-m", "debug", "-a", "msg={{ network_subnet }}"]
+    base = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "ANSIBLE_LOCAL_TEMP": str(tmp_path)}
+    unset = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=base)
+    assert unset.returncode != 0, unset.stdout
+    assert "never falls back to an open range" in unset.stdout + unset.stderr, unset.stdout + unset.stderr
+    given = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=120, env={**base, "NETWORK_SUBNET": "198.51.100.0/24"}
+    )
+    assert given.returncode == 0 and "198.51.100.0/24" in given.stdout, given.stdout + given.stderr
+
+
 def test_no_use_of_network_subnet_supplies_its_own_default() -> None:
     uses = [
         f"{p.relative_to(_ROOT)}:{n}"
         for p in _ANSIBLE.rglob("*.y*ml")
         for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
-        if re.search(r"network_subnet\s*\|\s*default", line)
+        if re.search(r"network_(subnet|gateway)\s*\|\s*default", line)
     ]
     assert not uses, f"a default here swallows the refusal and re-opens the rule: {uses}"
 
@@ -193,10 +222,15 @@ def _picker():
 
 
 def test_routes_are_read_as_ranges_and_default_is_skipped() -> None:
-    used = _picker().routes_in_use(
-        ["default via 172.30.0.1 dev enp0s4", "172.30.0.0/24 dev enp0s4 proto kernel", "10.9.9.9 dev tun0"]
-    )
-    assert used == [ipaddress.ip_network("172.30.0.0/24"), ipaddress.ip_network("10.9.9.9/32")]
+    lines = [
+        "default via 172.30.0.1 dev enp0s4",
+        "172.30.0.0/24 dev enp0s4 proto kernel",
+        "10.9.9.9 dev tun0",
+        "blackhole 10.0.0.0/8",
+        "unreachable 10.1.0.0/16 metric 5",
+    ]
+    expected = ["172.30.0.0/24", "10.9.9.9/32", "10.0.0.0/8", "10.1.0.0/16"]
+    assert _picker().routes_in_use(lines) == [ipaddress.ip_network(n) for n in expected]
 
 
 def test_the_pick_never_overlaps_a_used_range() -> None:
