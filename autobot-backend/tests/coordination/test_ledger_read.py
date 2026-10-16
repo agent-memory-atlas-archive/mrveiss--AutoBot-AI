@@ -292,3 +292,15 @@ async def test_the_unreadable_detail_is_generic_and_the_cause_is_only_logged(mon
         await ledger_read.claims()
     assert "10.9.8.7" not in caught.value.detail and "6379" not in caught.value.detail
     assert "10.9.8.7" in caplog.text  # kept server-side
+
+
+@pytest.mark.asyncio
+async def test_a_yield_reason_is_capped_on_write_and_other_fields_are_not(redis):
+    long_text = "x" * (ledger_events.TEXT_CAP + 50)
+    assert await ledger_events.record_ledger_event(
+        redis, ledger_events.YIELD_REQUESTED, token="t", scope="path:a/x", reason=long_text, requester_task_id=long_text
+    )
+    row = (await ledger_read.activity()).activity[0]
+    assert row.detail == "x" * ledger_events.TEXT_CAP
+    stored = await redis.lindex(ledger_events.EVENTS_KEY, 0)
+    assert long_text in stored  # a non-free-text field (an id) is never cut

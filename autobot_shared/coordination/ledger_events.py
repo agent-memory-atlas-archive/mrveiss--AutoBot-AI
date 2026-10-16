@@ -37,6 +37,10 @@ EVENTS_KEY = "work_claims:ledger:events"
 EVENT_CAP = env_int_clamped("AUTOBOT_LEDGER_EVENT_CAP", 500, min_v=50, max_v=5000)
 #: Idle lifetime of the whole list; each write refreshes it.
 EVENT_TTL_S = env_int_clamped("AUTOBOT_LEDGER_EVENT_TTL_S", 7 * 86400, min_v=3600, max_v=90 * 86400)
+#: Longest free text (a yield's ``reason``) an event keeps; the ledger screens show it back to other viewers.
+TEXT_CAP = env_int_clamped("AUTOBOT_LEDGER_TEXT_CAP", 280, min_v=32, max_v=2000)
+#: Caller-supplied free-text fields, capped at :data:`TEXT_CAP` on write.
+_FREE_TEXT_FIELDS = frozenset({"reason"})
 
 #: A claim left the index because its TTL ran out while the holder never released it.
 CLAIM_EXPIRED = "claim_expired"
@@ -58,7 +62,8 @@ async def record_ledger_event(client: Any, event_type: str, **fields: Any) -> bo
     """Append one event. ``False`` means it was not recorded; never raises."""
     if event_type not in EVENT_TYPES:
         raise ValueError(f"unknown ledger event {event_type!r}; events are {sorted(EVENT_TYPES)}")
-    entry = json.dumps({"type": event_type, "at": utc_timestamp(), "company_id": resolve_company(), **fields})
+    capped = {k: v[:TEXT_CAP] if k in _FREE_TEXT_FIELDS and isinstance(v, str) else v for k, v in fields.items()}
+    entry = json.dumps({"type": event_type, "at": utc_timestamp(), "company_id": resolve_company(), **capped})
     try:
         async with client.pipeline(transaction=True) as pipe:
             pipe.lpush(EVENTS_KEY, entry)

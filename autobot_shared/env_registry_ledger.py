@@ -40,3 +40,17 @@ register_env_var(
         range=(3600, 7776000),
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_LEDGER_TEXT_CAP",
+        type=int,
+        default=280,
+        description=(
+            "Longest caller-supplied free text (a yield request's reason) an agent-ledger event keeps (#18391). "
+            "The activity screen shows it to other viewers, so it is bounded on write."
+        ),
+        component="orchestration",
+        range=(32, 2000),
+    )
+)
