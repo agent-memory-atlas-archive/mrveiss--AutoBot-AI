@@ -38,6 +38,11 @@ python:
   # must run it.
   - '.env.example'
   - 'autobot-frontend/.env.example'
+  # #18555: env_file_family_18555_test.py reads every tracked env file -- one
+  # host-key format across the family, one Docker env file; an edit confined to
+  # any of them, or a new one, must run it.
+  - '**/.env*'
+  - '**/*.env'
   # #18592: install_preflight_and_source_18581_test.py reads INSTALL.md; compose_slm_gui_profile_18585_test.py reads the root compose file and the frontend Dockerfile.
   - 'INSTALL.md'
   - 'docker-compose.yml'

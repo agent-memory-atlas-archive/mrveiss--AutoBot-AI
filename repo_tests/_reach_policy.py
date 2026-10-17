@@ -362,6 +362,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
     ),
+    "env-file-family-18555-scan": (
+        ABSOLUTE,
+        "FIXED_INVENTORY",
+        "The tracked env templates; a small, named set across four roots.",
+    ),
     "ansible-concept-forks-17856-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
