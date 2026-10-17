@@ -59,7 +59,7 @@ async def audit_secret_op(
     never a value. The miss is logged by exception class name only.
     """
     try:
-        await audit_log(
+        recorded = await audit_log(
             SECRET_OPERATIONS[operation],
             result,
             user_id=_actor(request),
@@ -69,3 +69,7 @@ async def audit_secret_op(
         )
     except Exception as exc:  # noqa: BLE001 -- the audit store being down must not fail a secret operation
         logger.error("[Secrets Audit] audit store write failed for %s: %s", operation, type(exc).__name__)
+        return
+    # AuditLogger.log reports a failed write by returning False, not by raising.
+    if recorded is False:
+        logger.error("[Secrets Audit] audit store did not record %s", operation)

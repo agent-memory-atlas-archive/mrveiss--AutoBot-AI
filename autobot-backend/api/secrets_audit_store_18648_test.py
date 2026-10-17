@@ -229,6 +229,66 @@ class TestAnUnreachableStoreNeverFailsTheOperation:
         assert KNOWN_VALUE not in caplog.text
 
 
+class TestHandlerErrorLogsCarryTheClassNameOnly:
+    """A handler's own error log must not echo an exception text that holds a value."""
+
+    @staticmethod
+    def _raising(client, attr):
+        setattr(client.manager, attr, MagicMock(side_effect=RuntimeError(f"echo {KNOWN_VALUE}")))
+
+    def _update(self, client):
+        client.manager.update_secret = MagicMock(return_value=None)
+        store = MagicMock(rotate=AsyncMock(side_effect=RuntimeError(f"echo {KNOWN_VALUE}")))
+        with patch("api.secrets.get_credential_store", return_value=store):
+            return client.put(f"/api/secrets/{SECRET_ID}", json={"credentials": {"token": KNOWN_VALUE}})
+
+    @pytest.mark.parametrize(
+        "attr, call",
+        [
+            ("create_secret", lambda c: _create_raw(c)),
+            ("list_secrets", lambda c: c.get("/api/secrets/")),
+            ("get_secret", lambda c: c.get(f"/api/secrets/{SECRET_ID}")),
+            ("delete_secret", lambda c: c.delete(f"/api/secrets/{SECRET_ID}")),
+            ("transfer_secrets", lambda c: c.post("/api/secrets/transfer", json=_transfer_body())),
+            ("delete_chat_secrets", lambda c: c.delete("/api/secrets/chat/chat-1")),
+        ],
+    )
+    def test_generic_failure_logs_no_value(self, client, store, caplog, attr, call):
+        self._raising(client, attr)
+        with caplog.at_level(logging.DEBUG):
+            response = call(client)
+        assert response.status_code == 500
+        assert "RuntimeError" in caplog.text
+        assert KNOWN_VALUE not in caplog.text
+        assert KNOWN_VALUE not in store.dump()
+
+    def test_update_failure_logs_no_value(self, client, store, caplog):
+        with caplog.at_level(logging.DEBUG):
+            response = self._update(client)
+        assert response.status_code == 500
+        assert "RuntimeError" in caplog.text
+        assert KNOWN_VALUE not in caplog.text
+
+
+class TestAnUnrecordedWriteIsReported:
+    """AuditLogger.log reports a failed write by returning False, not by raising."""
+
+    def test_a_false_return_is_logged_and_the_operation_completes(self, client, caplog):
+        with patch("api.secrets_audit.audit_log", AsyncMock(return_value=False)), caplog.at_level(logging.DEBUG):
+            response = _delete(client)
+        assert response.status_code == 200
+        assert "did not record DELETE" in caplog.text
+
+
+def _create_raw(client):
+    body = {"name": "x", "type": SecretType.API_KEY.value, "scope": ChatSecretScope.GENERAL.value, "value": KNOWN_VALUE}
+    return client.post("/api/secrets/", json=body)
+
+
+def _transfer_body():
+    return {"secret_ids": [SECRET_ID], "target_scope": ChatSecretScope.GENERAL.value}
+
+
 class TestTheOldLocalFunctionRecordedNothing:
     """(d) contrast: the log-only function never reached the store; the route now does."""
 

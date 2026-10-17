@@ -215,7 +215,7 @@ class SecretsManager:
             try:
                 current_mtime = os.path.getmtime(self.secrets_file)
             except OSError as e:
-                logger.error("Failed to get secrets file mtime: %s", e)
+                logger.error("Failed to get secrets file mtime: %s", type(e).__name__)
                 # File may have been deleted - return empty dict
                 self._secrets_cache = {}
                 self._cache_mtime = None
@@ -263,7 +263,7 @@ class SecretsManager:
             try:
                 self._cache_mtime = os.path.getmtime(self.secrets_file)
             except OSError as e:
-                logger.error("Failed to update cache mtime: %s", e)
+                logger.error("Failed to update cache mtime: %s", type(e).__name__)
                 self._cache_mtime = None
 
     def _invalidate_cache(self):
@@ -762,7 +762,7 @@ async def create_secret(
         raise
     except Exception as e:
         await audit_secret_op("CREATE", None, http_request, "failed", reason=type(e).__name__)
-        logger.error("Failed to create secret: %s", e)
+        logger.error("Failed to create secret: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to create secret")
 
 
@@ -793,7 +793,7 @@ async def list_secrets(
             },
         )
     except Exception as e:
-        logger.error("Failed to list secrets: %s", e)
+        logger.error("Failed to list secrets: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to list secrets")
 
 
@@ -841,7 +841,7 @@ async def get_secrets_status(
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         }
     except Exception as e:
-        logger.error("Failed to get secrets status: %s", e)
+        logger.error("Failed to get secrets status: %s", type(e).__name__)
         return {
             "status": "error",
             "service": "secrets_manager",
@@ -895,7 +895,7 @@ async def get_secrets_stats(
 
         return JSONResponse(status_code=200, content=stats)
     except Exception as e:
-        logger.error("Failed to get secrets stats: %s", e)
+        logger.error("Failed to get secrets stats: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to get stats")
 
 
@@ -955,7 +955,7 @@ async def get_secret(
         raise
     except Exception as e:
         await audit_secret_op("ACCESS", secret_id, http_request, "failed", reason=type(e).__name__)
-        logger.error("Failed to get secret: %s", e)
+        logger.error("Failed to get secret: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to get secret")
 
 
@@ -1022,7 +1022,7 @@ async def update_secret(
         raise
     except Exception as e:
         await audit_secret_op("UPDATE", secret_id, http_request, "failed", reason=type(e).__name__)
-        logger.error("Failed to update secret: %s", e)
+        logger.error("Failed to update secret: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to update secret")
 
 
@@ -1077,7 +1077,7 @@ async def delete_secret(
         raise
     except Exception as e:
         await audit_secret_op("DELETE", secret_id, http_request, "failed", reason=type(e).__name__)
-        logger.error("Failed to delete secret: %s", e)
+        logger.error("Failed to delete secret: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to delete secret")
 
 
@@ -1118,7 +1118,7 @@ async def transfer_secrets(
         )
     except Exception as e:
         await audit_secret_op("TRANSFER", None, http_request, "failed", reason=type(e).__name__)
-        logger.error("Failed to transfer secrets: %s", e)
+        logger.error("Failed to transfer secrets: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to transfer secrets")
 
 
@@ -1138,7 +1138,7 @@ async def get_chat_cleanup_info(
         info = await asyncio.to_thread(secrets_manager.cleanup_chat_secrets, chat_id)
         return JSONResponse(status_code=200, content=info)
     except Exception as e:
-        logger.error("Failed to get chat cleanup info: %s", e)
+        logger.error("Failed to get chat cleanup info: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to get cleanup info")
 
 
@@ -1178,5 +1178,5 @@ async def delete_chat_secrets(
         )
     except Exception as e:
         await audit_secret_op("BULK_DELETE", None, http_request, "failed", reason=type(e).__name__)
-        logger.error("Failed to delete chat secrets: %s", e)
+        logger.error("Failed to delete chat secrets: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to delete chat secrets")
