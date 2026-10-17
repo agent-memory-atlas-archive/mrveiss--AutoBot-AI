@@ -152,11 +152,6 @@ def handle_api_error(error: Exception, request_id: str = "unknown") -> Dict[str,
     return {"error": "An internal error occurred"}
 
 
-def log_request_context(request: Request, endpoint: str, request_id: str) -> None:
-    """Log request context for debugging"""
-    logger.info("[%s] %s - %s %s", request_id, endpoint, request.method, request.url.path)
-
-
 # ====================================================================
 # Message Merge Helpers (Issue #315 - Reduced nesting)
 # ====================================================================
@@ -335,6 +330,7 @@ logger.info(
 
 # Include session management router
 from api.chat_sessions import delete_session as _canonical_delete_session
+from api.chat_sessions import log_request_context
 from api.chat_sessions import router as sessions_router
 
 router.include_router(sessions_router)
@@ -2601,13 +2597,13 @@ async def translate_text(
     return JSONResponse(content=result, media_type="application/json; charset=utf-8")
 
 
-@router.post("/detect-language", response_model=DetectLanguageData)
+@router.post("/detect-language", response_model=DetectLanguageData, name="detect_language")
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="detect_language",
     error_code_prefix="TRANSLATE",
 )
-async def detect_language(
+async def detect_text_language(
     body: DetectLanguageRequest,
     current_user: dict = Depends(get_current_user),
 ):
