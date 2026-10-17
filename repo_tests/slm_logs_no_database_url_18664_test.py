@@ -23,7 +23,7 @@ from repo_tests._paths import repo_root
 from tools.lint._scan_helpers import tracked_paths
 
 _ROOT = repo_root()
-_URL_IN_LOG = re.compile(r"logger\.\w+\((?P<args>.*\b(?:db_url|database_url|dsn)\b.*)\)")
+_URL_IN_LOG = re.compile(r"(?:(?:logger|logging|log)\.\w+|print)\((?P<args>.*\b(?:db_url|database_url|dsn)\b.*)\)")
 
 
 def test_no_slm_log_call_passes_a_database_url_unredacted() -> None:
@@ -43,3 +43,5 @@ def test_no_slm_log_call_passes_a_database_url_unredacted() -> None:
 def test_the_guard_sees_an_unredacted_call() -> None:
     assert _URL_IN_LOG.search('logger.info(f"Running migrations on PostgreSQL: {db_url}")')
     assert _URL_IN_LOG.search('logger.info("Migrating database: %s", db_url)')
+    assert _URL_IN_LOG.search('logging.warning("db %s", database_url)')
+    assert _URL_IN_LOG.search('print(f"using {dsn}")')

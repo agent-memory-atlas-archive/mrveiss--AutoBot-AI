@@ -120,6 +120,12 @@ def use_epoch_store(
     _store_override = (get_epoch, set_epoch)
 
 
+def reset_epoch_store() -> None:
+    """Back to the default (Redis) store -- for tests and teardown (#18663)."""
+    global _store_override
+    _store_override = None
+
+
 async def set_password_epoch(subject: str, *, now: int | None = None) -> int | None:
     """Mark *subject*'s password as changed now, revoking older tokens.
 

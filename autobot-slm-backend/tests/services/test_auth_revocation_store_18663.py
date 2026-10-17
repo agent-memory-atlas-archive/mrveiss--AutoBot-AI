@@ -243,10 +243,10 @@ async def test_an_epoch_write_failure_returns_none(store, monkeypatch):
 
 @pytest.fixture
 def installed(monkeypatch):
-    monkeypatch.setattr(password_epoch, "_store_override", None)
+    password_epoch.reset_epoch_store()
     _pe.install()
     yield
-    monkeypatch.setattr(password_epoch, "_store_override", None)
+    password_epoch.reset_epoch_store()
 
 
 async def test_the_shared_rule_routes_to_the_installed_store(store, installed):

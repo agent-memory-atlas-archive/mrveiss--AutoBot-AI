@@ -70,6 +70,12 @@ class DatabaseService:
             class_=AsyncSession,
             expire_on_commit=False,
         )
+        # #18663: the shared password-epoch rule reads and writes this database from the
+        # moment it has a session -- installed BEFORE anything below can fail, so a
+        # half-initialized SLM never falls back to a Redis it does not own.
+        from services.password_epoch_store import install as install_epoch_store
+
+        install_epoch_store()
 
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -77,11 +83,6 @@ class DatabaseService:
         await self._initialize_defaults()
         self._initialized = True
         logger.info("Database initialized successfully")
-        # #18663: from here the shared password-epoch rule reads and writes this database,
-        # never Redis -- the SLM deploys Redis, so its own auth must not depend on it.
-        from services.password_epoch_store import install as install_epoch_store
-
-        install_epoch_store()
 
     @staticmethod
     def _ui_preference_defaults() -> dict:
