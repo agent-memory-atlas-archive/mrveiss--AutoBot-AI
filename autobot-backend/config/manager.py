@@ -93,6 +93,7 @@ class ConfigManager(
         # Async support
         self._async_lock = asyncio.Lock() if hasattr(asyncio, "current_task") else None
         self._sync_lock = None  # Will be created when needed
+        self._sync_reloading = False  # set while a sync reload runs (#18661)
         self._file_watchers: Dict[str, asyncio.Task] = {}
         self._callbacks: Dict[str, List[Callable]] = {}
 
