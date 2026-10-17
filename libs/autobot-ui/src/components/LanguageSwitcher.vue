@@ -40,6 +40,10 @@ const optionEls: HTMLElement[] = []
 /** The option holding the one Tab stop in the open list. */
 const active = ref(0)
 
+function setOptionEl(el: unknown, index: number): void {
+  if (el instanceof HTMLElement) optionEls[index] = el
+}
+
 function selectedIndex(): number {
   return Math.max(0, props.options.findIndex((o) => o.code === props.modelValue))
 }
@@ -118,7 +122,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onOutside))
         <li
           v-for="(o, i) in options"
           :key="o.code"
-          :ref="(el) => { if (el) optionEls[i] = el as HTMLElement }"
+          :ref="(el: unknown) => setOptionEl(el, i)"
           role="option"
           :tabindex="i === active ? 0 : -1"
           :lang="o.code"
