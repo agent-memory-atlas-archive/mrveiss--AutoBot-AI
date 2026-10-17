@@ -4,7 +4,9 @@
 
 While ``GET /status`` and ``GET /chat-init`` were shadowed by ``GET /{job_id}``, an anonymous
 request hit that route's ``get_current_user`` and got 401. Declaring them first must not
-open them: ``/chat-init`` returns every chat id with its timestamps.
+open them: ``/chat-init`` returns every chat id with its timestamps. ``POST /load`` (never
+shadowed, anonymous on main too) runs several API calls on the caller's behalf, so it is gated in
+the same change (#18718).
 """
 
 import pytest
@@ -20,7 +22,9 @@ def _route(path: str, method: str):
     raise AssertionError(f"{method} {path} not found in api.batch_jobs")
 
 
-@pytest.mark.parametrize(("path", "method"), [("/status", "GET"), ("/chat-init", "GET"), ("/chat-init", "POST")])
+@pytest.mark.parametrize(
+    ("path", "method"), [("/status", "GET"), ("/chat-init", "GET"), ("/chat-init", "POST"), ("/load", "POST")]
+)
 def test_reachable_batch_literal_requires_an_authenticated_user(path: str, method: str) -> None:
     calls = {dep.call for dep in _route(path, method).dependant.dependencies}
     assert get_current_user in calls, f"{method} {path} has no get_current_user dependency"

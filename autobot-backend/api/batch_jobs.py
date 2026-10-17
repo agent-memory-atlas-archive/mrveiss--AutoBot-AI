@@ -841,7 +841,7 @@ def _process_session_file(filename: str, chats_directory: str):
     operation="batch_load",
     error_code_prefix="BATCH_JOBS",
 )
-async def batch_load(batch_request: APIBatchRequest):
+async def batch_load(batch_request: APIBatchRequest, current_user: dict = Depends(get_current_user)):
     """Execute multiple API calls in parallel and return combined results."""
     import time
 
