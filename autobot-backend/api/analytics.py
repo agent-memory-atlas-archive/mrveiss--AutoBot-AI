@@ -1262,7 +1262,7 @@ async def start_dashboard_analysis(
     operation="get_dashboard_status",
     error_code_prefix="ANALYTICS",
 )
-async def get_dashboard_status(task_id: str):
+async def get_dashboard_status(task_id: str, _user: Dict = Depends(get_current_user)):
     """Get dashboard overview task status (#1304, GH#8433)."""
     status = celery_result_to_status(AsyncResult(task_id))
     if status is None or status["status"] == "pending":

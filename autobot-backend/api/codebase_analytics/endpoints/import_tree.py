@@ -14,10 +14,11 @@ from typing import Dict, List, Tuple
 
 import aiofiles
 from celery.result import AsyncResult
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from api.codebase_analytics.source_scope import SourceIdQuery, cached_task_result, source_scoped_prefix
+from auth_middleware import check_admin_permission, get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, bounded, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from tasks.analytics_tasks import run_import_tree_analysis
@@ -378,7 +379,7 @@ async def start_import_tree_analysis_endpoint(source_id: SourceIdQuery):
     return {"task_id": result.id, "status": "pending"}
 
 
-@router.get("/analytics/import-tree/status/{task_id}")
+@router.get("/analytics/import-tree/status/{task_id}", dependencies=[Depends(get_current_user)])
 @bounded(60.0)
 async def get_import_tree_status(task_id: str):
     """Get import tree analysis task status."""
@@ -388,7 +389,7 @@ async def get_import_tree_status(task_id: str):
     return status
 
 
-@router.post("/analytics/import-tree/tasks/clear-stuck")
+@router.post("/analytics/import-tree/tasks/clear-stuck", dependencies=[Depends(check_admin_permission)])
 @bounded(60.0)
 async def clear_stuck_import_tasks(
     force: bool = Query(default=False, description="Force clear ALL running tasks"),

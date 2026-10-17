@@ -91,7 +91,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/duplicate_detector.py": 1119,
     "autobot-backend/api/codebase_analytics/endpoints/call_graph.py": 756,
     "autobot-backend/api/codebase_analytics/endpoints/environment.py": 698,  # #13602: sanitised traversal log
-    "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 827,
+    "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 826,
     "autobot-backend/api/codebase_analytics/endpoints/report.py": 2266,
     "autobot-backend/api/codebase_analytics/endpoints/stats.py": 663,
     "autobot-backend/api/conversation_files.py": 996,

@@ -14,9 +14,10 @@ import json
 from typing import Any, Dict, List
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import bounded
 from autobot_shared.logging_manager import get_logger
 from constants.path_constants import PATH
@@ -147,8 +148,6 @@ async def start_pattern_analysis(request: PatternAnalysisRequest, http_request: 
     # cannot gate it. Authorize the caller against it in-handler, mirroring the
     # index endpoint, so one admin cannot scope a task to another's private source.
     if request.source_id:
-        from auth_middleware import get_current_user  # noqa: PLC0415
-
         from .shared import authorize_source_access  # noqa: PLC0415
 
         user = await get_current_user(http_request)
@@ -162,7 +161,7 @@ async def start_pattern_analysis(request: PatternAnalysisRequest, http_request: 
 
 @router.get("/patterns/status/{task_id}", response_model=PatternAnalysisStatus)
 @bounded(60.0)
-async def get_analysis_status(task_id: str) -> PatternAnalysisStatus:
+async def get_analysis_status(task_id: str, _user: dict = Depends(get_current_user)) -> PatternAnalysisStatus:
     """Get status of a pattern analysis task."""
     task = celery_result_to_status(AsyncResult(task_id))
     if task is None:
@@ -283,7 +282,7 @@ async def start_pattern_summary_analysis(
 
 @router.get("/patterns/summary/status/{task_id}")
 @bounded(60.0)
-async def get_pattern_summary_status(task_id: str):
+async def get_pattern_summary_status(task_id: str, _user: dict = Depends(get_current_user)):
     """Get pattern summary task status."""
     status = celery_result_to_status(AsyncResult(task_id))
     if status is None:

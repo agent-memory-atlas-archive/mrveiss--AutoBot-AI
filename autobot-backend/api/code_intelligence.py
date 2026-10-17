@@ -63,7 +63,7 @@ from api.schemas_code import (
     SuggestionsResponse,
 )
 from api.schemas_common import DataResponse
-from auth_middleware import check_admin_permission
+from auth_middleware import check_admin_permission, get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.status_enums import Severity
@@ -2048,7 +2048,7 @@ async def start_security_analysis(
     operation="get_security_score_status",
     error_code_prefix="CODE_INTELLIGENCE",
 )
-async def get_security_score_status(task_id: str):
+async def get_security_score_status(task_id: str, _user: Dict = Depends(get_current_user)):
     """Get security score analysis task status (GH#8437: handle no_path sentinel)."""
     if task_id == "no_path":
         return {
