@@ -106,7 +106,7 @@ defineEmits<Emits>()
 .form-input {
   flex: 1;
   padding: var(--spacing-3) var(--spacing-4);
-  border: 2px solid var(--border-light, #ecf0f1);
+  border: 2px solid var(--border-light);
   border-radius: var(--radius-md);
   font-size: var(--text-base);
   background: var(--bg-primary);

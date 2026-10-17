@@ -843,7 +843,7 @@ onMounted(() => {
 }
 
 .rank-3 {
-  background: var(--chart-orange, #f97316);
+  background: var(--chart-orange);
   color: var(--text-on-primary);
 }
 
