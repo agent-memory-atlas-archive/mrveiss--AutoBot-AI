@@ -59080,6 +59080,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ApprovalDecision */
+        ApprovalDecision: {
+            decision: components["schemas"]["ApprovalStatus"];
+            /** Decided By Agent Id */
+            decided_by_agent_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ApprovalDecisionRequest */
         ApprovalDecisionRequest: {
             /** Decision */
@@ -88796,7 +88804,7 @@ export interface components {
          * PerformanceAnalyzeContentResponse
          * @description Response for POST /performance/analyze-content.
          *
-         *     Returns list[PerformanceIssue]; each item is a model_dump() dict.
+         *     Returns list[PerformancePatternIssue]; each item is a model_dump() dict.
          */
         PerformanceAnalyzeContentResponse: {
             [key: string]: unknown;
@@ -97046,6 +97054,23 @@ export interface components {
          * @enum {string}
          */
         SkillActivationLevel: "trusted" | "monitored" | "sandboxed" | "restricted";
+        /**
+         * SkillApprovalDecision
+         * @description Request body for approving or rejecting a skill approval record.
+         */
+        SkillApprovalDecision: {
+            /** Approved */
+            approved: boolean;
+            /** @default monitored */
+            trust_level: components["schemas"]["SkillActivationLevel"];
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * SkillBundleInstallResponse
          * @description Response for POST /skills/bundles/{bundle_id}/enable (Issue #10540).
@@ -105606,23 +105631,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * ApprovalDecision
-         * @description Request body for approving or rejecting a skill approval record.
-         */
-        api__schemas_agent__ApprovalDecision: {
-            /** Approved */
-            approved: boolean;
-            /** @default monitored */
-            trust_level: components["schemas"]["SkillActivationLevel"];
-            /**
-             * Notes
-             * @default
-             */
-            notes: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * Citation
          * @description Structured source citation attached to a RAG-grounded response (#10548).
          *
@@ -105812,14 +105820,6 @@ export interface components {
              * @default false
              */
             is_system: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ApprovalDecision */
-        llc__api__approvals__ApprovalDecision: {
-            decision: components["schemas"]["ApprovalStatus"];
-            /** Decided By Agent Id */
-            decided_by_agent_id?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -167431,7 +167431,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__schemas_agent__ApprovalDecision"];
+                "application/json": components["schemas"]["SkillApprovalDecision"];
             };
         };
         responses: {
@@ -172085,7 +172085,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["llc__api__approvals__ApprovalDecision"];
+                "application/json": components["schemas"]["ApprovalDecision"];
             };
         };
         responses: {
