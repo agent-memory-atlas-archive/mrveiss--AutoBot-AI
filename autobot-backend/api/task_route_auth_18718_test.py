@@ -73,3 +73,77 @@ def test_planted_control_ungated_route_is_flagged():
         return {}
 
     assert ungated_task_routes(fake) == ["GET /x/status/{task_id}"]
+
+
+# --- behaviour ---
+# conftest replaces ``auth_middleware`` with a stub, so the gates cannot be exercised
+# through the real middleware here. Each caller class is modelled by overriding the
+# very callables the routes captured in ``Depends`` -- a route lacking the gate
+# ignores the override and runs its handler, which is what these tests detect.
+
+PATTERN = "api.codebase_analytics.endpoints.pattern_analysis"
+BUG = "api.analytics_bug_prediction"
+
+
+def _deny(code):
+    from fastapi import HTTPException
+
+    def _dep():
+        raise HTTPException(status_code=code)
+
+    return _dep
+
+
+def _allow(*_a, **_k):
+    return {"username": "a", "role": "admin"}
+
+
+def _client(module, caller):
+    """TestClient over ``module``'s router; ``caller`` is anonymous, user or admin."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(importlib.import_module(module).router)
+    if caller == "anonymous":
+        app.dependency_overrides[get_current_user] = _deny(401)
+        app.dependency_overrides[check_admin_permission] = _deny(401)
+    elif caller == "user":
+        app.dependency_overrides[get_current_user] = _allow
+        app.dependency_overrides[check_admin_permission] = _deny(403)
+    else:
+        app.dependency_overrides[get_current_user] = _allow
+        app.dependency_overrides[check_admin_permission] = lambda: True
+    return TestClient(app)
+
+
+@pytest.mark.parametrize("caller,code", [("anonymous", 401), ("user", 403)])
+def test_pattern_task_revoke_requires_admin_and_does_not_revoke(caller, code):
+    from unittest.mock import patch
+
+    client = _client(PATTERN, caller)
+    with patch("celery_app.celery_app.control.revoke") as revoke:
+        assert client.delete("/patterns/task/x").status_code == code
+    revoke.assert_not_called()
+
+
+def test_pattern_task_revoke_admin_revokes():
+    from unittest.mock import patch
+
+    client = _client(PATTERN, "admin")
+    with patch("celery_app.celery_app.control.revoke") as revoke:
+        assert client.delete("/patterns/task/x").status_code == 200
+    revoke.assert_called_once_with("x", terminate=True)
+
+
+@pytest.mark.parametrize("path", ["/patterns/result/x", "/patterns/tasks"])
+def test_pattern_result_and_list_require_authentication(path):
+    assert _client(PATTERN, "anonymous").get(path).status_code == 401
+
+
+@pytest.mark.parametrize("caller,code", [("anonymous", 401), ("user", 403), ("admin", 200)])
+def test_bug_prediction_clear_stuck_gated_and_same_body(caller, code):
+    resp = _client(BUG, caller).post("/bug-prediction/tasks/clear-stuck?force=true")
+    assert resp.status_code == code
+    if code == 200:
+        assert resp.json() == {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
