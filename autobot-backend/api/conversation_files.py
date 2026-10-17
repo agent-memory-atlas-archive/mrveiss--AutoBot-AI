@@ -19,6 +19,7 @@ import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from api.files import get_security_layer
 from api.schemas_chat import (
     ConvFileInfoData,
     ConvFileOpData,
@@ -46,7 +47,6 @@ from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from security.session_ownership import validate_session_ownership
 from security.session_posture import SessionPosture
-from security_layer import SecurityLayer
 from utils.catalog_http_exceptions import raise_internal_error, raise_invalid_input, raise_not_found
 
 router = APIRouter(
@@ -92,11 +92,6 @@ ALLOWED_EXTENSIONS = {
     ".xls",
     ".xlsx",
 }
-
-
-def get_security_layer(request: Request) -> SecurityLayer:
-    """Get security layer from app state"""
-    return request.app.state.security_layer
 
 
 async def _authorize_file_operation(request: Request, session_id: str, operation: str) -> dict:
