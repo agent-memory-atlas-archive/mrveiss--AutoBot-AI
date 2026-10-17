@@ -135,6 +135,18 @@ LAN and cut the host off the network. To choose the range yourself, set
 `AUTOBOT_DOCKER_MGMT_PREFIX=<first three octets>` (e.g. `10.77.3`) before running the
 script. Keep the file: every command below passes it.
 
+It also holds `AUTOBOT_ADMIN_PASSWORD`, the password of the main app's first admin
+account (user `admin`). The backend creates that account on its first start. To read it:
+
+```bash
+grep '^AUTOBOT_ADMIN_PASSWORD=' docker/.env.secrets
+```
+
+Log in to the main app at **http://localhost** with `admin` and that password, then change
+it. A stack started without the line has no main-app account; add the line with
+`bash docker/generate-secrets.sh` (it keeps every value already in the file) and restart the
+backend.
+
 ### SLM web GUI first (smallest start)
 
 Start only the Service Lifecycle Manager and its web GUI, then add the rest of the fleet
@@ -166,6 +178,9 @@ Optional services are activated with `--profile`:
 ```bash
 # Add a local Ollama LLM server
 docker compose --env-file docker/.env.docker --env-file docker/.env.secrets --profile ollama up -d --build
+# ...then pull the models docker/.env.docker names (the profile starts Ollama with none):
+docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull qwen3.5:9b
+docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull nomic-embed-text:latest
 
 # Add Prometheus + Grafana monitoring
 docker compose --env-file docker/.env.docker --env-file docker/.env.secrets --profile monitoring up -d --build
