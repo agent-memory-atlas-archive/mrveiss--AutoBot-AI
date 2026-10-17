@@ -213,8 +213,8 @@ async def list_batch_jobs(
     operation="get_batch_status",
     error_code_prefix="BATCH_JOBS",
 )
-async def get_batch_status():
-    """Get batch processing service status"""
+async def get_batch_status(current_user: dict = Depends(get_current_user)):
+    """Get batch processing service status (authenticated: its shadowing removal must not open it, #18720)."""
     return {
         "status": "healthy",
         "service": "batch_processor",
@@ -232,7 +232,7 @@ async def get_batch_status():
     operation="batch_chat_initialization",
     error_code_prefix="BATCH_JOBS",
 )
-async def batch_chat_initialization(request: Request):
+async def batch_chat_initialization(request: Request, current_user: dict = Depends(get_current_user)):
     """
     Optimized endpoint for chat interface initialization.
     Returns all data needed to start the chat in one request.

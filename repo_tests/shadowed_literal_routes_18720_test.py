@@ -143,6 +143,19 @@ def test_planted_path_converter_swallows_a_suffix() -> None:
     assert len(shadowed_literals(routes)) == 1
 
 
+def test_a_param_route_behind_an_earlier_param_route_is_reported() -> None:
+    """Not only literals: ``{peer:path}/audit`` behind ``{peer:path}`` is the a2a shape (#18720)."""
+    routes = [_r("GET", "/api/t/{p:path}"), _r("GET", "/api/t/{p:path}/audit")]
+    assert [(r.path, prior.path) for r, prior in shadowed_literals(routes)] == [
+        ("/api/t/{p:path}/audit", "/api/t/{p:path}")
+    ]
+
+
+def test_a_param_route_declared_first_is_not_reported() -> None:
+    routes = [_r("GET", "/api/t/{p:path}/audit"), _r("GET", "/api/t/{p:path}")]
+    assert shadowed_literals(routes) == []
+
+
 def test_literal_first_and_other_shapes_are_not_reported() -> None:
     clean = [
         [_r("GET", "/api/x/status"), _r("GET", "/api/x/{id}")],  # the fixed order

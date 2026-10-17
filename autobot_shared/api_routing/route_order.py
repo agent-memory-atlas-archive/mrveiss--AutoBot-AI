@@ -27,6 +27,7 @@ Ordering rules it models, each matching how FastAPI builds the list:
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -336,27 +337,37 @@ def slm_routes(order: RouteOrder) -> List[OrderedRoute]:
 # -- the check ----------------------------------------------------------------------------------------
 
 
-def shadowed_literals(routes: List[OrderedRoute]) -> List[Tuple[OrderedRoute, OrderedRoute]]:
-    """``(literal, earlier param route)`` for every literal route a prior route fully matches.
+_PARAM = re.compile(r"\{([^}:]+)(:[^}]+)?\}")
 
-    The match is Starlette's own compiled path regex, anchored, so ``{id}`` stops at ``/`` and
-    ``{x:path}`` does not -- the two shapes #18720 found. Same method only: a different method is a
-    partial match and Starlette keeps looking.
+
+def sample_url(path: str) -> str:
+    """A concrete URL the route *path* serves: ``{x}`` -> ``x``, ``{x:path}`` -> ``x/y``."""
+    return _PARAM.sub(lambda m: "x/y" if m.group(2) == ":path" else "x", path)
+
+
+def shadowed_literals(routes: List[OrderedRoute]) -> List[Tuple[OrderedRoute, OrderedRoute]]:
+    """``(route, earlier route)`` for every route whose URL a prior same-method route already takes.
+
+    A literal is tested as-is; a param route through :func:`sample_url`, so a ``{x:path}``
+    swallowing a later ``{x:path}/audit`` (#18720's a2a and vnc-proxy shapes) is caught by the
+    walk, not only by pinned cases. The match is Starlette's own compiled regex, anchored. Same
+    method only: a different method is a partial match and Starlette keeps looking. An earlier
+    route with the identical path is a duplicate registration, not a shadow (#17325's job).
     """
     from starlette.routing import compile_path
 
-    params: Dict[str, List[Tuple[OrderedRoute, object]]] = {}
-    literals: set = set()
+    seen: Dict[str, List[Tuple[OrderedRoute, object]]] = {}
+    registered: set = set()
     hits: List[Tuple[OrderedRoute, OrderedRoute]] = []
     for route in routes:
-        if "{" in route.path:
-            params.setdefault(route.method, []).append((route, compile_path(route.path)[0]))
+        if (route.method, route.path) in registered:  # a repeat: its first registration already answered
             continue
-        if (route.method, route.path) in literals:  # an earlier identical literal already won
-            continue
-        literals.add((route.method, route.path))
-        for earlier, regex in params.get(route.method, []):
-            if regex.match(route.path):  # type: ignore[attr-defined]
-                hits.append((route, earlier))
+        registered.add((route.method, route.path))
+        earlier = seen.setdefault(route.method, [])
+        url = sample_url(route.path) if "{" in route.path else route.path
+        for prior, regex in earlier:
+            if regex.match(url):  # type: ignore[attr-defined]
+                hits.append((route, prior))
                 break
+        earlier.append((route, compile_path(route.path)[0]))
     return hits
