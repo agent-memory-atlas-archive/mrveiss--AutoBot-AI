@@ -32,6 +32,9 @@ export type ConflictRow = Schemas['ConflictRow']
 export type ActivityRow = Schemas['ActivityRow']
 export type DevLoopActionRow = Schemas['DevLoopActionRow']
 export type LedgerSourceStatus = Schemas['LedgerSourceStatus']
+export type PresenceRow = Schemas['PresenceRow']
+export type PeerMessageRow = Schemas['PeerMessageRow']
+export type IdleSubscriberRow = Schemas['IdleSubscriberRow']
 
 const LEDGER = '/monitoring/agent-ledger'
 
@@ -61,10 +64,17 @@ export function useSlmAgentLedger() {
   const conflicts: Ref<LedgerSection<ConflictRow>> = ref(loadingLedgerSection())
   const activity: Ref<LedgerSection<ActivityRow>> = ref(loadingLedgerSection())
   const devLoopIssues: Ref<LedgerSection<number>> = ref(loadingLedgerSection())
+  // Live state, read from the user backend's snapshot (#18632).
+  const presence: Ref<LedgerSection<PresenceRow>> = ref(loadingLedgerSection())
+  const peerMessages: Ref<LedgerSection<PeerMessageRow>> = ref(loadingLedgerSection())
+  const idleSubscribers: Ref<LedgerSection<IdleSubscriberRow>> = ref(loadingLedgerSection())
 
   async function refresh(): Promise<void> {
-    const [s, n, c, x, a, d] = await Promise.all([
+    const [s, p, m, i, n, c, x, a, d] = await Promise.all([
       read<LedgerSourceStatus>('/sources', 'sources'),
+      read<PresenceRow>('/presence', 'agents'),
+      read<PeerMessageRow>('/peer-messages', 'recipients'),
+      read<IdleSubscriberRow>('/idle-subscribers', 'subscribers'),
       read<ContentionRow>('/contention', 'resources'),
       read<ClaimRow>('/claims', 'claims'),
       read<ConflictRow>('/conflicts', 'conflicts'),
@@ -72,6 +82,9 @@ export function useSlmAgentLedger() {
       read<number>('/dev-loop', 'issues'),
     ])
     sources.value = s
+    presence.value = p
+    peerMessages.value = m
+    idleSubscribers.value = i
     contention.value = n
     claims.value = c
     conflicts.value = x
@@ -79,5 +92,5 @@ export function useSlmAgentLedger() {
     devLoopIssues.value = d
   }
 
-  return { sources, contention, claims, conflicts, activity, devLoopIssues, refresh }
+  return { sources, presence, peerMessages, idleSubscribers, contention, claims, conflicts, activity, devLoopIssues, refresh }
 }

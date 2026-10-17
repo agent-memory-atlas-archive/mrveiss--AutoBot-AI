@@ -57,6 +57,22 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_LEDGER_PROJECTION_TTL_S",
+        type=int,
+        default=120,
+        description=(
+            "How long the user backend's snapshot of live agent state (presence, pending peer "
+            "messages, idle subscriptions) stays readable by the SLM ledger without a refresh "
+            "(#18632). Longer than the presence sweep so one slow sweep does not blank the SLM; "
+            "a stopped backend's snapshot expires and reads as 'couldn't read', never as stale."
+        ),
+        component="orchestration",
+        range=(10, 3600),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_LEDGER_SCOPE_MAX_LEN",
         type=int,
         default=512,
