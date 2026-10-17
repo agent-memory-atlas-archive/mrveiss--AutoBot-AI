@@ -19,6 +19,28 @@ To add a variable:
 The table has no count line, and its rows are sorted by name. So two PRs that each add a variable only
 conflict when their rows sort next to each other.
 
+## Env-file family
+
+The tracked env files are templates. The installer and the Ansible roles write the real ones.
+[#18555](https://github.com/mrveiss/AutoBot-AI/issues/18555) settled the shape of the family:
+
+| File | Used by |
+|---|---|
+| `docker/.env.docker` | Docker Compose, through `--env-file docker/.env.docker`. This is the **only** Docker env file. |
+| `.env.example` | The full annotated reference for a native install. |
+| `.env.localhost`, `.env.native-vm`, `.env.network`, `.env.network-template` | Per-environment overlays, read by the `autobot-infrastructure/shared/scripts` tooling. |
+
+Host keys use one format in every file:
+
+- A `*_HOST` key is a bare host name or IP address, with no scheme, port or path. Ports go in the matching
+  `*_PORT` key. Compose builds `http://${AUTOBOT_OLLAMA_HOST}:11434`, so a URL in a host key breaks it.
+- A `*_URL` or `*_ENDPOINT` key carries the scheme, as in `http://`, `redis://` or `ws://`.
+- `OLLAMA_HOST` is Ollama's own variable. Its upstream format is `host[:port]`, and it is the only exception.
+
+`repo_tests/env_file_family_18555_test.py` enforces both rules over every tracked env file. It fails when
+a host key breaks the format, when two files disagree on a key's format, or when a second Docker env file
+appears.
+
 <!-- BEGIN_AUTOGEN_ENV_DOCS -->
 | Name | Component | Type | Default | Description |
 |---|---|---|---|---|

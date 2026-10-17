@@ -61,7 +61,7 @@ from .causal_models import CausalMetadata, EffectTrace
 from .collaboration_coordinator import CollaborationCoordinator
 from .dag_executor import (
     DAGExecutor,
-    NodeType,
+    DagNodeType,
     WorkflowDAG,
     build_dag,
     workflow_has_condition_nodes,
@@ -190,7 +190,7 @@ __all__ = [
     "is_sub_workflow_step",
     # DAG execution (#2140)
     "DAGExecutor",
-    "NodeType",
+    "DagNodeType",
     "WorkflowDAG",
     "build_dag",
     "workflow_has_condition_nodes",
