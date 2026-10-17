@@ -11,9 +11,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { BaseModal } from '@autobot/ui'
+import { BaseBadge, BaseModal } from '@autobot/ui'
 import Icon from '@/components/ui/Icon.vue'
-import BaseBadge from '@/components/base/BaseBadge.vue'
 import {
   useMcpExternalServersApi,
   type McpServer,
@@ -238,17 +237,17 @@ onMounted(load)
             <tr v-for="server in servers" :key="server.server_id">
               <td>{{ server.name }}</td>
               <td>
-                <BaseBadge variant="neutral" size="sm">{{ transportLabel(server.transport) }}</BaseBadge>
+                <BaseBadge tone="subtle" variant="neutral" size="sm">{{ transportLabel(server.transport) }}</BaseBadge>
               </td>
               <td class="cell-mono">{{ server.command || server.url || '—' }}</td>
               <td>
-                <BaseBadge :variant="server.has_credential ? 'success' : 'neutral'" size="sm">
+                <BaseBadge tone="subtle" :variant="server.has_credential ? 'success' : 'neutral'" size="sm">
                   {{ server.has_credential ? t('admin.mcpServers.credentialSet') : t('admin.mcpServers.credentialNone') }}
                 </BaseBadge>
               </td>
               <td class="cell-muted">{{ server.allowed_roles.join(', ') }}</td>
               <td>
-                <BaseBadge :variant="server.enabled ? 'success' : 'neutral'" size="sm">
+                <BaseBadge tone="subtle" :variant="server.enabled ? 'success' : 'neutral'" size="sm">
                   {{ server.enabled ? t('admin.mcpServers.statusEnabled') : t('admin.mcpServers.statusDisabled') }}
                 </BaseBadge>
               </td>

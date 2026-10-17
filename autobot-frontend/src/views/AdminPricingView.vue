@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseBadge from '@/components/base/BaseBadge.vue'
+import { BaseBadge } from '@autobot/ui'
 import Icon from '@/components/ui/Icon.vue'
 import {
   useAdminPricingApi,
@@ -167,7 +167,7 @@ onMounted(load)
         <div v-for="[provider, s] in providers" :key="provider" class="card provider-card">
           <div class="card-header">
             <span class="provider-name">{{ provider }}</span>
-            <BaseBadge :variant="s.success ? 'success' : 'error'" size="sm">
+            <BaseBadge tone="subtle" :variant="s.success ? 'success' : 'error'" size="sm">
               {{ s.success ? t('admin.pricing.statusOk') : t('admin.pricing.statusFailed') }}
             </BaseBadge>
           </div>

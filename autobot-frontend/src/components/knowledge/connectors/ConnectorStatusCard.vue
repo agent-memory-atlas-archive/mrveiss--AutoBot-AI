@@ -9,7 +9,7 @@
 import { ref, computed } from 'vue'
 import type { ConnectorConfig, ConnectorStatus } from '@/types/knowledgeBase'
 import { formatTimeAgo } from '@/utils/formatHelpers'
-import BaseBadge from '@/components/base/BaseBadge.vue'
+import { BaseBadge } from '@autobot/ui'
 import BaseButton from '@/components/base/BaseButton.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -183,10 +183,10 @@ defineExpose({ resetSyncing })
             ></span>
           </div>
           <div class="badge-row">
-            <BaseBadge :variant="typeBadgeVariant" size="xs">
+            <BaseBadge tone="subtle" :variant="typeBadgeVariant" size="xs">
               {{ typeLabel }}
             </BaseBadge>
-            <BaseBadge
+            <BaseBadge tone="subtle"
               :variant="tierBadgeVariant"
               size="xs"
               :title="tierTooltip"
@@ -217,7 +217,7 @@ defineExpose({ resetSyncing })
       </div>
       <div class="stat">
         <span class="stat-label">{{ $t('knowledge.connectors.status.status') }}</span>
-        <BaseBadge :variant="syncStatusVariant" size="xs">
+        <BaseBadge tone="subtle" :variant="syncStatusVariant" size="xs">
           {{ status.last_sync_status }}
         </BaseBadge>
       </div>

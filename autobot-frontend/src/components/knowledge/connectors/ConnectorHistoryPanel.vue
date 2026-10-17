@@ -8,7 +8,7 @@
  */
 
 import { ref, computed, onMounted, watch } from 'vue'
-import BaseBadge from '@/components/base/BaseBadge.vue'
+import { BaseBadge } from '@autobot/ui'
 import { useConnectorJob, fetchConnectorHistory } from '@/composables/knowledge/useConnectorJob'
 import { formatTimeAgo } from '@/utils/formatHelpers'
 import { createLogger } from '@/utils/debugUtils'
@@ -109,7 +109,7 @@ function formatDuration(seconds: number | null): string {
     <!-- Live job progress -->
     <div v-if="isPolling || (jobState && jobState.status === 'running')" class="live-job">
       <div class="live-header">
-        <BaseBadge variant="warning" size="xs">Running</BaseBadge>
+        <BaseBadge tone="subtle" variant="warning" size="xs">Running</BaseBadge>
         <span class="live-worker">{{ jobState?.worker_id }}</span>
       </div>
       <div class="progress-bar-track" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100">
@@ -134,7 +134,7 @@ function formatDuration(seconds: number | null): string {
         :class="{ expanded: expandedRows.has(idx) }"
       >
         <div class="row-main" @click="errorList(entry).length > 0 && toggleRow(idx)">
-          <BaseBadge :variant="statusVariant(entry.status)" size="xs">
+          <BaseBadge tone="subtle" :variant="statusVariant(entry.status)" size="xs">
             {{ entry.status ?? '?' }}
           </BaseBadge>
           <span class="row-time">{{ entry.started_at ? formatTimeAgo(entry.started_at) : '?' }}</span>

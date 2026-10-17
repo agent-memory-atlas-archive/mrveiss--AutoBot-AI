@@ -8,10 +8,11 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import BaseBadge, { type BadgeVariant, type BadgeSize } from '../BaseBadge.vue'
+import BaseBadge, { type BadgeVariant, type BadgeSize, type BadgeTone } from '../BaseBadge.vue'
 
 const VARIANTS: BadgeVariant[] = ['neutral', 'primary', 'success', 'warning', 'error', 'info']
-const SIZES: BadgeSize[] = ['sm', 'md']
+const SIZES: BadgeSize[] = ['xs', 'sm', 'md', 'lg']
+const TONES: BadgeTone[] = ['solid', 'subtle', 'outline']
 
 describe('BaseBadge', () => {
   it('renders default slot content', () => {
@@ -20,11 +21,47 @@ describe('BaseBadge', () => {
     expect(wrapper.text()).toBe('Active')
   })
 
-  it('defaults to variant=neutral and size=md', () => {
-    // fails if the withDefaults() default values for variant/size are changed or dropped
+  it('defaults to variant=neutral, size=md, tone=solid, rounded, not removable', () => {
+    // fails if a default changes -- the kit's existing consumers in both apps rely on solid/md
     const wrapper = mount(BaseBadge)
-    expect(wrapper.classes()).toContain('aui-badge--neutral')
-    expect(wrapper.classes()).toContain('aui-badge--md')
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(['aui-badge--neutral', 'aui-badge--md', 'aui-badge--solid']))
+    expect(wrapper.classes()).not.toContain('aui-badge--square')
+    expect(wrapper.find('button').exists()).toBe(false)
+  })
+
+  it.each(TONES)('applies the aui-badge--%s class for tone=%s', (tone) => {
+    const wrapper = mount(BaseBadge, { props: { tone } })
+    expect(wrapper.classes()).toContain(`aui-badge--${tone}`)
+  })
+
+  it('renders the label prop when no default slot is given, and the slot over it', () => {
+    expect(mount(BaseBadge, { props: { label: 'From prop' } }).text()).toBe('From prop')
+    expect(mount(BaseBadge, { props: { label: 'From prop' }, slots: { default: 'From slot' } }).text()).toBe('From slot')
+  })
+
+  it('renders an icon slot before the text', () => {
+    const wrapper = mount(BaseBadge, { props: { label: 'x' }, slots: { icon: '<i data-testid="icon" />' } })
+    expect(wrapper.element.firstElementChild?.getAttribute('data-testid')).toBe('icon')
+    expect(wrapper.text()).toBe('x')
+  })
+
+  it('square and monospace are classes, off by default', () => {
+    const wrapper = mount(BaseBadge, { props: { rounded: false, monospace: true } })
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(['aui-badge--square', 'aui-badge--mono']))
+  })
+
+  it('a removable badge has a named remove button that emits remove and stops the click', async () => {
+    const outer = { clicked: 0 }
+    const wrapper = mount(
+      { components: { BaseBadge }, template: '<div @click="clicked++"><BaseBadge removable remove-label="Remove tag" label="Tag" @remove="removed++" /></div>',
+        data: () => ({ clicked: 0, removed: 0 }) },
+    )
+    const button = wrapper.get('button')
+    expect(button.attributes('aria-label')).toBe('Remove tag')
+    expect(button.attributes('type')).toBe('button')
+    await button.trigger('click')
+    expect((wrapper.vm as unknown as { removed: number }).removed).toBe(1)
+    expect((wrapper.vm as unknown as { clicked: number }).clicked).toBe(outer.clicked)
   })
 
   it.each(VARIANTS)('applies the aui-badge--%s class for variant=%s', (variant) => {
