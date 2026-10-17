@@ -371,8 +371,10 @@ def _summary(n: int) -> str:
 def _collect(argv: list[str], repo_root: Path) -> tuple[int, list[str]]:
     """``(comparable getenv/ssot_config pairs examined, finding lines)``; *argv* is unused."""
     del argv  # full-repo only, by construction
-    if not (repo_root / "autobot_shared" / "ssot_config.py").is_file():
-        raise VacuousScan(f"autobot_shared/ssot_config.py is not in {repo_root} -- there are no defaults to compare")
+    for name in SSOT_FIELD_SOURCES:
+        # Every SSOT field source must be present: a missing one is a refusal (exit 2), never a skip.
+        if not (repo_root / "autobot_shared" / name).is_file():
+            raise VacuousScan(f"autobot_shared/{name} is not in {repo_root} -- there are no defaults to compare")
     offenders, calls_examined = find_drift(repo_root)
     return calls_examined, [f"[{HOOK_ID}] {offender}" for offender in offenders]
 
