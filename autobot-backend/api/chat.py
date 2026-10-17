@@ -74,6 +74,7 @@ from knowledge.quarantine import RESEARCH_QUARANTINE_FILTER
 from security.chat_message_safety import scan_chat_message
 from security.session_ownership import build_owner_metadata, validate_session_ownership
 from services.ai_stack_client import AIStackError, get_ai_stack_client
+from services.llm_service import get_llm_service  # process-wide singleton (#18689)
 from type_defs.common import STREAMING_MESSAGE_TYPES, Metadata
 
 # Import reusable chat utilities - Phase 1 Utility Extraction
@@ -116,14 +117,6 @@ def get_system_state(request: Request) -> Dict:
 def get_memory_interface(request: Request) -> Any | None:
     """Get memory interface from app state"""
     return getattr(request.app.state, "memory_interface", None)
-
-
-def get_llm_service(request: Request) -> Any:
-    """Get LLM service from app state, with lazy initialization"""
-    from services.llm_service import LLMService
-    from utils.lazy_singleton import lazy_init_singleton
-
-    return lazy_init_singleton(request.app.state, "llm_service", LLMService)
 
 
 async def get_chat_workflow_manager(request: Request) -> Any:
@@ -1062,7 +1055,7 @@ async def send_message(
 
     # Get dependencies from request state
     chat_history_manager = get_chat_history_manager(request)
-    llm_service = get_llm_service(request)
+    llm_service = get_llm_service()
     memory_interface = get_memory_interface(request)
 
     # Issue #3282: Carry author identity for shared-session message attribution
@@ -1144,7 +1137,7 @@ async def stream_message(
 
     # Get dependencies from request state
     chat_history_manager = get_chat_history_manager(request)
-    llm_service, message.content = get_llm_service(request), scan_chat_message(message.content, message.session_id)
+    llm_service, message.content = get_llm_service(), scan_chat_message(message.content, message.session_id)
 
     # Return streaming response
     return await stream_chat_response(message, chat_history_manager, llm_service, request_id)
@@ -1393,7 +1386,7 @@ async def chat_health_check(
     # chat_history_manager is critical - must be present
     chat_history_status = "healthy" if chat_history_manager else "unavailable"
 
-    # llm_service is lazily initialized - report as "available" if not yet created
+    # lifespan wires app.state.llm_service to the process singleton (#18689)
     llm_status = "healthy" if llm_service else "available"
 
     health_status = {
@@ -2674,7 +2667,7 @@ Conversation:
 Summary:"""
 
     # Get LLM service and generate summary
-    llm_service = get_llm_service(request)
+    llm_service = get_llm_service()
 
     try:
         summary_response = await llm_service.generate_response(
