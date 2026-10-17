@@ -81,7 +81,7 @@ logged.
 | *(none)* | Standard interactive install |
 | `--unattended` | Run without prompts, use all defaults (CI/automation) |
 | `--reinstall` | Force a reinstall over an existing installation |
-| `--uninstall` | Completely remove AutoBot and its dependencies (asks for confirmation) |
+| `--uninstall` | Remove AutoBot: shows what it will remove, then asks you to type `UNINSTALL`. See [Uninstalling](#uninstalling) |
 | `--yes`, `-y` | Skip confirmation prompts (use with `--uninstall`) |
 | `--validate` | Verify installation integrity (required service directories present) |
 | `--branch=BRANCH` | Git branch to install (default: `main`) |
@@ -276,6 +276,29 @@ sudo systemctl status postgresql
 ```
 
 ---
+
+## Uninstalling
+
+```bash
+sudo /opt/autobot/code_source/install.sh --uninstall                     # shows the plan, then asks
+sudo bash /opt/autobot/code_source/scripts/uninstall.sh --dry-run        # only shows what would go
+```
+
+The uninstaller first prints everything it will remove: AutoBot's services and units,
+its databases, the packages and apt sources AutoBot added, its sudoers files, accounts and
+directories. It then asks you to type `UNINSTALL`. `--yes` skips the question for scripted use.
+Without a terminal and without `--yes`, it refuses instead of proceeding.
+
+What it never removes:
+- **An account it did not create.** The installer records the `autobot` account only if it
+  created it, in `/etc/autobot/install-record`. On a machine where `autobot` already existed,
+  for example your own login, the account and its home are left alone.
+- **nginx and the base packages** the installer needs (git, curl, openssh-server, ...). They
+  often serve other things on the same machine.
+- **Service accounts the roles create** (prometheus, node_exporter, ...). There is no record
+  to tell them from accounts that were already there.
+
+The log is written to `/var/tmp/autobot-uninstall-<timestamp>.log`, which survives the uninstall.
 
 ## Troubleshooting
 
