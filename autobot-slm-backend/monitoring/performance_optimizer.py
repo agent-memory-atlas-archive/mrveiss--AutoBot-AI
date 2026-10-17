@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 
 import psutil
 import yaml
-from performance_monitor import PerformanceMonitor
+from performance_monitor import FleetPerformanceMonitor
 
 from constants.path_constants import PATH
 
@@ -130,7 +130,7 @@ class PerformanceOptimizer:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.monitor = PerformanceMonitor()
+        self.monitor = FleetPerformanceMonitor()
         self.redis_client = None
         self.optimization_history = []
         self.optimization_config = self.load_optimization_config()

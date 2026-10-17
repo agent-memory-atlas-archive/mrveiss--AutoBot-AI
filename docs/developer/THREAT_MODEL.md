@@ -102,7 +102,7 @@ response, a log line, an issue, a PR comment — is already redacted.
 [`autobot_shared/field_encryption.py`](../../autobot_shared/field_encryption.py) `encrypt_field`/`decrypt_field` for single columns ·
 [`credential_store.py`](../../autobot-backend/knowledge/connectors/credential_store.py) `ConnectorCredentialStore` (:211) for connector/OAuth creds, ownership via `_require_owner` (:642) ·
 [`auth_middleware.py`](../../autobot-backend/auth_middleware.py) `verify_internal_api_key` (:950) for service-to-service ·
-[`services/auth.py`](../../autobot-slm-backend/services/auth.py) `decode_token_async` (:127) for SLM token revocation.
+[`services/auth.py`](../../autobot-slm-backend/services/auth.py) `decode_token_async` (:128) for SLM token revocation.
 
 **Invariants**
 - No parallel crypto path. A diff introducing its own `Fernet(...)` or `AESGCM(...)` instead
@@ -118,7 +118,7 @@ response, a log line, an issue, a PR comment — is already redacted.
 - Keys come from SSOT config, never a literal. A default value for an encryption key is a
   finding even when production overrides it via env var.
 - SLM token revocation fails CLOSED (#16387, owner decision): when the HS256 jti-denylist check
-  (`is_jti_revoked` (:132) in [`token_denylist.py`](../../autobot-slm-backend/services/token_denylist.py)) or the password-epoch check can't run because Redis errored,
+  (`is_jti_revoked` (:113) in [`token_denylist.py`](../../autobot-slm-backend/services/token_denylist.py)) or the password-epoch check can't run because its store (the SLM's own PostgreSQL since #18663) errored,
   `decode_token_async` denies the token (401) instead of reading "could not check" as "not revoked" — a Redis outage takes SLM login down, including the backend admin path reached through the proxy (#16374).
 - The RS256 authority-token path fails CLOSED the same way (#16412): [`rs256_denylist.py`](../../autobot-slm-backend/services/rs256_denylist.py)
   `is_rs256_jti_revoked` (:89) raises on a Redis error rather than reporting "not revoked"; its caller

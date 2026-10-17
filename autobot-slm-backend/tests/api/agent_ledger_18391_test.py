@@ -118,7 +118,7 @@ async def test_an_admin_sees_every_companys_claims_waiters_contention_and_dev_lo
     await try_acquire("provider:anthropic", agent_id="dev-session", task_id="t", intent="quota")
     await join("provider:anthropic", agent_id="co-a-agent", task_id="t2", intent="needs quota")
     assert await renew("path:a/f", agent_id="co-a-agent", task_id="t")
-    await dla.record(
+    await dla.record_dev_loop_action(
         dla.build_action(5, intent="triage", outcome=dla.OUTCOME_SKIPPED_CLAIMED, estimated_tokens=0, reason="held")
     )
     api = _client("admin")

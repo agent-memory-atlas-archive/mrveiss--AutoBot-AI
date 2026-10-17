@@ -16878,7 +16878,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "description": "Revoke the presented token and return IdP logout URL if applicable.\n\n- Denylists the token's ``jti`` in Redis (HS256 tokens only).\n- Queries the user's SSO link for an ``end_session_endpoint``.\n- Returns ``{\"logout_url\": \"<url>\"}`` (url may be null when not SSO-linked).",
+        "description": "Revoke the presented token and return IdP logout URL if applicable.\n\n- Denylists the token's ``jti`` in the SLM's PostgreSQL (HS256 tokens only, #18663).\n- Queries the user's SSO link for an ``end_session_endpoint``.\n- Returns ``{\"logout_url\": \"<url>\"}`` (url may be null when not SSO-linked).",
         "operationId": "logout_api_auth_logout_post",
         "responses": {
           "200": {
