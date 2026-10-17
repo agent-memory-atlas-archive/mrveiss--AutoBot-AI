@@ -726,7 +726,7 @@ export function useAutobotApi() {
   }
 
   async function updateSettings(settings: Record<string, unknown>): Promise<SettingsResponse> {
-    const response = await client.put<SettingsResponse>('/settings', settings)
+    const response = await client.post<SettingsResponse>('/settings/', settings)
     return response.data
   }
 
@@ -739,7 +739,7 @@ export function useAutobotApi() {
     section: string,
     data: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
-    const response = await client.put(`/settings/${section}`, data)
+    const response = await client.post(`/settings/${section}`, data)
     return response.data
   }
 
@@ -762,7 +762,7 @@ export function useAutobotApi() {
   }
 
   async function updateCacheConfig(config: Partial<CacheConfig>): Promise<CacheConfig> {
-    const response = await client.put<CacheConfig>('/cache/config', config)
+    const response = await client.post<CacheConfig>('/cache/config', config)
     return response.data
   }
 
@@ -807,7 +807,7 @@ export function useAutobotApi() {
     id: string,
     data: Partial<LogForwardingDestination>
   ): Promise<LogForwardingDestination> {
-    const response = await client.patch<LogForwardingDestination>(
+    const response = await client.put<LogForwardingDestination>(
       `/log-forwarding/destinations/${id}`,
       data
     )
@@ -947,7 +947,7 @@ export function useAutobotApi() {
   async function deleteFile(path: string, host?: string): Promise<void> {
     const params = new URLSearchParams({ path })
     if (host) params.append('host', host)
-    await client.delete(`/files?${params}`)
+    await client.delete(`/files/delete?${params}`)
   }
 
   async function uploadFile(
@@ -1089,7 +1089,7 @@ export function useAutobotApi() {
   }
 
   async function updateLLMConfig(config: Record<string, unknown>): Promise<void> {
-    await client.put('/llm/config', config)
+    await client.post('/llm/config', config)
   }
 
   async function getLLMModels(): Promise<Array<{ id: string; name: string; provider: string }>> {
@@ -1455,7 +1455,7 @@ export function useAutobotApi() {
   }
 
   async function setLogForwardingAutoStart(enabled: boolean): Promise<{ status: string }> {
-    const response = await client.post<{ status: string }>('/log-forwarding/auto-start', { enabled })
+    const response = await client.put<{ status: string }>('/log-forwarding/auto-start', null, { params: { enabled } })
     return response.data
   }
 

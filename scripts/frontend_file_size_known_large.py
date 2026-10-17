@@ -202,5 +202,5 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 736,
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 723,
     "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 869,
-    "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1235,
+    "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1080,
 }
