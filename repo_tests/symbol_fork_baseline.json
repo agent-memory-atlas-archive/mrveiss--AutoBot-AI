@@ -107,7 +107,6 @@
     "WorkflowState",
     "WorkflowStateMachine",
     "WorkflowStatusUpdate",
-    "audit_log",
     "can_access",
     "check_admin_permission",
     "detect_language",
