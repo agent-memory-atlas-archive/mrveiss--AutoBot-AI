@@ -23,15 +23,22 @@ import asyncio
 import logging
 import time
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from autobot_shared.user_management import password_epoch
 from autobot_shared.user_management.password_epoch import RevocationCheckUnavailable
 
+try:  # asyncpg can raise its own errors at connect time, before SQLAlchemy wraps them
+    import asyncpg
+
+    _DRIVER_FAILURES: tuple = (asyncpg.PostgresError, asyncpg.InterfaceError)
+except ImportError:  # pragma: no cover - asyncpg is the SLM's driver in deployments
+    _DRIVER_FAILURES = ()
+
 logger = logging.getLogger(__name__)
 
-_STORE_FAILURES = (asyncio.TimeoutError, ConnectionError, OSError, SQLAlchemyError)
+_STORE_FAILURES = (asyncio.TimeoutError, ConnectionError, OSError, SQLAlchemyError, *_DRIVER_FAILURES)
 _STORE_DEADLINE_SECONDS = 2.0  # same bound as the jti denylist (#11443)
 
 
@@ -66,10 +73,12 @@ async def _write(subject: str, epoch: int) -> None:
     from models.auth_revocation import PasswordEpoch  # lazy, as in _session
 
     async with _session() as session:
+        stmt = insert(PasswordEpoch).values(subject=subject, epoch=epoch)
+        # Never move an epoch backwards: that would re-validate tokens it revoked.
         await session.execute(
-            insert(PasswordEpoch)
-            .values(subject=subject, epoch=epoch)
-            .on_conflict_do_update(index_elements=["subject"], set_={"epoch": epoch})
+            stmt.on_conflict_do_update(
+                index_elements=["subject"], set_={"epoch": func.greatest(PasswordEpoch.epoch, stmt.excluded.epoch)}
+            )
         )
         await session.commit()
 

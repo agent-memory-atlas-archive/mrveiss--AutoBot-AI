@@ -167,6 +167,19 @@ async def test_a_database_error_is_refused_as_store_unavailable(store, monkeypat
         await _dl.is_jti_revoked("abc")
 
 
+async def test_a_raw_driver_error_is_refused_as_store_unavailable(store):
+    """asyncpg can raise before SQLAlchemy wraps it; that must still be a 401, not a 500."""
+    if not _dl._DRIVER_FAILURES:
+        pytest.skip("asyncpg is not installed here")
+
+    async def _boom(stmt):
+        raise _dl._DRIVER_FAILURES[1]("connection was closed")
+
+    store["session"].execute = _boom
+    with pytest.raises(ConnectionError):
+        await _dl.is_jti_revoked("abc")
+
+
 async def test_the_check_refuses_when_the_database_is_too_slow(store, monkeypatch):
     monkeypatch.setattr(_dl, "_STORE_DEADLINE_SECONDS", 0.05)
     store["session"] = _FakeSession(hang=1.0)
@@ -177,7 +190,10 @@ async def test_the_check_refuses_when_the_database_is_too_slow(store, monkeypatc
 async def test_revoking_inserts_prunes_and_commits(store):
     await _dl.revoke_jti("abc", ttl_seconds=60)
     insert_sql, prune_sql = store["session"].sql()
-    assert insert_sql.startswith("INSERT INTO slm_revoked_tokens") and "ON CONFLICT (jti) DO NOTHING" in insert_sql
+    assert insert_sql.startswith("INSERT INTO slm_revoked_tokens") and "ON CONFLICT (jti) DO UPDATE" in insert_sql
+    assert (
+        "greatest(slm_revoked_tokens.expires_at, excluded.expires_at)" in insert_sql
+    ), "a repeat revoke must never shorten"
     assert prune_sql.startswith("DELETE FROM slm_revoked_tokens") and "expires_at <=" in prune_sql
     store["session"].commit.assert_awaited_once()
 
@@ -217,6 +233,7 @@ async def test_recording_an_epoch_upserts(store):
     assert await _pe.set_epoch("admin", now=1700000123) == 1700000123
     (sql,) = store["session"].sql()
     assert sql.startswith("INSERT INTO slm_password_epochs") and "ON CONFLICT (subject) DO UPDATE" in sql
+    assert "greatest(slm_password_epochs.epoch, excluded.epoch)" in sql, "an epoch must never move backwards"
 
 
 async def test_an_epoch_write_failure_returns_none(store, monkeypatch):

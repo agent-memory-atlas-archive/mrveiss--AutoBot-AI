@@ -21,6 +21,10 @@ revoked" and "unknown" are different answers. ``decode_token_async``
 (``services/auth.py``) catches the raise and returns 401. The store is now the
 database the SLM cannot run without, so this no longer denies a healthy SLM.
 
+Upgrade note: revocations recorded in Redis before #18663 are not carried over --
+tokens logged out before the upgrade stay valid until they expire (at most the
+token lifetime).
+
 ``revoke_jti`` stays fail-open (#16387): a logout that cannot reach the store has
 nothing else to deny against; decode-time verification carries the guarantee.
 
@@ -32,13 +36,20 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
+
+try:  # asyncpg can raise its own errors at connect time, before SQLAlchemy wraps them
+    import asyncpg
+
+    _DRIVER_FAILURES: tuple = (asyncpg.PostgresError, asyncpg.InterfaceError)
+except ImportError:  # pragma: no cover - asyncpg is the SLM's driver in deployments
+    _DRIVER_FAILURES = ()
 
 logger = logging.getLogger(__name__)
 
 # Failures that mean "the store could not answer".
-_STORE_FAILURES = (asyncio.TimeoutError, ConnectionError, OSError, SQLAlchemyError)
+_STORE_FAILURES = (asyncio.TimeoutError, ConnectionError, OSError, SQLAlchemyError, *_DRIVER_FAILURES)
 
 # Hard deadline for any denylist store interaction (#11443).
 _STORE_DEADLINE_SECONDS = 2.0
@@ -60,10 +71,13 @@ async def _revoke(jti: str, ttl_seconds: int) -> None:
 
     now = datetime.now(timezone.utc)
     async with _session() as session:
+        stmt = insert(RevokedToken).values(jti=jti, expires_at=now + timedelta(seconds=ttl_seconds))
+        # A repeat revocation keeps the later expiry, never shortens it.
         await session.execute(
-            insert(RevokedToken)
-            .values(jti=jti, expires_at=now + timedelta(seconds=ttl_seconds))
-            .on_conflict_do_nothing(index_elements=["jti"])
+            stmt.on_conflict_do_update(
+                index_elements=["jti"],
+                set_={"expires_at": func.greatest(RevokedToken.expires_at, stmt.excluded.expires_at)},
+            )
         )
         # Rows of tokens that have expired anyway carry no information; prune on write.
         await session.execute(delete(RevokedToken).where(RevokedToken.expires_at <= now))
@@ -109,5 +123,5 @@ async def is_jti_revoked(jti: str) -> bool:
     """
     try:
         return await asyncio.wait_for(_lookup(jti), timeout=_STORE_DEADLINE_SECONDS)
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, *_DRIVER_FAILURES) as exc:
         raise ConnectionError(f"jti denylist store unavailable: {exc.__class__.__name__}") from exc
