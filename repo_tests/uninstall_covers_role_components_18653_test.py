@@ -32,6 +32,7 @@ from pathlib import Path
 import yaml
 from repo_tests._paths import repo_root
 
+from tools.lint._comment_syntax import code_text
 from tools.lint._scan_helpers import tracked_paths
 
 _ROOT = repo_root()
@@ -227,7 +228,7 @@ def test_autobots_admin_account_is_removed_by_its_marker() -> None:
 
 
 def test_no_system_wide_autoremove() -> None:
-    code = "\n".join(l for l in _UNINSTALL.read_text(encoding="utf-8").splitlines() if not l.lstrip().startswith("#"))
+    code = code_text(_UNINSTALL)
     assert "autoremove" not in code, "a system-wide apt autoremove removes packages that are not AutoBot's"
 
 
