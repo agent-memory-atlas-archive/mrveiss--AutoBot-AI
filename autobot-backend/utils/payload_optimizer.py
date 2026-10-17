@@ -54,7 +54,7 @@ def _compress_value_by_type(optimizer: "PayloadOptimizer", value: Any) -> Any | 
 
 @dataclass
 class PayloadOptimizationResult:
-    """Result of payload optimization"""
+    """The optimized payload plus its before/after sizes and what was trimmed (#17312)."""
 
     original_size: int
     optimized_size: int
