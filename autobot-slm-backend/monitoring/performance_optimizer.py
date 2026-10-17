@@ -113,7 +113,7 @@ class PerformanceTuningAction:
 
 
 @dataclass
-class OptimizationResult:
+class PerformanceTuningResult:
     """Result of applying an optimization."""
 
     recommendation: PerformanceTuningAction
@@ -514,7 +514,7 @@ class PerformanceOptimizer:
 
         return recommendations
 
-    async def _measure_optimization_impact(self, result: OptimizationResult, metrics_before: Dict) -> None:
+    async def _measure_optimization_impact(self, result: PerformanceTuningResult, metrics_before: Dict) -> None:
         """Measure metrics after optimization and calculate improvement.
 
         Helper for apply_optimization (#825).
@@ -526,12 +526,12 @@ class PerformanceOptimizer:
             metrics_before, metrics_after, result.recommendation.category
         )
 
-    async def apply_optimization(self, recommendation: PerformanceTuningAction) -> OptimizationResult:
+    async def apply_optimization(self, recommendation: PerformanceTuningAction) -> PerformanceTuningResult:
         """Apply a specific optimization recommendation."""
         self.logger.info("Applying optimization: %s", recommendation.description)
 
         metrics_before = await self.monitor.generate_performance_report()
-        result = OptimizationResult(
+        result = PerformanceTuningResult(
             recommendation=recommendation,
             applied=False,
             success=False,
