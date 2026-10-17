@@ -14,6 +14,7 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { getBackendUrl } from '@/config/ssot-config'
+import type { SlmUserResponse } from '@/composables/useSlmUserApi'
 
 // Type definitions for AutoBot API responses
 
@@ -22,14 +23,11 @@ export interface SettingsResponse {
   last_modified: string
 }
 
-export interface UserResponse {
-  id: string
-  username: string
-  email?: string
-  roles: string[]
-  created_at: string
-  last_login?: string
-}
+/**
+ * The main backend's /api/user-management/users item. It is the same shared
+ * autobot_shared UserResponse the SLM backend serves, so the generated type is reused (#15536).
+ */
+export type UserResponse = SlmUserResponse
 
 export interface CacheConfig {
   enabled: boolean
@@ -53,22 +51,70 @@ export interface LogForwardingDestination {
   config: Record<string, unknown>
 }
 
+/** The main backend's worker definition (autobot-backend/models/npu_models.py NPUWorkerDefinition). */
+export interface NPUWorkerDefinition {
+  id: string
+  name: string
+  url: string
+  platform: string
+  enabled: boolean
+  priority: number
+  weight: number
+  max_concurrent_tasks: number
+}
+
+/** GET /api/npu/workers item (npu_models.py NPUWorkerDetails); only the fields read here. */
+interface NPUWorkerDetails {
+  config: NPUWorkerDefinition
+  status: {
+    status: NPUWorker['status']
+    current_load: number
+    last_heartbeat: string | null
+  }
+}
+
+/** POST /api/npu/workers/{id}/test (npu_models.py WorkerTestResult); a failed test is 200 with success false. */
+export interface NPUWorkerTestResult {
+  worker_id: string
+  success: boolean
+  response_time_ms: number | null
+  error_message: string | null
+}
+
+/** One row of the NPU workers table, flattened from NPUWorkerDetails. */
 export interface NPUWorker {
   id: string
   hostname: string
   ip_address: string
-  status: 'online' | 'offline' | 'busy' | 'error'
+  status: 'online' | 'offline' | 'busy' | 'error' | 'unknown' | 'degraded'
   capabilities: string[]
+  /** Active tasks as a percentage of the worker's max_concurrent_tasks. */
   current_load: number
   last_heartbeat: string
+  definition: NPUWorkerDefinition
 }
 
-export interface PermissionRule {
-  id: string
-  pattern: string
-  action: 'allow' | 'deny' | 'ask'
-  scope: string
-  enabled: boolean
+export function toNPUWorker(details: NPUWorkerDetails): NPUWorker {
+  const { config, status } = details
+  const capacity = Math.max(config.max_concurrent_tasks, 1)
+  return {
+    id: config.id,
+    hostname: config.name,
+    ip_address: urlHost(config.url),
+    status: status.status,
+    capabilities: [],
+    current_load: Math.min(100, Math.round((status.current_load / capacity) * 100)),
+    last_heartbeat: status.last_heartbeat ?? '',
+    definition: config,
+  }
+}
+
+function urlHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
 }
 
 export interface PromptTemplate {
@@ -87,14 +133,6 @@ export interface FileItem {
   size?: number
   modified?: string
   permissions?: string
-}
-
-export interface MCPServer {
-  id: string
-  name: string
-  type: string
-  status: 'running' | 'stopped' | 'error'
-  config: Record<string, unknown>
 }
 
 export interface Agent {
@@ -710,30 +748,8 @@ export function useAutobotApi() {
   // =============================================================================
 
   async function getUsers(): Promise<UserResponse[]> {
-    const response = await client.get<{ users: UserResponse[] }>('/users')
+    const response = await client.get<{ users: UserResponse[] }>('/user-management/users')
     return response.data.users
-  }
-
-  async function createUser(userData: {
-    username: string
-    password: string
-    email?: string
-    roles?: string[]
-  }): Promise<UserResponse> {
-    const response = await client.post<UserResponse>('/users', userData)
-    return response.data
-  }
-
-  async function updateUser(
-    userId: string,
-    data: Partial<UserResponse & { password?: string }>
-  ): Promise<UserResponse> {
-    const response = await client.patch<UserResponse>(`/users/${userId}`, data)
-    return response.data
-  }
-
-  async function deleteUser(userId: string): Promise<void> {
-    await client.delete(`/users/${userId}`)
   }
 
   // =============================================================================
@@ -815,81 +831,48 @@ export function useAutobotApi() {
   // NPU Workers API
   // =============================================================================
 
+  // The main backend serves workers at /api/npu/... (api/npu_workers.py), as
+  // NPUWorkerDetails; toNPUWorker() flattens each one for the settings table (#15536).
   async function getNPUWorkers(): Promise<NPUWorker[]> {
-    const response = await client.get<{ workers: NPUWorker[] }>('/npu-workers')
-    return response.data.workers
+    const response = await client.get<NPUWorkerDetails[]>('/npu/workers')
+    return response.data.map(toNPUWorker)
   }
 
-  async function getNPUWorker(workerId: string): Promise<NPUWorker> {
-    const response = await client.get<NPUWorker>(`/npu-workers/${workerId}`)
-    return response.data
-  }
-
+  /** PUT replaces the whole definition, so the change is applied over the current one. */
   async function updateNPUWorker(
-    workerId: string,
-    data: Partial<NPUWorker>
-  ): Promise<NPUWorker> {
-    const response = await client.patch<NPUWorker>(`/npu-workers/${workerId}`, data)
-    return response.data
+    worker: NPUWorker,
+    changes: Partial<NPUWorkerDefinition>
+  ): Promise<void> {
+    await client.put(`/npu/workers/${worker.id}`, { ...worker.definition, ...changes })
   }
 
-  async function restartNPUWorker(workerId: string): Promise<{ status: string }> {
-    const response = await client.post<{ status: string }>(`/npu-workers/${workerId}/restart`)
-    return response.data
-  }
-
-  // Missing NPU Worker methods (Issue #729)
   async function getNPULoadBalancingConfig(): Promise<Record<string, unknown>> {
-    const response = await client.get('/npu-workers/load-balancing/config')
+    const response = await client.get('/npu/load-balancing')
     return response.data
   }
 
   async function updateNPULoadBalancingConfig(config: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const response = await client.put('/npu-workers/load-balancing/config', config)
+    const response = await client.put('/npu/load-balancing', config)
     return response.data
   }
 
-  async function pairNPUWorker(workerId: string, data: { hostname: string; ip_address: string }): Promise<NPUWorker> {
-    const response = await client.post<NPUWorker>(`/npu-workers/${workerId}/pair`, data)
-    return response.data
+  /** The main host contacts the worker at `url`, gives it an id and registers it. */
+  async function pairNPUWorker(data: { url: string; name?: string; enabled?: boolean }): Promise<void> {
+    await client.post('/npu/workers/pair', data)
   }
 
-  async function testNPUWorker(workerId: string): Promise<{ success: boolean; latency_ms: number; message: string }> {
-    const response = await client.post<{ success: boolean; latency_ms: number; message: string }>(`/npu-workers/${workerId}/test`)
+  async function testNPUWorker(workerId: string): Promise<NPUWorkerTestResult> {
+    const response = await client.post<NPUWorkerTestResult>(`/npu/workers/${workerId}/test`)
     return response.data
   }
 
   async function removeNPUWorker(workerId: string): Promise<void> {
-    await client.delete(`/npu-workers/${workerId}`)
+    await client.delete(`/npu/workers/${workerId}`)
   }
 
   // =============================================================================
   // Permission API
   // =============================================================================
-
-  async function getPermissionRules(): Promise<PermissionRule[]> {
-    const response = await client.get<{ rules: PermissionRule[] }>('/permissions/rules')
-    return response.data.rules
-  }
-
-  async function createPermissionRule(
-    rule: Omit<PermissionRule, 'id'>
-  ): Promise<PermissionRule> {
-    const response = await client.post<PermissionRule>('/permissions/rules', rule)
-    return response.data
-  }
-
-  async function updatePermissionRule(
-    id: string,
-    data: Partial<PermissionRule>
-  ): Promise<PermissionRule> {
-    const response = await client.patch<PermissionRule>(`/permissions/rules/${id}`, data)
-    return response.data
-  }
-
-  async function deletePermissionRule(id: string): Promise<void> {
-    await client.delete(`/permissions/rules/${id}`)
-  }
 
   // =============================================================================
   // Prompts API
@@ -961,10 +944,6 @@ export function useAutobotApi() {
     return response.data.content
   }
 
-  async function writeFile(path: string, content: string, host?: string): Promise<void> {
-    await client.post('/files/write', { path, content, host })
-  }
-
   async function deleteFile(path: string, host?: string): Promise<void> {
     const params = new URLSearchParams({ path })
     if (host) params.append('host', host)
@@ -1001,31 +980,6 @@ export function useAutobotApi() {
   // MCP Registry API
   // =============================================================================
 
-  async function getMCPServers(): Promise<MCPServer[]> {
-    const response = await client.get<{ servers: MCPServer[] }>('/mcp/servers')
-    return response.data.servers
-  }
-
-  async function getMCPServer(id: string): Promise<MCPServer> {
-    const response = await client.get<MCPServer>(`/mcp/servers/${id}`)
-    return response.data
-  }
-
-  async function startMCPServer(id: string): Promise<{ status: string }> {
-    const response = await client.post<{ status: string }>(`/mcp/servers/${id}/start`)
-    return response.data
-  }
-
-  async function stopMCPServer(id: string): Promise<{ status: string }> {
-    const response = await client.post<{ status: string }>(`/mcp/servers/${id}/stop`)
-    return response.data
-  }
-
-  async function restartMCPServer(id: string): Promise<{ status: string }> {
-    const response = await client.post<{ status: string }>(`/mcp/servers/${id}/restart`)
-    return response.data
-  }
-
   async function getMCPBridges(): Promise<Record<string, unknown>[]> {
     const response = await client.get<{ bridges: Record<string, unknown>[] }>('/mcp/bridges')
     return response.data.bridges
@@ -1049,11 +1003,6 @@ export function useAutobotApi() {
   // =============================================================================
   // Agents API
   // =============================================================================
-
-  async function getAgents(): Promise<Agent[]> {
-    const response = await client.get<{ agents: Agent[] }>('/agents')
-    return response.data.agents
-  }
 
   async function getAgent(id: string): Promise<Agent> {
     const response = await client.get<Agent>(`/agents/${id}`)
@@ -1111,15 +1060,6 @@ export function useAutobotApi() {
   // Voice API
   // =============================================================================
 
-  async function getVoiceConfig(): Promise<Record<string, unknown>> {
-    const response = await client.get('/voice/config')
-    return response.data
-  }
-
-  async function updateVoiceConfig(config: Record<string, unknown>): Promise<void> {
-    await client.put('/voice/config', config)
-  }
-
   async function voiceListen(userRole: string = 'admin'): Promise<Record<string, unknown>> {
     const formData = new FormData()
     formData.append('user_role', userRole)
@@ -1163,10 +1103,11 @@ export function useAutobotApi() {
    * Get LLM fallback monitoring status (GH#8998 / #10488).
    * Backend returns a flat payload (no create_success_response envelope):
    * { configured_chains: [...], active_fallbacks: [...] }.
-   * The /autobot-api proxy strips its prefix -> backend /api/llm-providers/fallback-status.
+   * The /autobot-api proxy maps to the main backend's /api, where the llm_providers
+   * router is mounted at /llm (#15536) -> backend /api/llm/fallback-status.
    */
   async function getLLMFallbackStatus(): Promise<LLMFallbackStatus> {
-    const response = await client.get<LLMFallbackStatus>('/llm-providers/fallback-status')
+    const response = await client.get<LLMFallbackStatus>('/llm/fallback-status')
     return {
       configured_chains: response.data.configured_chains || [],
       active_fallbacks: response.data.active_fallbacks || [],
@@ -1267,16 +1208,6 @@ export function useAutobotApi() {
   // =============================================================================
   // System Monitoring API
   // =============================================================================
-
-  async function getSystemMetrics(): Promise<Record<string, unknown>> {
-    const response = await client.get('/monitoring/system')
-    return response.data
-  }
-
-  async function getHardwareInfo(): Promise<Record<string, unknown>> {
-    const response = await client.get('/monitoring/hardware')
-    return response.data
-  }
 
   async function getSystemHealth(): Promise<SystemHealthReport> {
     const response = await client.get('/system/health/detailed')
@@ -1478,11 +1409,6 @@ export function useAutobotApi() {
     // #10429: backend exposes /batch-jobs/status (returns status: "healthy"),
     // never /batch-jobs/health (404). Repointed to the real route.
     const response = await client.get('/batch-jobs/status')
-    return response.data
-  }
-
-  async function getBatchStatus(): Promise<Record<string, unknown>> {
-    const response = await client.get('/batch/status')
     return response.data
   }
 
@@ -1922,9 +1848,6 @@ export function useAutobotApi() {
     updateSettingsSection,
     // Users
     getUsers,
-    createUser,
-    updateUser,
-    deleteUser,
     // Cache
     getCacheConfig,
     updateCacheConfig,
@@ -1939,19 +1862,13 @@ export function useAutobotApi() {
     testLogForwardingDestination,
     // NPU Workers
     getNPUWorkers,
-    getNPUWorker,
     updateNPUWorker,
-    restartNPUWorker,
     getNPULoadBalancingConfig,
     updateNPULoadBalancingConfig,
     pairNPUWorker,
     testNPUWorker,
     removeNPUWorker,
     // Permissions
-    getPermissionRules,
-    createPermissionRule,
-    updatePermissionRule,
-    deletePermissionRule,
     // Prompts
     getPromptTemplates,
     getPromptTemplate,
@@ -1962,21 +1879,14 @@ export function useAutobotApi() {
     // Files
     listFiles,
     readFile,
-    writeFile,
     deleteFile,
     uploadFile,
     // MCP Registry (Issue #835)
-    getMCPServers,
-    getMCPServer,
-    startMCPServer,
-    stopMCPServer,
-    restartMCPServer,
     getMCPBridges,
     getMCPTools,
     getMCPHealth,
     getMCPStats,
     // Agents (Issue #835)
-    getAgents,
     getAgent,
     updateAgent,
     getAvailableAgents,
@@ -1989,8 +1899,6 @@ export function useAutobotApi() {
     // Shared Chat Links (GH#8996)
     getSharedLinksAdmin,
     // Voice (Issue #835)
-    getVoiceConfig,
-    updateVoiceConfig,
     voiceListen,
     voiceSpeak,
     // LLM
@@ -2009,8 +1917,6 @@ export function useAutobotApi() {
     // Logs
     getLogs,
     // System
-    getSystemMetrics,
-    getHardwareInfo,
     getSystemHealth,
     getErrorStatistics,
     getRecentErrors,
@@ -2037,7 +1943,6 @@ export function useAutobotApi() {
     getBatchJob,
     cancelBatchJob,
     getBatchJobHealth,
-    getBatchStatus,
     // Terminal (Issue #729)
     executeTerminalCommand,
     // Advanced Control (#12653)

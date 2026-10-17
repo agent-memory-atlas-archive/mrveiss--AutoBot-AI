@@ -18,6 +18,10 @@ const logger = createLogger('NPUWorkersSettings')
 
 const api = useAutobotApi()
 
+// Workers serve plain HTTP: the scheme autobot_shared/network_constants.py builds NPU_WORKER_SERVICE with.
+// An edited worker keeps the scheme it was paired with.
+const NEW_WORKER_SCHEME = 'http:'
+
 // State
 const loading = ref(false)
 const saving = ref(false)
@@ -50,7 +54,6 @@ const workerForm = reactive({
   enabled: true,
   priority: 1,
   weight: 1,
-  capabilities: [] as string[],
 })
 
 // Metrics modal
@@ -98,9 +101,11 @@ async function fetchLoadBalancingConfig(): Promise<void> {
     }
     loadBalancingConfigLoaded.value = true
   } catch (e) {
-    // Config endpoint may not be available
+    // GET /api/npu/load-balancing is served (#15536): a failure is a real error, so say so.
+    // Save stays disabled, because saving the form's defaults would overwrite the server's settings.
     loadBalancingConfigLoaded.value = false
-    logger.debug('NPU load-balancing config unavailable:', e)
+    error.value = e instanceof Error ? e.message : 'Failed to load load-balancing configuration'
+    logger.error('NPU load-balancing config failed to load:', e)
   }
 }
 
@@ -128,11 +133,14 @@ function openAddModal(): void {
 
 function openEditModal(worker: NPUWorker): void {
   editingWorker.value = worker
-  workerForm.name = worker.hostname
-  workerForm.ip_address = worker.ip_address
-  workerForm.platform = 'linux'
-  workerForm.enabled = worker.status !== 'offline'
-  workerForm.capabilities = worker.capabilities || []
+  const url = new URL(worker.definition.url)
+  workerForm.name = worker.definition.name
+  workerForm.ip_address = url.hostname
+  workerForm.port = Number(url.port) || workerForm.port
+  workerForm.platform = worker.definition.platform
+  workerForm.enabled = worker.definition.enabled
+  workerForm.priority = worker.definition.priority
+  workerForm.weight = worker.definition.weight
   showModal.value = true
 }
 
@@ -144,7 +152,6 @@ function resetForm(): void {
   workerForm.enabled = true
   workerForm.priority = 1
   workerForm.weight = 1
-  workerForm.capabilities = []
 }
 
 function closeModal(): void {
@@ -158,17 +165,19 @@ async function saveWorker(): Promise<void> {
   error.value = null
 
   try {
+    const scheme = editingWorker.value ? new URL(editingWorker.value.definition.url).protocol : NEW_WORKER_SCHEME
+    const url = `${scheme}//${workerForm.ip_address}:${workerForm.port}`
     if (editingWorker.value) {
-      await api.updateNPUWorker(editingWorker.value.id, {
-        hostname: workerForm.name,
-        ip_address: workerForm.ip_address,
-        capabilities: workerForm.capabilities,
+      await api.updateNPUWorker(editingWorker.value, {
+        name: workerForm.name,
+        url,
+        platform: workerForm.platform,
+        enabled: workerForm.enabled,
+        priority: workerForm.priority,
+        weight: workerForm.weight,
       })
     } else {
-      await api.pairNPUWorker(workerForm.ip_address, {
-        hostname: workerForm.name,
-        ip_address: workerForm.ip_address,
-      })
+      await api.pairNPUWorker({ url, name: workerForm.name, enabled: workerForm.enabled })
     }
 
     success.value = `Worker ${editingWorker.value ? 'updated' : 'paired'} successfully`
@@ -187,31 +196,17 @@ async function testWorker(worker: NPUWorker): Promise<void> {
   error.value = null
 
   try {
-    await api.testNPUWorker(worker.id)
+    const result = await api.testNPUWorker(worker.id)
+    if (!result.success) {
+      error.value = result.error_message || 'Connection test failed'
+      return
+    }
     success.value = `Connection to ${worker.hostname} successful`
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Connection test failed'
   } finally {
     testingWorker.value[worker.id] = false
-  }
-}
-
-async function restartWorker(worker: NPUWorker): Promise<void> {
-  if (!confirm(`Are you sure you want to restart ${worker.hostname}?`)) return
-
-  saving.value = true
-  error.value = null
-
-  try {
-    await api.restartNPUWorker(worker.id)
-    success.value = `Restart signal sent to ${worker.hostname}`
-    await fetchWorkers()
-    setTimeout(() => { success.value = null }, 3000)
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to restart worker'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -535,15 +530,6 @@ onUnmounted(() => {
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </button>
-                  <button
-                    @click="restartWorker(worker)"
-                    class="p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded-sm"
-                    :title="$t('settings.admin.nPUWorkersSettings.restart')"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                   </button>
                   <button
