@@ -20,8 +20,9 @@ import re
 from pathlib import Path
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 _CANONICAL_DOCKER_ENV = "docker/.env.docker"
@@ -30,10 +31,31 @@ _UPSTREAM_KEYS = frozenset({"OLLAMA_HOST"})
 _LINE = re.compile(r"^\s*(?:#\s*)?([A-Z][A-Z0-9_]*)=(.*)$")
 
 
+_ROOTS = (".env", "autobot-frontend/", "autobot-slm-backend/", "docker/")
+
+
+def _population(root: Path) -> list[str]:
+    """Every tracked env file -- `.env*` or `*.env` by name."""
+    try:
+        paths = tracked_paths(root, "*.env*")
+    except EmptyEnumeration:
+        return []
+    return [p for p in paths if (n := p.rsplit("/", 1)[-1]).startswith(".env") or n.endswith(".env")]
+
+
+REACH = declare(
+    "env-file-family-18555-scan",
+    discover=_population,
+    # Mid-window from REACH.window(): population 8, window (4, 8) -> 6.
+    floor=6,
+    growth=4,
+    what="tracked env files",
+    roots=_ROOTS,
+)
+
+
 def _env_files() -> dict[str, str]:
-    paths = tracked_paths(_ROOT, "*.env*")
-    names = [p for p in paths if (n := p.rsplit("/", 1)[-1]).startswith(".env") or n.endswith(".env")]
-    return {p: (_ROOT / p).read_text(encoding="utf-8") for p in names}
+    return {p: (_ROOT / p).read_text(encoding="utf-8") for p in REACH.examined(_ROOT)}
 
 
 def _value(raw: str) -> str:
