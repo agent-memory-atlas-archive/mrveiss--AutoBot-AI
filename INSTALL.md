@@ -118,7 +118,7 @@ images needs headroom on top:
 
 | What you start | Containers | Memory limits (sum) | Measured use | Host RAM |
 |----------------|------------|---------------------|--------------|----------|
-| SLM web GUI only (`--profile slm`) | SLM, its GUI, Redis, PostgreSQL | ~3.1 GB | ~215 MiB just after start, idle (CI) | 4 GB+ free |
+| SLM web GUI only (`--profile slm`) | SLM, its GUI, Redis, PostgreSQL | ~3.1 GB | ~215 MiB idle just after start (CI); ~414 MiB with the SLM restarting (an external test) | 1 GB+ free to run; building the images needs more (not measured) |
 | Full stack | backend, worker, celery-beat, SLM, frontend, Redis, PostgreSQL, ChromaDB | ~9 GB | not measured | 16 GB recommended |
 
 ### First: per-host secrets and network range
