@@ -35,6 +35,27 @@ describe('backoffDelay', () => {
     expect(backoffDelay(5, { base: 1000, max: 30000, jitterMs: 1000 })).toBe(30000)
   })
 
+  it('redraws a value from the biased top bucket instead of taking its modulo', () => {
+    // For jitterMs = 1000 the unbiased ceiling is 2^32 - (2^32 % 1000) = 4294967000.
+    const draws = [0xffffffff, 1999]
+    const spy = vi.spyOn(crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(a: T) => {
+      ;(a as unknown as Uint32Array)[0] = draws.shift() as number
+      return a
+    })
+    expect(backoffDelay(0, { base: 1000, jitterMs: 1000 })).toBe(1999)
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps jitter inside [0, jitterMs) at both ends of the accepted range', () => {
+    const draws = [0, 4294966999]
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(a: T) => {
+      ;(a as unknown as Uint32Array)[0] = draws.shift() as number
+      return a
+    })
+    expect(backoffDelay(0, { base: 0, jitterMs: 1000 })).toBe(0)
+    expect(backoffDelay(0, { base: 0, jitterMs: 1000 })).toBe(999)
+  })
+
   it('adds no jitter unless asked', () => {
     const spy = vi.spyOn(crypto, 'getRandomValues')
     backoffDelay(2, { base: 500, max: 10000 })

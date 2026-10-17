@@ -22,8 +22,22 @@ export interface BackoffOptions {
 /** Request retries: 1s, 2s, 4s, then 5s -- the shape both apps' ApiClients and async loaders use. */
 export const RETRY_BACKOFF: Readonly<Required<Omit<BackoffOptions, 'jitterMs'>>> = Object.freeze({ base: 1000, max: 5000 })
 
+const UINT32_RANGE = 2 ** 32
+
+/**
+ * A uniform integer in [0, limit) from the CSPRNG. Rejection sampling, not a bare
+ * modulo: the top partial bucket of the 32-bit range would favour small results,
+ * so a draw that lands in it is redrawn (CodeQL js/biased-cryptographic-random).
+ */
 function randomBelow(limit: number): number {
-  return crypto.getRandomValues(new Uint32Array(1))[0] % limit
+  const bound = Math.floor(limit)
+  if (bound <= 1) return 0
+  const unbiasedCeiling = UINT32_RANGE - (UINT32_RANGE % bound)
+  const draw = new Uint32Array(1)
+  for (;;) {
+    crypto.getRandomValues(draw)
+    if (draw[0] < unbiasedCeiling) return draw[0] % bound
+  }
 }
 
 const finiteOr = (value: number, fallback: number): number => (Number.isFinite(value) ? value : fallback)
