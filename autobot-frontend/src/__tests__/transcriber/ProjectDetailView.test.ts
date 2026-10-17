@@ -139,15 +139,4 @@ describe('ProjectDetailView.vue', () => {
     expect(cards).toHaveLength(3)
     expect(cards[0].text()).toContain('rec-99.mp3')
   })
-
-  // Re-enable with the progress route (#18746): ProcessingProgress is not rendered until then.
-  it.skip('refreshes a recording when processing completes', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.findComponent(ProcessingProgressStub).vm.$emit('complete')
-    await flushPromises()
-
-    expect(getRecording).toHaveBeenCalledWith(11)
-  })
 })

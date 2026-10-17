@@ -274,10 +274,10 @@ export function useBrowserAutomation(options: UseBrowserAutomationOptions = {}) 
     })
   }
 
-  async function type(sessionId: string, selector: string, value: string): Promise<boolean> {
+  async function type(sessionId: string, selector: string, text: string): Promise<boolean> {
     error.value = null
     return wrap(async () => {
-      await ApiClient.post<unknown>(`${getApiBase()}/browser/mcp/fill`, { session_id: sessionId, selector, value })
+      await ApiClient.post<unknown>(`${getApiBase()}/browser/type`, { session_id: sessionId, selector, text })
       logger.debug('Typed text into:', selector)
       return true
     }).catch((err) => {
@@ -319,7 +319,7 @@ export function useBrowserAutomation(options: UseBrowserAutomationOptions = {}) 
   async function executeScript(sessionId: string, script: string): Promise<unknown> {
     error.value = null
     return wrap(async () => {
-      const data = await ApiClient.post<{ result: unknown }>(`${getApiBase()}/browser/mcp/evaluate`, { session_id: sessionId, script })
+      const data = await ApiClient.post<{ result: unknown }>(`${getApiBase()}/browser/execute`, { session_id: sessionId, script })
       logger.debug('Executed script, result:', data.result)
       return data.result
     }).catch((err) => {

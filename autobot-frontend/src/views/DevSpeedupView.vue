@@ -13,8 +13,17 @@ import { ref, computed } from 'vue'
 import { useDevSpeedup } from '@/composables/useDevSpeedup'
 import { createLogger } from '@/utils/debugUtils'
 import Icon from '@/components/ui/Icon.vue'
+import { runCodeAction } from './devSpeedupCodeAction'
 
 const logger = createLogger('DevSpeedupView')
+
+// Each flag returns with its route (#18749); the dev-speedup routes below are not served.
+// Quick search: POST /dev-speedup/quick-search.
+const QUICK_SEARCH_ENABLED = false
+// Snippet generation: POST /dev-speedup/snippet-generate.
+const SNIPPET_GENERATE_ENABLED = false
+// Code actions (refactor, tests, optimize, format, lint-fix): POST /dev-speedup/{refactor-suggest,test-generate,optimize,format,lint-fix}.
+const CODE_ACTIONS_ENABLED = false
 
 const {
   searchResults,
@@ -35,7 +44,9 @@ const {
   lintFix,
 } = useDevSpeedup({ autoFetch: true })
 
-const activeTab = ref<'search' | 'snippets' | 'templates' | 'actions'>('templates')
+const activeTab = ref<'search' | 'snippets' | 'templates' | 'actions'>(
+  QUICK_SEARCH_ENABLED ? 'search' : 'templates',
+)
 const searchQuery = ref('')
 const searchType = ref<'file' | 'code' | 'symbol' | undefined>(undefined)
 
@@ -70,35 +81,10 @@ async function handleFetchTemplates() {
 
 async function handleCodeAction() {
   if (!codeInput.value.trim()) return
-
-  switch (actionType.value) {
-    case 'refactor':
-      await suggestRefactor(codeInput.value, actionLanguage.value)
-      break
-    case 'optimize':
-      const optimized = await optimizeCode(codeInput.value, actionLanguage.value)
-      if (optimized) {
-        alert(`Optimized code:\n\n${optimized}`)
-      }
-      break
-    case 'format':
-      const formatted = await formatCode(codeInput.value, actionLanguage.value)
-      if (formatted) {
-        codeInput.value = formatted
-        logger.debug('Code formatted')
-      }
-      break
-    case 'lint':
-      const fixed = await lintFix(codeInput.value, actionLanguage.value)
-      if (fixed) {
-        codeInput.value = fixed
-        logger.debug('Linting fixed')
-      }
-      break
-    case 'test':
-      await generateTests(codeInput.value, actionLanguage.value)
-      break
-  }
+  const replacement = await runCodeAction(actionType.value, codeInput.value, actionLanguage.value, {
+    suggestRefactor, optimizeCode, formatCode, lintFix, generateTests,
+  })
+  if (replacement) codeInput.value = replacement
 }
 
 function copyToClipboard(text: string) {
@@ -138,14 +124,112 @@ const templateCategories = computed(() => {
 
     <!-- Tabs -->
     <nav class="tab-nav">
+      <button v-if="QUICK_SEARCH_ENABLED" @click="activeTab = 'search'" :class="['tab-btn', { active: activeTab === 'search' }]">
+        <Icon name="search" /> {{ $t('views.devSpeedup.quickSearch') }}
+      </button>
+      <button v-if="SNIPPET_GENERATE_ENABLED" @click="activeTab = 'snippets'" :class="['tab-btn', { active: activeTab === 'snippets' }]">
+        <Icon name="puzzle-piece" /> {{ $t('views.devSpeedup.snippetsTab', { count: snippets.length }) }}
+      </button>
       <button @click="activeTab = 'templates'" :class="['tab-btn', { active: activeTab === 'templates' }]">
         <Icon name="file-code" /> {{ $t('views.devSpeedup.templatesTab', { count: templates.length }) }}
       </button>
-      <!-- Quick search, snippet generation and code actions return with their routes (#18749). -->
+      <button v-if="CODE_ACTIONS_ENABLED" @click="activeTab = 'actions'" :class="['tab-btn', { active: activeTab === 'actions' }]">
+        <Icon name="bolt" /> {{ $t('views.devSpeedup.quickActions') }}
+      </button>
     </nav>
 
     <!-- Tab Content -->
     <div class="tab-content">
+      <!-- Search Tab -->
+      <div v-if="QUICK_SEARCH_ENABLED" v-show="activeTab === 'search'" class="tab-panel">
+        <div class="card">
+          <div class="card-header"><span class="card-title">{{ $t('views.devSpeedup.quickCodeSearch') }}</span></div>
+          <div class="card-body">
+            <div class="search-row">
+              <input v-model="searchQuery" type="text" :placeholder="$t('views.devSpeedup.searchPlaceholder')" class="field-input search-input">
+              <select v-model="searchType" class="field-select">
+                <option :value="undefined">{{ $t('views.devSpeedup.allTypes') }}</option>
+                <option value="file">{{ $t('views.devSpeedup.files') }}</option>
+                <option value="code">{{ $t('views.devSpeedup.code') }}</option>
+                <option value="symbol">{{ $t('views.devSpeedup.symbols') }}</option>
+              </select>
+              <button @click="handleSearch" :disabled="isLoading || !searchQuery.trim()" class="btn-action-primary">
+                {{ $t('views.devSpeedup.search') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="searchResults.length > 0" class="card">
+          <div class="card-header"><span class="card-title">{{ $t('views.devSpeedup.results', { count: searchResults.length }) }}</span></div>
+          <div class="card-body">
+            <div class="results-list">
+              <div v-for="(result, idx) in searchResults" :key="idx" class="result-item">
+                <span :class="['badge', 'badge-' + result.type]">{{ result.type }}</span>
+                <div class="result-content">
+                  <p class="result-path">{{ result.path }}</p>
+                  <p v-if="result.line" class="result-line">{{ $t('views.devSpeedup.line', { num: result.line }) }}</p>
+                  <p class="result-text">{{ result.content }}</p>
+                  <p v-if="result.context" class="result-context">{{ result.context }}</p>
+                </div>
+                <div class="result-score">{{ $t('views.devSpeedup.score', { value: result.score.toFixed(2) }) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="searchQuery && !isLoading" class="empty-state">
+          <Icon name="search" />
+          <p>{{ $t('views.devSpeedup.noResults') }}</p>
+        </div>
+      </div>
+
+      <!-- Snippets Tab -->
+      <div v-if="SNIPPET_GENERATE_ENABLED" v-show="activeTab === 'snippets'" class="tab-panel">
+        <div class="card">
+          <div class="card-header"><span class="card-title">{{ $t('views.devSpeedup.generateCodeSnippet') }}</span></div>
+          <div class="card-body">
+            <div class="field-group">
+              <label class="field-label">{{ $t('views.devSpeedup.language') }}</label>
+              <select v-model="snippetLanguage" class="field-select">
+                <option v-for="lang in supportedLanguages" :key="lang" :value="lang">
+                  {{ lang.charAt(0).toUpperCase() + lang.slice(1) }}
+                </option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">{{ $t('views.devSpeedup.description') }}</label>
+              <textarea v-model="snippetDescription" rows="3" :placeholder="$t('views.devSpeedup.snippetPlaceholder')" class="field-input"></textarea>
+            </div>
+            <button @click="handleGenerateSnippet" :disabled="isLoading || !snippetDescription.trim()" class="btn-action-primary btn-full">
+              {{ $t('views.devSpeedup.generateSnippet') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="snippets.length > 0" class="snippets-list">
+          <div v-for="snippet in snippets" :key="snippet.id" class="card">
+            <div class="card-body">
+              <div class="snippet-header">
+                <div class="snippet-tags">
+                  <span class="badge badge-info">{{ snippet.language }}</span>
+                  <span v-for="tag in snippet.tags" :key="tag" class="badge badge-neutral">{{ tag }}</span>
+                </div>
+                <button @click="copyToClipboard(snippet.code)" class="btn-copy">{{ $t('views.devSpeedup.copy') }}</button>
+              </div>
+              <p class="snippet-desc">{{ snippet.description }}</p>
+              <pre class="code-block"><code>{{ snippet.code }}</code></pre>
+              <p class="snippet-date">{{ $t('views.devSpeedup.created', { date: new Date(snippet.created_at).toLocaleString() }) }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="empty-state">
+          <Icon name="puzzle-piece" />
+          <p>{{ $t('views.devSpeedup.noSnippets') }}</p>
+        </div>
+      </div>
+
       <!-- Templates Tab -->
       <div v-show="activeTab === 'templates'" class="tab-panel">
         <div class="card template-filter">
@@ -186,6 +270,93 @@ const templateCategories = computed(() => {
         </div>
       </div>
 
+      <!-- Actions Tab -->
+      <div v-if="CODE_ACTIONS_ENABLED" v-show="activeTab === 'actions'" class="tab-panel">
+        <div class="card">
+          <div class="card-header"><span class="card-title">{{ $t('views.devSpeedup.quickCodeActions') }}</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field-group">
+                <label class="field-label">{{ $t('views.devSpeedup.language') }}</label>
+                <select v-model="actionLanguage" class="field-select">
+                  <option v-for="lang in supportedLanguages" :key="lang" :value="lang">
+                    {{ lang.charAt(0).toUpperCase() + lang.slice(1) }}
+                  </option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label">{{ $t('views.devSpeedup.action') }}</label>
+                <select v-model="actionType" class="field-select">
+                  <option value="refactor">{{ $t('views.devSpeedup.suggestRefactorings') }}</option>
+                  <option value="optimize">{{ $t('views.devSpeedup.optimizeCode') }}</option>
+                  <option value="format">{{ $t('views.devSpeedup.formatCode') }}</option>
+                  <option value="lint">{{ $t('views.devSpeedup.fixLinting') }}</option>
+                  <option value="test">{{ $t('views.devSpeedup.generateTests') }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">{{ $t('views.devSpeedup.code') }}</label>
+              <textarea v-model="codeInput" rows="12" :placeholder="$t('views.devSpeedup.codePlaceholder')" class="field-input code-textarea"></textarea>
+            </div>
+            <button @click="handleCodeAction" :disabled="isLoading || !codeInput.trim()" class="btn-action-primary btn-full">
+              {{ isLoading ? $t('views.devSpeedup.processing') : $t('views.devSpeedup.runAction') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Refactor Suggestions -->
+        <div v-if="actionType === 'refactor' && refactorSuggestions.length > 0" class="card">
+          <div class="card-header">
+            <span class="card-title">{{ $t('views.devSpeedup.refactorSuggestions', { count: refactorSuggestions.length }) }}</span>
+          </div>
+          <div class="card-body suggestions-list">
+            <div v-for="(suggestion, idx) in refactorSuggestions" :key="idx" class="suggestion-item">
+              <div class="suggestion-meta">
+                <span class="badge badge-info">{{ suggestion.type }}</span>
+                <span :class="[
+                  'badge',
+                  suggestion.impact === 'high' ? 'badge-error' :
+                  suggestion.impact === 'medium' ? 'badge-warning' : 'badge-neutral'
+                ]">
+                  {{ $t('views.devSpeedup.impact', { level: suggestion.impact }) }}
+                </span>
+              </div>
+              <p class="suggestion-desc">{{ suggestion.description }}</p>
+              <div class="diff-grid">
+                <div>
+                  <p class="diff-label">{{ $t('views.devSpeedup.before') }}:</p>
+                  <pre class="code-block code-sm"><code>{{ suggestion.before }}</code></pre>
+                </div>
+                <div>
+                  <p class="diff-label">{{ $t('views.devSpeedup.after') }}:</p>
+                  <pre class="code-block code-sm"><code>{{ suggestion.after }}</code></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Generated Tests -->
+        <div v-if="actionType === 'test' && generatedTests.length > 0" class="card">
+          <div class="card-header">
+            <span class="card-title">{{ $t('views.devSpeedup.generatedTests', { count: generatedTests.length }) }}</span>
+          </div>
+          <div class="card-body tests-list">
+            <div v-for="(test, idx) in generatedTests" :key="idx" class="test-item">
+              <div class="test-header">
+                <div>
+                  <h4 class="test-name">{{ test.name }}</h4>
+                  <span class="badge badge-success">{{ test.framework }}</span>
+                </div>
+                <button @click="copyToClipboard(test.code)" class="btn-copy">{{ $t('views.devSpeedup.copy') }}</button>
+              </div>
+              <p class="test-desc">{{ test.description }}</p>
+              <pre class="code-block"><code>{{ test.code }}</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>

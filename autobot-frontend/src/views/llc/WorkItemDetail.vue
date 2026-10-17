@@ -153,7 +153,36 @@
           </div>
         </template>
 
-        <!-- Comments return with their read route (#18750). -->
+        <!-- Comments tab -->
+        <template v-if="activeTab === 'comments'">
+          <div class="comments-list">
+            <div v-for="c in comments" :key="c.id" class="comment-item">
+              <div class="comment-author">
+                <span class="author-avatar">{{ initials(c.author_name) }}</span>
+                <div class="author-meta">
+                  <span class="author-name">{{ c.author_name }}</span>
+                  <span class="comment-time">{{ formatTime(c.created_at) }}</span>
+                  <span v-if="c.author_type === 'agent'" class="agent-chip">{{ $t('llc.workItem.agentChip') }}</span>
+                </div>
+              </div>
+              <div class="comment-body" v-html="renderMarkdown(c.body)" />
+            </div>
+            <div v-if="comments.length === 0 && !isLoadingComments" class="meta-empty">
+              {{ $t('llc.workItem.noComments') }}
+            </div>
+          </div>
+          <div class="comment-input-row">
+            <textarea
+              v-model="newComment"
+              class="comment-textarea"
+              rows="3"
+              :placeholder="$t('llc.workItem.commentPlaceholder')"
+            />
+            <button class="btn-primary" :disabled="!newComment.trim() || isPosting" @click="postComment">
+              {{ isPosting ? $t('llc.workItem.posting') : $t('llc.workItem.post') }}
+            </button>
+          </div>
+        </template>
 
         <!-- Artifacts tab -->
         <template v-if="activeTab === 'artifacts'">
@@ -217,37 +246,14 @@ import { useCompanyPeople } from '@/composables/llc/useCompanyPeople'
 import WorkItemBadge from '@/components/llc/WorkItemBadge.vue'
 
 const logger = createLogger('WorkItemDetail')
+
+// Comments return with their read route (#18750): only POST .../comments is served, no GET.
+const COMMENTS_ENABLED = false
 const api = useApiClient()
 const { t } = useI18n()
 
 import type { WorkItem } from './workItemTypes'
-
-interface Comment {
-  id: string
-  body: string
-  author_name: string
-  author_type: 'human' | 'agent'
-  created_at: string
-}
-
-interface Artifact {
-  id: string
-  name: string
-  type: string
-  url: string
-}
-
-interface ActivityEvent {
-  id: string
-  actor_name: string
-  description: string
-  created_at: string
-}
-
-interface GoalAncestor {
-  id: string
-  title: string
-}
+import type { Comment, Artifact, ActivityEvent, GoalAncestor } from './workItemDetailTypes'
 
 const props = defineProps<{
   item: WorkItem
@@ -261,11 +267,11 @@ const emit = defineEmits<{
 
 const TABS = computed(() => [
   { key: 'details', label: t('llc.workItem.tabDetails') },
-  // Comments tab returns with its read route (#18750).
+  { key: 'comments', label: t('llc.workItem.tabComments') },
   { key: 'artifacts', label: t('llc.workItem.tabArtifacts') },
   { key: 'activity', label: t('llc.workItem.tabActivity') },
   { key: 'handoff', label: t('llc.workItem.tabHandoff') },
-])
+].filter((tab) => COMMENTS_ENABLED || tab.key !== 'comments'))
 
 const activeTab = ref('details')
 const localItem = ref<WorkItem>({ ...props.item })
