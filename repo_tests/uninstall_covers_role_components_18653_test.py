@@ -154,7 +154,9 @@ def test_every_deployed_config_file_is_removed() -> None:
     )
     resolved, open_ = _deployed(prefixes)
     assert len(resolved) >= 8, f"read {len(resolved)} config destinations -- the scan is broken"
-    exact = set(_array("PATHS")) | set(_array("POSTGRES_PATHS"))
+    exact = (
+        set(_array("PATHS")) | set(_array("DATA_PATHS")) | set(_array("SHARED_PATHS")) | set(_array("POSTGRES_PATHS"))
+    )
     missed = sorted(d for d in resolved | open_ if not _covered(d, exact, _array("PATH_GLOBS")))
     assert not missed, f"roles deploy config files scripts/uninstall.sh never removes: {missed}"
 
@@ -179,7 +181,9 @@ def test_every_recorded_key_is_read_by_the_uninstaller() -> None:
 
 def test_the_log_lives_outside_everything_it_removes() -> None:
     log = re.search(r'^readonly LOG_FILE="([^"$]+)', _UNINSTALL.read_text(encoding="utf-8"), re.M).group(1)
-    removed = [p for p in _array("PATHS") if not p.startswith("${")] + ["/opt/autobot"]
+    removed = [p for p in _array("PATHS") + _array("DATA_PATHS") + _array("SHARED_PATHS") if not p.startswith("${")] + [
+        "/opt/autobot"
+    ]
     assert not any(log.startswith(p.rstrip("/") + "/") for p in removed), f"{log} is inside a removed path"
 
 
@@ -220,3 +224,74 @@ def test_an_account_the_installer_created_is_removed() -> None:
 def test_autobots_admin_account_is_removed_by_its_marker() -> None:
     assert _plan_users(None, "Emergency Admin User (fallback access)") == ["autobot_admin"]
     assert _plan_users(None, "AutoBot Backup Admin (Emergency Access)") == ["autobot_admin"]
+
+
+def test_no_system_wide_autoremove() -> None:
+    code = "\n".join(l for l in _UNINSTALL.read_text(encoding="utf-8").splitlines() if not l.lstrip().startswith("#"))
+    assert "autoremove" not in code, "a system-wide apt autoremove removes packages that are not AutoBot's"
+
+
+def test_the_exit_trap_deletes_only_a_temp_copy() -> None:
+    text = _UNINSTALL.read_text(encoding="utf-8")
+    assert re.search(r"^trap '\[\[ \"\$\{BASH_SOURCE\[0\]\}\" == \$\{COPY_PATTERN\} \]\] && rm", text, re.M)
+    assert 'readonly COPY_PATTERN="/var/tmp/autobot-uninstall.*.sh"' in text
+
+
+def _postgres(stubs: str) -> int:
+    text = _UNINSTALL.read_text(encoding="utf-8")
+    funcs = "\n".join(
+        re.search(rf"^{n}\(\) \{{.*?^\}}", text, re.S | re.M).group(0)
+        for n in ("psql_on", "cluster_is_autobots", "postgres_holds_only_autobot")
+    )
+    script = f"""set -euo pipefail
+DATABASES=(slm slm_users autobot_users)
+DB_ROLES=(slm_app)
+{stubs}
+{funcs}
+postgres_holds_only_autobot && echo REMOVE || echo KEEP
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = subprocess.run(
+            [shutil.which("bash") or "bash", "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": f"{tmp}:/usr/bin:/bin"},
+        )
+    assert out.returncode == 0, out.stderr
+    return out.stdout.strip()
+
+
+_ONLY_AUTOBOT = r"""
+pg_lsclusters() { echo "16 main 5432 online postgres /var/lib/postgresql/16/main x"; }
+psql() { :; }
+sudo() { shift 2; case "$*" in *pg_database*) printf 'postgres\ntemplate0\ntemplate1\nslm\nslm_users\n' ;; *count*) echo 0 ;; *pg_roles*) printf 'postgres\nslm_app\n' ;; esac; }
+"""
+
+
+def test_postgres_holding_only_autobot_is_removed() -> None:
+    assert _postgres(_ONLY_AUTOBOT) == "REMOVE"
+
+
+def test_postgres_is_kept_whenever_it_cannot_be_fully_inspected() -> None:
+    """01's HIGH: an uninspected PostgreSQL read as "only AutoBot's" and was rm -rf'd."""
+    no_lsclusters = "psql() { :; }"
+    failing = _ONLY_AUTOBOT.replace("pg_lsclusters() { echo", "pg_lsclusters() { return 3; echo")
+    no_cluster = _ONLY_AUTOBOT.replace(
+        'pg_lsclusters() { echo "16 main 5432 online postgres /var/lib/postgresql/16/main x"; }',
+        "pg_lsclusters() { :; }",
+    )
+    offline = _ONLY_AUTOBOT.replace("5432 online", "5432 down")
+    silent = _ONLY_AUTOBOT.replace("sudo() { shift 2;", "sudo() { return 2; shift 2;")
+    for stubs in (no_lsclusters, failing, no_cluster, offline, silent):
+        assert stubs != _ONLY_AUTOBOT, "the replacement matched nothing -- this case would test nothing"
+        assert _postgres(stubs) == "KEEP", stubs
+
+
+def test_postgres_with_anything_else_in_it_is_kept() -> None:
+    other_db = _ONLY_AUTOBOT.replace(r"slm\nslm_users", r"slm\nshop")
+    tables_in_postgres = _ONLY_AUTOBOT.replace("*count*) echo 0", "*count*) echo 4")
+    other_role = _ONLY_AUTOBOT.replace(r"postgres\nslm_app", r"postgres\nslm_app\nanalyst")
+    for stubs in (other_db, tables_in_postgres, other_role):
+        assert stubs != _ONLY_AUTOBOT, "the replacement matched nothing -- this case would test nothing"
+        assert _postgres(stubs) == "KEEP", stubs

@@ -280,34 +280,33 @@ sudo systemctl status postgresql
 ## Uninstalling
 
 ```bash
-sudo /opt/autobot/code_source/install.sh --uninstall                     # shows the plan, then asks
-sudo bash /opt/autobot/code_source/scripts/uninstall.sh --dry-run        # only shows what would go
+sudo /opt/autobot/code_source/install.sh --uninstall                       # shows the plan, then asks
+sudo bash /opt/autobot/code_source/scripts/uninstall.sh --dry-run          # only shows what would go
+sudo bash /opt/autobot/code_source/scripts/uninstall.sh --purge-data       # also your AutoBot data
 ```
 
-The uninstaller first prints everything it will remove: AutoBot's services and units,
-its databases, the packages apt would purge (including anything that depends on them), its
-apt sources, sudoers files, accounts and directories. It then asks you to type `UNINSTALL`.
-`--yes` skips the question for scripted use. Without a terminal and without `--yes`, it
-refuses instead of proceeding.
+The uninstaller first prints its plan, then asks you to type `UNINSTALL`. `--yes` skips the
+question for scripted use. Without a terminal and without `--yes`, it refuses instead of
+proceeding.
 
-What it never removes:
+By default it removes AutoBot's services and units, its code, configs, nginx sites, sudoers
+files and the apt sources it added. **Your data stays** unless you add a flag:
+
+| Flag | Also removes |
+|---|---|
+| `--purge-data` | AutoBot's databases, `/etc/autobot` (secrets and credentials), its state and backups, and the accounts the installer created, with their homes. PostgreSQL itself only if every cluster was inspected and holds nothing but AutoBot's databases and roles |
+| `--purge-shared` | grafana, prometheus, node-exporter, redis-stack and python3-psycopg2, with their data. Nothing records who installed them, so they stay by default |
+
+It never removes:
 - **An account it did not create.** The installer records the `autobot` account only if it
   created it, in `/etc/autobot/install-record`. On a machine where `autobot` already existed,
-  for example your own login, the account and its home are left alone. An install made before
-  this record existed has no record, so no account, recorded package or recorded apt source is
-  removed there; the plan says so.
-- **Your PostgreSQL.** AutoBot's databases are dropped. PostgreSQL itself (clusters, packages,
-  data, the `pgdg` source) is removed only if it holds nothing else; the plan names any other
-  database it found.
-- **nginx and the base packages** the installer needs (git, curl, openssh-server, ...), and
-  `ollama`. They often serve other things on the same machine. AutoBot's own nginx sites are
-  removed.
-- **General-purpose apt sources** (`docker`, `intel-openvino`, and `deadsnakes` unless the
-  installer recorded adding it). AutoBot's `grafana` and `redis` sources are removed.
-- **Service accounts the roles create** (prometheus, node_exporter, ...). There is no record
-  to tell them from accounts that were already there.
-- **Anything apt would only autoremove.** No system-wide `apt autoremove` is run; run it
-  yourself afterwards if you want to review what else is unused.
+  for example your own login, the account and its home stay. An install made before this record
+  existed has no record, so no account, recorded package or recorded apt source is removed there.
+- **More than it asked apt for.** If purging a package would also remove something else, the
+  purge is skipped and the plan names it. No `apt autoremove` is run.
+- **nginx, the base packages** the installer needs (git, curl, openssh-server, ...), `ollama`,
+  the `docker` and `intel-openvino` sources, and `deadsnakes` unless the installer recorded
+  adding it. Nor the service accounts the roles create (prometheus, node_exporter, ...).
 
 A partial install that never got as far as cloning the code has no uninstaller copy on the
 machine; `install.sh --uninstall` says so instead of guessing.
