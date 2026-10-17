@@ -98,7 +98,6 @@
     "restart_fleet_service",
     "route_next",
     "run_doctor",
-    "scan_codebase",
     "start_fleet_service",
     "stop_fleet_service",
     "verify_internal_api_key"
