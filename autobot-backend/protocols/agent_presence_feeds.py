@@ -37,8 +37,12 @@ def _is_running(run) -> bool:
     return run is not None and run.status == LLCRunStatus.RUNNING.value
 
 
-async def _running_work_item_titles(session: "AsyncSession", runs: list) -> dict:
-    """Titles of the work items the running runs are on, in one query (#18391)."""
+async def _running_work_item_titles(session: "AsyncSession", company_id: str, runs: list) -> dict:
+    """Titles of the work items the running runs are on, in one query (#18391).
+
+    Filtered to *company_id* as well as the ids: a title is only ever shown to the
+    company whose work item it is, whatever the run join returned.
+    """
     ids = {run.work_item_id for run in runs if _is_running(run) and run.work_item_id is not None}
     if not ids:
         return {}
@@ -46,7 +50,9 @@ async def _running_work_item_titles(session: "AsyncSession", runs: list) -> dict
 
     from llc.models.work_item import LLCWorkItem
 
-    rows = await session.execute(select(LLCWorkItem.id, LLCWorkItem.title).where(LLCWorkItem.id.in_(ids)))
+    rows = await session.execute(
+        select(LLCWorkItem.id, LLCWorkItem.title).where(LLCWorkItem.id.in_(ids), LLCWorkItem.company_id == company_id)
+    )
     return dict(rows.all())
 
 
@@ -66,7 +72,7 @@ async def sync_company_os_presence(registry: AgentPresenceRegistry, session: "As
     """
     result = await session.execute(agent_org_nodes_with_latest_heartbeat(company_id))
     rows = result.all()
-    titles = await _running_work_item_titles(session, [run for _, run in rows])
+    titles = await _running_work_item_titles(session, company_id, [run for _, run in rows])
     for node, run in rows:
         registry.report(
             kind=AgentKind.COMPANY_OS,

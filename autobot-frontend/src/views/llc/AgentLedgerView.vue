@@ -36,7 +36,7 @@
             <tr v-for="a in ledger.presence.value.rows" :key="`${a.kind}:${a.name}`">
               <td>{{ a.name }}</td><td>{{ a.kind }}</td>
               <td>{{ a.busy ? t('llc.ledger.busy') : t('llc.ledger.idle') }}</td>
-              <td data-testid="ledger-current-task">{{ a.current_task?.title ?? '' }}</td><td>{{ a.detail ?? '' }}</td>
+              <td data-testid="ledger-current-task" class="max-w-xs truncate" :title="a.current_task?.title">{{ a.current_task?.title ?? '' }}</td><td>{{ a.detail ?? '' }}</td>
             </tr>
           </tbody>
         </table>

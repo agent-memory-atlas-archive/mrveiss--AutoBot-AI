@@ -40,9 +40,11 @@ class _FakeSession:
     def __init__(self, rows, *more):
         self._results = [rows, *more]
         self.calls = 0
+        self.statements = []
 
-    async def execute(self, *_args, **_kwargs):
+    async def execute(self, statement, *_args, **_kwargs):
         self.calls += 1
+        self.statements.append(statement)
         return _FakeResult(self._results[min(self.calls, len(self._results)) - 1])
 
 
@@ -82,6 +84,26 @@ class TestSyncCompanyOsPresence:
         await sync_company_os_presence(registry, session, str(company_id))
 
         assert registry.list_live(str(company_id))[0].task == PresenceTask(id=str(item), title="Draft the Q3 report")
+
+    @pytest.mark.asyncio
+    async def test_the_title_query_is_scoped_to_the_agents_company(self):
+        """A title is only ever read for the company whose presence is being synced (01's review of #18652)."""
+        company_id, item = uuid.uuid4(), uuid.uuid4()
+        node = _org_node(agent_id="assistant-abc123", company_id=company_id)
+        session = _FakeSession([(node, _run(LLCRunStatus.RUNNING.value, item))], [(item, "t")])
+
+        await sync_company_os_presence(AgentPresenceRegistry(ttl_seconds=60), session, str(company_id))
+
+        where = str(session.statements[1].whereclause)
+        assert "llc_work_items.company_id" in where and "llc_work_items.id IN" in where
+
+    def test_the_latest_run_join_is_scoped_to_the_company(self):
+        """Agent slugs repeat across companies; the run join must not pick another company's run."""
+        from llc.services.agent_presence_queries import agent_org_nodes_with_latest_heartbeat
+
+        sql = str(agent_org_nodes_with_latest_heartbeat(str(uuid.uuid4())))
+        join_on = sql.split("LEFT OUTER JOIN llc_heartbeat_runs ON", 1)[1].split("WHERE", 1)[0]
+        assert "llc_heartbeat_runs.company_id" in join_on
 
     @pytest.mark.asyncio
     async def test_an_idle_agent_has_no_current_task_and_no_title_query_runs(self):
