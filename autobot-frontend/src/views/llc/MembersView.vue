@@ -142,9 +142,8 @@ import { useApiClient } from '@/plugins/api'
 import { createLogger } from '@/utils/debugUtils'
 import { useCollaborationInvite } from '@/composables/collaboration/useCollaborationInvite'
 import BaseButton from '@/components/base/BaseButton.vue'
-import BaseCard from '@/components/base/BaseCard.vue'
 import BaseBadge from '@/components/base/BaseBadge.vue'
-import { BaseModal } from '@autobot/ui'
+import { BaseCard, BaseModal } from '@autobot/ui'
 import ErrorBanner from '@/components/base/ErrorBanner.vue'
 
 // Backend MembershipRole enum (autobot-backend/llc/models/enums.py).

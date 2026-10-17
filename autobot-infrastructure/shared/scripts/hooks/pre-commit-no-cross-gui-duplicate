@@ -101,7 +101,6 @@ TYPE_NAME_ALLOWLIST = {
 KIT_FORK_GRANDFATHER = {
     "BaseButton": "autobot-frontend/src/components/base/BaseButton.vue",
     "BaseBadge": "autobot-frontend/src/components/base/BaseBadge.vue",
-    "BaseCard": "autobot-frontend/src/components/base/BaseCard.vue",
     "EmptyState": "autobot-frontend/src/components/ui/EmptyState.vue",
 }
 KIT_COMPONENTS_DIR = "libs/autobot-ui/src/components"
