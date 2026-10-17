@@ -11,8 +11,10 @@ get. Each test runs the call in a daemon thread and joins with a deadline,
 so a regression fails instead of hanging the suite.
 """
 
+import asyncio
 import threading
 
+from config.async_ops import AsyncOperationsMixin
 from config.sync_ops import SyncOperationsMixin
 
 DEADLINE_S = 5.0
@@ -83,3 +85,18 @@ def test_a_failed_reload_clears_the_reentry_flag():
     except RuntimeError:
         pass
     assert cfg._sync_reloading is False
+
+
+class _ReentrantAsyncConfig(AsyncOperationsMixin, _ReentrantConfig):
+    """The async main-config read shares the sync lock and guard (#18661)."""
+
+    def __init__(self):
+        super().__init__()
+        self._async_lock = None
+
+
+def test_async_main_load_reloads_once_when_the_reload_reenters():
+    cfg = _ReentrantAsyncConfig()
+    got = _call_with_deadline(lambda: asyncio.run(cfg.load_config_async("main")))
+    assert got == {"logging": {"file": "new"}}
+    assert cfg.reloads == 1

@@ -98,7 +98,7 @@ class ConfigManager(
         self._callbacks: Dict[str, List[Callable]] = {}
 
         # Initialize
-        self._reload_config()
+        self._reload_guarded()
 
         # Ensure config directory exists
         self.config_dir.mkdir(parents=True, exist_ok=True)
