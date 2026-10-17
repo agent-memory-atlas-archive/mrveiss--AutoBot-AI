@@ -2597,13 +2597,13 @@ async def translate_text(
     return JSONResponse(content=result, media_type="application/json; charset=utf-8")
 
 
-@router.post("/detect-language", response_model=DetectLanguageData)
+@router.post("/detect-language", response_model=DetectLanguageData, name="detect_language")
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="detect_language",
     error_code_prefix="TRANSLATE",
 )
-async def detect_language(
+async def detect_text_language(
     body: DetectLanguageRequest,
     current_user: dict = Depends(get_current_user),
 ):
