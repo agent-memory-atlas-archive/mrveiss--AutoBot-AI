@@ -12,7 +12,7 @@ god-class orchestrator. Canonical inference lives in
 What remains here is shared infra reused across the new stack:
 
     types.py          - Enums (ProviderType, LLMType)
-    models.py         - Dataclasses (LLMSettings, LLMResponse, ChatMessage, LLMRequest)
+    models.py         - Dataclasses (LLMSettings, LLMResponse, LLMChatMessage, LLMRequest)
     hardware.py       - Hardware detection and backend selection
     streaming.py      - Streaming state and failure management
     cache.py          - L1/L2 dual-tier caching (Issue #551)
@@ -74,7 +74,7 @@ from .model_param_registry import (
 )
 
 # Models
-from .models import ChatMessage, LLMRequest, LLMResponse, LLMSettings
+from .models import LLMChatMessage, LLMRequest, LLMResponse, LLMSettings
 from .ollama_helpers import call_ollama_generate
 from .provider_registry import ProviderRegistry, get_provider_registry
 
@@ -99,7 +99,7 @@ __all__ = [
     # Models
     "LLMSettings",
     "LLMResponse",
-    "ChatMessage",
+    "LLMChatMessage",
     "LLMRequest",
     # Hardware
     "AccelerationDetector",

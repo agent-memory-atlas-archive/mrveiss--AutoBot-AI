@@ -89,7 +89,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 827,
     "autobot-backend/api/codebase_analytics/endpoints/report.py": 2266,
     "autobot-backend/api/codebase_analytics/endpoints/stats.py": 663,
-    "autobot-backend/api/conversation_files.py": 1078,
+    "autobot-backend/api/conversation_files.py": 1073,
     "autobot-backend/api/database_mcp.py": 1056,
     "autobot-backend/api/development_speedup.py": 611,
     "autobot-backend/api/enterprise_features.py": 700,
@@ -130,7 +130,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_analytics.py": 3533,
     "autobot-backend/api/schemas_chat.py": 702,
     "autobot-backend/api/schemas_code.py": 3265,
-    "autobot-backend/api/schemas_knowledge.py": 5155,
+    "autobot-backend/api/schemas_knowledge.py": 5133,
     "autobot-backend/api/schemas_system.py": 4362,  # #13051: SecretModel ownership fields
     "autobot-backend/api/schemas_workflows.py": 2917,
     "autobot-backend/api/secrets.py": 1182,  # #16444 review: except HTTPException, ValueError handlers

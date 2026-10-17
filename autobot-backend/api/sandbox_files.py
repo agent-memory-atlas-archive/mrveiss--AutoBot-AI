@@ -58,7 +58,7 @@ _sandbox_root_ready = False
 _GIT_STATUS_TIMEOUT_SECONDS = env_int_clamped("AUTOBOT_SANDBOX_GIT_STATUS_TIMEOUT_SECONDS", 10, min_v=1)
 
 
-def ensure_sandbox_root() -> None:
+def ensure_sandbox_files_root() -> None:
     """Create the sandbox root directory on first use, not on import (#14217)."""
     global _sandbox_root_ready
     if not _sandbox_root_ready:
@@ -67,7 +67,7 @@ def ensure_sandbox_root() -> None:
         _sandbox_root_ready = True
 
 
-router = APIRouter(dependencies=[Depends(ensure_sandbox_root)])
+router = APIRouter(dependencies=[Depends(ensure_sandbox_files_root)])
 
 
 def _check_permission(request: Request, permission: str) -> dict:
