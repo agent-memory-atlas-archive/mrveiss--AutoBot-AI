@@ -52,7 +52,7 @@
                 <span class="members-name">{{ member.display_name }}</span>
               </td>
               <td>
-                <BaseBadge size="sm" tone="subtle" :variant="roleBadgeVariant(member.role)">
+                <BaseBadge size="sm" :variant="roleBadgeVariant(member.role)">
                   {{ roleLabel(member.role) }}
                 </BaseBadge>
               </td>

@@ -80,12 +80,12 @@
         <div class="component-section">
           <h4 class="section-heading">{{ $t('views.componentShowcase.variants') }}</h4>
           <div class="badge-group">
-            <BaseBadge size="sm" tone="subtle" variant="neutral">{{ $t('views.componentShowcase.default') }}</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="primary">{{ $t('views.componentShowcase.primary') }}</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="success">{{ $t('views.componentShowcase.success') }}</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="warning">{{ $t('views.componentShowcase.warning') }}</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="error">{{ $t('views.componentShowcase.error') }}</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="info">{{ $t('views.componentShowcase.info') }}</BaseBadge>
+            <BaseBadge size="sm" variant="neutral">{{ $t('views.componentShowcase.default') }}</BaseBadge>
+            <BaseBadge size="sm" variant="primary">{{ $t('views.componentShowcase.primary') }}</BaseBadge>
+            <BaseBadge size="sm" variant="success">{{ $t('views.componentShowcase.success') }}</BaseBadge>
+            <BaseBadge size="sm" variant="warning">{{ $t('views.componentShowcase.warning') }}</BaseBadge>
+            <BaseBadge size="sm" variant="error">{{ $t('views.componentShowcase.error') }}</BaseBadge>
+            <BaseBadge size="sm" variant="info">{{ $t('views.componentShowcase.info') }}</BaseBadge>
           </div>
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.outlineStyle') }}</h4>
@@ -98,25 +98,25 @@
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.monospace') }}</h4>
           <div class="badge-group">
-            <BaseBadge size="sm" tone="subtle" monospace :rounded="false">v2.1.0</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" monospace :rounded="false" variant="primary">main</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" monospace :rounded="false" variant="success">+142ms</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" monospace :rounded="false">SHA:a3f4c2</BaseBadge>
+            <BaseBadge size="sm" monospace :rounded="false">v2.1.0</BaseBadge>
+            <BaseBadge size="sm" monospace :rounded="false" variant="primary">main</BaseBadge>
+            <BaseBadge size="sm" monospace :rounded="false" variant="success">+142ms</BaseBadge>
+            <BaseBadge size="sm" monospace :rounded="false">SHA:a3f4c2</BaseBadge>
           </div>
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.sizes') }}</h4>
           <div class="badge-group">
-            <BaseBadge tone="subtle" size="xs">{{ $t('views.componentShowcase.extraSmall') }}</BaseBadge>
-            <BaseBadge tone="subtle" size="sm">{{ $t('views.componentShowcase.small') }}</BaseBadge>
-            <BaseBadge tone="subtle" size="md">{{ $t('views.componentShowcase.medium') }}</BaseBadge>
-            <BaseBadge tone="subtle" size="lg">{{ $t('views.componentShowcase.large') }}</BaseBadge>
+            <BaseBadge size="xs">{{ $t('views.componentShowcase.extraSmall') }}</BaseBadge>
+            <BaseBadge size="sm">{{ $t('views.componentShowcase.small') }}</BaseBadge>
+            <BaseBadge size="md">{{ $t('views.componentShowcase.medium') }}</BaseBadge>
+            <BaseBadge size="lg">{{ $t('views.componentShowcase.large') }}</BaseBadge>
           </div>
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.removable') }}</h4>
           <div class="badge-group">
-            <BaseBadge size="sm" tone="subtle" variant="primary" removable @remove="handleRemove" :remove-label="$t('base.badge.removeBadge')">Tag 1</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="success" removable @remove="handleRemove" :remove-label="$t('base.badge.removeBadge')">Tag 2</BaseBadge>
-            <BaseBadge size="sm" tone="subtle" variant="warning" removable @remove="handleRemove" :remove-label="$t('base.badge.removeBadge')">Tag 3</BaseBadge>
+            <BaseBadge size="sm" variant="primary" removable @remove="handleRemove" :remove-label="$t('base.badge.removeBadge')">Tag 1</BaseBadge>
+            <BaseBadge size="sm" variant="success" removable @remove="handleRemove" :remove-label="$t('base.badge.removeBadge')">Tag 2</BaseBadge>
+            <BaseBadge size="sm" variant="warning" removable @remove="handleRemove" :remove-label="$t('base.badge.removeBadge')">Tag 3</BaseBadge>
           </div>
         </div>
       </BaseCard>
@@ -185,7 +185,7 @@
             </template>
 
             <template #cell-status="{ value }">
-              <BaseBadge tone="subtle"
+              <BaseBadge
                 :variant="value === 'active' ? 'success' : value === 'pending' ? 'warning' : 'neutral'"
                 size="sm"
               >

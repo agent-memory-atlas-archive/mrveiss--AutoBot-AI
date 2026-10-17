@@ -237,17 +237,17 @@ onMounted(load)
             <tr v-for="server in servers" :key="server.server_id">
               <td>{{ server.name }}</td>
               <td>
-                <BaseBadge tone="subtle" variant="neutral" size="sm">{{ transportLabel(server.transport) }}</BaseBadge>
+                <BaseBadge variant="neutral" size="sm">{{ transportLabel(server.transport) }}</BaseBadge>
               </td>
               <td class="cell-mono">{{ server.command || server.url || '—' }}</td>
               <td>
-                <BaseBadge tone="subtle" :variant="server.has_credential ? 'success' : 'neutral'" size="sm">
+                <BaseBadge :variant="server.has_credential ? 'success' : 'neutral'" size="sm">
                   {{ server.has_credential ? t('admin.mcpServers.credentialSet') : t('admin.mcpServers.credentialNone') }}
                 </BaseBadge>
               </td>
               <td class="cell-muted">{{ server.allowed_roles.join(', ') }}</td>
               <td>
-                <BaseBadge tone="subtle" :variant="server.enabled ? 'success' : 'neutral'" size="sm">
+                <BaseBadge :variant="server.enabled ? 'success' : 'neutral'" size="sm">
                   {{ server.enabled ? t('admin.mcpServers.statusEnabled') : t('admin.mcpServers.statusDisabled') }}
                 </BaseBadge>
               </td>

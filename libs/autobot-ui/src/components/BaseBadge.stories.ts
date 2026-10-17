@@ -23,7 +23,7 @@ const meta = {
     removable: { control: 'boolean' },
     label: { control: 'text' },
   },
-  args: { variant: 'primary', tone: 'solid', size: 'md', label: 'Badge' },
+  args: { variant: 'primary', tone: 'subtle', size: 'md', label: 'Badge' },
 } satisfies Meta<typeof BaseBadge>
 
 export default meta
@@ -48,7 +48,7 @@ export const Sizes: Story = {
   render: () => ({
     components: { BaseBadge },
     setup: () => ({ SIZES }),
-    template: `<div style="display:flex;gap:0.5rem;align-items:center"><BaseBadge v-for="size in SIZES" :key="size" :size="size" tone="subtle" variant="info" :label="size" /></div>`,
+    template: `<div style="display:flex;gap:0.5rem;align-items:center"><BaseBadge v-for="size in SIZES" :key="size" :size="size" variant="info" :label="size" /></div>`,
   }),
 }
 
@@ -57,9 +57,9 @@ export const SquareMonospaceAndRemovable: Story = {
     components: { BaseBadge },
     template: `
       <div style="display:flex;gap:0.5rem;align-items:center">
-        <BaseBadge monospace :rounded="false" tone="subtle" label="v2.1.0" />
-        <BaseBadge monospace :rounded="false" tone="subtle" variant="success" label="+142ms" />
-        <BaseBadge removable remove-label="Remove badge" tone="subtle" variant="primary" label="Tag" />
+        <BaseBadge monospace :rounded="false" label="v2.1.0" />
+        <BaseBadge monospace :rounded="false" variant="success" label="+142ms" />
+        <BaseBadge removable remove-label="Remove badge" variant="primary" label="Tag" />
       </div>`,
   }),
 }

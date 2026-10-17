@@ -183,10 +183,10 @@ defineExpose({ resetSyncing })
             ></span>
           </div>
           <div class="badge-row">
-            <BaseBadge tone="subtle" :variant="typeBadgeVariant" size="xs">
+            <BaseBadge :variant="typeBadgeVariant" size="xs">
               {{ typeLabel }}
             </BaseBadge>
-            <BaseBadge tone="subtle"
+            <BaseBadge
               :variant="tierBadgeVariant"
               size="xs"
               :title="tierTooltip"
@@ -217,7 +217,7 @@ defineExpose({ resetSyncing })
       </div>
       <div class="stat">
         <span class="stat-label">{{ $t('knowledge.connectors.status.status') }}</span>
-        <BaseBadge tone="subtle" :variant="syncStatusVariant" size="xs">
+        <BaseBadge :variant="syncStatusVariant" size="xs">
           {{ status.last_sync_status }}
         </BaseBadge>
       </div>

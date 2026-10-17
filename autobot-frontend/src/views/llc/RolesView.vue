@@ -56,7 +56,7 @@
                 @click="selectRole(role.id)"
               >
                 <span class="roles-list-name">{{ role.name }}</span>
-                <BaseBadge size="sm" tone="subtle" v-if="role.is_system" variant="neutral">
+                <BaseBadge size="sm" v-if="role.is_system" variant="neutral">
                   {{ t('llcRoles.systemRole') }}
                 </BaseBadge>
               </button>
@@ -91,7 +91,7 @@
               </p>
               <ul v-else class="roles-chip-list">
                 <li v-for="holder in holders" :key="holder.id" class="roles-chip">
-                  <BaseBadge size="sm" tone="subtle" :variant="holder.ended_at ? 'neutral' : 'success'">
+                  <BaseBadge size="sm" :variant="holder.ended_at ? 'neutral' : 'success'">
                     {{ t(`llcRoles.holderType.${holder.holder_type}`) }}
                   </BaseBadge>
                   <span class="roles-chip-id">{{ holder.holder_id }}</span>

@@ -6,8 +6,8 @@
   for statuses, counts, and tags. See BaseButton.vue for the kit rules.
 
   The one badge for both apps (#14776): the main app's local fork is retired into
-  this. `tone` picks the fill -- `solid` (the kit's original look, still the
-  default), `subtle` (a tint with coloured text, the main app's look) or
+  this. `tone` picks the fill -- `subtle` (a tint with coloured text; the
+  default, as the design system's badge matrix defines it), `solid` or
   `outline`. The kit holds no text, so a removable badge takes its translated
   `removeLabel` from the app.
 -->
@@ -37,7 +37,7 @@ withDefaults(
   {
     variant: 'neutral',
     size: 'md',
-    tone: 'solid',
+    tone: 'subtle',
     label: undefined,
     rounded: true,
     monospace: false,

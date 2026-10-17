@@ -87,7 +87,7 @@ onUnmounted(() => {
     <!-- Overall state -->
     <div class="pf-state">
       <span class="pf-label">{{ $t('admin.providerFallback.status') }}</span>
-      <BaseBadge tone="subtle" :variant="hasActive ? 'warning' : 'success'" size="md">
+      <BaseBadge :variant="hasActive ? 'warning' : 'success'" size="md">
         {{
           hasActive
             ? $t('admin.providerFallback.stateDegraded')
@@ -121,11 +121,11 @@ onUnmounted(() => {
               <span class="pf-time">{{ formatTimestamp(entry.timestamp) }}</span>
             </div>
             <div class="pf-hop">
-              <BaseBadge tone="subtle" variant="neutral" size="sm" monospace>
+              <BaseBadge variant="neutral" size="sm" monospace>
                 {{ entry.primary_provider }}/{{ entry.primary_model }}
               </BaseBadge>
               <span class="pf-arrow" aria-hidden="true">→</span>
-              <BaseBadge tone="subtle" variant="warning" size="sm" monospace>
+              <BaseBadge variant="warning" size="sm" monospace>
                 {{ entry.fallback_provider }}/{{ entry.fallback_model }}
               </BaseBadge>
             </div>
@@ -143,7 +143,7 @@ onUnmounted(() => {
             class="pf-card"
           >
             <div class="pf-card-head">
-              <BaseBadge tone="subtle" variant="primary" size="sm" monospace>
+              <BaseBadge variant="primary" size="sm" monospace>
                 {{ chain.primary_model }}
               </BaseBadge>
               <span class="pf-provider">{{ chain.provider }}</span>
@@ -158,7 +158,7 @@ onUnmounted(() => {
         <h2 class="pf-section-title">{{ $t('admin.providerFallback.timeline') }}</h2>
         <ul class="pf-timeline">
           <li v-for="(ev, idx) in timeline" :key="`${ev.conversation_id}-${idx}`" class="pf-event">
-            <BaseBadge tone="subtle" :variant="ev.exhausted ? 'error' : 'warning'" size="sm">
+            <BaseBadge :variant="ev.exhausted ? 'error' : 'warning'" size="sm">
               {{
                 ev.exhausted
                   ? $t('admin.providerFallback.exhausted')

@@ -22,10 +22,10 @@ describe('BaseBadge', () => {
     expect(wrapper.text()).toBe('Active')
   })
 
-  it('defaults to variant=neutral, size=md, tone=solid, rounded, not removable', () => {
-    // fails if a default changes -- the kit's existing consumers in both apps rely on solid/md
+  it('defaults to variant=neutral, size=md, tone=subtle, rounded, not removable', () => {
+    // fails if a default changes -- subtle is the design system's default badge (#18691); solid users say so
     const wrapper = mount(BaseBadge)
-    expect(wrapper.classes()).toEqual(expect.arrayContaining(['aui-badge--neutral', 'aui-badge--md', 'aui-badge--solid']))
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(['aui-badge--neutral', 'aui-badge--md', 'aui-badge--subtle']))
     expect(wrapper.classes()).not.toContain('aui-badge--square')
     expect(wrapper.find('button').exists()).toBe(false)
   })
