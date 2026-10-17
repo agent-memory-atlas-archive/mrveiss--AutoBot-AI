@@ -1623,7 +1623,7 @@ async def reenroll_node(
     await create_node_event(
         db,
         node_id,
-        EventType.STATUS_CHANGED,
+        EventType.STATE_CHANGE,
         EventSeverity.INFO,
         f"Node reset to pending for re-enrollment by {current_user.get('username', 'unknown')}",
     )
