@@ -22,9 +22,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import Annotated
 
+from api.service_action_guard import FLEET_SERVICE_ACTION_ROUTE
 from api.websocket import ws_manager
 from models.database import Node, Service, SystemdState
 from models.schemas import ServiceActionRequest
+from models.schemas import ServiceActionResponse as FleetServiceActionResponse
 from services.ansible_utils import summarize_playbook_failure
 from services.auth import get_current_user
 from services.database import get_db
@@ -724,7 +726,7 @@ async def _fetch_fleet_services_and_nodes(
     db: AsyncSession,
     service_name: str,
 ) -> tuple:
-    """Helper for start/stop/restart_fleet_service. Ref: #1088.
+    """Helper for the fleet start/stop/restart handlers. Ref: #1088.
 
     Fetch all Service records for service_name and their Node objects.
     Raises HTTP 404 if no records found. Returns (services, nodes_dict).
@@ -752,7 +754,7 @@ async def _apply_fleet_action(
     active_state: str | None,
     sub_state: str | None,
 ) -> tuple:
-    """Helper for start/stop/restart_fleet_service. Ref: #1088.
+    """Helper for the fleet start/stop/restart handlers. Ref: #1088.
 
     Run action on each node, update svc fields, broadcast status.
     Returns (success_count, fail_count).
@@ -792,106 +794,49 @@ async def _apply_fleet_action(
     return success_count, fail_count
 
 
-@fleet_router.post(
-    "/services/{service_name}/start",
-    response_model=ServiceActionResponse,
-)
-async def start_fleet_service(
+def _canonical_fleet_action(action: str):
+    """The ``api.services`` fleet handler for *action* -- the one implementation (#18714).
+
+    Imported at call time: ``api.services`` imports this module at load, so a module-level
+    import here would be a cycle.
+    """
+    from api import services as services_api
+
+    return getattr(services_api, f"{action}_fleet_service")
+
+
+@fleet_router.post("/services/{service_name}/start", **FLEET_SERVICE_ACTION_ROUTE)
+async def orchestration_start_fleet_service(
     service_name: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[dict, Depends(get_current_user)],
-) -> ServiceActionResponse:
+) -> FleetServiceActionResponse:
+    """Start a service on all nodes that have it: delegates to ``api.services`` (#18714).
+
+    The route dependencies (``FLEET_SERVICE_ACTION_ROUTE``) are the ones the canonical route
+    carries, so the unit-name validation (422) and the service-management gate come with it.
     """
-    Start a service on all nodes that have it.
-
-    Issue #850: Moved from /fleet/services/{name}/start to /orchestration/fleet/services/{name}/start.
-    """
-    services, nodes = await _fetch_fleet_services_and_nodes(db, service_name)
-    success_count, fail_count = await _apply_fleet_action(
-        service_name,
-        "start",
-        services,
-        nodes,
-        SystemdState.RUNNING.value,
-        "active",
-        "running",
-    )
-    await db.commit()
-    return ServiceActionResponse(
-        action="start",
-        service_name=service_name,
-        node_id="fleet",
-        success=fail_count == 0,
-        message=f"Started on {success_count}/{len(services)} nodes",
-    )
+    return await _canonical_fleet_action("start")(service_name, db, _)
 
 
-@fleet_router.post(
-    "/services/{service_name}/stop",
-    response_model=ServiceActionResponse,
-)
-async def stop_fleet_service(
+@fleet_router.post("/services/{service_name}/stop", **FLEET_SERVICE_ACTION_ROUTE)
+async def orchestration_stop_fleet_service(
     service_name: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[dict, Depends(get_current_user)],
-) -> ServiceActionResponse:
-    """
-    Stop a service on all nodes.
-
-    Issue #850: Moved from /fleet/services/{name}/stop to /orchestration/fleet/services/{name}/stop.
-    """
-    services, nodes = await _fetch_fleet_services_and_nodes(db, service_name)
-    success_count, fail_count = await _apply_fleet_action(
-        service_name,
-        "stop",
-        services,
-        nodes,
-        SystemdState.STOPPED.value,
-        "inactive",
-        "dead",
-    )
-    await db.commit()
-    return ServiceActionResponse(
-        action="stop",
-        service_name=service_name,
-        node_id="fleet",
-        success=fail_count == 0,
-        message=f"Stopped on {success_count}/{len(services)} nodes",
-    )
+) -> FleetServiceActionResponse:
+    """Stop a service on all nodes: delegates to ``api.services`` (#18714)."""
+    return await _canonical_fleet_action("stop")(service_name, db, _)
 
 
-@fleet_router.post(
-    "/services/{service_name}/restart",
-    response_model=ServiceActionResponse,
-)
-async def restart_fleet_service(
+@fleet_router.post("/services/{service_name}/restart", **FLEET_SERVICE_ACTION_ROUTE)
+async def orchestration_restart_fleet_service(
     service_name: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[dict, Depends(get_current_user)],
-) -> ServiceActionResponse:
-    """
-    Restart a service on all nodes that have it.
-
-    Issue #850: Moved from /fleet/services/{name}/restart to /orchestration/fleet/services/{name}/restart.
-    """
-    services, nodes = await _fetch_fleet_services_and_nodes(db, service_name)
-    success_count, fail_count = await _apply_fleet_action(
-        service_name,
-        "restart",
-        services,
-        nodes,
-        SystemdState.RUNNING.value,
-        "active",
-        "running",
-    )
-    await db.commit()
-    return ServiceActionResponse(
-        action="restart",
-        service_name=service_name,
-        node_id="fleet",
-        success=fail_count == 0,
-        message=f"Restarted on {success_count}/{len(services)} nodes",
-    )
+) -> FleetServiceActionResponse:
+    """Restart a service on all nodes that have it: delegates to ``api.services`` (#18714)."""
+    return await _canonical_fleet_action("restart")(service_name, db, _)
 
 
 # Include fleet sub-router in main orchestration router
