@@ -329,7 +329,7 @@
               <span class="metric-value">{{ qualityScore.metrics.security }}</span>
             </div>
           </div>
-          <div class="quality-trend" :class="'trend-' + qualityScore.trend">
+          <div v-if="qualityScore.trend" class="quality-trend" :class="'trend-' + qualityScore.trend">
             <i
               :class="
                 qualityScore.trend === 'improving'
@@ -513,36 +513,7 @@
       </div>
     </div>
 
-    <!-- Analysis History Section (#3073) -->
-    <div v-if="analysisHistory && analysisHistory.length > 0" class="analysis-history-section">
-      <h4>
-        <Icon name="history" />
-        {{ $t('analytics.codebase.intelligence.analysisHistoryTitle') }}
-        <button
-          @click="emit('load-analysis-history')"
-          class="card-refresh-btn"
-          style="margin-left: 8px;"
-        >
-          <Icon name="sync-alt" />
-        </button>
-      </h4>
-      <div class="history-list">
-        <div
-          v-for="entry in analysisHistory"
-          :key="entry.id"
-          class="history-item"
-        >
-          <div class="history-meta">
-            <span class="history-language">{{ entry.language }}</span>
-            <span v-if="entry.filename" class="history-filename">{{ entry.filename }}</span>
-          </div>
-          <div class="history-score" :class="getScoreClass(entry.quality_score)">
-            {{ entry.quality_score }}
-          </div>
-          <div class="history-time">{{ formatTimestamp(entry.timestamp) }}</div>
-        </div>
-      </div>
-    </div>
+    <!-- Analysis history returns with its route (#18748). -->
 
     <EmptyState
       v-if="!rootPath && !securityScore && !performanceScore && !redisHealth"
@@ -642,7 +613,7 @@ interface QualityScore {
     security: number
   }
   grade: string
-  trend: 'improving' | 'stable' | 'declining'
+  trend?: 'improving' | 'stable' | 'declining'
 }
 
 interface CodeSuggestion {

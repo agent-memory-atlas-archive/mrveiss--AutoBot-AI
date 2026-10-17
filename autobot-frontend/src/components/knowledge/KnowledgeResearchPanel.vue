@@ -524,12 +524,7 @@ onUnmounted(() => {
               </a>
 
               <div class="card-actions" v-if="!card.decision">
-                <button class="btn-accept" @click="acceptSource(card)" :title="$t('knowledge.research.acceptTitle')">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {{ $t('knowledge.research.accept') }}
-                </button>
+                <!-- Accept returns with its route (#18745). -->
                 <button class="btn-reject" @click="rejectSource(card)" :title="$t('knowledge.research.rejectTitle')">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

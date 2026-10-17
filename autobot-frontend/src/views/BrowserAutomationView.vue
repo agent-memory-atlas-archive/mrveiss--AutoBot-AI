@@ -153,9 +153,7 @@ function selectSession(session: typeof sessions.value[0]) {
       <button @click="activeTab = 'sessions'" :class="['tab-btn', { active: activeTab === 'sessions' }]">
         <Icon name="window-restore" /> {{ $t('views.browserAutomation.sessionsTab', { count: sessions.length }) }}
       </button>
-      <button @click="activeTab = 'scripts'" :class="['tab-btn', { active: activeTab === 'scripts' }]">
-        <Icon name="code" /> {{ $t('views.browserAutomation.automationScripts') }}
-      </button>
+      <!-- Run automation script returns with its route (#18747). -->
     </nav>
 
     <!-- Tab Content -->
@@ -174,19 +172,7 @@ function selectSession(session: typeof sessions.value[0]) {
           </div>
         </div>
 
-        <div v-if="!currentSession" class="card">
-          <div class="card-header">
-            <span class="card-title">{{ $t('views.browserAutomation.launchNewSession') }}</span>
-          </div>
-          <div class="card-body">
-            <div class="input-action-row">
-              <input v-model="urlInput" type="url" placeholder="https://example.com" class="field-input">
-              <button @click="handleLaunchSession" :disabled="isLoading" class="btn-action-primary">
-                {{ $t('views.browserAutomation.launchBrowser') }}
-              </button>
-            </div>
-          </div>
-        </div>
+        <!-- Launch returns with its route (#18747). -->
 
         <div v-if="currentSession" class="card">
           <div class="card-header">
@@ -289,23 +275,6 @@ function selectSession(session: typeof sessions.value[0]) {
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Scripts Tab -->
-      <div v-show="activeTab === 'scripts'" class="tab-panel">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">{{ $t('views.browserAutomation.runAutomationScript') }}</span>
-          </div>
-          <div class="card-body">
-            <textarea v-model="automationScriptInput" rows="12" :placeholder="$t('views.browserAutomation.automationScriptPlaceholder')" class="field-input code-textarea"></textarea>
-            <div class="action-row">
-              <button @click="handleRunAutomation" :disabled="isLoading || !automationScriptInput.trim()" class="btn-action-primary">
-                {{ $t('views.browserAutomation.runAutomation') }}
-              </button>
-            </div>
           </div>
         </div>
       </div>

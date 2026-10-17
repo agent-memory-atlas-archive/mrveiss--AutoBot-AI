@@ -153,36 +153,7 @@
           </div>
         </template>
 
-        <!-- Comments tab -->
-        <template v-if="activeTab === 'comments'">
-          <div class="comments-list">
-            <div v-for="c in comments" :key="c.id" class="comment-item">
-              <div class="comment-author">
-                <span class="author-avatar">{{ initials(c.author_name) }}</span>
-                <div class="author-meta">
-                  <span class="author-name">{{ c.author_name }}</span>
-                  <span class="comment-time">{{ formatTime(c.created_at) }}</span>
-                  <span v-if="c.author_type === 'agent'" class="agent-chip">{{ $t('llc.workItem.agentChip') }}</span>
-                </div>
-              </div>
-              <div class="comment-body" v-html="renderMarkdown(c.body)" />
-            </div>
-            <div v-if="comments.length === 0 && !isLoadingComments" class="meta-empty">
-              {{ $t('llc.workItem.noComments') }}
-            </div>
-          </div>
-          <div class="comment-input-row">
-            <textarea
-              v-model="newComment"
-              class="comment-textarea"
-              rows="3"
-              :placeholder="$t('llc.workItem.commentPlaceholder')"
-            />
-            <button class="btn-primary" :disabled="!newComment.trim() || isPosting" @click="postComment">
-              {{ isPosting ? $t('llc.workItem.posting') : $t('llc.workItem.post') }}
-            </button>
-          </div>
-        </template>
+        <!-- Comments return with their read route (#18750). -->
 
         <!-- Artifacts tab -->
         <template v-if="activeTab === 'artifacts'">
@@ -290,7 +261,7 @@ const emit = defineEmits<{
 
 const TABS = computed(() => [
   { key: 'details', label: t('llc.workItem.tabDetails') },
-  { key: 'comments', label: t('llc.workItem.tabComments') },
+  // Comments tab returns with its read route (#18750).
   { key: 'artifacts', label: t('llc.workItem.tabArtifacts') },
   { key: 'activity', label: t('llc.workItem.tabActivity') },
   { key: 'handoff', label: t('llc.workItem.tabHandoff') },

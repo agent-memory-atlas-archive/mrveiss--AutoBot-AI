@@ -145,16 +145,9 @@ onMounted(load)
             <span>{{ formatDate(recording.uploaded_at) }}</span>
           </span>
 
-          <ProcessingProgress
-            v-if="isInProgress(recording)"
-            :recording-id="recording.id"
-            class="recording-progress"
-            @complete="onProcessingSettled(recording.id)"
-            @error="onProcessingSettled(recording.id)"
-          />
-
+          <!-- Live progress returns with its route (#18746). -->
           <span
-            v-else-if="recording.status === 'error'"
+            v-if="recording.status === 'error'"
             class="recording-failure"
           >
             {{ recording.failure_reason || 'Transcription failed.' }}

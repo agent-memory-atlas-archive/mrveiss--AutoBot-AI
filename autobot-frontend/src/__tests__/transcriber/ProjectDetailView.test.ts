@@ -91,12 +91,12 @@ describe('ProjectDetailView.vue', () => {
     expect(wrapper.findAll('.recording-card')).toHaveLength(2)
   })
 
-  it('renders ProcessingProgress only for in-progress recordings', async () => {
+  it('does not render ProcessingProgress while its route is unserved (#18746)', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    // recording 11 is "processing" → one progress bar.
-    expect(wrapper.findAllComponents(ProcessingProgressStub)).toHaveLength(1)
+    // recording 11 is "processing", but the SSE progress route does not exist.
+    expect(wrapper.findAllComponents(ProcessingProgressStub)).toHaveLength(0)
   })
 
   it('formats duration as m:ss', async () => {
@@ -140,7 +140,8 @@ describe('ProjectDetailView.vue', () => {
     expect(cards[0].text()).toContain('rec-99.mp3')
   })
 
-  it('refreshes a recording when processing completes', async () => {
+  // Re-enable with the progress route (#18746): ProcessingProgress is not rendered until then.
+  it.skip('refreshes a recording when processing completes', async () => {
     const wrapper = mountView()
     await flushPromises()
 
