@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Pracownik",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "Test połączenia nie powiódł się",
-        "loadBalancingLoadFailed": "Nie udało się wczytać konfiguracji równoważenia obciążenia"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Active",

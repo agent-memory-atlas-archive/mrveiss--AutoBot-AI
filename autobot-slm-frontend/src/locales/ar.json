@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Worker",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "فشل اختبار الاتصال",
-        "loadBalancingLoadFailed": "تعذّر تحميل إعدادات موازنة الحمل"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Active",

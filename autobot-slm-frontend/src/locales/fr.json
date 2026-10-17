@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Travailleur",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "Échec du test de connexion",
-        "loadBalancingLoadFailed": "Impossible de charger la configuration de répartition de charge"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Active",

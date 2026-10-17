@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Trabajador",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "La prueba de conexión falló",
-        "loadBalancingLoadFailed": "No se pudo cargar la configuración de balanceo de carga"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Active",

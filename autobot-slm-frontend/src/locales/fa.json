@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Worker",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "آزمون اتصال ناموفق بود",
-        "loadBalancingLoadFailed": "بارگذاری پیکربندی توازن بار ناموفق بود"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "فعال",

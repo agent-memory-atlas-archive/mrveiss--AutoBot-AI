@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Worker",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "בדיקת החיבור נכשלה",
-        "loadBalancingLoadFailed": "טעינת תצורת איזון העומסים נכשלה"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Active",

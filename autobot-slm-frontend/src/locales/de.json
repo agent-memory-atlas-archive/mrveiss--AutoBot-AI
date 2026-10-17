@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Mitarbeiter",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "Verbindungstest fehlgeschlagen",
-        "loadBalancingLoadFailed": "Lastverteilungskonfiguration konnte nicht geladen werden"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Aktiv",

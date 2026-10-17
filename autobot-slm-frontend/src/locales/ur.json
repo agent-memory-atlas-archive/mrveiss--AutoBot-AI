@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Worker",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "کنکشن ٹیسٹ ناکام ہو گیا",
-        "loadBalancingLoadFailed": "لوڈ بیلنسنگ کنفیگریشن لوڈ نہیں ہو سکی"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "فعال",

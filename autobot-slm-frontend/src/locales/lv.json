@@ -2368,8 +2368,8 @@
         "windows": "Windows",
         "worker": "Darbinieks",
         "workerName": "Worker Name *",
-        "connectionTestFailed": "Savienojuma pārbaude neizdevās",
-        "loadBalancingLoadFailed": "Neizdevās ielādēt slodzes līdzsvarošanas konfigurāciju"
+        "connectionTestFailed": "Connection test failed",
+        "loadBalancingLoadFailed": "Failed to load load-balancing configuration"
       },
       "personalitySettings": {
         "active": "Active",
