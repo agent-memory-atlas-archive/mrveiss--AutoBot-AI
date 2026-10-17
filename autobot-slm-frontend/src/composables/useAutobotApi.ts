@@ -1036,8 +1036,8 @@ export function useAutobotApi() {
   // =============================================================================
 
   async function getAgents(): Promise<AgentConfigSummary[]> {
-    const response = await client.get<{ data: { agents: AgentConfigSummary[] } }>('/agent_config/agents')
-    return response.data.data.agents
+    const response = await client.get<{ agents: AgentConfigSummary[] }>('/agent_config/agents')
+    return response.data.agents
   }
 
   async function getAgent(id: string): Promise<Agent> {
@@ -1933,13 +1933,13 @@ export function useAutobotApi() {
     pairNPUWorker,
     testNPUWorker,
     removeNPUWorker,
+    getNPUWorker,
+    restartNPUWorker,
+    // Permissions
     getPermissionRules,
     createPermissionRule,
     updatePermissionRule,
     deletePermissionRule,
-    getNPUWorker,
-    restartNPUWorker,
-    // Permissions
     // Prompts
     getPromptTemplates,
     getPromptTemplate,
