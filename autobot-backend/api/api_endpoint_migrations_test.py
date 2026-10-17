@@ -30255,11 +30255,11 @@ class TestBatch110TerminalCOMPLETE(unittest.TestCase):
         self.assertIn("ModalityType.COMBINED", combine_source)
 
     def test_batch_171_migration_preserves_processing_intent(self):
-        """Verify migration preserves ProcessingIntent usage"""
+        """Verify migration preserves MultimodalProcessingIntent usage"""
         from api import multimodal
 
-        # Verify ProcessingIntent is imported
-        self.assertTrue(hasattr(multimodal, "ProcessingIntent"))
+        # Verify MultimodalProcessingIntent is imported
+        self.assertTrue(hasattr(multimodal, "MultimodalProcessingIntent"))
 
         # Verify _get_processing_intent helper exists
         self.assertTrue(hasattr(multimodal, "_get_processing_intent"))

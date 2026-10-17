@@ -1811,16 +1811,6 @@ class CodeLanguage(str, Enum):
     VUE = "vue"
 
 
-class GenerationStatus(str, Enum):
-    """Status of code generation request"""
-
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    ROLLED_BACK = "rolled_back"
-
-
 class CodeGenerationRequest(BaseModel):
     """Request model for code generation"""
 
@@ -1921,7 +1911,7 @@ class LearningPhase(str, Enum):
     DEPLOYED = "deployed"
 
 
-class ConfidenceLevel(str, Enum):
+class PatternConfidenceLevel(str, Enum):
     """Human-readable confidence levels."""
 
     VERY_LOW = "very_low"
@@ -1964,7 +1954,7 @@ class ConfidenceScore(BaseModel):
 
     pattern_id: str
     score: float = Field(..., ge=0.0, le=1.0)
-    level: ConfidenceLevel
+    level: PatternConfidenceLevel
     total_feedback: int
     correct_count: int
     incorrect_count: int
