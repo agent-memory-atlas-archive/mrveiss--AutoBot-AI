@@ -256,7 +256,7 @@ postgres_holds_only_autobot && echo REMOVE || echo KEEP
             capture_output=True,
             text=True,
             timeout=30,
-            env={"PATH": f"{tmp}:/usr/bin:/bin"},
+            env={"PATH": tmp},  # only the empty temp dir: a host's real pg_lsclusters/psql must never answer
         )
     assert out.returncode == 0, out.stderr
     return out.stdout.strip()
@@ -295,3 +295,47 @@ def test_postgres_with_anything_else_in_it_is_kept() -> None:
     for stubs in (other_db, tables_in_postgres, other_role):
         assert stubs != _ONLY_AUTOBOT, "the replacement matched nothing -- this case would test nothing"
         assert _postgres(stubs) == "KEEP", stubs
+
+
+def test_every_opt_autobot_child_the_roles_write_is_classified() -> None:
+    """01's HIGH: a default uninstall rm -rf'd all of /opt/autobot, and the roles keep data there."""
+    data, code = set(_array("OPT_DATA")), set(_array("OPT_CODE"))
+    assert not data & code, f"classified as both data and code: {sorted(data & code)}"
+    children = set()
+    pattern = re.compile(r"/opt/autobot/([A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9_]|\.env)")
+    for path in _role_files():
+        children |= set(pattern.findall(path.read_text(encoding="utf-8")))
+    assert len(children) >= 20, f"read {len(children)} /opt/autobot children -- the scan is broken"
+    unclassified = sorted(children - data - code)
+    assert not unclassified, f"/opt/autobot children neither OPT_DATA nor OPT_CODE: {unclassified}"
+    assert {"backups", "data", "models", ".env"} <= data
+
+
+def _plan_opt_code(purge_data: bool) -> set[str]:
+    text = _UNINSTALL.read_text(encoding="utf-8")
+    func = re.search(r"^plan_opt_code\(\) \{.*?^\}", text, re.S | re.M).group(0)
+    opt_data = re.search(r"^readonly OPT_DATA=.*$", text, re.M).group(0)
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "autobot"
+        for child in ("backups", "data", "models", ".env", "venv", "autobot-backend", "code_source"):
+            (base / child).mkdir(parents=True) if child != ".env" else None
+        (base / ".env").write_text("X=1", encoding="utf-8")
+        script = f"""set -euo pipefail
+AUTOBOT_BASE={base}
+PURGE_DATA={'true' if purge_data else 'false'}
+{opt_data}
+{func}
+plan_opt_code
+"""
+        out = subprocess.run([shutil.which("bash") or "bash", "-c", script], capture_output=True, text=True, timeout=30)
+        assert out.returncode == 0, out.stderr
+        return {Path(line).name for line in out.stdout.split()}
+
+
+def test_a_default_uninstall_removes_only_code_under_opt_autobot() -> None:
+    assert _plan_opt_code(purge_data=False) == {"venv", "autobot-backend", "code_source"}
+
+
+def test_purge_data_takes_the_whole_tree_through_data_paths_instead() -> None:
+    assert _plan_opt_code(purge_data=True) == set()
+    assert _array("DATA_PATHS")[0] == "${AUTOBOT_BASE}"

@@ -70,8 +70,19 @@ readonly APT_SOURCES=(grafana redis)
 # (deadsnakes is removed when install.sh's record says it added it).
 readonly KEPT_APT_SOURCES=(docker intel-openvino deadsnakes)
 # Code, configs and AutoBot-only files: removed on UNINSTALL.
+# /opt/autobot holds code AND data: by default only its non-data children are removed (see
+# OPT_DATA); --purge-data removes the whole tree. Every child the roles write there is
+# classified in OPT_DATA or OPT_CODE -- the #18653 guard fails on an unclassified one.
+readonly OPT_DATA=(backups data models llm-models .env config config.yaml certs nginx)
+readonly OPT_CODE=(
+    autobot-backend autobot-slm-backend autobot-browser-worker autobot-frontend autobot-npu-worker
+    autobot-db-stack autobot-tts-worker autobot-slm-frontend autobot-ai-stack autobot-slm-agent
+    autobot-vue autobot-infrastructure autobot-plugins autobot_shared autobot_shared.egg-info
+    code_source scripts venv src app slm slm-agent agent ai-stack infrastructure libs constraints
+    logs cache requirements.txt venv_provenance.py .autobot-installed
+)
 readonly PATHS=(
-    "${AUTOBOT_BASE}" /etc/slm-agent /var/log/autobot /opt/node_exporter
+    /etc/slm-agent /var/log/autobot /opt/node_exporter
     /etc/dnsmasq.d/autobot.conf /etc/logrotate.d/autobot /etc/logrotate.d/redis-stack
     /etc/rsyslog.d/30-autobot.conf /etc/rsyslog.d/50-autobot.conf /etc/ssl/slm
     /var/www/slm-admin /var/www/autobot-slm /etc/nginx/sites-available/slm
@@ -85,7 +96,7 @@ readonly PATH_GLOBS=(
 )
 # Data, credentials and state: only with --purge-data.
 readonly DATA_PATHS=(
-    /etc/autobot /var/lib/autobot /var/lib/slm /var/lib/slm-agent
+    "${AUTOBOT_BASE}" /etc/autobot /var/lib/autobot /var/lib/slm /var/lib/slm-agent
     /var/backups/autobot /var/backups/autobot-apt-sources
     /root/autobot-credentials.txt /root/slm-credentials.txt
 )
@@ -93,6 +104,8 @@ readonly DATABASES=(slm slm_users autobot_users)
 readonly DB_ROLES=(slm_app)
 # PostgreSQL itself: only with --purge-data AND when it holds nothing but AutoBot's.
 readonly POSTGRES_PACKAGES=("postgresql-*" "postgresql-client-*" "postgresql-contrib-*" postgresql-common postgresql-client-common)
+# Removed only once EMPTY after pg_dropcluster: /var/lib/postgresql is the postgres user's
+# home (dumps, .pgpass, unregistered clusters live there).
 readonly POSTGRES_PATHS=(/var/lib/postgresql /etc/postgresql)
 readonly POSTGRES_APT_SOURCES=(pgdg)
 # Shared software with no install record: only with --purge-shared.
@@ -122,16 +135,18 @@ psql_on() {  # psql_on <port> <db> <sql>: one value per line, non-zero if Postgr
 }
 
 cluster_is_autobots() {  # cluster_is_autobots <port>: holds nothing but AutoBot's databases and roles
-    local port="$1" db role tables
+    local port="$1" db role tables listing names=()
     local own_dbs=" postgres template0 template1 ${DATABASES[*]} " own_roles=" postgres ${DB_ROLES[*]} "
-    db="$(psql_on "${port}" postgres "SELECT datname FROM pg_database")" || return 1
-    for db in ${db}; do [[ "${own_dbs}" == *" ${db} "* ]] || return 1; done
+    listing="$(psql_on "${port}" postgres "SELECT datname FROM pg_database")" || return 1
+    mapfile -t names <<< "${listing}"
+    for db in "${names[@]}"; do [[ -z "${db}" || "${own_dbs}" == *" ${db} "* ]] || return 1; done
     for db in postgres template1; do  # the owner's tables can live in the default databases too
         tables="$(psql_on "${port}" "${db}" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','p','v','m','S','f') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'")" || return 1
         [[ "${tables}" == "0" ]] || return 1
     done
-    role="$(psql_on "${port}" postgres "SELECT rolname FROM pg_roles WHERE rolname !~ '^pg_'")" || return 1
-    for role in ${role}; do [[ "${own_roles}" == *" ${role} "* ]] || return 1; done
+    listing="$(psql_on "${port}" postgres "SELECT rolname FROM pg_roles WHERE rolname !~ '^pg_'")" || return 1
+    mapfile -t names <<< "${listing}"
+    for role in "${names[@]}"; do [[ -z "${role}" || "${own_roles}" == *" ${role} "* ]] || return 1; done
     return 0
 }
 
@@ -146,6 +161,7 @@ postgres_holds_only_autobot() {
         [[ "${status}" == online* ]] || return 1
         cluster_is_autobots "${port}" || return 1
     done <<< "${listing}"
+    POSTGRES_CLUSTERS="${listing}"  # exactly what was inspected; drop_clusters drops only these
     return 0
 }
 
@@ -174,8 +190,12 @@ plan_purge_extra() {  # what apt would remove beyond plan_packages (reverse-depe
     local pkgs
     mapfile -t pkgs < <(plan_packages)
     [[ ${#pkgs[@]} -gt 0 ]] || return 0
-    { apt-get -s purge "${pkgs[@]}" 2>/dev/null || true; } | awk '/^Purg /{print $2}' | sort -u \
-        | comm -23 - <(printf '%s\n' "${pkgs[@]}")
+    local simulated
+    if ! simulated="$(apt-get -s purge "${pkgs[@]}" 2>/dev/null)"; then
+        echo "(apt-get could not simulate this purge)"  # unknown is not "nothing else": skip
+        return 0
+    fi
+    awk '/^Purg /{print $2}' <<< "${simulated}" | sort -u | comm -23 - <(printf '%s\n' "${pkgs[@]}")
 }
 
 plan_apt_sources() {
@@ -192,11 +212,22 @@ plan_apt_sources() {
     return 0
 }
 
+plan_opt_code() {  # /opt/autobot's children except its data, when the data stays
+    ${PURGE_DATA} && return 0  # the whole tree goes with DATA_PATHS
+    local child name
+    for child in "${AUTOBOT_BASE}"/* "${AUTOBOT_BASE}"/.[!.]*; do
+        [[ -e "${child}" || -L "${child}" ]] || continue
+        name="${child##*/}"
+        [[ " ${OPT_DATA[*]} " == *" ${name} "* ]] || echo "${child}"
+    done
+    return 0
+}
+
 plan_paths() {
     existing "${PATHS[@]}" "${PATH_GLOBS[@]}" "${UNIT_DROPINS[@]}"
+    plan_opt_code
     ${PURGE_DATA} && existing "${DATA_PATHS[@]}"
     ${PURGE_SHARED} && existing "${SHARED_PATHS[@]}"
-    [[ "${POSTGRES_DECISION}" == "remove" ]] && existing "${POSTGRES_PATHS[@]}"
     return 0
 }
 
@@ -231,7 +262,7 @@ print_plan() {
         log "  accounts:     $(plan_users | tr '\n' ' ')"
         log "  PostgreSQL:   $([[ "${POSTGRES_DECISION}" == "remove" ]] && echo "holds only AutoBot's -- removed too" || echo "KEPT (holds data that is not AutoBot's, or could not be fully inspected)")"
     else
-        log "  KEPT (data):  databases ${DATABASES[*]}, accounts $(plan_users | tr '\n' ' '), $(existing "${DATA_PATHS[@]}" | tr '\n' ' ')-- add --purge-data to remove"
+        log "  KEPT (data):  databases ${DATABASES[*]}, accounts $(plan_users | tr '\n' ' '), $(existing "${DATA_PATHS[@]:1}" | tr '\n' ' ')and in ${AUTOBOT_BASE}: ${OPT_DATA[*]} -- add --purge-data to remove"
     fi
     ${PURGE_SHARED} || log "  KEPT (shared): ${SHARED_PACKAGES[*]} and their data -- add --purge-shared to remove"
     [[ -f "${INSTALL_RECORD}" ]] || log "  (no install record at ${INSTALL_RECORD}: no account, recorded package or recorded apt source is removed)"
@@ -282,13 +313,19 @@ drop_databases() {
     return 0
 }
 
-drop_clusters() {
+drop_clusters() {  # the clusters inspected at decision time -- never one created since
     [[ "${POSTGRES_DECISION}" == "remove" ]] || return 0
-    local ver name _
+    local ver name _ dir
     while read -r ver name _; do
+        [[ -n "${ver}" ]] || continue
         if pg_dropcluster --stop "${ver}" "${name}" >>"${LOG_FILE}" 2>&1; then log "  dropped cluster ${ver}/${name}"
         else log "  WARNING: could not drop cluster ${ver}/${name}; see ${LOG_FILE}"; fi
-    done < <(pg_lsclusters --no-header 2>/dev/null || true)
+    done <<< "${POSTGRES_CLUSTERS}"
+    for dir in "${POSTGRES_PATHS[@]}"; do  # only empty directories go
+        [[ -d "${dir}" ]] && find "${dir}" -depth -type d -empty -delete 2>>"${LOG_FILE}"
+        [[ -e "${dir}" ]] && log "  kept ${dir} (not empty after dropping the clusters)"
+    done
+    return 0
 }
 
 purge_packages() {
@@ -347,7 +384,7 @@ parse_args() {
 }
 
 main() {
-    DRY_RUN=false CONFIRM_YES=false PURGE_DATA=false PURGE_SHARED=false POSTGRES_DECISION=keep
+    DRY_RUN=false CONFIRM_YES=false PURGE_DATA=false PURGE_SHARED=false POSTGRES_DECISION=keep POSTGRES_CLUSTERS=""
     parse_args "$@"
     [[ ${EUID} -eq 0 ]] || { echo "Run as root (sudo)." >&2; exit 1; }
     # Decided ONCE, before anything changes: after a purge psql is gone and could not re-decide.
