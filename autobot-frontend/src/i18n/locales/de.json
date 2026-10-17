@@ -8949,6 +8949,7 @@
       "peerMessages": "Ausstehende Peer-Nachrichten",
       "idleSubscribers": "Untätigkeits-Abos",
       "pendingFor": "{n} ausstehend für {name}",
+      "sentBy": "von {names}",
       "waitsForIdle": "{who} wartet, bis {target} untätig ist",
       "heldBy": "Gehalten von {agent}",
       "waitlistAria": "Warteliste in Reihenfolge",

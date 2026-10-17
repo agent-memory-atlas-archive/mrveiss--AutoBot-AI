@@ -8937,6 +8937,7 @@
       "peerMessages": "Pending peer messages",
       "idleSubscribers": "Idle subscriptions",
       "pendingFor": "{n} pending for {name}",
+      "sentBy": "from {names}",
       "waitsForIdle": "{who} waits for {target} to go idle",
       "heldBy": "Held by {agent}",
       "waitlistAria": "Waitlist in order",

@@ -46,6 +46,7 @@
         <ul class="m-0 ps-4">
           <li v-for="m in ledger.peerMessages.value.rows" :key="`${m.recipient_kind}:${m.recipient_name}`">
             {{ t('llc.ledger.pendingFor', { name: m.recipient_name, n: m.pending }) }}
+            <span class="text-autobot-text-secondary">{{ t('llc.ledger.sentBy', { names: m.senders.join(', ') }) }}</span>
           </li>
         </ul>
       </LedgerSectionState>

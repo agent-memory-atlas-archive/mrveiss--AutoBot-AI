@@ -8949,6 +8949,7 @@
       "peerMessages": "زیر التوا پیئر پیغامات",
       "idleSubscribers": "فراغت کی رکنیتیں",
       "pendingFor": "{name} کے لیے {n} زیر التوا",
+      "sentBy": "{names} کی طرف سے",
       "waitsForIdle": "{who} انتظار میں ہے کہ {target} فارغ ہو",
       "heldBy": "{agent} کے پاس",
       "waitlistAria": "ترتیب سے انتظار کی فہرست",

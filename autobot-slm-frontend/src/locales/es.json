@@ -1333,6 +1333,7 @@
       "refresh": "Actualizar",
       "tabsAria": "Vistas del registro",
       "tabs": {
+        "now": "Trabajando ahora",
         "contention": "Contención",
         "claims": "Reservas",
         "conflicts": "Conflictos",
@@ -1346,7 +1347,11 @@
         "mode": "Modo",
         "intent": "Intención",
         "expires": "Caduca",
-        "renewals": "Renovaciones"
+        "renewals": "Renovaciones",
+        "kind": "Tipo",
+        "status": "Estado",
+        "task": "Tarea actual",
+        "detail": "Detalle"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "No hay conflictos",
         "activity": "No recent activity",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "Ningún agente se ha reportado",
+        "peerMessages": "No hay mensajes pendientes",
+        "idleSubscribers": "No hay suscripciones de inactividad"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "No se pudo leer el registro",
         "unavailableBody": "El almacén {source} no respondió. No es lo mismo que no tener entradas.",
         "errorTitle": "Algo salió mal al cargar esta sección"
-      }
+      },
+      "busy": "Ocupado",
+      "idle": "Idle",
+      "peerMessages": "Mensajes entre pares pendientes",
+      "idleSubscribers": "Suscripciones de inactividad",
+      "pendingFor": "{n} pendientes para {name}",
+      "sentBy": "de {names}",
+      "waitsForIdle": "{who} espera a que {target} quede inactivo"
     }
   },
   "monitoringView": {

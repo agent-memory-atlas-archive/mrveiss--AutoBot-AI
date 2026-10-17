@@ -1333,6 +1333,7 @@
       "refresh": "تازہ کریں",
       "tabsAria": "لیجر کے منظر",
       "tabs": {
+        "now": "ابھی کام کر رہے ہیں",
         "contention": "مسابقت",
         "claims": "دعوے",
         "conflicts": "تنازعات",
@@ -1346,7 +1347,11 @@
         "mode": "طریقہ",
         "intent": "ارادہ",
         "expires": "میعاد ختم",
-        "renewals": "تجدیدات"
+        "renewals": "تجدیدات",
+        "kind": "قسم",
+        "status": "Status",
+        "task": "موجودہ کام",
+        "detail": "تفصیل"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "کوئی تنازع نہیں",
         "activity": "کوئی حالیہ سرگرمی نہیں",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "کسی ایجنٹ نے اطلاع نہیں دی",
+        "peerMessages": "کوئی زیر التوا پیغام نہیں",
+        "idleSubscribers": "کوئی فراغت کی رکنیت نہیں"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "لیجر نہیں پڑھا جا سکا",
         "unavailableBody": "اسٹور {source} نے جواب نہیں دیا۔ یہ اندراجات نہ ہونے جیسا نہیں ہے۔",
         "errorTitle": "یہ حصہ لوڈ کرتے وقت کچھ غلط ہو گیا"
-      }
+      },
+      "busy": "مصروف",
+      "idle": "Idle",
+      "peerMessages": "زیر التوا پیئر پیغامات",
+      "idleSubscribers": "فراغت کی رکنیتیں",
+      "pendingFor": "{name} کے لیے {n} زیر التوا",
+      "sentBy": "{names} کی طرف سے",
+      "waitsForIdle": "{who} انتظار میں ہے کہ {target} فارغ ہو"
     }
   },
   "monitoringView": {

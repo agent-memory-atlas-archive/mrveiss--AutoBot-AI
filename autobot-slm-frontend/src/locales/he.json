@@ -1333,6 +1333,7 @@
       "refresh": "Refresh",
       "tabsAria": "תצוגות היומן",
       "tabs": {
+        "now": "עובדים כעת",
         "contention": "תחרות",
         "claims": "תפיסות",
         "conflicts": "התנגשויות",
@@ -1346,7 +1347,11 @@
         "mode": "מצב פעולה",
         "intent": "כוונה",
         "expires": "פג תוקף",
-        "renewals": "חידושים"
+        "renewals": "חידושים",
+        "kind": "סוג",
+        "status": "סטטוס",
+        "task": "משימה נוכחית",
+        "detail": "פרטים"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "אין התנגשויות",
         "activity": "אין פעילות אחרונה",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "אף סוכן לא דיווח",
+        "peerMessages": "אין הודעות ממתינות",
+        "idleSubscribers": "אין מינויי זמן סרק"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "לא ניתן היה לקרוא את היומן",
         "unavailableBody": "המאגר {source} לא הגיב. זה לא כמו שאין רשומות.",
         "errorTitle": "אירעה שגיאה בטעינת הקטע הזה"
-      }
+      },
+      "busy": "עסוק",
+      "idle": "Idle",
+      "peerMessages": "הודעות עמיתים ממתינות",
+      "idleSubscribers": "מינויי זמן סרק",
+      "pendingFor": "{n} ממתינות עבור {name}",
+      "sentBy": "מאת {names}",
+      "waitsForIdle": "{who} ממתין עד ש-{target} יתפנה"
     }
   },
   "monitoringView": {
