@@ -80,8 +80,11 @@ withDefaults(
   border: 2px solid var(--aui-color-border-strong);
   box-shadow: none;
 }
+/* The design system draws no shadows: "elevated" is a raised surface with a strong border. */
 .aui-card--elevated {
-  box-shadow: var(--aui-shadow-lg);
+  background-color: var(--aui-color-surface-raised);
+  border-color: var(--aui-color-border-strong);
+  box-shadow: none;
 }
 .aui-card--flat {
   background-color: var(--aui-color-surface-sunken);

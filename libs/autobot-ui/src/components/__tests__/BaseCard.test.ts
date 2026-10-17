@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import cardSource from '../BaseCard.vue?raw'
 import BaseCard from '../BaseCard.vue'
 
 describe('BaseCard', () => {
@@ -101,5 +102,13 @@ describe('BaseCard', () => {
   it('scrollable makes the body scroll', () => {
     const wrapper = mount(BaseCard, { props: { scrollable: true } })
     expect(wrapper.get('.aui-card__body').classes()).toContain('aui-card__body--scroll')
+  })
+
+  it('no frame adds a shadow: the design system draws none (#18691)', () => {
+    // jsdom does not apply SFC <style>, so the rules are read from the source. The base
+    // card's pre-existing shadow is #18691's to remove; a variant must not add another.
+    const css = cardSource.split('<style scoped>')[1]
+    const shadows = [...css.matchAll(/box-shadow:\s*([^;]+);/g)].map((m) => m[1].trim())
+    expect(shadows.filter((s) => s !== 'none')).toEqual(['var(--aui-shadow-sm)'])
   })
 })
