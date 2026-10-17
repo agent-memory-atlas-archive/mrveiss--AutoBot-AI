@@ -78467,6 +78467,11 @@ export interface components {
             since: number;
             /** Expires At */
             expires_at: number;
+            /**
+             * Tenant Id
+             * @description The owning company; set in the install-wide (SLM) view, null in a company's own
+             */
+            tenant_id?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -88675,6 +88680,11 @@ export interface components {
             senders: string[];
             /** Oldest At */
             oldest_at: number;
+            /**
+             * Tenant Id
+             * @description The owning company; set in the install-wide (SLM) view, null in a company's own
+             */
+            tenant_id?: string | null;
         } & {
             [key: string]: unknown;
         };

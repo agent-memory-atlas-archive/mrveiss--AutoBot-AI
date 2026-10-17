@@ -1333,6 +1333,7 @@
       "refresh": "Aktualisieren",
       "tabsAria": "Ledger-Ansichten",
       "tabs": {
+        "now": "Arbeitet gerade",
         "contention": "Konkurrenz",
         "claims": "Ansprüche",
         "conflicts": "Konflikte",
@@ -1346,7 +1347,11 @@
         "mode": "Modus",
         "intent": "Absicht",
         "expires": "Läuft ab",
-        "renewals": "Verlängerungen"
+        "renewals": "Verlängerungen",
+        "kind": "Art",
+        "status": "Status",
+        "task": "Aktuelle Aufgabe",
+        "detail": "Details"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "Keine Konflikte",
         "activity": "No recent activity",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "Keine Agenten gemeldet",
+        "peerMessages": "Keine ausstehenden Nachrichten",
+        "idleSubscribers": "Keine Untätigkeits-Abos"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "Ledger konnte nicht gelesen werden",
         "unavailableBody": "Der Speicher {source} hat nicht geantwortet. Das ist nicht dasselbe wie keine Einträge.",
         "errorTitle": "Beim Laden dieses Abschnitts ist ein Fehler aufgetreten"
-      }
+      },
+      "busy": "Beschäftigt",
+      "idle": "Idle",
+      "peerMessages": "Ausstehende Peer-Nachrichten",
+      "idleSubscribers": "Untätigkeits-Abos",
+      "pendingFor": "{n} ausstehend für {name}",
+      "sentBy": "von {names}",
+      "waitsForIdle": "{who} wartet, bis {target} untätig ist"
     }
   },
   "monitoringView": {

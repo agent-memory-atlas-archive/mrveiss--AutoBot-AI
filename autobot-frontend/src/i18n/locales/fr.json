@@ -8949,6 +8949,7 @@
       "peerMessages": "Messages entre pairs en attente",
       "idleSubscribers": "Abonnements d'inactivité",
       "pendingFor": "{n} en attente pour {name}",
+      "sentBy": "de {names}",
       "waitsForIdle": "{who} attend que {target} soit inactif",
       "heldBy": "Détenu par {agent}",
       "waitlistAria": "Liste d'attente dans l'ordre",

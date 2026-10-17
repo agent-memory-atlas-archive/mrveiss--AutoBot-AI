@@ -1333,6 +1333,7 @@
       "refresh": "Actualiser",
       "tabsAria": "Vues du registre",
       "tabs": {
+        "now": "En cours",
         "contention": "Contention",
         "claims": "Réservations",
         "conflicts": "Conflits",
@@ -1346,7 +1347,11 @@
         "mode": "Mode",
         "intent": "Intention",
         "expires": "Expire",
-        "renewals": "Renouvellements"
+        "renewals": "Renouvellements",
+        "kind": "Type",
+        "status": "Statut",
+        "task": "Tâche en cours",
+        "detail": "Détail"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "Aucun conflit",
         "activity": "Aucune activité récente",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "Aucun agent ne s'est signalé",
+        "peerMessages": "Aucun message en attente",
+        "idleSubscribers": "Aucun abonnement d'inactivité"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "Impossible de lire le registre",
         "unavailableBody": "Le stockage {source} n'a pas répondu. Ce n'est pas la même chose qu'une liste vide.",
         "errorTitle": "Un problème est survenu lors du chargement de cette section"
-      }
+      },
+      "busy": "Occupé",
+      "idle": "Idle",
+      "peerMessages": "Messages entre pairs en attente",
+      "idleSubscribers": "Abonnements d'inactivité",
+      "pendingFor": "{n} en attente pour {name}",
+      "sentBy": "de {names}",
+      "waitsForIdle": "{who} attend que {target} soit inactif"
     }
   },
   "monitoringView": {

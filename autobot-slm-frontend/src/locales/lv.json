@@ -1333,6 +1333,7 @@
       "refresh": "Refresh",
       "tabsAria": "Žurnāla skati",
       "tabs": {
+        "now": "Pašlaik strādā",
         "contention": "Konkurence",
         "claims": "Pieprasījumi",
         "conflicts": "Konflikti",
@@ -1346,7 +1347,11 @@
         "mode": "Režīms",
         "intent": "Nolūks",
         "expires": "Beidzas",
-        "renewals": "Atjaunojumi"
+        "renewals": "Atjaunojumi",
+        "kind": "Veids",
+        "status": "Statuss",
+        "task": "Pašreizējais uzdevums",
+        "detail": "Sīkāk"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "Nav konfliktu",
         "activity": "No recent activity",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "Neviens aģents nav pieteicies",
+        "peerMessages": "Nav neizlasītu ziņu",
+        "idleSubscribers": "Nav dīkstāves abonementu"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "Neizdevās nolasīt žurnālu",
         "unavailableBody": "Krātuve {source} neatbildēja. Tas nav tas pats, kas tukšs saraksts.",
         "errorTitle": "Ielādējot šo sadaļu, radās kļūda"
-      }
+      },
+      "busy": "Aizņemts",
+      "idle": "Idle",
+      "peerMessages": "Neizlasītās ziņas",
+      "idleSubscribers": "Dīkstāves abonementi",
+      "pendingFor": "{n} gaida lietotāju {name}",
+      "sentBy": "no {names}",
+      "waitsForIdle": "{who} gaida, kamēr {target} būs dīkstāvē"
     }
   },
   "monitoringView": {

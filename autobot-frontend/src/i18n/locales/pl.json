@@ -8949,6 +8949,7 @@
       "peerMessages": "Oczekujące wiadomości",
       "idleSubscribers": "Subskrypcje bezczynności",
       "pendingFor": "{n} oczekuje na {name}",
+      "sentBy": "od {names}",
       "waitsForIdle": "{who} czeka, aż {target} będzie bezczynny",
       "heldBy": "Trzyma {agent}",
       "waitlistAria": "Kolejka w kolejności",

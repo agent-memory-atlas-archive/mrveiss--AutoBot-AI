@@ -224,5 +224,30 @@ class AgentPresenceRegistry:
                 if key_tenant is None or key_tenant == tenant_id
             ]
 
+    def snapshot_for_projection(self) -> list[PresenceEntry]:
+        """Every live entry of EVERY tenant, for the install-wide SLM projection only (#18632).
+
+        Not a query API: the only caller is `protocols.ledger_projection_feed`, which
+        publishes to the SLM's admin view (owner ruling on #18632). Request handlers
+        keep using `list_live()`, whose per-tenant scoping is the point of this class.
+        `UNKNOWN_TENANT` still fails closed -- unresolved tenancy is never published.
+        """
+        now = time.time()
+        with self._lock:
+            return [
+                PresenceEntry(
+                    kind=kind,
+                    tenant_id=tenant,
+                    name=name,
+                    busy=rec.busy,
+                    instance_id=rec.instance_id,
+                    detail=rec.detail,
+                    task=rec.task,
+                    last_seen=rec.last_seen,
+                )
+                for (kind, tenant, name), rec in self._entries.items()
+                if now - rec.last_seen < self._ttl and tenant != UNKNOWN_TENANT
+            ]
+
 
 get_presence_registry = lazy_singleton(AgentPresenceRegistry)
