@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import re
 import subprocess
-from pathlib import Path
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts/uninstall.sh"
+from repo_tests._paths import repo_root
+
+_SCRIPT = repo_root() / "scripts/uninstall.sh"
 _INSTALLED = [
     "postgresql-16",
     "postgresql-client-16",
