@@ -108,6 +108,10 @@ export type { DurationStyle } from './src/utils/duration'
 export { log, createLogger } from './src/utils/logger'
 export type { LogLevel } from './src/utils/logger'
 
+// The one exponential-backoff formula for reconnects and retries (#15402).
+export { backoffDelay, RETRY_BACKOFF } from './src/utils/backoff'
+export type { BackoffOptions } from './src/utils/backoff'
+
 export { default as SchedulePicker } from './src/components/SchedulePicker.vue'
 export * from './src/schedule'
 
