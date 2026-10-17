@@ -55,8 +55,7 @@ from api.user_management.dependencies import require_org_context
 from api.websockets import NON_CONVERSATIONAL_WEBSOCKET_MESSAGE_TYPES
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
-from autobot_shared.time_utils import utc_timestamp
-from chat_history.deduplication import _parse_timestamp
+from autobot_shared.time_utils import parse_utc_iso, utc_timestamp
 from chat_history.message_schema import llm_role, message_text, message_type
 
 # Import context overflow protection (#9043)
@@ -156,6 +155,18 @@ def handle_api_error(error: Exception, request_id: str = "unknown") -> Dict[str,
 # ====================================================================
 # Message Merge Helpers (Issue #315 - Reduced nesting)
 # ====================================================================
+
+
+def _parse_message_timestamp(msg_ts_str: str) -> datetime | None:
+    """Parse message timestamp from various formats (Issue #315)."""
+    if not isinstance(msg_ts_str, str) or not msg_ts_str:
+        return None
+    try:
+        if "T" in msg_ts_str:
+            return parse_utc_iso(msg_ts_str)
+        return datetime.strptime(msg_ts_str, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return None
 
 
 def _should_start_new_streaming_group(current_ts: datetime, last_streaming_ts: datetime | None) -> bool:
@@ -272,7 +283,7 @@ def _process_streaming_groups(merged: List[Dict]) -> List[Dict]:
     for msg in merged:
         if _is_streaming_response(msg):
             msg_ts_str = msg.get("timestamp", "")
-            current_ts = _parse_timestamp(msg_ts_str)
+            current_ts = _parse_message_timestamp(msg_ts_str)
 
             if current_ts and _should_start_new_streaming_group(current_ts, last_streaming_ts):
                 if current_group:

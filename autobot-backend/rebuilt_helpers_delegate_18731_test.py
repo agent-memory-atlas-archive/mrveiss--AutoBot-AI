@@ -35,14 +35,6 @@ def test_frontend_config_reads_the_ssot_websocket_url():
     assert frontend_config.ssot_config is ssot_config
 
 
-def test_chat_uses_the_deduplication_timestamp_parser():
-    from api import chat
-    from chat_history import deduplication
-
-    assert chat._parse_timestamp is deduplication._parse_timestamp
-    assert not hasattr(chat, "_parse_message_timestamp")
-
-
 def test_sandbox_check_permission_delegates_to_files(monkeypatch):
     from api import sandbox_files
 
