@@ -63368,7 +63368,7 @@ export interface components {
              * Citations
              * @description Structured source citations from RAG retrieval. Non-empty only when grounding.grounded=True.
              */
-            citations?: components["schemas"]["api__schemas_chat__Citation"][];
+            citations?: components["schemas"]["Citation"][];
             /** @description Grounding transparency marker. grounded=False signals a model-only claim. */
             grounding?: components["schemas"]["GroundingStatus"] | null;
         } & {
@@ -63696,6 +63696,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** CheckpointRestoreRequest */
+        CheckpointRestoreRequest: {
+            /** Checkpoint Name */
+            checkpoint_name: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ChromaSearchRequest
          * @description Request for similarity search.
@@ -63756,6 +63763,42 @@ export interface components {
          * @description Response for GET /circuit-breakers — opaque shape from manager.get_status().
          */
         CircuitBreakerStatusResponse: {
+            [key: string]: unknown;
+        };
+        /**
+         * Citation
+         * @description Structured source citation attached to a RAG-grounded response (#10548).
+         *
+         *     Propagated from retrieval (kb_results / RAGMetrics) through the response
+         *     builder to the API payload and rendered by CitationsDisplay.vue as chips.
+         */
+        Citation: {
+            /**
+             * Id
+             * @description Unique citation identifier (chunk/doc/graph-node id)
+             */
+            id: string;
+            /**
+             * Source Type
+             * @description Origin of this citation: 'doc' | 'chunk' | 'graph'
+             */
+            source_type: string;
+            /**
+             * Title
+             * @description Human-readable title or file name
+             */
+            title: string;
+            /**
+             * Uri
+             * @description Relative path or URI for deep-linking
+             */
+            uri?: string | null;
+            /**
+             * Score
+             * @description Retrieval relevance score (0–1)
+             */
+            score: number;
+        } & {
             [key: string]: unknown;
         };
         /** ClaimRow */
@@ -65938,6 +65981,25 @@ export interface components {
             web_research?: {
                 [key: string]: unknown;
             } | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ComprehensiveResearchRequest */
+        ComprehensiveResearchRequest: {
+            /** Query */
+            query: string;
+            /**
+             * Research Depth
+             * @default comprehensive
+             */
+            research_depth: string;
+            /** Sources */
+            sources?: string[] | null;
+            /**
+             * Include Web
+             * @default true
+             */
+            include_web: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -85749,6 +85811,53 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ModelTrainingRequest
+         * @description Request to trigger model training.
+         */
+        ModelTrainingRequest: {
+            /**
+             * Language
+             * @description Filter training data by language
+             */
+            language?: string | null;
+            /**
+             * Pattern Type
+             * @description Filter training data by pattern type
+             */
+            pattern_type?: string | null;
+            /**
+             * Num Epochs
+             * @default 10
+             */
+            num_epochs: number;
+            /**
+             * Batch Size
+             * @default 32
+             */
+            batch_size: number;
+            /**
+             * Notes
+             * @description Training notes
+             */
+            notes?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ModelTrainingResponse
+         * @description Response from training trigger.
+         */
+        ModelTrainingResponse: {
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Training Started */
+            training_started: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ModelsAvailableData
          * @description Response data for GET /models/available.
          */
@@ -92459,6 +92568,26 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ResearchFactCitation
+         * @description One source citation backing a synthesized statement.
+         */
+        ResearchFactCitation: {
+            /** Fact Id */
+            fact_id: string;
+            /**
+             * Source Url
+             * @default
+             */
+            source_url: string;
+            /**
+             * Source Doc Id
+             * @default
+             */
+            source_doc_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ResearchFactOut
          * @description A KB fact produced or reused by this research run.
          */
@@ -92481,6 +92610,20 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ResearchRequest
+         * @description ``POST /research`` request body.
+         */
+        ResearchRequest: {
+            /** Question */
+            question: string;
+            /** Options */
+            options?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ResearchResponse
          * @description ``POST /research`` response body — the full contract from #12622.
          */
@@ -92488,7 +92631,7 @@ export interface components {
             /** Answer */
             answer: string;
             /** Citations */
-            citations?: components["schemas"]["services__research__models__Citation"][];
+            citations?: components["schemas"]["ResearchFactCitation"][];
             /** Facts */
             facts?: components["schemas"]["ResearchFactOut"][];
             /** Contradictions */
@@ -92648,6 +92791,43 @@ export interface components {
             updated?: number | null;
             /** Errors */
             errors?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * RestoreRequest
+         * @description Request model for restoring knowledge base from backup (Issue #419)
+         */
+        RestoreRequest: {
+            /**
+             * Backup File
+             * @description Path to backup file to restore
+             */
+            backup_file: string;
+            /**
+             * Overwrite Existing
+             * @description Overwrite existing facts with backup data
+             * @default false
+             */
+            overwrite_existing: boolean;
+            /**
+             * Skip Duplicates
+             * @description Skip facts that already exist
+             * @default true
+             */
+            skip_duplicates: boolean;
+            /**
+             * Restore Embeddings
+             * @description Restore vector embeddings if available
+             * @default true
+             */
+            restore_embeddings: boolean;
+            /**
+             * Dry Run
+             * @description Only validate backup, don't actually restore
+             * @default true
+             */
+            dry_run: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -101389,6 +101569,48 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * TrainRequest
+         * @description Request body for training the NL service on an external database.
+         */
+        TrainRequest: {
+            /**
+             * Db Id
+             * @description Unique identifier for this database connection
+             */
+            db_id: string;
+            /**
+             * Db Secret Id
+             * @description Secret ID containing the database_url in the secrets manager
+             */
+            db_secret_id: string;
+            /**
+             * Db Type
+             * @description Database type: postgresql, mysql, or sqlite
+             * @default postgresql
+             */
+            db_type: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * TrainResponse
+         * @description Response for a database schema training operation.
+         */
+        TrainResponse: {
+            /** Success */
+            success: boolean;
+            /** Db Id */
+            db_id: string;
+            /** Schema Length */
+            schema_length?: number | null;
+            /** Table Count */
+            table_count?: number | null;
+            /** Error */
+            error?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** TranscriberExportRequest */
         TranscriberExportRequest: {
             /**
@@ -105631,140 +105853,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * Citation
-         * @description Structured source citation attached to a RAG-grounded response (#10548).
-         *
-         *     Propagated from retrieval (kb_results / RAGMetrics) through the response
-         *     builder to the API payload and rendered by CitationsDisplay.vue as chips.
-         */
-        api__schemas_chat__Citation: {
-            /**
-             * Id
-             * @description Unique citation identifier (chunk/doc/graph-node id)
-             */
-            id: string;
-            /**
-             * Source Type
-             * @description Origin of this citation: 'doc' | 'chunk' | 'graph'
-             */
-            source_type: string;
-            /**
-             * Title
-             * @description Human-readable title or file name
-             */
-            title: string;
-            /**
-             * Uri
-             * @description Relative path or URI for deep-linking
-             */
-            uri?: string | null;
-            /**
-             * Score
-             * @description Retrieval relevance score (0–1)
-             */
-            score: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ResearchRequest */
-        api__schemas_knowledge__ResearchRequest: {
-            /** Query */
-            query: string;
-            /**
-             * Research Depth
-             * @default comprehensive
-             */
-            research_depth: string;
-            /** Sources */
-            sources?: string[] | null;
-            /**
-             * Include Web
-             * @default true
-             */
-            include_web: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * RestoreRequest
-         * @description Request model for restoring knowledge base from backup (Issue #419)
-         */
-        api__schemas_knowledge__RestoreRequest: {
-            /**
-             * Backup File
-             * @description Path to backup file to restore
-             */
-            backup_file: string;
-            /**
-             * Overwrite Existing
-             * @description Overwrite existing facts with backup data
-             * @default false
-             */
-            overwrite_existing: boolean;
-            /**
-             * Skip Duplicates
-             * @description Skip facts that already exist
-             * @default true
-             */
-            skip_duplicates: boolean;
-            /**
-             * Restore Embeddings
-             * @description Restore vector embeddings if available
-             * @default true
-             */
-            restore_embeddings: boolean;
-            /**
-             * Dry Run
-             * @description Only validate backup, don't actually restore
-             * @default true
-             */
-            dry_run: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainRequest
-         * @description Request body for training the NL service on an external database.
-         */
-        api__schemas_knowledge__TrainRequest: {
-            /**
-             * Db Id
-             * @description Unique identifier for this database connection
-             */
-            db_id: string;
-            /**
-             * Db Secret Id
-             * @description Secret ID containing the database_url in the secrets manager
-             */
-            db_secret_id: string;
-            /**
-             * Db Type
-             * @description Database type: postgresql, mysql, or sqlite
-             * @default postgresql
-             */
-            db_type: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainResponse
-         * @description Response for a database schema training operation.
-         */
-        api__schemas_knowledge__TrainResponse: {
-            /** Success */
-            success: boolean;
-            /** Db Id */
-            db_id: string;
-            /** Schema Length */
-            schema_length?: number | null;
-            /** Table Count */
-            table_count?: number | null;
-            /** Error */
-            error?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * ProvidersResponse
          * @description Response for GET /providers — list of provider availability statuses.
          */
@@ -105791,13 +105879,6 @@ export interface components {
             base_url_required: boolean;
             /** Documentation Url */
             documentation_url: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** RestoreRequest */
-        api__task_workspace_ws__RestoreRequest: {
-            /** Checkpoint Name */
-            checkpoint_name: string;
         } & {
             [key: string]: unknown;
         };
@@ -105844,87 +105925,6 @@ export interface components {
              * @default false
              */
             is_system: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainRequest
-         * @description Request to trigger model training.
-         */
-        routers__model_management__TrainRequest: {
-            /**
-             * Language
-             * @description Filter training data by language
-             */
-            language?: string | null;
-            /**
-             * Pattern Type
-             * @description Filter training data by pattern type
-             */
-            pattern_type?: string | null;
-            /**
-             * Num Epochs
-             * @default 10
-             */
-            num_epochs: number;
-            /**
-             * Batch Size
-             * @default 32
-             */
-            batch_size: number;
-            /**
-             * Notes
-             * @description Training notes
-             */
-            notes?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainResponse
-         * @description Response from training trigger.
-         */
-        routers__model_management__TrainResponse: {
-            /** Status */
-            status: string;
-            /** Message */
-            message: string;
-            /** Training Started */
-            training_started: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Citation
-         * @description One source citation backing a synthesized statement.
-         */
-        services__research__models__Citation: {
-            /** Fact Id */
-            fact_id: string;
-            /**
-             * Source Url
-             * @default
-             */
-            source_url: string;
-            /**
-             * Source Doc Id
-             * @default
-             */
-            source_doc_id: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ResearchRequest
-         * @description ``POST /research`` request body.
-         */
-        services__research__models__ResearchRequest: {
-            /** Question */
-            question: string;
-            /** Options */
-            options?: {
-                [key: string]: unknown;
-            };
         } & {
             [key: string]: unknown;
         };
@@ -114067,7 +114067,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__RestoreRequest"];
+                "application/json": components["schemas"]["RestoreRequest"];
             };
         };
         responses: {
@@ -158922,7 +158922,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["routers__model_management__TrainRequest"];
+                "application/json": components["schemas"]["ModelTrainingRequest"];
             };
         };
         responses: {
@@ -158932,7 +158932,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__model_management__TrainResponse"];
+                    "application/json": components["schemas"]["ModelTrainingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -161913,7 +161913,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__task_workspace_ws__RestoreRequest"];
+                "application/json": components["schemas"]["CheckpointRestoreRequest"];
             };
         };
         responses: {
@@ -163441,7 +163441,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__RestoreRequest"];
+                "application/json": components["schemas"]["RestoreRequest"];
             };
         };
         responses: {
@@ -166090,7 +166090,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__ResearchRequest"];
+                "application/json": components["schemas"]["ComprehensiveResearchRequest"];
             };
         };
         responses: {
@@ -168836,7 +168836,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__TrainRequest"];
+                "application/json": components["schemas"]["TrainRequest"];
             };
         };
         responses: {
@@ -168846,7 +168846,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__schemas_knowledge__TrainResponse"];
+                    "application/json": components["schemas"]["TrainResponse"];
                 };
             };
             /** @description Validation Error */
@@ -169623,7 +169623,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["services__research__models__ResearchRequest"];
+                "application/json": components["schemas"]["ResearchRequest"];
             };
         };
         responses: {
