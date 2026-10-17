@@ -177,6 +177,11 @@ FIELD_DEFAULT_FLOOR = 300
 #: nothing.
 GETENV_CALL_FLOOR = 8
 
+#: SSOT settings modules split out of ``ssot_config.py`` for its size ceiling; their
+#: ``Field`` aliases are SSOT config exactly like ``ssot_config.py``'s (#17312: ``TLSConfig``
+#: moved to ``ssot_tls.py``, which took the TLS getenv-pair sites out of the sweep).
+SSOT_FIELD_SOURCES = ("ssot_config.py", "ssot_tls.py")
+
 
 def _call_name(node: ast.Call) -> str | None:
     func = node.func
@@ -305,7 +310,7 @@ def _in_scope(path: Path, repo_root: Path) -> bool:
         return False
     if "tests" in parts:
         return False
-    if path.name in ("ssot_config.py",) or path.name.endswith("_test.py"):
+    if path.name in SSOT_FIELD_SOURCES or path.name.endswith("_test.py"):
         return False
     return True
 
@@ -328,8 +333,10 @@ def _swept_files(repo_root: Path) -> list[Path]:
 
 def find_drift(repo_root: Path) -> tuple[list[str], int]:
     """Offender strings, and the number of in-scope call sites examined."""
-    ssot_source = (repo_root / "autobot_shared" / "ssot_config.py").read_text(encoding="utf-8")
-    field_defaults = extract_field_defaults(ssot_source)
+    field_defaults: dict[str, Any] = {}
+    for name in SSOT_FIELD_SOURCES:
+        source = (repo_root / "autobot_shared" / name).read_text(encoding="utf-8")
+        field_defaults.update(extract_field_defaults(source))
     if len(field_defaults) < FIELD_DEFAULT_FLOOR:
         raise VacuousScan(f"only {len(field_defaults)} ssot_config field defaults reached — the sweep broke")
 
