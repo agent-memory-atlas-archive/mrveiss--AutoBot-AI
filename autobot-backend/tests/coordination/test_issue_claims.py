@@ -106,3 +106,33 @@ def test_no_client_at_all_is_unreadable_not_empty(monkeypatch, capsys):
     monkeypatch.setattr(work_claims, "get_async_redis_client", _none)
     assert issue_claims.main(["who", "9"]) == issue_claims.EXIT_UNREADABLE
     assert json.loads(capsys.readouterr().out)["error_class"] == "ClaimUnavailable"
+
+
+@pytest.mark.asyncio
+async def test_an_omitted_ttl_uses_the_session_ttl(redis):
+    code, body = await issue_claims.claim_issue(4242, "autobot-ai-a0", "ttl")
+    assert code == issue_claims.EXIT_OK
+    holder = body["holder"]
+    from datetime import datetime
+
+    lifetime = datetime.fromisoformat(holder["expires_at"]) - datetime.fromisoformat(holder["acquired_at"])
+    assert round(lifetime.total_seconds()) == issue_claims.SESSION_CLAIM_TTL_S
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["claim", "0", "--owner", "s"],
+        ["claim", "-5", "--owner", "s"],
+        ["claim", "7", "--owner", "  "],
+        ["claim", "7", "--owner", "s", "--ttl-s", "0"],
+        ["claim", "7", "--owner", "s", "--ttl-s", "-1"],
+        ["claim", "7", "--owner", "s", "--ttl-s", str(issue_claims.TTL_MAX_S + 1)],
+        ["release", "0", "--owner", "s"],
+    ],
+)
+def test_an_invalid_request_is_a_usage_error_not_held(argv, capsys):
+    """Bad input must never read as "someone holds it" (exit 1): it is EXIT_USAGE (4)."""
+    assert issue_claims.main(argv) == issue_claims.EXIT_USAGE
+    body = json.loads(capsys.readouterr().out.strip())
+    assert body["error"] == "bad-request" and body["granted"] is False

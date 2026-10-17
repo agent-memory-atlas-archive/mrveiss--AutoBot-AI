@@ -18,7 +18,9 @@ Interface (``python -m autobot_shared.coordination.issue_claims``; one JSON obje
     who     N                                        exit 0 (``held`` says whether anyone holds it)
     list                                             exit 0, every live issue claim
 
-Exit 3 means the registry could not be read; any exit other than 0 must be treated as a refusal
+Exit 3 means the registry could not be read; exit 4 means the request itself was invalid (a
+non-positive issue number, an empty owner, a TTL outside the registry's bounds). Any exit other
+than 0 must be treated as a refusal
 (fail closed -- a claim is never granted on a registry nobody could read). The refusal is logged
 by exception class name, never with the exception text, which can carry connection details.
 
@@ -41,6 +43,7 @@ from autobot_shared.coordination.work_claims import (
     ClaimConflict,
     ClaimUnavailable,
     HolderError,
+    ScopeError,
     WorkClaim,
     list_claims,
     release_scope,
@@ -53,12 +56,14 @@ logger = get_logger(__name__)
 
 #: How long a session's issue claim lives between ledger heartbeats. Mirrors the ledger's own
 #: 4h default; the session re-runs ``claim`` to renew, so a crashed session frees the issue.
-SESSION_CLAIM_TTL_S = env_int_clamped("AUTOBOT_ISSUE_CLAIM_SESSION_TTL_S", 14400, min_v=60, max_v=172800)
+TTL_MIN_S, TTL_MAX_S = 60, 172800
+SESSION_CLAIM_TTL_S = env_int_clamped("AUTOBOT_ISSUE_CLAIM_SESSION_TTL_S", 14400, min_v=TTL_MIN_S, max_v=TTL_MAX_S)
 
 #: The task identity every session claim uses: one issue per session owner, reentrant on renew.
 SESSION_TASK_ID = "dev-ledger"
 
-EXIT_OK, EXIT_HELD, EXIT_UNREADABLE = 0, 1, 3
+#: 2 is argparse's own usage exit; 4 is an invalid request that parsed (bad number, owner or TTL).
+EXIT_OK, EXIT_HELD, EXIT_UNREADABLE, EXIT_USAGE = 0, 1, 3, 4
 
 #: What "the registry could not be read" looks like from here.
 _UNREADABLE = (ClaimUnavailable, RedisError, OSError, asyncio.TimeoutError)
@@ -137,16 +142,31 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _invalid_request(args: argparse.Namespace) -> str:
+    """Why *args* can't be a valid request, or ``""``. Checked before the registry is touched."""
+    if getattr(args, "number", 1) < 1:
+        return f"issue number must be positive, got {args.number}"
+    if hasattr(args, "owner") and not args.owner.strip():
+        return "owner must not be empty"
+    ttl = getattr(args, "ttl_s", None)
+    if ttl is not None and not TTL_MIN_S <= ttl <= TTL_MAX_S:
+        return f"--ttl-s must be within [{TTL_MIN_S}, {TTL_MAX_S}], got {ttl}"
+    return ""
+
+
 def run(argv: list[str]) -> tuple[int, dict]:
     """Parse *argv*, run it, and map every unreadable-registry failure to ``EXIT_UNREADABLE``."""
     args = _parser().parse_args(argv)
+    invalid = _invalid_request(args)
+    if invalid:
+        return EXIT_USAGE, {"error": "bad-request", "message": invalid, "granted": False}
     try:
         return asyncio.run(_dispatch(args))
     except _UNREADABLE as exc:
         logger.error("issue claim registry unreadable (%s); refusing, nothing granted", type(exc).__name__)
         return EXIT_UNREADABLE, {"error": "registry-unreadable", "error_class": type(exc).__name__, "granted": False}
-    except HolderError as exc:
-        return EXIT_HELD, {"error": "bad-holder", "message": str(exc), "granted": False}
+    except (HolderError, ScopeError) as exc:
+        return EXIT_USAGE, {"error": "bad-request", "message": str(exc), "granted": False}
 
 
 def main(argv: list[str] | None = None) -> int:

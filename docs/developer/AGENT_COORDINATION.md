@@ -77,10 +77,9 @@ Cross-refusal is therefore the registry's own conflict rule, not a second check 
 Rules for the ledger side: call the CLI **before** writing any ledger-local state, treat every
 exit other than 0 as a refusal (fail closed -- an unreadable registry never grants), and keep
 pr, branch and worktree claims local. A session `--steal` of an `issue` claim is not supported:
-the holder releases or the TTL (`AUTOBOT_ISSUE_CLAIM_SESSION_TTL_S`) lapses. The ledger-side
-change is `~/autobot-handover/ledger-17098.patch` (the ledger script is owner tooling outside
-this repo). Until it is applied the ledger still holds issue claims locally and AutoBot cannot
-see them; the cross-refusal is tested at the registry
+the holder releases or the TTL (`AUTOBOT_ISSUE_CLAIM_SESSION_TTL_S`) lapses. The ledger script
+is owner tooling outside this repo, so the owner applies the ledger-side change separately.
+Until it is applied the ledger still holds issue claims locally and AutoBot cannot see them; the cross-refusal is tested at the registry
 (`autobot-backend/tests/coordination/test_issue_claims.py`).
 
 **The dev loop's action history** lives beside the claims, in the same keyspace
