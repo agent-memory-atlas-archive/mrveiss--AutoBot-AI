@@ -74,7 +74,7 @@ SERVICE_ENDPOINTS = {
 }
 
 
-class PerformanceMonitor:
+class FleetPerformanceMonitor:
     """Main performance monitoring class for AutoBot distributed system."""
 
     def __init__(self, log_level: str = "INFO"):
@@ -716,7 +716,7 @@ async def main():
 
     args = parser.parse_args()
 
-    monitor = PerformanceMonitor(log_level=args.log_level)
+    monitor = FleetPerformanceMonitor(log_level=args.log_level)
 
     if args.once:
         metrics = await monitor.generate_performance_report()
