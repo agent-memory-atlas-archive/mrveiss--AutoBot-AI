@@ -33,14 +33,14 @@ import type { components } from '@/types/generated/api'
 // =============================================================================
 
 // Both /slm-users and /autobot-users serve the `autobot_shared` user schemas
-// (the generated names are FastAPI's disambiguation of two same-named models).
+// (the generated names are unqualified now that no other SLM model shares them).
 export type RoleResponse =
-  components['schemas']['autobot_shared__user_management__schemas__user__RoleResponse']
+  components['schemas']['RoleResponse']
 export type SlmUserResponse =
-  components['schemas']['autobot_shared__user_management__schemas__user__UserResponse']
+  components['schemas']['UserResponse']
 export type SlmUserListResponse = components['schemas']['UserListResponse']
 export type CreateUserPayload =
-  components['schemas']['autobot_shared__user_management__schemas__user__UserCreate']
+  components['schemas']['UserCreate']
 export type PasswordChange = components['schemas']['PasswordChange']
 
 export type AutobotTeamResponse = components['schemas']['AutobotTeamResponse']
