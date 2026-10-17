@@ -21,6 +21,8 @@ import pytest
 import yaml
 from repo_tests._paths import repo_root
 
+from tools.lint._comment_syntax import code_lines
+
 _ROOT = repo_root()
 _GENERATOR = _ROOT / "docker" / "generate-secrets.sh"
 
@@ -72,11 +74,29 @@ def test_the_compose_user_mode_default_is_a_mode_the_backend_accepts() -> None:
     assert modes and default in modes, f"{default!r} is not one of {sorted(modes)} -- retired single_user? (#10636)"
 
 
+def runnable_pulls(markdown: str) -> set[str]:
+    """Models pulled by uncommented ``ollama pull`` lines inside fenced bash/sh blocks."""
+    blocks = re.findall(r"^```(?:bash|sh|shell)\n(.*?)^```", markdown, re.S | re.M)
+    return {
+        m
+        for b in blocks
+        for line in code_lines(b, name="block.sh", strip_trailing=True)
+        for m in re.findall(r"\bollama pull (\S+)", line.text)
+    }
+
+
+def test_runnable_pulls_contrast() -> None:
+    live = "```bash\nollama pull a:1\n```\n"
+    assert runnable_pulls(live) == {"a:1"}
+    assert runnable_pulls("```bash\n# ollama pull a:1\n```\n") == set()
+    assert runnable_pulls("prose: ollama pull a:1\n") == set()
+
+
 def test_install_md_pulls_the_models_docker_env_names() -> None:
     names = dict(
         line.split("=", 1)
         for line in (_ROOT / "docker" / ".env.docker").read_text(encoding="utf-8").splitlines()
         if line.startswith(("AUTOBOT_DEFAULT_LLM_MODEL=", "AUTOBOT_EMBEDDING_MODEL="))
     )
-    pulled = set(re.findall(r"ollama pull (\S+)", (_ROOT / "INSTALL.md").read_text(encoding="utf-8")))
+    pulled = runnable_pulls((_ROOT / "INSTALL.md").read_text(encoding="utf-8"))
     assert len(names) == 2 and set(names.values()) <= pulled, (names, pulled)

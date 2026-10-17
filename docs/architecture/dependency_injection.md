@@ -218,7 +218,7 @@ from backend.dependencies import get_config, provide_orchestrator
 
 # Get fully configured orchestrator through dependency injection
 config = get_config()
-orchestrator = provide_orchestrator()  # Gets config + all sub-dependencies
+orchestrator = provide_orchestrator(config=config)  # outside FastAPI, Depends() is not resolved: pass it
 ```
 
 ### 3. Testing with Mocks

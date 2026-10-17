@@ -113,7 +113,10 @@ readonly DATA_PATHS=(
 readonly DATABASES=(slm slm_users autobot_users)
 readonly DB_ROLES=(slm_app)
 # PostgreSQL itself: only with --purge-data AND when it holds nothing but AutoBot's.
-readonly POSTGRES_PACKAGES=("postgresql-*" "postgresql-client-*" "postgresql-contrib-*" postgresql-common postgresql-client-common)
+readonly POSTGRES_PACKAGES=("postgresql-*" "postgresql-contrib-*" postgresql-common)
+# The client stays even then (KEPT_PACKAGES): other workloads use psql/pg_dump. `postgresql-*`
+# also matches postgresql-client-NN, so plan_packages drops this family from every plan (#18761).
+readonly POSTGRES_CLIENT_RE='^postgresql-client($|-)'
 # Removed only once EMPTY after pg_dropcluster: /var/lib/postgresql is the postgres user's
 # home (dumps, .pgpass, unregistered clusters live there).
 readonly POSTGRES_PATHS=(/var/lib/postgresql /etc/postgresql)
@@ -224,7 +227,7 @@ plan_packages() {  # the installed packages this run would purge
     for pkg in "${wanted[@]}"; do
         # dpkg-query exits 1 for a package that is not known here: not installed, not a failure.
         { dpkg-query -W -f='${Package} ${Status}\n' "${pkg}" 2>/dev/null || true; } | awk '/ installed$/{print $1}'
-    done | sort -u
+    done | awk -v keep="${POSTGRES_CLIENT_RE}" '$0 !~ keep' | sort -u
 }
 
 plan_purge_extra() {  # what apt would remove beyond plan_packages (reverse-dependents)

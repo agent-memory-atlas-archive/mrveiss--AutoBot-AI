@@ -44,15 +44,15 @@ def test_the_reconciled_allow_list_accepts_both_routes_formats(validator, name):
 @pytest.mark.parametrize(
     "name",
     [
-        "report‮fdp.sh",  # BIDI override: displays as "reportsh.pdf"
-        "a​b.txt",  # zero-width space (Cf)
+        "report\u202efdp.sh",  # BIDI override: displays as "reportsh.pdf"
+        "a\u200bb.txt",  # zero-width space (Cf)
         "a\x7f.txt",  # DEL
         "a\x85.txt",  # C1 next-line
-        "a／b.txt",  # fullwidth solidus, NFKC -> "/"
-        "．．／x.txt",  # fullwidth "../"
-        "a＼b.txt",  # fullwidth reverse solidus, NFKC -> "\"
-        "a∕b.txt",  # division slash, NOT folded by NFKC
-        "a⁄b.txt",  # fraction slash
+        "a\uff0fb.txt",  # fullwidth solidus, NFKC -> "/"
+        "\uff0e\uff0e\uff0fx.txt",  # fullwidth "../"
+        "a\uff3cb.txt",  # fullwidth reverse solidus, NFKC -> "\"
+        "a\u2215b.txt",  # division slash, NOT folded by NFKC
+        "a\u2044b.txt",  # fraction slash
         ".",
         "..",
     ],

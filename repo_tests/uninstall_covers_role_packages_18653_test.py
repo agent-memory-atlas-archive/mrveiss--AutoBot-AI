@@ -17,7 +17,10 @@ from repo_tests.uninstall_covers_role_components_18653_test import _INSTALL, _RO
 
 _APT_MODULES = ("apt", "ansible.builtin.apt", "package", "ansible.builtin.package")
 #: Package expressions no role chooses: apply-system-updates.yml installs what the operator passes.
-_OPERATOR_SUPPLIED = ("specific_packages",)
+#: Matched EXACTLY -- a substring test would also exempt `{{ other_specific_packages }}`.
+_OPERATOR_SUPPLIED = frozenset(
+    {"{{ specific_packages.split(',') if specific_packages is string else specific_packages }}"}
+)
 
 
 def _var_maps(docs) -> list[dict]:
@@ -71,9 +74,10 @@ def _expand(value, loop, maps: list[dict], python: str) -> list[str]:
     return [value]
 
 
-def _role_packages() -> dict[str, str]:
-    """{package or unresolved expression: a file installing it}."""
-    docs = _docs()
+def _role_packages(docs=None) -> dict[str, str]:
+    """{package or unresolved expression: a file installing it}; `docs` defaults to the real tree."""
+    real = docs is None
+    docs = _docs() if real else docs
     maps = _var_maps(docs)
     python = (_ROOT / ".python-version").read_text(encoding="utf-8").strip()
     found: dict[str, str] = {}
@@ -94,7 +98,7 @@ def _role_packages() -> dict[str, str]:
 
     for path, doc in docs:
         walk(doc, path)
-    assert len(found) > 100, f"read {len(found)} role packages -- the scan is broken"
+    assert not real or len(found) > 100, f"read {len(found)} role packages -- the scan is broken"
     return found
 
 
@@ -123,7 +127,7 @@ def test_every_package_a_role_installs_is_removed_or_kept() -> None:
 def test_every_package_expression_resolves() -> None:
     """An unresolved name is a package nothing checks; only operator input is allowed to stay one."""
     unresolved = {n: f for n, f in _role_packages().items() if "{{" in n}
-    unexpected = {n: f for n, f in unresolved.items() if not any(op in n for op in _OPERATOR_SUPPLIED)}
+    unexpected = {n: f for n, f in unresolved.items() if n not in _OPERATOR_SUPPLIED}
     assert not unexpected, f"package names the guard cannot resolve: {unexpected}"
 
 
@@ -136,6 +140,24 @@ def test_every_kept_package_is_one_a_role_installs() -> None:
 
 def test_a_new_role_package_in_no_list_is_caught() -> None:
     assert uncovered_packages({"autobot-new-daemon": "x", "nginx": "y"}, _removed_or_kept()) == ["autobot-new-daemon"]
+
+
+def test_role_package_discovery_contrast(tmp_path) -> None:
+    """_role_packages() finds a present/latest apt install, looped or not, and ignores an absent one."""
+    task_file = _ROOT / "autobot-slm-backend/ansible/roles/contrast/tasks/main.yml"
+    tasks = [
+        {"apt": {"name": "contrast-present"}},
+        {"ansible.builtin.apt": {"name": "{{ item }}", "state": "latest"}, "loop": ["contrast-looped"]},
+        {"apt": {"name": "contrast-absent", "state": "absent"}},
+        {"debug": {"msg": "contrast-not-a-package"}},
+    ]
+    found = _role_packages([(task_file, tasks)])
+    assert set(found) == {"contrast-present", "contrast-looped"}
+
+
+def test_an_unresolved_expression_that_merely_contains_the_operator_name_is_not_exempt() -> None:
+    assert "{{ other_specific_packages }}" not in _OPERATOR_SUPPLIED
+    assert all("{{" in op for op in _OPERATOR_SUPPLIED)
 
 
 def test_the_install_record_packages_are_read() -> None:

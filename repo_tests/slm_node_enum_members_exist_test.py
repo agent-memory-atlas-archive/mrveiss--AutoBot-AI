@@ -82,6 +82,11 @@ def unknown_members(source: str, members: dict[str, set[str]]) -> list[tuple[int
     return bad
 
 
+def imports_node_enums(source: str) -> bool:
+    """True for every import form that can reach the enums, qualified ``import models.database`` included."""
+    return bool(re.search(r"^\s*(from models(\.database)? import|import models(\.database)?\b)", source, re.M))
+
+
 def _members() -> dict[str, set[str]]:
     return enum_members((repo_root() / _ENUM_HOME).read_text(encoding="utf-8"))
 
@@ -97,10 +102,25 @@ def test_every_referenced_node_enum_member_exists():
     examined = REACH.examined(root)
     for rel in examined:
         source = (root / rel).read_text(encoding="utf-8")
-        if "models.database import" in source or "from models import" in source:
+        if imports_node_enums(source):
             bad += [f"{rel}:{line} {ref}" for line, ref in unknown_members(source, members)]
     REACH.completed(len(examined), root)
     assert not bad, f"references to node enum members that do not exist: {bad}"
+
+
+def test_every_import_form_is_recognised_and_an_unrelated_one_is_not():
+    for form in (
+        "from models.database import EventType",
+        "from models import EventType",
+        "import models.database",
+        "import models.database as db",
+        "import models",
+    ):
+        assert imports_node_enums(f"{form}\n"), form
+    assert not imports_node_enums("from my_models.database import EventType\nimport modelsx\n")
+    members = {"EventType": {"STATE_CHANGE"}}
+    qualified = "import models.database\nx = models.database.EventType.GONE\n"
+    assert unknown_members(qualified, members) == [(2, "EventType.GONE")]
 
 
 def test_a_planted_missing_member_is_caught():
