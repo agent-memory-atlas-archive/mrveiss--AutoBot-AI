@@ -370,6 +370,40 @@ def test_purge_data_takes_the_whole_tree_through_data_paths_instead() -> None:
 _DATA_LIKE = re.compile(r"/(data|chromadb|db|\.env|[^/]*\.sqlite[0-9]*|[^/]*\.db)(/|$)")
 
 
+def _is_secret(sub: str) -> bool:
+    name = sub.rsplit("/", 1)[-1]
+    return name == ".env" or name.startswith(".env.") or name.endswith(".env")
+
+
+def _nested_covered(sub: str, nested: list[str]) -> bool:
+    """A secret is kept by rule (nested_data_in finds every .env); other data must be listed."""
+    if _is_secret(sub):
+        return True
+    return any(sub == n or sub.startswith(n + "/") or n.startswith(sub + "/") for n in nested)
+
+
+def _templated_data_paths(code_dirs: set[str]) -> set[str]:
+    """01's round 5: roles name code dirs through {{ *_install_dir }} -- resolve them."""
+    variables = _variables(_docs())
+    templated = re.compile(r"\{\{\s*(\w+_(?:install_dir|dir|home|path))\s*\}\}/([A-Za-z0-9_./-]+)")
+    found = set()
+    for path in _role_files():
+        for var, rest in templated.findall(path.read_text(encoding="utf-8")):
+            base = variables.get(var, "")
+            if not base.startswith("/opt/autobot/"):
+                continue
+            sub = f"{base.removeprefix('/opt/autobot/')}/{rest.rstrip('.,;:)')}"
+            if sub.split("/", 1)[0] in code_dirs and (_DATA_LIKE.search("/" + sub) or _is_secret(sub)):
+                found.add(sub)
+    return found
+
+
+def test_install_dir_variables_resolve_to_code_dirs() -> None:
+    """The resolution is live: ai/tts/npu .env files (01's round 5) are seen through their vars."""
+    found = _templated_data_paths(set(_array("OPT_CODE")))
+    assert {"autobot-ai-stack/.env", "autobot-tts-worker/.env"} <= found, sorted(found)
+
+
 def test_every_data_path_inside_a_code_dir_is_preserved() -> None:
     """01's round 4: ChromaDB lived at /opt/autobot/autobot-db-stack/chromadb/data, a code dir."""
     code_dirs, nested = set(_array("OPT_CODE")), _array("OPT_NESTED_DATA")
@@ -386,10 +420,9 @@ def test_every_data_path_inside_a_code_dir_is_preserved() -> None:
             sub = sub.rstrip(".,;:)")
             if _DATA_LIKE.search("/" + sub):
                 found.add(sub)
+    found |= _templated_data_paths(code_dirs)
     assert found, "no data-like path under a code dir read -- the scan is broken"
-    uncovered = sorted(
-        s for s in found if not any(s == n or s.startswith(n + "/") or n.startswith(s + "/") for n in nested)
-    )
+    uncovered = sorted(s for s in found if not _nested_covered(s, nested))
     assert not uncovered, f"data inside OPT_CODE dirs that a default uninstall would delete: {uncovered}"
 
 
@@ -408,6 +441,9 @@ def test_a_code_dir_loses_its_code_and_keeps_the_data_inside() -> None:
             "autobot-db-stack/.env",
             "autobot-backend/data/kb.json",
             "autobot-backend/app/main.py",
+            "autobot-ai-stack/.env",
+            "autobot-ai-stack/conf/extra.env",
+            "autobot-ai-stack/src/app.py",
         ):
             (base / rel).parent.mkdir(parents=True, exist_ok=True)
             (base / rel).write_text("x", encoding="utf-8")
@@ -418,6 +454,7 @@ log() {{ echo "$*"; }}
 {funcs}
 remove_code_keeping_data {base}/autobot-db-stack
 remove_code_keeping_data {base}/autobot-backend
+remove_code_keeping_data {base}/autobot-ai-stack
 """
         out = subprocess.run([shutil.which("bash") or "bash", "-c", script], capture_output=True, text=True, timeout=30)
         assert out.returncode == 0, out.stderr
@@ -426,4 +463,7 @@ remove_code_keeping_data {base}/autobot-backend
         assert (
             not (base / "autobot-db-stack/bin").exists() and not (base / "autobot-backend/app").exists()
         ), "code stayed"
+        # 01, round 5: an UNLISTED .env is a secret, never code -- kept by rule
+        assert (base / "autobot-ai-stack/.env").exists() and (base / "autobot-ai-stack/conf/extra.env").exists()
+        assert not (base / "autobot-ai-stack/src").exists()
         assert "KEPT" in out.stdout

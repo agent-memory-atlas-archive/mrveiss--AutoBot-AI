@@ -84,8 +84,9 @@ readonly OPT_CODE=(
     logs cache requirements.txt venv_provenance.py .autobot-installed
 )
 # Data that lives INSIDE an OPT_CODE directory (relative to /opt/autobot): such a directory
-# loses its code and keeps these sub-paths unless --purge-data. The #18653 guard fails on a
-# data-like sub-path (data, chromadb, db, .env, *.sqlite, *.db) under a code dir not listed.
+# loses its code and keeps these sub-paths unless --purge-data. Secrets are never code: ANY
+# `.env`, `.env.*` or `*.env` file inside a code dir is kept by rule (nested_data_in), listed or not.
+# The #18653 guard fails on a data-like sub-path under a code dir that is not covered.
 readonly OPT_NESTED_DATA=(
     autobot-backend/data autobot-backend/.env autobot-slm-backend/data autobot-slm-backend/.env
     autobot-db-stack/chromadb autobot-db-stack/.env autobot-npu-worker/.env
@@ -229,11 +230,14 @@ opt_children() {  # every entry directly under /opt/autobot, hidden ones include
     return 0
 }
 
-nested_data_in() {  # nested_data_in <code dir>: its OPT_NESTED_DATA sub-paths that exist
+nested_data_in() {  # nested_data_in <code dir>: its kept data -- OPT_NESTED_DATA plus every .env
     local rel
-    for rel in "${OPT_NESTED_DATA[@]}"; do
-        [[ "${rel%%/*}" == "${1##*/}" ]] && existing "${AUTOBOT_BASE}/${rel}"
-    done
+    {
+        for rel in "${OPT_NESTED_DATA[@]}"; do
+            [[ "${rel%%/*}" == "${1##*/}" ]] && existing "${AUTOBOT_BASE}/${rel}"
+        done
+        [[ -d "$1" ]] && find "$1" \( -name '.env' -o -name '.env.*' -o -name '*.env' \) \( -type f -o -type l \) -print 2>/dev/null
+    } | sort -u
     return 0
 }
 
@@ -267,7 +271,7 @@ remove_code_keeping_data() {  # remove_code_keeping_data <code dir>: everything 
             # the kept path itself, anything inside it, and the directories leading to it stay
             if [[ "${path}" == "${keep}" || "${path}" == "${keep}/"* || "${keep}" == "${path}/"* ]]; then skip=true; break; fi
         done
-        ${skip} || rm -rf -- "${path}"
+        if ! ${skip}; then rm -rf -- "${path}" || log "  WARNING: could not remove ${path}"; fi
     done < <(find "${dir}" -mindepth 1 -depth -print0)
     for keep in "${keeps[@]}"; do log "  KEPT ${keep} (data inside ${dir##*/})"; done
     return 0
