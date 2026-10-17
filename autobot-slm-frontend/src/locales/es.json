@@ -1425,6 +1425,7 @@
       "peerMessages": "Mensajes entre pares pendientes",
       "idleSubscribers": "Suscripciones de inactividad",
       "pendingFor": "{n} pendientes para {name}",
+      "sentBy": "de {names}",
       "waitsForIdle": "{who} espera a que {target} quede inactivo"
     }
   },

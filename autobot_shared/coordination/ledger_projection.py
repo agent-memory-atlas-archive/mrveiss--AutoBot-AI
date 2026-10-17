@@ -95,8 +95,13 @@ async def read_snapshot(source: str, model: type[Row]) -> tuple[list[Row], str]:
 
 
 async def published_at(source: str) -> str | None:
-    """When *source* was last published, or None when there is no live snapshot. Never raises for absence."""
+    """When *source* was last published, or None when it cannot be read -- absent, expired, or Redis down.
+
+    Goes through the same ``_read`` as the routes, so a Redis error is "unreachable" here
+    too, never a 500 from ``/sources``.
+    """
     try:
-        return (await _load(source))["published_at"]
+        snapshot: dict = await _read(source, lambda: _load(source))
+        return snapshot["published_at"]
     except LedgerUnreadable:
         return None

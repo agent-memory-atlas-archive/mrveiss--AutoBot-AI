@@ -1425,6 +1425,7 @@
       "peerMessages": "پیام‌های همتای در انتظار",
       "idleSubscribers": "اشتراک‌های بیکاری",
       "pendingFor": "{n} در انتظار برای {name}",
+      "sentBy": "از {names}",
       "waitsForIdle": "{who} منتظر است تا {target} بیکار شود"
     }
   },

@@ -39,7 +39,8 @@ function ok(): Record<string, () => Response> {
       { source: 'claims', reachable: true, reason: '' },
       { source: 'events', reachable: false, reason: 'down' },
       { source: 'presence', reachable: true, reason: '' },
-      { source: 'live_sessions', reachable: false, reason: 'no snapshot' },
+      { source: 'live_sessions', reachable: true, reason: '' },
+      { source: 'peer_messages', reachable: false, reason: 'no snapshot' },
     ] }),
     '/presence': () => jsonResponse({ agents: [
       { kind: 'company_os', tenant_id: 'acme', name: 'writer', busy: true, detail: 'worker', last_seen: 1,
@@ -94,7 +95,7 @@ describe('AgentLedgerMonitor', () => {
   it('names every source it cannot read right now, and the two known gaps', async () => {
     const w = await mountView(null)
     expect(w.findAll('[data-testid="slm-ledger-down"]').map((d) => d.text()).join(' ')).toContain('ledger activity')
-    expect(w.findAll('[data-testid="slm-ledger-down"]').map((d) => d.text()).join(' ')).toContain('live sessions')
+    expect(w.findAll('[data-testid="slm-ledger-down"]').map((d) => d.text()).join(' ')).toContain(L.source.peer_messages)
     expect(w.text()).not.toContain(L.notes.storeDown.replace('{source}', L.source.presence))
     expect(w.find('[data-testid="slm-ledger-gap-16950"]').text()).toBe(L.notes.peerIdentity)
     expect(w.find('[data-testid="slm-ledger-gap-16962"]').text()).toBe(L.notes.busAuth)
@@ -186,6 +187,7 @@ describe('AgentLedgerMonitor', () => {
       [L.installWide, 'chat', 'ai_stack', L.idle, '', ''],
     ])
     expect(w.get('[data-testid="slm-ledger-peer-messages"]').text()).toContain('(acme)')
+    expect(w.get('[data-testid="slm-ledger-peer-messages"]').text()).toContain(L.sentBy.replace('{names}', 'a'))
     expect(w.get('[data-testid="ledger-empty"]').text()).toContain(L.empty.idleSubscribers)
   })
 

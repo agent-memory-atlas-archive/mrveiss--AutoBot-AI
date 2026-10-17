@@ -1425,6 +1425,7 @@
       "peerMessages": "Neizlasītās ziņas",
       "idleSubscribers": "Dīkstāves abonementi",
       "pendingFor": "{n} gaida lietotāju {name}",
+      "sentBy": "no {names}",
       "waitsForIdle": "{who} gaida, kamēr {target} būs dīkstāvē"
     }
   },

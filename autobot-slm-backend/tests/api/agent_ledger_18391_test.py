@@ -267,6 +267,23 @@ async def test_live_state_is_read_from_the_user_backends_snapshot_with_its_compa
 
 
 @pytest.mark.asyncio
+async def test_a_redis_error_while_probing_marks_live_sources_unreachable_not_a_500_18632(redis, monkeypatch):
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    await _publish(redis)
+
+    async def _down(*_args, **_kwargs):
+        raise RedisConnectionError("redis down")
+
+    monkeypatch.setattr(redis, "get", _down)
+    response = _client("admin").get("/api/monitoring/agent-ledger/sources")
+    assert response.status_code == 200
+    sources = {s["source"]: s for s in response.json()["sources"]}
+    for name in ("presence", "ai_stack_agents", "live_sessions", "peer_messages", "idle_subscribers"):
+        assert sources[name]["reachable"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_missing_snapshot_is_the_typed_503_never_an_empty_list_18632(redis):
     for path in ("presence", "peer-messages", "idle-subscribers"):
         response = _client("admin").get(f"/api/monitoring/agent-ledger/{path}")

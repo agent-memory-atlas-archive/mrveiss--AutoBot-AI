@@ -29,6 +29,7 @@
       <ul class="m-0 ps-5" data-testid="slm-ledger-peer-messages">
         <li v-for="m in peerMessages.rows" :key="`${m.tenant_id}:${m.recipient_kind}:${m.recipient_name}`">
           {{ t('monitoring.agentLedger.pendingFor', { name: m.recipient_name, n: m.pending }) }} ({{ companyOf(m.tenant_id) }})
+          <span class="text-(--aui-color-text-muted)">{{ t('monitoring.agentLedger.sentBy', { names: m.senders.join(', ') }) }}</span>
         </li>
       </ul>
     </LedgerSectionState>

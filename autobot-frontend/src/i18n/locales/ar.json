@@ -8949,6 +8949,7 @@
       "peerMessages": "رسائل الأقران المعلقة",
       "idleSubscribers": "اشتراكات الخمول",
       "pendingFor": "{n} معلقة لـ {name}",
+      "sentBy": "من {names}",
       "waitsForIdle": "{who} ينتظر حتى يصبح {target} خاملاً",
       "heldBy": "يحتفظ به {agent}",
       "waitlistAria": "قائمة الانتظار بالترتيب",
