@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Worker",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "آزمون اتصال ناموفق بود",
+        "loadBalancingLoadFailed": "بارگذاری پیکربندی توازن بار ناموفق بود"
       },
       "personalitySettings": {
         "active": "فعال",

@@ -80,15 +80,25 @@ _SERVICES = {
 
 # Lower when a sweep genuinely covers less; never lower it to make a red run pass.
 # Measured on main at the time of writing: 126 resolved, 8 unresolved-and-skipped.
-# #15536: 129 -> 108, exactly the 21 call sites of the uncalled useAutobotApi functions it
-# removed (measured on the branch and on main's composable); the floor keeps its 11 of margin.
-_RESOLVED_FLOOR = 97
+_RESOLVED_FLOOR = 115
 
 # (repo-relative file, service, normalised path) — exact, shrink-only.
 _KNOWN_UNSERVED = frozenset(
-    # #15536 emptied the `useAutobotApi.ts` entries: 10 live calls now name served routes,
-    # and 21 uncalled functions were removed (owner ruling 2026-10-17). #15236/#15230 covers the terminal one.
-    set()
+    # #15536 repointed every useAutobotApi call that has a served route. These 7 have none;
+    # each is on #18736 (or #18725 for the NPU restart) for a build-or-retire decision.
+    # #15236/#15230 covers the terminal one.
+    {
+        ("autobot-slm-frontend/src/composables/useAutobotApi.ts", "main", p)
+        for p in (
+            "/api/mcp/servers/{param}/restart",
+            "/api/mcp/servers/{param}/start",
+            "/api/mcp/servers/{param}/stop",
+            "/api/monitoring/hardware",
+            "/api/npu-workers/{param}/restart",
+            "/api/permissions/rules/{param}",
+            "/api/voice/config",
+        )
+    }
     | {("autobot-slm-frontend/src/views/tools/admin/TerminalTool.vue", "slm", "/api/terminal/ws/ssh")}
 )
 

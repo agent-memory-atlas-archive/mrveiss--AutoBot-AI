@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Worker",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "فشل اختبار الاتصال",
+        "loadBalancingLoadFailed": "تعذّر تحميل إعدادات موازنة الحمل"
       },
       "personalitySettings": {
         "active": "Active",

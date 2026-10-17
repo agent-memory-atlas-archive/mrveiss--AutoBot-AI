@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Worker",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "کنکشن ٹیسٹ ناکام ہو گیا",
+        "loadBalancingLoadFailed": "لوڈ بیلنسنگ کنفیگریشن لوڈ نہیں ہو سکی"
       },
       "personalitySettings": {
         "active": "فعال",

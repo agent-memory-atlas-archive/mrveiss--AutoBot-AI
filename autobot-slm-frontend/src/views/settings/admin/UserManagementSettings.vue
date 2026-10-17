@@ -533,7 +533,26 @@ watch(() => authStore.user, (newUser: typeof authStore.user) => {
       </div>
     </div>
 
-    <!-- Preferences and security settings are hidden until a backend stores them (#18733). -->
+    <!-- Preferences, session timeout and re-auth are hidden until a backend stores them (#18733). -->
+    <!-- Security Settings -->
+    <div v-if="authStore.isAuthenticated" class="bg-white rounded-lg shadow-xs border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">{{ $t('settings.admin.userManagementSettings.security') }}</h2>
+
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="block text-sm font-medium text-gray-900">{{ $t('settings.admin.userManagementSettings.password') }}</label>
+            <p class="text-xs text-gray-500 mt-1">{{ $t('settings.admin.userManagementSettings.changeYourAccountPassword') }}</p>
+          </div>
+          <button @click="openPasswordChangeModal()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+            {{ $t('settings.admin.userManagementSettings.changePassword') }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- User Management (Admin Only) - Tabbed Interface -->
     <div v-if="isAdmin" class="bg-white rounded-lg shadow-xs border border-gray-200 p-6">

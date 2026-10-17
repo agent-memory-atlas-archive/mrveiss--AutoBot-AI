@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Trabalhador",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "O teste de conexão falhou",
+        "loadBalancingLoadFailed": "Falha ao carregar a configuração de balanceamento de carga"
       },
       "personalitySettings": {
         "active": "Active",

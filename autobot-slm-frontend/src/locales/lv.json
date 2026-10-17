@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Darbinieks",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "Savienojuma pārbaude neizdevās",
+        "loadBalancingLoadFailed": "Neizdevās ielādēt slodzes līdzsvarošanas konfigurāciju"
       },
       "personalitySettings": {
         "active": "Active",

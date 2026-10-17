@@ -11,16 +11,19 @@
  */
 
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAutobotApi, type NPUWorker } from '@/composables/useAutobotApi'
 import { createLogger } from '@/utils/debugUtils'
 
 const logger = createLogger('NPUWorkersSettings')
 
 const api = useAutobotApi()
+const { t } = useI18n()
 
 // Workers serve plain HTTP: the scheme autobot_shared/network_constants.py builds NPU_WORKER_SERVICE with.
 // An edited worker keeps the scheme it was paired with.
 const NEW_WORKER_SCHEME = 'http:'
+const DEFAULT_PORTS: Record<string, number> = { 'http:': 80, 'https:': 443 }
 
 // State
 const loading = ref(false)
@@ -104,7 +107,7 @@ async function fetchLoadBalancingConfig(): Promise<void> {
     // GET /api/npu/load-balancing is served (#15536): a failure is a real error, so say so.
     // Save stays disabled, because saving the form's defaults would overwrite the server's settings.
     loadBalancingConfigLoaded.value = false
-    error.value = e instanceof Error ? e.message : 'Failed to load load-balancing configuration'
+    error.value = e instanceof Error ? e.message : t('settings.admin.nPUWorkersSettings.loadBalancingLoadFailed')
     logger.error('NPU load-balancing config failed to load:', e)
   }
 }
@@ -136,7 +139,8 @@ function openEditModal(worker: NPUWorker): void {
   const url = new URL(worker.definition.url)
   workerForm.name = worker.definition.name
   workerForm.ip_address = url.hostname
-  workerForm.port = Number(url.port) || workerForm.port
+  // URL elides a scheme's default port, so an empty port means that default, not the form's 8081.
+  workerForm.port = Number(url.port) || DEFAULT_PORTS[url.protocol] || workerForm.port
   workerForm.platform = worker.definition.platform
   workerForm.enabled = worker.definition.enabled
   workerForm.priority = worker.definition.priority
@@ -165,10 +169,13 @@ async function saveWorker(): Promise<void> {
   error.value = null
 
   try {
-    const scheme = editingWorker.value ? new URL(editingWorker.value.definition.url).protocol : NEW_WORKER_SCHEME
-    const url = `${scheme}//${workerForm.ip_address}:${workerForm.port}`
+    const endpoint = new URL(editingWorker.value?.definition.url ?? `${NEW_WORKER_SCHEME}//placeholder`)
+    endpoint.hostname = workerForm.ip_address
+    endpoint.port = String(workerForm.port)
+    // `host` elides a default port again, so an unchanged worker keeps the URL it was paired with.
+    const url = `${endpoint.protocol}//${endpoint.host}`
     if (editingWorker.value) {
-      await api.updateNPUWorker(editingWorker.value, {
+      await api.updateNPUWorker(editingWorker.value.id, {
         name: workerForm.name,
         url,
         platform: workerForm.platform,
@@ -198,7 +205,7 @@ async function testWorker(worker: NPUWorker): Promise<void> {
   try {
     const result = await api.testNPUWorker(worker.id)
     if (!result.success) {
-      error.value = result.error_message || 'Connection test failed'
+      error.value = result.error_message || t('settings.admin.nPUWorkersSettings.connectionTestFailed')
       return
     }
     success.value = `Connection to ${worker.hostname} successful`
@@ -209,6 +216,8 @@ async function testWorker(worker: NPUWorker): Promise<void> {
     testingWorker.value[worker.id] = false
   }
 }
+
+// Restart returns with its route (#18725): no backend restarts an NPU worker yet.
 
 function confirmDelete(worker: NPUWorker): void {
   deleteTarget.value = worker
@@ -532,6 +541,7 @@ onUnmounted(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                   </button>
+                  <!-- Restart returns with its route (#18725). -->
                   <button
                     @click="openEditModal(worker)"
                     class="p-2 text-gray-400 hover:text-primary-500 hover:bg-primary-50 rounded-sm"

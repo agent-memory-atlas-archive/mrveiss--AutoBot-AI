@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Worker",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "בדיקת החיבור נכשלה",
+        "loadBalancingLoadFailed": "טעינת תצורת איזון העומסים נכשלה"
       },
       "personalitySettings": {
         "active": "Active",

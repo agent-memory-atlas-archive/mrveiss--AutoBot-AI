@@ -2367,7 +2367,9 @@
         "weighted": "Weighted",
         "windows": "Windows",
         "worker": "Mitarbeiter",
-        "workerName": "Worker Name *"
+        "workerName": "Worker Name *",
+        "connectionTestFailed": "Verbindungstest fehlgeschlagen",
+        "loadBalancingLoadFailed": "Lastverteilungskonfiguration konnte nicht geladen werden"
       },
       "personalitySettings": {
         "active": "Aktiv",
