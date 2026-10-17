@@ -81,7 +81,7 @@ logged.
 | *(none)* | Standard interactive install |
 | `--unattended` | Run without prompts, use all defaults (CI/automation) |
 | `--reinstall` | Force a reinstall over an existing installation |
-| `--uninstall` | Completely remove AutoBot and its dependencies (asks for confirmation) |
+| `--uninstall` | Remove AutoBot: shows what it will remove, then asks you to type `UNINSTALL`. See [Uninstalling](#uninstalling) |
 | `--yes`, `-y` | Skip confirmation prompts (use with `--uninstall`) |
 | `--validate` | Verify installation integrity (required service directories present) |
 | `--branch=BRANCH` | Git branch to install (default: `main`) |
@@ -118,7 +118,7 @@ images needs headroom on top:
 
 | What you start | Containers | Memory limits (sum) | Measured use | Host RAM |
 |----------------|------------|---------------------|--------------|----------|
-| SLM web GUI only (`--profile slm`) | SLM, its GUI, Redis, PostgreSQL | ~3.1 GB | ~215 MiB just after start, idle (CI) | 4 GB+ free |
+| SLM web GUI only (`--profile slm`) | SLM, its GUI, Redis, PostgreSQL | ~3.1 GB | ~215 MiB idle just after start (CI); ~414 MiB with the SLM restarting (an external test) | 1 GB+ free to run; building the images needs more (not measured) |
 | Full stack | backend, worker, celery-beat, SLM, frontend, Redis, PostgreSQL, ChromaDB | ~9 GB | not measured | 16 GB recommended |
 
 ### First: per-host secrets and network range
@@ -276,6 +276,42 @@ sudo systemctl status postgresql
 ```
 
 ---
+
+## Uninstalling
+
+```bash
+sudo /opt/autobot/code_source/install.sh --uninstall                       # shows the plan, then asks
+sudo bash /opt/autobot/code_source/scripts/uninstall.sh --dry-run          # only shows what would go
+sudo bash /opt/autobot/code_source/scripts/uninstall.sh --purge-data       # also your AutoBot data
+```
+
+The uninstaller first prints its plan, then asks you to type `UNINSTALL`. `--yes` skips the
+question for scripted use. Without a terminal and without `--yes`, it refuses instead of
+proceeding.
+
+By default it removes AutoBot's services and units, its code, configs, nginx sites, sudoers
+files and the apt sources it added. **Your data stays** unless you add a flag:
+
+| Flag | Also removes |
+|---|---|
+| `--purge-data` | AutoBot's databases; the whole `/opt/autobot` tree, including anything else in it (by default only AutoBot's own code there goes; its `backups`, `db-backups`, `snapshots`, `data`, `models`, `plugins`, `.env`, `config`, certificates, any folder AutoBot does not know as its code, and the data inside its code folders -- the backends' `data` and `.env`, the ChromaDB store -- stay); `/etc/autobot` (secrets and credentials); its state and backups elsewhere; and the accounts the installer created, with their homes. PostgreSQL itself only if every cluster was inspected and holds nothing but AutoBot's databases and roles, and its directories only if empty afterwards |
+| `--purge-shared` | grafana, prometheus, node-exporter, redis-stack and python3-psycopg2, with their data. Nothing records who installed them, so they stay by default |
+
+It never removes:
+- **An account it did not create.** The installer records the `autobot` account only if it
+  created it, in `/etc/autobot/install-record`. On a machine where `autobot` already existed,
+  for example your own login, the account and its home stay. An install made before this record
+  existed has no record, so no account, recorded package or recorded apt source is removed there.
+- **More than it asked apt for.** If purging a package would also remove something else, the
+  purge is skipped and the plan names it. No `apt autoremove` is run.
+- **nginx, the base packages** the installer needs (git, curl, openssh-server, ...), `ollama`,
+  the `docker` and `intel-openvino` sources, and `deadsnakes` unless the installer recorded
+  adding it. Nor the service accounts the roles create (prometheus, node_exporter, ...).
+
+A partial install that never got as far as cloning the code has no uninstaller copy on the
+machine; `install.sh --uninstall` says so instead of guessing.
+
+The log is written to `/var/tmp/autobot-uninstall-<timestamp>.log`, which survives the uninstall.
 
 ## Troubleshooting
 

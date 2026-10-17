@@ -146,6 +146,9 @@ class PeerMessageRow(BaseModel):
     pending: int
     senders: list[str]
     oldest_at: float
+    tenant_id: str | None = Field(
+        default=None, description="The owning company; set in the install-wide (SLM) view, null in a company's own"
+    )
 
 
 class PeerMessagesResponse(BaseModel):
@@ -159,6 +162,9 @@ class IdleSubscriberRow(BaseModel):
     target_name: str
     since: float
     expires_at: float
+    tenant_id: str | None = Field(
+        default=None, description="The owning company; set in the install-wide (SLM) view, null in a company's own"
+    )
 
 
 class IdleSubscribersResponse(BaseModel):

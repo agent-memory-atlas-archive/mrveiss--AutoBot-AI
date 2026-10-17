@@ -1333,6 +1333,7 @@
       "refresh": "Odśwież",
       "tabsAria": "Widoki rejestru",
       "tabs": {
+        "now": "Teraz pracuje",
         "contention": "Rywalizacja",
         "claims": "Rezerwacje",
         "conflicts": "Konflikty",
@@ -1346,7 +1347,11 @@
         "mode": "Tryb",
         "intent": "Zamiar",
         "expires": "Wygasa",
-        "renewals": "Odnowienia"
+        "renewals": "Odnowienia",
+        "kind": "Rodzaj",
+        "status": "Stan",
+        "task": "Bieżące zadanie",
+        "detail": "Szczegóły"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "Brak konfliktów",
         "activity": "Brak ostatniej aktywności",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "Żaden agent się nie zgłosił",
+        "peerMessages": "Brak oczekujących wiadomości",
+        "idleSubscribers": "Brak subskrypcji bezczynności"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "Nie udało się odczytać rejestru",
         "unavailableBody": "Magazyn {source} nie odpowiedział. To nie to samo co brak wpisów.",
         "errorTitle": "Podczas ładowania tej sekcji wystąpił błąd"
-      }
+      },
+      "busy": "Zajęty",
+      "idle": "Idle",
+      "peerMessages": "Oczekujące wiadomości",
+      "idleSubscribers": "Subskrypcje bezczynności",
+      "pendingFor": "{n} oczekuje na {name}",
+      "sentBy": "od {names}",
+      "waitsForIdle": "{who} czeka, aż {target} będzie bezczynny"
     }
   },
   "monitoringView": {

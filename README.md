@@ -127,7 +127,7 @@ stores the SLM provisions onto them.
 | Component | SLM node (min) | Platform node (min) | Platform node (rec.) |
 |-----------|----------------|---------------------|----------------------|
 | **CPU** | 2 cores | 4 cores | 8+ cores |
-| **RAM** | 1.5 GB | 8 GB | 16+ GB |
+| **RAM** | 1.5 GB (native install; the installer checks it) | 8 GB | 16+ GB |
 | **Storage** | 20 GB SSD | 20 GB SSD | 50+ GB SSD |
 | **GPU** | None (CPU-only mode) | NVIDIA GPU for faster inference |
 | **OS** | Ubuntu 20.04+ / Debian 11+ | Ubuntu 22.04 LTS |

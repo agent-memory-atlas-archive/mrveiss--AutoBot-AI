@@ -35,6 +35,10 @@ installMonotonicDateNow()
 // (async DOM updates/emits break). Restore all stubbed globals after each file.
 afterAll(() => {
   vi.unstubAllGlobals()
+  // #18254: RumAgent is a singleton that starts 30s intervals on import; stop them before
+  // jsdom is torn down, or a late tick reads a localStorage that no longer exists.
+  // Only present when the file loaded it -- nothing is imported here to find it.
+  globalThis.window?.rum?.stop?.()
 })
 
 // Wrap global fetch to resolve relative URLs against document origin (jsdom 29+ compat)
