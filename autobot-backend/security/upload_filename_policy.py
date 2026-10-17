@@ -12,53 +12,56 @@ decision 2026-10-17: the strict rules for both, one allow-list (the union:
 the general list plus ``.xls``, which conversation uploads already took).
 """
 
+import unicodedata
 from pathlib import Path
 
 # Allowed file extensions for security
-ALLOWED_EXTENSIONS = {
-    # Text and data formats
-    ".txt",
-    ".md",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".xml",
-    ".csv",
-    ".log",
-    ".cfg",
-    ".ini",
-    ".conf",
-    # Code files
-    ".py",
-    ".js",
-    ".ts",
-    ".sh",
-    ".bat",
-    ".sql",
-    # Web files
-    ".html",
-    ".css",
-    # Office document formats (Microsoft)
-    ".pdf",
-    ".doc",
-    ".docx",
-    ".xls",
-    ".xlsx",
-    ".ppt",
-    ".pptx",
-    # Office document formats (OpenDocument/LibreOffice)
-    ".odt",  # OpenDocument Text (Writer)
-    ".ods",  # OpenDocument Spreadsheet (Calc)
-    ".odp",  # OpenDocument Presentation (Impress)
-    ".odg",  # OpenDocument Graphics (Draw)
-    # Image formats
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".svg",
-    ".ico",
-}
+ALLOWED_EXTENSIONS = frozenset(
+    {
+        # Text and data formats
+        ".txt",
+        ".md",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".csv",
+        ".log",
+        ".cfg",
+        ".ini",
+        ".conf",
+        # Code files
+        ".py",
+        ".js",
+        ".ts",
+        ".sh",
+        ".bat",
+        ".sql",
+        # Web files
+        ".html",
+        ".css",
+        # Office document formats (Microsoft)
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        # Office document formats (OpenDocument/LibreOffice)
+        ".odt",  # OpenDocument Text (Writer)
+        ".ods",  # OpenDocument Spreadsheet (Calc)
+        ".odp",  # OpenDocument Presentation (Impress)
+        ".odg",  # OpenDocument Graphics (Draw)
+        # Image formats
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".svg",
+        ".ico",
+    }
+)
 
 # Issue #380: Module-level frozenset for dangerous filename characters
 _DANGEROUS_FILENAME_CHARS = frozenset({"<", ">", '"', "|", "?", "*", "\0", "\r", "\n"})
@@ -83,13 +86,11 @@ _DANGEROUS_FILENAMES = frozenset(
 _DANGEROUS_EXTENSIONS = frozenset(
     {
         ".exe",
-        ".bat",
         ".cmd",
         ".com",
         ".scr",
         ".pif",
         ".vbs",
-        ".js",
         ".jar",
         ".app",
         ".deb",
@@ -101,41 +102,39 @@ _DANGEROUS_EXTENSIONS = frozenset(
 )
 
 
-def is_safe_file(filename: str) -> bool:
-    """
-    Check if file type is allowed and filename is safe.
+#: Slash and backslash lookalikes NFKC does NOT fold to "/" or "\\" (the
+#: fullwidth forms it does fold, and the fold is checked separately): division
+#: slash, fraction slash, big solidus, big reverse solidus (#18704).
+_SEPARATOR_LOOKALIKES = frozenset({"\u2215", "\u2044", "\u29f8", "\u29f9"})
 
-    Issue #398: Refactored to use module-level constants.
+
+def is_safe_file(filename: str) -> bool:
+    """True when *filename* is a bare, allowed, non-deceptive upload name.
+
+    The rules run on the name as given AND on its NFKC form, so a fullwidth
+    solidus (U+FF0F), a division slash (U+2215) or fullwidth dots that fold to
+    ``/`` or ``..`` are refused like the ASCII ones (#18704).
     """
     if not filename:
         return False
+    return _passes(filename) and _passes(unicodedata.normalize("NFKC", filename))
 
-    # Check for dangerous characters (Issue #380: module-level constant)
-    if any(char in filename for char in _DANGEROUS_FILENAME_CHARS):
+
+def _passes(name: str) -> bool:
+    # Control and format characters: C0, DEL, C1 and the BIDI overrides that
+    # let "report\u202efdp.sh" display with a fake extension (#18704).
+    if any(unicodedata.category(c) in ("Cc", "Cf") for c in name):
         return False
-
-    # An uploaded filename is a bare name, never a path (#13394). Backslash is
-    # checked explicitly because Path.name is platform-dependent — on POSIX
-    # "dir\\evil.py" is one valid component (#13162).
-    if "/" in filename or "\\" in filename or Path(filename).name != filename:
+    if any(char in name for char in _DANGEROUS_FILENAME_CHARS):
         return False
-
-    if len(filename) > 255:
+    # A bare name, never a path (#13394); backslash explicitly, because
+    # Path.name is platform-dependent and "dir\\evil.py" is one POSIX component (#13162).
+    if "/" in name or "\\" in name or Path(name).name != name or name in (".", ".."):
         return False
-
-    extension = Path(filename).suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
+    if any(char in _SEPARATOR_LOOKALIKES for char in name):
         return False
-
-    # Issue #398: Use module-level sets
-    if filename.lower() in _DANGEROUS_FILENAMES:
+    if len(name) > 255 or name.lower() in _DANGEROUS_FILENAMES:
         return False
-
-    if extension in _DANGEROUS_EXTENSIONS and extension not in ALLOWED_EXTENSIONS:
-        return False
-
-    # Prevent null bytes and control characters
-    if "\0" in filename or any(ord(c) < 32 for c in filename):
-        return False
-
-    return True
+    extension = Path(name).suffix.lower()
+    # Deny first: an executable type added to the allow-list by mistake stays refused.
+    return extension not in _DANGEROUS_EXTENSIONS and extension in ALLOWED_EXTENSIONS

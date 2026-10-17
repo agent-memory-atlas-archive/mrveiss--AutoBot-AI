@@ -833,13 +833,12 @@ class ConversationFileManager:
         file_hash = self._compute_file_hash(file_content)
         file_id = str(uuid.uuid4())
         stored_filename = self._generate_stored_filename(original_filename, file_hash)
-        session_dir = self.get_session_dir(session_id)
         return UploadInfo(
             file_id=file_id,
             session_id=session_id,
             original_filename=original_filename,
             stored_filename=stored_filename,
-            file_path=session_dir / stored_filename,
+            file_path=self.validate_session_path(session_id, stored_filename),  # contained (#18704)
             file_size=file_size,
             file_hash=file_hash,
             mime_type=kwargs.get("mime_type"),
