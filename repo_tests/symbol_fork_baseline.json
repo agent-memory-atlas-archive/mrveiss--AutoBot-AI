@@ -108,7 +108,6 @@
     "get_orchestrator",
     "get_security_layer",
     "get_service_url",
-    "is_safe_file",
     "list_sources",
     "log_request_context",
     "process_chat_message",
