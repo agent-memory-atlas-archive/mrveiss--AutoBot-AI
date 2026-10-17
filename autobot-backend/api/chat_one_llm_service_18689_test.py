@@ -159,3 +159,29 @@ async def test_the_lifespan_entry_point_wires_it(chat_module, monkeypatch):
     await bw.start_background_workers(app)
 
     assert app.state.llm_service is singleton
+
+
+def _llm_service_constructions(tree: ast.AST) -> list[int]:
+    """Lines that call ``LLMService(...)`` or hand the class itself to a factory."""
+    hits = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id == "LLMService":
+            hits.append(node.lineno)
+        hits.extend(a.lineno for a in node.args if isinstance(a, ast.Name) and a.id == "LLMService")
+    return hits
+
+
+@pytest.mark.parametrize("rel", ["api/chat_embed.py", "api/telegram_bot.py", "api/whatsapp.py"])
+def test_app_state_fallbacks_build_the_singleton_not_a_second_service(rel):
+    """The ``lazy_init_singleton`` fallbacks resolve to the process-wide service (#18689)."""
+    source = (_BACKEND / rel).read_text(encoding="utf-8")
+    assert "lazy_init_singleton" in source and "get_llm_service" in source, rel
+    assert _llm_service_constructions(ast.parse(source)) == [], rel
+
+
+def test_construction_detector_sees_both_shapes():
+    """Control: the detector flags a direct call and a class-as-factory argument."""
+    tree = ast.parse('LLMService()\nlazy_init_singleton(s, "llm_service", LLMService)\n')
+    assert _llm_service_constructions(tree) == [1, 2]
