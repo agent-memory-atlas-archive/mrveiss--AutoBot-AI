@@ -1480,7 +1480,7 @@ class WorkflowState(BaseModel):
 
 
 class ProjectManagementConnectionTestRequest(BaseModel):
-    """Request to test project management connection."""
+    """Credentials POST /test-connection probes against a Jira, Trello or Asana provider; nothing is stored."""
 
     provider: str = Field(..., description="Provider: jira, trello, or asana")
     base_url: str | None = Field(None, description="Base URL for the service")

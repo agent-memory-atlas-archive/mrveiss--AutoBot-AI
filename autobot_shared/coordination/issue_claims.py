@@ -154,7 +154,7 @@ def _invalid_request(args: argparse.Namespace) -> str:
     return ""
 
 
-def run(argv: list[str]) -> tuple[int, dict]:
+def run_claims_command(argv: list[str]) -> tuple[int, dict]:
     """Parse *argv*, run it, and map every unreadable-registry failure to ``EXIT_UNREADABLE``."""
     args = _parser().parse_args(argv)
     invalid = _invalid_request(args)
@@ -170,7 +170,7 @@ def run(argv: list[str]) -> tuple[int, dict]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    code, body = run(sys.argv[1:] if argv is None else argv)
+    code, body = run_claims_command(sys.argv[1:] if argv is None else argv)
     sys.stdout.write(json.dumps(body, sort_keys=True) + "\n")
     return code
 
