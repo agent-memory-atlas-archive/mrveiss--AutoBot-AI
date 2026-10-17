@@ -23,7 +23,7 @@ const baseCards: Card[] = [
   { name: 'BaseButton', description: 'Interactive button component with variants and states', href: '?path=/docs/components-base-basebutton--docs' },
   { name: 'BaseInput', description: 'Form input component with validation and helpers', href: '?path=/docs/components-base-baseinput--docs' },
   { name: 'BaseCard', description: 'Card container with multiple styling variants', href: '?path=/docs/components-base-basecard--docs' },
-  { name: 'BaseBadge', description: 'Badge component for labels and status indicators', href: '?path=/docs/components-base-basebadge--docs' },
+  { name: 'BaseBadge', description: 'Badge component for labels and status indicators (shared kit)', href: '?path=/docs/kit-basebadge--docs' },
   { name: 'BaseTable', description: 'Data table component with sorting and filtering', href: '?path=/docs/components-base-basetable--docs' },
   { name: 'BasePanel', description: 'Collapsible panel component for organizing content', href: '?path=/docs/components-base-basepanel--docs' },
 ];
