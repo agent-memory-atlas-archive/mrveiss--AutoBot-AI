@@ -329,6 +329,7 @@ _DECLARED_SCOPES = {
         "debug",
     ),
     "slm-backend-embedded-playbook-scan": ("autobot-slm-backend",),
+    "slm-node-enum-members-exist": ("autobot-slm-backend",),
     "one-playwright-server-scan": (
         "autobot-browser-worker",
         "autobot-infrastructure",
