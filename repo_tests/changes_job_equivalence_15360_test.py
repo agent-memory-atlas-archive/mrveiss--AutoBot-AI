@@ -182,6 +182,8 @@ ALLOWED_ADDITIONS = {
             # #18555: env_file_family_18555_test.py reads every tracked env file.
             "**/.env*",
             "**/*.env",
+            # #18653: uninstall_covers_role_packages_18653_test.py reads .python-version.
+            ".python-version",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
