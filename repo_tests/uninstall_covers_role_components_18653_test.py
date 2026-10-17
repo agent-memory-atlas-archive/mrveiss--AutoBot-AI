@@ -299,25 +299,46 @@ def test_postgres_with_anything_else_in_it_is_kept() -> None:
 
 def test_every_opt_autobot_child_the_roles_write_is_classified() -> None:
     """01's HIGH: a default uninstall rm -rf'd all of /opt/autobot, and the roles keep data there."""
-    data, code = set(_array("OPT_DATA")), set(_array("OPT_CODE"))
-    assert not data & code, f"classified as both data and code: {sorted(data & code)}"
+    data, code_dirs = set(_array("OPT_DATA")), set(_array("OPT_CODE"))
+    assert not data & code_dirs, f"classified as both data and code: {sorted(data & code_dirs)}"
     children = set()
     pattern = re.compile(r"/opt/autobot/([A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9_]|\.env)")
-    for path in _role_files():
+    # The roles AND the code that writes under /opt/autobot at runtime (snapshots, db-backups).
+    code = [
+        _ROOT / p
+        for p in tracked_paths(_ROOT, "autobot-backend/*.py", "autobot_shared/*.py", "autobot-slm-backend/*.py")
+        if not p.endswith("_test.py") and "/tests/" not in p
+    ]
+    for path in _role_files() + code:
         children |= set(pattern.findall(path.read_text(encoding="utf-8")))
-    assert len(children) >= 20, f"read {len(children)} /opt/autobot children -- the scan is broken"
-    unclassified = sorted(children - data - code)
+    assert len(children) >= 25, f"read {len(children)} /opt/autobot children -- the scan is broken"
+    unclassified = sorted(children - data - code_dirs)
     assert not unclassified, f"/opt/autobot children neither OPT_DATA nor OPT_CODE: {unclassified}"
     assert {"backups", "data", "models", ".env"} <= data
 
 
 def _plan_opt_code(purge_data: bool) -> set[str]:
     text = _UNINSTALL.read_text(encoding="utf-8")
-    func = re.search(r"^plan_opt_code\(\) \{.*?^\}", text, re.S | re.M).group(0)
+    func = "\n".join(
+        re.search(rf"^{name}\(\) \{{.*?^\}}", text, re.S | re.M).group(0) for name in ("opt_children", "plan_opt_code")
+    )
     opt_data = re.search(r"^readonly OPT_DATA=.*$", text, re.M).group(0)
+    opt_data += "\n" + re.search(r"^readonly OPT_CODE=\(.*?\)$", text, re.S | re.M).group(0)
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp) / "autobot"
-        for child in ("backups", "data", "models", ".env", "venv", "autobot-backend", "code_source"):
+        for child in (
+            "backups",
+            "data",
+            "models",
+            ".env",
+            "venv",
+            "autobot-backend",
+            "code_source",
+            "db-backups",
+            "snapshots",
+            "owners-own-folder",
+            ".ansible",
+        ):
             (base / child).mkdir(parents=True) if child != ".env" else None
         (base / ".env").write_text("X=1", encoding="utf-8")
         script = f"""set -euo pipefail
@@ -333,6 +354,8 @@ plan_opt_code
 
 
 def test_a_default_uninstall_removes_only_code_under_opt_autobot() -> None:
+    """An ALLOW-list (01, round 3): only OPT_CODE goes -- snapshots, db-backups and a folder
+    of the owner's are kept even though nothing lists them."""
     assert _plan_opt_code(purge_data=False) == {"venv", "autobot-backend", "code_source"}
 
 

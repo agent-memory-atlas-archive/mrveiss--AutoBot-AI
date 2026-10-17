@@ -70,12 +70,14 @@ readonly APT_SOURCES=(grafana redis)
 # (deadsnakes is removed when install.sh's record says it added it).
 readonly KEPT_APT_SOURCES=(docker intel-openvino deadsnakes)
 # Code, configs and AutoBot-only files: removed on UNINSTALL.
-# /opt/autobot holds code AND data: by default only its non-data children are removed (see
-# OPT_DATA); --purge-data removes the whole tree. Every child the roles write there is
+# /opt/autobot holds code AND data. By default only children named in OPT_CODE are removed
+# -- an ALLOW-list: anything else there (data, snapshots, a folder of the owner's) stays and
+# is named as kept. --purge-data removes the whole tree. Every child the roles write is
 # classified in OPT_DATA or OPT_CODE -- the #18653 guard fails on an unclassified one.
-readonly OPT_DATA=(backups data models llm-models .env config config.yaml certs nginx)
+readonly OPT_DATA=(backups db-backups snapshots data models llm-models plugins .env config config.yaml certs nginx)
 readonly OPT_CODE=(
-    autobot-backend autobot-slm-backend autobot-browser-worker autobot-frontend autobot-npu-worker
+    autobot-backend autobot-slm-backend autobot-user-backend backend frontend
+    autobot-browser-worker autobot-frontend autobot-npu-worker
     autobot-db-stack autobot-tts-worker autobot-slm-frontend autobot-ai-stack autobot-slm-agent
     autobot-vue autobot-infrastructure autobot-plugins autobot_shared autobot_shared.egg-info
     code_source scripts venv src app slm slm-agent agent ai-stack infrastructure libs constraints
@@ -212,14 +214,29 @@ plan_apt_sources() {
     return 0
 }
 
-plan_opt_code() {  # /opt/autobot's children except its data, when the data stays
-    ${PURGE_DATA} && return 0  # the whole tree goes with DATA_PATHS
-    local child name
+opt_children() {  # every entry directly under /opt/autobot, hidden ones included
+    local child
     for child in "${AUTOBOT_BASE}"/* "${AUTOBOT_BASE}"/.[!.]*; do
-        [[ -e "${child}" || -L "${child}" ]] || continue
-        name="${child##*/}"
-        [[ " ${OPT_DATA[*]} " == *" ${name} "* ]] || echo "${child}"
+        [[ -e "${child}" || -L "${child}" ]] && echo "${child}"
     done
+    return 0
+}
+
+plan_opt_code() {  # the /opt/autobot children that are AutoBot code -- allow-list, never "the rest"
+    ${PURGE_DATA} && return 0  # the whole tree goes with DATA_PATHS
+    local child
+    while read -r child; do
+        [[ -n "${child}" && " ${OPT_CODE[*]} " == *" ${child##*/} "* ]] && echo "${child}"
+    done < <(opt_children)
+    return 0
+}
+
+plan_opt_kept() {  # what a default uninstall leaves in /opt/autobot
+    ${PURGE_DATA} && return 0
+    local child
+    while read -r child; do
+        [[ -n "${child}" && " ${OPT_CODE[*]} " != *" ${child##*/} "* ]] && echo "${child}"
+    done < <(opt_children)
     return 0
 }
 
@@ -259,10 +276,12 @@ print_plan() {
     log "  paths:        $(plan_paths | tr '\n' ' ')"
     if ${PURGE_DATA}; then
         log "  databases:    ${DATABASES[*]} (role ${DB_ROLES[*]})"
+        [[ -d "${AUTOBOT_BASE}" ]] && log "  ${AUTOBOT_BASE}: the WHOLE tree, including anything else in it: $(opt_children | tr '\n' ' ')"
         log "  accounts:     $(plan_users | tr '\n' ' ')"
         log "  PostgreSQL:   $([[ "${POSTGRES_DECISION}" == "remove" ]] && echo "holds only AutoBot's -- removed too" || echo "KEPT (holds data that is not AutoBot's, or could not be fully inspected)")"
     else
-        log "  KEPT (data):  databases ${DATABASES[*]}, accounts $(plan_users | tr '\n' ' '), $(existing "${DATA_PATHS[@]:1}" | tr '\n' ' ')and in ${AUTOBOT_BASE}: ${OPT_DATA[*]} -- add --purge-data to remove"
+        log "  KEPT (data):  databases ${DATABASES[*]}, accounts $(plan_users | tr '\n' ' '), $(existing "${DATA_PATHS[@]:1}" | tr '\n' ' ')-- add --purge-data to remove"
+        log "  KEPT in ${AUTOBOT_BASE} (data, or not AutoBot code): $(plan_opt_kept | tr '\n' ' ')"
     fi
     ${PURGE_SHARED} || log "  KEPT (shared): ${SHARED_PACKAGES[*]} and their data -- add --purge-shared to remove"
     [[ -f "${INSTALL_RECORD}" ]] || log "  (no install record at ${INSTALL_RECORD}: no account, recorded package or recorded apt source is removed)"
@@ -322,7 +341,9 @@ drop_clusters() {  # the clusters inspected at decision time -- never one create
         else log "  WARNING: could not drop cluster ${ver}/${name}; see ${LOG_FILE}"; fi
     done <<< "${POSTGRES_CLUSTERS}"
     for dir in "${POSTGRES_PATHS[@]}"; do  # only empty directories go
-        [[ -d "${dir}" ]] && find "${dir}" -depth -type d -empty -delete 2>>"${LOG_FILE}"
+        if [[ -d "${dir}" ]]; then
+            find "${dir}" -depth -type d -empty -delete 2>>"${LOG_FILE}" || log "  WARNING: could not prune empty directories in ${dir}"
+        fi
         [[ -e "${dir}" ]] && log "  kept ${dir} (not empty after dropping the clusters)"
     done
     return 0
