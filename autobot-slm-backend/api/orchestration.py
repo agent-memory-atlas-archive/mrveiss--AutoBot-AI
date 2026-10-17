@@ -13,7 +13,6 @@ Updated for Issue #850 - Complete orchestration consolidation.
 """
 
 import logging
-from datetime import datetime, timezone
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,10 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import Annotated
 
 from api.service_action_guard import FLEET_SERVICE_ACTION_ROUTE
-from api.websocket import ws_manager
 from models.database import Node, Service, SystemdState
+from models.fleet_schemas import FleetServiceActionResponse
 from models.schemas import ServiceActionRequest
-from models.schemas import ServiceActionResponse as FleetServiceActionResponse
 from services.ansible_utils import summarize_playbook_failure
 from services.auth import get_current_user
 from services.database import get_db
@@ -720,78 +718,6 @@ async def update_fleet_service_category(
         "category": update.category,
         "nodes_updated": len(services),
     }
-
-
-async def _fetch_fleet_services_and_nodes(
-    db: AsyncSession,
-    service_name: str,
-) -> tuple:
-    """Helper for the fleet start/stop/restart handlers. Ref: #1088.
-
-    Fetch all Service records for service_name and their Node objects.
-    Raises HTTP 404 if no records found. Returns (services, nodes_dict).
-    """
-    query = select(Service).where(Service.service_name == service_name)
-    result = await db.execute(query)
-    services = result.scalars().all()
-    if not services:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Service {service_name} not found on any node",
-        )
-    node_ids = [s.node_id for s in services]
-    nodes_result = await db.execute(select(Node).where(Node.node_id.in_(node_ids)))
-    nodes = {n.node_id: n for n in nodes_result.scalars().all()}
-    return services, nodes
-
-
-async def _apply_fleet_action(
-    service_name: str,
-    action: str,
-    services: list,
-    nodes: dict,
-    running_state: str | None,
-    active_state: str | None,
-    sub_state: str | None,
-) -> tuple:
-    """Helper for the fleet start/stop/restart handlers. Ref: #1088.
-
-    Run action on each node, update svc fields, broadcast status.
-    Returns (success_count, fail_count).
-    """
-    success_count = 0
-    fail_count = 0
-    for svc in services:
-        node = nodes.get(svc.node_id)
-        if not node:
-            fail_count += 1
-            continue
-        success, msg = await _run_ssh_service_action(node, service_name, action)
-        if success:
-            success_count += 1
-            svc.status = running_state
-            svc.active_state = active_state
-            svc.sub_state = sub_state
-            svc.last_checked = datetime.now(timezone.utc)
-            await ws_manager.send_service_status(
-                node_id=svc.node_id,
-                service_name=service_name,
-                status=running_state,
-                action=action,
-                success=True,
-                message=msg,
-            )
-        else:
-            fail_count += 1
-            await ws_manager.send_service_status(
-                node_id=svc.node_id,
-                service_name=service_name,
-                status="unknown",
-                action=action,
-                success=False,
-                message=msg,
-            )
-    return success_count, fail_count
 
 
 def _canonical_fleet_action(action: str):

@@ -75,7 +75,6 @@ async def env(monkeypatch):
     ssh = AsyncMock(return_value=(True, "ok"))
     monkeypatch.setattr(_services_api, "run_ansible_service_action", ssh)
     monkeypatch.setattr(_services_api, "ws_manager", AsyncMock())
-    monkeypatch.setattr(_orchestration_api, "ws_manager", AsyncMock())
     app = FastAPI()
     app.include_router(_orchestration_api.fleet_router)
     app.dependency_overrides[_auth.get_current_user] = lambda: _ADMIN
@@ -116,7 +115,7 @@ async def test_a_path_traversal_name_never_reaches_an_executor(env, action):
 @pytest.mark.parametrize("action", _ACTIONS)
 async def test_the_route_awaits_the_services_implementation_with_the_same_arguments(env, action, monkeypatch):
     canonical = AsyncMock(
-        return_value=_services_api.ServiceActionResponse(
+        return_value=_services_api.FleetServiceActionResponse(
             action=action, service_name="redis.service", node_id="fleet", success=True, message="m"
         )
     )
