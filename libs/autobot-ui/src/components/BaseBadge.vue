@@ -87,7 +87,6 @@ function onRemove(event: MouseEvent): void {
   display: inline-flex;
   align-items: center;
   gap: var(--aui-space-1);
-  border: 1px solid transparent;
   border-radius: var(--aui-radius-full);
   font-family: var(--aui-font-sans);
   font-weight: var(--aui-font-weight-medium);
@@ -148,6 +147,11 @@ function onRemove(event: MouseEvent): void {
 .aui-badge--solid.aui-badge--neutral {
   background-color: var(--aui-color-surface-sunken);
   color: var(--aui-color-text-muted);
+}
+/* Only the subtle and outline tones draw a border: solid stays border-less, as it always was. */
+.aui-badge--subtle,
+.aui-badge--outline {
+  border: 1px solid transparent;
 }
 .aui-badge--subtle {
   background-color: color-mix(in srgb, var(--aui-badge-color) 15%, transparent);

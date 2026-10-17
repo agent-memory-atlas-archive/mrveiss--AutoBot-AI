@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import badgeSource from '../BaseBadge.vue?raw'
 import BaseBadge, { type BadgeVariant, type BadgeSize, type BadgeTone } from '../BaseBadge.vue'
 
 const VARIANTS: BadgeVariant[] = ['neutral', 'primary', 'success', 'warning', 'error', 'info']
@@ -90,5 +91,16 @@ describe('BaseBadge', () => {
     // fails if the static 'aui-badge' base class is dropped from the class array
     const wrapper = mount(BaseBadge, { props: { variant: 'info', size: 'sm' } })
     expect(wrapper.classes()).toContain('aui-badge')
+  })
+
+  it('the base and solid rules declare no border, so existing solid badges keep their size', () => {
+    // jsdom does not apply SFC <style>, so the rules are read from the source: a border on
+    // .aui-badge or .aui-badge--solid would grow every existing kit badge by 2px (#14776 review).
+    const css = badgeSource.split('<style scoped>')[1]
+    const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.-]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? ''
+    expect(rule('.aui-badge')).toContain('display: inline-flex')
+    expect(rule('.aui-badge')).not.toMatch(/\bborder\s*:/)
+    expect(rule('.aui-badge--solid')).not.toMatch(/\bborder/)
+    expect(css).toMatch(/\.aui-badge--subtle,\s*\.aui-badge--outline \{\s*border: 1px solid transparent;/)
   })
 })
