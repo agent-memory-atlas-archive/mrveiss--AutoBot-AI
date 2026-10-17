@@ -219,7 +219,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/integrations/whatsapp_integration.py": 754,
     "autobot-backend/intelligence/goal_processor.py": 609,
     "autobot-backend/intelligence/intelligent_agent.py": 848,
-    "autobot-backend/intelligence/streaming_executor.py": 650,
+    "autobot-backend/intelligence/streaming_executor.py": 648,
     "autobot-backend/intent_classification_test.py": 622,
     "autobot-backend/judges/multi_agent_arbitrator.py": 611,
     "autobot-backend/judges/security_risk_judge.py": 842,
@@ -263,7 +263,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/llc/tests/test_role_assignments.py": 728,
     "autobot-backend/llc/tests/test_work_items_idor.py": 602,
     "autobot-backend/llm_self_awareness.py": 708,
-    "autobot-backend/llm_shared/optimization/attention_backend_test.py": 802,
+    "autobot-backend/llm_shared/optimization/attention_backend_test.py": 801,
     "autobot-backend/llm_shared/optimization/flash_attention.py": 669,
     "autobot-backend/llm_shared/optimization/kv_cache_test.py": 675,
     "autobot-backend/llm_shared/optimization/layer_inference.py": 869,
@@ -492,7 +492,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot_shared/redis_client.py": 679,
     "autobot_shared/redis_management/connection_manager.py": 1514,
     "autobot_shared/security/ssrf_guard_test.py": 633,
-    "autobot_shared/ssot_config.py": 3308,  # #16375: AUTOBOT_PROMETHEUS_SCRAPE_TOKEN
+    "autobot_shared/ssot_config.py": 3260,  # #16375: AUTOBOT_PROMETHEUS_SCRAPE_TOKEN
     "autobot_shared/ssot_config_test.py": 782,
     "autobot_shared/ssot_constants.py": 896,
     "autobot_shared/user_management/team_service.py": 724,

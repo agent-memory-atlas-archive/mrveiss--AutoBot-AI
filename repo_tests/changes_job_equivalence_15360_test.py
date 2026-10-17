@@ -172,6 +172,13 @@ ALLOWED_ADDITIONS = {
             "autobot-browser-worker/session-store.js",
             # #18553: redis_direct_constructor_18553_test.py scans this installer for direct redis constructors.
             "autobot-backend/code_analysis/install.sh",
+            # #15469: one_brand_mark_and_announcer_18240_test.py pins these icons to the kit mark.
+            "autobot-frontend/public/favicon.ico",
+            "autobot-frontend/public/favicon.svg",
+            "autobot-slm-frontend/public/favicon.svg",
+            # #18500: the autofix steps moved into a composite action with a dispatch-only caller; its guards read both.
+            ".github/actions/generated-types-autofix/action.yml",
+            f"{WORKFLOWS}/dispatch-generated-types.yml",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
