@@ -97,7 +97,7 @@ describe('BaseBadge', () => {
     // jsdom does not apply SFC <style>, so the rules are read from the source: a border on
     // .aui-badge or .aui-badge--solid would grow every existing kit badge by 2px (#14776 review).
     const css = badgeSource.split('<style scoped>')[1]
-    const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.-]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? ''
+    const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? ''
     expect(rule('.aui-badge')).toContain('display: inline-flex')
     expect(rule('.aui-badge')).not.toMatch(/\bborder\s*:/)
     expect(rule('.aui-badge--solid')).not.toMatch(/\bborder/)
