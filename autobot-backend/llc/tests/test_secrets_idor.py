@@ -28,6 +28,17 @@ _FIXED_USER_ID = uuid.UUID("77777777-7777-7777-7777-777777777777")
 _OTHER_ORG = "99999999-9999-9999-9999-999999999999"
 
 
+def _role(name: str):
+    from llc.models.enums import MembershipRole  # noqa: PLC0415
+
+    return MembershipRole(name)
+
+
+#: Sentinel default: the caller is an admin of their company, as the
+#: same-tenant success cases below assume.
+_ADMIN = "admin"
+
+
 def _make_row(secret_name: str = "db_password", version: int = 1) -> MagicMock:
     row = MagicMock()
     row.name = secret_name
@@ -38,6 +49,7 @@ def _make_row(secret_name: str = "db_password", version: int = 1) -> MagicMock:
 def _make_client(
     caller_org_id: str,
     is_platform_admin: bool = False,
+    membership=_ADMIN,
 ) -> TestClient:
     from api.user_management.dependencies import get_current_user, require_org_context  # noqa: PLC0415
     from llc.api.secrets import router as secrets_router  # noqa: PLC0415
@@ -50,6 +62,8 @@ def _make_client(
     mock_session.commit = AsyncMock()
     execute_result = MagicMock()
     execute_result.scalar_one.return_value = _make_row()
+    # The membership row require_company_admin reads (None = not a member).
+    execute_result.scalar_one_or_none.return_value = _role(membership) if membership else None
     mock_session.execute = AsyncMock(return_value=execute_result)
 
     async def _fake_session():
@@ -212,3 +226,43 @@ class TestSecretsIdor:
         client = _make_client(org)
         resp = client.delete(f"/api/llc/secrets/{_OTHER_ORG}/db_password", params={"actor": "agent-1"})
         assert resp.status_code == 404
+
+
+class TestSecretsNeedCompanyAdmin:
+    """A tenant match is not enough: values and mutations need owner/admin."""
+
+    @staticmethod
+    def _calls(org: str):
+        return {
+            "set": lambda c: c.post(f"/api/llc/secrets/{org}", json={"name": "k", "value": "v", "actor": "a"}),
+            "get": lambda c: c.get(f"/api/llc/secrets/{org}/db_password"),
+            "revoke": lambda c: c.delete(f"/api/llc/secrets/{org}/db_password", params={"actor": "a"}),
+        }
+
+    @pytest.mark.parametrize("op", ["set", "get", "revoke"])
+    def test_a_plain_member_is_refused(self, op):
+        org = str(uuid.uuid4())
+        resp = self._calls(org)[op](_make_client(org, membership="member"))
+        assert resp.status_code == 403
+        assert "plaintext-value" not in resp.text
+
+    @pytest.mark.parametrize("op", ["set", "get", "revoke"])
+    def test_a_tenant_user_with_no_membership_is_refused(self, op):
+        org = str(uuid.uuid4())
+        resp = self._calls(org)[op](_make_client(org, membership=None))
+        assert resp.status_code == 403
+
+    @pytest.mark.parametrize("op, expected", [("set", 201), ("get", 200), ("revoke", 204)])
+    def test_an_owner_is_allowed(self, op, expected):
+        org = str(uuid.uuid4())
+        assert self._calls(org)[op](_make_client(org, membership="owner")).status_code == expected
+
+    @pytest.mark.parametrize("op, expected", [("set", 201), ("get", 200), ("revoke", 204)])
+    def test_a_platform_admin_keeps_the_documented_exemption(self, op, expected):
+        org = str(uuid.uuid4())
+        client = _make_client(org, is_platform_admin=True, membership=None)
+        assert self._calls(org)[op](client).status_code == expected
+
+    def test_a_plain_member_may_still_list_names(self):
+        org = str(uuid.uuid4())
+        assert _make_client(org, membership="member").get(f"/api/llc/secrets/{org}").status_code == 200
