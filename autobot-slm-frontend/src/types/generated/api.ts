@@ -14813,7 +14813,7 @@ export interface components {
             holder_task_id: string;
             /**
              * Reason
-             * @description Why; cut to the ledger's free-text cap
+             * @description Why; at most the ledger's free-text cap
              * @default
              */
             reason: string;

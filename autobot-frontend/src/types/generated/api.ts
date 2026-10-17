@@ -90069,8 +90069,22 @@ export interface components {
             busy: boolean;
             /** Detail */
             detail?: string | null;
+            /** @description Null when idle, or when the agent's kind has no notion of a task */
+            current_task?: components["schemas"]["PresenceTaskRow"] | null;
             /** Last Seen */
             last_seen: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PresenceTaskRow
+         * @description What a busy agent is working on (#18391): for a Company OS agent, its running run's work item.
+         */
+        PresenceTaskRow: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
         } & {
             [key: string]: unknown;
         };
@@ -105544,7 +105558,7 @@ export interface components {
             holder_task_id: string;
             /**
              * Reason
-             * @description Why; cut to the ledger's free-text cap
+             * @description Why; at most the ledger's free-text cap
              * @default
              */
             reason: string;

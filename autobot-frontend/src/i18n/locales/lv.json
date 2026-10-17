@@ -8936,6 +8936,7 @@
         "agent": "Aģents",
         "kind": "Veids",
         "status": "Statuss",
+        "task": "Pašreizējais uzdevums",
         "detail": "Sīkāk",
         "scope": "Tvērums",
         "mode": "Režīms",

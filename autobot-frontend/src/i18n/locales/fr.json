@@ -8936,6 +8936,7 @@
         "agent": "Agent",
         "kind": "Type",
         "status": "Statut",
+        "task": "Tâche en cours",
         "detail": "Détail",
         "scope": "Portée",
         "mode": "Mode",

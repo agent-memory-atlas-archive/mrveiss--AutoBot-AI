@@ -15609,17 +15609,22 @@
         "properties": {
           "holder_task_id": {
             "description": "The task that holds the claim, as the claims screen shows it",
+            "maxLength": 256,
+            "minLength": 1,
             "title": "Holder Task Id",
             "type": "string"
           },
           "reason": {
             "default": "",
-            "description": "Why; cut to the ledger's free-text cap",
+            "description": "Why; at most the ledger's free-text cap",
+            "maxLength": 280,
             "title": "Reason",
             "type": "string"
           },
           "scope": {
             "description": "The claimed scope, e.g. `path:src/app.py`",
+            "maxLength": 512,
+            "minLength": 1,
             "title": "Scope",
             "type": "string"
           }

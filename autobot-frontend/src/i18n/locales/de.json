@@ -8936,6 +8936,7 @@
         "agent": "Agent",
         "kind": "Art",
         "status": "Status",
+        "task": "Aktuelle Aufgabe",
         "detail": "Details",
         "scope": "Bereich",
         "mode": "Modus",
