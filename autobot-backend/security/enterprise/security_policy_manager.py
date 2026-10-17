@@ -53,7 +53,7 @@ class PolicyStatus(Enum):
     DEPRECATED = "deprecated"
 
 
-class EnforcementMode(Enum):
+class PolicyEnforcementMode(Enum):
     """Policy enforcement modes"""
 
     ENFORCE = "enforce"  # Block non-compliant actions
@@ -71,7 +71,7 @@ class SecurityPolicy:
     description: str
     policy_type: PolicyType
     status: PolicyStatus
-    enforcement_mode: EnforcementMode
+    enforcement_mode: PolicyEnforcementMode
     rules: List[Dict]
     metadata: Dict
     created_at: datetime
@@ -210,7 +210,7 @@ class SecurityPolicyManager:
                 # Convert enums
                 policy_data["policy_type"] = PolicyType(policy_data["policy_type"])
                 policy_data["status"] = PolicyStatus(policy_data["status"])
-                policy_data["enforcement_mode"] = EnforcementMode(policy_data["enforcement_mode"])
+                policy_data["enforcement_mode"] = PolicyEnforcementMode(policy_data["enforcement_mode"])
 
                 policy = SecurityPolicy(**policy_data)
                 self.policies[policy.policy_id] = policy
@@ -478,7 +478,7 @@ class SecurityPolicyManager:
         policy_type: PolicyType,
         rules: List[Dict],
         author: str,
-        enforcement_mode: EnforcementMode = EnforcementMode.ENFORCE,
+        enforcement_mode: PolicyEnforcementMode = PolicyEnforcementMode.ENFORCE,
         effective_date: datetime | None = None,
         expiry_date: datetime | None = None,
         metadata: Dict | None = None,
@@ -616,12 +616,12 @@ class SecurityPolicyManager:
     ):
         """Apply enforcement mode to result (Issue #315 - extracted helper)."""
         mode_actions = {
-            EnforcementMode.ENFORCE: lambda: (
+            PolicyEnforcementMode.ENFORCE: lambda: (
                 enforcement_result.update({"allowed": False}),
                 enforcement_result["violations"].append(violation),
             ),
-            EnforcementMode.WARN: lambda: enforcement_result["warnings"].append(violation),
-            EnforcementMode.MONITOR: lambda: None,  # Log only, no action
+            PolicyEnforcementMode.WARN: lambda: enforcement_result["warnings"].append(violation),
+            PolicyEnforcementMode.MONITOR: lambda: None,  # Log only, no action
         }
         action = mode_actions.get(policy.enforcement_mode)
         if action:
