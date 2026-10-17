@@ -196,8 +196,9 @@ automatically.
 
 ### Environment
 
-Docker Compose reads `.env.docker` by default. Copy `.env.example` to
-`.env.docker` and adjust values as needed before starting.
+Every command above passes `--env-file docker/.env.docker`. That is the only Docker env file
+(#18555). To change a value, edit a copy of it and pass the copy with `--env-file` instead.
+`.env.example` is the reference for native installs, not for Docker.
 
 ---
 

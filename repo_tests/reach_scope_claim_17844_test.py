@@ -44,6 +44,7 @@ import repo_tests.credential_field_name_only_17336_test as _credential_field_gua
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
 import repo_tests.egress_default_guard_17576_test as _egress_default_guard  # noqa: F401 -- registers its scope
 import repo_tests.embedding_model_preserved_15502_test as _embedding_render_guard  # noqa: F401 -- registers its scope
+import repo_tests.env_file_family_18555_test as _env_family_guard  # noqa: F401 -- registers its scope
 import repo_tests.github_api_single_module_15411_test as _github_api_guard  # noqa: F401 -- registers its scope
 import repo_tests.infra_scripts_no_backend_imports_18288_test as _infra_backend_guard  # noqa: F401 -- registers its scope
 import repo_tests.kb_read_visibility_guard_test as kb
@@ -267,6 +268,7 @@ _DECLARED_SCOPES = {
         "pipeline-scripts/",
     ),
     "ansible-concept-forks-17856-scan": ("autobot-slm-backend/ansible",),
+    "env-file-family-18555-scan": (".env", "autobot-frontend/", "autobot-slm-backend/", "docker/"),
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "gateway-adapter-package-scan": ("autobot-backend/services/gateway",),
     "architecture-family-definition-scan": (

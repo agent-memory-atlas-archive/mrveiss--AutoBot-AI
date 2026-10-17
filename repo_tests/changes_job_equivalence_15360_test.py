@@ -179,6 +179,9 @@ ALLOWED_ADDITIONS = {
             # #18500: the autofix steps moved into a composite action with a dispatch-only caller; its guards read both.
             ".github/actions/generated-types-autofix/action.yml",
             f"{WORKFLOWS}/dispatch-generated-types.yml",
+            # #18555: env_file_family_18555_test.py reads every tracked env file.
+            "**/.env*",
+            "**/*.env",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
