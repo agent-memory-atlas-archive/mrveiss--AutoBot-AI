@@ -8949,6 +8949,7 @@
       "peerMessages": "הודעות עמיתים ממתינות",
       "idleSubscribers": "מינויי זמן סרק",
       "pendingFor": "{n} ממתינות עבור {name}",
+      "sentBy": "מאת {names}",
       "waitsForIdle": "{who} ממתין עד ש-{target} יתפנה",
       "heldBy": "מוחזק על ידי {agent}",
       "waitlistAria": "רשימת המתנה לפי הסדר",

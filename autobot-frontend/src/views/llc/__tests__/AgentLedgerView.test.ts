@@ -126,6 +126,18 @@ describe('AgentLedgerView (#18391)', () => {
     expect(w.findAll('[data-testid="ledger-current-task"]').map((c) => c.text())).toEqual(['Draft the Q3 report', ''])
   })
 
+  it('names who sent the pending peer messages, never what they said', async () => {
+    serve({
+      'peer-messages': json(200, { recipients: [
+        { recipient_kind: 'company_os', recipient_name: 'writer', pending: 2, senders: ['planner', 'reviewer'], oldest_at: 1 },
+      ], count: 1 }),
+    })
+    const w = mount(AgentLedgerView, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(w.text()).toContain(L.sentBy.replace('{names}', 'planner, reviewer'))
+  })
+
   it('tabs follow WAI-ARIA: one Tab stop, arrows and Home/End move selection and focus, panels are wired', async () => {
     serve({})
     const w = mount(AgentLedgerView, { global: { plugins: [i18n] }, attachTo: document.body })

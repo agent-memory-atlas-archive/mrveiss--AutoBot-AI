@@ -38,9 +38,19 @@ function ok(): Record<string, () => Response> {
     '/sources': () => jsonResponse({ sources: [
       { source: 'claims', reachable: true, reason: '' },
       { source: 'events', reachable: false, reason: 'down' },
-      { source: 'presence', reachable: false, reason: 'process-local' },
-      { source: 'live_sessions', reachable: false, reason: 'process-local' },
+      { source: 'presence', reachable: true, reason: '' },
+      { source: 'live_sessions', reachable: true, reason: '' },
+      { source: 'peer_messages', reachable: false, reason: 'no snapshot' },
     ] }),
+    '/presence': () => jsonResponse({ agents: [
+      { kind: 'company_os', tenant_id: 'acme', name: 'writer', busy: true, detail: 'worker', last_seen: 1,
+        current_task: { id: 'wi-1', title: 'Draft the Q3 report' } },
+      { kind: 'ai_stack', tenant_id: null, name: 'chat', busy: false, detail: null, last_seen: 1, current_task: null },
+    ], count: 2 }),
+    '/peer-messages': () => jsonResponse({ recipients: [
+      { recipient_kind: 'company_os', recipient_name: 'writer', pending: 2, senders: ['a'], oldest_at: 1, tenant_id: 'acme' },
+    ], count: 1 }),
+    '/idle-subscribers': () => jsonResponse({ subscribers: [], count: 0 }),
     '/contention': () => jsonResponse({ resources: [
       { scope: holder.scope, kind: 'provider', holders: [holder], waiters: [waiter], contended: true },
     ], count: 1 }),
@@ -54,9 +64,11 @@ function ok(): Record<string, () => Response> {
   }
 }
 
-async function mountView(): Promise<VueWrapper> {
+/** Mounts the view and opens *tab* ("Now working" is the default tab; most cases here are about another). */
+async function mountView(tab: string | null = 'contention'): Promise<VueWrapper> {
   wrapper = mount(AgentLedgerMonitor, { global: { plugins: [i18n] }, attachTo: document.body })
   await flushPromises()
+  if (tab) await openTab(wrapper, tab)
   return wrapper
 }
 
@@ -80,10 +92,11 @@ afterEach(() => {
 })
 
 describe('AgentLedgerMonitor', () => {
-  it('names what the SLM can never read, a store that is down, and the two known gaps', async () => {
-    const w = await mountView()
-    expect(w.get('[data-testid="slm-ledger-never"]').text()).toContain('agent presence, live sessions')
-    expect(w.get('[data-testid="slm-ledger-down"]').text()).toContain('ledger activity')
+  it('names every source it cannot read right now, and the two known gaps', async () => {
+    const w = await mountView(null)
+    expect(w.findAll('[data-testid="slm-ledger-down"]').map((d) => d.text()).join(' ')).toContain('ledger activity')
+    expect(w.findAll('[data-testid="slm-ledger-down"]').map((d) => d.text()).join(' ')).toContain(L.source.peer_messages)
+    expect(w.text()).not.toContain(L.notes.storeDown.replace('{source}', L.source.presence))
     expect(w.find('[data-testid="slm-ledger-gap-16950"]').text()).toBe(L.notes.peerIdentity)
     expect(w.find('[data-testid="slm-ledger-gap-16962"]').text()).toBe(L.notes.busAuth)
   })
@@ -92,7 +105,7 @@ describe('AgentLedgerMonitor', () => {
     routes['/sources'] = () => errorResponse(500, {})
     const w = await mountView()
     expect(w.find('[data-testid="slm-ledger-sources-unknown"]').exists()).toBe(true)
-    expect(w.find('[data-testid="slm-ledger-never"]').exists()).toBe(false)
+    expect(w.find('[data-testid="slm-ledger-down"]').exists()).toBe(false)
   })
 
   it('shows a contended resource with its holder and queue in order', async () => {
@@ -165,9 +178,29 @@ describe('AgentLedgerMonitor', () => {
     expect(w.get('[data-testid="slm-ledger-devloop-actions"]').text()).toContain('refused')
   })
 
+  it('opens on who is working on what, across every company, with each task and company (#18632)', async () => {
+    const w = await mountView(null)
+    expect(w.get('[data-testid="slm-ledger-tab-now"]').attributes('aria-selected')).toBe('true')
+    const rows = w.get('[data-testid="slm-ledger-presence"]').findAll('tbody tr').map((r) => r.findAll('td').map((c) => c.text()))
+    expect(rows).toEqual([
+      ['acme', 'writer', 'company_os', L.busy, 'Draft the Q3 report', 'worker'],
+      [L.installWide, 'chat', 'ai_stack', L.idle, '', ''],
+    ])
+    expect(w.get('[data-testid="slm-ledger-peer-messages"]').text()).toContain('(acme)')
+    expect(w.get('[data-testid="slm-ledger-peer-messages"]').text()).toContain(L.sentBy.replace('{names}', 'a'))
+    expect(w.get('[data-testid="ledger-empty"]').text()).toContain(L.empty.idleSubscribers)
+  })
+
+  it('reads a missing live-state snapshot as unavailable, never as nobody working (#18632)', async () => {
+    routes['/presence'] = () => errorResponse(503, { error: 'ledger_unavailable', source: 'presence', detail: 'no snapshot' })
+    const w = await mountView(null)
+    expect(w.get('[data-testid="ledger-unavailable"]').text()).toContain('presence')
+    expect(w.find('[data-testid="slm-ledger-presence"]').exists()).toBe(false)
+  })
+
   it('moves between tabs with the arrow keys, wrapping', async () => {
-    const w = await mountView()
-    await w.get('[data-testid="slm-ledger-tab-contention"]').trigger('keydown', { key: 'ArrowLeft' })
+    const w = await mountView(null)
+    await w.get('[data-testid="slm-ledger-tab-now"]').trigger('keydown', { key: 'ArrowLeft' })
     await flushPromises()
     const last = w.get('[data-testid="slm-ledger-tab-activity"]')
     expect(last.attributes('aria-selected')).toBe('true')
