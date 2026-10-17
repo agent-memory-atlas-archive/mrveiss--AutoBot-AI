@@ -8947,6 +8947,7 @@
         "agent": "Agente",
         "kind": "Tipo",
         "status": "Estado",
+        "task": "Tarefa atual",
         "detail": "Detalhe",
         "scope": "Âmbito",
         "mode": "Modo",

@@ -8947,6 +8947,7 @@
         "agent": "Agent",
         "kind": "Rodzaj",
         "status": "Stan",
+        "task": "Bieżące zadanie",
         "detail": "Szczegóły",
         "scope": "Zakres",
         "mode": "Tryb",
