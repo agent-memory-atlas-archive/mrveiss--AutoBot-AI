@@ -17,12 +17,13 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from config import settings
+from models.auth_revocation import PasswordEpoch, RevokedToken
 from models.database import Base, Setting
 from models.post_sync_action_run import PostSyncActionRun
 
 # Tables whose models live outside models/database.py (its file-size ceiling). Imported
 # here so they are on Base.metadata before create_all runs (#17455).
-_EXTRA_MODELS = (PostSyncActionRun,)
+_EXTRA_MODELS = (PostSyncActionRun, RevokedToken, PasswordEpoch)  # auth revocation: #18663
 
 # SSOT-derived seed defaults — env vars match PortConfig/VMConfig aliases
 _BACKEND_HOST = os.getenv("AUTOBOT_BACKEND_HOST", "127.0.0.1")
@@ -76,6 +77,11 @@ class DatabaseService:
         await self._initialize_defaults()
         self._initialized = True
         logger.info("Database initialized successfully")
+        # #18663: from here the shared password-epoch rule reads and writes this database,
+        # never Redis -- the SLM deploys Redis, so its own auth must not depend on it.
+        from services.password_epoch_store import install as install_epoch_store
+
+        install_epoch_store()
 
     @staticmethod
     def _ui_preference_defaults() -> dict:
