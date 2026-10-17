@@ -176,14 +176,21 @@ ChromaDB.
 Optional services are activated with `--profile`:
 
 ```bash
-# Add a local Ollama LLM server
+# Add a local Ollama LLM server (only for running models on this host)
 docker compose --env-file docker/.env.docker --env-file docker/.env.secrets --profile ollama up -d --build
-# ...then pull the models docker/.env.docker names (the profile starts Ollama with none):
-docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull qwen3.5:9b
-docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull nomic-embed-text:latest
 
 # Add Prometheus + Grafana monitoring
 docker compose --env-file docker/.env.docker --env-file docker/.env.secrets --profile monitoring up -d --build
+```
+
+Which AI providers to use is your choice: local, hybrid or cloud (#15494). Cloud and
+hybrid providers need no local model. Only on the fully local path, with the `ollama`
+profile, does Ollama start empty: pull the models `docker/.env.docker` names, or the
+ones you set there instead:
+
+```bash
+docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull qwen3.5:9b
+docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull nomic-embed-text:latest
 ```
 
 ### Exposed Services
