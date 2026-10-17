@@ -316,7 +316,6 @@
 1|other|autobot-backend/knowledge/pipeline/cognifiers/relationship_extractor.py|"user"
 1|other|autobot-backend/knowledge/pipeline/cognifiers/summarizer.py|"user"
 1|other|autobot-backend/knowledge/relations.py|10
-1|other|autobot-backend/knowledge/schemas/rag.py|5
 2|other|autobot-backend/knowledge/search.py|10
 3|other|autobot-backend/knowledge/search_components/agentic_search.py|5
 1|ssot|autobot-backend/knowledge/search_components/agentic_search.py|llama3.2:latest

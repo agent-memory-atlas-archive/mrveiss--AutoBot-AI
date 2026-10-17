@@ -43,7 +43,8 @@ _INSTALL = _ROOT / "install.sh"
 def _array(name: str) -> list[str]:
     match = re.search(rf"^readonly {name}=\((.*?)\)", _UNINSTALL.read_text(encoding="utf-8"), re.S | re.M)
     assert match, f"readonly {name}=(...) not found in scripts/uninstall.sh"
-    return [tok.strip("\"'") for tok in match.group(1).split()]
+    body = code_text(match.group(1), name="uninstall.sh", strip_trailing=True)
+    return [tok.strip("\"'") for tok in body.split()]
 
 
 def _role_files() -> list[Path]:

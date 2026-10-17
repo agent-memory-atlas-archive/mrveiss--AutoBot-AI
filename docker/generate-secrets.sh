@@ -44,6 +44,14 @@ fi
 touch "$SECRETS_FILE"
 chmod 600 "$SECRETS_FILE"
 
+gen_password() {  # 32 URL-safe chars meeting the user schema's policy: upper, lower and a digit
+    local value=""
+    until [[ "${value}" =~ [A-Z] && "${value}" =~ [a-z] && "${value}" =~ [0-9] ]]; do
+        value="$(openssl rand -base64 24 | tr -d '+/=\n')"
+    done
+    printf '%s' "${value}"
+}
+
 ensure_secret() {
     local key="$1"
     # #14758: how the value is generated is per-key. The signing secrets are
@@ -57,6 +65,7 @@ ensure_secret() {
         local value
         case "$generator" in
             b64_32) value="$(openssl rand -base64 32 | tr '+/' '-_')" ;;
+            password) value="$(gen_password)" ;;
             *)      value="$(openssl rand -hex 32)" ;;
         esac
         printf '%s=%s\n' "$key" "$value" >>"$SECRETS_FILE"
@@ -75,6 +84,9 @@ ensure_secret AUTOBOT_SECRETS_ROOT_KEY b64_32
 # and must need no URL escaping.
 ensure_secret AUTOBOT_DB_PASSWORD
 ensure_secret GRAFANA_ADMIN_PASSWORD
+# #18729: the main app seeds its first admin from this on first start; without it a
+# fresh Docker install has no account to log in with. Read it back from this file.
+ensure_secret AUTOBOT_ADMIN_PASSWORD password
 
 # #16833: the compose management network has no default range -- a fixed one took
 # over the host's route on a LAN using the same /24. Pick a free private /24 once
@@ -92,6 +104,9 @@ else
     echo "  AUTOBOT_DOCKER_MGMT_PREFIX: ${prefix} (management network ${prefix}.0/24)"
 fi
 
+echo ""
+echo "Main-app login: user 'admin', password = the AUTOBOT_ADMIN_PASSWORD line in ${SECRETS_FILE}"
+echo "  (the value is not printed here; read it with: grep '^AUTOBOT_ADMIN_PASSWORD=' ${SECRETS_FILE})"
 echo ""
 echo "Done. Start the stack with both env files:"
 echo "  docker compose --env-file docker/.env.docker --env-file docker/.env.secrets up -d"

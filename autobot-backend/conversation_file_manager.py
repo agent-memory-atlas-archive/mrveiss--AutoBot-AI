@@ -38,6 +38,7 @@ from autobot_shared.ssot_config import config
 from config import unified_config_manager
 from constants.threshold_constants import TimingConstants
 from constants.ttl_constants import TTL_1_HOUR
+from utils.chat_utils import validate_chat_session_id
 
 # Module-level project root constant (Issue #380 - avoid repeated Path computation)
 # Use .parent (autobot-backend/) so paths work in both Docker (/app/autobot-backend/)
@@ -168,17 +169,13 @@ class ConversationFileManager:
         )
 
     def get_session_dir(self, session_id: str) -> Path:
-        """Get or create session-specific file storage directory.
+        """Get or create {storage_dir}/sessions/{session_id}/ (Issue #70: session-isolated storage).
 
-        Issue #70: Session-isolated file storage. Files are stored in
-        {storage_dir}/sessions/{session_id}/ for physical isolation.
-
-        Args:
-            session_id: Chat session identifier
-
-        Returns:
-            Path to session-specific file directory
+        The ID is checked before anything touches the disk: one with a path component
+        (``..``, ``a/b``, NUL) would place the "session" directory outside sessions/ (#18760).
         """
+        if not validate_chat_session_id(session_id):
+            raise ValueError("Invalid session ID: must be a single safe path segment")
         session_dir = self.storage_dir / self.SESSION_DIR_PREFIX / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         return session_dir
@@ -833,13 +830,12 @@ class ConversationFileManager:
         file_hash = self._compute_file_hash(file_content)
         file_id = str(uuid.uuid4())
         stored_filename = self._generate_stored_filename(original_filename, file_hash)
-        session_dir = self.get_session_dir(session_id)
         return UploadInfo(
             file_id=file_id,
             session_id=session_id,
             original_filename=original_filename,
             stored_filename=stored_filename,
-            file_path=session_dir / stored_filename,
+            file_path=self.validate_session_path(session_id, stored_filename),  # contained (#18704)
             file_size=file_size,
             file_hash=file_hash,
             mime_type=kwargs.get("mime_type"),
