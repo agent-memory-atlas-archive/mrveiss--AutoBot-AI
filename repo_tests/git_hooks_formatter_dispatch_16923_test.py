@@ -245,10 +245,10 @@ def test_negative_control_the_pre_16923_hook_would_not_have_caught_this(tmp_path
 
 
 def test_the_bot_commit_workflow_never_installs_local_hooks() -> None:
-    # The caller and, since #18500, the reusable workflow that holds its steps.
+    # The caller and, since #18500, the composite action that holds its steps.
     workflows = [
-        _REPO_ROOT / ".github" / "workflows" / n
-        for n in ("auto-fix-generated-types.yml", "_generated-types-autofix.yml")
+        _REPO_ROOT / ".github" / "workflows" / "auto-fix-generated-types.yml",
+        _REPO_ROOT / ".github" / "actions" / "generated-types-autofix" / "action.yml",
     ]
     for workflow in workflows:
         assert workflow.is_file(), f"{workflow} is missing — the named exemption's subject vanished"

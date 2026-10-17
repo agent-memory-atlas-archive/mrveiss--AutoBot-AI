@@ -7,8 +7,8 @@
 # patch -- instead of spending a full CI suite on the train PR. On drift the job fails
 # and uploads the `generated-types-patch` artifact, exactly as on a pull request.
 #
-# A workflow of its own, not a second trigger on auto-fix-generated-types.yml: see
-# _generated-types-autofix.yml for why (CodeQL cache-poisoning on a shared PR checkout).
+# Its own workflow, not a trigger on auto-fix-generated-types.yml, and a plain checkout
+# with no `ref:`: see .github/actions/generated-types-autofix/action.yml for why.
 
 name: Dispatch Generated Types Autofix
 
@@ -25,9 +25,11 @@ permissions:
 
 jobs:
   autofix-types:
-    uses: ./.github/workflows/_generated-types-autofix.yml
-    with:
-      ref: ${{ github.ref }}
-    # Only the checkout token, not every repository secret.
-    secrets:
-      AUTOBOT_PUSH_TOKEN: ${{ secrets.AUTOBOT_PUSH_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      # The dispatched branch itself: the default ref, no PR- or input-derived value.
+      - name: Checkout the dispatched branch
+        uses: actions/checkout@v7
+
+      - name: Regenerate the generated types and report drift
+        uses: ./.github/actions/generated-types-autofix

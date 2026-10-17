@@ -83,6 +83,7 @@ permissions:
 
 jobs:
   autofix-types:
+    runs-on: ubuntu-latest
     # #14153: fork-hostile by construction — this job pushes a commit back to
     # the PR branch, which needs write access to the head repo that a fork PR
     # never grants. Skip rather than fail. (auto-fix-formatting.yml carried the
@@ -90,13 +91,27 @@ jobs:
     # only workflow of the shape.)
     if: github.event.pull_request.head.repo.full_name == github.repository
 
-    # The steps are in _generated-types-autofix.yml, shared with the dispatch caller (#18500).
-    uses: ./.github/workflows/_generated-types-autofix.yml
-    with:
-      ref: ${{ github.head_ref }}
-    # Only the checkout token, not every repository secret.
-    secrets:
-      AUTOBOT_PUSH_TOKEN: ${{ secrets.AUTOBOT_PUSH_TOKEN }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          # #13791: prefer a token attributed to a human. Pushing with the
+          # default GITHUB_TOKEN attributes the commit to github-actions[bot],
+          # and this repository's fork-PR policy (all_external_contributors)
+          # treats that bot as external — so every run the push triggers is
+          # created with conclusion=action_required and never starts. Falls back
+          # to GITHUB_TOKEN so this workflow keeps working before the secret is
+          # configured; the runs simply park as they do today. #14311's
+          # `approve-parked-runs` job below repairs that fallback case
+          # immediately instead of leaving it parked.
+          token: ${{ secrets.AUTOBOT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+
+
+      # The steps are the generated-types-autofix composite action, shared with the
+      # dispatch caller (#18500).
+      - name: Regenerate the generated types and report drift
+        uses: ./.github/actions/generated-types-autofix
 
   # #15362: `approve-parked-runs` below is now VESTIGIAL and deliberately kept.
   # `autofix-types` no longer pushes, so nothing parks and there is nothing for it
