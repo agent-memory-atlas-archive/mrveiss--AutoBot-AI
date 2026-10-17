@@ -24,8 +24,8 @@ from transcriber.orchestrator import TranscriberOrchestrator, _assign_speaker
 from transcriber.routes.projects import router as projects_router
 from transcriber.routes.recordings import router as recordings_router
 from voice_processing.providers import (
-    ProviderRegistry,
     ProviderTranscription,
+    SpeechProviderRegistry,
     TranscriptionUnavailableError,
     TranscriptSegment,
 )
@@ -143,7 +143,7 @@ async def test_process_recording_happy_path(db, tmp_path):
     mock_provider.provider_name = "mock_provider"
     mock_provider.transcribe = AsyncMock(return_value=transcript_segments)
 
-    mock_registry = create_autospec(ProviderRegistry, instance=True, spec_set=True)
+    mock_registry = create_autospec(SpeechProviderRegistry, instance=True, spec_set=True)
     mock_registry.transcribe_with_fallback.return_value = ProviderTranscription(mock_provider, transcript_segments)
 
     orch = TranscriberOrchestrator(db=db)
@@ -201,7 +201,7 @@ async def test_process_recording_single_speaker_fallback(db, tmp_path):
     mock_provider.provider_name = "mock_provider"
     mock_provider.transcribe = AsyncMock(return_value=transcript_segments)
 
-    mock_registry = create_autospec(ProviderRegistry, instance=True, spec_set=True)
+    mock_registry = create_autospec(SpeechProviderRegistry, instance=True, spec_set=True)
     mock_registry.transcribe_with_fallback.return_value = ProviderTranscription(mock_provider, transcript_segments)
 
     orch = TranscriberOrchestrator(db=db)
@@ -257,7 +257,7 @@ async def _run_with_registry_result(db, tmp_path, *, raises=None, outcome=None, 
     mock_ffmpeg.extract_audio = AsyncMock(return_value=None)
     mock_ffmpeg.get_audio_duration = AsyncMock(return_value=3.0)
     if registry is None:
-        registry = create_autospec(ProviderRegistry, instance=True, spec_set=True)
+        registry = create_autospec(SpeechProviderRegistry, instance=True, spec_set=True)
         if raises is not None:
             registry.transcribe_with_fallback.side_effect = raises
         else:
@@ -290,7 +290,7 @@ async def test_no_provider_could_run_marks_the_recording_error_with_the_reason(d
 @pytest.mark.asyncio
 async def test_a_whisper_load_failure_marks_the_recording_error_not_an_empty_complete(db, tmp_path):
     """The loader returning None is a failure (#17778), not "ran and found no speech"."""
-    registry = ProviderRegistry()
+    registry = SpeechProviderRegistry()
     registry.register("en", WhisperProvider(), priority=1)
     with (
         patch("voice_processing.providers.whisper_provider.whisper_loadable", return_value=True),

@@ -36,6 +36,9 @@ readonly AUTOBOT_BASE="/opt/autobot"
 readonly INSTALL_MARKER="${AUTOBOT_BASE}/.autobot-installed"
 readonly CODE_SOURCE="${AUTOBOT_BASE}/code_source"
 readonly SECRETS_FILE="/etc/autobot/slm-secrets.env"
+# #18653: what this installer itself created -- read by scripts/uninstall.sh, which removes an
+# account, package or apt source only if it is recorded here, never a pre-existing one.
+readonly INSTALL_RECORD="/etc/autobot/install-record"
 # The service account that owns ${AUTOBOT_BASE} and runs the AutoBot units, and the
 # account the SLM later reaches this node as (PathConfig.ssh_user, AUTOBOT_SSH_USER).
 # Named once here because this script runs before the repository, and so before
@@ -130,6 +133,11 @@ run_ok() {
     fi
 }
 
+record_install() {  # record_install <key> <value>, once (#18653)
+    mkdir -p "$(dirname "${INSTALL_RECORD}")"
+    grep -qxF "$1=$2" "${INSTALL_RECORD}" 2>/dev/null || echo "$1=$2" >> "${INSTALL_RECORD}"
+}
+
 # add_ppa_if_missing: prefer device-shipped PPA; only add if not already configured (#7144)
 #   $1 = ppa spec for apt-add-repository, e.g. "ppa:ansible/ansible"
 #   $2 = match string to grep across /etc/apt/sources.list.d/ — typically
@@ -168,6 +176,7 @@ add_ppa_if_missing() {
 
     run_ok "Adding ${desc} PPA" \
         apt-add-repository -y "${ppa}"
+    record_install apt_source "${match%%/*}"
 }
 
 # =============================================================================
@@ -304,7 +313,7 @@ After installation, use the SLM web UI setup wizard to add fleet nodes.
 Options:
   --unattended          Run without prompts, use all defaults
   --reinstall           Force reinstall over existing installation
-  --uninstall           Completely remove AutoBot and all dependencies (#2706)
+  --uninstall           Remove AutoBot: shows the plan, then asks (#2706, #18653)
   --validate            Verify installation integrity (check required service distributions)
   --yes                 Skip confirmation prompts (use with --uninstall)
   --branch=BRANCH       Git branch to install (default: ${DEFAULT_BRANCH})
@@ -450,6 +459,7 @@ system_setup() {
         run_ok "Installing Python 3.14" \
             env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
                 python3.14 python3.14-venv python3.14-dev
+        for p in python3.14 python3.14-venv python3.14-dev; do record_install package "${p}"; done
     else
         success "  Python 3.14 already installed ($(python3.14 --version))"
     fi
@@ -460,6 +470,7 @@ system_setup() {
             apt-get update -qq
         run_ok "Installing Ansible" \
             env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ansible
+        record_install package ansible
     else
         success "  Ansible already installed ($(ansible --version | head -1))"
     fi
@@ -469,6 +480,7 @@ system_setup() {
             bash -c "curl -fsSL https://${NODESOURCE_HOST}/setup_20.x | bash -"
         run_ok "Installing Node.js" \
             env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs
+        record_install package nodejs; record_install apt_source nodesource
     else
         success "  Node.js already installed ($(node --version))"
     fi
@@ -478,6 +490,7 @@ system_setup() {
             useradd -r -m -s /bin/bash -d "${AUTOBOT_HOME}" "${AUTOBOT_USER}"
         echo "${AUTOBOT_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/autobot
         chmod 0440 /etc/sudoers.d/autobot
+        record_install created_user "${AUTOBOT_USER}"; record_install created_sudoers /etc/sudoers.d/autobot
         success "  Passwordless sudo configured"
     else
         success "  User '${AUTOBOT_USER}' already exists"
@@ -1110,177 +1123,17 @@ parse_args() {
 # =============================================================================
 
 uninstall() {
-    print_banner
-    _log_init
-    log "AutoBot Uninstaller started"
-
-    if [[ $EUID -ne 0 ]]; then
-        fatal "This script must be run as root (use sudo)"
+    # #18653: the uninstaller is its own script, installed with the code. It removes only
+    # what the install record and AutoBot's own roles account for, shows the plan, and asks.
+    local script="${CODE_SOURCE}/scripts/uninstall.sh"
+    [[ $EUID -eq 0 ]] || fatal "This script must be run as root (use sudo)"
+    if [[ ! -f "${script}" ]]; then
+        echo "No installed AutoBot at ${CODE_SOURCE}: its uninstaller (scripts/uninstall.sh) lives there." >&2
+        echo "See 'Uninstalling' in INSTALL.md for a partial install." >&2
+        exit 1
     fi
-
-    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${RED}  WARNING: Full AutoBot Uninstall${NC}"
-    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo
-    echo "  This will permanently remove:"
-    echo "    - All AutoBot services and data"
-    echo "    - PostgreSQL server and all databases"
-    echo "    - Node.js, Grafana, Ansible"
-    echo "    - APT repositories added by the installer"
-    echo "    - The '${AUTOBOT_USER}' system user"
-    echo "    - Directories: ${AUTOBOT_BASE}, /etc/autobot, /var/lib/slm, /var/log/autobot"
-    echo
-
-    if ! ${CONFIRM_YES}; then
-        echo -e "  ${YELLOW}Type 'UNINSTALL' to confirm:${NC}"
-        # The no-terminal branch REFUSES here, where the password prompt
-        # auto-generates (#17929). The direction is deliberate and opposite:
-        # continuing without an answer costs a generated credential there and an
-        # unconfirmed destructive wipe here. Today EOF aborts this via `set -e`,
-        # which is accidentally fail-safe -- this keeps that outcome and makes it
-        # intentional, with a message naming the flag to use instead.
-        if ! prompt_from_tty confirmation "  > "; then
-            error "No terminal available to confirm an uninstall."
-            error "Re-run with --yes if you intend to uninstall non-interactively."
-            exit 1
-        fi
-        if [[ "${confirmation}" != "UNINSTALL" ]]; then
-            info "Uninstall cancelled."
-            exit 0
-        fi
-        echo
-    fi
-
-    info "Starting full uninstall..."
-
-    # ---- Phase 1: Stop and disable services ----
-    info "Stopping services..."
-    # Stop all autobot-* units first (covers playwright, browser-worker, tts, npu, etc.)
-    # before removing their unit files — otherwise processes survive with no unit file.
-    while IFS= read -r unit; do
-        [[ -z "$unit" ]] && continue
-        svc="${unit%.service}"
-        systemctl stop "${svc}" >> "${LOG_FILE}" 2>&1 && success "  Stopped ${svc}" || true
-        systemctl disable "${svc}" >> "${LOG_FILE}" 2>&1 || true
-    done < <(systemctl list-units --all --no-legend 'autobot-*' 2>/dev/null | grep -oP 'autobot-\S+\.service')
-
-    local services=(nginx grafana-server postgresql)
-    for svc in "${services[@]}"; do
-        if systemctl is-active --quiet "${svc}" 2>/dev/null; then
-            systemctl stop "${svc}" >> "${LOG_FILE}" 2>&1 && success "  Stopped ${svc}" || warn "  Failed to stop ${svc}"
-        fi
-        if systemctl is-enabled --quiet "${svc}" 2>/dev/null; then
-            systemctl disable "${svc}" >> "${LOG_FILE}" 2>&1 || true
-        fi
-    done
-
-    # Remove AutoBot systemd unit files
-    for unit_file in /etc/systemd/system/autobot-*.service; do
-        if [[ -f "${unit_file}" ]]; then
-            rm -f "${unit_file}"
-            log "  Removed ${unit_file}"
-        fi
-    done
-    systemctl daemon-reload >> "${LOG_FILE}" 2>&1 || true
-
-    # ---- Phase 2: Drop PostgreSQL databases and user ----
-    info "Removing PostgreSQL databases..."
-    if command -v psql &>/dev/null; then
-        systemctl start postgresql >> "${LOG_FILE}" 2>&1 || true
-        sleep 2
-        local dbs=(slm slm_users autobot_users)
-        for db in "${dbs[@]}"; do
-            if sudo -u postgres psql -lqt 2>/dev/null | cut -d\| -f1 | grep -qw "${db}"; then
-                sudo -u postgres dropdb "${db}" >> "${LOG_FILE}" 2>&1 && success "  Dropped database: ${db}" || warn "  Failed to drop: ${db}"
-            fi
-        done
-        if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='slm_app'" 2>/dev/null | grep -q 1; then
-            sudo -u postgres dropuser slm_app >> "${LOG_FILE}" 2>&1 && success "  Dropped user: slm_app" || warn "  Failed to drop user: slm_app"
-        fi
-        systemctl stop postgresql >> "${LOG_FILE}" 2>&1 || true
-    else
-        warn "  PostgreSQL not installed — skipping database cleanup"
-    fi
-
-    # ---- Phase 3: Remove APT packages ----
-    info "Removing installed packages..."
-    local pg_version
-    pg_version=$(pg_lsclusters 2>/dev/null | awk 'NR==2{print $1}' || echo "16")
-
-    # Drop the PostgreSQL cluster before purging
-    if command -v pg_dropcluster &>/dev/null; then
-        pg_dropcluster --stop "${pg_version}" main >> "${LOG_FILE}" 2>&1 || true
-    fi
-
-    local packages=("postgresql-${pg_version}" "postgresql-client-${pg_version}"
-        "postgresql-contrib-${pg_version}" python3-psycopg2 grafana ansible nodejs)
-    for pkg in "${packages[@]}"; do
-        if dpkg -l "${pkg}" &>/dev/null 2>&1; then
-            env DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq "${pkg}" >> "${LOG_FILE}" 2>&1 \
-                && success "  Purged ${pkg}" || warn "  Failed to purge ${pkg}"
-        fi
-    done
-
-    # Purge remaining PostgreSQL and Grafana config
-    env DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq 'postgresql-common' >> "${LOG_FILE}" 2>&1 || true
-    env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -qq >> "${LOG_FILE}" 2>&1 || true
-
-    # ---- Phase 4: Remove APT repositories ----
-    info "Removing APT repositories..."
-    local repo_files=(/etc/apt/sources.list.d/{pgdg,deadsnakes-*,nodesource,grafana,ansible-*}.{list,sources})
-    for pattern in "${repo_files[@]}"; do
-        # shellcheck disable=SC2086
-        for f in ${pattern}; do
-            if [[ -f "${f}" ]]; then
-                rm -f "${f}"
-                log "  Removed ${f}"
-            fi
-        done
-    done
-
-    # Remove signing keys
-    rm -f /usr/share/keyrings/pgdg.asc /usr/share/keyrings/grafana.gpg \
-          /usr/share/keyrings/nodesource.gpg 2>/dev/null || true
-    success "  APT repositories cleaned"
-
-    # ---- Phase 5: Remove directories and files ----
-    info "Removing AutoBot directories and files..."
-    local dirs=("${AUTOBOT_BASE}" /var/lib/slm /var/log/autobot /etc/autobot /var/lib/postgresql /etc/postgresql /var/lib/grafana /etc/grafana)
-    for dir in "${dirs[@]}"; do
-        if [[ -d "${dir}" ]]; then
-            rm -rf "${dir}"
-            success "  Removed ${dir}"
-        fi
-    done
-
-    # Remove credential and config files
-    rm -f /root/autobot-credentials.txt /etc/sudoers.d/autobot /tmp/.autobot_detected_ip 2>/dev/null || true
-
-    # Remove nginx site config (but leave nginx installed)
-    rm -f /etc/nginx/sites-available/autobot-slm /etc/nginx/sites-enabled/autobot-slm \
-          /etc/systemd/system/nginx.service.d/ssl-cert-check.conf 2>/dev/null || true
-
-    # ---- Phase 6: Remove autobot user ----
-    info "Removing ${AUTOBOT_USER} user..."
-    if id "${AUTOBOT_USER}" &>/dev/null; then
-        userdel -r "${AUTOBOT_USER}" >> "${LOG_FILE}" 2>&1 && success "  Removed user: ${AUTOBOT_USER}" || warn "  Failed to remove user (may have running processes)"
-    fi
-    if getent group "${AUTOBOT_USER}" &>/dev/null; then
-        groupdel "${AUTOBOT_USER}" >> "${LOG_FILE}" 2>&1 || true
-    fi
-
-    # ---- Done ----
-    echo
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  AutoBot has been completely uninstalled.${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo
-    echo -e "  ${CYAN}Removed:${NC} services, databases, packages, repos, user, data"
-    echo -e "  ${CYAN}Log:${NC}     ${LOG_FILE}"
-    echo
-    echo -e "  ${YELLOW}Note:${NC} nginx was left installed but AutoBot site config was removed."
-    echo -e "  To remove nginx too: ${BLUE}sudo apt purge nginx${NC}"
-    echo
+    if ${CONFIRM_YES}; then exec bash "${script}" --yes; fi
+    exec bash "${script}"
 }
 
 # =============================================================================

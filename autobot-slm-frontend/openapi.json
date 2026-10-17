@@ -5759,6 +5759,72 @@
         "title": "HeartbeatResponse",
         "type": "object"
       },
+      "IdleSubscriberRow": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "number"
+          },
+          "since": {
+            "title": "Since",
+            "type": "number"
+          },
+          "subscriber": {
+            "title": "Subscriber",
+            "type": "string"
+          },
+          "target_kind": {
+            "title": "Target Kind",
+            "type": "string"
+          },
+          "target_name": {
+            "title": "Target Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owning company; set in the install-wide (SLM) view, null in a company's own",
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "subscriber",
+          "target_kind",
+          "target_name",
+          "since",
+          "expires_at"
+        ],
+        "title": "IdleSubscriberRow",
+        "type": "object"
+      },
+      "IdleSubscribersResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "subscribers": {
+            "items": {
+              "$ref": "#/components/schemas/IdleSubscriberRow"
+            },
+            "title": "Subscribers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscribers",
+          "count"
+        ],
+        "title": "IdleSubscribersResponse",
+        "type": "object"
+      },
       "LDAPLoginRequest": {
         "description": "Request model for LDAP login.",
         "properties": {
@@ -8534,6 +8600,76 @@
         "title": "PasswordChange",
         "type": "object"
       },
+      "PeerMessageRow": {
+        "description": "Pending peer messages for one recipient. Metadata only -- never the content.",
+        "properties": {
+          "oldest_at": {
+            "title": "Oldest At",
+            "type": "number"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "recipient_kind": {
+            "title": "Recipient Kind",
+            "type": "string"
+          },
+          "recipient_name": {
+            "title": "Recipient Name",
+            "type": "string"
+          },
+          "senders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Senders",
+            "type": "array"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owning company; set in the install-wide (SLM) view, null in a company's own",
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "recipient_kind",
+          "recipient_name",
+          "pending",
+          "senders",
+          "oldest_at"
+        ],
+        "title": "PeerMessageRow",
+        "type": "object"
+      },
+      "PeerMessagesResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/PeerMessageRow"
+            },
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients",
+          "count"
+        ],
+        "title": "PeerMessagesResponse",
+        "type": "object"
+      },
       "PendingNodeResponse": {
         "description": "Node that needs code update.",
         "properties": {
@@ -9205,6 +9341,108 @@
           "node_id"
         ],
         "title": "PreflightResult",
+        "type": "object"
+      },
+      "PresenceResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/PresenceRow"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agents",
+          "count"
+        ],
+        "title": "PresenceResponse",
+        "type": "object"
+      },
+      "PresenceRow": {
+        "properties": {
+          "busy": {
+            "title": "Busy",
+            "type": "boolean"
+          },
+          "current_task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PresenceTaskRow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when idle, or when the agent's kind has no notion of a task"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen": {
+            "title": "Last Seen",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "kind",
+          "tenant_id",
+          "name",
+          "busy",
+          "last_seen"
+        ],
+        "title": "PresenceRow",
+        "type": "object"
+      },
+      "PresenceTaskRow": {
+        "description": "What a busy agent is working on (#18391): for a Company OS agent, its running run's work item.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "PresenceTaskRow",
         "type": "object"
       },
       "ProvisionRequest": {
@@ -16878,7 +17116,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "description": "Revoke the presented token and return IdP logout URL if applicable.\n\n- Denylists the token's ``jti`` in Redis (HS256 tokens only).\n- Queries the user's SSO link for an ``end_session_endpoint``.\n- Returns ``{\"logout_url\": \"<url>\"}`` (url may be null when not SSO-linked).",
+        "description": "Revoke the presented token and return IdP logout URL if applicable.\n\n- Denylists the token's ``jti`` in the SLM's PostgreSQL (HS256 tokens only, #18663).\n- Queries the user's SSO link for an ``end_session_endpoint``.\n- Returns ``{\"logout_url\": \"<url>\"}`` (url may be null when not SSO-linked).",
         "operationId": "logout_api_auth_logout_post",
         "responses": {
           "200": {
@@ -24304,9 +24542,123 @@
         ]
       }
     },
+    "/api/monitoring/agent-ledger/idle-subscribers": {
+      "get": {
+        "description": "Every agent waiting to be told a peer next goes idle.",
+        "operationId": "ledger_idle_subscribers_api_monitoring_agent_ledger_idle_subscribers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdleSubscribersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerUnavailable"
+                }
+              }
+            },
+            "description": "The ledger could not be read (not the same as empty)"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ledger Idle Subscribers",
+        "tags": [
+          "monitoring",
+          "agent-ledger"
+        ]
+      }
+    },
+    "/api/monitoring/agent-ledger/peer-messages": {
+      "get": {
+        "description": "Messages waiting for any agent's next turn. Counts and senders, never content.",
+        "operationId": "ledger_peer_messages_api_monitoring_agent_ledger_peer_messages_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerMessagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerUnavailable"
+                }
+              }
+            },
+            "description": "The ledger could not be read (not the same as empty)"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ledger Peer Messages",
+        "tags": [
+          "monitoring",
+          "agent-ledger"
+        ]
+      }
+    },
+    "/api/monitoring/agent-ledger/presence": {
+      "get": {
+        "description": "Every company's live agents, AI-stack agents and live sessions, from the user backend's snapshot.",
+        "operationId": "ledger_presence_api_monitoring_agent_ledger_presence_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerUnavailable"
+                }
+              }
+            },
+            "description": "The ledger could not be read (not the same as empty)"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ledger Presence",
+        "tags": [
+          "monitoring",
+          "agent-ledger"
+        ]
+      }
+    },
     "/api/monitoring/agent-ledger/sources": {
       "get": {
-        "description": "Which coordination stores this view can read right now, and which it never can.",
+        "description": "Which coordination stores and live-state snapshots this view can read right now.",
         "operationId": "ledger_sources_api_monitoring_agent_ledger_sources_get",
         "responses": {
           "200": {

@@ -65,11 +65,12 @@ logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
 
-# #16387: the narrow set of failure modes a revocation-check Redis call can
+# #16387: the narrow set of failure modes a revocation check can
 # raise -- the client's own error type plus the connection/timeout errors it
 # can surface. Deliberately NOT `except Exception`: a check that cannot run
 # must be told apart from a genuine "not revoked" answer, and a blanket catch
-# would also swallow real bugs and relabel them as Redis outages.
+# would also swallow real bugs and relabel them as store outages. The SLM's own
+# stores (#18663) raise ConnectionError/TimeoutError; RedisError stays for the RS256 path.
 _REVOCATION_CHECK_FAILURES = (asyncio.TimeoutError, ConnectionError, OSError, _RedisError)
 
 
@@ -84,10 +85,10 @@ class AuthService:
         """Create a JWT access token.
 
         Every SLM-minted HS256 token receives a unique ``jti`` claim so that
-        individual tokens can be revoked via the Redis denylist without
+        individual tokens can be revoked via the jti denylist (the SLM's PostgreSQL, #18663) without
         invalidating other tokens issued to the same user.  Revocation is
         enforced on the async decode path (``decode_token_async``).
-        The sync ``decode_token`` path does not check Redis — see its docstring.
+        The sync ``decode_token`` path does not check the denylist — see its docstring.
         """
         payload = dict(data)
         payload.setdefault("jti", secrets.token_urlsafe(16))
@@ -111,7 +112,7 @@ class AuthService:
         Use ``decode_token_async`` in async contexts — it handles both alg
         values and performs JWKS key lookup for RS256 tokens.
 
-        **Revocation note:** ``jti`` denylist checks require Redis (async).
+        **Revocation note:** ``jti`` denylist checks are async (a database query).
         This sync path does NOT check the denylist.  Token revocation is
         enforced on the async HTTP auth path via ``decode_token_async``.
         """
@@ -139,8 +140,8 @@ class AuthService:
 
         Raises ``HTTPException`` (401, matching ``get_current_user``'s normal
         invalid-token response) when a revocation check itself cannot run --
-        the HS256 jti denylist or the password-epoch check -- because Redis
-        errored. Fail CLOSED (#16387): the caller must not treat "could not
+        the HS256 jti denylist or the password-epoch check -- because its store
+        (the SLM's PostgreSQL since #18663) could not answer. Fail CLOSED (#16387): the caller must not treat "could not
         check" as "not revoked".
         """
         alg = _peek_alg(token)
@@ -160,7 +161,7 @@ class AuthService:
                     revoked = await is_jti_revoked(jti)
                 except _REVOCATION_CHECK_FAILURES as exc:
                     # #16387: fail CLOSED. The jti denylist is the only record
-                    # of a logged-out or leaked-credential token; if Redis
+                    # of a logged-out or leaked-credential token; if its store
                     # cannot answer we cannot tell "not revoked" from
                     # "unknown", so the token is denied rather than honoured.
                     # This also gates the backend admin path reached through

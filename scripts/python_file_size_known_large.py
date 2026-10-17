@@ -133,7 +133,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_knowledge.py": 5155,
     "autobot-backend/api/schemas_system.py": 4362,  # #13051: SecretModel ownership fields
     "autobot-backend/api/schemas_workflows.py": 2917,
-    "autobot-backend/api/secrets.py": 1216,  # #16444 review: except HTTPException, ValueError handlers
+    "autobot-backend/api/secrets.py": 1182,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
     "autobot-backend/api/settings.py": 881,
     "autobot-backend/api/system.py": 1108,
@@ -445,7 +445,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/api/updates.py": 1107,
     "autobot-slm-backend/main.py": 781,  # #16375: secret seeding consolidated into services/generated_system_secrets.py
     "autobot-slm-backend/models/database.py": 1140,
-    "autobot-slm-backend/models/schemas.py": 2153,
+    "autobot-slm-backend/models/schemas.py": 2145,
     "autobot-slm-backend/monitoring/business_intelligence_dashboard.py": 1159,
     "autobot-slm-backend/monitoring/performance_benchmark.py": 1073,
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,

@@ -244,7 +244,7 @@ export interface paths {
          * Logout
          * @description Revoke the presented token and return IdP logout URL if applicable.
          *
-         *     - Denylists the token's ``jti`` in Redis (HS256 tokens only).
+         *     - Denylists the token's ``jti`` in the SLM's PostgreSQL (HS256 tokens only, #18663).
          *     - Queries the user's SSO link for an ``end_session_endpoint``.
          *     - Returns ``{"logout_url": "<url>"}`` (url may be null when not SSO-linked).
          */
@@ -2983,6 +2983,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/monitoring/agent-ledger/idle-subscribers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Idle Subscribers
+         * @description Every agent waiting to be told a peer next goes idle.
+         */
+        get: operations["ledger_idle_subscribers_api_monitoring_agent_ledger_idle_subscribers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/peer-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Peer Messages
+         * @description Messages waiting for any agent's next turn. Counts and senders, never content.
+         */
+        get: operations["ledger_peer_messages_api_monitoring_agent_ledger_peer_messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/monitoring/agent-ledger/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger Presence
+         * @description Every company's live agents, AI-stack agents and live sessions, from the user backend's snapshot.
+         */
+        get: operations["ledger_presence_api_monitoring_agent_ledger_presence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/monitoring/agent-ledger/sources": {
         parameters: {
             query?: never;
@@ -2992,7 +3052,7 @@ export interface paths {
         };
         /**
          * Ledger Sources
-         * @description Which coordination stores this view can read right now, and which it never can.
+         * @description Which coordination stores and live-state snapshots this view can read right now.
          */
         get: operations["ledger_sources_api_monitoring_agent_ledger_sources_get"];
         put?: never;
@@ -9936,6 +9996,35 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** IdleSubscriberRow */
+        IdleSubscriberRow: {
+            /** Expires At */
+            expires_at: number;
+            /** Since */
+            since: number;
+            /** Subscriber */
+            subscriber: string;
+            /** Target Kind */
+            target_kind: string;
+            /** Target Name */
+            target_name: string;
+            /**
+             * Tenant Id
+             * @description The owning company; set in the install-wide (SLM) view, null in a company's own
+             */
+            tenant_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdleSubscribersResponse */
+        IdleSubscribersResponse: {
+            /** Count */
+            count: number;
+            /** Subscribers */
+            subscribers: components["schemas"]["IdleSubscriberRow"][];
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * LDAPLoginRequest
          * @description Request model for LDAP login.
@@ -11421,6 +11510,38 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * PeerMessageRow
+         * @description Pending peer messages for one recipient. Metadata only -- never the content.
+         */
+        PeerMessageRow: {
+            /** Oldest At */
+            oldest_at: number;
+            /** Pending */
+            pending: number;
+            /** Recipient Kind */
+            recipient_kind: string;
+            /** Recipient Name */
+            recipient_name: string;
+            /** Senders */
+            senders: string[];
+            /**
+             * Tenant Id
+             * @description The owning company; set in the install-wide (SLM) view, null in a company's own
+             */
+            tenant_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PeerMessagesResponse */
+        PeerMessagesResponse: {
+            /** Count */
+            count: number;
+            /** Recipients */
+            recipients: components["schemas"]["PeerMessageRow"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * PendingNodeResponse
          * @description Node that needs code update.
          */
@@ -11716,6 +11837,46 @@ export interface components {
             role_name: string;
             /** Warnings */
             warnings?: components["schemas"]["PreflightConflict"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** PresenceResponse */
+        PresenceResponse: {
+            /** Agents */
+            agents: components["schemas"]["PresenceRow"][];
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PresenceRow */
+        PresenceRow: {
+            /** Busy */
+            busy: boolean;
+            /** @description Null when idle, or when the agent's kind has no notion of a task */
+            current_task?: components["schemas"]["PresenceTaskRow"] | null;
+            /** Detail */
+            detail?: string | null;
+            /** Kind */
+            kind: string;
+            /** Last Seen */
+            last_seen: number;
+            /** Name */
+            name: string;
+            /** Tenant Id */
+            tenant_id: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PresenceTaskRow
+         * @description What a busy agent is working on (#18391): for a Company OS agent, its running run's work item.
+         */
+        PresenceTaskRow: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
         } & {
             [key: string]: unknown;
         };
@@ -20017,6 +20178,93 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_idle_subscribers_api_monitoring_agent_ledger_idle_subscribers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdleSubscribersResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_peer_messages_api_monitoring_agent_ledger_peer_messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerMessagesResponse"];
+                };
+            };
+            /** @description The ledger could not be read (not the same as empty) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerUnavailable"];
+                };
+            };
+        };
+    };
+    ledger_presence_api_monitoring_agent_ledger_presence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceResponse"];
                 };
             };
             /** @description The ledger could not be read (not the same as empty) */

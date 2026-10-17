@@ -281,7 +281,7 @@ KNOWN_RESTATEMENTS: dict[str, frozenset[str]] = {
     "autobot-slm-backend/user_management/schemas/mfa.py": frozenset({"MFASetupResponse"}),
     "autobot-slm-backend/user_management/services/sso_service.py": frozenset({"SSOProviderNotFoundError"}),
     "autobot_shared/logging_manager.py": frozenset(
-        {"get_audit_logger", "get_backend_logger", "get_debug_logger", "get_frontend_logger", "get_llm_logger"}
+        {"get_backend_logger", "get_debug_logger", "get_frontend_logger", "get_llm_logger"}
     ),
     "autobot_shared/monitoring/metrics/claude_api.py": frozenset({"ClaudeAPIMetricsRecorder"}),
     "autobot_shared/monitoring/metrics/frontend.py": frozenset(

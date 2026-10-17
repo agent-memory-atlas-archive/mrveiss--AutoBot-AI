@@ -274,7 +274,7 @@ async def logout(
 ) -> dict:
     """Revoke the presented token and return IdP logout URL if applicable.
 
-    - Denylists the token's ``jti`` in Redis (HS256 tokens only).
+    - Denylists the token's ``jti`` in the SLM's PostgreSQL (HS256 tokens only, #18663).
     - Queries the user's SSO link for an ``end_session_endpoint``.
     - Returns ``{"logout_url": "<url>"}`` (url may be null when not SSO-linked).
     """

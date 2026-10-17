@@ -138,6 +138,22 @@ def test_route_handler_detection_does_not_overreach(source: str, expected: bool)
     assert detector.is_route_handler(ast.parse(source).body[0]) is expected
 
 
+def _subclasses_shared_namesake(cls: ast.ClassDef, origin: dict[str, tuple[str, str]]) -> bool:
+    """Control's own reading of "binds the shared definition": same-named base from autobot_shared."""
+    for base in cls.bases:
+        text = ast.unparse(base)
+        head, _, tail = text.partition(".")
+        module, original = origin.get(head, ("", ""))
+        if not module.startswith("autobot_shared"):
+            continue
+        # `from m import X as Y` then Y; or `from pkg import mod as m` then m.X
+        if (tail == "" and original == cls.name) or (tail == cls.name and original != cls.name):
+            return True
+        if tail == cls.name and original == "":
+            return True
+    return False
+
+
 def _independent_population() -> set[str]:
     """Rule 3-5: a second derivation that replicates the PREDICATE, exemptions included.
 
@@ -180,12 +196,22 @@ def _independent_population() -> set[str]:
         base = parts[-1]
         if banned_dirs & set(parts):
             continue
-        if base.endswith("_test.py") or base.startswith("test_") or "tests" in parts:
+        if base.endswith("_test.py") or base.startswith("test_") or base == "conftest.py" or "tests" in parts:
             continue
         try:
-            body = ast.parse((_REPO_ROOT / rel).read_text(encoding="utf-8")).body
+            tree = ast.parse((_REPO_ROOT / rel).read_text(encoding="utf-8"))
         except (SyntaxError, OSError):
             continue
+        body = tree.body
+        # local alias -> (module, original name); `import a.b as c` maps c -> (a.b, "")
+        origin: dict[str, tuple[str, str]] = {}
+        for node in body:
+            if isinstance(node, ast.ImportFrom) and node.module:
+                for a in node.names:
+                    origin[a.asname or a.name] = (node.module, a.name)
+            elif isinstance(node, ast.Import):
+                for a in node.names:
+                    origin[a.asname or a.name] = (a.name, "")
         for stmt in body:
             if not isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -198,6 +224,8 @@ def _independent_population() -> set[str]:
                 for d in stmt.decorator_list
             )
             if decorated:
+                continue
+            if isinstance(stmt, ast.ClassDef) and _subclasses_shared_namesake(stmt, origin):
                 continue
             seen[stmt.name].add(rel)
     return {name for name, files in seen.items() if len(files) > 1}

@@ -1333,6 +1333,7 @@
       "refresh": "Refresh",
       "tabsAria": "نماهای دفتر",
       "tabs": {
+        "now": "در حال کار",
         "contention": "رقابت",
         "claims": "ادعاها",
         "conflicts": "تعارض‌ها",
@@ -1346,7 +1347,11 @@
         "mode": "حالت",
         "intent": "هدف",
         "expires": "انقضا",
-        "renewals": "تمدیدها"
+        "renewals": "تمدیدها",
+        "kind": "نوع",
+        "status": "وضعیت",
+        "task": "وظیفه فعلی",
+        "detail": "جزئیات"
       },
       "installWide": "Install-wide",
       "heldBy": "Held by {agent} ({company})",
@@ -1386,11 +1391,13 @@
         "conflicts": "تعارضی وجود ندارد",
         "activity": "فعالیت اخیری نیست",
         "devLoop": "No dev-loop history",
-        "devLoopActions": "No actions recorded for this issue"
+        "devLoopActions": "No actions recorded for this issue",
+        "presence": "هیچ عاملی گزارش نداده است",
+        "peerMessages": "پیام در انتظاری نیست",
+        "idleSubscribers": "اشتراک بیکاری وجود ندارد"
       },
       "notes": {
         "title": "What this view cannot see",
-        "neverReadable": "The SLM cannot read {sources}: they live inside the AutoBot backend process, so they are missing here, not empty.",
         "storeDown": "Couldn't read the {source} store just now. Its entries are missing here, not empty.",
         "sourcesUnknown": "Couldn't check which ledger sources are readable.",
         "peerIdentity": "Agents have no per-peer identity yet: an agent that is refused an action can ask another agent to do it (#16950).",
@@ -1412,7 +1419,14 @@
         "unavailableTitle": "خواندن دفتر ممکن نشد",
         "unavailableBody": "مخزن {source} پاسخ نداد. این با نبودن هیچ ورودی یکی نیست.",
         "errorTitle": "هنگام بارگذاری این بخش خطایی رخ داد"
-      }
+      },
+      "busy": "مشغول",
+      "idle": "Idle",
+      "peerMessages": "پیام‌های همتای در انتظار",
+      "idleSubscribers": "اشتراک‌های بیکاری",
+      "pendingFor": "{n} در انتظار برای {name}",
+      "sentBy": "از {names}",
+      "waitsForIdle": "{who} منتظر است تا {target} بیکار شود"
     }
   },
   "monitoringView": {
