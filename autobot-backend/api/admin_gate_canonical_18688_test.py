@@ -43,10 +43,18 @@ def identity(monkeypatch):
     """The user the real gate sees; the internal-key check is pinned to ``_KEY``."""
     real = load_real_auth_middleware()
     state = SimpleNamespace(user=None)
-    middleware = SimpleNamespace(get_user_from_request=lambda _request: state.user)
+    middleware = SimpleNamespace(
+        get_user_from_request=lambda _request: state.user,
+        # get_current_user's run/device-JWT fallbacks: no such token in these requests.
+        _extract_user_from_run_jwt=AsyncMock(return_value=None),
+        _extract_user_from_device_jwt=AsyncMock(return_value=None),
+    )
     monkeypatch.setattr(real, "get_auth_middleware", lambda: middleware)
     monkeypatch.setattr(real, "verify_internal_api_key", lambda provided: provided == _KEY)
     monkeypatch.setitem(sys.modules, "auth_middleware", real)
+    import security.human_admin as human_admin
+
+    monkeypatch.setattr(human_admin, "auth_middleware", real)  # the same key check the gate makes
     return state
 
 
@@ -65,6 +73,7 @@ def audit_client(identity):
     app.include_router(module.router, prefix="/api")
     audit_logger = MagicMock()
     audit_logger.query_logs = AsyncMock(return_value=[])
+    audit_logger.cleanup_old_logs = AsyncMock(return_value=None)
     with patch.object(module, "get_audit_logger", return_value=audit_logger):
         yield TestClient(app, raise_server_exceptions=False)
 
@@ -73,6 +82,11 @@ def audit_client(identity):
 def stop_client(identity):
     module = _fresh("redis_service")
     manager = MagicMock()
+    manager.get_service_status = AsyncMock(
+        return_value=SimpleNamespace(
+            status="running", pid=1, uptime_seconds=1.0, memory_mb=1.0, last_check="2026-10-18T00:00:00Z"
+        )
+    )
     manager.stop_service = AsyncMock(
         return_value=SimpleNamespace(
             success=True,
@@ -139,3 +153,40 @@ def test_an_admin_gives_200_on_redis_service_stop_and_is_named_in_the_audit(stop
     identity.user = dict(_ADMIN)
     assert client.post(_STOP).status_code == 200
     manager.stop_service.assert_awaited_once_with(user_id="root")
+
+
+# -- destructive routes are for human admins only (owner decision 2026-10-18) ---------------------
+
+_CLEANUP = "/api/audit/cleanup"
+_CLEANUP_BODY = {"confirm": True, "days_to_keep": 90}
+_STATUS = "/api/status"
+
+
+def test_the_internal_key_cannot_stop_redis(stop_client, identity):
+    client, manager = stop_client
+    response = client.post(_STOP, headers={"X-Internal-API-Key": _KEY})
+    assert response.status_code == 403
+    manager.stop_service.assert_not_awaited()
+
+
+def test_the_internal_key_cannot_delete_audit_logs(audit_client, identity):
+    response = audit_client.post(_CLEANUP, json=_CLEANUP_BODY, headers={"X-Internal-API-Key": _KEY})
+    assert response.status_code == 403
+
+
+def test_a_human_admin_can_still_delete_audit_logs(audit_client, identity):
+    identity.user = _ADMIN
+    assert audit_client.post(_CLEANUP, json=_CLEANUP_BODY).status_code == 200
+
+
+def test_a_wrong_key_with_a_human_admin_session_is_not_refused_as_a_service(audit_client, identity):
+    """Only a VALID service key is refused; a stray header doesn't block the human admin."""
+    identity.user = _ADMIN
+    assert audit_client.post(_CLEANUP, json=_CLEANUP_BODY, headers={"X-Internal-API-Key": "wrong"}).status_code == 200
+
+
+def test_redis_status_needs_a_user(stop_client, identity):
+    client, _manager = stop_client
+    assert client.get(_STATUS).status_code == 401
+    identity.user = _USER
+    assert client.get(_STATUS).status_code != 401

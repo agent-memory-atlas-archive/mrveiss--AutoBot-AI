@@ -23,6 +23,7 @@ from api.system_health import ComponentHealth, register_health_probe
 from auth_middleware import check_admin_permission, get_auth_middleware, get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
+from security.human_admin import refuse_service_principal
 from services.redis_service_manager import RedisConnectionError, RedisServiceManager
 
 logger = get_logger(__name__)
@@ -146,6 +147,7 @@ async def start_redis_service(request: Request, manager: RedisServiceManager = D
 async def stop_redis_service(
     request: Request,
     manager: RedisServiceManager = Depends(get_service_manager),
+    _human: None = Depends(refuse_service_principal),
     admin_check: bool = Depends(check_admin_permission),
     current_user: dict = Depends(get_current_user),
 ):
@@ -232,11 +234,13 @@ async def restart_redis_service(request: Request, manager: RedisServiceManager =
     operation="get_redis_status",
     error_code_prefix="REDIS_SERVICE",
 )
-async def get_redis_status(manager: RedisServiceManager = Depends(get_service_manager)):
+async def get_redis_status(
+    manager: RedisServiceManager = Depends(get_service_manager), current_user: dict = Depends(get_current_user)
+):
     """
     Get current Redis service status
 
-    No authentication required (public endpoint)
+    Requires an authenticated user; no caller depended on it being public (#18718).
     """
     try:
         status = await manager.get_service_status()
