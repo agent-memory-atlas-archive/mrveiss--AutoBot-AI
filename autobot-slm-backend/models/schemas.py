@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from services.ssh_utils import SshHost, SshPassword, SshUser
 
-from .database import BackupServiceType, NodeStatus
+from .database import BackupServiceType, NodeStatus, ScheduleTargetType  # noqa: F401  (re-exported)
 
 # =============================================================================
 # Authentication Schemas
@@ -1836,14 +1836,6 @@ class CodeVersionNotificationResponse(BaseModel):
 # =============================================================================
 # Schedule Schemas (Issue #741 - Phase 7)
 # =============================================================================
-
-
-class ScheduleTargetType(str, Enum):
-    """Schedule target type enumeration."""
-
-    ALL = "all"
-    SPECIFIC = "specific"
-    TAG = "tag"
 
 
 class ScheduleCreate(BaseModel):

@@ -445,7 +445,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/api/updates.py": 1107,
     "autobot-slm-backend/main.py": 781,  # #16375: secret seeding consolidated into services/generated_system_secrets.py
     "autobot-slm-backend/models/database.py": 1140,
-    "autobot-slm-backend/models/schemas.py": 2153,
+    "autobot-slm-backend/models/schemas.py": 2145,
     "autobot-slm-backend/monitoring/business_intelligence_dashboard.py": 1159,
     "autobot-slm-backend/monitoring/performance_benchmark.py": 1073,
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,
