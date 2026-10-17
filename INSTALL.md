@@ -294,7 +294,7 @@ files and the apt sources it added. **Your data stays** unless you add a flag:
 
 | Flag | Also removes |
 |---|---|
-| `--purge-data` | AutoBot's databases; the whole `/opt/autobot` tree, including anything else in it (by default only AutoBot's own code there goes; its `backups`, `db-backups`, `snapshots`, `data`, `models`, `plugins`, `.env`, `config`, certificates and any folder AutoBot does not know as its code stay); `/etc/autobot` (secrets and credentials); its state and backups elsewhere; and the accounts the installer created, with their homes. PostgreSQL itself only if every cluster was inspected and holds nothing but AutoBot's databases and roles, and its directories only if empty afterwards |
+| `--purge-data` | AutoBot's databases; the whole `/opt/autobot` tree, including anything else in it (by default only AutoBot's own code there goes; its `backups`, `db-backups`, `snapshots`, `data`, `models`, `plugins`, `.env`, `config`, certificates, any folder AutoBot does not know as its code, and the data inside its code folders -- the backends' `data` and `.env`, the ChromaDB store -- stay); `/etc/autobot` (secrets and credentials); its state and backups elsewhere; and the accounts the installer created, with their homes. PostgreSQL itself only if every cluster was inspected and holds nothing but AutoBot's databases and roles, and its directories only if empty afterwards |
 | `--purge-shared` | grafana, prometheus, node-exporter, redis-stack and python3-psycopg2, with their data. Nothing records who installed them, so they stay by default |
 
 It never removes:

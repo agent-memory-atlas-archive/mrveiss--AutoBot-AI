@@ -320,10 +320,13 @@ def test_every_opt_autobot_child_the_roles_write_is_classified() -> None:
 def _plan_opt_code(purge_data: bool) -> set[str]:
     text = _UNINSTALL.read_text(encoding="utf-8")
     func = "\n".join(
-        re.search(rf"^{name}\(\) \{{.*?^\}}", text, re.S | re.M).group(0) for name in ("opt_children", "plan_opt_code")
+        re.search(rf"^{name}\(\) \{{.*?^\}}", text, re.S | re.M).group(0)
+        for name in ("existing", "opt_children", "nested_data_in", "plan_opt_code")
     )
+    func += "\n" + re.search(r"^is_code_child\(\) \{.*\}$", text, re.M).group(0)
     opt_data = re.search(r"^readonly OPT_DATA=.*$", text, re.M).group(0)
     opt_data += "\n" + re.search(r"^readonly OPT_CODE=\(.*?\)$", text, re.S | re.M).group(0)
+    opt_data += "\n" + re.search(r"^readonly OPT_NESTED_DATA=\(.*?\)$", text, re.S | re.M).group(0)
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp) / "autobot"
         for child in (
@@ -362,3 +365,65 @@ def test_a_default_uninstall_removes_only_code_under_opt_autobot() -> None:
 def test_purge_data_takes_the_whole_tree_through_data_paths_instead() -> None:
     assert _plan_opt_code(purge_data=True) == set()
     assert _array("DATA_PATHS")[0] == "${AUTOBOT_BASE}"
+
+
+_DATA_LIKE = re.compile(r"/(data|chromadb|db|\.env|[^/]*\.sqlite[0-9]*|[^/]*\.db)(/|$)")
+
+
+def test_every_data_path_inside_a_code_dir_is_preserved() -> None:
+    """01's round 4: ChromaDB lived at /opt/autobot/autobot-db-stack/chromadb/data, a code dir."""
+    code_dirs, nested = set(_array("OPT_CODE")), _array("OPT_NESTED_DATA")
+    alternation = "|".join(re.escape(c) for c in sorted(code_dirs))
+    pattern = re.compile(rf"/opt/autobot/((?:{alternation})/[A-Za-z0-9_./-]+)")
+    code = [
+        _ROOT / p
+        for p in tracked_paths(_ROOT, "autobot-backend/*.py", "autobot_shared/*.py", "autobot-slm-backend/*.py")
+        if not p.endswith("_test.py") and "/tests/" not in p
+    ]
+    found = set()
+    for path in _role_files() + code:
+        for sub in pattern.findall(path.read_text(encoding="utf-8")):
+            sub = sub.rstrip(".,;:)")
+            if _DATA_LIKE.search("/" + sub):
+                found.add(sub)
+    assert found, "no data-like path under a code dir read -- the scan is broken"
+    uncovered = sorted(
+        s for s in found if not any(s == n or s.startswith(n + "/") or n.startswith(s + "/") for n in nested)
+    )
+    assert not uncovered, f"data inside OPT_CODE dirs that a default uninstall would delete: {uncovered}"
+
+
+def test_a_code_dir_loses_its_code_and_keeps_the_data_inside() -> None:
+    text = _UNINSTALL.read_text(encoding="utf-8")
+    funcs = "\n".join(
+        re.search(rf"^{n}\(\) \{{.*?^\}}", text, re.S | re.M).group(0)
+        for n in ("existing", "nested_data_in", "remove_code_keeping_data")
+    )
+    nested = re.search(r"^readonly OPT_NESTED_DATA=\(.*?\)$", text, re.S | re.M).group(0)
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "autobot"
+        for rel in (
+            "autobot-db-stack/chromadb/data/chroma.sqlite3",
+            "autobot-db-stack/bin/run.sh",
+            "autobot-db-stack/.env",
+            "autobot-backend/data/kb.json",
+            "autobot-backend/app/main.py",
+        ):
+            (base / rel).parent.mkdir(parents=True, exist_ok=True)
+            (base / rel).write_text("x", encoding="utf-8")
+        script = f"""set -euo pipefail
+AUTOBOT_BASE={base}
+log() {{ echo "$*"; }}
+{nested}
+{funcs}
+remove_code_keeping_data {base}/autobot-db-stack
+remove_code_keeping_data {base}/autobot-backend
+"""
+        out = subprocess.run([shutil.which("bash") or "bash", "-c", script], capture_output=True, text=True, timeout=30)
+        assert out.returncode == 0, out.stderr
+        assert (base / "autobot-db-stack/chromadb/data/chroma.sqlite3").exists(), "the ChromaDB store was deleted"
+        assert (base / "autobot-db-stack/.env").exists() and (base / "autobot-backend/data/kb.json").exists()
+        assert (
+            not (base / "autobot-db-stack/bin").exists() and not (base / "autobot-backend/app").exists()
+        ), "code stayed"
+        assert "KEPT" in out.stdout

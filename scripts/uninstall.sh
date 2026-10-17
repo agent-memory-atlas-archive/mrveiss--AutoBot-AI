@@ -83,6 +83,13 @@ readonly OPT_CODE=(
     code_source scripts venv src app slm slm-agent agent ai-stack infrastructure libs constraints
     logs cache requirements.txt venv_provenance.py .autobot-installed
 )
+# Data that lives INSIDE an OPT_CODE directory (relative to /opt/autobot): such a directory
+# loses its code and keeps these sub-paths unless --purge-data. The #18653 guard fails on a
+# data-like sub-path (data, chromadb, db, .env, *.sqlite, *.db) under a code dir not listed.
+readonly OPT_NESTED_DATA=(
+    autobot-backend/data autobot-backend/.env autobot-slm-backend/data autobot-slm-backend/.env
+    autobot-db-stack/chromadb autobot-db-stack/.env autobot-npu-worker/.env
+)
 readonly PATHS=(
     /etc/slm-agent /var/log/autobot /opt/node_exporter
     /etc/dnsmasq.d/autobot.conf /etc/logrotate.d/autobot /etc/logrotate.d/redis-stack
@@ -222,12 +229,47 @@ opt_children() {  # every entry directly under /opt/autobot, hidden ones include
     return 0
 }
 
-plan_opt_code() {  # the /opt/autobot children that are AutoBot code -- allow-list, never "the rest"
+nested_data_in() {  # nested_data_in <code dir>: its OPT_NESTED_DATA sub-paths that exist
+    local rel
+    for rel in "${OPT_NESTED_DATA[@]}"; do
+        [[ "${rel%%/*}" == "${1##*/}" ]] && existing "${AUTOBOT_BASE}/${rel}"
+    done
+    return 0
+}
+
+is_code_child() { [[ " ${OPT_CODE[*]} " == *" ${1##*/} "* ]]; }
+
+plan_opt_code() {  # AutoBot code children removed WHOLE -- allow-list, never "the rest"
     ${PURGE_DATA} && return 0  # the whole tree goes with DATA_PATHS
     local child
     while read -r child; do
-        [[ -n "${child}" && " ${OPT_CODE[*]} " == *" ${child##*/} "* ]] && echo "${child}"
+        [[ -n "${child}" ]] && is_code_child "${child}" && [[ -z "$(nested_data_in "${child}")" ]] && echo "${child}"
     done < <(opt_children)
+    return 0
+}
+
+plan_opt_partial() {  # code children that hold data: their code goes, the data inside stays
+    ${PURGE_DATA} && return 0
+    local child
+    while read -r child; do
+        [[ -n "${child}" ]] && is_code_child "${child}" && [[ -n "$(nested_data_in "${child}")" ]] && echo "${child}"
+    done < <(opt_children)
+    return 0
+}
+
+remove_code_keeping_data() {  # remove_code_keeping_data <code dir>: everything but its nested data
+    local dir="$1" path keep skip
+    local keeps=()
+    mapfile -t keeps < <(nested_data_in "${dir}")
+    while IFS= read -r -d '' path; do
+        skip=false
+        for keep in "${keeps[@]}"; do
+            # the kept path itself, anything inside it, and the directories leading to it stay
+            if [[ "${path}" == "${keep}" || "${path}" == "${keep}/"* || "${keep}" == "${path}/"* ]]; then skip=true; break; fi
+        done
+        ${skip} || rm -rf -- "${path}"
+    done < <(find "${dir}" -mindepth 1 -depth -print0)
+    for keep in "${keeps[@]}"; do log "  KEPT ${keep} (data inside ${dir##*/})"; done
     return 0
 }
 
@@ -235,7 +277,8 @@ plan_opt_kept() {  # what a default uninstall leaves in /opt/autobot
     ${PURGE_DATA} && return 0
     local child
     while read -r child; do
-        [[ -n "${child}" && " ${OPT_CODE[*]} " != *" ${child##*/} "* ]] && echo "${child}"
+        [[ -z "${child}" ]] && continue
+        if is_code_child "${child}"; then nested_data_in "${child}"; else echo "${child}"; fi
     done < <(opt_children)
     return 0
 }
@@ -282,6 +325,7 @@ print_plan() {
     else
         log "  KEPT (data):  databases ${DATABASES[*]}, accounts $(plan_users | tr '\n' ' '), $(existing "${DATA_PATHS[@]:1}" | tr '\n' ' ')-- add --purge-data to remove"
         log "  KEPT in ${AUTOBOT_BASE} (data, or not AutoBot code): $(plan_opt_kept | tr '\n' ' ')"
+        log "  code removed AROUND the data kept inside: $(plan_opt_partial | tr '\n' ' ')"
     fi
     ${PURGE_SHARED} || log "  KEPT (shared): ${SHARED_PACKAGES[*]} and their data -- add --purge-shared to remove"
     [[ -f "${INSTALL_RECORD}" ]] || log "  (no install record at ${INSTALL_RECORD}: no account, recorded package or recorded apt source is removed)"
@@ -371,6 +415,8 @@ remove_files() {
     for path in "${paths[@]}"; do
         if rm -rf -- "${path}"; then log "  removed ${path}"; else log "  WARNING: could not remove ${path}"; fi
     done
+    mapfile -t paths < <(plan_opt_partial)
+    for path in "${paths[@]}"; do remove_code_keeping_data "${path}"; done
     return 0
 }
 
