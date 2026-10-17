@@ -75,7 +75,9 @@ def audit_client(identity):
     audit_logger.query_logs = AsyncMock(return_value=[])
     audit_logger.cleanup_old_logs = AsyncMock(return_value=None)
     with patch.object(module, "get_audit_logger", return_value=audit_logger):
-        yield TestClient(app, raise_server_exceptions=False)
+        client = TestClient(app, raise_server_exceptions=False)
+        client.audit_logger = audit_logger  # so a test can prove nothing was deleted
+        yield client
 
 
 @pytest.fixture
@@ -172,11 +174,13 @@ def test_the_internal_key_cannot_stop_redis(stop_client, identity):
 def test_the_internal_key_cannot_delete_audit_logs(audit_client, identity):
     response = audit_client.post(_CLEANUP, json=_CLEANUP_BODY, headers={"X-Internal-API-Key": _KEY})
     assert response.status_code == 403
+    audit_client.audit_logger.cleanup_old_logs.assert_not_awaited()
 
 
 def test_a_human_admin_can_still_delete_audit_logs(audit_client, identity):
     identity.user = _ADMIN
     assert audit_client.post(_CLEANUP, json=_CLEANUP_BODY).status_code == 200
+    audit_client.audit_logger.cleanup_old_logs.assert_awaited_once()
 
 
 def test_a_wrong_key_with_a_human_admin_session_is_not_refused_as_a_service(audit_client, identity):
