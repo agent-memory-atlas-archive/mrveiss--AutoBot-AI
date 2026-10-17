@@ -26,21 +26,21 @@
  */
 
 import slmApiClient from '@/utils/ApiClient'
-import type { components } from '@/types/generated/api'
+import type { components, operations } from '@/types/generated/api'
 
 // =============================================================================
 // Type Definitions — derived from the generated OpenAPI contract
 // =============================================================================
 
-// Both /slm-users and /autobot-users serve the `autobot_shared` user schemas
-// (the generated names are unqualified now that no other SLM model shares them).
-export type RoleResponse =
-  components['schemas']['RoleResponse']
-export type SlmUserResponse =
-  components['schemas']['UserResponse']
+// Both /slm-users and /autobot-users serve the `autobot_shared` user schemas.
+// Taken from the create operation rather than by schema name: the generated
+// name is qualified while another SLM model shares it and unqualified once none
+// does (#17312), and an operation's shape survives that rename.
+type CreateSlmUser = operations['create_slm_user_api_slm_users_post']
+export type CreateUserPayload = CreateSlmUser['requestBody']['content']['application/json']
+export type SlmUserResponse = CreateSlmUser['responses'][201]['content']['application/json']
+export type RoleResponse = NonNullable<SlmUserResponse['roles']>[number]
 export type SlmUserListResponse = components['schemas']['UserListResponse']
-export type CreateUserPayload =
-  components['schemas']['UserCreate']
 export type PasswordChange = components['schemas']['PasswordChange']
 
 export type AutobotTeamResponse = components['schemas']['AutobotTeamResponse']
