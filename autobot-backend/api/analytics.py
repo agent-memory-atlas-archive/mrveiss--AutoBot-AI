@@ -32,6 +32,9 @@ from api.analytics_controller import (
     analytics_controller,
     analytics_state,
 )
+
+# Import controller class (extracted from this file - Issue #212)
+from api.codebase_analytics.task_routes import add_clear_stuck_route
 from api.schemas_analytics import (
     AnalyticsClearStuckTasksResponse,
     AnalyticsCollectionStartResponse,
@@ -49,8 +52,6 @@ from api.schemas_analytics import (
     RealTimeEvent,
 )
 from api.schemas_analytics_collector import AnalyticsPerformanceMetricsResponse, AnalyticsUsageStatisticsResponse
-
-# Import controller class (extracted from this file - Issue #212)
 from api.ws_security import open_authenticated_ws
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
@@ -1270,14 +1271,11 @@ async def get_dashboard_status(task_id: str, _user: Dict = Depends(get_current_u
     return status
 
 
-@router.post("/dashboard/overview/tasks/clear-stuck", response_model=AnalyticsClearStuckTasksResponse)
-@with_error_handling(
-    category=ErrorCategory.SERVER_ERROR,
-    operation="clear_stuck_dashboard_tasks",
-    error_code_prefix="ANALYTICS",
+add_clear_stuck_route(
+    router,
+    "/dashboard/overview/tasks/clear-stuck",
+    name="clear_stuck_dashboard_tasks",
+    error_prefix="ANALYTICS",
+    response_model=AnalyticsClearStuckTasksResponse,
+    description="Clear stuck dashboard overview tasks — no-op, Celery handles recovery (GH#8433).",
 )
-async def clear_stuck_dashboard_tasks(
-    force: bool = Query(default=False, description="Force clear ALL running tasks"),
-):
-    """Clear stuck dashboard overview tasks — no-op, Celery handles recovery (GH#8433)."""
-    return {"cleared_count": 0, "message": "Celery handles task recovery automatically"}

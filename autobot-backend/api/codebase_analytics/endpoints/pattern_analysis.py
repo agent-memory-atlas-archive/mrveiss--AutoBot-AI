@@ -17,6 +17,7 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from api.codebase_analytics.task_routes import add_clear_stuck_route
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import bounded
 from autobot_shared.logging_manager import get_logger
@@ -211,13 +212,9 @@ async def list_analysis_tasks() -> Dict[str, Any]:
     return {"tasks": analytics_tasks, "count": len(analytics_tasks)}
 
 
-@router.post("/patterns/tasks/clear-stuck")
-@bounded(60.0)
-async def clear_stuck_tasks(
-    force: bool = Query(default=False, description="Force clear ALL running tasks"),
-) -> Dict[str, Any]:
-    """No-op: Celery handles stuck-task recovery automatically (GH#6505)."""
-    return {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
+add_clear_stuck_route(
+    router, "/patterns/tasks/clear-stuck", name="clear_stuck_tasks", bounded_s=60.0, response_model=Dict[str, Any]
+)
 
 
 @router.post("/patterns/tasks/clear-all")
@@ -290,13 +287,7 @@ async def get_pattern_summary_status(task_id: str, _user: dict = Depends(get_cur
     return status
 
 
-@router.post("/patterns/summary/tasks/clear-stuck")
-@bounded(60.0)
-async def clear_stuck_summary_tasks(
-    force: bool = Query(default=False, description="Force clear ALL running tasks"),
-):
-    """No-op: Celery handles stuck-task recovery automatically (GH#6505)."""
-    return {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
+add_clear_stuck_route(router, "/patterns/summary/tasks/clear-stuck", name="clear_stuck_summary_tasks", bounded_s=60.0)
 
 
 @router.get("/patterns/duplicates")

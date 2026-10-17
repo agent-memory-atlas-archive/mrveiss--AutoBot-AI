@@ -25,16 +25,6 @@ ROUTER_MODULES = [
     "api.codebase_analytics.endpoints.indexing",
     "api.codebase_analytics.endpoints.pattern_analysis",
 ]
-# clear-stuck routes in grandfathered files whose size ceiling (python_file_size_ratchet)
-# leaves no room for the extra signature line; each is gated once the file is split or
-# its ceiling is decided. The test below fails when an entry here becomes gated, so the
-# list can only shrink.
-PENDING_CEILING = {
-    ("api.analytics", "/dashboard/overview/tasks/clear-stuck"),
-    ("api.code_intelligence", "/security/score/tasks/clear-stuck"),
-    ("api.codebase_analytics.endpoints.pattern_analysis", "/patterns/tasks/clear-stuck"),
-    ("api.codebase_analytics.endpoints.pattern_analysis", "/patterns/summary/tasks/clear-stuck"),
-}
 _TASK_PATH = re.compile(r"/status/\{task_id\}$|/clear-stuck$")
 _GATES = {get_current_user, check_admin_permission}
 
@@ -60,15 +50,14 @@ def _ungated_paths(module):
 
 @pytest.mark.parametrize("module", ROUTER_MODULES)
 def test_task_routes_are_gated(module):
-    pending = {p for m, p in PENDING_CEILING if m == module}
-    assert _ungated_paths(module) == pending
+    assert _ungated_paths(module) == set()
 
 
-def test_clear_stuck_gates_are_admin_and_status_gates_exist():
+def test_clear_stuck_gates_are_admin():
     for module in ROUTER_MODULES:
         for r in _task_routes(importlib.import_module(module).router):
             calls = {d.call for d in r.dependant.dependencies}
-            if r.path.endswith("/clear-stuck") and (module, r.path) not in PENDING_CEILING:
+            if r.path.endswith("/clear-stuck"):
                 assert check_admin_permission in calls, f"{module} {r.path}"
 
 

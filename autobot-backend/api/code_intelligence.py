@@ -24,6 +24,7 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from api.codebase_analytics.task_routes import add_clear_stuck_route
 from api.schemas_code import (
     CachedSecurityScoreResponse,
     ClearStuckResponse,
@@ -2067,17 +2068,13 @@ async def get_security_score_status(task_id: str, _user: Dict = Depends(get_curr
     return status
 
 
-@router.post("/security/score/tasks/clear-stuck", response_model=ClearStuckResponse)
-@with_error_handling(
-    category=ErrorCategory.SERVER_ERROR,
-    operation="clear_stuck_sec_tasks",
-    error_code_prefix="CODE_INTELLIGENCE",
+add_clear_stuck_route(
+    router,
+    "/security/score/tasks/clear-stuck",
+    name="clear_stuck_sec_tasks",
+    error_prefix="CODE_INTELLIGENCE",
+    response_model=ClearStuckResponse,
 )
-async def clear_stuck_sec_tasks(
-    force: bool = Query(default=False, description="Force clear ALL running tasks"),
-):
-    """No-op: Celery handles stuck-task recovery automatically (GH#6505)."""
-    return {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
 
 
 # Issue #2068: Stub GET endpoints for security/performance/redis findings.
