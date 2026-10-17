@@ -24056,7 +24056,7 @@
     },
     "/api/monitoring/agent-ledger/claims/yield-request": {
       "post": {
-        "description": "Ask the holder of any claim to release it. Publishes a request; releases nothing.",
+        "description": "Ask the holder of any claim to release it. Publishes a request; releases nothing.\n\nThe asker is the token's ``sub``; a token without one is a 401, never the shared\nidentity ``\"None\"`` (#18607). The per-person rate limit (``RateLimiter.acquire_window``)\nfails OPEN if ITS store is unreachable -- the limiter's class policy. With Redis down the\nask never gets that far: the claim lookup before the limiter answers the typed 503. Only\na limiter store failing on its own lets an ask through unlimited; it is still published\nonce per request, never as a release.",
         "operationId": "ledger_yield_request_api_monitoring_agent_ledger_claims_yield_request_post",
         "requestBody": {
           "content": {
