@@ -347,8 +347,8 @@ def _inspect(path: Path) -> tuple[int, dict]:
     return stat.S_IMODE(os.stat(path).st_mode), yaml.load(path.read_text(encoding="utf-8"), Loader=_UnsafeLoader)
 
 
-def _run_enrollment(deployment, monkeypatch, tmp_path, returncode: int):
-    """Run _execute_enrollment_playbook with a fake subprocess; return (argv, file seen, mode seen)."""
+def _run_enrollment(deployment, monkeypatch, tmp_path, returncode: int, deploy: bool = False):
+    """Run the enrollment (or role deploy) playbook with a fake subprocess; return (argv, file seen, mode seen)."""
     import asyncio
 
     seen: dict = {}
@@ -369,6 +369,7 @@ def _run_enrollment(deployment, monkeypatch, tmp_path, returncode: int):
     svc = deployment.DeploymentService()
     (tmp_path / "playbooks").mkdir()
     (tmp_path / deployment._ENROLLMENT_PLAYBOOK).write_text("---\n", encoding="utf-8")
+    (tmp_path / "deploy.yml").write_text("---\n", encoding="utf-8")
     svc.ansible_dir = tmp_path
 
     async def key() -> str:
@@ -379,15 +380,22 @@ def _run_enrollment(deployment, monkeypatch, tmp_path, returncode: int):
     monkeypatch.setattr(deployment.shutil, "which", lambda _n: "/usr/bin/sshpass")
     monkeypatch.setattr(deployment.asyncio, "create_subprocess_exec", fake_exec)
     try:
-        asyncio.run(svc._execute_enrollment_playbook("h", "n1", "u", 22, ssh_password=_SECRET))
+        if deploy:
+            asyncio.run(svc._execute_ansible_playbook("h", ["r"], "u", 22, ssh_password=_SECRET))
+        else:
+            asyncio.run(svc._execute_enrollment_playbook("h", "n1", "u", 22, ssh_password=_SECRET))
     except RuntimeError:
         seen["raised"] = True
     return seen
 
 
+@pytest.mark.parametrize("deploy", [False, True], ids=["enrollment", "role-deploy"])
 @pytest.mark.parametrize("returncode", [0, 1])
-def test_secrets_leave_argv_and_the_file_is_private_and_removed(deployment, monkeypatch, tmp_path, returncode) -> None:
-    seen = _run_enrollment(deployment, monkeypatch, tmp_path, returncode)
+def test_secrets_leave_argv_and_the_file_is_private_and_removed(
+    deployment, monkeypatch, tmp_path, returncode, deploy
+) -> None:
+    """Both playbook paths pass the SSH password via a 0600 file, never argv (role deploy: CodeQL #1182)."""
+    seen = _run_enrollment(deployment, monkeypatch, tmp_path, returncode, deploy)
     assert not any(_SECRET in arg for arg in seen["argv"])
     assert seen["argv"][-2] == "-e" and seen["argv"][-1].startswith("@")
     assert seen["mode"] == 0o600

@@ -113,13 +113,47 @@ readonly DATA_PATHS=(
 readonly DATABASES=(slm slm_users autobot_users)
 readonly DB_ROLES=(slm_app)
 # PostgreSQL itself: only with --purge-data AND when it holds nothing but AutoBot's.
-readonly POSTGRES_PACKAGES=("postgresql-*" "postgresql-client-*" "postgresql-contrib-*" postgresql-common postgresql-client-common)
+readonly POSTGRES_PACKAGES=("postgresql-*" "postgresql-contrib-*" postgresql-common)
+# The client stays even then (KEPT_PACKAGES): other workloads use psql/pg_dump. `postgresql-*`
+# also matches postgresql-client-NN, so plan_packages drops this family from every plan (#18761).
+readonly POSTGRES_CLIENT_RE='^postgresql-client($|-)'
 # Removed only once EMPTY after pg_dropcluster: /var/lib/postgresql is the postgres user's
 # home (dumps, .pgpass, unregistered clusters live there).
 readonly POSTGRES_PATHS=(/var/lib/postgresql /etc/postgresql)
 readonly POSTGRES_APT_SOURCES=(pgdg)
 # Shared software with no install record: only with --purge-shared.
 readonly SHARED_PACKAGES=(python3-psycopg2 grafana prometheus "prometheus-node-exporter*" redis-stack-server)
+# Packages the roles install that NO uninstall removes: general-purpose software the host or
+# its operator may rely on, so taking it away could break something that is not AutoBot. Each
+# group states why. Removed instead: the install record's packages, SHARED_PACKAGES with
+# --purge-shared, POSTGRES_PACKAGES when PostgreSQL holds only AutoBot. The #18653 guard fails
+# on a package a role installs that is in none of these lists.
+readonly KEPT_PACKAGES=(
+    # base OS tools and package plumbing -- every admin and many services use them
+    apt-transport-https ca-certificates cron curl dnsutils git gnupg gzip htop iftop iotop iputils-ping
+    logrotate lsb-release lsof net-tools netcat-openbsd nethogs nmap openssh-server openssl rsync
+    software-properties-common strace sudo systemd tar traceroute tree unzip vim wget xz-utils zstd
+    # host services an operator may run for other workloads too
+    chkrootkit chrony containerd.io dnsmasq docker-buildx-plugin docker-ce docker-ce-cli
+    docker-compose-plugin duplicity fail2ban nginx ntp ntpdate rkhunter supervisor systemd-timesyncd
+    ufw unattended-upgrades xorgxrdp xrdp
+    # build toolchain and development headers -- other software on the host builds with them
+    build-essential cmake ninja-build pkg-config portaudio19-dev python3-dev tk-dev zlib1g-dev "lib*-dev"
+    # language runtimes and their distro libraries
+    ansible nodejs npm python3 python3-opencv python3-pip python3-prometheus-client python3-redis
+    python3-tk python3-venv
+    # desktop, VNC and browser stack, with the runtime libraries browsers load
+    chromium-browser dbus-x11 firefox fluxbox tightvncserver "tigervnc-*" ubuntu-desktop-minimal
+    websockify x11-apps x11-utils x11vnc xauth xfce4 xfce4-goodies xfce4-terminal xterm xvfb
+    "libasound2*" "libatk*" libcups2 libdbus-1-3 libdrm2 libgbm1 libnspr4 libnss3 libxcomposite1
+    libxdamage1 libxfixes3 libxkbcommon0 libxrandr2
+    # media, speech and numeric libraries -- general purpose
+    espeak-ng espeak-ng-data ffmpeg libsndfile1 tesseract-ocr
+    # hardware drivers and vendor runtimes -- removing them can break the GPU or NPU for everything
+    intel-driver-compiler-npu intel-opencl-icd level-zero "openvino-*"
+    # clients of the shared services, and third-party CLIs from their own apt sources
+    claude-code gh postgresql-client redis-tools
+)
 readonly SHARED_PATHS=(/var/lib/grafana /etc/grafana /var/log/grafana /var/lib/prometheus /etc/prometheus /opt/prometheus)
 # Never removed: nginx and the base packages install.sh needs (git, curl, openssh-server, ...),
 # and the service accounts the roles create (no record tells them from pre-existing ones).
@@ -193,7 +227,7 @@ plan_packages() {  # the installed packages this run would purge
     for pkg in "${wanted[@]}"; do
         # dpkg-query exits 1 for a package that is not known here: not installed, not a failure.
         { dpkg-query -W -f='${Package} ${Status}\n' "${pkg}" 2>/dev/null || true; } | awk '/ installed$/{print $1}'
-    done | sort -u
+    done | awk -v keep="${POSTGRES_CLIENT_RE}" '$0 !~ keep' | sort -u
 }
 
 plan_purge_extra() {  # what apt would remove beyond plan_packages (reverse-dependents)
@@ -333,7 +367,7 @@ print_plan() {
     fi
     ${PURGE_SHARED} || log "  KEPT (shared): ${SHARED_PACKAGES[*]} and their data -- add --purge-shared to remove"
     [[ -f "${INSTALL_RECORD}" ]] || log "  (no install record at ${INSTALL_RECORD}: no account, recorded package or recorded apt source is removed)"
-    log "Never removed: nginx, base packages, ${KEPT_UNITS[*]}, apt sources ${KEPT_APT_SOURCES[*]}, role service accounts."
+    log "Never removed: general-purpose packages (KEPT_PACKAGES in this script), ${KEPT_UNITS[*]}, apt sources ${KEPT_APT_SOURCES[*]}, role service accounts."
 }
 
 confirm() {

@@ -503,12 +503,12 @@ class SecurityScannerAgent(StandardizedAgent):
         """Use research agent to find appropriate scanning tools"""
         try:
             # Import research agent
-            from agents.web_researcher import ResearchRequest, WebResearcher
+            from agents.web_researcher import WebResearcher, WebResearchRequest
 
             research_agent = WebResearcher()
             query = f"{scan_type} tools for security assessment Kali Linux 2024"
 
-            request = ResearchRequest(query=query, focus="tools")
+            request = WebResearchRequest(query=query, focus="tools")
 
             # Perform research
             research_result = await research_agent.research_specific_tools(request)

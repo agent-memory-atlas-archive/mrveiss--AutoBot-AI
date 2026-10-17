@@ -52,6 +52,13 @@ from constants.error_constants import (
     ERR_FILE_OR_DIR_NOT_FOUND,
     ERR_PATH_NOT_FOUND,
 )
+from security.upload_filename_policy import (  # noqa: F401 -- re-exported for api.sandbox_files and tests
+    _DANGEROUS_EXTENSIONS,
+    _DANGEROUS_FILENAME_CHARS,
+    _DANGEROUS_FILENAMES,
+    ALLOWED_EXTENSIONS,
+    is_safe_file,
+)
 from security_layer import SecurityLayer
 from utils.io_executor import run_in_file_executor
 from utils.path_validation import is_invalid_name
@@ -111,95 +118,11 @@ router = APIRouter(dependencies=[Depends(ensure_sandbox_root)])
 # Maximum file size (50MB)
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
-# Allowed file extensions for security
-ALLOWED_EXTENSIONS = {
-    # Text and data formats
-    ".txt",
-    ".md",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".xml",
-    ".csv",
-    ".log",
-    ".cfg",
-    ".ini",
-    ".conf",
-    # Code files
-    ".py",
-    ".js",
-    ".ts",
-    ".sh",
-    ".bat",
-    ".sql",
-    # Web files
-    ".html",
-    ".css",
-    # Office document formats (Microsoft)
-    ".pdf",
-    ".doc",
-    ".docx",
-    ".xlsx",
-    ".ppt",
-    ".pptx",
-    # Office document formats (OpenDocument/LibreOffice)
-    ".odt",  # OpenDocument Text (Writer)
-    ".ods",  # OpenDocument Spreadsheet (Calc)
-    ".odp",  # OpenDocument Presentation (Impress)
-    ".odg",  # OpenDocument Graphics (Draw)
-    # Image formats
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".svg",
-    ".ico",
-}
 
 # Performance optimization: O(1) lookup for invalid path characters (Issue #326).
 # Canonical set lives in autobot_shared.security.path_validator (#11844); this
 # alias preserves the public name that api.sandbox_files historically imported.
 INVALID_PATH_CHARACTERS = SANDBOX_INVALID_PATH_CHARACTERS
-
-# Issue #380: Module-level frozenset for dangerous filename characters
-_DANGEROUS_FILENAME_CHARS = frozenset({"<", ">", '"', "|", "?", "*", "\0", "\r", "\n"})
-
-# Issue #398: Module-level sets for is_safe_file validation
-_DANGEROUS_FILENAMES = frozenset(
-    {
-        ".htaccess",
-        ".env",
-        "passwd",
-        "shadow",
-        "config",
-        "web.config",
-        "autoexec.bat",
-        "boot.ini",
-        "hosts",
-        "httpd.conf",
-        "nginx.conf",
-    }
-)
-
-_DANGEROUS_EXTENSIONS = frozenset(
-    {
-        ".exe",
-        ".bat",
-        ".cmd",
-        ".com",
-        ".scr",
-        ".pif",
-        ".vbs",
-        ".js",
-        ".jar",
-        ".app",
-        ".deb",
-        ".rpm",
-        ".dmg",
-        ".pkg",
-        ".msi",
-    }
-)
 
 
 def get_security_layer(request: Request) -> SecurityLayer:
@@ -287,46 +210,6 @@ def get_file_info(file_path: Path, relative_path: str) -> FileInfo:
         permissions=oct(stat.st_mode)[-3:],
         extension=file_path.suffix.lower() if file_path.suffix else None,
     )
-
-
-def is_safe_file(filename: str) -> bool:
-    """
-    Check if file type is allowed and filename is safe.
-
-    Issue #398: Refactored to use module-level constants.
-    """
-    if not filename:
-        return False
-
-    # Check for dangerous characters (Issue #380: module-level constant)
-    if any(char in filename for char in _DANGEROUS_FILENAME_CHARS):
-        return False
-
-    # An uploaded filename is a bare name, never a path (#13394). Backslash is
-    # checked explicitly because Path.name is platform-dependent — on POSIX
-    # "dir\\evil.py" is one valid component (#13162).
-    if "/" in filename or "\\" in filename or Path(filename).name != filename:
-        return False
-
-    if len(filename) > 255:
-        return False
-
-    extension = Path(filename).suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
-        return False
-
-    # Issue #398: Use module-level sets
-    if filename.lower() in _DANGEROUS_FILENAMES:
-        return False
-
-    if extension in _DANGEROUS_EXTENSIONS and extension not in ALLOWED_EXTENSIONS:
-        return False
-
-    # Prevent null bytes and control characters
-    if "\0" in filename or any(ord(c) < 32 for c in filename):
-        return False
-
-    return True
 
 
 def _list_directory_contents(target_path: Path) -> tuple:
