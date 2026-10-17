@@ -20,7 +20,7 @@ from api.schemas_system import (
     ServiceStatusResponse,
 )
 from api.system_health import ComponentHealth, register_health_probe
-from auth_middleware import get_auth_middleware
+from auth_middleware import check_admin_permission, get_auth_middleware, get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from services.redis_service_manager import RedisConnectionError, RedisServiceManager
@@ -38,8 +38,6 @@ _service_manager_started: bool = False
 
 # Thread-safe lock for singleton
 import asyncio as _asyncio_lock
-
-from autobot_shared.auth.permissions import is_admin_role
 
 _service_manager_lock = _asyncio_lock.Lock()
 
@@ -69,28 +67,6 @@ async def get_service_manager() -> RedisServiceManager:
                 logger.info("Started Redis Service Manager singleton")
 
     return _service_manager
-
-
-def check_admin_permission(request: Request) -> str:
-    """
-    Check if user has admin permissions
-
-    Returns:
-        User ID if authorized
-
-    Raises:
-        HTTPException: If user lacks admin permissions
-    """
-    user_data = get_auth_middleware().get_user_from_request(request)
-
-    if not user_data:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    # Check if user has admin role
-    if not is_admin_role(user_data.get("role")):
-        raise HTTPException(status_code=403, detail="Admin role required for this operation")
-
-    return user_data.get("username", "unknown")
 
 
 def check_operator_permission(request: Request) -> str:
@@ -167,7 +143,12 @@ async def start_redis_service(request: Request, manager: RedisServiceManager = D
     operation="stop_redis_service",
     error_code_prefix="REDIS_SERVICE",
 )
-async def stop_redis_service(request: Request, manager: RedisServiceManager = Depends(get_service_manager)):
+async def stop_redis_service(
+    request: Request,
+    manager: RedisServiceManager = Depends(get_service_manager),
+    admin_check: bool = Depends(check_admin_permission),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Stop Redis service on Redis VM
 
@@ -176,8 +157,8 @@ async def stop_redis_service(request: Request, manager: RedisServiceManager = De
     Warning: Stopping Redis will affect all dependent services
     """
     try:
-        # Check permissions (admin only for stop)
-        user_id = check_admin_permission(request)
+        # Admin gate is the canonical Depends above; the name is for the audit log only
+        user_id = current_user.get("username", "unknown")
 
         logger.warning("Stopping Redis service, requested by admin: %s", user_id)
 
