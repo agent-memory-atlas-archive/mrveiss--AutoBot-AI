@@ -10,18 +10,19 @@ Two things follow from delegating ~357 user_management-gated routes (mostly
 * a token minted before its subject's password changed is refused on those
   routes too (it was honoured there before), and
 * the internal service key now resolves to a ``service`` principal, which is
-  NOT a tenant admin (owner decision 2026-10-17): organization-scoped routes
-  refuse it whatever ``X-Organization-Id`` it sends, while a non-tenant
-  ``auth_middleware`` route still admits it.
+  NOT a tenant admin (owner decision 2026-10-17): the wrapper refuses it with
+  the 401 main answered, while a route on ``auth_middleware`` directly still
+  admits it (no wrapper route has a named service caller).
 
 The real canonical gate runs here; only storage (the epoch lookup) is stood in.
 """
 
+import asyncio
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import api.user_management.dependencies as user_deps
@@ -82,19 +83,100 @@ def _service_key_gate(monkeypatch):
     [
         ({"X-Organization-Id": str(uuid.uuid4())}, {}),
         ({}, {"company_id": str(uuid.uuid4())}),
-        ({"X-Organization-Id": str(uuid.uuid4())}, {"company_id": str(uuid.uuid4())}),
         ({}, {}),  # no org at all: still refused, not "org context required"
     ],
 )
-def test_the_internal_service_key_is_refused_on_an_org_scoped_route(monkeypatch, headers, params):
+def test_the_internal_service_key_is_refused_at_the_wrapper_on_an_org_scoped_route(monkeypatch, headers, params):
     _service_key_gate(monkeypatch)
 
     response = _llc_client().get(
         "/api/llc/approvals", params=params, headers={"X-Internal-API-Key": INTERNAL_KEY, **headers}
     )
 
-    assert response.status_code == 403, response.text
-    assert response.json()["detail"] == user_deps._SERVICE_PRINCIPAL_DENIED
+    # 401 is what main answered the key on this dependency (JWT/session only).
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"] == "Authentication required"
+
+
+def test_the_internal_service_key_gets_no_cross_tenant_company_list(monkeypatch):
+    import llc.api.companies as companies_api  # noqa: PLC0415
+
+    _service_key_gate(monkeypatch)
+    svc = MagicMock()
+    svc.list_root_companies = AsyncMock(return_value=[MagicMock()])
+    app = FastAPI()
+    app.include_router(companies_api.router, prefix="/api/llc")
+    app.dependency_overrides[companies_api._get_service] = lambda: svc
+
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/api/llc/companies/", headers={"X-Internal-API-Key": INTERNAL_KEY}
+    )
+
+    assert response.status_code == 401, response.text
+    svc.list_root_companies.assert_not_called()
+
+
+@pytest.mark.parametrize("path", ["/report", "/summary"])
+def test_the_internal_service_key_is_refused_on_a_wrapper_only_route(monkeypatch, path):
+    import api.analytics_reporting as analytics  # noqa: PLC0415
+
+    _service_key_gate(monkeypatch)
+    app = FastAPI()
+    app.include_router(analytics.router)
+
+    response = TestClient(app, raise_server_exceptions=False).get(path, headers={"X-Internal-API-Key": INTERNAL_KEY})
+
+    assert response.status_code == 401, response.text
+
+
+def test_the_tenant_context_still_refuses_a_service_principal_handed_to_it_directly():
+    service = {"username": "service:slm", "role": "admin", "service": True}
+    request = MagicMock()
+    request.headers = {}
+    request.path_params = {}
+    request.query_params = {}
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(user_deps._resolve_tenant_context(request, service, AsyncMock()))
+
+    assert refused.value.status_code == 403
+    assert refused.value.detail == user_deps._SERVICE_PRINCIPAL_DENIED
+
+
+@pytest.mark.parametrize(
+    "claims, expected",
+    [
+        ({"username": "service:slm", "role": "admin", "service": True}, False),
+        ({"username": "alice", "role": "admin"}, True),  # control: the same role, no service marker
+    ],
+)
+def test_me_derives_platform_admin_from_the_shared_predicate(monkeypatch, claims, expected):
+    import api.user_management.users as users_api  # noqa: PLC0415
+
+    # UserResponse is stood in: /me builds it with created_at=None, which its schema
+    # refuses (a separate defect), so the flag is read off the constructor call.
+    built = {}
+    monkeypatch.setattr(users_api, "UserResponse", lambda **kwargs: built.update(kwargs))
+
+    asyncio.run(users_api.get_current_user_profile(current_user=dict(claims)))
+
+    assert built["is_platform_admin"] is expected
+
+
+def test_a_human_admin_jwt_still_lists_companies(monkeypatch):
+    import llc.api.companies as companies_api  # noqa: PLC0415
+
+    install_canonical_gate(monkeypatch, _jwt_middleware())
+    svc = MagicMock()
+    svc.list_root_companies = AsyncMock(return_value=[])
+    app = FastAPI()
+    app.include_router(companies_api.router, prefix="/api/llc")
+    app.dependency_overrides[companies_api._get_service] = lambda: svc
+
+    response = TestClient(app, raise_server_exceptions=False).get("/api/llc/companies/")
+
+    assert response.status_code == 200, response.text
+    svc.list_root_companies.assert_awaited_once()
 
 
 def test_the_internal_service_key_still_works_on_a_non_tenant_route(monkeypatch):

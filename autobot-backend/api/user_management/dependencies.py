@@ -68,10 +68,21 @@ async def get_current_user(request: Request) -> dict:
 
     The canonical gate adds password-change revocation (#12924, #16411), the
     run/device-JWT path allow-lists and one error shape. It also admits the
-    internal service key as a ``service`` principal; tenant-scoped gates here
-    refuse that principal (see ``_is_service_principal``).
+    internal service key as a ``service`` principal, which this wrapper refuses
+    with 401 (see ``_is_service_principal``); routes that accept the key depend on
+    ``auth_middleware.get_current_user`` directly.
     """
-    return await _canonical_get_current_user(request)
+    user = await _canonical_get_current_user(request)
+    if _is_service_principal(user):
+        # Parity with main, where this dependency read only the JWT/session and
+        # so answered an internal-key caller 401. No route behind this wrapper
+        # has a named service caller (#18688), so the principal is refused here
+        # rather than trusted to every route-local role check.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    return user
 
 
 def get_current_user_id(

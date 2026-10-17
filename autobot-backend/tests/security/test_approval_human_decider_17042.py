@@ -35,7 +35,6 @@ from fastapi.testclient import TestClient
 import api.approval_gates as gates_api
 import api.user_management.dependencies as user_deps
 import llc.api.approvals as llc_api
-from api.user_management.dependencies import _SERVICE_PRINCIPAL_DENIED
 from api.user_management.human_decider import HUMAN_DECISION_REQUIRED, classify_author_type
 from autobot_shared.auth.interactive_principal import LOGIN_TOKEN_TYPE, is_interactive_human, is_login_token
 from llc.deps import get_session as llc_get_session
@@ -58,12 +57,11 @@ from tests.security._credential_harness import (
 #: before it. Since #18688 the LLC route resolves credentials through the same
 #: canonical ``get_current_user`` as the async route, so run/device JWTs are now
 #: refused by their path allow-lists (403, was 401 "no user") and the internal
-#: service key now RESOLVES -- to a service principal the tenant gate refuses
-#: (403, was 401 "no user"): service principals are not tenant admins.
-REFUSED_AS_SERVICE_PRINCIPAL = "service principal"
+#: service key resolves to a service principal that the wrapper refuses at
+#: authentication (401, as before): service principals are not tenant admins.
 _LLC_EXPECTED = {
     "pre_17042_login_jwt": (403, REFUSED_BY_HUMAN_CHECK),
-    "internal_service_key": (403, REFUSED_AS_SERVICE_PRINCIPAL),
+    "internal_service_key": (401, REFUSED_AT_AUTHENTICATION),
     "run_jwt": (403, "run-JWT path allow-list"),
     "run_jwt_on_platform_key": (403, "run-JWT path allow-list"),
     "device_jwt": (403, "device-JWT path allow-list"),
@@ -241,8 +239,6 @@ def test_llc_decision_refuses_a_non_interactive_credential(harness, kind):
     assert response.status_code == status, response.text
     if refuser == REFUSED_BY_HUMAN_CHECK:
         assert response.json()["detail"] == HUMAN_DECISION_REQUIRED
-    if refuser == REFUSED_AS_SERVICE_PRINCIPAL:
-        assert response.json()["detail"] == _SERVICE_PRINCIPAL_DENIED
     harness.decide.assert_not_awaited()
 
 
