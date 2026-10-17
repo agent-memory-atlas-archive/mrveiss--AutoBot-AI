@@ -133,6 +133,11 @@ run_ok() {
     fi
 }
 
+record_install() {  # record_install <key> <value>, once (#18653)
+    mkdir -p "$(dirname "${INSTALL_RECORD}")"
+    grep -qxF "$1=$2" "${INSTALL_RECORD}" 2>/dev/null || echo "$1=$2" >> "${INSTALL_RECORD}"
+}
+
 # add_ppa_if_missing: prefer device-shipped PPA; only add if not already configured (#7144)
 #   $1 = ppa spec for apt-add-repository, e.g. "ppa:ansible/ansible"
 #   $2 = match string to grep across /etc/apt/sources.list.d/ — typically
@@ -146,11 +151,6 @@ run_ok() {
 # Signed-By → apt-get update aborts with E:Conflicting values set for option
 # Signed-By. This helper preserves the device-shipped repo and removes any
 # stale legacy duplicate left from prior install attempts.
-record_install() {  # record_install <key> <value>, once (#18653)
-    mkdir -p "$(dirname "${INSTALL_RECORD}")"
-    grep -qxF "$1=$2" "${INSTALL_RECORD}" 2>/dev/null || echo "$1=$2" >> "${INSTALL_RECORD}"
-}
-
 add_ppa_if_missing() {
     local ppa="$1"
     local match="$2"
@@ -313,7 +313,7 @@ After installation, use the SLM web UI setup wizard to add fleet nodes.
 Options:
   --unattended          Run without prompts, use all defaults
   --reinstall           Force reinstall over existing installation
-  --uninstall           Completely remove AutoBot and all dependencies (#2706)
+  --uninstall           Remove AutoBot: shows the plan, then asks (#2706, #18653)
   --validate            Verify installation integrity (check required service distributions)
   --yes                 Skip confirmation prompts (use with --uninstall)
   --branch=BRANCH       Git branch to install (default: ${DEFAULT_BRANCH})
@@ -1127,7 +1127,11 @@ uninstall() {
     # what the install record and AutoBot's own roles account for, shows the plan, and asks.
     local script="${CODE_SOURCE}/scripts/uninstall.sh"
     [[ $EUID -eq 0 ]] || fatal "This script must be run as root (use sudo)"
-    [[ -f "${script}" ]] || fatal "No installed AutoBot at ${CODE_SOURCE} -- its uninstaller (scripts/uninstall.sh) lives there."
+    if [[ ! -f "${script}" ]]; then
+        echo "No installed AutoBot at ${CODE_SOURCE}: its uninstaller (scripts/uninstall.sh) lives there." >&2
+        echo "See 'Uninstalling' in INSTALL.md for a partial install." >&2
+        exit 1
+    fi
     if ${CONFIRM_YES}; then exec bash "${script}" --yes; fi
     exec bash "${script}"
 }

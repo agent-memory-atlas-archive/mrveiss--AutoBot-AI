@@ -16,8 +16,8 @@ uid-1000 login. It is now scripts/uninstall.sh. These pin:
   admin marker, never by name;
 - the log sits outside every path it removes.
 
-**What these do not cover.** Templated names (``{{ var }}``) are not resolved, and nothing here
-runs an uninstall on a real host -- a run on a host with a prior install is the end-to-end proof.
+**What these do not cover.** Names templated from facts or computed expressions resolve only
+when a literal prefix is already covered; nothing here runs an uninstall on a real host -- a run on a host with a prior install is the end-to-end proof.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import yaml
 from repo_tests._paths import repo_root
 
 from tools.lint._scan_helpers import tracked_paths
@@ -50,48 +51,122 @@ def _role_files() -> list[Path]:
     return files
 
 
-def _role_dests(prefix: str) -> set[str]:
-    """Literal destinations under `prefix` that any role or playbook writes."""
-    found = set()
-    pattern = re.compile(rf"""dest:\s*["']?({re.escape(prefix)}[^"'\s]+)""")
+def _docs() -> list[tuple[Path, object]]:
+    out = []
     for path in _role_files():
-        found |= {m.group(1) for m in pattern.finditer(path.read_text(encoding="utf-8")) if "{{" not in m.group(1)}
-    return found
+        try:
+            out.append((path, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        except yaml.YAMLError:
+            continue
+    assert len(out) > 0.9 * len(_role_files()), "too many ansible files failed to parse -- the scan would miss them"
+    return out
 
 
-def test_every_deployed_systemd_unit_is_removed() -> None:
-    units, globs, dropins = set(_array("UNITS")), _array("UNIT_GLOBS"), set(_array("UNIT_DROPINS"))
-    deployed = _role_dests("/etc/systemd/system/")
-    assert len(deployed) >= 20, f"read {len(deployed)} deployed units -- the scan is broken"
-    missed = []
-    for dest in sorted(deployed):
-        name = dest.removeprefix("/etc/systemd/system/")
-        if "/" in name:  # a drop-in under <unit>.d/
-            covered = dest in dropins
-        else:
-            covered = name in units or any(fnmatch.fnmatch(name, g) for g in globs)
-        if not covered:
-            missed.append(dest)
-    assert not missed, f"roles deploy units scripts/uninstall.sh never removes: {missed}"
+def _variables(docs) -> dict[str, str]:
+    """Plain-string values from role defaults, group_vars and play-level vars."""
+    values: dict[str, str] = {}
+
+    def take(mapping) -> None:
+        for key, value in (mapping or {}).items():
+            if isinstance(value, str) and "{{" not in value:
+                values.setdefault(key, value)
+
+    for path, doc in docs:
+        if path.match("*/defaults/main.yml") or "group_vars" in path.parts:
+            take(doc if isinstance(doc, dict) else {})
+        elif isinstance(doc, list):
+            for play in doc:
+                if isinstance(play, dict) and isinstance(play.get("vars"), dict):
+                    take(play["vars"])
+    return values
+
+
+def _walk(node):
+    """(dest, loop items) for every module call with a `dest:`."""
+    if isinstance(node, dict):
+        loop = node.get("loop") or node.get("with_items")
+        for value in node.values():
+            if isinstance(value, dict) and isinstance(value.get("dest"), str):
+                yield value["dest"], loop if isinstance(loop, list) else None
+            yield from _walk(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _walk(item)
+
+
+def _resolve(dest: str, variables: dict[str, str]) -> str:
+    dest = re.sub(
+        r"\{\{\s*(\w+)\s*\|\s*default\(\s*['\"]([^'\"]+)['\"]\s*\)\s*\}\}", lambda m: variables.get(m[1], m[2]), dest
+    )
+    return re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda m: variables.get(m[1], m[0]), dest)
+
+
+def _deployed(prefixes: tuple[str, ...]) -> tuple[set[str], set[str]]:
+    """Destinations under `prefixes` the roles write: (resolved, still templated)."""
+    docs = _docs()
+    variables = _variables(docs)
+    resolved, open_ = set(), set()
+    for _, doc in docs:
+        for dest, loop in _walk(doc):
+            dest = dest.strip()
+            if not dest.startswith(prefixes):
+                continue
+            for item in loop if (loop and "{{ item }}" in dest) else [None]:
+                name = _resolve(dest.replace("{{ item }}", str(item)) if item is not None else dest, variables)
+                (open_ if "{{" in name else resolved).add(name)
+    return resolved, open_
+
+
+def _covered(path: str, exact: set[str], globs: list[str]) -> bool:
+    if path in exact or any(fnmatch.fnmatch(path, g) for g in globs):
+        return True
+    head = path.split("{{", 1)[0]  # a templated tail after a literal prefix a glob already covers
+    return "{{" in path and any(g.endswith("*") and head.startswith(g[:-1]) and len(head) >= len(g) - 1 for g in globs)
+
+
+def test_every_deployed_systemd_unit_is_removed_or_kept() -> None:
+    resolved, open_ = _deployed(("/etc/systemd/system/",))
+    assert len(resolved) >= 25, f"read {len(resolved)} deployed units -- the scan is broken"
+    unit_dir = "/etc/systemd/system/"
+    exact = {unit_dir + u for u in _array("UNITS") + _array("KEPT_UNITS")} | set(_array("UNIT_DROPINS"))
+    globs = [unit_dir + g for g in _array("UNIT_GLOBS")]
+    missed = sorted(d for d in resolved | open_ if not _covered(d, exact, globs))
+    assert not missed, f"roles deploy units scripts/uninstall.sh neither removes nor keeps: {missed}"
 
 
 def test_every_deployed_sudoers_file_is_removed() -> None:
-    covered = set(_array("SUDOERS")) | {"autobot"}  # autobot: install.sh's own, via created_sudoers
-    deployed = {d.removeprefix("/etc/sudoers.d/") for d in _role_dests("/etc/sudoers.d/")}
-    assert deployed, "no sudoers destinations read -- the scan is broken"
-    assert (
-        not deployed - covered
-    ), f"roles deploy sudoers files scripts/uninstall.sh never removes: {sorted(deployed - covered)}"
+    resolved, open_ = _deployed(("/etc/sudoers.d/",))
+    assert resolved, "no sudoers destinations read -- the scan is broken"
+    exact = {"/etc/sudoers.d/" + s for s in _array("SUDOERS")} | {
+        "/etc/sudoers.d/autobot"
+    }  # install.sh's own, via the record
+    missed = sorted(d for d in resolved | open_ if not _covered(d, exact, []))
+    assert not missed, f"roles deploy sudoers files scripts/uninstall.sh never removes: {missed}"
 
 
-def test_every_apt_source_a_role_adds_is_removed() -> None:
-    sources = _array("APT_SOURCES")
+def test_every_deployed_config_file_is_removed() -> None:
+    prefixes = (
+        "/etc/logrotate.d/",
+        "/etc/rsyslog.d/",
+        "/etc/dnsmasq.d/",
+        "/etc/nginx/sites-available/",
+        "/etc/nginx/sites-enabled/",
+    )
+    resolved, open_ = _deployed(prefixes)
+    assert len(resolved) >= 8, f"read {len(resolved)} config destinations -- the scan is broken"
+    exact = set(_array("PATHS")) | set(_array("POSTGRES_PATHS"))
+    missed = sorted(d for d in resolved | open_ if not _covered(d, exact, _array("PATH_GLOBS")))
+    assert not missed, f"roles deploy config files scripts/uninstall.sh never removes: {missed}"
+
+
+def test_every_apt_source_a_role_adds_is_removed_or_kept() -> None:
+    sources = _array("APT_SOURCES") + _array("KEPT_APT_SOURCES") + _array("POSTGRES_APT_SOURCES")
     added = set()
     for path in _role_files():
         added |= set(re.findall(r"""apt_repo_filename:\s*["']([a-z0-9-]+)["']""", path.read_text(encoding="utf-8")))
     assert added, "no apt_repo_filename read -- the scan is broken"
     missed = sorted(a for a in added if not any(a.startswith(s) for s in sources))
-    assert not missed, f"roles add apt sources scripts/uninstall.sh never removes: {missed}"
+    assert not missed, f"roles add apt sources scripts/uninstall.sh neither removes nor keeps: {missed}"
 
 
 def test_every_recorded_key_is_read_by_the_uninstaller() -> None:

@@ -12,9 +12,15 @@
 #   it, or it carries the marker AutoBot's own playbooks set on their admin account.
 #   Never by name or uid alone: on a reused machine `autobot` can be the owner's account.
 # - Packages and apt sources install.sh adds are removed only if the record says it added
-#   them. The rest are the components AutoBot's Ansible roles deploy, listed below; the
-#   guard repo_tests/uninstall_covers_role_components_18653_test.py fails when a role
-#   deploys a unit, sudoers file or apt source this file does not cover.
+#   them. The rest are the components AutoBot's Ansible roles deploy, listed below -- each
+#   either removed or KEPT with its reason. The guard
+#   repo_tests/uninstall_covers_role_components_18653_test.py fails when a role deploys a
+#   unit, sudoers file, apt source or config file this script neither removes nor keeps.
+# - PostgreSQL (clusters, packages, data, the pgdg source) goes only when every database on
+#   it is AutoBot's; a cluster holding anything else, or one that cannot be inspected, keeps
+#   the whole PostgreSQL stack. AutoBot's own databases are dropped either way.
+# - No system-wide `apt-get autoremove`, and the plan shows apt's full purge set,
+#   reverse-dependents included, before anything is touched.
 # - The full plan is printed before anything is touched; without --yes the operator types
 #   UNINSTALL to confirm, and a missing terminal refuses rather than proceeding. --dry-run
 #   prints the plan and exits.
@@ -29,6 +35,7 @@ if [[ "${AUTOBOT_UNINSTALL_COPY:-}" != "1" ]]; then
     cp "${BASH_SOURCE[0]}" "${copy}"
     AUTOBOT_UNINSTALL_COPY=1 exec bash "${copy}" "$@"
 fi
+trap 'rm -f "${BASH_SOURCE[0]}"' EXIT  # the temp copy, on dry run, cancel, refusal or error too
 
 readonly AUTOBOT_BASE="/opt/autobot"
 readonly INSTALL_RECORD="/etc/autobot/install-record"
@@ -42,9 +49,11 @@ readonly ADMIN_MARKERS=("Emergency Admin User (fallback access)" "AutoBot Backup
 readonly UNIT_GLOBS=("autobot-*.service" "autobot-*.timer" "autobot-*.socket")
 readonly UNITS=(
     slm.target slm-agent.service slm-admin-ui.service node_exporter.service prometheus.service
-    loki.service promtail.service redis_exporter.service redisinsight.service ollama.service
-    vnc-server.service redis-stack-server.service
+    loki.service promtail.service redis_exporter.service redisinsight.service
+    vnc-server.service vnc-websockify.service redis-stack-server.service
 )
+# ollama: commonly installed and used outside AutoBot; its unit and models stay.
+readonly KEPT_UNITS=(ollama.service)
 readonly UNIT_DROPINS=(
     /etc/systemd/system/nginx.service.d/ssl-cert-check.conf
     /etc/systemd/system/logrotate.timer.d/autobot-hourly.conf
@@ -53,16 +62,22 @@ readonly SUDOERS=(
     90-autobot 90-autobot_admin autobot_admin autobot-nopasswd autobot-python-provision
     autobot-redis-service slm-agent
 )
-readonly APT_SOURCES=(pgdg grafana redis docker intel-openvino deadsnakes)
-readonly PACKAGES=(
-    "postgresql-*" "postgresql-client-*" "postgresql-contrib-*" postgresql-common postgresql-client-common
-    python3-psycopg2 grafana prometheus "prometheus-node-exporter*" redis-stack-server
-)
+readonly APT_SOURCES=(grafana redis)
+# docker, intel-openvino, deadsnakes: general-purpose sources other software on the machine
+# relies on (deadsnakes is removed when install.sh's record says it added it).
+readonly KEPT_APT_SOURCES=(docker intel-openvino deadsnakes)
+readonly PACKAGES=(python3-psycopg2 grafana prometheus "prometheus-node-exporter*" redis-stack-server)
+# Removed only when PostgreSQL holds nothing but AutoBot's databases (postgres_is_autobots).
+readonly POSTGRES_PACKAGES=("postgresql-*" "postgresql-client-*" "postgresql-contrib-*" postgresql-common postgresql-client-common)
+readonly POSTGRES_PATHS=(/var/lib/postgresql /etc/postgresql)
+readonly POSTGRES_APT_SOURCES=(pgdg)
 readonly DATABASES=(slm slm_users autobot_users)
 readonly DB_ROLES=(slm_app)
 readonly PATHS=(
-    "${AUTOBOT_BASE}" /etc/autobot /var/lib/slm /var/lib/slm-agent /var/lib/autobot /var/log/autobot
-    /var/lib/postgresql /etc/postgresql /var/lib/grafana /etc/grafana /var/log/grafana
+    "${AUTOBOT_BASE}" /etc/autobot /etc/slm-agent /var/lib/slm /var/lib/slm-agent /var/lib/autobot /var/log/autobot
+    /var/lib/grafana /etc/grafana /var/log/grafana /opt/node_exporter
+    /etc/dnsmasq.d/autobot.conf /etc/logrotate.d/autobot /etc/logrotate.d/redis-stack
+    /etc/rsyslog.d/30-autobot.conf /etc/rsyslog.d/50-autobot.conf
     /var/lib/prometheus /etc/prometheus /opt/prometheus /etc/ssl/slm
     /var/backups/autobot /var/backups/autobot-apt-sources /var/www/slm-admin /var/www/autobot-slm
     /etc/nginx/sites-available/slm /etc/tmpfiles.d/autobot-slm-self-update.conf
@@ -71,7 +86,7 @@ readonly PATHS=(
     /usr/local/bin/check-time-sync.sh /var/lib/systemd/timers/stamp-autobot-pg-backup.timer
 )
 readonly PATH_GLOBS=(
-    "/etc/nginx/sites-available/autobot-slm*" "/etc/nginx/sites-enabled/autobot-slm*"
+    "/etc/nginx/sites-available/autobot-*" "/etc/nginx/sites-enabled/autobot-*"
     "/etc/nginx/snippets/autobot-*" "/etc/logrotate.d/autobot-*"
 )
 # Left on purpose: nginx (install.sh's base package, often serving other sites), the base
@@ -105,27 +120,67 @@ plan_units() {
     return 0
 }
 
+foreign_databases() {  # databases on this host's PostgreSQL that are not AutoBot's
+    command -v pg_lsclusters &>/dev/null || return 0
+    local own="postgres|template0|template1|$(IFS='|'; echo "${DATABASES[*]}")" ver name port status _
+    while read -r ver name port status _; do
+        if [[ "${status}" != online* ]]; then
+            echo "(cluster ${ver}/${name} is ${status} and cannot be inspected)"
+            continue
+        fi
+        { sudo -u postgres psql -p "${port}" -Atc "SELECT datname FROM pg_database" 2>/dev/null \
+            || echo "(cluster ${ver}/${name} did not answer)"; } | grep -vxE "${own}" || true
+    done < <(pg_lsclusters --no-header 2>/dev/null || true)
+}
+
+# Decided ONCE, before anything changes (main sets POSTGRES_DECISION): after the purge psql is
+# gone, and re-deciding then would leave the data directories and the pgdg source behind.
+postgres_is_autobots() {
+    [[ "${POSTGRES_DECISION}" == "remove" ]]
+}
+
+decide_postgres() {  # "remove" when PostgreSQL is installed and holds only AutoBot's databases
+    if command -v psql &>/dev/null && [[ -z "$(foreign_databases)" ]]; then echo remove; else echo keep; fi
+}
+
 plan_packages() {
-    local pkg
-    for pkg in "${PACKAGES[@]}" $(record_values package); do
+    local pkg extra=()
+    postgres_is_autobots && extra=("${POSTGRES_PACKAGES[@]}")
+    for pkg in "${PACKAGES[@]}" "${extra[@]}" $(record_values package); do
         # dpkg-query exits 1 for a package that is not known here: not installed, not a failure.
         { dpkg-query -W -f='${Package} ${Status}\n' "${pkg}" 2>/dev/null || true; } | awk '/ installed$/{print $1}'
     done
     return 0
 }
 
+plan_purge_set() {  # everything apt would remove for plan_packages, reverse-dependents included
+    local pkgs
+    mapfile -t pkgs < <(plan_packages | sort -u)
+    [[ ${#pkgs[@]} -gt 0 ]] || return 0
+    { apt-get -s purge "${pkgs[@]}" 2>/dev/null || true; } | awk '/^Purg /{print $2}'
+}
+
 plan_apt_sources() {
-    local name
-    for name in "${APT_SOURCES[@]}" $(record_values apt_source); do
+    local name extra=()
+    postgres_is_autobots && extra=("${POSTGRES_APT_SOURCES[@]}")
+    for name in "${APT_SOURCES[@]}" "${extra[@]}" $(record_values apt_source); do
         existing "/etc/apt/sources.list.d/${name}*.list" "/etc/apt/sources.list.d/${name}*.sources" \
                  "/etc/apt/sources.list.d/ppa_${name}_*.list" "/etc/apt/sources.list.d/*${name}*.list.distUpgrade"
     done
-    existing /usr/share/keyrings/pgdg.asc /usr/share/keyrings/grafana.gpg /usr/share/keyrings/grafana.key \
-             /usr/share/keyrings/nodesource.gpg
+    existing /usr/share/keyrings/grafana.gpg /usr/share/keyrings/grafana.key
+    postgres_is_autobots && existing /usr/share/keyrings/pgdg.asc
+    [[ -n "$(record_values apt_source | grep -x nodesource)" ]] && existing /usr/share/keyrings/nodesource.gpg
+    return 0
+}
+
+plan_paths() {
+    existing "${PATHS[@]}" "${PATH_GLOBS[@]}" "${UNIT_DROPINS[@]}"
+    postgres_is_autobots && existing "${POSTGRES_PATHS[@]}"
+    return 0
 }
 
 plan_sudoers() {
-    local name
+    local name path
     for name in "${SUDOERS[@]}"; do existing "/etc/sudoers.d/${name}"; done
     record_values created_sudoers | while read -r path; do existing "${path}"; done
 }
@@ -144,13 +199,18 @@ print_plan() {
     log "This removes, from $(hostname):"
     log "  units:        $(plan_units | tr '\n' ' ')"
     log "  databases:    ${DATABASES[*]} (role ${DB_ROLES[*]}), if PostgreSQL is present"
-    log "  packages:     $(plan_packages | tr '\n' ' ')"
+    if command -v psql &>/dev/null && ! postgres_is_autobots; then
+        log "  PostgreSQL:   KEPT -- it also holds: $(foreign_databases | tr '\n' ' ')"
+    elif command -v psql &>/dev/null; then
+        log "  PostgreSQL:   holds only AutoBot's databases -- its clusters, packages and data go too"
+    fi
+    log "  packages:     $(plan_purge_set | tr '\n' ' ')"
     log "  apt sources:  $(plan_apt_sources | tr '\n' ' ')"
     log "  sudoers:      $(plan_sudoers | tr '\n' ' ')"
     log "  accounts:     $(plan_users | tr '\n' ' ')"
-    log "  paths:        $(existing "${PATHS[@]}" "${PATH_GLOBS[@]}" "${UNIT_DROPINS[@]}" | tr '\n' ' ')"
+    log "  paths:        $(plan_paths | tr '\n' ' ')"
     [[ -f "${INSTALL_RECORD}" ]] || log "  (no install record at ${INSTALL_RECORD}: no account, recorded package or recorded apt source is removed)"
-    log "Kept: nginx, base packages, role service accounts (see the header of this script)."
+    log "Kept: nginx, base packages, ${KEPT_UNITS[*]}, apt sources ${KEPT_APT_SOURCES[*]}, role service accounts."
 }
 
 confirm() {
@@ -182,26 +242,33 @@ drop_databases() {
     systemctl start postgresql >>"${LOG_FILE}" 2>&1 || true  # already gone with its unit is fine
     local db role
     for db in "${DATABASES[@]}"; do
-        sudo -u postgres dropdb --if-exists "${db}" >>"${LOG_FILE}" 2>&1 && log "  dropped database ${db}"
+        if sudo -u postgres dropdb --if-exists "${db}" >>"${LOG_FILE}" 2>&1; then log "  dropped database ${db}"
+        else log "  WARNING: could not drop database ${db}; see ${LOG_FILE}"; fi
     done
     for role in "${DB_ROLES[@]}"; do
-        sudo -u postgres dropuser --if-exists "${role}" >>"${LOG_FILE}" 2>&1 && log "  dropped role ${role}"
+        if sudo -u postgres dropuser --if-exists "${role}" >>"${LOG_FILE}" 2>&1; then log "  dropped role ${role}"
+        else log "  WARNING: could not drop role ${role}; see ${LOG_FILE}"; fi
     done
     return 0
+}
+
+drop_clusters() {  # only when PostgreSQL holds nothing but AutoBot's (now dropped) databases
+    postgres_is_autobots || return 0
+    local ver name _
+    while read -r ver name _; do
+        if pg_dropcluster --stop "${ver}" "${name}" >>"${LOG_FILE}" 2>&1; then log "  dropped cluster ${ver}/${name}"
+        else log "  WARNING: could not drop cluster ${ver}/${name}; see ${LOG_FILE}"; fi
+    done < <(pg_lsclusters --no-header 2>/dev/null || true)
 }
 
 purge_packages() {
     local pkgs
     mapfile -t pkgs < <(plan_packages | sort -u)
     [[ ${#pkgs[@]} -gt 0 ]] || return 0
-    command -v pg_lsclusters &>/dev/null && pg_lsclusters --no-header 2>/dev/null \
-        | while read -r ver name _; do pg_dropcluster --stop "${ver}" "${name}" >>"${LOG_FILE}" 2>&1; done
     # A failed purge is reported and the rest of the uninstall still runs: stopping here is
     # how a partial uninstall used to leave credentials and accounts behind (#18653).
     if env DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq "${pkgs[@]}" >>"${LOG_FILE}" 2>&1; then
-        log "  purged ${pkgs[*]}"
-        env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -qq >>"${LOG_FILE}" 2>&1 \
-            || log "  WARNING: apt-get autoremove failed; see ${LOG_FILE}"
+        log "  purged ${pkgs[*]} (no autoremove: run \`apt autoremove\` yourself to review what else is unused)"
     else
         log "  WARNING: apt-get purge failed for ${pkgs[*]}; see ${LOG_FILE}"
     fi
@@ -209,7 +276,7 @@ purge_packages() {
 
 remove_files() {
     local path
-    for path in $(plan_apt_sources) $(existing "${PATHS[@]}" "${PATH_GLOBS[@]}" "${UNIT_DROPINS[@]}"); do
+    for path in $(plan_apt_sources) $(plan_paths); do
         rm -rf "${path}" && log "  removed ${path}"
     done
 }
@@ -237,19 +304,20 @@ parse_args() {
 }
 
 main() {
-    DRY_RUN=false CONFIRM_YES=false
+    DRY_RUN=false CONFIRM_YES=false POSTGRES_DECISION=keep
     parse_args "$@"
     [[ ${EUID} -eq 0 ]] || { echo "Run as root (sudo)." >&2; exit 1; }
+    POSTGRES_DECISION="$(decide_postgres)"
     print_plan
     ${DRY_RUN} && { log "Dry run: nothing was removed. Log: ${LOG_FILE}"; exit 0; }
     confirm
     remove_units
     drop_databases
+    drop_clusters
     purge_packages
     remove_sudoers_and_users   # before remove_files: it reads the install record in /etc/autobot
     remove_files
-    rm -f "${BASH_SOURCE[0]}"
-    log "AutoBot has been removed. nginx and base packages were kept. Log: ${LOG_FILE}"
+    log "AutoBot has been removed. Kept items are listed above. Log: ${LOG_FILE}"
 }
 
 main "$@"

@@ -285,18 +285,32 @@ sudo bash /opt/autobot/code_source/scripts/uninstall.sh --dry-run        # only 
 ```
 
 The uninstaller first prints everything it will remove: AutoBot's services and units,
-its databases, the packages and apt sources AutoBot added, its sudoers files, accounts and
-directories. It then asks you to type `UNINSTALL`. `--yes` skips the question for scripted use.
-Without a terminal and without `--yes`, it refuses instead of proceeding.
+its databases, the packages apt would purge (including anything that depends on them), its
+apt sources, sudoers files, accounts and directories. It then asks you to type `UNINSTALL`.
+`--yes` skips the question for scripted use. Without a terminal and without `--yes`, it
+refuses instead of proceeding.
 
 What it never removes:
 - **An account it did not create.** The installer records the `autobot` account only if it
   created it, in `/etc/autobot/install-record`. On a machine where `autobot` already existed,
-  for example your own login, the account and its home are left alone.
-- **nginx and the base packages** the installer needs (git, curl, openssh-server, ...). They
-  often serve other things on the same machine.
+  for example your own login, the account and its home are left alone. An install made before
+  this record existed has no record, so no account, recorded package or recorded apt source is
+  removed there; the plan says so.
+- **Your PostgreSQL.** AutoBot's databases are dropped. PostgreSQL itself (clusters, packages,
+  data, the `pgdg` source) is removed only if it holds nothing else; the plan names any other
+  database it found.
+- **nginx and the base packages** the installer needs (git, curl, openssh-server, ...), and
+  `ollama`. They often serve other things on the same machine. AutoBot's own nginx sites are
+  removed.
+- **General-purpose apt sources** (`docker`, `intel-openvino`, and `deadsnakes` unless the
+  installer recorded adding it). AutoBot's `grafana` and `redis` sources are removed.
 - **Service accounts the roles create** (prometheus, node_exporter, ...). There is no record
   to tell them from accounts that were already there.
+- **Anything apt would only autoremove.** No system-wide `apt autoremove` is run; run it
+  yourself afterwards if you want to review what else is unused.
+
+A partial install that never got as far as cloning the code has no uninstaller copy on the
+machine; `install.sh --uninstall` says so instead of guessing.
 
 The log is written to `/var/tmp/autobot-uninstall-<timestamp>.log`, which survives the uninstall.
 
