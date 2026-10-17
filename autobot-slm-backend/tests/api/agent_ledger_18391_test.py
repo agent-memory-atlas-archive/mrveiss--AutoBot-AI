@@ -202,7 +202,7 @@ def test_sources_name_what_is_unreachable_instead_of_showing_it_empty(monkeypatc
     assert not any(s["reachable"] for s in sources.values())
     assert {"claims", "waitlists", "events", "dev_loop"} <= set(sources)
     for gap in ("presence", "ai_stack_agents", "live_sessions", "peer_messages", "idle_subscribers"):
-        assert sources[gap]["reachable"] is False and sources[gap]["reason"] == lp_mod.NOT_PUBLISHED_DETAIL
+        assert sources[gap]["reachable"] is False and sources[gap]["reason"] == ledger_read.GENERIC_DETAIL
 
 
 async def _publish(redis, **rows):  # noqa: ANN001, ANN003
@@ -281,6 +281,29 @@ async def test_a_redis_error_while_probing_marks_live_sources_unreachable_not_a_
     sources = {s["source"]: s for s in response.json()["sources"]}
     for name in ("presence", "ai_stack_agents", "live_sessions", "peer_messages", "idle_subscribers"):
         assert sources[name]["reachable"] is False
+        assert sources[name]["reason"] == ledger_read.GENERIC_DETAIL  # unreadable, not "never published"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not json",
+        '{"rows": []}',
+        '{"published_at": "t"}',
+        '{"rows": {}, "published_at": "t"}',
+        '{"rows": [{"kind": 1}], "published_at": "t"}',
+    ],
+)
+async def test_a_corrupt_snapshot_is_the_typed_503_and_sources_say_why_18632(redis, raw):
+    await redis.set(lp_mod.projection_key(lp_mod.SOURCE_PRESENCE), raw)
+    response = _client("admin").get("/api/monitoring/agent-ledger/presence")
+    assert response.status_code == 503 and response.json()["error"] == "ledger_unavailable"
+    sources = {s["source"]: s for s in _client("admin").get("/api/monitoring/agent-ledger/sources").json()["sources"]}
+    if raw.endswith('"t"}') and '"kind": 1' in raw:
+        assert sources["presence"]["reachable"] is True  # the envelope is valid; only the route validates rows
+    else:
+        assert sources["presence"] == {"source": "presence", "reachable": False, "reason": lp_mod.CORRUPT_DETAIL}
 
 
 @pytest.mark.asyncio
@@ -289,6 +312,8 @@ async def test_a_missing_snapshot_is_the_typed_503_never_an_empty_list_18632(red
         response = _client("admin").get(f"/api/monitoring/agent-ledger/{path}")
         assert response.status_code == 503
         assert response.json()["error"] == "ledger_unavailable"
+    sources = {s["source"]: s for s in _client("admin").get("/api/monitoring/agent-ledger/sources").json()["sources"]}
+    assert sources["presence"]["reason"] == lp_mod.NOT_PUBLISHED_DETAIL
 
 
 @pytest.mark.asyncio

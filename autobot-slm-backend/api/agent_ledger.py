@@ -96,13 +96,9 @@ async def _probe_stores() -> list[LedgerSourceStatus]:
 
 
 async def _probe_projection() -> list[LedgerSourceStatus]:
-    published = {src: await ledger_projection.published_at(src) for src in ledger_projection.SOURCES}
+    reasons = {src: await ledger_projection.unreadable_reason(src) for src in ledger_projection.SOURCES}
     return [
-        LedgerSourceStatus(
-            source=name,
-            reachable=published[src] is not None,
-            reason="" if published[src] else ledger_projection.NOT_PUBLISHED_DETAIL,
-        )
+        LedgerSourceStatus(source=name, reachable=not reasons[src], reason=reasons[src])
         for name, src in PROJECTED_SOURCES.items()
     ]
 

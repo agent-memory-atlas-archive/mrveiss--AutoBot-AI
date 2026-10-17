@@ -30,9 +30,12 @@ from pydantic import BaseModel
 from autobot_shared.coordination.ledger_read import GENERIC_DETAIL, LedgerUnreadable, _read
 from autobot_shared.coordination.ledger_schemas import IdleSubscriberRow, PeerMessageRow, PresenceRow
 from autobot_shared.env_utils import env_int_clamped
+from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
 from autobot_shared.store_authority import system_of_record
 from autobot_shared.time_utils import utc_timestamp
+
+logger = get_logger(__name__)
 
 SYSTEM_OF_RECORD = system_of_record("agent_live_state")
 
@@ -48,6 +51,7 @@ SOURCE_IDLE_SUBSCRIBERS = "idle_subscribers"
 SOURCES = (SOURCE_PRESENCE, SOURCE_PEER_MESSAGES, SOURCE_IDLE_SUBSCRIBERS)
 
 NOT_PUBLISHED_DETAIL = "no snapshot: the user backend has not published this within the projection TTL"
+CORRUPT_DETAIL = "the snapshot is not a valid ledger snapshot"
 
 Row = TypeVar("Row", bound=BaseModel)
 
@@ -85,23 +89,40 @@ async def _load(source: str) -> dict:
     raw = await client.get(projection_key(source))
     if raw is None:
         raise LedgerUnreadable(source, NOT_PUBLISHED_DETAIL)
-    return json.loads(raw)
+    return _parse(source, raw)
+
+
+def _parse(source: str, raw: str) -> dict:
+    """The snapshot, or :class:`LedgerUnreadable` when it is not one -- corrupt is unreadable, not a 500."""
+    try:
+        snapshot = json.loads(raw)
+        if not isinstance(snapshot["rows"], list) or not isinstance(snapshot["published_at"], str):
+            raise ValueError("snapshot fields have the wrong type")
+        return snapshot
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning("agent ledger: the %s snapshot is not readable: %s", source, exc)
+        raise LedgerUnreadable(source, CORRUPT_DETAIL) from exc
 
 
 async def read_snapshot(source: str, model: type[Row]) -> tuple[list[Row], str]:
-    """``(rows, published_at)`` for *source*; a missing snapshot is :class:`LedgerUnreadable`."""
+    """``(rows, published_at)`` for *source*; a missing or corrupt snapshot is :class:`LedgerUnreadable`."""
     snapshot = await _read(source, lambda: _load(source))
-    return [model.model_validate(row) for row in snapshot["rows"]], snapshot["published_at"]
+    try:
+        rows = [model.model_validate(row) for row in snapshot["rows"]]
+    except ValueError as exc:  # pydantic's ValidationError is a ValueError
+        logger.warning("agent ledger: the %s snapshot has a row that is not a %s: %s", source, model.__name__, exc)
+        raise LedgerUnreadable(source, CORRUPT_DETAIL) from exc
+    return rows, snapshot["published_at"]
 
 
-async def published_at(source: str) -> str | None:
-    """When *source* was last published, or None when it cannot be read -- absent, expired, or Redis down.
+async def unreadable_reason(source: str) -> str:
+    """Why *source* cannot be read right now, or ``""`` when it can -- for ``/sources``.
 
-    Goes through the same ``_read`` as the routes, so a Redis error is "unreachable" here
-    too, never a 500 from ``/sources``.
+    Goes through the same ``_read`` as the routes, so a Redis error, a missing snapshot and a
+    corrupt one are each reported with their own reason, never as a 500.
     """
     try:
-        snapshot: dict = await _read(source, lambda: _load(source))
-        return snapshot["published_at"]
-    except LedgerUnreadable:
-        return None
+        await _read(source, lambda: _load(source))
+    except LedgerUnreadable as exc:
+        return exc.detail
+    return ""
