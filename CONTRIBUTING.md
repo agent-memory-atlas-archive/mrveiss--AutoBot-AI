@@ -186,7 +186,6 @@ No code needed: each language is one JSON file, and every language issue is a [g
 
 The SLM console reuses these translations automatically (`scripts/lift_locale_translations.py`). Never edit its locale files by hand.
 
-
 ---
 
 Questions? Open an issue or start a [Discussion](https://github.com/mrveiss/AutoBot-AI/discussions). Happy hacking.

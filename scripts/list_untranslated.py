@@ -48,14 +48,18 @@ def load(code: str, locales: Path = LOCALES) -> dict[str, str]:
 
 
 def is_meaningful(value: str) -> bool:
+    """Long enough and wordy enough that matching English means something."""
     return len(value) > MIN_MEANINGFUL_LENGTH and any(character.isalpha() for character in value)
 
 
 def untranslated_keys(english: dict[str, str], locale: dict[str, str]) -> list[str]:
-    """Keys whose English source is meaningful and the locale lacks or copies verbatim.
+    """English keys the locale does not render in its own words.
 
-    A missing key counts: the runtime falls back to English (``fallbackLocale``),
-    so the user reads English either way.
+    `locale.get(key, source)` is what folds the two states into one count: a
+    missing key falls back to the English source here exactly as it does at
+    runtime (``fallbackLocale``), so absent and present-but-identical are both
+    equal to `source`. Keys the locale carries that English does not are excluded
+    by construction; `locale-parity.test.ts` is what fails on those.
     """
     return [key for key, source in english.items() if is_meaningful(source) and locale.get(key, source) == source]
 

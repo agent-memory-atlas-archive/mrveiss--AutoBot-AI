@@ -56,12 +56,10 @@ see must not read as the good state.
 from __future__ import annotations
 
 import pytest
-from repo_tests._paths import repo_root
 
-from scripts.list_untranslated import MIN_MEANINGFUL_LENGTH, is_meaningful, load, untranslated_keys
+from scripts.list_untranslated import LOCALES, MIN_MEANINGFUL_LENGTH, is_meaningful, load, untranslated_keys
 
-_REPO_ROOT = repo_root()
-_LOCALES = _REPO_ROOT / "autobot-frontend" / "src" / "i18n" / "locales"
+_LOCALES = LOCALES
 
 # Lower these as translations land. Never raise one to admit a new untranslated
 # string: translate it, or leave the key out until it can be translated.
