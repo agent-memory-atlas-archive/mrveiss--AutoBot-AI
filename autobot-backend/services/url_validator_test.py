@@ -261,3 +261,14 @@ class TestResolveSafeIP:
         with patch("services.url_validator.resolve_safe_ip_async", kept):
             assert await URLValidator.resolve_safe_ip("example.com") == "8.8.8.8"
         kept.assert_awaited_once_with("example.com")
+
+    async def test_delegated_resolver_still_enforces_its_timeout(self) -> None:
+        """A hung shared resolver is bounded by ``timeout`` and surfaces as ValueError (#18731)."""
+
+        async def hung(_host: str) -> str:
+            await asyncio.Event().wait()
+            return "8.8.8.8"
+
+        with patch("services.url_validator.resolve_safe_ip_async", hung):
+            with pytest.raises(ValueError, match="DNS resolution timeout"):
+                await URLValidator.resolve_safe_ip("slow.example.com", timeout=0.05)
