@@ -138,9 +138,7 @@ def retired_mode_sites(files: dict[str, str]) -> list[str]:
 def _mode_carriers(root: Path) -> list[str]:
     """Compose files, Docker entrypoints and env templates -- where a user-mode default lives."""
     try:
-        return tracked_paths(
-            root, "docker-compose*.yml", "docker/*entrypoint*.sh", "*.env.example", ".env*", "docker/.env*"
-        )
+        return tracked_paths(root, "docker-compose*.yml", "docker/*/*entrypoint*.sh", ".env*", "*/.env*")
     except EmptyEnumeration:
         return []
 
