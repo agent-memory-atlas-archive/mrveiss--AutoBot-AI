@@ -27,7 +27,6 @@
     "TaskArtifact",
     "TaskQueue",
     "TaskResult",
-    "ToolCall",
     "User",
     "get_current_user",
     "get_deployment_config",
