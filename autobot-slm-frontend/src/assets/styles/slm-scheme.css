@@ -400,6 +400,25 @@
   --table-header-bg: var(--surface2);
   --table-row-bg: var(--surface);
   --table-border: var(--border);
+  /* Table tokens the kit adapter reads (#14778); same names and values as the main app. */
+  --tbl-font-size: 13px;
+  --tbl-row-h: 44px;
+  --tbl-cell-px: 16px;
+  --tbl-cell-py: 10px;
+  --tbl-head-h: 36px;
+  --tbl-head-bg: var(--surface2);
+  --tbl-head-fg: var(--muted);
+  --tbl-head-font: 600 11.5px/1.2 var(--font-sans);
+  --tbl-head-case: uppercase;
+  --tbl-head-ls: .05em;
+  --tbl-head-border: var(--bw) solid var(--border);
+  --tbl-border: var(--bw) solid var(--line);
+  --tbl-row-hover: var(--surface2);
+  --tbl-row-selected: var(--surface2);
+  --tbl-zebra-bg: var(--surface2);
+  --tbl-check-col-w: 44px;
+  --tbl-min-col: 96px;
+  --tbl-num: tabular-nums;
   --input-bg: var(--surface);
   --input-border: var(--border);
   --color-focus: var(--focus);

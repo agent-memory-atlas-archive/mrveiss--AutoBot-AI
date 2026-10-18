@@ -167,8 +167,13 @@
         <BaseCard :title="$t('views.componentShowcase.table')" :subtitle="$t('views.componentShowcase.tableSubtitle')">
           <BaseTable
             :columns="tableColumns"
-            :data="tableData"
+            :rows="tableData"
+            :caption="$t('views.componentShowcase.table')"
             :selectable="true"
+            :select-all-label="$t('base.table.selectAllRows')"
+            :select-row-label="(n: number) => $t('base.table.selectRow', { row: n })"
+            :actions-label="$t('base.table.actions')"
+            :empty-title="$t('base.table.noDataAvailable')"
             :zebra="true"
             size="comfortable"
           >
@@ -294,9 +299,8 @@ import { useI18n } from 'vue-i18n'
 import { createLogger } from '@/utils/debugUtils'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
-import { BaseBadge } from '@autobot/ui'
+import { BaseBadge, BaseTable } from '@autobot/ui'
 import BaseCard from '@/components/base/BaseCard.vue'
-import BaseTable from '@/components/base/BaseTable.vue'
 
 const { t } = useI18n()
 const logger = createLogger('ComponentShowcase')
