@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.chromadb_client_cache_key_test import _stub_chromadb, async_mod, sync_mod
+from utils.chromadb_client_cache_key_test import _stub_chromadb, async_mod, repairs_mod, sync_mod
 
 _REPAIRS = (
     "_migrate_legacy_collection_configs",
@@ -36,13 +36,13 @@ def repairs(tmp_path):
         patch.object(sync_mod, "_CHROMADB_HOST", ""),
         patch.object(async_mod, "_CHROMADB_HOST", ""),
     ):
-        patchers = [patch.object(sync_mod, n, MagicMock()) for n in _REPAIRS]
+        patchers = [patch.object(repairs_mod, n, MagicMock(return_value=True)) for n in _REPAIRS]
         for name, p in zip(_REPAIRS, patchers):
             mocks[name] = p.start()
         for cache in (
             sync_mod._sync_client_cache,
             async_mod._async_client_cache,
-            getattr(sync_mod, "_prepared_paths", {}),
+            repairs_mod._prepared_paths,
         ):
             cache.clear()
         mocks["path"] = str(tmp_path / "chromadb")

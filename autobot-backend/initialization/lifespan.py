@@ -862,7 +862,7 @@ async def _run_background_doc_indexing():
 
         # Fix HNSW pickle format after indexing (#1390)
         from autobot_shared.paths import chromadb_data_dir
-        from utils.chromadb_client import _fix_hnsw_pickle_format
+        from utils.chromadb_store_repairs import _fix_hnsw_pickle_format
 
         chroma_path = chromadb_data_dir()
         _fix_hnsw_pickle_format(chroma_path)
