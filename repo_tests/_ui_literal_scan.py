@@ -86,8 +86,9 @@ _MIN_LENGTH = 4
 _CODE_IDENTIFIER = re.compile(r"^([A-Za-z][a-z0-9]*[A-Z][A-Za-z0-9]*|[A-Za-z][A-Za-z0-9]*([_-][A-Za-z0-9]+)+)$")
 
 
-_SCRIPT_BLOCK = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_SCRIPT_BODY = re.compile(r"<script\b[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
+# Closing tags tolerate whitespace and attributes (`</script >`), as browsers do (CodeQL py/bad-tag-filter).
+_SCRIPT_BLOCK = re.compile(r"<(script|style)\b[^>]*>.*?</\1\b[^>]*>", re.DOTALL | re.IGNORECASE)
+_SCRIPT_BODY = re.compile(r"<script\b[^>]*>(.*?)</script\b[^>]*>", re.DOTALL | re.IGNORECASE)
 _SCRIPT_LITERAL = re.compile(
     r"""(?:\.value\s*=|message:|title:|confirm\(|alert\(|Error\()\s*[`'"]([A-Z][a-z][^`'"]{3,})[`'"]"""
 )
