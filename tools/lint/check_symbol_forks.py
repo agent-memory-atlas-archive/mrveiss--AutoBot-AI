@@ -49,6 +49,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -108,6 +109,11 @@ def __getattr__(name: str):
 MIN_FILES_PARSED = 2000
 
 BASELINE = _REPO_ROOT / "repo_tests" / "symbol_fork_baseline.json"
+EXCEPTIONS = _REPO_ROOT / "repo_tests" / "symbol_fork_exceptions.json"
+
+#: A recorded exception links the issue that owns it: a full URL or `#N`.
+_ISSUE_LINK = re.compile(r"^(https://github\.com/[\w.-]+/[\w.-]+/issues/\d+|#\d+)$")
+_EXCEPTION_FIELDS = ("symbol", "canonical", "sites", "reason", "issue")
 
 
 def tracked_python_files() -> list[Path]:
@@ -212,6 +218,56 @@ def load_baseline() -> set[str]:
     return set(json.loads(BASELINE.read_text(encoding="utf-8"))["clusters"])
 
 
+def load_exceptions(path: Path | None = None) -> list[dict]:
+    """The recorded per-service exceptions; none if the record does not exist."""
+    path = path or EXCEPTIONS
+    if not path.exists():
+        return []
+    return list(json.loads(path.read_text(encoding="utf-8"))["exceptions"])
+
+
+def validate_exception(entry: dict) -> list[str]:
+    """Why an exception entry is unusable. An exception with no reason or issue is not a record."""
+    problems = [f"missing {f!r}" for f in _EXCEPTION_FIELDS if not entry.get(f)]
+    sites = entry.get("sites") or []
+    if entry.get("sites") is not None and not isinstance(sites, list):
+        problems.append("'sites' must be a list of path:qualname")
+    bad = [x for x in ([entry.get("canonical")] + list(sites)) if x and ":" not in str(x)]
+    problems += [f"site {x!r} is not path:qualname" for x in bad]
+    if entry.get("issue") and not _ISSUE_LINK.match(str(entry["issue"])):
+        problems.append(f"'issue' {entry['issue']!r} is not an issue URL or #N")
+    return [f"exception {entry.get('symbol', '?')!r}: {p}" for p in problems]
+
+
+def _live_sites(cluster: Cluster | None) -> set[str]:
+    """Binding sites as `path:qualname`; a module-level binding's qualname is its name."""
+    return {f"{d.path}:{cluster.name}" for d in cluster.definitions} if cluster else set()
+
+
+def apply_exceptions(clusters: dict[str, Cluster], exceptions: list[dict]):
+    """Drop clusters whose EVERY binding is canonical or a recorded exception.
+
+    Returns `(effective clusters, problems)`. A binding outside the record keeps
+    its cluster; an invalid entry or a recorded site that no longer exists is a
+    problem, so the record shrinks with the tree exactly as the baseline does.
+    """
+    effective, problems = dict(clusters), []
+    for entry in exceptions:
+        bad = validate_exception(entry)
+        problems += bad
+        if bad:
+            continue
+        name, cluster = entry["symbol"], clusters.get(entry["symbol"])
+        recorded = {entry["canonical"], *entry["sites"]}
+        problems += [
+            f"STALE exception {name!r}: site {s!r} is not a live binding"
+            for s in sorted(recorded - _live_sites(cluster))
+        ]
+        if cluster and _live_sites(cluster) <= recorded:
+            effective.pop(name, None)
+    return effective, problems
+
+
 def write_baseline(names: set[str]) -> None:
     shared = _shared()
     BASELINE.write_text(
@@ -260,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
 
     paths = tracked_python_files()
     clusters, parsed = find_clusters(paths)
+    clusters, exception_problems = apply_exceptions(clusters, load_exceptions())
     # Floor on files successfully PARSED, not on files git listed and not on
     # findings. `len(paths)` would clear this floor even if `in_population`
     # filtered everything out or every parse failed, which is the exact
@@ -309,7 +366,9 @@ def main(argv: list[str] | None = None) -> int:
             "Delete them. The list may only shrink, and it has to shrink HERE when the "
             "duplication is gone — otherwise the entry tolerates whatever takes that name next."
         )
-    if new or stale:
+    for problem in exception_problems:
+        print(problem)
+    if new or stale or exception_problems:
         return 1
     print(
         f"symbol forks: {len(clusters)} clusters over {parsed} parsed files "

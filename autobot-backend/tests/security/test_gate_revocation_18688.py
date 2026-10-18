@@ -89,7 +89,6 @@ _PATHS = {
     "auth_middleware.check_admin_permission": _admin_gate,
     "auth_rbac._request_caller (require_permission)": _module_path("auth_rbac", lambda m, r: m._request_caller(r)),
     "auth_rbac.require_role": _module_path("auth_rbac", lambda m, r: m.require_role("admin")(r)),
-    "service_messages._check_admin": _module_path("api.service_messages", lambda m, r: m._check_admin(r)),
     "verbatim_memory._require_user": _module_path("api.verbatim_memory", lambda m, r: m._require_user(r)),
     "envelope_secrets.principal": _envelope_principal,
     "session_posture.authenticated_user": _module_path(
