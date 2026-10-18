@@ -137,12 +137,14 @@ class _TemplateScan(HTMLParser):
         if self._opaque_depth:
             return
         # Drop every interpolation first: `{{ $t('x') }}` and `{{ count }}` are
-        # not literals, and a line may mix one with real text.
-        text = re.sub(r"\{\{.*?\}\}", " ", data, flags=re.S)
-        for chunk in text.splitlines():
+        # not literals, and a line may mix one with real text. Blank it but keep its
+        # newlines, so each line below still knows where it is.
+        text = re.sub(r"\{\{.*?\}\}", _blank, data, flags=re.S)
+        start = self.getpos()[0]
+        for offset, chunk in enumerate(text.splitlines()):
             candidate = chunk.strip()
             if _is_prose(candidate):
-                self.found.append(Hit(self.getpos()[0], "template-text", candidate, candidate[:60]))
+                self.found.append(Hit(start + offset, "template-text", candidate, candidate[:60]))
 
 
 def _is_prose(value: str) -> bool:
