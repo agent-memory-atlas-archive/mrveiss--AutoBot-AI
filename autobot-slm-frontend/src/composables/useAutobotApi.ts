@@ -41,7 +41,7 @@ export interface SettingsResponse {
  * autobot_shared UserResponse the SLM backend serves, so the generated type is reused (#15536).
  */
 export type UserResponse = SlmUserResponse
-export type UserCreate = components['schemas']['autobot_shared__user_management__schemas__user__UserCreate']
+export type UserCreate = components['schemas']['UserCreate']
 export type UserUpdate = components['schemas']['UserUpdate']
 
 export interface CacheConfig {
