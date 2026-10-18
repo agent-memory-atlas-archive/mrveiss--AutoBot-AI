@@ -303,8 +303,8 @@ class LinkPipeline(BasePipeline):
                 )
             if raw_bytes is None:
                 return self._error_result(url, "response body exceeded max content length", metadata)
-            raw_html = raw_bytes.decode("utf-8", errors="replace")
-            return self._parse_html(raw_html, final_url, content_type, metadata)
+            body = raw_bytes.decode("utf-8", errors="replace")
+            return self._parse_body(body, final_url, content_type, metadata)
 
         except SSRFError as exc:
             logger.warning("Link pipeline fetch blocked by SSRF guard for %s: %s", url, exc)
@@ -319,6 +319,30 @@ class LinkPipeline(BasePipeline):
     # ------------------------------------------------------------------
     # HTML parsing
     # ------------------------------------------------------------------
+
+    def _parse_body(self, body: str, url: str, content_type: str, metadata: Dict) -> Dict[str, Any]:
+        """Dispatch on Content-Type as ``WebFetcher`` does (#18826): HTML parsed, text/JSON kept, rest refused."""
+        from web_fetch.content_types import BodyKind, classify
+
+        kind = classify(content_type, body)
+        if kind is BodyKind.HTML:
+            return self._parse_html(body, url, content_type, metadata)
+        if kind is BodyKind.UNSUPPORTED:
+            declared = content_type or "(undeclared, binary)"
+            return self._error_result(url, f"unsupported content type {declared}: not HTML, text or JSON", metadata)
+        return self._parse_text(body, url, content_type, metadata)
+
+    def _parse_text(self, body: str, url: str, content_type: str, metadata: Dict) -> Dict[str, Any]:
+        """Store a text or JSON body as text -- no HTML parse, no outbound links -- in :meth:`_parse_html`'s shape."""
+        from web_fetch.content_types import page_from_body
+        from web_fetch.profile import IngestProfile
+
+        text = page_from_body(body, content_type, IngestProfile.DOCUMENT, url)[2]
+        text = _sanitize_document(text, source="web_text").sanitized_text
+        result = {"type": "link_fetch", "url": url, "title": "", "description": "", "content": text}
+        result.update(word_count=len(text.split()), links=[], open_graph={}, content_type=content_type)
+        result.update(confidence=0.9 if text else 0.5, metadata=metadata)
+        return result
 
     def _parse_html(
         self,

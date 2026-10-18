@@ -142,3 +142,38 @@ async def test_crawler_refuses_a_binary_page_with_a_specific_reason():
         result, raw_html = await connector._fetch_page_with_html(WebFetcher(), _URL)
     assert result.success is False and result.error_code == ERR_UNSUPPORTED_CONTENT_TYPE and raw_html == ""
     assert _no_content_reason(result).startswith("skipped: not an HTML, text or JSON page")
+
+
+class TestLinkIngestDispatch:
+    """Link ingest (media/link/pipeline.py) dispatches the same way, keeping its result shape."""
+
+    _SHAPE = {"type", "url", "title", "description", "content", "word_count", "links", "open_graph"}
+
+    def _parse(self, body, content_type):
+        from media.link.pipeline import LinkPipeline
+
+        pipe = LinkPipeline()
+        with patch.object(pipe, "_parse_html", side_effect=AssertionError("HTML-parsed a non-HTML body")):
+            return pipe._parse_body(body, _URL, content_type, {"k": "v"})
+
+    def test_text_body_is_stored_as_text_with_no_links(self):
+        result = self._parse("See https://example.com/x for details   \r\n\r\n\r\nnext   ", "text/plain")
+        assert self._SHAPE <= set(result) and result["content_type"] == "text/plain"
+        assert result["content"] == "See https://example.com/x for details\n\nnext"
+        assert result["links"] == [] and result["open_graph"] == {} and result["metadata"] == {"k": "v"}
+
+    def test_json_body_passes_through(self):
+        result = self._parse('{"a": [1]}', "application/json; charset=utf-8")
+        assert result["content"] == '{\n  "a": [\n    1\n  ]\n}' and result["links"] == []
+
+    @pytest.mark.parametrize("content_type", ["application/octet-stream", "application/pdf", None])
+    def test_binary_body_is_refused_with_no_text(self, content_type):
+        result = self._parse("\x00\x01�� binary", content_type)
+        assert result["processing_status"] == "error" and result["content"] == "" and result["links"] == []
+        assert "unsupported content type" in result["error"]
+
+    def test_html_body_still_goes_to_parse_html(self):
+        from media.link.pipeline import LinkPipeline
+
+        result = LinkPipeline()._parse_body(_HTML, _URL, "text/html", {})
+        assert result["content"] == "Head\n\nBody." and result["title"] == "T"
