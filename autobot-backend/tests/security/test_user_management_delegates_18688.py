@@ -292,3 +292,53 @@ def test_a_user_jwt_alone_is_unchanged_on_a_wrapper_route(monkeypatch):
 
     assert response.status_code == 200, response.text
     assert response.json()["username"] == "alice"
+
+
+def test_the_internal_key_with_an_admin_jwt_resolves_to_the_human_admin(monkeypatch):
+    import auth_revocation  # noqa: PLC0415
+
+    _key_and_jwt_gate(monkeypatch, _jwt_middleware())  # _JWT_USER carries role admin
+    monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", AsyncMock(return_value=False))
+
+    response = TestClient(_whoami_app()).get("/whoami", headers={"X-Internal-API-Key": INTERNAL_KEY})
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["username"], response.json()["role"]) == ("alice", "admin")
+    assert not response.json().get("service")
+
+
+_SIGNING_SECRET = "s" * 40
+
+
+def _real_jwt_middleware(real):
+    """The real middleware, verifying with ``_SIGNING_SECRET`` -- no mocked decode."""
+    cls = real.AuthenticationMiddleware
+    middleware = cls.__new__(cls)
+    middleware.jwt_secret = _SIGNING_SECRET
+    middleware.jwt_public_key = None
+    middleware.failed_attempts = {}
+    middleware.enable_auth = True
+    middleware.get_session = {}.get
+    return middleware
+
+
+@pytest.mark.parametrize("secret, expected", [("f" * 40, 401), (_SIGNING_SECRET, 200)])
+def test_the_internal_key_with_a_forged_jwt_is_refused_by_real_verification(monkeypatch, secret, expected):
+    """A forged signature fails the real verify_jwt_token; the correctly signed control passes."""
+    import auth_revocation  # noqa: PLC0415
+    from autobot_shared.auth.interactive_principal import LOGIN_TOKEN_TYPE  # noqa: PLC0415
+    from autobot_shared.auth.jwt_core import encode_jwt  # noqa: PLC0415
+    from tests.conftest import load_real_auth_middleware  # noqa: PLC0415
+
+    real = load_real_auth_middleware()
+    _key_and_jwt_gate(monkeypatch, _real_jwt_middleware(real))
+    monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", AsyncMock(return_value=False))
+    claims = {"username": "alice", "role": "admin", "user_id": str(uuid.uuid4()), "token_type": LOGIN_TOKEN_TYPE}
+    token = encode_jwt(claims, secret=secret, expiry_hours=1)
+
+    response = TestClient(_whoami_app(), raise_server_exceptions=False).get(
+        "/whoami", headers={"X-Internal-API-Key": INTERNAL_KEY, "Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == expected, response.text
+    assert not response.json().get("service")
