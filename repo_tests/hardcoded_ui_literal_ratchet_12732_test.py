@@ -50,7 +50,7 @@ from repo_tests._ui_literal_rederive import (
     regex_literals,
     tracked_vue_files,
 )
-from repo_tests._ui_literal_scan import script_literals
+from repo_tests._ui_literal_scan import script_literals, template_hits
 
 _PANEL = "autobot-frontend/src/components/knowledge/connectors/ConnectorHistoryPanel.vue"
 _PANEL_LITERALS = {
@@ -245,3 +245,9 @@ def test_script_blocks_end_at_any_valid_closing_tag() -> None:
     )
     assert script_literals(source) == ["Spaced closing tag"]
     assert [kind for kind, _ in literals_in(source)] == ["template-text", "script"]
+
+
+def test_each_line_of_a_multi_line_text_node_has_its_own_line_number() -> None:
+    """A literal reports its own line, even after a multi-line interpolation (#18802 review)."""
+    source = "<template>\n  <p>\n    First line here\n    {{\n      count\n    }}\n    Third real line\n  </p>\n</template>\n"
+    assert [(hit.line, hit.text) for hit in template_hits(source)] == [(3, "First line here"), (7, "Third real line")]
