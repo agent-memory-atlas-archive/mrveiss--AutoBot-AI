@@ -1,0 +1,1317 @@
+{
+ "autobot-frontend/src/components/admin/NpuWorkerPairConfirmDialog.vue": [
+  ["template-text", "(recommended)"],
+  ["template-text", "Cancel"],
+  ["template-text", "Confirm NPU Worker Profile"],
+  ["template-text", "Manual override — your choice will be saved."],
+  ["template-text", "Save profile"],
+  ["template-text", "Why?"],
+  ["template-text", "Worker"],
+  ["template-text", "Worker profile"],
+  ["template-text", "paired successfully."]
+ ],
+ "autobot-frontend/src/components/agents/AgentTaskDetail.vue": [
+  ["attribute", "Type guidance to redirect the agent (e.g. 'skip that file, focus on the tests')"],
+  ["script", "Agent will absorb your guidance on the next iteration."],
+  ["script", "Failed to send guidance — check connection."],
+  ["template-text", "Completed:"],
+  ["template-text", "Created:"],
+  ["template-text", "Duration:"],
+  ["template-text", "Error Details"],
+  ["template-text", "Priority:"],
+  ["template-text", "Reason:"],
+  ["template-text", "Steer Agent"],
+  ["template-text", "Task ID:"],
+  ["template-text", "Task Result"],
+  ["template-text", "The agent could not confidently complete this task and chose to abstain"],
+  ["template-text", "Why the Agent Abstained"],
+  ["template-text", "rather than provide a potentially incorrect result."]
+ ],
+ "autobot-frontend/src/components/agents/HeartbeatPanel.vue": [
+  ["attribute", "Enter agent ID"],
+  ["template-text", "+ Queue Wakeup"],
+  ["template-text", "Agent ID"],
+  ["template-text", "Configuration"],
+  ["template-text", "Cost"],
+  ["template-text", "Created"],
+  ["template-text", "Current Task"],
+  ["template-text", "Duration"],
+  ["template-text", "Enable heartbeat"],
+  ["template-text", "Heartbeat Status"],
+  ["template-text", "Interval"],
+  ["template-text", "Interval (s)"],
+  ["template-text", "Last Heartbeat"],
+  ["template-text", "Load"],
+  ["template-text", "Max Duration"],
+  ["template-text", "Max Duration (s)"],
+  ["template-text", "No events"],
+  ["template-text", "No pending wakeup requests"],
+  ["template-text", "No runs recorded yet"],
+  ["template-text", "Paused At"],
+  ["template-text", "Paused By"],
+  ["template-text", "Priority"],
+  ["template-text", "Reason"],
+  ["template-text", "Reason"],
+  ["template-text", "Run History"],
+  ["template-text", "Started"],
+  ["template-text", "Status"],
+  ["template-text", "Status"],
+  ["template-text", "Tokens"],
+  ["template-text", "Trigger"],
+  ["template-text", "Wakeup Queue"]
+ ],
+ "autobot-frontend/src/components/analytics/AddSourceModal.vue": [
+  ["script", "Could not load credentials: ${msg}"],
+  ["script", "Save failed: ${msg}"]
+ ],
+ "autobot-frontend/src/components/analytics/AgentCostPanel.vue": [
+  ["template-text", "(USD)"]
+ ],
+ "autobot-frontend/src/components/analytics/AnalyticsGrid.vue": [
+  ["template-text", "KB/s"]
+ ],
+ "autobot-frontend/src/components/analytics/CodeEvolutionTimeline.vue": [
+  ["script", "Export failed"],
+  ["script", "Failed to fetch evolution data"]
+ ],
+ "autobot-frontend/src/components/analytics/CodeGenerationDashboard.vue": [
+  ["template-text", "Python"],
+  ["template-text", "Python"],
+  ["template-text", "Python"]
+ ],
+ "autobot-frontend/src/components/analytics/CodeQualityDashboard.vue": [
+  ["template-text", "Your codebase is rated"]
+ ],
+ "autobot-frontend/src/components/analytics/CodebaseAnalytics.vue": [
+  ["script", "Component not ready"]
+ ],
+ "autobot-frontend/src/components/analytics/CodebaseDependenciesPanel.vue": [
+  ["template-text", "and                                                        more..."],
+  ["template-text", "imports"]
+ ],
+ "autobot-frontend/src/components/analytics/CodebaseOverviewPanel.vue": [
+  ["template-text", "KB/s"]
+ ],
+ "autobot-frontend/src/components/analytics/CodebaseSecurityPanel.vue": [
+  ["template-text", "(                                           findings)"]
+ ],
+ "autobot-frontend/src/components/analytics/LLMPatternDashboard.vue": [
+  ["template-text", "Claude 3 Haiku"],
+  ["template-text", "Claude 3 Opus"],
+  ["template-text", "Claude 3 Sonnet"],
+  ["template-text", "GPT-3.5 Turbo"],
+  ["template-text", "GPT-4o Mini"],
+  ["template-text", "~                                      tokens"]
+ ],
+ "autobot-frontend/src/components/analytics/LogPatternDashboard.vue": [
+  ["template-text", "% confidence"]
+ ],
+ "autobot-frontend/src/components/analytics/PatternAnalysis.vue": [
+  ["template-text", "% similar"],
+  ["template-text", "-                                                complexity"]
+ ],
+ "autobot-frontend/src/components/analytics/PrecommitHookDashboard.vue": [
+  ["template-text", "Version"],
+  ["template-text", "files"],
+  ["template-text", "issues"],
+  ["template-text", "• Last run:"]
+ ],
+ "autobot-frontend/src/components/analytics/ShareSourceModal.vue": [
+  ["attribute", "user1\nuser2\nuser3"],
+  ["script", "Update failed: ${msg}"]
+ ],
+ "autobot-frontend/src/components/analytics/SourceManager.vue": [
+  ["template-text", "(source:                                            ...)"]
+ ],
+ "autobot-frontend/src/components/analytics/UnwiredTrackerTile.vue": [
+  ["attribute", "Loading"],
+  ["template-text", "Unwired Trackers"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseApiEndpointsPanel.vue": [
+  ["template-text", "(                                                   % coverage)"],
+  ["template-text", "Showing 30 of                                  used endpoints"],
+  ["template-text", "Showing 30 of                                orphaned endpoints"],
+  ["template-text", "Showing 30 of                               missing endpoints"],
+  ["template-text", "calls"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseBugPredictionPanel.vue": [
+  ["template-text", "(                                                               of"],
+  ["template-text", "(                           files)"],
+  ["template-text", "(                  files need attention)"],
+  ["template-text", "All (                           )"],
+  ["template-text", "High (                              )"],
+  ["template-text", "Low (                  )"],
+  ["template-text", "Medium (                     )"],
+  ["template-text", "Show More"],
+  ["template-text", "files affected"],
+  ["template-text", "remaining)"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseConfigDuplicatesPanel.vue": [
+  ["template-text", "(                                duplicates)"],
+  ["template-text", "... and                                more locations"],
+  ["template-text", "Showing 20 of                                  duplicate patterns"],
+  ["template-text", "locations"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseCrossLanguagePanel.vue": [
+  ["template-text", "% match"],
+  ["template-text", "% similar"],
+  ["template-text", "(                              patterns)"],
+  ["template-text", "Field:"],
+  ["template-text", "Python"],
+  ["template-text", "Showing 15 of                                               duplications"],
+  ["template-text", "Showing 15 of                                       matches"],
+  ["template-text", "Showing 20 of                                               API issues"],
+  ["template-text", "Showing 20 of                                      DTO mismatches"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseEnvironmentPanel.vue": [
+  ["template-text", "(                                          % reduced)"],
+  ["template-text", "(                                      hardcoded values)"],
+  ["template-text", "(showing                                        of"],
+  ["template-text", "- use Export for full data)"],
+  ["template-text", "Analysis completed in                                                s"],
+  ["template-text", "Default:"],
+  ["template-text", "Showing 10 of                                       recommendations"],
+  ["template-text", "Use:"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseIntelligenceScoresPanel.vue": [
+  ["template-text", "Complexity"],
+  ["template-text", "Documentation"],
+  ["template-text", "Maintainability"],
+  ["template-text", "OWASP:"],
+  ["template-text", "Security"],
+  ["template-text", "Testing"],
+  ["template-text", "critical"],
+  ["template-text", "critical"],
+  ["template-text", "files"],
+  ["template-text", "files"],
+  ["template-text", "files"],
+  ["template-text", "files"],
+  ["template-text", "findings"],
+  ["template-text", "h debt"],
+  ["template-text", "high"],
+  ["template-text", "high"],
+  ["template-text", "in                            ()"],
+  ["template-text", "issues"],
+  ["template-text", "issues"],
+  ["template-text", "issues"],
+  ["template-text", "suggestions"]
+ ],
+ "autobot-frontend/src/components/analytics/panels/CodebaseOwnershipPanel.vue": [
+  ["template-text", "(                                          contributors)"],
+  ["template-text", ":             files"],
+  ["template-text", "Analysis completed in                                                s"],
+  ["template-text", "Impact"],
+  ["template-text", "Recency"],
+  ["template-text", "commits"],
+  ["template-text", "files owned"],
+  ["template-text", "lines"],
+  ["template-text", "lines"],
+  ["template-text", "lines"],
+  ["template-text", "lines"],
+  ["template-text", "lines"]
+ ],
+ "autobot-frontend/src/components/artifact-cells/ChartCell.vue": [
+  ["attribute", "Chart data table"],
+  ["attribute", "Chart data table"],
+  ["script", "Container element not found: ${chartId.value}"],
+  ["script", "Failed to load vega-embed"]
+ ],
+ "autobot-frontend/src/components/artifact-cells/CodeCell.vue": [
+  ["attribute", "Highlighted code"],
+  ["script", "Failed to load highlight.js"]
+ ],
+ "autobot-frontend/src/components/async/AsyncComponentWrapper.vue": [
+  ["template-text", "Loading                           ..."]
+ ],
+ "autobot-frontend/src/components/async/AsyncErrorFallback.vue": [
+  ["template-text", "Component:"],
+  ["template-text", "Failed to Load Component"],
+  ["template-text", "Go to Home"],
+  ["template-text", "Reload Page"],
+  ["template-text", "Retry Attempts:"],
+  ["template-text", "Technical Details"],
+  ["template-text", "Time:"]
+ ],
+ "autobot-frontend/src/components/autoresearch/ApprovalCard.vue": [
+  ["template-text", "Approval Required"],
+  ["template-text", "Approve"],
+  ["template-text", "Baseline val_bpb:"],
+  ["template-text", "Improvement:"],
+  ["template-text", "Reject"],
+  ["template-text", "Result val_bpb:"]
+ ],
+ "autobot-frontend/src/components/autoresearch/ExperimentTimeline.vue": [
+  ["template-text", "No experiments yet"],
+  ["template-text", "tok/s"],
+  ["template-text", "val_bpb:"]
+ ],
+ "autobot-frontend/src/components/autoresearch/InsightsPanel.vue": [
+  ["attribute", "Search insights..."],
+  ["template-text", "% confidence"],
+  ["template-text", "Based on                                             experiment(s)"],
+  ["template-text", "Experiment Insights"],
+  ["template-text", "No insights yet. Run experiments and trigger synthesis."],
+  ["template-text", "Search"]
+ ],
+ "autobot-frontend/src/components/autoresearch/PromptOptimizerPanel.vue": [
+  ["attribute", "Comment..."],
+  ["template-text", "Best score:"],
+  ["template-text", "Cancel"],
+  ["template-text", "Max Rounds"],
+  ["template-text", "Prompt Optimizer"],
+  ["template-text", "Review"],
+  ["template-text", "Round                               /"],
+  ["template-text", "Score:"],
+  ["template-text", "Start Optimization"],
+  ["template-text", "Status:"],
+  ["template-text", "Submit"],
+  ["template-text", "Target Agent"]
+ ],
+ "autobot-frontend/src/components/browser/InteractiveScreenshot.vue": [
+  ["attribute", "Label (e.g. title, price)"],
+  ["template-text", "Cancel"],
+  ["template-text", "Save"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasCell.vue": [
+  ["attribute", "Accept agent cell (⌥Enter)"],
+  ["attribute", "Agent-authored cell"],
+  ["attribute", "Cancel stream"],
+  ["attribute", "Discard agent cell (Esc)"],
+  ["attribute", "Discard errored cell"],
+  ["attribute", "Edit agent cell (Enter)"],
+  ["attribute", "Keep cell on error"],
+  ["attribute", "Loading…"],
+  ["attribute", "Retry stream"],
+  ["template-text", "Cancel"],
+  ["template-text", "Discard"],
+  ["template-text", "Keep"],
+  ["template-text", "Retry"],
+  ["template-text", "Rich render pending (Phase 2)"],
+  ["template-text", "Writing…"],
+  ["template-text", "⚠ Stream error"],
+  ["template-text", "✎ Edit"],
+  ["template-text", "✓ Accept"],
+  ["template-text", "✕ Discard"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasCellToolbar.vue": [
+  ["attribute", "Copy cell content"],
+  ["attribute", "Delete cell"],
+  ["attribute", "Duplicate cell"],
+  ["attribute", "Move cell down (⌘↓)"],
+  ["attribute", "Move cell up (⌘↑)"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasConflictBanner.vue": [
+  ["attribute", "Dismiss conflict banner"],
+  ["attribute", "Resume agent writing in a new cell"],
+  ["template-text", "Dismiss"],
+  ["template-text", "Resume"],
+  ["template-text", "You edited a cell the agent was writing. The agent will continue in a new cell below."],
+  ["template-text", "⚡ Conflict"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasEdgeStates.vue": [
+  ["attribute", "Add your first cell"],
+  ["attribute", "Discard errored cell"],
+  ["attribute", "Keep partial cell content"],
+  ["attribute", "Retry loading canvas"],
+  ["attribute", "Retry stream"],
+  ["template-text", "Add your first cell"],
+  ["template-text", "Agent is working…"],
+  ["template-text", "Discard"],
+  ["template-text", "Failed to load canvas"],
+  ["template-text", "Keep"],
+  ["template-text", "Retry"],
+  ["template-text", "Retry"],
+  ["template-text", "Stream failed. What would you like to do?"],
+  ["template-text", "Your canvas is empty"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasExportSheet.vue": [
+  ["attribute", "Cancel export"],
+  ["attribute", "Export canvas"],
+  ["attribute", "Export canvas"],
+  ["template-text", "Cancel"],
+  ["template-text", "Export"],
+  ["template-text", "Export Canvas"],
+  ["template-text", "Format"],
+  ["template-text", "Include cell types"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasPanel.vue": [
+  ["attribute", "Canvas cells"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasSplitLayout.vue": [
+  ["attribute", "Resize panels"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasToolPalette.vue": [
+  ["attribute", "Add cell"],
+  ["attribute", "Canvas toolbar"],
+  ["attribute", "Export canvas (⌘⇧E)"],
+  ["attribute", "Redo (⌘⇧Z)"],
+  ["attribute", "Retry save"],
+  ["attribute", "Undo (⌘Z)"],
+  ["template-text", "Add cell"],
+  ["template-text", "Export"],
+  ["template-text", "Retry"]
+ ],
+ "autobot-frontend/src/components/canvas/CanvasView.vue": [
+  ["template-text", "Chat panel — connect to chat interface via slot"]
+ ],
+ "autobot-frontend/src/components/canvas/CodeCell.vue": [
+  ["attribute", "Code block"],
+  ["attribute", "Loading code…"],
+  ["script", "Failed to load libraries: ${err instanceof Error ? err.message : String(err)}"],
+  ["script", "Syntax highlight failed: ${err instanceof Error ? err.message : String(err)}"],
+  ["template-text", "❌ Code render failed"]
+ ],
+ "autobot-frontend/src/components/charts/FunctionCallGraph.vue": [
+  ["template-text", "async"],
+  ["template-text", "async"],
+  ["template-text", "async"],
+  ["template-text", "caller"],
+  ["template-text", "function"]
+ ],
+ "autobot-frontend/src/components/charts/ImportTreeChart.vue": [
+  ["template-text", "file"],
+  ["template-text", "module"]
+ ],
+ "autobot-frontend/src/components/chat/ChatBrowser.vue": [
+  ["script", "Invalid response from browser session API"]
+ ],
+ "autobot-frontend/src/components/chat/ChatFilePanel.vue": [
+  ["template-text", "file"]
+ ],
+ "autobot-frontend/src/components/chat/ChatInput.vue": [
+  ["script", "File \"${file.name}\" is too large (max ${formatFileSize(maxFileSize)})"],
+  ["script", "Invalid response from server"],
+  ["script", "Microphone access was denied. Please allow microphone access in your browser settings."],
+  ["script", "Network error during upload"],
+  ["script", "Upload cancelled"],
+  ["script", "Upload failed with status: ${xhr.status}"],
+  ["script", "Voice input requires Chrome, Edge, or Safari 15+. Transcription is not available in this browser."]
+ ],
+ "autobot-frontend/src/components/chat/ChatInterface.vue": [
+  ["attribute", "Voice controls"],
+  ["script", "Initialization timeout"],
+  ["script", "Server returned ${response.status}"]
+ ],
+ "autobot-frontend/src/components/chat/ChatMessages.vue": [
+  ["script", "New message from ${sender}: ${preview}${preview.length < latestMessage.content.length ? '...' : ''}"]
+ ],
+ "autobot-frontend/src/components/chat/DeleteConversationDialog.vue": [
+  ["attribute", "e.g., archive/2025/"],
+  ["attribute", "e.g., research, documentation"]
+ ],
+ "autobot-frontend/src/components/chat/MCPPromptTemplatePicker.vue": [
+  ["template-text", "Back to templates"],
+  ["template-text", "Cancel"],
+  ["template-text", "Loading templates..."],
+  ["template-text", "Prompt Templates"],
+  ["template-text", "Templates"]
+ ],
+ "autobot-frontend/src/components/chat/McpPromptPicker.vue": [
+  ["attribute", "Prompt Templates"],
+  ["script", "Failed to load prompt template. Please try again."],
+  ["script", "Failed to load prompt templates. Please try again."],
+  ["script", "Please fill in required parameter: ${arg.name}"],
+  ["template-text", "Back"],
+  ["template-text", "Cancel"],
+  ["template-text", "Filesystem"],
+  ["template-text", "Insert Template"],
+  ["template-text", "Knowledge"],
+  ["template-text", "Loading templates..."],
+  ["template-text", "No templates available from                    bridge"],
+  ["template-text", "Parameters:"],
+  ["template-text", "Prompt Templates"],
+  ["template-text", "Retry"],
+  ["template-text", "Source:"]
+ ],
+ "autobot-frontend/src/components/chat/MessageItem.vue": [
+  ["attribute", "Save as document"],
+  ["attribute", "Save as document"]
+ ],
+ "autobot-frontend/src/components/chat/OverseerStepMessage.vue": [
+  ["template-text", "Exit:"],
+  ["template-text", "Step                        of"]
+ ],
+ "autobot-frontend/src/components/chat/SlashCommandDropdown.vue": [
+  ["attribute", "Slash command suggestions"]
+ ],
+ "autobot-frontend/src/components/desktop/DesktopContextPanel.vue": [
+  ["template-text", "% (                                   MB /                                     MB)"]
+ ],
+ "autobot-frontend/src/components/desktop/DesktopInterface.vue": [
+  ["script", "Configuration Error"],
+  ["script", "Configuration Error"],
+  ["script", "Configuration Error"],
+  ["script", "Connected"],
+  ["script", "Connected"],
+  ["script", "Connected"],
+  ["script", "Connecting..."],
+  ["script", "Connecting..."],
+  ["script", "Disconnected"],
+  ["script", "Error"],
+  ["script", "Network Error"],
+  ["script", "Timeout"],
+  ["script", "Timeout"]
+ ],
+ "autobot-frontend/src/components/desktop/PopoutChromiumBrowser.vue": [
+  ["attribute", "AI Propose regions"],
+  ["attribute", "AI Propose regions"],
+  ["attribute", "Describe what you want to extract (e.g. product prices, article titles)…"],
+  ["template-text", "% |                   ms"]
+ ],
+ "autobot-frontend/src/components/documents/AIDocumentEditor.vue": [
+  ["attribute", "Click to edit title"],
+  ["attribute", "Describe how to refine this document…"],
+  ["attribute", "Document content"],
+  ["attribute", "Document content (markdown supported)…"],
+  ["attribute", "Document title"],
+  ["attribute", "Refine with AI"],
+  ["attribute", "Refinement instruction"],
+  ["template-text", "Cancel"],
+  ["template-text", "Refine"],
+  ["template-text", "Updated"],
+  ["template-text", "source"]
+ ],
+ "autobot-frontend/src/components/examples/ThemingPatternExample.vue": [
+  ["attribute", "Enter longer text..."],
+  ["attribute", "Type something..."],
+  ["template-text", "All values come from CSS design tokens"],
+  ["template-text", "Base (16px) — var(--text-base)"],
+  ["template-text", "Button Patterns"],
+  ["template-text", "Canonical Theming Pattern"],
+  ["template-text", "Card Example"],
+  ["template-text", "Danger Action"],
+  ["template-text", "Degraded"],
+  ["template-text", "Disabled Danger"],
+  ["template-text", "Disabled Primary"],
+  ["template-text", "Error"],
+  ["template-text", "Extra small (12px) — var(--text-xs)"],
+  ["template-text", "Form Elements"],
+  ["template-text", "Large (18px) — var(--text-lg)"],
+  ["template-text", "Offline"],
+  ["template-text", "Online"],
+  ["template-text", "Option 1"],
+  ["template-text", "Option 2"],
+  ["template-text", "Option 3"],
+  ["template-text", "Primary"],
+  ["template-text", "Primary Action"],
+  ["template-text", "Secondary Action"],
+  ["template-text", "Select"],
+  ["template-text", "Semantic Color Tokens"],
+  ["template-text", "Small (14px) — var(--text-sm)"],
+  ["template-text", "Spacing Scale"],
+  ["template-text", "Status Indicators"],
+  ["template-text", "Success"],
+  ["template-text", "Success Action"],
+  ["template-text", "Text Input"],
+  ["template-text", "Textarea"],
+  ["template-text", "This card demonstrates the recommended pattern:"],
+  ["template-text", "Typography Scale"],
+  ["template-text", "Unknown"],
+  ["template-text", "Using design tokens correctly"],
+  ["template-text", "Warning"],
+  ["template-text", "X-Large (20px) — var(--text-xl)"],
+  ["template-text", "lg (24px)"],
+  ["template-text", "md (16px)"],
+  ["template-text", "xl (32px)"],
+  ["template-text", "xs (4px)"],
+  ["template-text", "— colors from tokens"],
+  ["template-text", "— radius from tokens"],
+  ["template-text", "— spacing from tokens"],
+  ["template-text", "— typography from tokens"]
+ ],
+ "autobot-frontend/src/components/file-browser/SandboxFileBrowser.vue": [
+  ["attribute", "Max file size"],
+  ["attribute", "Sandbox file tree"],
+  ["attribute", "Total directories"],
+  ["attribute", "Total files"],
+  ["attribute", "Total size"],
+  ["template-text", "Loading…"],
+  ["template-text", "Refresh"],
+  ["template-text", "Sandbox Files"],
+  ["template-text", "Sandbox is empty"],
+  ["template-text", "dirs"],
+  ["template-text", "files"],
+  ["template-text", "max                              MB"]
+ ],
+ "autobot-frontend/src/components/knowledge/ChromaDBExplorer.vue": [
+  ["attribute", "Enter search query..."],
+  ["attribute", "Results"],
+  ["template-text", "Back"],
+  ["template-text", "Browse and search vector collections at port 8100"],
+  ["template-text", "ChromaDB Explorer"],
+  ["template-text", "Clear"],
+  ["template-text", "Collections"],
+  ["template-text", "D embedding"],
+  ["template-text", "Documents"],
+  ["template-text", "Documents"],
+  ["template-text", "Loading collections..."],
+  ["template-text", "Loading documents..."],
+  ["template-text", "Metadata"],
+  ["template-text", "Metadata"],
+  ["template-text", "Metadata:"],
+  ["template-text", "No collections found"],
+  ["template-text", "No documents found"],
+  ["template-text", "Page                       (                       -                                                                   of                               )"],
+  ["template-text", "Search"],
+  ["template-text", "Search Documents"],
+  ["template-text", "Select a collection to explore its documents"],
+  ["template-text", "documents"],
+  ["template-text", "fields"],
+  ["template-text", "results"]
+ ],
+ "autobot-frontend/src/components/knowledge/DeduplicationManager.vue": [
+  ["script", "Error removing duplicates: ${err}"],
+  ["script", "Error removing orphans: ${err}"],
+  ["script", "Error scanning: ${err}"],
+  ["script", "Failed to remove duplicates: ${data.message || 'Unknown error'}"],
+  ["script", "Failed to remove orphans: ${data.message || 'Unknown error'}"],
+  ["script", "Failed to scan for duplicates"],
+  ["script", "Failed to scan for orphans"]
+ ],
+ "autobot-frontend/src/components/knowledge/GraphRAGQuery.vue": [
+  ["template-text", "Graph:                                                            s"]
+ ],
+ "autobot-frontend/src/components/knowledge/KBSearchResultPanel.vue": [
+  ["attribute", "Close search results"],
+  ["attribute", "Copy content"],
+  ["attribute", "Document viewer"],
+  ["attribute", "Ranked search results"],
+  ["attribute", "Search results"],
+  ["template-text", "% match"],
+  ["template-text", "Copied"],
+  ["template-text", "Copy"],
+  ["template-text", "Loading document…"],
+  ["template-text", "No results for"],
+  ["template-text", "No results found for \"           \""],
+  ["template-text", "Searching…"],
+  ["template-text", "Select a result to view the document"],
+  ["template-text", "Use arrow keys to navigate, Enter to open"],
+  ["template-text", "result                                      for"]
+ ],
+ "autobot-frontend/src/components/knowledge/KnowledgeGraph.vue": [
+  ["script", "Please fill in all required fields"]
+ ],
+ "autobot-frontend/src/components/knowledge/KnowledgeHealth.vue": [
+  ["template-text", "LangChain RecursiveCharacterTextSplitter"],
+  ["template-text", "LlamaIndex + LangChain"]
+ ],
+ "autobot-frontend/src/components/knowledge/KnowledgeSystemDocs.vue": [
+  ["template-text", "Markdown"]
+ ],
+ "autobot-frontend/src/components/knowledge/KnowledgeUpload.vue": [
+  ["script", "Successfully uploaded ${uploadedCount} file${uploadedCount !== 1 ? 's' : ''}!"],
+  ["script", "Uploaded ${uploadedCount} file${uploadedCount !== 1 ? 's' : ''}, ${failedCount} failed"],
+  ["template-text", "Upload                            file"],
+  ["template-text", "file                                          selected"]
+ ],
+ "autobot-frontend/src/components/knowledge/McpResourceBrowser.vue": [
+  ["script", "Failed to load MCP resources. Please try again."],
+  ["template-text", "Browse resources from connected MCP servers"],
+  ["template-text", "Close"],
+  ["template-text", "Loading content..."],
+  ["template-text", "Loading resources..."],
+  ["template-text", "MCP Resources"],
+  ["template-text", "No resources available from                    bridge"],
+  ["template-text", "Retry"],
+  ["template-text", "Type:"],
+  ["template-text", "URI:"]
+ ],
+ "autobot-frontend/src/components/knowledge/MemoryOrphanManager.vue": [
+  ["template-text", "Session:                                      ..."]
+ ],
+ "autobot-frontend/src/components/knowledge/SessionOrphanManager.vue": [
+  ["template-text", "Session:                                    ..."]
+ ],
+ "autobot-frontend/src/components/knowledge/SystemKnowledgeManager.vue": [
+  ["script", "Background job started. Polling for completion..."],
+  ["script", "Batched vectorization complete!"],
+  ["script", "Documents reindexed successfully"],
+  ["script", "Failed to fetch knowledge base statistics"],
+  ["script", "Final batch... (Building search index)"],
+  ["script", "Initialization complete!"],
+  ["script", "Initializing machine knowledge..."],
+  ["script", "Machine knowledge initialized successfully"],
+  ["script", "No task_id returned from server"],
+  ["script", "Populating common command man pages..."],
+  ["script", "Processing batch 1... (Loading facts from Redis)"],
+  ["script", "Processing batches... (Generating embeddings)"],
+  ["script", "Refresh complete!"],
+  ["script", "Reindexing complete!"],
+  ["script", "Reindexing documents..."],
+  ["script", "Starting background job..."],
+  ["script", "Starting batched vectorization..."],
+  ["script", "System knowledge refresh failed: ${errorMsg}"],
+  ["script", "Task queued, waiting to start..."]
+ ],
+ "autobot-frontend/src/components/knowledge/WebResearchSettings.vue": [
+  ["attribute", "Dismiss error"],
+  ["script", "Failed to ${store.settings.enabled ? 'disable' : 'enable'} web research: ${msg}"],
+  ["script", "Failed to clear cache: ${msg}"],
+  ["script", "Failed to reset circuit breakers: ${msg}"],
+  ["script", "Failed to save settings: ${msg}"],
+  ["template-text", "API Based"],
+  ["template-text", "Advanced"],
+  ["template-text", "Allow AutoBot agents to perform automated internet searches."],
+  ["template-text", "Anonymize Requests"],
+  ["template-text", "Ask for confirmation before each research request."],
+  ["template-text", "Auto Research Threshold"],
+  ["template-text", "Basic"],
+  ["template-text", "Cache Size"],
+  ["template-text", "Circuit Breakers"],
+  ["template-text", "Clear Cache"],
+  ["template-text", "Confidence score (0–1) above which research triggers automatically."],
+  ["template-text", "Configure automated web research behaviour, rate limiting, and cache management."],
+  ["template-text", "Enable Web Research"],
+  ["template-text", "Exclude adult or explicit content from research results."],
+  ["template-text", "Filter Adult Content"],
+  ["template-text", "General"],
+  ["template-text", "Limits"],
+  ["template-text", "Max Requests per Window"],
+  ["template-text", "Max Results"],
+  ["template-text", "Maximum number of results returned per research query."],
+  ["template-text", "Maximum time to wait for a research response."],
+  ["template-text", "Number of research requests allowed within the rate limit window."],
+  ["template-text", "Preferred Method"],
+  ["template-text", "Preferred Method"],
+  ["template-text", "Privacy and Storage"],
+  ["template-text", "Rate Limit Window (seconds)"],
+  ["template-text", "Rate Limiter"],
+  ["template-text", "Rate Limiting"],
+  ["template-text", "Refresh"],
+  ["template-text", "Require User Confirmation"],
+  ["template-text", "Research Status"],
+  ["template-text", "Reset Circuit Breakers"],
+  ["template-text", "Reset Defaults"],
+  ["template-text", "Save research results to the knowledge base for future use."],
+  ["template-text", "Search strategy used by the research agent."],
+  ["template-text", "Settings saved successfully."],
+  ["template-text", "Store Results in Knowledge Base"],
+  ["template-text", "Strip identifying information from outbound research requests."],
+  ["template-text", "Time window in seconds for the rate limit counter."],
+  ["template-text", "Timeout (seconds)"],
+  ["template-text", "Web Research Settings"]
+ ],
+ "autobot-frontend/src/components/knowledge/connectors/ConnectorConfigModal.vue": [
+  ["attribute", "*.pdf, *.md, *.txt"],
+  ["attribute", "*.tmp, .git/*"],
+  ["attribute", "0AB1cDeFgHiJkLmNoPqR"],
+  ["attribute", "1AbCdEfGhIjKlMnOpQrStUv"],
+  ["attribute", "42, group/project"],
+  ["attribute", "b!aBcDeFgHiJkLmNoPqRsTuVwXyZ"],
+  ["attribute", "contoso.sharepoint.com,abc123,def456"],
+  ["attribute", "owner/repo, org/other"],
+  ["attribute", "postgresql://user:pass@host:5432/db"],
+  ["attribute", "title, body, summary"],
+  ["attribute", "xxxxxxxxxxxxxxxxxxxx"]
+ ],
+ "autobot-frontend/src/components/knowledge/connectors/ConnectorHistoryPanel.vue": [
+  ["attribute", "Close"],
+  ["template-text", "(                              failed)"],
+  ["template-text", "Loading…"],
+  ["template-text", "No sync history yet."],
+  ["template-text", "Running"],
+  ["template-text", "Sync History"]
+ ],
+ "autobot-frontend/src/components/knowledge/web-research/CrawlTab.vue": [
+  ["attribute", "Loading"]
+ ],
+ "autobot-frontend/src/components/knowledge/web-research/ExtractTab.vue": [
+  ["attribute", "Loading"]
+ ],
+ "autobot-frontend/src/components/knowledge/web-research/ScrapeTab.vue": [
+  ["attribute", "Loading"],
+  ["template-text", "Markdown"]
+ ],
+ "autobot-frontend/src/components/knowledge/web-research/SiteMapTab.vue": [
+  ["attribute", "Loading"]
+ ],
+ "autobot-frontend/src/components/llc/LlcBreadcrumb.vue": [
+  ["attribute", "Breadcrumb"]
+ ],
+ "autobot-frontend/src/components/llc/TemplateBrowser.vue": [
+  ["template-text", "$                                                                     /mo estimated"],
+  ["template-text", "$                                                              /mo"],
+  ["template-text", "+                                            more"],
+  ["template-text", "Agents Included"],
+  ["template-text", "Goals"],
+  ["template-text", "Initial Work Items"],
+  ["template-text", "Knowledge Collections"],
+  ["template-text", "agents"],
+  ["template-text", "agents"]
+ ],
+ "autobot-frontend/src/components/manpage/ManPageManager.vue": [
+  ["script", "Backend restart required"],
+  ["script", "Connection failed"],
+  ["script", "Search failed"]
+ ],
+ "autobot-frontend/src/components/plugins/CapabilityApprovalDialog.vue": [
+  ["script", "Failed to approve capabilities"],
+  ["script", "Failed to approve capabilities"],
+  ["script", "Failed to fetch capabilities"]
+ ],
+ "autobot-frontend/src/components/plugins/PluginInstallModal.vue": [
+  ["attribute", "main"]
+ ],
+ "autobot-frontend/src/components/security/SecretsManager.vue": [
+  ["attribute", "-----BEGIN OPENSSH PRIVATE KEY-----\n..."],
+  ["template-text", "Used by:"]
+ ],
+ "autobot-frontend/src/components/security/ThreatIntelligenceDashboard.vue": [
+  ["template-text", "URLVoid:"],
+  ["template-text", "VirusTotal:"]
+ ],
+ "autobot-frontend/src/components/settings/PushNotificationSettingsPanel.vue": [
+  ["attribute", "Dismiss error"],
+  ["template-text", "Browser push notifications"],
+  ["template-text", "Notifications are active on this device."],
+  ["template-text", "Notifications are blocked. Enable them in your browser's site settings, then reload this"],
+  ["template-text", "Permission granted — toggle on to receive notifications."],
+  ["template-text", "Push notifications are not supported in this browser."],
+  ["template-text", "Receive notifications when background tasks complete — even when AutoBot is not the"],
+  ["template-text", "Toggle on to be asked for notification permission."],
+  ["template-text", "Try Chrome, Edge, or Firefox on desktop."],
+  ["template-text", "active tab."],
+  ["template-text", "page."]
+ ],
+ "autobot-frontend/src/components/settings/SettingsPanel.vue": [
+  ["script", "Cache API not available in fast backend"],
+  ["script", "Failed to load cache statistics"]
+ ],
+ "autobot-frontend/src/components/settings/TelegramSettingsPanel.vue": [
+  ["attribute", "123456789:ABCdefGhi..."],
+  ["attribute", "Telegram bot token"],
+  ["attribute", "Webhook base URL"],
+  ["template-text", "@BotFather"],
+  ["template-text", "Active webhook:"],
+  ["template-text", "AutoBot registers"],
+  ["template-text", "Bot Token"],
+  ["template-text", "Create a bot via"],
+  ["template-text", "Public HTTPS URL where Telegram will deliver updates."],
+  ["template-text", "Telegram Bot"],
+  ["template-text", "Webhook URL"],
+  ["template-text", "at this base URL."],
+  ["template-text", "on Telegram and paste the token here."]
+ ],
+ "autobot-frontend/src/components/settings/ThemePresetPicker.vue": [
+  ["template-text", "Accent Color"],
+  ["template-text", "Advanced Customization"],
+  ["template-text", "Base Theme"],
+  ["template-text", "Choose a pre-configured theme or customize your own color scheme"],
+  ["template-text", "Theme Presets"]
+ ],
+ "autobot-frontend/src/components/terminal/CompletionSuggestions.vue": [
+  ["template-text", "Tab to cycle | Enter to accept | Esc to dismiss"]
+ ],
+ "autobot-frontend/src/components/terminal/SSHTerminal.vue": [
+  ["script", "Connection error"],
+  ["script", "Not authenticated"],
+  ["template-text", "Reconnect"]
+ ],
+ "autobot-frontend/src/components/terminal/TerminalHeader.vue": [
+  ["template-text", "⚡ INT"],
+  ["template-text", "🛑 KILL"]
+ ],
+ "autobot-frontend/src/components/terminal/TerminalModals.vue": [
+  ["template-text", "PID                  :"]
+ ],
+ "autobot-frontend/src/components/terminal/TerminalOutput.vue": [
+  ["script", "New terminal output${lineType}: ${cleanContent}"]
+ ],
+ "autobot-frontend/src/components/terminal/TerminalStatusBar.vue": [
+  ["template-text", "Debug: Status=                      , Connecting=                , CanInput="]
+ ],
+ "autobot-frontend/src/components/terminal/TerminalWindow.vue": [
+  ["script", "Terminal Session - ${sessionTitle.value}"],
+  ["script", "Terminal URL copied to clipboard!"]
+ ],
+ "autobot-frontend/src/components/theme/EmberThemeToggle.vue": [
+  ["template-text", "Ember Gradient Showcase"],
+  ["template-text", "Ember Icon Set"],
+  ["template-text", "Marigold → Tangerine → Wine"],
+  ["template-text", "Theme Variant"]
+ ],
+ "autobot-frontend/src/components/transcriber/AiAnalysisPanel.vue": [
+  ["attribute", "Custom question…"],
+  ["template-text", "AI Analysis"],
+  ["template-text", "Choose an action above to analyze the transcript."],
+  ["template-text", "Key Facts"],
+  ["template-text", "Protocol"],
+  ["template-text", "Summarize"]
+ ],
+ "autobot-frontend/src/components/transcriber/AsrProviderSelector.vue": [
+  ["template-text", "Active provider"],
+  ["template-text", "Choose which cloud provider transcribes recordings. Only providers with a"],
+  ["template-text", "Loading providers…"],
+  ["template-text", "No speech-to-text providers are available. Configure a provider API key on"],
+  ["template-text", "Providers marked \"not configured\" require a server-side API key before"],
+  ["template-text", "Retry"],
+  ["template-text", "Saving…"],
+  ["template-text", "Select a provider…"],
+  ["template-text", "Speech-to-text provider"],
+  ["template-text", "means audio is sent to that provider for processing."],
+  ["template-text", "not configured"],
+  ["template-text", "server-side API key configured are selectable. Selecting a cloud provider"],
+  ["template-text", "the server to enable cloud transcription."],
+  ["template-text", "they can be selected."]
+ ],
+ "autobot-frontend/src/components/transcriber/UploadModal.vue": [
+  ["attribute", "Upload Recording"],
+  ["template-text", "Drag audio file here or click to browse"]
+ ],
+ "autobot-frontend/src/components/ui/ConfirmDialog.vue": [
+  ["template-text", "Cancel"],
+  ["template-text", "Confirm"]
+ ],
+ "autobot-frontend/src/components/ui/PreferencesPanel.vue": [
+  ["template-text", "Theme Variant"]
+ ],
+ "autobot-frontend/src/components/visualizations/ServiceMessageTimeline.vue": [
+  ["attribute", "Filter by message type"],
+  ["attribute", "Filter by sender"]
+ ],
+ "autobot-frontend/src/components/workflow/NotificationConfigModal.vue": [
+  ["script", "Email already added"],
+  ["script", "Invalid email address"]
+ ],
+ "autobot-frontend/src/components/workflow/PhaseProgressionIndicator.vue": [
+  ["attribute", "Load validation data"]
+ ],
+ "autobot-frontend/src/components/workflow/WorkflowTemplateGallery.vue": [
+  ["template-text", "Required Credentials"]
+ ],
+ "autobot-frontend/src/views/AdminMcpServersView.vue": [
+  ["attribute", "npx -y @modelcontextprotocol/server-example"]
+ ],
+ "autobot-frontend/src/views/AdminSandboxView.vue": [
+  ["template-text", "Browse and inspect files in the code-execution sandbox"],
+  ["template-text", "Sandbox Inspector"]
+ ],
+ "autobot-frontend/src/views/AgentActivity.vue": [
+  ["template-text", "Agent Activity"],
+  ["template-text", "All entries —"],
+  ["template-text", "Loading…"],
+  ["template-text", "No agent diary data found."],
+  ["template-text", "No entries found."],
+  ["template-text", "No entries yet."],
+  ["template-text", "View all"],
+  ["template-text", "recent"],
+  ["template-text", "session"]
+ ],
+ "autobot-frontend/src/views/BusinessIntelligenceView.vue": [
+  ["template-text", "% faster"],
+  ["template-text", "Save $"]
+ ],
+ "autobot-frontend/src/views/CanvasView.vue": [
+  ["template-text", "Loading canvas…"]
+ ],
+ "autobot-frontend/src/views/ComponentShowcaseView.vue": [
+  ["attribute", "user@example.com"],
+  ["template-text", "+142ms"],
+  ["template-text", "SHA: a3f4c2e1b7d"],
+  ["template-text", "SHA:a3f4c2"],
+  ["template-text", "Tag 1"],
+  ["template-text", "Tag 2"],
+  ["template-text", "Tag 3"],
+  ["template-text", "main"],
+  ["template-text", "user_id: 1234567890"]
+ ],
+ "autobot-frontend/src/views/CustomDashboard.vue": [
+  ["script", "Agent Activity"],
+  ["script", "Agent Activity"],
+  ["script", "Resource Heatmap"],
+  ["script", "System Monitor"],
+  ["script", "System Monitor"],
+  ["script", "Workflow View"]
+ ],
+ "autobot-frontend/src/views/DevSpeedupView.vue": [
+  ["script", "Optimized code:\\n\\n${optimized}"]
+ ],
+ "autobot-frontend/src/views/ExperimentDashboard.vue": [
+  ["template-text", "Best val_bpb"],
+  ["template-text", "Discarded"],
+  ["template-text", "Experiment Dashboard"],
+  ["template-text", "Experiment Timeline"],
+  ["template-text", "Kept"],
+  ["template-text", "Loading experiments..."],
+  ["template-text", "Total Experiments"]
+ ],
+ "autobot-frontend/src/views/OnboardingWizard.vue": [
+  ["attribute", "Choose a starter preset"],
+  ["attribute", "Dismiss error"],
+  ["attribute", "Setup progress"],
+  ["script", "Could not load presets."],
+  ["script", "Could not load system health report. You can still continue."],
+  ["script", "Failed to apply preset. Please try again."],
+  ["template-text", "Agents"],
+  ["template-text", "AutoBot Setup"],
+  ["template-text", "Back"],
+  ["template-text", "CPU cores"],
+  ["template-text", "Choose a starter configuration that best matches your primary use-case."],
+  ["template-text", "Disk"],
+  ["template-text", "GiB free"],
+  ["template-text", "GiB free"],
+  ["template-text", "Hardware"],
+  ["template-text", "LLM tier"],
+  ["template-text", "Next"],
+  ["template-text", "No system data available. You can continue to preset selection."],
+  ["template-text", "Open Chat"],
+  ["template-text", "Recommendation"],
+  ["template-text", "Scanning system…"],
+  ["template-text", "Services"],
+  ["template-text", "Skills"],
+  ["template-text", "Suggested tier:"],
+  ["template-text", "System prompt"],
+  ["template-text", "You can adjust everything later in Settings."],
+  ["template-text", "You're all set!"],
+  ["template-text", "Your preset has been applied. Head to Chat to start using AutoBot."]
+ ],
+ "autobot-frontend/src/views/SettingsView.vue": [
+  ["template-text", "Configure the AutoBot Telegram bot to receive and respond to messages."],
+  ["template-text", "Control which usage metrics AutoBot records locally on your infrastructure. Nothing is ever transmitted."],
+  ["template-text", "Manage browser push notifications for this device."],
+  ["template-text", "Manage feature flags, enforcement modes, and access control"],
+  ["template-text", "Manage your paired mobile devices for push notifications and offline sync."],
+  ["template-text", "Privacy & Telemetry"],
+  ["template-text", "Telegram Bot"],
+  ["template-text", "·                                                     :                    ms"]
+ ],
+ "autobot-frontend/src/views/UsageView.vue": [
+  ["script", "Failed to load usage data."],
+  ["template-text", "All time"],
+  ["template-text", "Audio + token charges"],
+  ["template-text", "Audio In"],
+  ["template-text", "Audio Out"],
+  ["template-text", "Audio in + out"],
+  ["template-text", "Cost (USD)"],
+  ["template-text", "Cost (USD)"],
+  ["template-text", "Cost (USD)"],
+  ["template-text", "Duration"],
+  ["template-text", "Ended"],
+  ["template-text", "Estimated Cost"],
+  ["template-text", "Export CSV"],
+  ["template-text", "Input Tokens"],
+  ["template-text", "Input Tokens"],
+  ["template-text", "LLM API calls"],
+  ["template-text", "Last                           days"],
+  ["template-text", "Last             loaded"],
+  ["template-text", "Last 30 days"],
+  ["template-text", "Last 7 days"],
+  ["template-text", "Last 90 days"],
+  ["template-text", "Loading Realtime sessions..."],
+  ["template-text", "Loading..."],
+  ["template-text", "Loading..."],
+  ["template-text", "Model"],
+  ["template-text", "Model"],
+  ["template-text", "My Requests"],
+  ["template-text", "My Total Cost"],
+  ["template-text", "My Total Tokens"],
+  ["template-text", "My Usage"],
+  ["template-text", "No Realtime session history found."],
+  ["template-text", "No personal usage data available."],
+  ["template-text", "No recent request history available."],
+  ["template-text", "No usage data available."],
+  ["template-text", "Output Tokens"],
+  ["template-text", "Output Tokens"],
+  ["template-text", "Provider"],
+  ["template-text", "Realtime Sessions"],
+  ["template-text", "Realtime Sessions"],
+  ["template-text", "Recent Requests"],
+  ["template-text", "Refresh"],
+  ["template-text", "Requests"],
+  ["template-text", "Requests"],
+  ["template-text", "Sessions"],
+  ["template-text", "Started"],
+  ["template-text", "System Overview"],
+  ["template-text", "Timestamp"],
+  ["template-text", "Token usage, LLM costs, and billing-ready metrics"],
+  ["template-text", "Tokens In"],
+  ["template-text", "Tokens Out"],
+  ["template-text", "Tool Calls"],
+  ["template-text", "Total Cost"],
+  ["template-text", "Total Duration"],
+  ["template-text", "Total Tokens"],
+  ["template-text", "Usage & Cost Tracking"],
+  ["template-text", "Usage by User"],
+  ["template-text", "User"],
+  ["template-text", "active users"],
+  ["template-text", "in /"],
+  ["template-text", "in /"]
+ ],
+ "autobot-frontend/src/views/secrets/LlmApiKeysView.vue": [
+  ["attribute", "[\"gpt-4\", \"claude-*\"]"]
+ ],
+ "autobot-frontend/src/views/slm/ThemeManagerView.vue": [
+  ["template-text", "Themes"],
+  ["template-text", "Uninstall"],
+  ["template-text", "Upload a theme package (.zip) to make it available to all users."]
+ ],
+ "autobot-frontend/src/views/transcriber/ProjectDetailView.vue": [
+  ["script", "Delete recording \"${recording.filename}\"?"],
+  ["script", "Failed to delete recording."],
+  ["script", "Failed to load this project."],
+  ["template-text", "Loading recordings…"],
+  ["template-text", "No recordings yet."],
+  ["template-text", "Retry"],
+  ["template-text", "Upload an audio or video file to start transcribing."],
+  ["template-text", "Upload recording"],
+  ["template-text", "View transcript"],
+  ["template-text", "← Projects"]
+ ],
+ "autobot-frontend/src/views/transcriber/ProjectsView.vue": [
+  ["attribute", "Short description"],
+  ["attribute", "e.g. Q3 customer interviews"],
+  ["script", "Delete project \"${project.name}\" and all its recordings?"],
+  ["script", "Failed to create project."],
+  ["script", "Failed to delete project."],
+  ["script", "Failed to load projects."],
+  ["script", "Project name is required."],
+  ["template-text", "(optional)"],
+  ["template-text", "Create a project to upload audio or video and get a diarized transcript."],
+  ["template-text", "Created"],
+  ["template-text", "Description"],
+  ["template-text", "Loading projects…"],
+  ["template-text", "Name"],
+  ["template-text", "No projects yet."],
+  ["template-text", "Retry"],
+  ["template-text", "Transcriber projects"]
+ ],
+ "autobot-frontend/src/views/transcriber/TranscriptView.vue": [
+  ["script", "Failed to load this recording."],
+  ["template-text", "Loading transcript…"],
+  ["template-text", "No transcript segments were produced for this recording."],
+  ["template-text", "Transcription failed"],
+  ["template-text", "Transcription in progress… this view will populate once processing completes."]
+ ],
+ "autobot-frontend/src/views/voice/VoiceBundleInfo.vue": [
+  ["template-text", "(                            tools)"],
+  ["template-text", "Active toolset"],
+  ["template-text", "Loading toolset…"],
+  ["template-text", "No voice bundle assigned"],
+  ["template-text", "Source:"]
+ ],
+ "autobot-slm-frontend/src/components/DeploymentLogViewer.vue": [
+  ["script", "Connected to deployment stream"],
+  ["script", "Connecting to deployment stream..."],
+  ["script", "Disconnected. Reconnecting in 3 seconds..."],
+  ["script", "WebSocket connection error"]
+ ],
+ "autobot-slm-frontend/src/components/RoleManagementModal.vue": [
+  ["script", "Removing ${roleToRemove.value}..."]
+ ],
+ "autobot-slm-frontend/src/components/agents/ProcessMonitorTab.vue": [
+  ["script", "Failed to load log"]
+ ],
+ "autobot-slm-frontend/src/components/fleet/AssignNPURoleModal.vue": [
+  ["script", "Please select a node"]
+ ],
+ "autobot-slm-frontend/src/components/fleet/DecommissionModal.vue": [
+  ["script", "Failed to fetch preflight data"]
+ ],
+ "autobot-slm-frontend/src/components/fleet/NPUDetailsPanel.vue": [
+  ["script", "Configuration saved"],
+  ["script", "Remove NPU Worker role from ${props.node.hostname}?"]
+ ],
+ "autobot-slm-frontend/src/components/fleet/NodeServicesPanel.vue": [
+  ["script", "Failed to load services"]
+ ],
+ "autobot-slm-frontend/src/components/monitoring/GrafanaDashboard.vue": [
+  ["script", "Failed to load Grafana dashboard. Please check if Grafana is running."],
+  ["script", "Grafana dashboard is taking too long to load. It may be unavailable."]
+ ],
+ "autobot-slm-frontend/src/components/orchestration/RestartConfirmDialog.vue": [
+  ["script", "Confirm Action"]
+ ],
+ "autobot-slm-frontend/src/views/CodeSyncView.vue": [
+  ["script", "Delete schedule \"${schedule.name}\"?"],
+  ["script", "Remove code source assignment?"],
+  ["script", "Successfully pulled latest changes (${shortCommit})"],
+  ["script", "Successfully queued sync for ${count} node${count > 1 ? 's' : ''}"],
+  ["script", "Successfully synced ${count} node${count > 1 ? 's' : ''}"]
+ ],
+ "autobot-slm-frontend/src/views/DeploymentsView.vue": [
+  ["script", "Access denied: Blue-green deployments require admin privileges"],
+  ["script", "Are you sure you want to cancel this deployment?"],
+  ["script", "Are you sure you want to cancel this deployment?"],
+  ["script", "Are you sure you want to retry this deployment?"],
+  ["script", "Are you sure you want to rollback this deployment? This will revert the node to its previous state."],
+  ["script", "Are you sure you want to rollback to the blue node?"],
+  ["script", "Are you sure you want to switch traffic to the green node?"],
+  ["script", "Failed to cancel"],
+  ["script", "Failed to cancel deployment"],
+  ["script", "Failed to create blue-green deployment: ${detail}"],
+  ["script", "Failed to create deployment: ${detail}"],
+  ["script", "Failed to retry deployment"],
+  ["script", "Failed to retry deployment"],
+  ["script", "Failed to rollback"],
+  ["script", "Failed to rollback deployment"],
+  ["script", "Failed to switch traffic"],
+  ["script", "Please select a blue (source) node"],
+  ["script", "Please select a green (target) node"],
+  ["script", "Please select a target node"],
+  ["script", "Please select at least one role to deploy"],
+  ["script", "Please select at least one role to migrate"]
+ ],
+ "autobot-slm-frontend/src/views/ExternalAgentsView.vue": [
+  ["script", "Delete agent \"${agent.name}\"? This cannot be undone."]
+ ],
+ "autobot-slm-frontend/src/views/MaintenanceView.vue": [
+  ["script", "Are you sure you want to delete this maintenance window?"],
+  ["script", "Are you sure you want to drain node ${nodeId}? This will put it in maintenance mode."],
+  ["script", "End time must be after start time"],
+  ["script", "Failed to activate maintenance window"],
+  ["script", "Failed to complete maintenance window"],
+  ["script", "Failed to delete maintenance window"],
+  ["script", "Failed to drain node. Please try again."],
+  ["script", "Failed to resume node. Please try again."],
+  ["script", "Start and end time are required"]
+ ],
+ "autobot-slm-frontend/src/views/OrchestrationView.vue": [
+  ["script", "Delete role \"${roleName}\"? This cannot be undone."],
+  ["script", "Role \"${roleName}\" is currently assigned to ${ownerLabel}. "]
+ ],
+ "autobot-slm-frontend/src/views/ReplicationView.vue": [
+  ["script", "Are you sure you want to promote this replica to primary? This will make the target node a standalone master."],
+  ["script", "Are you sure you want to stop this replication? The replica will remain connected but replication link will be marked as stopped."]
+ ],
+ "autobot-slm-frontend/src/views/SecurityView.vue": [
+  ["script", "Are you sure you want to delete this certificate?"],
+  ["script", "Bulk renewal complete: ${result.renewed} renewed, ${result.failed} failed"],
+  ["script", "Certificate renewed successfully. New expiry: ${result.expires_at || 'Unknown'}"],
+  ["script", "Certificate rotated successfully. New expiry: ${result.expires_at || 'Unknown'}"],
+  ["script", "Enable TLS on ${selectedTlsServices.value.join(', ')}?\\n\\nThis will:\\n1. Deploy TLS certificates to the nodes\\n2. Configure services for HTTPS\\n3. Restart affected services\\n\\nContinue?"],
+  ["script", "Failed to bulk renew certificates"],
+  ["script", "Failed to delete certificate"],
+  ["script", "Failed to load TLS certificates"],
+  ["script", "Failed to load audit logs"],
+  ["script", "Failed to load security events"],
+  ["script", "Failed to load security overview"],
+  ["script", "Failed to load security policies"],
+  ["script", "Failed to renew certificate"],
+  ["script", "Failed to rotate certificate"],
+  ["script", "Failed to upload certificate"],
+  ["script", "Please provide all certificate files"],
+  ["script", "Please select a node"],
+  ["script", "Please select at least one service to enable TLS"],
+  ["script", "Renew all certificates expiring within 30 days? This will deploy new certificates to the nodes."],
+  ["script", "Renew this certificate? This will generate a new certificate with the same CN and extended validity."],
+  ["script", "Rotate this certificate? This will generate a completely new certificate with new keys (more secure than renewal)."]
+ ],
+ "autobot-slm-frontend/src/views/SetupWizardView.vue": [
+  ["script", "Failed to save API keys. Check the console for details."],
+  ["script", "Skip the setup wizard? You can configure nodes later from the Fleet page."],
+  ["script", "Starting fleet provisioning..."]
+ ],
+ "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": [
+  ["script", "Cancel this update job?"],
+  ["script", "Job cancelled"],
+  ["script", "Upgrade ALL packages on ${nodeId}?"],
+  ["script", "Upgrade all started for ${nodeId}"],
+  ["script", "Upgrade jobs started"]
+ ],
+ "autobot-slm-frontend/src/views/monitoring/AlertsMonitor.vue": [
+  ["script", "Clear all active alerts? This cannot be undone."]
+ ],
+ "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": [
+  ["script", "Clear errors older than 7 days?"]
+ ],
+ "autobot-slm-frontend/src/views/settings/APISettings.vue": [
+  ["script", "Connected (${responseTime}ms)"]
+ ],
+ "autobot-slm-frontend/src/views/settings/BackendSettings.vue": [
+  ["script", "Failed to save setting"],
+  ["script", "Setting saved successfully"]
+ ],
+ "autobot-slm-frontend/src/views/settings/DisposalPolicySettings.vue": [
+  ["script", "Failed to save disposal policy"]
+ ],
+ "autobot-slm-frontend/src/views/settings/GeneralSettings.vue": [
+  ["script", "Failed to save setting(s): ${failed.join(', ')}"],
+  ["script", "Settings saved successfully"],
+  ["script", "Setup wizard has been reset"]
+ ],
+ "autobot-slm-frontend/src/views/settings/MonitoringSettings.vue": [
+  ["script", "Failed to save setting"]
+ ],
+ "autobot-slm-frontend/src/views/settings/NotificationsSettings.vue": [
+  ["script", "Failed to save setting(s): ${failed.join(', ')}"],
+  ["script", "Notification settings saved successfully"]
+ ],
+ "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": [
+  ["script", "Are you sure you want to revoke this API key? This action cannot be undone."],
+  ["script", "Copied to clipboard"],
+  ["script", "Name and at least one scope are required"],
+  ["script", "Password is required"],
+  ["script", "Password is required"],
+  ["script", "Please enter a valid 6-digit code"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/CacheSettings.vue": [
+  ["script", "Are you sure you want to clear the ${database} Redis database?"],
+  ["script", "Are you sure you want to clear the ${type} cache?"],
+  ["script", "Cache configuration saved successfully"],
+  ["script", "Cache warmup completed successfully"],
+  ["script", "Redis ${database} database cleared successfully"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/ConfigDefaultsSettings.vue": [
+  ["script", "Config \"${key}\" saved"],
+  ["script", "Delete global config \"${key}\"?"],
+  ["script", "Key is required"],
+  ["script", "Request failed: ${err instanceof Error ? err.message : 'Unknown error'}"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": [
+  ["script", "Propose deleting orphaned storage: ${candidate.provider}:${candidate.location}"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/LLMSettings.vue": [
+  ["script", "Remove provider \"${name}\"?"],
+  ["script", "Save configuration before applying to fleet"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": [
+  ["script", "Auto-start ${status.auto_start ? 'enabled' : 'disabled'}"],
+  ["script", "Connection test successful"],
+  ["script", "Destination ${editingDestination.value ? 'updated' : 'created'} successfully"],
+  ["script", "Destination deleted successfully"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": [
+  ["script", "Connection to ${worker.hostname} successful"],
+  ["script", "Load balancing configuration saved"],
+  ["script", "Worker ${editingWorker.value ? 'updated' : 'paired'} successfully"],
+  ["script", "Worker removed successfully"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/PromptsSettings.vue": [
+  ["script", "Are you sure you want to revert this prompt to its default content?"],
+  ["script", "Prompt reverted to default"],
+  ["script", "Prompt saved successfully"],
+  ["script", "You have unsaved changes. Discard them?"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": [
+  ["script", "Delete SSO provider \"${provider.name}\"? This cannot be undone."],
+  ["script", "Provider name is required"]
+ ],
+ "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": [
+  ["script", "Are you sure you want to delete this SLM admin?"],
+  ["script", "Are you sure you want to delete this SSO provider?"],
+  ["script", "Are you sure you want to delete this team?"],
+  ["script", "Are you sure you want to delete this user?"],
+  ["script", "Checking RBAC status..."],
+  ["script", "Passwords do not match"]
+ ],
+ "autobot-slm-frontend/src/views/tools/admin/BatchTool.vue": [
+  ["script", "Are you sure you want to delete this job?"],
+  ["script", "AutoBot backend unreachable. Polling paused."],
+  ["script", "Please enter a job name"]
+ ],
+ "autobot-slm-frontend/src/views/tools/admin/MCPTool.vue": [
+  ["script", "AutoBot backend did not respond in time. Is it reachable?"]
+ ],
+ "autobot-slm-frontend/src/views/tools/admin/NoVNCTool.vue": [
+  ["script", "Please select a host"]
+ ],
+ "autobot-slm-frontend/src/views/tools/admin/VisionTool.vue": [
+  ["script", "Please capture or upload an image first"]
+ ],
+ "autobot-slm-frontend/src/views/tools/admin/VoiceTool.vue": [
+  ["script", "Speech recognition error: ${event.error}"],
+  ["script", "Speech recognition is not supported in this browser"],
+  ["script", "Speech synthesis failed"],
+  ["script", "Speech synthesis is not supported in this browser"]
+ ]
+}

@@ -31,10 +31,11 @@ by its known positive and by synthetic fixtures instead.
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import pytest
-from repo_tests._hardcoded_ui_literal_baseline import HARDCODED_UI_LITERALS
+from repo_tests._hardcoded_ui_literal_baseline import HARDCODED_UI_LITERAL_IDS, HARDCODED_UI_LITERALS
 from repo_tests._hardcoded_ui_literal_detect import (
     APP_TREES,
     REACH_UI_LITERAL_FILES,
@@ -71,22 +72,37 @@ def measured() -> dict[str, list[tuple[str, str]]]:
     return scan(repo_root())
 
 
+def identity_diff(recorded, measured):
+    """(new, stale) as {file: [(kind, literal), ...]}, compared per file as multisets."""
+    new, stale = {}, {}
+    for f in sorted(set(recorded) | set(measured)):
+        have, had = Counter(measured.get(f, [])), Counter(recorded.get(f, []))
+        if added := sorted((have - had).elements()):
+            new[f] = added
+        if gone := sorted((had - have).elements()):
+            stale[f] = gone
+    return new, stale
+
+
 class TestThePopulationOnlyShrinks:
     def test_no_file_gains_a_literal(self, measured):
-        grew = {
-            f: (HARDCODED_UI_LITERALS.get(f, 0), len(v))
-            for f, v in measured.items()
-            if len(v) > HARDCODED_UI_LITERALS.get(f, 0)
-        }
-        assert not grew, f"hard-coded UI text grew (file: recorded, now) {grew}. {_FIX}"
+        new, _ = identity_diff(HARDCODED_UI_LITERAL_IDS, measured)
+        assert not new, f"hard-coded UI text not in the baseline (file: [(kind, literal)]) {new}. {_FIX}"
 
-    def test_a_shrink_is_recorded_in_the_commit_that_did_the_work(self, measured):
-        shrunk = {
-            f: (n, len(measured.get(f, [])))
-            for f, n in HARDCODED_UI_LITERALS.items()
-            if 0 < len(measured.get(f, [])) < n
-        }
-        assert not shrunk, f"lower these in _hardcoded_ui_literal_baseline.py (recorded, now): {shrunk}"
+    def test_a_removed_literal_is_deleted_in_the_commit_that_did_the_work(self, measured):
+        _, stale = identity_diff(HARDCODED_UI_LITERAL_IDS, measured)
+        assert not stale, f"delete these from hardcoded_ui_literal_baseline_12732.json: {stale}"
+
+    def test_a_swap_in_one_file_fails_both_ways(self):
+        """A per-file count passed this (#18802): one literal out, another in, same total."""
+        recorded = {"A.vue": [("script", "Old text")]}
+        new, stale = identity_diff(recorded, {"A.vue": [("script", "New text")]})
+        assert new == {"A.vue": [("script", "New text")]} and stale == {"A.vue": [("script", "Old text")]}
+        assert identity_diff(recorded, {"A.vue": [("script", "Old text")]}) == ({}, {})
+
+    def test_a_duplicate_literal_counts_twice(self):
+        new, _ = identity_diff({"A.vue": [("attribute", "Close")]}, {"A.vue": [("attribute", "Close")] * 2})
+        assert new == {"A.vue": [("attribute", "Close")]}
 
     def test_a_file_that_reaches_zero_leaves_the_dict(self, measured):
         gone = sorted(f for f in HARDCODED_UI_LITERALS if f not in measured)
@@ -98,8 +114,10 @@ class TestThePopulationOnlyShrinks:
         assert not bad, f"entries that are zero or outside the boundary: {bad}"
 
     def test_the_baseline_is_sorted(self):
-        keys = list(HARDCODED_UI_LITERALS)
+        keys = list(HARDCODED_UI_LITERAL_IDS)
         assert keys == sorted(keys)
+        unsorted = [f for f, v in HARDCODED_UI_LITERAL_IDS.items() if v != sorted(v)]
+        assert not unsorted, f"literals not sorted within: {unsorted}"
 
 
 class TestTheBoundaryDoesNotMoveSilently:
@@ -172,6 +190,16 @@ class TestEachMatcherOnSyntheticSources:
     def test_script_negatives(self):
         src = "<script>a.value = 'lower case'; b.value = t('x'); title: 'A'</script>"
         assert self._kinds(src, "script") == []
+
+    def test_script_quotes_close_on_the_opening_delimiter(self):
+        """An apostrophe inside double quotes, and double quotes inside single (#18802)."""
+        src = "<script>alert(\"Can't connect\"); e.value = 'Say \"hi\" now'; title: `It's ${n}`</script>"
+        assert self._kinds(src, "script") == ["Can't connect", 'Say "hi" now', "It's ${n}"]
+
+    def test_script_quote_negatives(self):
+        """A mismatched pair is not a literal, nor is a lower-case string with an apostrophe."""
+        assert self._kinds("<script>alert(\"Unclosed text')</script>", "script") == []
+        assert self._kinds('<script>x.value = "don\'t count"</script>', "script") == []
 
     def test_script_text_in_template_is_not_a_script_literal(self):
         assert self._kinds("<template><p>message: 'Hello there'</p></template>", "script") == []
