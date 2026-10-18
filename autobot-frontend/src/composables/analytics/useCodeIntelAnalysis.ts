@@ -215,7 +215,9 @@ export function useCodeIntelAnalysis(
       if (!result) {
         throw new Error('scan-file returned no result')
       }
-      const issueCount = result.statistics.issues_found
+      // The contract types statistics as an open dict, so narrow before comparing.
+      const issuesFound = result.statistics.issues_found
+      const issueCount = typeof issuesFound === 'number' ? issuesFound : 0
       if (issueCount > 0) {
         codeIntelFindingsFetched.value = {
           security: true,

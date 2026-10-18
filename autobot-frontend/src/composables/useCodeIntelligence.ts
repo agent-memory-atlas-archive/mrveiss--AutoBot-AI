@@ -8,6 +8,7 @@
  * Issue #899 - Code Intelligence Tools
  */
 
+import type { components } from '@/types/generated/api'
 import { ref, computed, onMounted, getCurrentInstance } from 'vue'
 import ApiClient from '@/utils/ApiClient'
 import { createLogger } from '@/utils/debugUtils'
@@ -67,17 +68,8 @@ export interface CodeSuggestion {
 }
 
 /** Wire shape of POST /api/code-intelligence/scan-file (bare JSON, one file). */
-export interface CodeScanFileResult {
-  status: string
-  timestamp: string
-  file_path: string
-  patterns: Array<Record<string, unknown>>
-  statistics: {
-    class_count: number
-    function_count: number
-    issues_found: number
-  }
-}
+/** POST /api/code-intelligence/scan-file body (the generated contract; the handler sends it bare, #18744). */
+export type CodeScanFileResult = components['schemas']['CodeIntelScanFileResultResponse']
 
 export interface QualityScore {
   overall_score: number
@@ -94,11 +86,7 @@ export interface QualityScore {
 }
 
 /** Wire shape of GET /api/analytics/code/metrics/quality-score (bare JSON, codebase-wide). */
-interface CodebaseQualityScoreResponse {
-  overall_score: number
-  grade: string
-  quality_factors: Record<string, unknown>
-}
+type CodebaseQualityScoreResponse = components['schemas']['AnalyticsCodeQualityScoreResponse']
 
 function toQualityScore(raw: CodebaseQualityScoreResponse): QualityScore {
   const factor = (key: string): number => Number(raw.quality_factors?.[key] ?? 0)

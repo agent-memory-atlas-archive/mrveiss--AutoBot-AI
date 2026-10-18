@@ -9,15 +9,12 @@
  * get_fact_by_key); fact keys are `fact:{id}` (knowledge/facts.py). The body is
  * bare: {key, content, metadata, created_at}.
  */
+import type { components } from '@/types/generated/api'
 import { getApiBase } from '@/config/ssot-config'
 import type { KnowledgeDocument } from '@/stores/useKnowledgeStore'
 
-export interface FactByKeyBody {
-  key: string
-  content: string
-  metadata?: Record<string, unknown>
-  created_at?: string
-}
+/** GET /api/knowledge_base/fact/{fact_key} body, from the generated contract. */
+export type FactByKeyBody = components['schemas']['FactByKeyResponse']
 
 export function factByKeyUrl(documentId: string): string {
   const factKey = documentId.startsWith('fact:') ? documentId : `fact:${documentId}`
