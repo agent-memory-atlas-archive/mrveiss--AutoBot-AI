@@ -143,4 +143,45 @@ register_env_var(
     )
 )
 
-from autobot_shared import env_registry_issue_claims  # noqa: E402,F401 -- registers #18811 vars; see its docstring
+
+# --- issue-claims CLI API transport (#18811): the session ledger reaches the registry via AutoBot's API ---
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_ISSUE_CLAIMS_API_URL",
+        type=str,
+        default="",
+        description=(
+            "Base URL of AutoBot's backend for the issue-claims CLI (#18811). When set, "
+            "`python -m autobot_shared.coordination.issue_claims` talks to /api/coordination/issue-claims "
+            "instead of Redis, so a developer checkout needs no registry credential. Never derived from "
+            "the SSOT backend URL. Unset keeps the direct Redis transport."
+        ),
+        component="orchestration",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_ISSUE_CLAIMS_TOKEN_FILE",
+        type=str,
+        default="",
+        description=(
+            "Path of a file holding the bearer token the issue-claims CLI sends to the API (#18811). "
+            "Read from the file on each run; the token is never taken from argv or an environment value, "
+            "and never printed. Required when AUTOBOT_ISSUE_CLAIMS_API_URL is set."
+        ),
+        component="orchestration",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_ISSUE_CLAIMS_API_TIMEOUT_S",
+        type=int,
+        default=10,
+        description="Per-request timeout of the issue-claims CLI's API transport; expiry fails closed (#18811).",
+        component="orchestration",
+        range=(1, 120),
+    )
+)
