@@ -51,7 +51,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/components/charts/FunctionCallGraph.vue": 2165,
     "autobot-frontend/src/components/charts/ImportTreeChart.vue": 1365,
     "autobot-frontend/src/components/chat/ChatInput.vue": 1716,
-    "autobot-frontend/src/components/chat/ChatInterface.vue": 1526,
+    "autobot-frontend/src/components/chat/ChatInterface.vue": 1521,
     "autobot-frontend/src/components/chat/ChatMessages.vue": 2119,
     "autobot-frontend/src/components/chat/ChatSidebar.vue": 808,
     "autobot-frontend/src/components/chat/DocumentationSearchSidebar.vue": 766,
