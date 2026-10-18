@@ -35,6 +35,7 @@ file, under-matching is the confident zero this guard exists to prevent.
 from __future__ import annotations
 
 import ast
+import functools
 import re
 from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple
@@ -119,13 +120,33 @@ def _import_maps(tree: ast.AST) -> tuple[dict[str, str], frozenset[str]]:
     return aliases, frozenset(policies)
 
 
+#: httpx transports that call an application object in this process and open no socket (#18765).
+_IN_PROCESS_TRANSPORTS = frozenset({"httpx.ASGITransport", "httpx.WSGITransport"})
+
+
+def _in_process(ctor: ast.Call, aliases: dict[str, str]) -> bool:
+    """True when an httpx client is built with ``transport=ASGITransport(...)`` and no ``mounts=``.
+
+    ``mounts`` routes chosen URL patterns to other (network) transports, so a client that has
+    them is not in-process however its default transport is set.
+    """
+    keywords = {kw.arg: kw.value for kw in ctor.keywords}
+    transport = keywords.get("transport")
+    return (
+        "mounts" not in keywords
+        and None not in keywords  # a **kwargs splat could carry mounts
+        and isinstance(transport, ast.Call)
+        and _canon(transport.func, aliases) in _IN_PROCESS_TRANSPORTS
+    )
+
+
 def _ctor_kind(expr: ast.expr | None, aliases: dict[str, str]) -> str | None:
     """Client kind produced by constructing/obtaining *expr*, if it is a known client factory."""
     if not isinstance(expr, ast.Call):
         return None
     canon = _canon(expr.func, aliases)
     if canon in _CTORS:
-        return _CTORS[canon]
+        return None if _in_process(expr, aliases) else _CTORS[canon]
     if canon.endswith(".tracked_session") or canon.endswith("get_http_client.tracked_session"):
         return "session"
     return "manager" if canon.split(".")[-1] == "get_http_client" else None
@@ -341,6 +362,14 @@ def outbound_sites(source: str) -> tuple[Site, ...]:
     return tuple(sorted(sites))
 
 
+@functools.lru_cache(maxsize=None)
+def _outbound_sites_cached(source: str) -> tuple[Site, ...]:
+    """``outbound_sites`` memoised on the file TEXT: several tests sweep the same tree, and keying
+    on content (not path) means an edited file is re-parsed, never served stale. A SyntaxError is
+    not cached, so an unparsable file is re-reported every sweep."""
+    return outbound_sites(source)
+
+
 def scan_paths(root: Path, relative_paths: Iterable[str]) -> dict[str, tuple[Site, ...]]:
     """Map each path with outbound calls to them; an unparsable file gets an ``(UNPARSED)`` key."""
     found: dict[str, tuple[Site, ...]] = {}
@@ -349,7 +378,7 @@ def scan_paths(root: Path, relative_paths: Iterable[str]) -> dict[str, tuple[Sit
         if not _QUICK.search(text):
             continue  # speed gate on vocabulary, not a matcher
         try:
-            sites = outbound_sites(text)
+            sites = _outbound_sites_cached(text)
         except SyntaxError:
             found[f"{rel} (UNPARSED)"] = ()
             continue

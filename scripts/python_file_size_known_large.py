@@ -73,7 +73,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/analytics_root_cause_test.py": 628,
     "autobot-backend/api/api_endpoint_migrations_test.py": 31020,
     "autobot-backend/api/auth.py": 698,
-    "autobot-backend/api/batch_jobs.py": 964,
+    "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
     "autobot-backend/api/cache_management.py": 779,
     "autobot-backend/api/chat.py": 2690,  # #18316: delete delegates to the canonical path
@@ -132,7 +132,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_code.py": 3265,
     "autobot-backend/api/schemas_knowledge.py": 5133,
     "autobot-backend/api/schemas_system.py": 4362,  # #13051: SecretModel ownership fields
-    "autobot-backend/api/schemas_workflows.py": 2917,
+    "autobot-backend/api/schemas_workflows.py": 2907,
     "autobot-backend/api/secrets.py": 1182,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
     "autobot-backend/api/settings.py": 881,
@@ -476,7 +476,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/tests/test_cleanup_never_destroys_data_14856.py": 981,
     "autobot-slm-backend/user_management/services/sso_service.py": 775,
     "autobot_shared/circuit_breaker.py": 689,
-    "autobot_shared/env_registry.py": 1176,  # #13602: +1 sibling import, -14 registration
+    "autobot_shared/env_registry.py": 1164,  # #13602, #18765: sibling imports; blocks moved to siblings
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
     "autobot_shared/network_constants.py": 614,
     "autobot_shared/npu/integration.py": 929,
