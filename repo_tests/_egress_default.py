@@ -125,12 +125,18 @@ _IN_PROCESS_TRANSPORTS = frozenset({"httpx.ASGITransport", "httpx.WSGITransport"
 
 
 def _in_process(ctor: ast.Call, aliases: dict[str, str]) -> bool:
-    """True when an httpx client is built with ``transport=ASGITransport(...)``: no network egress."""
-    return any(
-        kw.arg == "transport"
-        and isinstance(kw.value, ast.Call)
-        and _canon(kw.value.func, aliases) in _IN_PROCESS_TRANSPORTS
-        for kw in ctor.keywords
+    """True when an httpx client is built with ``transport=ASGITransport(...)`` and no ``mounts=``.
+
+    ``mounts`` routes chosen URL patterns to other (network) transports, so a client that has
+    them is not in-process however its default transport is set.
+    """
+    keywords = {kw.arg: kw.value for kw in ctor.keywords}
+    transport = keywords.get("transport")
+    return (
+        "mounts" not in keywords
+        and None not in keywords  # a **kwargs splat could carry mounts
+        and isinstance(transport, ast.Call)
+        and _canon(transport.func, aliases) in _IN_PROCESS_TRANSPORTS
     )
 
 

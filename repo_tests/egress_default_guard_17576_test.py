@@ -345,6 +345,17 @@ def test_an_in_process_asgi_client_is_not_an_outbound_call() -> None:
     assert len(sites) == 1 and not sites[0].guarded, "contrast: a network httpx client must still be detected"
 
 
+def test_an_asgi_client_with_network_mounts_is_still_an_outbound_call() -> None:
+    """``mounts=`` sends matching URLs to a network transport, so the exemption does not apply."""
+    mounted = _IN_PROCESS.replace(
+        "transport=httpx.ASGITransport(app=app), ",
+        "transport=httpx.ASGITransport(app=app), mounts={'https://': httpx.AsyncHTTPTransport()}, ",
+    )
+    assert mounted != _IN_PROCESS
+    sites = outbound_sites(mounted)
+    assert len(sites) == 1 and not sites[0].guarded
+
+
 def test_known_live_misses_are_now_found() -> None:
     """The review's three live misses: an aliased session under ``with`` and an httpx client."""
     found = scan_paths(repo_root(), ["autobot-backend/api/provider_auth.py", "autobot-backend/content_reach/_http.py"])

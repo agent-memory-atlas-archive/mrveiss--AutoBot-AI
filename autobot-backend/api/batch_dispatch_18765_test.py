@@ -144,6 +144,10 @@ async def test_the_internal_key_alone_does_not_escalate_a_batch_to_admin(calls) 
         "/api/batch-jobs/status",
         "/health",
         "",
+        "/api/%2e%2e/chats",
+        "/api//chats",
+        "/api/chats/",
+        "/API/chats",
     ],
 )
 @pytest.mark.asyncio
@@ -153,6 +157,21 @@ async def test_a_refused_endpoint_never_dispatches(calls, endpoint) -> None:
     assert item["status"] in (400, 403)
     assert item["body"] is None
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_sub_request_401_propagates_into_its_slot(calls) -> None:
+    """The internal key admits /load itself but is never forwarded, so the sub-request is anonymous."""
+    resp = await _load(calls, [_get("/api/chats")], {"X-Internal-API-Key": INTERNAL_KEY})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["results"][0]["status"] == 401  # the gated route sees an anonymous caller
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_an_empty_batch_is_refused_with_400(calls) -> None:
+    resp = await _load(calls, [], {"Authorization": "Bearer root"})
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio

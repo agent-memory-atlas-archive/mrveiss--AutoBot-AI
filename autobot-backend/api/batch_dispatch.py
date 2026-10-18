@@ -129,6 +129,8 @@ async def _dispatch_one(asgi_client: "httpx.AsyncClient", req: Dict, headers: Di
 
 def check_batch_size(requests: List[Dict]) -> None:
     """Refuse an oversized or empty batch before anything is dispatched."""
+    if not requests:
+        raise HTTPException(status_code=400, detail="batch is empty")
     if len(requests) > BATCH_MAX_REQUESTS:
         raise HTTPException(
             status_code=400, detail=f"batch of {len(requests)} exceeds the maximum of {BATCH_MAX_REQUESTS}"
