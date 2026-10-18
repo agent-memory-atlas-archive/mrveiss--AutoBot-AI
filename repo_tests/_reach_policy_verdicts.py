@@ -548,4 +548,9 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "FIXED_INVENTORY",
         "Compose files, container entrypoints and env templates: a small, named set.",
     ),
+    "backend-migrations-resume-safe-18729": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Alembic revisions, growing.",
+    ),
 }
