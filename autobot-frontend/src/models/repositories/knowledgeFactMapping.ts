@@ -33,7 +33,7 @@ export function factToDocument(documentId: string, fact: FactByKeyBody): Knowled
   return {
     id: documentId,
     title: metaString(meta, 'title'),
-    content: fact.content,
+    content: typeof fact.content === 'string' ? fact.content : '',
     source: metaString(meta, 'source'),
     type: 'document',
     tags: Array.isArray(meta.tags) ? meta.tags.filter((tag): tag is string => typeof tag === 'string') : [],

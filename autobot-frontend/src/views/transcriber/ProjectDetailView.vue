@@ -20,7 +20,9 @@ const logger = createLogger('TranscriberProjectDetailView')
 const LIVE_PROGRESS_ENABLED = false
 
 // While live progress is off, a pending/processing recording is refreshed by polling its served GET.
-const RECORDING_POLL_MS = Number(import.meta.env.VITE_TRANSCRIBER_POLL_MS ?? 4000)
+const POLL_MS_RAW = Number(import.meta.env.VITE_TRANSCRIBER_POLL_MS)
+// Empty or malformed values (0, NaN) would poll near-continuously: fall back, and never go under 1s.
+const RECORDING_POLL_MS = Number.isFinite(POLL_MS_RAW) && POLL_MS_RAW >= 1000 ? POLL_MS_RAW : 4000
 
 const route = useRoute()
 const router = useRouter()
@@ -113,8 +115,17 @@ function stopPolling() {
   pollTimer = null
 }
 
+let pollBusy = false
+
+// One batch at a time: a slow service must not stack requests or let an older reply win.
 async function pollInProgress() {
-  await Promise.all(recordings.value.filter(isInProgress).map((r) => onProcessingSettled(r.id)))
+  if (pollBusy) return
+  pollBusy = true
+  try {
+    await Promise.all(recordings.value.filter(isInProgress).map((r) => onProcessingSettled(r.id)))
+  } finally {
+    pollBusy = false
+  }
 }
 
 const hasInProgress = computed(() => recordings.value.some(isInProgress))
