@@ -11,6 +11,7 @@ counters never reached the chat path.
 
 import ast
 import importlib.util as _ilu
+import json
 import pathlib
 import sys
 from types import SimpleNamespace
@@ -180,6 +181,37 @@ async def test_a_failing_llm_service_does_not_skip_the_other_workers(monkeypatch
 
     assert len(started) == 2
     assert not hasattr(app.state, "llm_service")
+    assert app.state.llm_service_error == "RuntimeError"
+
+
+async def _health_llm_status(chat, **state) -> str:
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(chat_history_manager=object(), **state)))
+    response = await chat.chat_health_check(current_user={"username": "u"}, request=request)
+    return json.loads(response.body)["components"]["llm_service"]
+
+
+@pytest.mark.asyncio
+async def test_health_reports_a_failed_startup_wiring_as_degraded(chat_module):
+    chat, singleton = chat_module
+    assert await _health_llm_status(chat, llm_service_error="RuntimeError") == "degraded"
+    assert await _health_llm_status(chat, llm_service=singleton) == "healthy"
+    assert await _health_llm_status(chat) == "available"
+
+
+def test_a_failed_construction_is_not_cached_so_the_next_request_retries(monkeypatch):
+    calls = []
+
+    def _flaky():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("provider config missing")
+        return SimpleNamespace(name="ok")
+
+    monkeypatch.setattr(llm_mod, "_service_instance", None)
+    monkeypatch.setattr(llm_mod, "LLMService", _flaky)
+    with pytest.raises(RuntimeError):
+        llm_mod.get_llm_service()
+    assert llm_mod.get_llm_service().name == "ok"
 
 
 def _llm_service_constructions(tree: ast.AST) -> list[int]:

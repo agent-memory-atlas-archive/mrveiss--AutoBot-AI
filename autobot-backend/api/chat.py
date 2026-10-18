@@ -1363,9 +1363,9 @@ async def chat_health_check(
     """
     Health check for chat service.
 
-    Note: llm_service is lazily initialized on first chat request, so we report
-    it as 'available' (can be initialized) rather than requiring it to exist.
-    Only chat_history_manager is critical for the health check.
+    llm_service: 'healthy' once startup wired the singleton, 'degraded' when that
+    wiring failed (#18689), 'available' before startup ran. Only
+    chat_history_manager is critical for the health check.
 
     Issue #744: Requires authenticated user.
     """
@@ -1375,8 +1375,8 @@ async def chat_health_check(
     # chat_history_manager is critical - must be present
     chat_history_status = "healthy" if chat_history_manager else "unavailable"
 
-    # lifespan wires app.state.llm_service to the process singleton (#18689)
-    llm_status = "healthy" if llm_service else "available"
+    wiring_failed = getattr(request.app.state, "llm_service_error", None)  # startup wiring, #18689
+    llm_status = "healthy" if llm_service else "degraded" if wiring_failed else "available"
 
     health_status = {
         "status": "healthy",

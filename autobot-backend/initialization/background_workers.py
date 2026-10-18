@@ -83,7 +83,9 @@ def wire_llm_service(app: FastAPI) -> None:
         from services.llm_service import get_llm_service
 
         app.state.llm_service = get_llm_service()
-    except Exception:  # noqa: BLE001 - a failed LLM service must not skip the other workers
+    except Exception as e:  # noqa: BLE001 - a failed LLM service must not skip the other workers
+        # Surfaced as 'degraded' by the chat health check; chat retries construction per request.
+        app.state.llm_service_error = type(e).__name__
         logger.exception("LLM service NOT wired onto app.state; chat resolves it per request (#18689)")
 
 
