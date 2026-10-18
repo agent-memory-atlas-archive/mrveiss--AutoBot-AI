@@ -7,7 +7,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from skills.generator import _parse_manifest
+from autobot_shared.frontmatter import parse_frontmatter_mapping as _parse_manifest
 
 
 class BaseRepoSync(ABC):
