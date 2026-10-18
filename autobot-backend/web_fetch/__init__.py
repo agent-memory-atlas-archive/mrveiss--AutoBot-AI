@@ -9,11 +9,12 @@ Issue #7400: Foundation for web research epic (#7396).
 
 Public API::
 
-    from web_fetch import WebFetcher, RenderMode, FetchResult, Frontier, RobotsCache
+    from web_fetch import WebFetcher, RenderMode, FetchResult, Frontier, RobotsCache, IngestProfile
 """
 
 from web_fetch.fetcher import WebFetcher
 from web_fetch.frontier import Frontier
+from web_fetch.profile import IngestProfile
 from web_fetch.robots import RobotsCache
 from web_fetch.types import (
     ERR_CIRCUIT_OPEN,
@@ -34,6 +35,7 @@ __all__ = [
     "FetchResult",
     "Frontier",
     "RobotsCache",
+    "IngestProfile",
     # Error code constants
     "ERR_SSRF_BLOCKED",
     "ERR_ROBOTS_BLOCKED",

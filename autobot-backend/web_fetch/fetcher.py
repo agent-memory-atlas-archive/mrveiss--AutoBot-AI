@@ -42,7 +42,8 @@ from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from web_fetch.cache import WEB_FETCH_MAX_BYTES, get_cached_result, set_cached_result
-from web_fetch.extractors import _MIN_CONTENT_CHARS, extract_markdown, is_spa_content
+from web_fetch.extractors import _MIN_CONTENT_CHARS, is_spa_content
+from web_fetch.profile import IngestProfile, extract_page, require_implemented
 
 
 def _parse_jina_markdown(jina_text: str) -> tuple:
@@ -297,9 +298,17 @@ class WebFetcher:
             logger.info("fetched markdown: %s", result.markdown)
     """
 
-    def __init__(self, redis_client=None, robots_cache=None) -> None:
+    def __init__(self, redis_client=None, robots_cache=None, profile: IngestProfile = IngestProfile.DOCUMENT) -> None:
         self._redis = redis_client
         self._robots = robots_cache
+        # #18826: validated here, before any cache lookup or network call, so an
+        # unimplemented profile can never be answered from a document-profile cache.
+        self.profile = require_implemented(profile)
+
+    def page_text(self, html: str, url: str) -> tuple[str, str]:
+        """Return ``(title, text)`` of *html* through the one HTML extractor (#18826)."""
+        document = extract_page(html, self.profile, base_url=url)
+        return document.info.get("title", ""), document.text
 
     @classmethod
     async def fetch(
@@ -309,8 +318,9 @@ class WebFetcher:
         timeout: float = 30.0,
         redis_client=None,
         robots_cache=None,
+        profile: IngestProfile = IngestProfile.DOCUMENT,
     ) -> FetchResult:
-        """Fetch url and return FetchResult with markdown content.
+        """Fetch url and return FetchResult with the page's extracted text.
 
         Args:
             url: Absolute URL to fetch.
@@ -318,8 +328,9 @@ class WebFetcher:
             timeout: Per-request timeout in seconds.
             redis_client: Optional async Redis client for caching.
             robots_cache: Optional RobotsCache instance.
+            profile: What to keep from an HTML page (#18826); ``document`` is the only implemented value.
         """
-        instance = cls(redis_client=redis_client, robots_cache=robots_cache)
+        instance = cls(redis_client=redis_client, robots_cache=robots_cache, profile=profile)
         return await instance._fetch(url, render, timeout)
 
     @classmethod
@@ -414,7 +425,7 @@ class WebFetcher:
         if html is None and status is None:
             pass  # fall through to Playwright
         elif html is not None and status is not None and status < 400:
-            title, md = extract_markdown(html)
+            title, md = self.page_text(html, url)
             if not is_spa_content(md, html):
                 return FetchResult(
                     url=url,
@@ -445,7 +456,7 @@ class WebFetcher:
         async with _get_fast_sem():
             html, status = await _fetch_bs4(url, min(timeout, 15.0))
         if html is not None and status is not None and status < 400:
-            title, md = extract_markdown(html)
+            title, md = self.page_text(html, url)
             return FetchResult(
                 url=url,
                 success=True,
@@ -468,7 +479,7 @@ class WebFetcher:
                 return _fail(url, ERR_TIMEOUT, retryable=True)
         if html is None:
             return _fail(url, ERR_UNKNOWN, retryable=True)
-        title, md = extract_markdown(html)
+        title, md = self.page_text(html, url)
         return FetchResult(
             url=url, success=True, markdown=md, title=title, render_mode=RenderMode.PLAYWRIGHT, source="playwright"
         )
