@@ -865,7 +865,7 @@ async def _run_background_doc_indexing():
         from utils.chromadb_store_repairs import repair_hnsw_pickles_locked
 
         chroma_path = chromadb_data_dir()
-        repair_hnsw_pickles_locked(chroma_path)
+        await asyncio.to_thread(repair_hnsw_pickles_locked, chroma_path)  # flock wait + fsync: off the loop
     except Exception as e:
         logger.warning("Background doc indexing failed (non-critical): %s", e)
 
