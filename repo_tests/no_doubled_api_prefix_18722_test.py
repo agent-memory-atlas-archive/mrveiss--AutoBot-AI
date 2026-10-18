@@ -127,6 +127,14 @@ def _is_router_ctor(call: ast.Call) -> bool:
     return _ctor_name(call) == "APIRouter"
 
 
+def _is_router_include(call: ast.Call, apps: set[str]) -> bool:
+    """``<router>.include_router(sub, prefix=...)``; on the FastAPI app, ``/api`` is the root mount."""
+    func = call.func
+    if not (isinstance(func, ast.Attribute) and func.attr == "include_router"):
+        return False
+    return not (isinstance(func.value, ast.Name) and func.value.id in apps)
+
+
 def doubled_paths(source: str) -> list[str]:
     """Every route path and ``APIRouter(prefix=...)`` in `source` that starts with ``/api``."""
     tree = ast.parse(source)
@@ -138,7 +146,7 @@ def doubled_paths(source: str) -> list[str]:
             continue
         if _is_route_call(node, routers, apps, decorators):
             path = _declared_path(node)
-        elif _is_router_ctor(node):
+        elif _is_router_ctor(node) or _is_router_include(node, apps):
             path = next((_str_const(k.value) for k in node.keywords if k.arg == "prefix"), None)
         else:
             continue
@@ -175,6 +183,8 @@ _PLANTED = (
     ('r: APIRouter = APIRouter()\nr.add_api_route("/api/z", f)\n', ["/api/z"]),
     # Unknown receiver used as a route decorator: flagged conservatively.
     ('@mystery.get("/api/q")\nasync def f(): ...\n', ["/api/q"]),
+    # Composition: a router included into another router under an ``/api`` prefix (CodeRabbit, #18827).
+    ('router.include_router(sub, prefix="/api/x")\n', ["/api/x"]),
 )
 
 #: Contrast: shapes that must NOT be flagged.
@@ -191,6 +201,9 @@ _CLEAN = (
     # Not a decorator and not a known router: a call, not a declaration.
     'resp = session.get("/api/health")\n',
     'add_deprecated_redirects(router, {("GET", "/api/cache/stats"): "/cache/stats"})\n',
+    # The app's own include is the root mount, not a doubled prefix.
+    'app = FastAPI()\napp.include_router(sub, prefix="/api")\n',
+    'router.include_router(sub, prefix="/cache")\n',
 )
 
 
