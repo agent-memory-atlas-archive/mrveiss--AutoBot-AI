@@ -56,7 +56,13 @@ async function getBackendUrl(): Promise<string> {
 async function clearStuckTasks(clearUrl: string, signal?: AbortSignal): Promise<void> {
   // Note: apiClient.post does not support AbortSignal; signal parameter kept for API compatibility.
   void signal
-  await apiClient.post<unknown>(`${clearUrl}?force=true`)
+  try {
+    await apiClient.post<unknown>(`${clearUrl}?force=true`)
+  } catch (e: unknown) {
+    // #18718: clear-stuck is admin-gated; a non-admin 403 is expected, the flow continues.
+    if (!(e instanceof Error) || !e.message.startsWith('HTTP 403')) throw e
+    logger.debug('clear-stuck refused (403, not admin); continuing without it')
+  }
 }
 
 /**

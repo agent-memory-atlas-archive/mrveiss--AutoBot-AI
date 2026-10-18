@@ -20,8 +20,10 @@ import { createLogger } from '@/utils/debugUtils'
 import { extractErrorMessage } from '@/utils/errorExtract'
 import { useBackgroundTask } from '@/composables/useBackgroundTask'
 import { useLoadingState } from '@/composables/useLoadingState'
+import { forceClearStuck, isClearStuckForbidden } from '@/composables/usePatternClearStuck'
 
 const logger = createLogger('usePatternAnalysis')
+const CLEAR_STUCK_PATH = '/api/analytics/codebase/patterns/tasks/clear-stuck?force=true'
 
 // Type definitions for Pattern Analysis
 export interface CodeLocation {
@@ -283,12 +285,9 @@ export function usePatternAnalysis() {
         logger.info('Another analysis is running, attempting to clear stuck tasks...')
 
         // Try to clear stuck tasks with force=true
-        const clearResponse = await fetchWithAuth(`${backendUrl}/api/analytics/codebase/patterns/tasks/clear-stuck?force=true`, { // fetchWithAuth retained: AbortController signal — exempt (#6256)
-          method: 'POST',
-          signal: _analyzeSignal,
-        })
+        const clearResponse = await forceClearStuck(`${backendUrl}${CLEAR_STUCK_PATH}`, _analyzeSignal)
 
-        if (clearResponse.ok) {
+        if (clearResponse?.ok) {
           const clearResult = await clearResponse.json()
           logger.info('Cleared stuck tasks:', clearResult)
 
@@ -333,10 +332,7 @@ export function usePatternAnalysis() {
           wasInterrupted.value = false
           error.value = null
 
-          await fetchWithAuth( // fetchWithAuth retained: AbortController signal — exempt (#6256)
-            `${backendUrl}/api/analytics/codebase/patterns/tasks/clear-stuck?force=true`,
-            { method: 'POST', signal: _analyzeSignal },
-          )
+          await forceClearStuck(`${backendUrl}${CLEAR_STUCK_PATH}`, _analyzeSignal)
           const retryResp = await fetchWithAuth( // fetchWithAuth retained: AbortController signal + response.status check — exempt (#6256)
             `${backendUrl}/api/analytics/codebase/patterns/analyze`,
             {
@@ -836,6 +832,7 @@ export function usePatternAnalysis() {
       logger.info('Cleared stuck tasks:', result)
       return { cleared: result.cleared_count, message: result.message }
     } catch (e: unknown) {
+      if (isClearStuckForbidden(e)) return { cleared: 0, message: 'Clearing stuck tasks requires admin' }
       logger.error('Failed to clear stuck tasks:', e)
       throw e
     }
