@@ -173,7 +173,8 @@ class TestAutoModelRouting:
         assert route_calls[0][1:] == ([{"role": "user", "content": "What is 2 + 2?"}], "auto")
 
     @pytest.mark.parametrize("stream", [False, True])
-    def test_default_complexity_strategy_keeps_claude_escalation(self, monkeypatch, stream):
+    @pytest.mark.parametrize("response_model", ["claude-sonnet", ""])
+    def test_default_complexity_strategy_keeps_claude_escalation(self, monkeypatch, stream, response_model):
         import json
 
         from llm_shared.models import LLMResponse
@@ -186,7 +187,7 @@ class TestAutoModelRouting:
         route = MagicMock(return_value=("capable-model", None))
         escalated_response = LLMResponse(
             content="Claude answer",
-            model="claude-sonnet",
+            model=response_model,
             provider="anthropic",
             usage={"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
         )
@@ -240,6 +241,14 @@ class TestAutoModelRouting:
                     chunks.append(chunk.encode() if isinstance(chunk, str) else chunk)
                 return response, b"".join(chunks).decode()
             return response, json.loads(response.body)
+
+        if not response_model:
+            with pytest.raises(HTTPException) as error:
+                asyncio.run(make_completion())
+            assert error.value.status_code == 502
+            assert error.value.detail == "Unable to resolve response model"
+            provider_registry.get_provider_for_request.assert_not_awaited()
+            return
 
         response, body = asyncio.run(make_completion())
 

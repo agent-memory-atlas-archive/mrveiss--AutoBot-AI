@@ -465,7 +465,9 @@ async def chat_completions(
 
     llm_response, provider = await prepare_completion(active_router, llm_request, registry, _select_provider_or_503)
     if llm_response is not None:
-        resolved_model = llm_response.model or llm_response.provider or resolved_model
+        if not llm_response.model:
+            raise HTTPException(status_code=502, detail="Unable to resolve response model")
+        resolved_model = llm_response.model
     completion_id = _make_completion_id()
 
     # Echo the concrete model name; fall back to provider name for autobot-default.
