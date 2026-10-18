@@ -130,6 +130,26 @@ async def test_the_route_awaits_the_services_implementation_with_the_same_argume
 
 
 @pytest.mark.parametrize("action", _ACTIONS)
+async def test_failure_diagnostics_survive_the_response_model_on_the_wire(env, action, monkeypatch):
+    """The route's response_model must be the fleet one, or FastAPI strips ``diagnostics`` (#18714)."""
+    diagnostics = {"n1": "systemctl status: failed\njournal: boom"}
+    canonical = AsyncMock(
+        return_value=_services_api.FleetServiceActionResponse(
+            action=action,
+            service_name="redis.service",
+            node_id="fleet",
+            success=False,
+            message="m",
+            diagnostics=diagnostics,
+        )
+    )
+    monkeypatch.setattr(_services_api, f"{action}_fleet_service", canonical)
+    response = await env.post("redis.service", action)
+    assert response.status_code == 200, response.text
+    assert response.json()["diagnostics"] == diagnostics
+
+
+@pytest.mark.parametrize("action", _ACTIONS)
 async def test_a_valid_name_runs_the_single_services_executor_path(env, action):
     response = await env.post("redis.service", action)
     assert response.status_code == 200, response.text
