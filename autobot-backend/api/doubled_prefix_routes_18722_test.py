@@ -5,6 +5,7 @@
 """The routes #18722 de-doubled are served at their single-prefix path, and the old
 doubled path answers a method-preserving 308 to it (shim removal: #18793)."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -38,12 +39,46 @@ _MOVES = [
 ]
 
 
-@pytest.fixture
-def client() -> TestClient:
+def _app() -> FastAPI:
     app = FastAPI()
     app.include_router(coordinator_router, prefix=_SYSTEM)
     app.include_router(ownership_router, prefix=_KB)
     app.include_router(grounding_router, prefix=_KB)
+    return app
+
+
+@pytest.fixture
+def anonymous(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """The same mounts, gated by the REAL dependencies and a caller with no credentials.
+
+    Under pytest ``auth_middleware`` is a conftest stub whose gates admit everyone, so the
+    routers captured stub callables; each is overridden with the real function from
+    ``load_real_auth_middleware`` (the approach of ``tests/api/test_router_auth_16375.py``), and
+    the middleware those read finds no user.
+    """
+    from tests.conftest import load_real_auth_middleware
+
+    real = load_real_auth_middleware()
+
+    async def _no_user(_request):
+        return None
+
+    middleware = SimpleNamespace(
+        enable_auth=True,
+        get_user_from_request=lambda _request: None,
+        _extract_user_from_run_jwt=_no_user,
+        _extract_user_from_device_jwt=_no_user,
+    )
+    monkeypatch.setattr(real, "get_auth_middleware", lambda: middleware)
+    app = _app()
+    app.dependency_overrides[check_admin_permission] = real.check_admin_permission
+    app.dependency_overrides[get_current_user] = real.get_current_user
+    return TestClient(app, follow_redirects=False)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    app = _app()
     app.dependency_overrides[check_admin_permission] = lambda: True
     app.dependency_overrides[get_current_user] = lambda: {"username": "test-user"}
     return TestClient(app, follow_redirects=False)
@@ -111,3 +146,22 @@ def test_a_post_redirect_followed_by_a_client_replays_the_post(client: TestClien
         response = follower.post(f"{_SYSTEM}/api/cache/clear/lru_memory")
     assert response.status_code == 200
     assert response.json()["status"] == "cleared"
+
+
+_DENIED = (401, 403)
+
+
+@pytest.mark.parametrize(("method", "old", "new"), _MOVES)
+def test_the_new_path_denies_an_anonymous_caller(anonymous: TestClient, method: str, old: str, new: str) -> None:
+    """Moving a route must not move it out from under its gate (check_admin_permission or
+    get_current_user): with no credentials every new path answers 401/403, never 200/404."""
+    response = anonymous.request(method, new)
+    assert response.status_code in _DENIED, (new, response.status_code)
+
+
+@pytest.mark.parametrize(("method", "old", "new"), _MOVES)
+def test_a_shim_leaks_no_body(anonymous: TestClient, method: str, old: str, new: str) -> None:
+    """The 308 is answered before any gate, so it must carry nothing but the Location."""
+    response = anonymous.request(method, old)
+    assert response.status_code == 308
+    assert response.content == b""

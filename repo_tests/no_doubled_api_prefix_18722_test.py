@@ -9,6 +9,11 @@ Every router under ``autobot-backend/api`` and ``autobot-slm-backend/api`` is mo
 ``/api/system/api/cache/stats``: thirteen routes shipped that way. The detector reads the syntax
 tree, so a docstring or comment showing such a path is not a declaration.
 
+A route is a router's when its receiver is a ``*router`` name, a name the module binds from
+``APIRouter(...)`` (``r = APIRouter()``), or -- conservatively -- any other name used as a route
+decorator. A name bound from ``FastAPI(...)`` is the app itself: ``@app.get("/api/health")`` is a
+root route, correct, and never flagged.
+
 A segment named ``/api-keys`` or ``/api-endpoints`` is a different word, not the doubled prefix:
 the match is ``/api`` followed by ``/`` or the end of the string.
 
@@ -68,37 +73,75 @@ def _str_const(node: ast.AST | None) -> str | None:
     return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
 
 
-def _receiver_is_router(func: ast.Attribute) -> bool:
+def _ctor_name(call: ast.Call) -> str | None:
+    func = call.func
+    return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+
+
+def _bound_names(tree: ast.AST, ctor: str) -> frozenset[str]:
+    """Names assigned from a ``<ctor>(...)`` call in this module (``r = APIRouter()``)."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        value = getattr(node, "value", None)
+        if not (isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(value, ast.Call)):
+            continue
+        if _ctor_name(value) != ctor:
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        names.update(t.id for t in targets if isinstance(t, ast.Name))
+    return frozenset(names)
+
+
+def _decorator_calls(tree: ast.AST) -> frozenset[int]:
+    """``id()`` of every call used as a decorator -- the position a route is declared from."""
+    return frozenset(
+        id(d)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for d in node.decorator_list
+        if isinstance(d, ast.Call)
+    )
+
+
+def _is_route_call(call: ast.Call, routers: frozenset[str], apps: frozenset[str], decorators: frozenset[int]) -> bool:
+    """A route declaration on a router: a ``*router`` name, a name bound from ``APIRouter(...)``,
+    or -- conservatively -- any receiver not bound from ``FastAPI(...)`` when it is a decorator.
+    An app-level ``@app.get("/api/x")`` is a root route and is never doubled."""
+    func = call.func
+    if not (isinstance(func, ast.Attribute) and func.attr in _ROUTE_METHODS):
+        return False
     base = func.value
-    return isinstance(base, ast.Name) and bool(_ROUTER_NAME.search(base.id))
+    if not isinstance(base, ast.Name) or base.id in apps:
+        return False
+    return base.id in routers or bool(_ROUTER_NAME.search(base.id)) or id(call) in decorators
 
 
 def _declared_path(call: ast.Call) -> str | None:
-    """The route path a ``<x>router.<method>(...)`` call declares, else None."""
-    func = call.func
-    if not (isinstance(func, ast.Attribute) and func.attr in _ROUTE_METHODS and _receiver_is_router(func)):
-        return None
+    """The first-argument (or ``path=``) string of a route call, else None."""
     if call.args:
         return _str_const(call.args[0])
     return next((_str_const(k.value) for k in call.keywords if k.arg == "path"), None)
 
 
 def _is_router_ctor(call: ast.Call) -> bool:
-    func = call.func
-    return (isinstance(func, ast.Name) and func.id == "APIRouter") or (
-        isinstance(func, ast.Attribute) and func.attr == "APIRouter"
-    )
+    return _ctor_name(call) == "APIRouter"
 
 
 def doubled_paths(source: str) -> list[str]:
     """Every route path and ``APIRouter(prefix=...)`` in `source` that starts with ``/api``."""
+    tree = ast.parse(source)
+    routers, apps = _bound_names(tree, "APIRouter"), _bound_names(tree, "FastAPI")
+    decorators = _decorator_calls(tree)
     found: list[str] = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        path = _declared_path(node)
-        if path is None and _is_router_ctor(node):
+        if _is_route_call(node, routers, apps, decorators):
+            path = _declared_path(node)
+        elif _is_router_ctor(node):
             path = next((_str_const(k.value) for k in node.keywords if k.arg == "prefix"), None)
+        else:
+            continue
         if path is not None and _DOUBLED.match(path):
             found.append(path)
     return found
@@ -126,6 +169,12 @@ _PLANTED = (
     ('router = APIRouter(tags=["x"], prefix="/api")\n', ["/api"]),
     ('router.add_api_route(path="/api/x", endpoint=f)\n', ["/api/x"]),
     ('@my_router.websocket("/api/ws")\nasync def f(): ...\n', ["/api/ws"]),
+    # An APIRouter bound to a name that does not end in ``router`` (the gap the reviewer named).
+    ('r = APIRouter()\n@r.get("/api/x")\nasync def f(): ...\n', ["/api/x"]),
+    ('import fastapi\napi = fastapi.APIRouter()\n@api.post("/api/y")\nasync def f(): ...\n', ["/api/y"]),
+    ('r: APIRouter = APIRouter()\nr.add_api_route("/api/z", f)\n', ["/api/z"]),
+    # Unknown receiver used as a route decorator: flagged conservatively.
+    ('@mystery.get("/api/q")\nasync def f(): ...\n', ["/api/q"]),
 )
 
 #: Contrast: shapes that must NOT be flagged.
@@ -136,6 +185,11 @@ _CLEAN = (
     '"""@router.get("/api/cache/stats")"""\nx = 1\n',
     '# @router.get("/api/cache/stats")\nx = 1\n',
     'client.get("/api/health")\n',
+    # FastAPI(...) is the app itself: ``/api/health`` there is a root route, not a doubled one.
+    'app = FastAPI()\n@app.get("/api/health")\nasync def f(): ...\n',
+    'import fastapi\nsrv = fastapi.FastAPI()\n@srv.get("/api/health")\nasync def f(): ...\n',
+    # Not a decorator and not a known router: a call, not a declaration.
+    'resp = session.get("/api/health")\n',
     'add_deprecated_redirects(router, {("GET", "/api/cache/stats"): "/cache/stats"})\n',
 )
 
