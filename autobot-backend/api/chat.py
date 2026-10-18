@@ -64,7 +64,7 @@ from chat_workflow.session_work_item import SessionWorkItemService
 from constants.threshold_constants import TimingConstants
 
 # Import dependencies and utilities - Using available dependencies
-from dependencies import get_knowledge_base, provide_config_manager
+from dependencies import provide_config_manager, provide_knowledge_base
 
 # Import shared exception classes (Issue #292 - Eliminate duplicate code)
 from exceptions import get_exceptions_lazy
@@ -150,11 +150,6 @@ def handle_api_error(error: Exception, request_id: str = "unknown") -> Dict[str,
     """Simple error handler replacement"""
     logger.exception("[%s] API error", request_id)
     return {"error": "An internal error occurred"}
-
-
-def log_request_context(request: Request, endpoint: str, request_id: str) -> None:
-    """Log request context for debugging"""
-    logger.info("[%s] %s - %s %s", request_id, endpoint, request.method, request.url.path)
 
 
 # ====================================================================
@@ -335,6 +330,7 @@ logger.info(
 
 # Include session management router
 from api.chat_sessions import delete_session as _canonical_delete_session
+from api.chat_sessions import log_request_context
 from api.chat_sessions import router as sessions_router
 
 router.include_router(sessions_router)
@@ -1043,7 +1039,7 @@ async def send_message(
     message: ChatMessage = None,
     request: Request = None,
     config=Depends(provide_config_manager),
-    knowledge_base=Depends(get_knowledge_base),
+    knowledge_base=Depends(provide_knowledge_base),
 ):
     """
     Send a chat message and get AI response.
@@ -2371,7 +2367,7 @@ async def chat_ai_stack(
     request: Request = None,
     preferences: ChatPreferences | None = None,
     config=Depends(provide_config_manager),
-    knowledge_base=Depends(get_knowledge_base),
+    knowledge_base=Depends(provide_knowledge_base),
 ):
     """
     AI Stack chat endpoint with knowledge base integration.
@@ -2601,13 +2597,13 @@ async def translate_text(
     return JSONResponse(content=result, media_type="application/json; charset=utf-8")
 
 
-@router.post("/detect-language", response_model=DetectLanguageData)
+@router.post("/detect-language", response_model=DetectLanguageData, name="detect_language")
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="detect_language",
     error_code_prefix="TRANSLATE",
 )
-async def detect_language(
+async def detect_text_language(
     body: DetectLanguageRequest,
     current_user: dict = Depends(get_current_user),
 ):

@@ -28,7 +28,7 @@ User Request -> Classification Agent -> Orchestrator -> Multi-Agent Execution ->
 
 1. **Extend BaseAgent**:
 ```python
-from src.agents.base_agent import BaseAgent, AgentRequest, StandardizedAgentResponse
+from agents.base_agent import AgentDeploymentMode, AgentRequest, BaseAgent, StandardizedAgentResponse
 
 class YourAgent(BaseAgent):
     def __init__(self):

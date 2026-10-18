@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 
 from transcriber.database import Database
-from transcriber.deps import authenticate, get_db
+from transcriber.deps import authenticate, get_transcriber_db_from_request
 from transcriber.models import RecordingStatus
 from transcriber.orchestrator import TranscriberOrchestrator, _assign_speaker
 from transcriber.routes.projects import router as projects_router
@@ -63,7 +63,7 @@ async def client(tmp_path):
         return _db
 
     await _db.connect()
-    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_transcriber_db_from_request] = override_db
     app.dependency_overrides[authenticate] = _as_test_user
     app.state.transcriber_upload_dir = str(upload_dir)
     app.include_router(projects_router, prefix="/api/transcriber")
@@ -153,7 +153,7 @@ async def test_process_recording_happy_path(db, tmp_path):
 
     with (
         patch("transcriber.orchestrator.is_diarization_available", return_value=True),
-        patch("transcriber.orchestrator.detect_language", new=AsyncMock(return_value="en")),
+        patch("transcriber.orchestrator.detect_audio_language", new=AsyncMock(return_value="en")),
         patch("transcriber.orchestrator._validate_file_path"),
     ):
         result = await orch.process_recording(rid)
@@ -210,7 +210,7 @@ async def test_process_recording_single_speaker_fallback(db, tmp_path):
 
     with (
         patch("transcriber.orchestrator.is_diarization_available", return_value=False),
-        patch("transcriber.orchestrator.detect_language", new=AsyncMock(return_value="en")),
+        patch("transcriber.orchestrator.detect_audio_language", new=AsyncMock(return_value="en")),
         patch("transcriber.orchestrator._validate_file_path"),
     ):
         result = await orch.process_recording(rid)
@@ -267,7 +267,7 @@ async def _run_with_registry_result(db, tmp_path, *, raises=None, outcome=None, 
     orch.provider_registry = registry
     with (
         patch("transcriber.orchestrator.is_diarization_available", return_value=False),
-        patch("transcriber.orchestrator.detect_language", new=AsyncMock(return_value="en")),
+        patch("transcriber.orchestrator.detect_audio_language", new=AsyncMock(return_value="en")),
         patch("transcriber.orchestrator._validate_file_path"),
     ):
         try:

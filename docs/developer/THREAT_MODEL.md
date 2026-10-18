@@ -32,10 +32,10 @@ known base · `resolve_within_sandbox` (:288) the file-management sandbox ·
 - `resolve_within_sandbox` forbids **any** `..`, `~`, leading `/`, or `SANDBOX_INVALID_PATH_CHARACTERS` (:45)
   — in-bounds or not. `''`, `'/'`, `'//'` legitimately address the sandbox root and return it unchanged
   (#11823); a diff that makes them raise again breaks root listing.
+- Upload **filenames** are their own gate: [`autobot-backend/security/upload_filename_policy.py`](../../autobot-backend/security/upload_filename_policy.py) `is_safe_file` (:111) — a bare name only (no `/`, no `\\`), one allow-list, a deny-list by name; every upload route imports it, and a route-local copy is a finding (the conversation copy accepted `a/b.txt` until #18704).
 
-**Known bypass shapes:** double percent-encoding (`%252e%252e`), Unicode confusables
-(`﹒﹒`, `‥`), null byte via encoding, symlink pointing out of the root, a `MagicMock`
-or arbitrary object stringifying into a creatable tree (#14217).
+**Known bypass shapes:** double percent-encoding (`%252e%252e`), Unicode confusables (`﹒﹒`, `‥`), null byte via encoding,
+symlink pointing out of the root, a `MagicMock` or arbitrary object stringifying into a creatable tree (#14217).
 
 ## 2. Session / chat ownership
 
@@ -77,7 +77,7 @@ Two postures, one validator (#14016): the contract is the docstring of [`securit
 **Canonical enforcement:** every route in
 [`autobot-backend/plugin_manager.py`](../../autobot-backend/plugin_manager.py) carries a
 `Depends` on [`auth_middleware.py`](../../autobot-backend/auth_middleware.py)
-`check_admin_permission` (:962).
+`check_admin_permission` (:950).
 Archive safety lives in [`autobot-backend/archive_safety.py`](../../autobot-backend/archive_safety.py)
 — `validate_zip_metadata` (:27), `safe_extract` (:58), `MAX_UPLOAD_BYTES` (:19).
 
@@ -101,7 +101,7 @@ response, a log line, an issue, a PR comment — is already redacted.
 **Canonical enforcement:** [`encryption_service.py`](../../autobot-backend/encryption_service.py) AES-GCM + PBKDF2 for data at rest ·
 [`autobot_shared/field_encryption.py`](../../autobot_shared/field_encryption.py) `encrypt_field`/`decrypt_field` for single columns ·
 [`credential_store.py`](../../autobot-backend/knowledge/connectors/credential_store.py) `ConnectorCredentialStore` (:211) for connector/OAuth creds, ownership via `_require_owner` (:642) ·
-[`auth_middleware.py`](../../autobot-backend/auth_middleware.py) `verify_internal_api_key` (:950) for service-to-service ·
+[`autobot_shared/auth/internal_api_key.py`](../../autobot_shared/auth/internal_api_key.py) `verify_internal_api_key` (:17) for service-to-service (re-exported by `auth_middleware.py` and the SLM `services/auth.py`) ·
 [`services/auth.py`](../../autobot-slm-backend/services/auth.py) `decode_token_async` (:128) for SLM token revocation.
 
 **Invariants**

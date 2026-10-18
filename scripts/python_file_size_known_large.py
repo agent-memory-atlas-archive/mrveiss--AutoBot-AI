@@ -76,7 +76,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/batch_jobs.py": 964,
     "autobot-backend/api/browser_mcp.py": 1323,
     "autobot-backend/api/cache_management.py": 779,
-    "autobot-backend/api/chat.py": 2712,  # #18316: delete delegates to the canonical path
+    "autobot-backend/api/chat.py": 2708,  # #18316: delete delegates to the canonical path
     "autobot-backend/api/chat_sessions.py": 1938,  # #18293: legacy transcripts only ever proposed
     "autobot-backend/api/code_intelligence.py": 2154,
     "autobot-backend/api/code_search.py": 828,
@@ -89,12 +89,12 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 827,
     "autobot-backend/api/codebase_analytics/endpoints/report.py": 2266,
     "autobot-backend/api/codebase_analytics/endpoints/stats.py": 663,
-    "autobot-backend/api/conversation_files.py": 1078,
+    "autobot-backend/api/conversation_files.py": 996,
     "autobot-backend/api/database_mcp.py": 1056,
     "autobot-backend/api/development_speedup.py": 611,
     "autobot-backend/api/enterprise_features.py": 700,
     "autobot-backend/api/envelope_secrets.py": 615,
-    "autobot-backend/api/files.py": 1365,
+    "autobot-backend/api/files.py": 1248,
     "autobot-backend/api/filesystem_mcp.py": 1968,
     "autobot-backend/api/git_mcp.py": 1336,
     "autobot-backend/api/http_client_mcp.py": 941,
@@ -130,7 +130,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_analytics.py": 3533,
     "autobot-backend/api/schemas_chat.py": 702,
     "autobot-backend/api/schemas_code.py": 3265,
-    "autobot-backend/api/schemas_knowledge.py": 5155,
+    "autobot-backend/api/schemas_knowledge.py": 5133,
     "autobot-backend/api/schemas_system.py": 4362,  # #13051: SecretModel ownership fields
     "autobot-backend/api/schemas_workflows.py": 2917,
     "autobot-backend/api/secrets.py": 1182,  # #16444 review: except HTTPException, ValueError handlers
@@ -144,7 +144,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/vnc_mcp.py": 763,
     "autobot-backend/api/websockets.py": 1120,  # #16457: accepts routed through websocket_subprotocol.accept_websocket
     "autobot-backend/api/workflow.py": 1027,
-    "autobot-backend/auth_middleware.py": 1088,  # #16457: bearer parsing moved to websocket_subprotocol.py
+    "autobot-backend/auth_middleware.py": 1076,  # #16457: bearer parsing moved to websocket_subprotocol.py
     "autobot-backend/autobot_memory_graph/property_graph.py": 630,
     "autobot-backend/autobot_memory_graph/relations.py": 641,
     "autobot-backend/autobot_memory_graph/semantic_search.py": 706,
@@ -197,7 +197,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/context_aware_decision/decision_engine.py": 815,
     "autobot-backend/context_aware_decision/tests/test_counterfactual_reasoner.py": 663,
     "autobot-backend/context_window_manager.py": 626,
-    "autobot-backend/conversation_file_manager.py": 1281,
+    "autobot-backend/conversation_file_manager.py": 1277,
     "autobot-backend/conversation_file_manager_init_test.py": 729,
     "autobot-backend/desktop_streaming_manager.py": 1419,
     "autobot-backend/enterprise_feature_manager.py": 955,
@@ -452,7 +452,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/monitoring/performance_optimizer.py": 773,
     "autobot-slm-backend/services/backup.py": 777,
     "autobot-slm-backend/services/blue_green.py": 1282,
-    "autobot-slm-backend/services/deployment.py": 712,
+    "autobot-slm-backend/services/deployment.py": 705,
     "autobot-slm-backend/services/drift_checker.py": 839,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,

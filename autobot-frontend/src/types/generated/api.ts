@@ -999,6 +999,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chats/embed/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Embed Message
+         * @description Accept a chat message from the embed widget and return an AI reply.
+         *
+         *     Supports both plain JSON and SSE streaming.  The response format is
+         *     selected by the ``Accept`` header:
+         *     - ``text/event-stream`` → SSE stream
+         *     - anything else (default) → JSON ``{"content": "..."}``
+         *
+         *     No authentication required — the endpoint is designed for unauthenticated
+         *     embed contexts.  Origin enforcement via AUTOBOT_EMBED_ALLOWED_ORIGINS
+         *     and per-IP rate limiting (GH#9117).
+         */
+        post: operations["embed_message_api_chats_embed_message_post"];
+        delete?: never;
+        /**
+         * Embed Message Preflight
+         * @description CORS preflight for embed widget cross-origin requests (GH#9117).
+         */
+        options: operations["embed_message_preflight_api_chats_embed_message_options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}": {
         parameters: {
             query?: never;
@@ -1784,39 +1817,6 @@ export interface paths {
         post: operations["compare_models_api_chat_compare_post"];
         delete?: never;
         options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/chats/embed/message": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Embed Message
-         * @description Accept a chat message from the embed widget and return an AI reply.
-         *
-         *     Supports both plain JSON and SSE streaming.  The response format is
-         *     selected by the ``Accept`` header:
-         *     - ``text/event-stream`` → SSE stream
-         *     - anything else (default) → JSON ``{"content": "..."}``
-         *
-         *     No authentication required — the endpoint is designed for unauthenticated
-         *     embed contexts.  Origin enforcement via AUTOBOT_EMBED_ALLOWED_ORIGINS
-         *     and per-IP rate limiting (GH#9117).
-         */
-        post: operations["embed_message_api_chats_embed_message_post"];
-        delete?: never;
-        /**
-         * Embed Message Preflight
-         * @description CORS preflight for embed widget cross-origin requests (GH#9117).
-         */
-        options: operations["embed_message_preflight_api_chats_embed_message_options"];
         head?: never;
         patch?: never;
         trace?: never;
@@ -13127,6 +13127,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vnc-proxy/{vnc_type}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Vnc Status
+         * @description Check if VNC server is accessible
+         *
+         *     Issue #744: Requires authenticated user.
+         *
+         *     Args:
+         *         vnc_type: 'desktop' or 'browser'
+         */
+        get: operations["get_vnc_status_api_vnc_proxy__vnc_type__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vnc-proxy/{vnc_type}/{path}": {
         parameters: {
             query?: never;
@@ -13145,31 +13170,6 @@ export interface paths {
          *         path: Asset path (e.g., 'core/rfb.js', 'app/ui.js')
          */
         get: operations["proxy_vnc_assets_api_vnc_proxy__vnc_type___path__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/vnc-proxy/{vnc_type}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Vnc Status
-         * @description Check if VNC server is accessible
-         *
-         *     Issue #744: Requires authenticated user.
-         *
-         *     Args:
-         *         vnc_type: 'desktop' or 'browser'
-         */
-        get: operations["get_vnc_status_api_vnc_proxy__vnc_type__status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -18844,6 +18844,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plugins/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Capability Audit Log
+         * @description Fetch capability audit log from Redis.
+         *
+         *     Returns recent capability usage attempts (both granted and denied).
+         *     Used by operators to monitor plugin behavior and detect violations.
+         *
+         *     Issue #9049.
+         *
+         *     Args:
+         *         limit: Maximum number of audit entries to return (default 100)
+         *
+         *     Returns:
+         *         List of audit entries ordered by timestamp descending
+         */
+        get: operations["get_capability_audit_log_api_plugins_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plugins/{plugin_name}": {
         parameters: {
             query?: never;
@@ -18977,37 +19008,6 @@ export interface paths {
          *     Issue #9049.
          */
         post: operations["approve_plugin_capabilities_api_plugins__plugin_name__approve_capabilities_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/plugins/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Capability Audit Log
-         * @description Fetch capability audit log from Redis.
-         *
-         *     Returns recent capability usage attempts (both granted and denied).
-         *     Used by operators to monitor plugin behavior and detect violations.
-         *
-         *     Issue #9049.
-         *
-         *     Args:
-         *         limit: Maximum number of audit entries to return (default 100)
-         *
-         *     Returns:
-         *         List of audit entries ordered by timestamp descending
-         */
-        get: operations["get_capability_audit_log_api_plugins_audit_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -31413,6 +31413,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/batch-jobs/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Batch Status
+         * @description Get batch processing service status (authenticated: its shadowing removal must not open it, #18720).
+         */
+        get: operations["get_batch_status_api_batch_jobs_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batch-jobs/chat-init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Batch Chat Initialization
+         * @description Optimized endpoint for chat interface initialization.
+         *     Returns all data needed to start the chat in one request.
+         *     Supports both GET and POST methods.
+         *
+         *     ``request`` lets the helpers below reach live app state (#13558); it adds
+         *     no field to the request or response schema.
+         */
+        get: operations["batch_chat_initialization_api_batch_jobs_chat_init_get"];
+        put?: never;
+        /**
+         * Batch Chat Initialization
+         * @description Optimized endpoint for chat interface initialization.
+         *     Returns all data needed to start the chat in one request.
+         *     Supports both GET and POST methods.
+         *
+         *     ``request`` lets the helpers below reach live app state (#13558); it adds
+         *     no field to the request or response schema.
+         */
+        post: operations["batch_chat_initialization_api_batch_jobs_chat_init_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/batch-jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -31628,26 +31682,6 @@ export interface paths {
         patch: operations["update_batch_schedule_api_batch_jobs_schedules__schedule_id__patch"];
         trace?: never;
     };
-    "/api/batch-jobs/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Batch Status
-         * @description Get batch processing service status
-         */
-        get: operations["get_batch_status_api_batch_jobs_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/batch-jobs/load": {
         parameters: {
             query?: never;
@@ -31662,40 +31696,6 @@ export interface paths {
          * @description Execute multiple API calls in parallel and return combined results.
          */
         post: operations["batch_load_api_batch_jobs_load_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/batch-jobs/chat-init": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Batch Chat Initialization
-         * @description Optimized endpoint for chat interface initialization.
-         *     Returns all data needed to start the chat in one request.
-         *     Supports both GET and POST methods.
-         *
-         *     ``request`` lets the helpers below reach live app state (#13558); it adds
-         *     no field to the request or response schema.
-         */
-        get: operations["batch_chat_initialization_api_batch_jobs_chat_init_get"];
-        put?: never;
-        /**
-         * Batch Chat Initialization
-         * @description Optimized endpoint for chat interface initialization.
-         *     Returns all data needed to start the chat in one request.
-         *     Supports both GET and POST methods.
-         *
-         *     ``request`` lets the helpers below reach live app state (#13558); it adds
-         *     no field to the request or response schema.
-         */
-        post: operations["batch_chat_initialization_api_batch_jobs_chat_init_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -37836,6 +37836,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/permissions/memory/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Memory Stats
+         * @description Get approval memory statistics.
+         *
+         *     Issue #744: Requires admin authentication.
+         */
+        get: operations["get_memory_stats_api_permissions_memory_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/permissions/memory/{project_path}": {
         parameters: {
             query?: never;
@@ -37883,28 +37905,6 @@ export interface paths {
          *     Issue #744: Requires admin authentication.
          */
         post: operations["store_approval_api_permissions_memory_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/permissions/memory/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Memory Stats
-         * @description Get approval memory statistics.
-         *
-         *     Issue #744: Requires admin authentication.
-         */
-        get: operations["get_memory_stats_api_permissions_memory_stats_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -47724,29 +47724,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/a2a/trust/{peer_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get trust record for a specific peer
-         * @description Return the full trust record for a specific federated peer.
-         *
-         *     Issue #7358 phase 2: If the peer has no prior interaction history,
-         *     returns a default UNTRUSTED record (score 0.0, zero counters).
-         */
-        get: operations["get_trust_record_api_a2a_trust__peer_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/a2a/trust/{peer_id}/audit": {
         parameters: {
             query?: never;
@@ -47763,6 +47740,29 @@ export interface paths {
          *     threat_event, integrity_violation).  Returns the 100 most recent entries.
          */
         get: operations["get_trust_audit_api_a2a_trust__peer_id__audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/trust/{peer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get trust record for a specific peer
+         * @description Return the full trust record for a specific federated peer.
+         *
+         *     Issue #7358 phase 2: If the peer has no prior interaction history,
+         *     returns a default UNTRUSTED record (score 0.0, zero counters).
+         */
+        get: operations["get_trust_record_api_a2a_trust__peer_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -59080,6 +59080,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ApprovalDecision */
+        ApprovalDecision: {
+            decision: components["schemas"]["ApprovalStatus"];
+            /** Decided By Agent Id */
+            decided_by_agent_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ApprovalDecisionRequest */
         ApprovalDecisionRequest: {
             /** Decision */
@@ -63360,7 +63368,7 @@ export interface components {
              * Citations
              * @description Structured source citations from RAG retrieval. Non-empty only when grounding.grounded=True.
              */
-            citations?: components["schemas"]["api__schemas_chat__Citation"][];
+            citations?: components["schemas"]["Citation"][];
             /** @description Grounding transparency marker. grounded=False signals a model-only claim. */
             grounding?: components["schemas"]["GroundingStatus"] | null;
         } & {
@@ -63688,6 +63696,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** CheckpointRestoreRequest */
+        CheckpointRestoreRequest: {
+            /** Checkpoint Name */
+            checkpoint_name: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ChromaSearchRequest
          * @description Request for similarity search.
@@ -63748,6 +63763,42 @@ export interface components {
          * @description Response for GET /circuit-breakers — opaque shape from manager.get_status().
          */
         CircuitBreakerStatusResponse: {
+            [key: string]: unknown;
+        };
+        /**
+         * Citation
+         * @description Structured source citation attached to a RAG-grounded response (#10548).
+         *
+         *     Propagated from retrieval (kb_results / RAGMetrics) through the response
+         *     builder to the API payload and rendered by CitationsDisplay.vue as chips.
+         */
+        Citation: {
+            /**
+             * Id
+             * @description Unique citation identifier (chunk/doc/graph-node id)
+             */
+            id: string;
+            /**
+             * Source Type
+             * @description Origin of this citation: 'doc' | 'chunk' | 'graph'
+             */
+            source_type: string;
+            /**
+             * Title
+             * @description Human-readable title or file name
+             */
+            title: string;
+            /**
+             * Uri
+             * @description Relative path or URI for deep-linking
+             */
+            uri?: string | null;
+            /**
+             * Score
+             * @description Retrieval relevance score (0–1)
+             */
+            score: number;
+        } & {
             [key: string]: unknown;
         };
         /** ClaimRow */
@@ -65514,6 +65565,30 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** CompanyRoleResponse */
+        CompanyRoleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Is System
+             * @default false
+             */
+            is_system: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * CompanyStatusTransitionRequest
          * @description Optional payload for a status transition (e.g. a suspend reason).
@@ -65933,6 +66008,25 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ComprehensiveResearchRequest */
+        ComprehensiveResearchRequest: {
+            /** Query */
+            query: string;
+            /**
+             * Research Depth
+             * @default comprehensive
+             */
+            research_depth: string;
+            /** Sources */
+            sources?: string[] | null;
+            /**
+             * Include Web
+             * @default true
+             */
+            include_web: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ConfigRevisionResponse
          * @description Response for a single config revision.
@@ -66111,49 +66205,6 @@ export interface components {
              */
             max_reconnect_attempts: number;
             quality?: components["schemas"]["ConnectionQualitySettings"];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ConnectionTestRequest
-         * @description Request to test project management connection.
-         */
-        ConnectionTestRequest: {
-            /**
-             * Provider
-             * @description Provider: jira, trello, or asana
-             */
-            provider: string;
-            /**
-             * Base Url
-             * @description Base URL for the service
-             */
-            base_url?: string | null;
-            /**
-             * Api Key
-             * @description API key
-             */
-            api_key?: string | null;
-            /**
-             * Api Secret
-             * @description API secret
-             */
-            api_secret?: string | null;
-            /**
-             * Token
-             * @description Auth token
-             */
-            token?: string | null;
-            /**
-             * Username
-             * @description Username
-             */
-            username?: string | null;
-            /**
-             * Password
-             * @description Password
-             */
-            password?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -85741,6 +85792,53 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ModelTrainingRequest
+         * @description Request to trigger model training.
+         */
+        ModelTrainingRequest: {
+            /**
+             * Language
+             * @description Filter training data by language
+             */
+            language?: string | null;
+            /**
+             * Pattern Type
+             * @description Filter training data by pattern type
+             */
+            pattern_type?: string | null;
+            /**
+             * Num Epochs
+             * @default 10
+             */
+            num_epochs: number;
+            /**
+             * Batch Size
+             * @default 32
+             */
+            batch_size: number;
+            /**
+             * Notes
+             * @description Training notes
+             */
+            notes?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ModelTrainingResponse
+         * @description Response from training trigger.
+         */
+        ModelTrainingResponse: {
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Training Started */
+            training_started: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ModelsAvailableData
          * @description Response data for GET /models/available.
          */
@@ -88796,7 +88894,7 @@ export interface components {
          * PerformanceAnalyzeContentResponse
          * @description Response for POST /performance/analyze-content.
          *
-         *     Returns list[PerformanceIssue]; each item is a model_dump() dict.
+         *     Returns list[PerformancePatternIssue]; each item is a model_dump() dict.
          */
         PerformanceAnalyzeContentResponse: {
             [key: string]: unknown;
@@ -90500,6 +90598,49 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * ProjectManagementConnectionTestRequest
+         * @description Credentials POST /test-connection probes against a Jira, Trello or Asana provider; nothing is stored.
+         */
+        ProjectManagementConnectionTestRequest: {
+            /**
+             * Provider
+             * @description Provider: jira, trello, or asana
+             */
+            provider: string;
+            /**
+             * Base Url
+             * @description Base URL for the service
+             */
+            base_url?: string | null;
+            /**
+             * Api Key
+             * @description API key
+             */
+            api_key?: string | null;
+            /**
+             * Api Secret
+             * @description API secret
+             */
+            api_secret?: string | null;
+            /**
+             * Token
+             * @description Auth token
+             */
+            token?: string | null;
+            /**
+             * Username
+             * @description Username
+             */
+            username?: string | null;
+            /**
+             * Password
+             * @description Password
+             */
+            password?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ProjectOut */
         ProjectOut: {
             /** Id */
@@ -90992,6 +91133,26 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ProviderInfo
+         * @description Information about a supported provider.
+         */
+        ProviderInfo: {
+            /** Provider */
+            provider: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Auth Type */
+            auth_type: string;
+            /** Base Url Required */
+            base_url_required: boolean;
+            /** Documentation Url */
+            documentation_url: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ProviderStatus
          * @description Availability of a single media-generation provider (image or video).
          */
@@ -91002,6 +91163,16 @@ export interface components {
             available: boolean;
             /** Reason */
             reason?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ProvidersResponse
+         * @description Response for GET /providers — list of provider availability statuses.
+         */
+        ProvidersResponse: {
+            /** Providers */
+            providers: components["schemas"]["ProviderStatus"][];
         } & {
             [key: string]: unknown;
         };
@@ -92451,6 +92622,26 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ResearchFactCitation
+         * @description One source citation backing a synthesized statement.
+         */
+        ResearchFactCitation: {
+            /** Fact Id */
+            fact_id: string;
+            /**
+             * Source Url
+             * @default
+             */
+            source_url: string;
+            /**
+             * Source Doc Id
+             * @default
+             */
+            source_doc_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ResearchFactOut
          * @description A KB fact produced or reused by this research run.
          */
@@ -92473,6 +92664,20 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * ResearchRequest
+         * @description ``POST /research`` request body.
+         */
+        ResearchRequest: {
+            /** Question */
+            question: string;
+            /** Options */
+            options?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ResearchResponse
          * @description ``POST /research`` response body — the full contract from #12622.
          */
@@ -92480,7 +92685,7 @@ export interface components {
             /** Answer */
             answer: string;
             /** Citations */
-            citations?: components["schemas"]["services__research__models__Citation"][];
+            citations?: components["schemas"]["ResearchFactCitation"][];
             /** Facts */
             facts?: components["schemas"]["ResearchFactOut"][];
             /** Contradictions */
@@ -92640,6 +92845,43 @@ export interface components {
             updated?: number | null;
             /** Errors */
             errors?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * RestoreRequest
+         * @description Request model for restoring knowledge base from backup (Issue #419)
+         */
+        RestoreRequest: {
+            /**
+             * Backup File
+             * @description Path to backup file to restore
+             */
+            backup_file: string;
+            /**
+             * Overwrite Existing
+             * @description Overwrite existing facts with backup data
+             * @default false
+             */
+            overwrite_existing: boolean;
+            /**
+             * Skip Duplicates
+             * @description Skip facts that already exist
+             * @default true
+             */
+            skip_duplicates: boolean;
+            /**
+             * Restore Embeddings
+             * @description Restore vector embeddings if available
+             * @default true
+             */
+            restore_embeddings: boolean;
+            /**
+             * Dry Run
+             * @description Only validate backup, don't actually restore
+             * @default true
+             */
+            dry_run: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -93114,6 +93356,28 @@ export interface components {
             hourly_rate: number | string;
             /** Currency */
             currency: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * RoleResponse
+         * @description Role information in responses.
+         */
+        RoleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Is System
+             * @default false
+             */
+            is_system: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -97046,6 +97310,23 @@ export interface components {
          * @enum {string}
          */
         SkillActivationLevel: "trusted" | "monitored" | "sandboxed" | "restricted";
+        /**
+         * SkillApprovalDecision
+         * @description Request body for approving or rejecting a skill approval record.
+         */
+        SkillApprovalDecision: {
+            /** Approved */
+            approved: boolean;
+            /** @default monitored */
+            trust_level: components["schemas"]["SkillActivationLevel"];
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * SkillBundleInstallResponse
          * @description Response for POST /skills/bundles/{bundle_id}/enable (Issue #10540).
@@ -101364,6 +101645,48 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * TrainRequest
+         * @description Request body for training the NL service on an external database.
+         */
+        TrainRequest: {
+            /**
+             * Db Id
+             * @description Unique identifier for this database connection
+             */
+            db_id: string;
+            /**
+             * Db Secret Id
+             * @description Secret ID containing the database_url in the secrets manager
+             */
+            db_secret_id: string;
+            /**
+             * Db Type
+             * @description Database type: postgresql, mysql, or sqlite
+             * @default postgresql
+             */
+            db_type: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * TrainResponse
+         * @description Response for a database schema training operation.
+         */
+        TrainResponse: {
+            /** Success */
+            success: boolean;
+            /** Db Id */
+            db_id: string;
+            /** Schema Length */
+            schema_length?: number | null;
+            /** Table Count */
+            table_count?: number | null;
+            /** Error */
+            error?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** TranscriberExportRequest */
         TranscriberExportRequest: {
             /**
@@ -101410,6 +101733,28 @@ export interface components {
              * @default
              */
             description: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TranscriberProviderInfo */
+        TranscriberProviderInfo: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Configured */
+            configured: boolean;
+            /** Languages */
+            languages: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /** TranscriberProvidersResponse */
+        TranscriberProvidersResponse: {
+            /** Selected */
+            selected: string | null;
+            /** Providers */
+            providers: components["schemas"]["TranscriberProviderInfo"][];
         } & {
             [key: string]: unknown;
         };
@@ -102605,7 +102950,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Roles */
-            roles?: components["schemas"]["autobot_shared__user_management__schemas__user__RoleResponse"][];
+            roles?: components["schemas"]["RoleResponse"][];
             /** Last Login At */
             last_login_at?: string | null;
             /**
@@ -105605,351 +105950,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ApprovalDecision
-         * @description Request body for approving or rejecting a skill approval record.
-         */
-        api__schemas_agent__ApprovalDecision: {
-            /** Approved */
-            approved: boolean;
-            /** @default monitored */
-            trust_level: components["schemas"]["SkillActivationLevel"];
-            /**
-             * Notes
-             * @default
-             */
-            notes: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Citation
-         * @description Structured source citation attached to a RAG-grounded response (#10548).
-         *
-         *     Propagated from retrieval (kb_results / RAGMetrics) through the response
-         *     builder to the API payload and rendered by CitationsDisplay.vue as chips.
-         */
-        api__schemas_chat__Citation: {
-            /**
-             * Id
-             * @description Unique citation identifier (chunk/doc/graph-node id)
-             */
-            id: string;
-            /**
-             * Source Type
-             * @description Origin of this citation: 'doc' | 'chunk' | 'graph'
-             */
-            source_type: string;
-            /**
-             * Title
-             * @description Human-readable title or file name
-             */
-            title: string;
-            /**
-             * Uri
-             * @description Relative path or URI for deep-linking
-             */
-            uri?: string | null;
-            /**
-             * Score
-             * @description Retrieval relevance score (0–1)
-             */
-            score: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ResearchRequest */
-        api__schemas_knowledge__ResearchRequest: {
-            /** Query */
-            query: string;
-            /**
-             * Research Depth
-             * @default comprehensive
-             */
-            research_depth: string;
-            /** Sources */
-            sources?: string[] | null;
-            /**
-             * Include Web
-             * @default true
-             */
-            include_web: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * RestoreRequest
-         * @description Request model for restoring knowledge base from backup (Issue #419)
-         */
-        api__schemas_knowledge__RestoreRequest: {
-            /**
-             * Backup File
-             * @description Path to backup file to restore
-             */
-            backup_file: string;
-            /**
-             * Overwrite Existing
-             * @description Overwrite existing facts with backup data
-             * @default false
-             */
-            overwrite_existing: boolean;
-            /**
-             * Skip Duplicates
-             * @description Skip facts that already exist
-             * @default true
-             */
-            skip_duplicates: boolean;
-            /**
-             * Restore Embeddings
-             * @description Restore vector embeddings if available
-             * @default true
-             */
-            restore_embeddings: boolean;
-            /**
-             * Dry Run
-             * @description Only validate backup, don't actually restore
-             * @default true
-             */
-            dry_run: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainRequest
-         * @description Request body for training the NL service on an external database.
-         */
-        api__schemas_knowledge__TrainRequest: {
-            /**
-             * Db Id
-             * @description Unique identifier for this database connection
-             */
-            db_id: string;
-            /**
-             * Db Secret Id
-             * @description Secret ID containing the database_url in the secrets manager
-             */
-            db_secret_id: string;
-            /**
-             * Db Type
-             * @description Database type: postgresql, mysql, or sqlite
-             * @default postgresql
-             */
-            db_type: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainResponse
-         * @description Response for a database schema training operation.
-         */
-        api__schemas_knowledge__TrainResponse: {
-            /** Success */
-            success: boolean;
-            /** Db Id */
-            db_id: string;
-            /** Schema Length */
-            schema_length?: number | null;
-            /** Table Count */
-            table_count?: number | null;
-            /** Error */
-            error?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ProvidersResponse
-         * @description Response for GET /providers — list of provider availability statuses.
-         */
-        api__schemas_media__ProvidersResponse: {
-            /** Providers */
-            providers: components["schemas"]["ProviderStatus"][];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ProviderInfo
-         * @description Information about a supported provider.
-         */
-        api__schemas_workflows__ProviderInfo: {
-            /** Provider */
-            provider: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
-            /** Auth Type */
-            auth_type: string;
-            /** Base Url Required */
-            base_url_required: boolean;
-            /** Documentation Url */
-            documentation_url: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** RestoreRequest */
-        api__task_workspace_ws__RestoreRequest: {
-            /** Checkpoint Name */
-            checkpoint_name: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * RoleResponse
-         * @description Role information in responses.
-         */
-        autobot_shared__user_management__schemas__user__RoleResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description?: string | null;
-            /**
-             * Is System
-             * @default false
-             */
-            is_system: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ApprovalDecision */
-        llc__api__approvals__ApprovalDecision: {
-            decision: components["schemas"]["ApprovalStatus"];
-            /** Decided By Agent Id */
-            decided_by_agent_id?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /** RoleResponse */
-        llc__api__roles__RoleResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Company Id
-             * Format: uuid
-             */
-            company_id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description?: string | null;
-            /**
-             * Is System
-             * @default false
-             */
-            is_system: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainRequest
-         * @description Request to trigger model training.
-         */
-        routers__model_management__TrainRequest: {
-            /**
-             * Language
-             * @description Filter training data by language
-             */
-            language?: string | null;
-            /**
-             * Pattern Type
-             * @description Filter training data by pattern type
-             */
-            pattern_type?: string | null;
-            /**
-             * Num Epochs
-             * @default 10
-             */
-            num_epochs: number;
-            /**
-             * Batch Size
-             * @default 32
-             */
-            batch_size: number;
-            /**
-             * Notes
-             * @description Training notes
-             */
-            notes?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TrainResponse
-         * @description Response from training trigger.
-         */
-        routers__model_management__TrainResponse: {
-            /** Status */
-            status: string;
-            /** Message */
-            message: string;
-            /** Training Started */
-            training_started: boolean;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Citation
-         * @description One source citation backing a synthesized statement.
-         */
-        services__research__models__Citation: {
-            /** Fact Id */
-            fact_id: string;
-            /**
-             * Source Url
-             * @default
-             */
-            source_url: string;
-            /**
-             * Source Doc Id
-             * @default
-             */
-            source_doc_id: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ResearchRequest
-         * @description ``POST /research`` request body.
-         */
-        services__research__models__ResearchRequest: {
-            /** Question */
-            question: string;
-            /** Options */
-            options?: {
-                [key: string]: unknown;
-            };
-        } & {
-            [key: string]: unknown;
-        };
-        /** ProviderInfo */
-        transcriber__routes__providers__ProviderInfo: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Configured */
-            configured: boolean;
-            /** Languages */
-            languages: string[];
-        } & {
-            [key: string]: unknown;
-        };
-        /** ProvidersResponse */
-        transcriber__routes__providers__ProvidersResponse: {
-            /** Selected */
-            selected: string | null;
-            /** Providers */
-            providers: components["schemas"]["transcriber__routes__providers__ProviderInfo"][];
-        } & {
-            [key: string]: unknown;
-        };
     };
     responses: never;
     parameters: never;
@@ -107239,6 +107239,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embed_message_api_chats_embed_message_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbedMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    embed_message_preflight_api_chats_embed_message_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -108558,59 +108611,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    embed_message_api_chats_embed_message_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EmbedMessageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    embed_message_preflight_api_chats_embed_message_options: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -114067,7 +114067,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__RestoreRequest"];
+                "application/json": components["schemas"]["RestoreRequest"];
             };
         };
         responses: {
@@ -121425,7 +121425,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["transcriber__routes__providers__ProvidersResponse"];
+                    "application/json": components["schemas"]["TranscriberProvidersResponse"];
                 };
             };
         };
@@ -122941,6 +122941,37 @@ export interface operations {
             };
         };
     };
+    get_vnc_status_api_vnc_proxy__vnc_type__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vnc_type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VncProxyStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     proxy_vnc_assets_api_vnc_proxy__vnc_type___path__get: {
         parameters: {
             query?: never;
@@ -122960,37 +122991,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_vnc_status_api_vnc_proxy__vnc_type__status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                vnc_type: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VncProxyStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -130493,6 +130493,39 @@ export interface operations {
             };
         };
     };
+    get_capability_audit_log_api_plugins_audit_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["CapabilityAuditEntry"][];
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_plugin_info_api_plugins__plugin_name__get: {
         parameters: {
             query?: never;
@@ -130681,39 +130714,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_capability_audit_log_api_plugins_audit_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["CapabilityAuditEntry"][];
                     };
                 };
             };
@@ -144796,7 +144796,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ConnectionTestRequest"];
+                "application/json": components["schemas"]["ProjectManagementConnectionTestRequest"];
             };
         };
         responses: {
@@ -144835,7 +144835,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__schemas_workflows__ProviderInfo"][];
+                    "application/json": components["schemas"]["ProviderInfo"][];
                 };
             };
         };
@@ -146767,6 +146767,66 @@ export interface operations {
             };
         };
     };
+    get_batch_status_api_batch_jobs_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchStatusResponse"];
+                };
+            };
+        };
+    };
+    batch_chat_initialization_api_batch_jobs_chat_init_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchChatInitResponse"];
+                };
+            };
+        };
+    };
+    batch_chat_initialization_api_batch_jobs_chat_init_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchChatInitResponse"];
+                };
+            };
+        };
+    };
     get_batch_job_api_batch_jobs__job_id__get: {
         parameters: {
             query?: never;
@@ -147130,26 +147190,6 @@ export interface operations {
             };
         };
     };
-    get_batch_status_api_batch_jobs_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchStatusResponse"];
-                };
-            };
-        };
-    };
     batch_load_api_batch_jobs_load_post: {
         parameters: {
             query?: never;
@@ -147179,46 +147219,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    batch_chat_initialization_api_batch_jobs_chat_init_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchChatInitResponse"];
-                };
-            };
-        };
-    };
-    batch_chat_initialization_api_batch_jobs_chat_init_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchChatInitResponse"];
                 };
             };
         };
@@ -152037,7 +152037,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__schemas_media__ProvidersResponse"];
+                    "application/json": components["schemas"]["ProvidersResponse"];
                 };
             };
         };
@@ -152090,7 +152090,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__schemas_media__ProvidersResponse"];
+                    "application/json": components["schemas"]["ProvidersResponse"];
                 };
             };
         };
@@ -155672,6 +155672,26 @@ export interface operations {
             };
         };
     };
+    get_memory_stats_api_permissions_memory_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionMemoryStatsResponse"];
+                };
+            };
+        };
+    };
     get_project_approvals_api_permissions_memory__project_path__get: {
         parameters: {
             query: {
@@ -155778,26 +155798,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_memory_stats_api_permissions_memory_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PermissionMemoryStatsResponse"];
                 };
             };
         };
@@ -158922,7 +158922,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["routers__model_management__TrainRequest"];
+                "application/json": components["schemas"]["ModelTrainingRequest"];
             };
         };
         responses: {
@@ -158932,7 +158932,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__model_management__TrainResponse"];
+                    "application/json": components["schemas"]["ModelTrainingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -161913,7 +161913,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__task_workspace_ws__RestoreRequest"];
+                "application/json": components["schemas"]["CheckpointRestoreRequest"];
             };
         };
         responses: {
@@ -163441,7 +163441,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__RestoreRequest"];
+                "application/json": components["schemas"]["RestoreRequest"];
             };
         };
         responses: {
@@ -166090,7 +166090,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__ResearchRequest"];
+                "application/json": components["schemas"]["ComprehensiveResearchRequest"];
             };
         };
         responses: {
@@ -167431,7 +167431,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__schemas_agent__ApprovalDecision"];
+                "application/json": components["schemas"]["SkillApprovalDecision"];
             };
         };
         responses: {
@@ -168442,7 +168442,7 @@ export interface operations {
             };
         };
     };
-    get_trust_record_api_a2a_trust__peer_id__get: {
+    get_trust_audit_api_a2a_trust__peer_id__audit_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -168475,7 +168475,7 @@ export interface operations {
             };
         };
     };
-    get_trust_audit_api_a2a_trust__peer_id__audit_get: {
+    get_trust_record_api_a2a_trust__peer_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -168836,7 +168836,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__schemas_knowledge__TrainRequest"];
+                "application/json": components["schemas"]["TrainRequest"];
             };
         };
         responses: {
@@ -168846,7 +168846,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["api__schemas_knowledge__TrainResponse"];
+                    "application/json": components["schemas"]["TrainResponse"];
                 };
             };
             /** @description Validation Error */
@@ -169623,7 +169623,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["services__research__models__ResearchRequest"];
+                "application/json": components["schemas"]["ResearchRequest"];
             };
         };
         responses: {
@@ -172085,7 +172085,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["llc__api__approvals__ApprovalDecision"];
+                "application/json": components["schemas"]["ApprovalDecision"];
             };
         };
         responses: {
@@ -174353,7 +174353,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["llc__api__roles__RoleResponse"][];
+                    "application/json": components["schemas"]["CompanyRoleResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -174388,7 +174388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["llc__api__roles__RoleResponse"];
+                    "application/json": components["schemas"]["CompanyRoleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -174454,7 +174454,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["llc__api__roles__RoleResponse"];
+                    "application/json": components["schemas"]["CompanyRoleResponse"];
                 };
             };
             /** @description Validation Error */
