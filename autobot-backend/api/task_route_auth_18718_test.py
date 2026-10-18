@@ -147,3 +147,35 @@ def test_bug_prediction_clear_stuck_gated_and_same_body(caller, code):
     assert resp.status_code == code
     if code == 200:
         assert resp.json() == {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
+
+
+def test_every_clear_stuck_route_refuses_the_service_principal():
+    """Destructive task routes are human-admin-only (owner, 2026-10-18; #18688)."""
+    from security.human_admin import refuse_service_principal
+
+    for module in ROUTER_MODULES:
+        for r in _task_routes(importlib.import_module(module).router):
+            if r.path.endswith("/clear-stuck"):
+                assert refuse_service_principal in {d.call for d in r.dependant.dependencies}, (module, r.path)
+
+
+@pytest.fixture
+def internal_key(monkeypatch):
+    import security.human_admin as human_admin
+
+    monkeypatch.setattr(human_admin.auth_middleware, "verify_internal_api_key", lambda key: key == "svc-key")
+    return {"X-Internal-API-Key": "svc-key"}
+
+
+def test_the_internal_key_cannot_revoke_a_pattern_task(internal_key):
+    from unittest.mock import patch
+
+    client = _client(PATTERN, "admin")  # the key's principal is admin; the refusal must still win
+    with patch("celery_app.celery_app.control.revoke") as revoke:
+        assert client.delete("/patterns/task/x", headers=internal_key).status_code == 403
+    revoke.assert_not_called()
+
+
+def test_the_internal_key_cannot_clear_stuck_tasks(internal_key):
+    resp = _client(BUG, "admin").post("/bug-prediction/tasks/clear-stuck?force=true", headers=internal_key)
+    assert resp.status_code == 403

@@ -17,8 +17,8 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from api.codebase_analytics.task_routes import add_clear_stuck_route
-from auth_middleware import check_admin_permission, get_current_user
+from api.codebase_analytics.task_routes import HUMAN_ADMIN_DEPENDENCIES, add_clear_stuck_route
+from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import bounded
 from autobot_shared.logging_manager import get_logger
 from constants.path_constants import PATH
@@ -191,7 +191,7 @@ async def get_analysis_result(task_id: str, _user: dict = Depends(get_current_us
     return task.get("result") or {}
 
 
-@router.delete("/patterns/task/{task_id}", dependencies=[Depends(check_admin_permission)])
+@router.delete("/patterns/task/{task_id}", dependencies=HUMAN_ADMIN_DEPENDENCIES)
 @bounded(60.0)
 async def cancel_analysis(task_id: str) -> Dict[str, str]:
     """Revoke a pending/running pattern analysis task (GH#8440: async-safe)."""
