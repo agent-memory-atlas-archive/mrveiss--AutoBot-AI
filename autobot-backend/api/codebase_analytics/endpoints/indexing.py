@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from api.codebase_analytics.task_routes import HUMAN_ADMIN_DEPENDENCIES
 from auth_middleware import get_current_user
 from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.logging_manager import get_logger
@@ -422,7 +423,7 @@ def _cancel_active_task(task_id: str, existing_task) -> JSONResponse:
         )
 
 
-@router.post("/index/cancel")
+@router.post("/index/cancel", dependencies=HUMAN_ADMIN_DEPENDENCIES)
 @bounded(60.0)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,

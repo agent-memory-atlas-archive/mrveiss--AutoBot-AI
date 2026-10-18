@@ -83,6 +83,7 @@ def test_planted_control_ungated_route_is_flagged():
 
 PATTERN = "api.codebase_analytics.endpoints.pattern_analysis"
 BUG = "api.analytics_bug_prediction"
+INDEXING = "api.codebase_analytics.endpoints.indexing"
 
 
 def _deny(code):
@@ -150,14 +151,29 @@ def test_bug_prediction_clear_stuck_gated_and_same_body(caller, code):
         assert resp.json() == {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
 
 
-def test_every_clear_stuck_route_refuses_the_service_principal():
+def _destructive_routes():
+    """Every clear-stuck route plus the destructive pattern/index routes."""
+    routes = [
+        (m, r)
+        for m in ROUTER_MODULES
+        for r in _task_routes(importlib.import_module(m).router)
+        if r.path.endswith("/clear-stuck")
+    ]
+    for module, path in [(PATTERN, "/patterns/tasks/clear-all"), (INDEXING, "/index/cancel")]:
+        found = [r for r in importlib.import_module(module).router.routes if getattr(r, "path", None) == path]
+        assert found, f"{module} {path}: route not found"
+        routes += [(module, r) for r in found]
+    return routes
+
+
+def test_every_destructive_route_refuses_the_service_principal_before_the_admin_check():
     """Destructive task routes are human-admin-only (owner, 2026-10-18; #18688)."""
     from security.human_admin import refuse_service_principal
 
-    for module in ROUTER_MODULES:
-        for r in _task_routes(importlib.import_module(module).router):
-            if r.path.endswith("/clear-stuck"):
-                assert refuse_service_principal in {d.call for d in r.dependant.dependencies}, (module, r.path)
+    for module, r in _destructive_routes():
+        calls = [d.call for d in r.dependant.dependencies]
+        assert refuse_service_principal in calls, (module, r.path)
+        assert calls.index(refuse_service_principal) < calls.index(check_admin_permission), (module, r.path)
 
 
 @pytest.fixture
@@ -180,3 +196,117 @@ def test_the_internal_key_cannot_revoke_a_pattern_task(internal_key):
 def test_the_internal_key_cannot_clear_stuck_tasks(internal_key):
     resp = _client(BUG, "admin").post("/bug-prediction/tasks/clear-stuck?force=true", headers=internal_key)
     assert resp.status_code == 403
+
+
+# --- the REAL gates (#18718) ---
+# Fresh copies of the routers execute with the real ``auth_middleware`` bound, so the
+# routes' own ``Depends`` is judged; only the identity the real gate reads is faked.
+
+_KEY = "svc-key"
+_ADMIN = {"username": "root", "role": "admin"}
+_USER = {"username": "viewer", "role": "user"}
+_ENDPOINTS = "api.codebase_analytics.endpoints"
+
+
+def _exec_fresh(monkeypatch, name, relpath):
+    import sys
+    from importlib.util import module_from_spec, spec_from_file_location
+    from pathlib import Path
+
+    spec = spec_from_file_location(name, Path(__file__).parent / relpath)
+    module = module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def real_gate(monkeypatch):
+    """Fresh routers bound to the real gate; ``state.user`` is the identity it sees."""
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from tests.conftest import load_real_auth_middleware
+
+    state = SimpleNamespace(user=None)
+    middleware = SimpleNamespace(
+        get_user_from_request=lambda _request: state.user,
+        _extract_user_from_run_jwt=AsyncMock(return_value=None),
+        _extract_user_from_device_jwt=AsyncMock(return_value=None),
+    )
+    real = load_real_auth_middleware()
+    monkeypatch.setattr(real, "get_auth_middleware", lambda: middleware)
+    monkeypatch.setattr(real, "verify_internal_api_key", lambda provided: provided == _KEY)
+    monkeypatch.setitem(sys.modules, "auth_middleware", real)
+    import security.human_admin as human_admin
+
+    monkeypatch.setattr(human_admin, "auth_middleware", real)
+    _exec_fresh(monkeypatch, "api.codebase_analytics.task_routes", "codebase_analytics/task_routes.py")
+    app = FastAPI()
+    for mod, rel in [
+        ("api.analytics_bug_prediction", "analytics_bug_prediction.py"),
+        (f"{_ENDPOINTS}.pattern_analysis", "codebase_analytics/endpoints/pattern_analysis.py"),
+        (f"{_ENDPOINTS}.indexing", "codebase_analytics/endpoints/indexing.py"),
+    ]:
+        module = _exec_fresh(monkeypatch, mod, rel)
+        app.include_router(module.router)
+        setattr(state, mod.rsplit(".", 1)[-1], module)
+    state.client = TestClient(app, raise_server_exceptions=False)
+    return state
+
+
+def _celery(active):
+    from unittest.mock import MagicMock, patch
+
+    control = MagicMock()
+    control.inspect.return_value.active.return_value = active
+    return patch("celery_app.celery_app.control", control), control
+
+
+_ACTIVE = {"w": [{"id": "t1", "name": "analytics.x"}]}
+_KEY_HEADER = {"X-Internal-API-Key": _KEY}
+_CALLS = [
+    ("post", "/bug-prediction/tasks/clear-stuck?force=true", 200),
+    ("delete", "/patterns/task/x", 200),
+    ("post", "/patterns/tasks/clear-all", 200),
+    ("post", "/index/cancel", 200),
+]
+
+
+def _arm_indexing(real_gate):
+    from unittest.mock import MagicMock
+
+    task = MagicMock()
+    task.done.return_value = False
+    real_gate.indexing._current_indexing_task_id = "job"
+    real_gate.indexing._active_tasks["job"] = task
+    return task
+
+
+@pytest.mark.parametrize("method,path,_ok", _CALLS)
+@pytest.mark.parametrize("who,headers,code", [("anon", {}, 401), ("user", {}, 403), ("key", _KEY_HEADER, 403)])
+def test_real_gate_refuses_and_nothing_is_revoked_or_cancelled(real_gate, method, path, _ok, who, headers, code):
+    patcher, control = _celery(_ACTIVE)
+    task = _arm_indexing(real_gate)
+    real_gate.user = _USER if who == "user" else None
+    with patcher:
+        assert getattr(real_gate.client, method)(path, headers=headers).status_code == code
+    control.revoke.assert_not_called()
+    task.cancel.assert_not_called()
+
+
+@pytest.mark.parametrize("method,path,ok", _CALLS)
+def test_real_gate_admits_a_human_admin(real_gate, method, path, ok):
+    patcher, control = _celery(_ACTIVE)
+    task = _arm_indexing(real_gate)
+    real_gate.user = dict(_ADMIN)
+    with patcher:
+        assert getattr(real_gate.client, method)(path).status_code == ok
+    if path.endswith("clear-all"):
+        control.revoke.assert_called_once_with("t1", terminate=True)
+    if path == "/index/cancel":
+        task.cancel.assert_called_once()

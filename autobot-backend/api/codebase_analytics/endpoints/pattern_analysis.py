@@ -217,7 +217,7 @@ add_clear_stuck_route(
 )
 
 
-@router.post("/patterns/tasks/clear-all")
+@router.post("/patterns/tasks/clear-all", dependencies=HUMAN_ADMIN_DEPENDENCIES)
 @bounded(60.0)
 async def clear_all_tasks() -> Dict[str, str]:
     """Revoke active analytics tasks without purging other Celery queues (GH#8438)."""
