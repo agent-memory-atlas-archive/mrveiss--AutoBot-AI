@@ -37,6 +37,8 @@ ERR_CONNECTION = "connection"
 ERR_TOO_LARGE = "too_large"
 ERR_REDIRECT_LIMIT = "redirect_limit"
 ERR_UNKNOWN = "unknown"
+# #18826: the body is not HTML, text or JSON (binary, image, PDF); it is never extracted as a page.
+ERR_UNSUPPORTED_CONTENT_TYPE = "unsupported_content_type"
 
 
 @dataclass

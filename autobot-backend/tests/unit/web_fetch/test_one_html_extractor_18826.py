@@ -5,7 +5,8 @@
 """Every HTML ingest entry point goes through the one extractor, with an explicit profile (#18826).
 
 AST checks over the named entry-point files, not a tree scan: each must route page text
-through ``web_fetch.profile.extract_page`` (directly or via ``WebFetcher.page_text``) and
+through ``web_fetch.profile.extract_page`` (directly, or via ``WebFetcher.page_text`` and the
+Content-Type dispatch in ``web_fetch.content_types.page_from_body``) and
 must not convert HTML itself. The contrast pair proves the detector sees a planted fork.
 """
 
@@ -21,7 +22,8 @@ _FORBIDDEN_CALLS = frozenset({"markdownify", "md", "extract_markdown", "Beautifu
 
 #: entry-point file -> (function, call it must make, keyword it must pass or None)
 _ENTRY_POINTS = {
-    "web_fetch/fetcher.py": ("page_text", "extract_page", None),
+    "web_fetch/fetcher.py": ("page_text", "page_from_body", None),
+    "web_fetch/content_types.py": ("page_from_body", "extract_page", None),
     "knowledge/connectors/web_crawler.py": ("_fetch_page_with_html", "page_text", None),
     "api/knowledge_crawl.py": ("crawl_url_endpoint", "crawl", "profile"),
     "api/knowledge_scrape.py": ("scrape_url", "fetch", "profile"),

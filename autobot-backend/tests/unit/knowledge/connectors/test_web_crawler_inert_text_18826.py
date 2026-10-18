@@ -65,7 +65,7 @@ async def test_scraped_page_body_is_the_document_only():
         patch("web_fetch.fetcher.get_cached_result", AsyncMock(return_value=None)),
         patch("web_fetch.fetcher.set_cached_result", AsyncMock()),
         patch("web_fetch.fetcher._fetch_jina", AsyncMock(return_value=None)),
-        patch("web_fetch.fetcher._fetch_bs4", AsyncMock(return_value=(_page_html(), 200))),
+        patch("web_fetch.fetcher._fetch_bs4", AsyncMock(return_value=(_page_html(), 200, "text/html; charset=utf-8"))),
     ):
         result = await WebFetcher.fetch(_PAGE_URL, render=RenderMode.FAST)
     assert result.success and result.source == "bs4"

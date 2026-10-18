@@ -43,12 +43,14 @@ from web_fetch import (
     ERR_SSRF_BLOCKED,
     ERR_TIMEOUT,
     ERR_UNKNOWN,
+    ERR_UNSUPPORTED_CONTENT_TYPE,
     FetchResult,
     Frontier,
     RenderMode,
     RobotsCache,
     WebFetcher,
 )
+from web_fetch.content_types import UnsupportedContentType
 from web_fetch.frontier import extract_links
 from web_fetch.profile import IngestProfile, require_implemented
 
@@ -104,6 +106,8 @@ def _no_content_reason(result: FetchResult) -> str:
 
     status = result.status_code
     code = result.error_code or ERR_UNKNOWN
+    if code == ERR_UNSUPPORTED_CONTENT_TYPE:
+        return "skipped: not an HTML, text or JSON page (unsupported content type): %s" % url
     if status is not None:
         if status == 403:
             return (
@@ -527,7 +531,11 @@ class WebCrawlerConnector(AbstractConnector):
             # _no_content_reason() can surface it (Issue #12486).
             return FetchResult(url=url, success=False, error_code=ERR_HTTP_ERROR, status_code=status), ""
 
-        title, markdown = fetcher.page_text(html, url)
+        try:
+            # fetch_raw_html carries no Content-Type, so the body is sniffed (#18826).
+            title, markdown = fetcher.page_text(html, url)
+        except UnsupportedContentType:
+            return FetchResult(url=url, success=False, error_code=ERR_UNSUPPORTED_CONTENT_TYPE, status_code=status), ""
         fetch_result = FetchResult(
             url=url,
             success=True,

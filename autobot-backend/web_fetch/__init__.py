@@ -25,6 +25,7 @@ from web_fetch.types import (
     ERR_TIMEOUT,
     ERR_TOO_LARGE,
     ERR_UNKNOWN,
+    ERR_UNSUPPORTED_CONTENT_TYPE,
     FetchResult,
     RenderMode,
 )
@@ -45,4 +46,5 @@ __all__ = [
     "ERR_CONNECTION",
     "ERR_TOO_LARGE",
     "ERR_UNKNOWN",
+    "ERR_UNSUPPORTED_CONTENT_TYPE",
 ]
