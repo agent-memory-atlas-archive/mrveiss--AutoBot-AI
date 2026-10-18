@@ -817,9 +817,9 @@ class AIHardwareAccelerator:
         top_k: int = input_data.get("top_k", _DEFAULT_SEMANTIC_SEARCH_TOP_K)
 
         try:
-            from knowledge_base_factory import get_knowledge_base
+            from knowledge_base_factory import get_knowledge_base_or_none
 
-            kb = await get_knowledge_base()
+            kb = await get_knowledge_base_or_none()
             if kb is None:
                 logger.warning("Knowledge base unavailable; returning empty semantic search result")
                 return _EMPTY

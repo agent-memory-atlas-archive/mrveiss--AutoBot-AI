@@ -32,10 +32,10 @@ known base · `resolve_within_sandbox` (:288) the file-management sandbox ·
 - `resolve_within_sandbox` forbids **any** `..`, `~`, leading `/`, or `SANDBOX_INVALID_PATH_CHARACTERS` (:45)
   — in-bounds or not. `''`, `'/'`, `'//'` legitimately address the sandbox root and return it unchanged
   (#11823); a diff that makes them raise again breaks root listing.
+- Upload **filenames** are their own gate: [`autobot-backend/security/upload_filename_policy.py`](../../autobot-backend/security/upload_filename_policy.py) `is_safe_file` (:111) — a bare name only (no `/`, no `\\`), one allow-list, a deny-list by name; every upload route imports it, and a route-local copy is a finding (the conversation copy accepted `a/b.txt` until #18704).
 
-**Known bypass shapes:** double percent-encoding (`%252e%252e`), Unicode confusables
-(`﹒﹒`, `‥`), null byte via encoding, symlink pointing out of the root, a `MagicMock`
-or arbitrary object stringifying into a creatable tree (#14217).
+**Known bypass shapes:** double percent-encoding (`%252e%252e`), Unicode confusables (`﹒﹒`, `‥`), null byte via encoding,
+symlink pointing out of the root, a `MagicMock` or arbitrary object stringifying into a creatable tree (#14217).
 
 ## 2. Session / chat ownership
 

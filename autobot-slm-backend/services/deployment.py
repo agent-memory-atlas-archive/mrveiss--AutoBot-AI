@@ -345,9 +345,8 @@ class DeploymentService:
         cmd: List[str],
         ssh_user: str | None,
         ssh_port: int | None,
-        ssh_password: str | None,
     ) -> None:
-        """Add SSH-related options to ansible command.
+        """Add the non-secret SSH options to ansible command; the password goes via a secrets file.
 
         Helper for _execute_ansible_playbook (Issue #665).
         """
@@ -356,18 +355,6 @@ class DeploymentService:
 
         if ssh_port:
             cmd.extend(["-e", f"ansible_port={ssh_port}"])
-
-        if ssh_password:
-            if not shutil.which("sshpass"):
-                raise RuntimeError("Password auth requires 'sshpass'. Install: sudo apt install sshpass")
-            cmd.extend(
-                [
-                    "-e",
-                    "ansible_ssh_pass=" + ssh_password,
-                    "-e",
-                    "ansible_become_pass=" + ssh_password,
-                ]
-            )
 
     def _get_ansible_environment(self) -> Dict[str, str]:
         """Build the environment dict for Ansible execution.
@@ -411,11 +398,17 @@ class DeploymentService:
             raise FileNotFoundError(f"Playbook not found: {playbook_path}")
 
         cmd = self._build_ansible_base_command(playbook_path, host, roles)
-        self._add_ssh_options_to_command(cmd, ssh_user, ssh_port, ssh_password)
-
+        self._add_ssh_options_to_command(cmd, ssh_user, ssh_port)
         logger.debug("Running deployment: %s", " ".join(cmd[:10]) + " ...")
 
-        return await self._run_ansible_command(cmd, "Ansible playbook failed")
+        secrets_path = self._write_enrollment_secrets(ssh_password) if ssh_password else None
+        try:
+            if secrets_path:
+                cmd.extend(["-e", "@" + secrets_path])
+            return await self._run_ansible_command(cmd, "Ansible playbook failed")
+        finally:
+            if secrets_path:
+                Path(secrets_path).unlink(missing_ok=True)
 
     def _get_effective_password(self, node: Node, ssh_password: str | None) -> str | None:
         """Get SSH password from parameter or decrypt from node storage.
