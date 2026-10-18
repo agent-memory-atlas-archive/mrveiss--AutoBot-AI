@@ -119,7 +119,7 @@
       </BaseButton>
 
       <BaseButton
-        variant="outline-solid"
+        variant="outline"
         @click="fetchStats"
         :disabled="isLoading"
       >
@@ -196,7 +196,7 @@ import { useLoadingState } from '@/composables/useLoadingState'
 import { usePollingJob } from '@/composables/usePollingJob';
 import { formatCategoryName as formatKey } from '@/utils/formatHelpers';
 import { useHostSelection } from '@/composables/useHostSelection';
-import BaseButton from '@/components/base/BaseButton.vue';
+import { BaseButton } from '@autobot/ui';
 import BasePanel from '@/components/base/BasePanel.vue';
 import { createLogger } from '@/utils/debugUtils';
 

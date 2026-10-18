@@ -156,7 +156,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatPresetsStore } from '@/stores/useChatPresetsStore'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 import Icon from '@/components/ui/Icon.vue'
 import type { SlashCommandPreset } from '@/types/api'
 

@@ -4,7 +4,7 @@
       <h3><Icon name="chart-bar" /> {{ $t('manpage.integrationStatus.title') }}</h3>
       <BaseButton
         size="sm"
-        variant="outline-solid"
+        variant="outline"
         @click="$emit('refresh')"
         :disabled="loading"
       >
@@ -92,7 +92,7 @@
 
 import Icon from '@/components/ui/Icon.vue'
 import BasePanel from '@/components/base/BasePanel.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 import { formatDate } from '@/utils/formatHelpers'
 
 interface IntegrationStatus {

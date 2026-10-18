@@ -4,7 +4,7 @@
       <h3><Icon name="desktop" /> {{ $t('manpage.machineProfile.title') }}</h3>
       <BaseButton
         size="sm"
-        variant="outline-solid"
+        variant="outline"
         @click="$emit('refresh')"
         :disabled="loading"
       >
@@ -72,7 +72,7 @@
 import Icon from '@/components/ui/Icon.vue'
 import { computed } from 'vue'
 import BasePanel from '@/components/base/BasePanel.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 
 interface MachineProfile {
   machine_id?: string

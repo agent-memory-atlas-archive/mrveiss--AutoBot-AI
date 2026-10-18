@@ -300,7 +300,7 @@
             <BaseButton
               v-for="endpoint in format.endpoints"
               :key="endpoint.path"
-              variant="outline-solid"
+              variant="outline"
               size="sm"
               @click="downloadExport(endpoint.path)"
             >
@@ -326,7 +326,7 @@ import Icon from '@/components/ui/Icon.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BasePanel from '@/components/base/BasePanel.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import api from '@/services/api'
 import { createLogger } from '@/utils/debugUtils'

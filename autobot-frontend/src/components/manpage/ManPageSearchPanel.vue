@@ -64,7 +64,7 @@
 
 import Icon from '@/components/ui/Icon.vue'
 import BasePanel from '@/components/base/BasePanel.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
 interface SearchResult {

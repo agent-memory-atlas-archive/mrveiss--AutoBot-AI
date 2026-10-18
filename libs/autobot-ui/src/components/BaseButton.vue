@@ -14,15 +14,22 @@
 -->
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { Component } from 'vue'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'error'
-export type ButtonSize = 'sm' | 'md' | 'lg'
+export type ButtonVariant =
+  | 'primary' | 'secondary' | 'ghost' | 'error'
+  | 'success' | 'warning' | 'info' | 'outline' | 'link'
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 
 const props = withDefaults(
   defineProps<{
     variant?: ButtonVariant
     size?: ButtonSize
     type?: 'button' | 'submit' | 'reset'
+    /** Element or component to render. The kit never imports vue-router:
+     *  callers pass `as="a"` or a RouterLink component, and `to`/`href`
+     *  fall through as attrs. */
+    as?: string | Component
     disabled?: boolean
     loading?: boolean
     block?: boolean
@@ -31,6 +38,7 @@ const props = withDefaults(
     variant: 'primary',
     size: 'md',
     type: 'button',
+    as: 'button',
     disabled: false,
     loading: false,
     block: false,
@@ -38,18 +46,22 @@ const props = withDefaults(
 )
 
 const isDisabled = computed(() => props.disabled || props.loading)
+const isNative = computed(() => props.as === 'button')
 </script>
 
 <template>
-  <button
-    :type="type"
-    :disabled="isDisabled"
+  <component
+    :is="as"
+    :type="isNative ? type : undefined"
+    :disabled="isNative ? isDisabled : undefined"
+    :aria-disabled="!isNative && isDisabled ? 'true' : undefined"
     :aria-busy="loading || undefined"
     :class="['aui-btn', `aui-btn--${variant}`, `aui-btn--${size}`, { 'aui-btn--block': block, 'aui-btn--loading': loading }]"
   >
     <span v-if="loading" class="aui-btn__spinner" aria-hidden="true" />
+    <slot v-else name="icon-left" />
     <span class="aui-btn__label"><slot /></span>
-  </button>
+  </component>
 </template>
 
 <style scoped>
@@ -74,12 +86,17 @@ const isDisabled = computed(() => props.disabled || props.loading)
   outline-offset: 1px;
 }
 
-.aui-btn:disabled {
+.aui-btn:disabled,
+.aui-btn[aria-disabled='true'] {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 /* ---- sizes ---- */
+.aui-btn--xs {
+  padding: var(--aui-space-1) var(--aui-space-2);
+  font-size: var(--aui-text-xs);
+}
 .aui-btn--sm {
   padding: var(--aui-space-1) var(--aui-space-3);
   font-size: var(--aui-text-sm);
@@ -91,6 +108,11 @@ const isDisabled = computed(() => props.disabled || props.loading)
 .aui-btn--lg {
   padding: var(--aui-space-3) var(--aui-space-5);
   font-size: var(--aui-text-lg);
+}
+
+.aui-btn--xl {
+  padding: var(--aui-space-4) var(--aui-space-6);
+  font-size: var(--aui-text-xl);
 }
 
 .aui-btn--block {
@@ -132,6 +154,51 @@ const isDisabled = computed(() => props.disabled || props.loading)
 }
 .aui-btn--error:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--aui-color-error) 88%, black);
+}
+
+.aui-btn--success {
+  background-color: var(--aui-color-success);
+  color: var(--aui-color-success-contrast);
+}
+.aui-btn--success:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--aui-color-success) 88%, black);
+}
+
+.aui-btn--warning {
+  background-color: var(--aui-color-warning);
+  color: var(--aui-color-warning-contrast);
+}
+.aui-btn--warning:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--aui-color-warning) 88%, black);
+}
+
+.aui-btn--info {
+  background-color: var(--aui-color-info);
+  color: var(--aui-color-info-contrast);
+}
+.aui-btn--info:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--aui-color-info) 88%, black);
+}
+
+.aui-btn--outline {
+  background-color: transparent;
+  border-color: var(--aui-color-border-strong);
+  color: var(--aui-color-text);
+}
+.aui-btn--outline:hover:not(:disabled) {
+  background-color: var(--aui-color-surface-raised);
+}
+
+.aui-btn--link {
+  background-color: transparent;
+  color: var(--aui-color-primary);
+  padding-left: 0;
+  padding-right: 0;
+  text-decoration: none;
+}
+.aui-btn--link:hover:not(:disabled) {
+  color: var(--aui-color-primary-hover);
+  text-decoration: underline;
 }
 
 /* ---- loading spinner ---- */

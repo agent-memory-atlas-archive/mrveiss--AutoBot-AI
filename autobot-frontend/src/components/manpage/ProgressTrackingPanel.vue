@@ -4,7 +4,7 @@
       <h3><Icon name="tasks" /> {{ $t('manpage.progressTracking.title') }}</h3>
       <BaseButton
         size="sm"
-        variant="outline-solid"
+        variant="outline"
         @click="$emit('hide')"
       >
         <Icon name="times" />
@@ -84,7 +84,7 @@
 import Icon from '@/components/ui/Icon.vue'
 import { computed } from 'vue'
 import BasePanel from '@/components/base/BasePanel.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 import { useKnowledgeIcons } from '@/composables/knowledge/useKnowledgeIcons'
 
 interface ProgressMessage {

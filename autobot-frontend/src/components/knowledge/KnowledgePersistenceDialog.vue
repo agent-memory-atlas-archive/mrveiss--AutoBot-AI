@@ -142,7 +142,7 @@
         <h4 class="section-title">{{ $t('knowledge.persistence.bulkActionsTitle') }}</h4>
         <div class="bulk-buttons">
           <BaseButton
-            variant="outline-solid"
+            variant="outline"
             @click="selectAll"
             class="bulk-button"
             :aria-label="$t('knowledge.persistence.selectAllAria')"
@@ -150,7 +150,7 @@
             {{ $t('knowledge.persistence.selectAll') }}
           </BaseButton>
           <BaseButton
-            variant="outline-solid"
+            variant="outline"
             @click="deselectAll"
             class="bulk-button"
             :aria-label="$t('knowledge.persistence.deselectAllAria')"
@@ -273,7 +273,7 @@ import { useBatchSelection } from '@/composables/useBatchSelection';
 import { apiService } from '@/services/api';
 import { getApiBase } from '@/config/ssot-config';
 import { formatDateTime as formatDate } from '@/utils/formatHelpers';
-import BaseButton from '@/components/base/BaseButton.vue';
+import { BaseButton } from '@autobot/ui';
 import BaseAlert from '@/components/ui/BaseAlert.vue';
 import { createLogger } from '@/utils/debugUtils';
 
