@@ -29,7 +29,6 @@
     "TaskResult",
     "ToolCall",
     "User",
-    "check_admin_permission",
     "get_current_user",
     "get_deployment_config",
     "get_llm_service",
