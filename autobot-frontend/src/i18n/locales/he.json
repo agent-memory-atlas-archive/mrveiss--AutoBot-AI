@@ -6497,6 +6497,7 @@
     "devSpeedup": {
       "after": "After",
       "title": "Developer Speedup",
+      "optimizedCode": "Optimized code",
       "symbols": "Symbols",
       "generateCodeSnippet": "Generate Code Snippet",
       "quickActions": "Quick Actions",
