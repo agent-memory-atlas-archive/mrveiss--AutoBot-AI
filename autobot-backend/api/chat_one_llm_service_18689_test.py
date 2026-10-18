@@ -185,3 +185,12 @@ def test_construction_detector_sees_both_shapes():
     """Control: the detector flags a direct call and a class-as-factory argument."""
     tree = ast.parse('LLMService()\nlazy_init_singleton(s, "llm_service", LLMService)\n')
     assert _llm_service_constructions(tree) == [1, 2]
+
+
+def test_chat_streaming_groups_use_the_deduplication_timestamp_parser():
+    """Chat's private timestamp parser was a byte-identical copy (#18731 G076)."""
+    tree = ast.parse((_BACKEND / "api/chat.py").read_text(encoding="utf-8"))
+    defs = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    imports = {(n.module, a.name) for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
+    assert "_parse_message_timestamp" not in defs
+    assert ("chat_history.deduplication", "_parse_timestamp") in imports
