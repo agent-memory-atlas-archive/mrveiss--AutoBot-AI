@@ -89,8 +89,10 @@ _CODE_IDENTIFIER = re.compile(r"^([A-Za-z][a-z0-9]*[A-Z][A-Za-z0-9]*|[A-Za-z][A-
 # Closing tags tolerate whitespace and attributes (`</script >`), as browsers do (CodeQL py/bad-tag-filter).
 _SCRIPT_BLOCK = re.compile(r"<(script|style)\b[^>]*>.*?</\1\b[^>]*>", re.DOTALL | re.IGNORECASE)
 _SCRIPT_BODY = re.compile(r"<script\b[^>]*>(.*?)</script\b[^>]*>", re.DOTALL | re.IGNORECASE)
+#: The closing quote is the opening one (backreference), so `alert("Can't connect")` is one
+#: literal; the other two quote characters may occur inside it (#18802).
 _SCRIPT_LITERAL = re.compile(
-    r"""(?:\.value\s*=|message:|title:|confirm\(|alert\(|Error\()\s*[`'"]([A-Z][a-z][^`'"]{3,})[`'"]"""
+    r"""(?:\.value\s*=|message:|title:|confirm\(|alert\(|Error\()\s*([`'"])([A-Z][a-z](?:(?!\1).){3,}?)\1"""
 )
 KINDS = ("template-text", "attribute", "script")
 
@@ -191,7 +193,7 @@ def script_literals(source: str) -> list[str]:
     """Every script-kind literal, from the `<script>` blocks only."""
     found: list[str] = []
     for block in _SCRIPT_BODY.findall(source):
-        found += _SCRIPT_LITERAL.findall(block)
+        found += [m.group(2) for m in _SCRIPT_LITERAL.finditer(block)]
     return found
 
 
