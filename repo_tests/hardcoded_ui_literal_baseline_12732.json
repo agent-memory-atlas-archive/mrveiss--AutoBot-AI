@@ -923,9 +923,6 @@
   ["script", "System Monitor"],
   ["script", "Workflow View"]
  ],
- "autobot-frontend/src/views/DevSpeedupView.vue": [
-  ["script", "Optimized code:\\n\\n${optimized}"]
- ],
  "autobot-frontend/src/views/ExperimentDashboard.vue": [
   ["template-text", "Best val_bpb"],
   ["template-text", "Discarded"],
