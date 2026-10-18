@@ -71,11 +71,11 @@ async def run_login(prompt: Prompt = getpass.getpass) -> tuple[int, dict]:
             jwt = await _login_jwt(http, prompt)
             minted = await _mint(http, jwt) if jwt else None
         if minted is None:
-            return EXIT_UNREADABLE, api.refusal("login-refused", "AuthRefused")
+            return EXIT_UNREADABLE, api.claims_refusal("login-refused", "AuthRefused")
         api.keyring().add(api.keyring_description(base), minted["credential"].encode("utf-8"))
     except Exception as exc:  # noqa: BLE001 -- any failure leaves nothing stored and is a refusal
         logger.error("issue-claims login failed (%s); nothing stored", type(exc).__name__)
-        return EXIT_UNREADABLE, api.refusal("login-failed", type(exc).__name__)
+        return EXIT_UNREADABLE, api.claims_refusal("login-failed", type(exc).__name__)
     body = {"logged_in": True, "username": minted["username"], "secret_id": minted["secret_id"], "keyring": "@u"}
     return EXIT_OK, body
 
@@ -96,11 +96,15 @@ async def run_logout() -> tuple[int, dict]:
         credential = api.stored_credential(base)
         status = await _revoke(credential)
         if status not in (200, 401):
-            return EXIT_UNREADABLE, api.refusal("revoke-failed", f"HTTP{status}", "the key was kept; retry logout")
+            return EXIT_UNREADABLE, api.claims_refusal(
+                "revoke-failed", f"HTTP{status}", "the key was kept; retry logout"
+            )
         api.keyring().unlink(api.keyring_description(base))
     except KeyNotFound:
         return EXIT_OK, {"logged_out": True, "revoked": False, "message": "no credential in the keyring"}
     except Exception as exc:  # noqa: BLE001 -- the key is kept so the revocation can be retried
         logger.error("issue-claims logout failed (%s); the key was kept", type(exc).__name__)
-        return EXIT_UNREADABLE, api.refusal("revoke-failed", type(exc).__name__, "the key was kept; retry logout")
+        return EXIT_UNREADABLE, api.claims_refusal(
+            "revoke-failed", type(exc).__name__, "the key was kept; retry logout"
+        )
     return EXIT_OK, {"logged_out": True, "revoked": status == 200}

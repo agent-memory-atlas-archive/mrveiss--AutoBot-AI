@@ -116,7 +116,7 @@ def stored_credential(base_url: str) -> str:
     return keyring().read(keyring_description(base_url)).decode("utf-8")
 
 
-def refusal(error: str, error_class: str, message: str = "") -> dict:
+def claims_refusal(error: str, error_class: str, message: str = "") -> dict:
     body = {"error": error, "error_class": error_class, "granted": False}
     return {**body, "message": message} if message else body
 
@@ -153,7 +153,7 @@ def map_response(response: httpx.Response) -> tuple[int, dict]:
     if status in (400, 422):
         return EXIT_USAGE, {"error": "bad-request", "message": str(_detail(response)), "granted": False}
     error_class = "AuthRefused" if status in (401, 403) else f"HTTP{status}"
-    return EXIT_UNREADABLE, refusal("registry-unreadable", error_class)
+    return EXIT_UNREADABLE, claims_refusal("registry-unreadable", error_class)
 
 
 async def run_api_command(args: argparse.Namespace) -> tuple[int, dict]:
@@ -166,7 +166,9 @@ async def run_api_command(args: argparse.Namespace) -> tuple[int, dict]:
             response = await http.request(method, url, **kwargs)
         return map_response(response)
     except KeyNotFound:
-        return EXIT_UNREADABLE, refusal("not-logged-in", "KeyNotFound", f"no issue-claims credential; {LOGIN_HINT}")
+        return EXIT_UNREADABLE, claims_refusal(
+            "not-logged-in", "KeyNotFound", f"no issue-claims credential; {LOGIN_HINT}"
+        )
     except Exception as exc:  # noqa: BLE001 -- every failure to get an answer fails closed
         logger.error("issue claims API unreachable (%s); refusing, nothing granted", type(exc).__name__)
-        return EXIT_UNREADABLE, refusal("registry-unreadable", type(exc).__name__)
+        return EXIT_UNREADABLE, claims_refusal("registry-unreadable", type(exc).__name__)
