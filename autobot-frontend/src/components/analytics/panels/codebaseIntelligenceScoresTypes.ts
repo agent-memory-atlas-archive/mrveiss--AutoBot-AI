@@ -5,6 +5,12 @@
 /** Prop and score shapes for CodebaseIntelligenceScoresPanel.vue (split out of the component for the size ceiling, #18730).
  * CodeHealthScore, QualityScore, CodeSuggestion and CodeAnalysisResult come from
  * composables/useCodeIntelligence.ts, the single definition. */
+export type {
+  CodeHealthScore,
+  QualityScore,
+  CodeSuggestion,
+  CodeAnalysisResult,
+} from '@/composables/useCodeIntelligence'
 
 export interface SecurityScoreResult {
   security_score: number

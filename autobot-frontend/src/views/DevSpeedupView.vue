@@ -10,14 +10,12 @@
  */
 
 import { ref, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useDevSpeedup } from '@/composables/useDevSpeedup'
 import { createLogger } from '@/utils/debugUtils'
 import Icon from '@/components/ui/Icon.vue'
 import { runCodeAction } from './devSpeedupCodeAction'
 
 const logger = createLogger('DevSpeedupView')
-const { t } = useI18n()
 
 // Each flag returns with its route (#18749); the dev-speedup routes below are not served.
 // Quick search: POST /dev-speedup/quick-search.
@@ -85,7 +83,7 @@ async function handleCodeAction() {
   if (!codeInput.value.trim()) return
   const replacement = await runCodeAction(actionType.value, codeInput.value, actionLanguage.value, {
     suggestRefactor, optimizeCode, formatCode, lintFix, generateTests,
-  }, t)
+  })
   if (replacement) codeInput.value = replacement
 }
 

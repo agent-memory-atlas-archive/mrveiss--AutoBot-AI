@@ -564,13 +564,11 @@ import type {
   SecurityFindingDetail,
   PerformanceFindingDetail,
   RedisOptimization,
-} from './codebaseIntelligenceScoresTypes'
-import type {
   CodeHealthScore,
   QualityScore,
   CodeSuggestion,
   CodeAnalysisResult,
-} from '@/composables/useCodeIntelligence'
+} from './codebaseIntelligenceScoresTypes'
 
 // Analysis history returns with its route (#18748): GET /code-intelligence/history is not served.
 const ANALYSIS_HISTORY_ENABLED = false

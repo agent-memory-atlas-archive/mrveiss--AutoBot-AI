@@ -253,16 +253,8 @@ const api = useApiClient()
 const { t } = useI18n()
 
 import type { WorkItem } from './workItemTypes'
-import {
-  toArtifact,
-  toActivityEvent,
-  type Comment,
-  type Artifact,
-  type ActivityEvent,
-  type GoalAncestor,
-  type RawWorkProduct,
-  type RawActivityEntry,
-} from './workItemDetailTypes'
+import { commentAuthor, toArtifact, toActivityEvent } from './workItemDetailTypes'
+import type { Comment, Artifact, ActivityEvent, GoalAncestor, RawWorkProduct, RawActivityEntry } from './workItemDetailTypes'
 
 const props = defineProps<{
   item: WorkItem
@@ -371,11 +363,6 @@ function renderMarkdown(text: string) {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
     .replace(/\n/g, '<br>')
-}
-
-/** The comment API serves author ids only (no names), so the id is the label. */
-function commentAuthor(c: Comment): string {
-  return c.author_agent_id ?? c.author_user_id ?? ''
 }
 
 function artifactIcon(type: string) {
@@ -511,8 +498,7 @@ async function fetchComments() {
 async function fetchArtifacts() {
   isLoadingArtifacts.value = true
   try {
-    // GH#9851: backend names these "products" (work products), returned as
-    // {products:[...]}. The api client returns parsed JSON directly.
+    // GH#9851: the backend calls these work "products" and returns {products:[...]}.
     const result = await api.get<{ products: RawWorkProduct[] }>(`/api/llc/work-items/${props.item.id}/products`)
     artifacts.value = (result.products ?? []).map(toArtifact)
   } catch (err) {

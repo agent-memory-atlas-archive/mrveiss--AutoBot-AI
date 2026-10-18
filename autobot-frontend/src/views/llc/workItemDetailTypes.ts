@@ -43,6 +43,11 @@ export interface ActivityEvent {
   created_at: string
 }
 
+/** The comment API serves author ids only (no names), so the id is the label. */
+export function commentAuthor(c: Comment): string {
+  return c.author_agent_id ?? c.author_user_id ?? ''
+}
+
 export function toArtifact(p: RawWorkProduct): Artifact {
   return { id: p.id, name: p.title, type: p.type, url: p.url }
 }
