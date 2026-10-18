@@ -81,7 +81,8 @@ Reused from #15737's own working example
    ``authenticate_websocket``, or -- one hop only, and only into a function
    defined in the *same module* as the endpoint, matching the actual pattern
    above -- for a reference to a helper whose own code references
-   ``get_auth_middleware``/``get_user_from_request``. This is a structural
+   ``get_auth_middleware``/``get_user_from_request``/``resolve_human_user``
+   (#18688). This is a structural
    reading of the real call graph, not a name guess: it is why ``files``
    (gated, via ``_check_file_permission``) and ``transcriber`` (NOT gated --
    its ``request.state.user`` is never populated, so every caller resolves to
@@ -161,7 +162,8 @@ _PERMISSION_FACTORY_QUALNAME_PREFIXES = ("require_permission.<locals>", "require
 # ``api/files.py`` each use instead of ``Depends(...)`` (4 in the module
 # docstring). Referencing one of these by name is what makes a helper an
 # auth check rather than an unrelated ``Request``-taking function.
-_AUTH_PRIMITIVE_NAMES = ("get_auth_middleware", "get_user_from_request")
+# resolve_human_user: the canonical async resolution (JWT revocation included) the gates call (#18688).
+_AUTH_PRIMITIVE_NAMES = ("get_auth_middleware", "get_user_from_request", "resolve_human_user")
 
 _WEBSOCKET_AUTH_NAME = "authenticate_websocket"
 

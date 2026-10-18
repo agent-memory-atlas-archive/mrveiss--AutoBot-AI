@@ -21,7 +21,7 @@ from api.schemas_system import (
     ServiceMessageResponse,
     SingleMessageResponse,
 )
-from auth_middleware import get_auth_middleware
+from auth_middleware import resolve_human_user
 from autobot_shared.auth.permissions import is_admin_role
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
@@ -43,10 +43,10 @@ router = APIRouter(prefix="/service-messages", tags=["service-messages"])
 # ------------------------------------------------------------------
 
 
-def _check_admin(request: Request) -> bool:
-    """Require admin role for service-message access."""
+async def _check_admin(request: Request) -> bool:
+    """Require admin role for service-message access; a revoked JWT is 401 (#18688)."""
     try:
-        user_data = get_auth_middleware().get_user_from_request(request)
+        user_data = await resolve_human_user(request)
         if not user_data:
             raise_auth_error(
                 "AUTH_0002",
