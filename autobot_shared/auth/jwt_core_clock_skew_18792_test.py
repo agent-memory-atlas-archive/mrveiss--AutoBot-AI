@@ -85,6 +85,25 @@ def test_malformed_iat_is_rejected(bad) -> None:
         decode_jwt(token, secret=_SECRET)
 
 
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), 1e400, 10**30])
+def test_non_finite_or_far_future_iat_is_rejected(bad) -> None:
+    token = jwt.encode({"sub": "a", "iat": bad, "exp": _nbf(3600)}, _SECRET, algorithm="HS256")
+    with pytest.raises(JWTDecodeError):
+        decode_jwt(token, secret=_SECRET)
+
+
+def test_malformed_nbf_is_rejected() -> None:
+    token = jwt.encode({"sub": "a", "nbf": float("nan"), "exp": _nbf(3600)}, _SECRET, algorithm="HS256")
+    with pytest.raises(JWTDecodeError):
+        decode_jwt(token, secret=_SECRET)
+
+
+def test_exp_just_past_is_rejected_strictly_on_the_audience_path() -> None:
+    token = _token(iat_offset=-60, exp_offset=-1, aud="svc")
+    with pytest.raises(JWTExpiredError):
+        decode_jwt(token, secret=_SECRET, audience="svc")
+
+
 def test_no_verify_exp_decoder_also_tolerates_iat_skew() -> None:
     claims = jwt_core.decode_jwt_no_verify_exp(_token(iat_offset=2), secret=_SECRET)
     assert claims["sub"] == "alice"

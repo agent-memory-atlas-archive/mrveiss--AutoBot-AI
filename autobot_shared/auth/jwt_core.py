@@ -57,6 +57,7 @@ Usage (slm-backend — HS256 unchanged)::
 import base64
 import json
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
@@ -103,6 +104,8 @@ def _check_not_before_claims(claims: Dict[str, Any]) -> None:
         value = claims[name]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise JWTDecodeError(f"JWT token is invalid: {name} must be a number")
+        if not math.isfinite(value):  # NaN compares False to everything; inf is never a real time
+            raise JWTDecodeError(f"JWT token is invalid: {name} must be finite")
         if value > limit:
             raise JWTDecodeError(f"JWT token is invalid: {name} is in the future beyond clock-skew tolerance")
 
