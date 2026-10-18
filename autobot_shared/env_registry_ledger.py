@@ -142,3 +142,5 @@ register_env_var(
         range=(60, 172800),
     )
 )
+
+from autobot_shared import env_registry_issue_claims  # noqa: E402,F401 -- registers #18811 vars; see its docstring

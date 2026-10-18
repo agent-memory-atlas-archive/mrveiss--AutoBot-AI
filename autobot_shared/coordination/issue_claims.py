@@ -18,6 +18,9 @@ Interface (``python -m autobot_shared.coordination.issue_claims``; one JSON obje
     who     N                                        exit 0 (``held`` says whether anyone holds it)
     list                                             exit 0, every live issue claim
 
+With ``AUTOBOT_ISSUE_CLAIMS_API_URL`` set the same commands go through AutoBot's API instead of Redis
+(``issue_claims_api``; the token comes from the file named by ``AUTOBOT_ISSUE_CLAIMS_TOKEN_FILE``).
+
 Exit 3 means the registry could not be read; exit 4 means the request itself was invalid (a
 non-positive issue number, an empty owner, a TTL outside the registry's bounds). Any exit other
 than 0 must be treated as a refusal
@@ -66,7 +69,7 @@ SESSION_TASK_ID = "dev-ledger"
 EXIT_OK, EXIT_HELD, EXIT_UNREADABLE, EXIT_USAGE = 0, 1, 3, 4
 
 #: What "the registry could not be read" looks like from here.
-_UNREADABLE = (ClaimUnavailable, RedisError, OSError, asyncio.TimeoutError)
+UNREADABLE_ERRORS = (ClaimUnavailable, RedisError, OSError, asyncio.TimeoutError)
 
 
 def issue_scope(number: int) -> str:
@@ -142,16 +145,31 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def invalid_request_reason(number: int, owner: str | None, ttl_s: int | None) -> str:
+    """Why these fields can't be a valid request, or ``""``. Shared by the CLI and the HTTP endpoints."""
+    if number < 1:
+        return f"issue number must be positive, got {number}"
+    if owner is not None and not owner.strip():
+        return "owner must not be empty"
+    if ttl_s is not None and not TTL_MIN_S <= ttl_s <= TTL_MAX_S:
+        return f"--ttl-s must be within [{TTL_MIN_S}, {TTL_MAX_S}], got {ttl_s}"
+    return ""
+
+
 def _invalid_request(args: argparse.Namespace) -> str:
     """Why *args* can't be a valid request, or ``""``. Checked before the registry is touched."""
-    if getattr(args, "number", 1) < 1:
-        return f"issue number must be positive, got {args.number}"
-    if hasattr(args, "owner") and not args.owner.strip():
-        return "owner must not be empty"
-    ttl = getattr(args, "ttl_s", None)
-    if ttl is not None and not TTL_MIN_S <= ttl <= TTL_MAX_S:
-        return f"--ttl-s must be within [{TTL_MIN_S}, {TTL_MAX_S}], got {ttl}"
-    return ""
+    return invalid_request_reason(
+        getattr(args, "number", 1), getattr(args, "owner", None), getattr(args, "ttl_s", None)
+    )
+
+
+async def _transport(args: argparse.Namespace) -> tuple[int, dict]:
+    """The API transport when ``AUTOBOT_ISSUE_CLAIMS_API_URL`` is set (#18811), else direct Redis."""
+    from autobot_shared.coordination import issue_claims_api
+
+    if issue_claims_api.api_base_url():
+        return await issue_claims_api.run_api_command(args)
+    return await _dispatch(args)
 
 
 def run_claims_command(argv: list[str]) -> tuple[int, dict]:
@@ -161,8 +179,8 @@ def run_claims_command(argv: list[str]) -> tuple[int, dict]:
     if invalid:
         return EXIT_USAGE, {"error": "bad-request", "message": invalid, "granted": False}
     try:
-        return asyncio.run(_dispatch(args))
-    except _UNREADABLE as exc:
+        return asyncio.run(_transport(args))
+    except UNREADABLE_ERRORS as exc:
         logger.error("issue claim registry unreadable (%s); refusing, nothing granted", type(exc).__name__)
         return EXIT_UNREADABLE, {"error": "registry-unreadable", "error_class": type(exc).__name__, "granted": False}
     except (HolderError, ScopeError) as exc:

@@ -9,11 +9,15 @@ was acquired cannot learn it from the event it missed, so the same fact is
 readable here -- `EVENT_STATE_DOCTRINE.md` principle 2, "state over
 notification".
 
-Read-only by design. Claims are acquired and released through
+`/claims` is read-only by design. Claims are acquired and released through
 `autobot_shared.coordination.work_claims`, by the agent doing the work, holding
 the task identity that owns them. An HTTP endpoint that could release another
 agent's claim would make every claim advisory against anyone with a session
 cookie, which is a coordination bug wearing an API.
+
+The one write surface is `/issue-claims` (#18811, `coordination_issue_claims`): a
+developer session reaches the issue-claims registry through it, and the holder is
+bound to the authenticated principal, so a caller can only touch their own claims.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.agent_ledger import CompanyScope, company_scope
 from api.agent_ledger import router as agent_ledger_router  # #18391
+from api.coordination_issue_claims import router as issue_claims_router  # #18811
 from api.user_management.dependencies import get_current_user
 from autobot_shared.coordination.ledger_read import visible
 from autobot_shared.coordination.work_claims import ScopeError
@@ -38,6 +43,8 @@ logger = get_logger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
 # The company-scoped agent ledger (#18391) rides this router: same read-only claim table, same gate.
 router.include_router(agent_ledger_router)
+# Install-wide session issue claims (#18811): no company scope, holder bound to the caller.
+router.include_router(issue_claims_router)
 
 
 @router.get("/claims")
