@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 _DELEGATE = "api.user_management.dependencies._canonical_get_current_user"
+_HUMAN_DELEGATE = "api.user_management.dependencies._canonical_resolve_human_user"
 
 
 def no_user_middleware() -> MagicMock:
@@ -36,6 +37,7 @@ def install_canonical_gate(monkeypatch, middleware):
     real = load_real_auth_middleware()
     monkeypatch.setattr(real, "get_auth_middleware", lambda: middleware)
     monkeypatch.setattr(_DELEGATE, real.get_current_user)
+    monkeypatch.setattr(_HUMAN_DELEGATE, real.resolve_human_user)
     return real
 
 

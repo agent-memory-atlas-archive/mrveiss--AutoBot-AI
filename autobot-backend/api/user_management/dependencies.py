@@ -16,6 +16,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_middleware import get_current_user as _canonical_get_current_user
+from auth_middleware import resolve_human_user as _canonical_resolve_human_user
 from autobot_shared.auth.permissions import Permission, is_admin_role, role_has_permission
 from autobot_shared.coordination.claim_company import set_company
 from user_management.database import get_async_session
@@ -69,20 +70,24 @@ async def get_current_user(request: Request) -> dict:
     The canonical gate adds password-change revocation (#12924, #16411), the
     run/device-JWT path allow-lists and one error shape. It also admits the
     internal service key as a ``service`` principal, which this wrapper refuses
-    with 401 (see ``_is_service_principal``); routes that accept the key depend on
+    with 401 unless the same request also names a human user, who is returned
+    instead (see ``_is_service_principal``); routes that accept the key depend on
     ``auth_middleware.get_current_user`` directly.
     """
     user = await _canonical_get_current_user(request)
-    if _is_service_principal(user):
-        # Parity with main, where this dependency read only the JWT/session and
-        # so answered an internal-key caller 401. No route behind this wrapper
-        # has a named service caller (#18688), so the principal is refused here
-        # rather than trusted to every route-local role check.
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-    return user
+    if not _is_service_principal(user):
+        return user
+    # The canonical gate reads the internal key before the JWT, and the SLM
+    # nginx adds the key to every proxied call alongside the user's own
+    # Authorization header. Main's wrapper read only the JWT/session, so such a
+    # request resolves to the human here; the key alone stays a 401.
+    human = await _canonical_resolve_human_user(request)
+    if human and not _is_service_principal(human):
+        return human
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required",
+    )
 
 
 def get_current_user_id(

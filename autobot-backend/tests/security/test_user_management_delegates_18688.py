@@ -202,3 +202,93 @@ def test_a_service_principal_is_not_a_platform_admin_or_reporting_line_writer():
     human = {"username": "alice", "role": "admin"}
     assert user_deps._is_platform_admin_claim(human) is True
     assert user_deps._holds_reporting_line_write(human) is True
+
+
+def _key_and_jwt_gate(monkeypatch, middleware):
+    real = install_canonical_gate(monkeypatch, middleware)
+    monkeypatch.setattr(real, "verify_internal_api_key", lambda provided: provided == INTERNAL_KEY)
+    return real
+
+
+def _whoami_app() -> FastAPI:
+    app = FastAPI()
+
+    @app.get("/whoami")
+    async def whoami(user: dict = Depends(user_deps.get_current_user)):
+        return user
+
+    return app
+
+
+def test_the_internal_key_with_a_valid_user_jwt_resolves_to_the_human_user(monkeypatch):
+    # The SLM nginx adds the key to every proxied call next to the user's own JWT.
+    import auth_revocation  # noqa: PLC0415
+
+    _key_and_jwt_gate(monkeypatch, _jwt_middleware())
+    monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", AsyncMock(return_value=False))
+
+    response = TestClient(_whoami_app()).get("/whoami", headers={"X-Internal-API-Key": INTERNAL_KEY})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["username"] == "alice"
+    assert not response.json().get("service")
+
+
+def test_the_internal_key_with_a_revoked_user_jwt_is_refused(monkeypatch):
+    import auth_revocation  # noqa: PLC0415
+
+    _key_and_jwt_gate(monkeypatch, _jwt_middleware())
+    monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", AsyncMock(return_value=True))
+
+    response = TestClient(_whoami_app(), raise_server_exceptions=False).get(
+        "/whoami", headers={"X-Internal-API-Key": INTERNAL_KEY}
+    )
+
+    assert response.status_code == 401, response.text
+
+
+def test_the_internal_key_with_an_expired_user_jwt_is_refused(monkeypatch):
+    # An expired token resolves to no user (get_user_from_request -> None).
+    _key_and_jwt_gate(monkeypatch, no_user_middleware())
+
+    response = TestClient(_whoami_app(), raise_server_exceptions=False).get(
+        "/whoami",
+        headers={"X-Internal-API-Key": INTERNAL_KEY, "Authorization": "Bearer expired"},
+    )
+
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"] == "Authentication required"
+
+
+def test_the_internal_key_alone_is_refused_on_a_wrapper_route(monkeypatch):
+    _key_and_jwt_gate(monkeypatch, no_user_middleware())
+
+    response = TestClient(_whoami_app(), raise_server_exceptions=False).get(
+        "/whoami", headers={"X-Internal-API-Key": INTERNAL_KEY}
+    )
+
+    assert response.status_code == 401, response.text
+
+
+def test_a_service_principal_resolved_as_the_human_is_still_refused(monkeypatch):
+    middleware = no_user_middleware()
+    middleware.get_user_from_request.return_value = {"username": "service:slm", "role": "admin", "service": True}
+    _key_and_jwt_gate(monkeypatch, middleware)
+
+    response = TestClient(_whoami_app(), raise_server_exceptions=False).get(
+        "/whoami", headers={"X-Internal-API-Key": INTERNAL_KEY}
+    )
+
+    assert response.status_code == 401, response.text
+
+
+def test_a_user_jwt_alone_is_unchanged_on_a_wrapper_route(monkeypatch):
+    import auth_revocation  # noqa: PLC0415
+
+    _key_and_jwt_gate(monkeypatch, _jwt_middleware())
+    monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", AsyncMock(return_value=False))
+
+    response = TestClient(_whoami_app()).get("/whoami")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["username"] == "alice"
