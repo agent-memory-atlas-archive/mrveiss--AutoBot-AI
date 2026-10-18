@@ -396,3 +396,37 @@ async def test_extract_url_strips_scripts_before_llm() -> None:
 
     assert captured_text, "extract() was never called"
     assert "steal_cookies" not in captured_text[0]
+
+
+_INERT_TEXT_HTML = """<html><head><title>Docs</title>
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "WebPage", "name": "LDJSON-MARKER"}</script>
+<style>.STYLE-MARKER { color: red }</style></head>
+<body><main><h1>Guide</h1><p>Real paragraph text that a reader came for.</p>
+<script>var SCRIPT_MARKER = 1;</script><noscript>NOSCRIPT-MARKER</noscript>
+<template>TEMPLATE-MARKER</template></main></body></html>"""
+
+_INERT_MARKERS = (
+    "LDJSON-MARKER",
+    "schema.org",
+    "STYLE-MARKER",
+    "SCRIPT_MARKER",
+    "NOSCRIPT-MARKER",
+    "TEMPLATE-MARKER",
+)
+
+
+class TestInertTextNeverReachesMarkdown:
+    """markdownify's strip= keeps a tag's text; extract_markdown must drop it (#18826)."""
+
+    def test_extract_markdown_drops_script_style_noscript_template_text(self) -> None:
+        title, md = extract_markdown(_INERT_TEXT_HTML)
+        assert title == "Docs"
+        assert "Real paragraph text" in md
+        leaked = [m for m in _INERT_MARKERS if m in md]
+        assert leaked == [], f"inert tag text leaked into markdown: {leaked}"
+
+    def test_control_markdownify_alone_keeps_the_text(self) -> None:
+        """The defect this guards: the raw markdownify path keeps script/style text."""
+        md = _html_to_markdown_via_markdownify(_INERT_TEXT_HTML)
+        assert "LDJSON-MARKER" in md or "STYLE-MARKER" in md

@@ -33,9 +33,20 @@ _SPA_MARKERS = (
 _MIN_CONTENT_CHARS = 500  # Minimum markdown length to consider a fetch successful.
 
 
+#: Tags whose inner text is never page content: code, CSS, JSON-LD, fallbacks (#18826).
+_INERT_TAGS = ("script", "style", "noscript", "template")
+
+
+def _strip_inert(soup) -> None:
+    """Remove tags whose inner text must never reach stored content, in-place."""
+    for tag in soup(list(_INERT_TAGS)):
+        tag.decompose()
+
+
 def _strip_boilerplate(soup) -> None:
-    """Remove non-content tags in-place."""
-    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+    """Remove non-content tags in-place: the inert ones plus page chrome."""
+    _strip_inert(soup)
+    for tag in soup(["nav", "footer", "header", "aside"]):
         tag.decompose()
 
 
@@ -87,6 +98,10 @@ def extract_markdown(html: str) -> Tuple[str, str]:
 
         soup = BeautifulSoup(html, "html.parser")
         title = _extract_title(soup)
+        # markdownify's strip= drops the TAGS but keeps their text, so a page's
+        # JSON-LD and inline CSS landed in KB facts (#18826). Remove them first.
+        _strip_inert(soup)
+        html = str(soup)
     except Exception:
         title = ""
 
