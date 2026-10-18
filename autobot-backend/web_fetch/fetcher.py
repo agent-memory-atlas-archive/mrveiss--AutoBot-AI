@@ -366,7 +366,7 @@ class WebFetcher:
     async def _fetch(self, url: str, render: RenderMode, timeout: float) -> FetchResult:
         """Internal fetch dispatcher."""
         # Cache lookup
-        cached = await get_cached_result(url, render.value, self._redis)
+        cached = await get_cached_result(url, render.value, self.profile.value, self._redis)
         if cached is not None:
             logger.debug("web_fetch cache hit for %s", url)
             return FetchResult(**cached)
@@ -497,4 +497,4 @@ class WebFetcher:
             "retryable": result.retryable,
             "status_code": result.status_code,
         }
-        await set_cached_result(url, render.value, payload, self._redis)
+        await set_cached_result(url, render.value, self.profile.value, payload, self._redis)

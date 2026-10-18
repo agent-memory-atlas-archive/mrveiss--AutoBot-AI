@@ -328,13 +328,19 @@ class LinkPipeline(BasePipeline):
         metadata: Dict,
     ) -> Dict[str, Any]:
         """Parse HTML with BeautifulSoup and extract structured content."""
+        from media.document.html_extraction import drop_non_content
+
         soup = BeautifulSoup(html, "html.parser")
 
         title = self._extract_title(soup)
         description = self._extract_description(soup)
-        main_text = self._extract_main_text(soup)
-        links = self._extract_links(soup, url)
         og_data = self._extract_open_graph(soup)
+        main_text = self._extract_main_text(html, url)
+        # Outbound links come from content only, never from site chrome: the same
+        # chrome rule the document extractor applies (#18826). It drops <head>, so
+        # the metadata above is read first.
+        drop_non_content(soup)
+        links = self._extract_links(soup, url)
 
         # Issue #5064: strip prompt-injection tokens from extracted page text
         # before it reaches the KB or the LLM context.
@@ -376,19 +382,16 @@ class LinkPipeline(BasePipeline):
                 return tag["content"].strip()
         return ""
 
-    def _extract_main_text(self, soup: Any) -> str:
-        """Extract readable main text, removing boilerplate tags."""
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
-            tag.decompose()
+    def _extract_main_text(self, html: str, url: str) -> str:
+        """Extract the page's document text through the one HTML extractor (#18826).
 
-        # Prefer <article> or <main> content if present
-        main = soup.find("article") or soup.find("main") or soup.find("body")
-        if main is None:
-            return ""
+        Link ingest used to flatten ``<article>``/``<main>`` with its own
+        ``get_text``. It now stores what every other HTML ingest path stores:
+        the ``document`` profile's text, structure kept, chrome dropped.
+        """
+        from web_fetch.profile import IngestProfile, extract_page
 
-        text = main.get_text(separator=" ", strip=True)
-        # Collapse whitespace
-        return re.sub(r"\s{2,}", " ", text).strip()
+        return extract_page(html, IngestProfile.DOCUMENT, base_url=url).text
 
     def _extract_links(self, soup: Any, base_url: str) -> List[Dict[str, str]]:
         """Extract and resolve all <a href> links on the page."""

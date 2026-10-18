@@ -26,6 +26,7 @@ _ENTRY_POINTS = {
     "api/knowledge_crawl.py": ("crawl_url_endpoint", "crawl", "profile"),
     "api/knowledge_scrape.py": ("scrape_url", "fetch", "profile"),
     "chat_workflow/tool_handler.py": ("_exec_extract_content", "extract_page", None),
+    "media/link/pipeline.py": ("_extract_main_text", "extract_page", None),
 }
 
 

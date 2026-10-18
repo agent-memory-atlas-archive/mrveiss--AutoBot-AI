@@ -99,8 +99,7 @@ class TestLinkPipelineHtmlParsing:
         assert self.pipe._extract_description(soup) == "OG desc"
 
     def test_extract_main_text_removes_boilerplate(self):
-        soup = self._soup(SAMPLE_HTML)
-        text = self.pipe._extract_main_text(soup)
+        text = self.pipe._extract_main_text(SAMPLE_HTML, "https://test.com/page")
         assert "Main content" in text
         assert "Navigation junk" not in text
         assert "Footer junk" not in text

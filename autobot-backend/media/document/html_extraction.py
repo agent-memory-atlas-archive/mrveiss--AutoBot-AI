@@ -38,6 +38,11 @@ from media.document.sections import Block, BlockKind, Link, ListItem, Section, r
 
 logger = get_logger(__name__)
 
+#: Version of this extractor's output. Part of the web_fetch cache key (#18826), so a
+#: page cached by an earlier extractor -- the markdownify path included -- is never
+#: served again. Bump it whenever a change here alters the extracted text.
+EXTRACTOR_VERSION = "18826-1"
+
 #: Tags whose inner text is never page content: code, CSS, JSON-LD, fallbacks.
 INERT_TAGS = ("script", "style", "noscript", "template")
 
