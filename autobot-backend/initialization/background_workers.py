@@ -79,9 +79,12 @@ def wire_llm_service(app: FastAPI) -> None:
     ``app.state`` reader share the singleton's counters, active provider and
     tier router. Runs before any worker or request handler reads the attribute.
     """
-    from services.llm_service import get_llm_service
+    try:
+        from services.llm_service import get_llm_service
 
-    app.state.llm_service = get_llm_service()
+        app.state.llm_service = get_llm_service()
+    except Exception:  # noqa: BLE001 - a failed LLM service must not skip the other workers
+        logger.exception("LLM service NOT wired onto app.state; chat resolves it per request (#18689)")
 
 
 async def start_background_workers(app: FastAPI) -> None:

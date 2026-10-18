@@ -161,6 +161,27 @@ async def test_the_lifespan_entry_point_wires_it(chat_module, monkeypatch):
     assert app.state.llm_service is singleton
 
 
+@pytest.mark.asyncio
+async def test_a_failing_llm_service_does_not_skip_the_other_workers(monkeypatch):
+    def _boom():
+        raise RuntimeError("no provider config")
+
+    started = []
+
+    async def _record(app):
+        started.append(app)
+
+    monkeypatch.setitem(sys.modules, "services.llm_service", SimpleNamespace(get_llm_service=_boom))
+    monkeypatch.setattr(bw, "start_doc_sync_queue_worker", _record)
+    monkeypatch.setattr(bw, "start_vector_reconciler", _record)
+    app = SimpleNamespace(state=SimpleNamespace())
+
+    await bw.start_background_workers(app)
+
+    assert len(started) == 2
+    assert not hasattr(app.state, "llm_service")
+
+
 def _llm_service_constructions(tree: ast.AST) -> list[int]:
     """Lines that call ``LLMService(...)`` or hand the class itself to a factory."""
     hits = []
