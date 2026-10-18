@@ -15,12 +15,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.codebase_analytics.task_routes import HUMAN_ADMIN_DEPENDENCIES
 from auth_middleware import get_current_user
 from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.path_validator import PROJECT_ALLOWED_ROOTS, validate_path
 from constants.path_constants import PATH
+from security.human_admin import HUMAN_ADMIN_DEPENDENCIES
 
 
 class IndexCodebaseRequest(BaseModel):

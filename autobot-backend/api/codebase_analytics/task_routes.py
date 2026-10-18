@@ -15,18 +15,13 @@ its historical handler name to keep the generated API types unchanged.
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
-from auth_middleware import check_admin_permission
 from autobot_shared.error_boundaries import ErrorCategory, bounded, with_error_handling
-from security.human_admin import refuse_service_principal
+from security.human_admin import HUMAN_ADMIN_DEPENDENCIES
 
 CLEAR_STUCK_DESCRIPTION = "No-op: Celery handles stuck-task recovery automatically (GH#6505)."
 _CLEARED = {"cleared_count": 0, "message": "Celery handles task recovery automatically"}
-
-
-#: Destructive task routes: the internal service key is refused before the admin check (#18688).
-HUMAN_ADMIN_DEPENDENCIES = [Depends(refuse_service_principal), Depends(check_admin_permission)]
 
 
 def add_clear_stuck_route(

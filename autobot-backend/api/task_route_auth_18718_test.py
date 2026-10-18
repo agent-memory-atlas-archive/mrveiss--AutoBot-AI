@@ -242,9 +242,9 @@ def real_gate(monkeypatch):
     monkeypatch.setattr(real, "get_auth_middleware", lambda: middleware)
     monkeypatch.setattr(real, "verify_internal_api_key", lambda provided: provided == _KEY)
     monkeypatch.setitem(sys.modules, "auth_middleware", real)
-    import security.human_admin as human_admin
-
-    monkeypatch.setattr(human_admin, "auth_middleware", real)
+    # HUMAN_ADMIN_DEPENDENCIES binds the gate when security.human_admin loads (the stub under
+    # pytest), so the shared list is rebuilt fresh against the real gate before the routers load.
+    _exec_fresh(monkeypatch, "security.human_admin", "../security/human_admin.py")
     _exec_fresh(monkeypatch, "api.codebase_analytics.task_routes", "codebase_analytics/task_routes.py")
     app = FastAPI()
     for mod, rel in [
