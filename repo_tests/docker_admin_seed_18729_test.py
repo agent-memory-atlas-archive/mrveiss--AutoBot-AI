@@ -123,7 +123,7 @@ def test_install_md_pulls_the_models_docker_env_names() -> None:
 
 #: A default or example naming the retired mode (#10636): `AUTOBOT_USER_MODE=single_user`,
 #: `${AUTOBOT_USER_MODE:-single_user}`, or a shell branch on it.
-_RETIRED_MODE = re.compile(r"AUTOBOT_USER_MODE(?:=|:-)\s*single_user|USER_MODE\"?\s*!?=+\s*\"?single_user")
+_RETIRED_MODE = re.compile(r"AUTOBOT_USER_MODE(?:=|:-)\s*[\"']?single_user|USER_MODE[\"']?\s*!?=+\s*[\"']?single_user")
 
 
 def retired_mode_sites(files: dict[str, str]) -> list[str]:
@@ -169,8 +169,12 @@ def test_the_retired_mode_check_sees_every_shape() -> None:
         "b": "# AUTOBOT_USER_MODE=single_user",
         "c": 'if [ "$USER_MODE" != "single_user" ]; then',
         "d": "# single_user is retired (#10636)",
+        "e": "AUTOBOT_USER_MODE='single_user'",
+        "f": 'AUTOBOT_USER_MODE="single_user"',
+        "g": "USER_MODE=\"${AUTOBOT_USER_MODE:-'single_user'}\"",
+        "h": "if [ \"$USER_MODE\" != 'single_user' ]; then",
     }
-    assert retired_mode_sites(shapes) == ["a:1", "b:1", "c:1"]
+    assert retired_mode_sites(shapes) == ["a:1", "b:1", "c:1", "e:1", "f:1", "g:1", "h:1"]
 
 
 # --- the entrypoint's migration retry is safe only if non-transactional migrations resume ---
@@ -195,6 +199,10 @@ MIGRATIONS_REACH = declare(
 )
 
 
+_CONCURRENT_SQL = re.compile(r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY", re.I)
+_DROP_IF_EXISTS = re.compile(r"DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?IF\s+EXISTS", re.I)
+
+
 def resume_hazards(name: str, source: str) -> list[str]:
     """Why a migration using autocommit_block could not be re-run after a partial failure."""
     if "autocommit_block" not in source:
@@ -205,7 +213,10 @@ def resume_hazards(name: str, source: str) -> list[str]:
         for stmt in re.findall(r"ADD VALUE[^\"']*", code)
         if "IF NOT EXISTS" not in stmt
     ]
-    if "postgresql_concurrently=True" in code and "indisvalid" not in code:
+    concurrent = "postgresql_concurrently=True" in code or _CONCURRENT_SQL.search(code)
+    # IF NOT EXISTS alone is not resumable: it silently keeps an invalid leftover index.
+    handles_leftover = "indisvalid" in code or _DROP_IF_EXISTS.search(code)
+    if concurrent and not handles_leftover:
         hazards.append(f"{name}: a concurrent index build never drops an invalid leftover")
     return hazards
 
@@ -226,3 +237,9 @@ def test_the_resume_check_sees_both_hazards() -> None:
     assert resume_hazards("a", bad_enum) == ["a: ADD VALUE without IF NOT EXISTS"]
     assert resume_hazards("b", bad_index) == ["b: a concurrent index build never drops an invalid leftover"]
     assert resume_hazards("c", good) == []
+    raw = "autocommit_block\nop.execute('CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (c)')"
+    raw_unique = "autocommit_block\nop.execute('create unique index concurrently i on t (c)')"
+    raw_safe = "autocommit_block\nop.execute('DROP INDEX CONCURRENTLY IF EXISTS i')\nop.execute('CREATE INDEX CONCURRENTLY i ON t (c)')"
+    assert resume_hazards("d", raw) == ["d: a concurrent index build never drops an invalid leftover"]
+    assert resume_hazards("e", raw_unique) == ["e: a concurrent index build never drops an invalid leftover"]
+    assert resume_hazards("f", raw_safe) == []
