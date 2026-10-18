@@ -210,6 +210,7 @@ HARDCODED_UI_LITERALS: dict[str, int] = {
     "autobot-slm-frontend/src/views/settings/admin/ConfigDefaultsSettings.vue": 4,
     "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 1,
     "autobot-slm-frontend/src/views/settings/admin/LLMSettings.vue": 2,
+    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 4,
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 4,
     "autobot-slm-frontend/src/views/settings/admin/PromptsSettings.vue": 4,
     "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 2,
