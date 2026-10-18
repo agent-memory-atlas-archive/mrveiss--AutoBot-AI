@@ -103,15 +103,23 @@ export function formFromDestination(dest: LogForwardingDestination): LogForwardi
   }
 }
 
-export function getUrlPlaceholder(type: string): string {
+/** The URL field's example as an i18n key: RFC 2606 example hosts, never a real address. */
+function urlPlaceholderKey(type: string): { key: string; params?: Record<string, unknown> } | null {
+  const base = 'settings.admin.logForwardingSettings'
   switch (type) {
     case 'syslog':
-      return '192.168.1.100:514'
+      return { key: `${base}.urlPlaceholderSyslog` }
     case 'webhook':
-      return 'https://webhook.example.com/logs'
+      return { key: `${base}.urlPlaceholderWebhook` }
     case 'elasticsearch':
-      return `http://elasticsearch:${config.port.elasticsearch}`
+      return { key: `${base}.urlPlaceholderElasticsearch`, params: { port: config.port.elasticsearch } }
     default:
-      return ''
+      return null
   }
+}
+
+/** The URL field's translated example for a destination type ('' when it has none). */
+export function getUrlPlaceholder(type: string, translate: (key: string, params: Record<string, unknown>) => string): string {
+  const example = urlPlaceholderKey(type)
+  return example ? translate(example.key, example.params ?? {}) : ''
 }

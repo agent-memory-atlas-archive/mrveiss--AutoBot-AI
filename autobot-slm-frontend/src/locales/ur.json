@@ -2329,7 +2329,10 @@
         "testAllFailed": "Failed to test destinations",
         "destinationDeleted": "Destination deleted successfully",
         "deleteFailed": "Failed to delete destination",
-        "removeStoredValue": "Remove the stored value"
+        "removeStoredValue": "Remove the stored value",
+        "urlPlaceholderSyslog": "syslog.example.com:514",
+        "urlPlaceholderWebhook": "https://logs.example.com/ingest",
+        "urlPlaceholderElasticsearch": "http://elasticsearch.example.com:{port}"
       },
       "nPUWorkersSettings": {
         "actions": "اقدامات",
