@@ -1442,28 +1442,6 @@ class ScanHostChangesRequest(BaseModel):
     auto_vectorize: bool = Field(default=False, description="Automatically vectorize detected changes")
 
 
-class AdvancedSearchRequest(BaseModel):
-    """Request model for advanced RAG search with reranking"""
-
-    query: str = Field(..., min_length=1, max_length=1000, description="Search query")
-    max_results: int = Field(
-        default=QueryDefaults.RAG_DEFAULT_RESULTS,
-        ge=1,
-        le=50,
-        description="Maximum results to return",
-    )
-    enable_reranking: bool = Field(default=True, description="Enable cross-encoder reranking")
-    return_context: bool = Field(default=False, description="Return optimized context for RAG")
-    timeout: float | None = Field(default=None, description="Optional timeout in seconds")
-
-
-class RerankRequest(BaseModel):
-    """Request model for reranking existing search results"""
-
-    query: str = Field(..., min_length=1, max_length=1000, description="Original search query")
-    results: List[Metadata] = Field(..., description="Search results to rerank")
-
-
 # ===== TAG MANAGEMENT MODELS (Issue #77) =====
 
 
@@ -3947,7 +3925,7 @@ class KnowledgeExtractionRequest(BaseModel):
     extraction_mode: str = Field("comprehensive")
 
 
-class ResearchRequest(BaseModel):
+class ComprehensiveResearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=5000)
     research_depth: str = Field("comprehensive")
     sources: List[str] | None = None

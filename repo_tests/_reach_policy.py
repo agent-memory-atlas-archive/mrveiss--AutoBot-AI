@@ -73,6 +73,12 @@ REASON_CODES = frozenset(
 #: `reach_declarations_test` fails on a new one that does not -- so the pattern cannot be
 #: re-added without someone writing down why (#17914 AC4).
 ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
+    "shadowed-literal-routes": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Router modules the registries and main.py mount, a subset of tracked Python under two trees; "
+        "the rest of those trees grows independently, so a share of all Python would sink with nothing wrong.",
+    ),
     "brand-mark-announcer-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -322,10 +328,30 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test .py/.sh under the scan roots is a subset of tracked files; the test-file share drifts.",
     ),
+    "hand-rolled-circuit-breaker-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under eight roots; the test-file share drifts.",
+    ),
+    "backoff-formula-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .ts/.vue source is a subset of tracked files under three roots; the test-file share drifts.",
+    ),
+    "anthropic-message-split-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
     "post-commit-seed-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "slm-backend-embedded-playbook-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
     ),
     "knowledge-metadata-parse-canonical": (
         ABSOLUTE,
@@ -341,6 +367,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "env-file-family-18555-scan": (
+        ABSOLUTE,
+        "FIXED_INVENTORY",
+        "The tracked env templates; a small, named set across four roots.",
     ),
     "ansible-concept-forks-17856-scan": (
         ABSOLUTE,

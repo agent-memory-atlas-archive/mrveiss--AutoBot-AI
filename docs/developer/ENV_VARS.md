@@ -19,6 +19,28 @@ To add a variable:
 The table has no count line, and its rows are sorted by name. So two PRs that each add a variable only
 conflict when their rows sort next to each other.
 
+## Env-file family
+
+The tracked env files are templates. The installer and the Ansible roles write the real ones.
+[#18555](https://github.com/mrveiss/AutoBot-AI/issues/18555) settled the shape of the family:
+
+| File | Used by |
+|---|---|
+| `docker/.env.docker` | Docker Compose, through `--env-file docker/.env.docker`. This is the **only** Docker env file. |
+| `.env.example` | The full annotated reference for a native install. |
+| `.env.localhost`, `.env.native-vm`, `.env.network`, `.env.network-template` | Per-environment overlays, read by the `autobot-infrastructure/shared/scripts` tooling. |
+
+Host keys use one format in every file:
+
+- A `*_HOST` key is a bare host name or IP address, with no scheme, port or path. Ports go in the matching
+  `*_PORT` key. Compose builds `http://${AUTOBOT_OLLAMA_HOST}:11434`, so a URL in a host key breaks it.
+- A `*_URL` or `*_ENDPOINT` key carries the scheme, as in `http://`, `redis://` or `ws://`.
+- `OLLAMA_HOST` is Ollama's own variable. Its upstream format is `host[:port]`, and it is the only exception.
+
+`repo_tests/env_file_family_18555_test.py` enforces both rules over every tracked env file. It fails when
+a host key breaks the format, when two files disagree on a key's format, or when a second Docker env file
+appears.
+
 <!-- BEGIN_AUTOGEN_ENV_DOCS -->
 | Name | Component | Type | Default | Description |
 |---|---|---|---|---|
@@ -99,6 +121,8 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_DEV_LOOP_BUDGET_TTL_SECONDS` | ai | int | `86400` | Seconds the dev loop's cumulative token counter survives in Redis. Refreshed on every recorded action, so it is a floor on how long spend is remembered. |
 | `AUTOBOT_DEV_LOOP_RATE_PER_HOUR` | ai | int | `0` | Dev-loop actions allowed per fixed UTC hour window (#17091). Zero disables the rate gate. Checked before every action, never after. |
 | `AUTOBOT_DEV_LOOP_TOKEN_BUDGET` | ai | int | `0` | Cumulative token ceiling for AutoBot's own dev-loop participation (#17091). Zero disables the spend gate, which is the shipped default; the rate ceiling below is independent of it. |
+| `AUTOBOT_DOCKER_MGMT_POOL` | slm | str | `'10.128.0.0/9'` | Private IPv4 block (/24 or larger) that docker/pick_mgmt_prefix.py draws the compose management /24 from, skipping any range a host route or Docker network uses (#16833). |
+| `AUTOBOT_DOCKER_MGMT_PREFIX` | slm | str | `""` | First three octets of the compose autobot-mgmt /24 (e.g. 10.77.3). No default: docker/generate-secrets.sh picks a free private range per host, docker-compose.yml refuses to start without it, and compose_fleet.py builds node IPs from it (#16833). |
 | `AUTOBOT_DOCKER_POOL_SIZE` | execution | int | `3` | Number of warm containers kept when AUTOBOT_DOCKER_USE_POOL is on. Ignored entirely when pooling is off. |
 | `AUTOBOT_DOCKER_USE_POOL` | execution | bool | false | Reuse a pool of warm containers for tool execution instead of starting one per call. Off by default — the pool trades isolation between calls for start-up latency. |
 | `AUTOBOT_DUPLICATE_BACKGROUND_TIMEOUT_SECONDS` | backend | float | `3600.0` | Upper bound for a duplicate scan run by the background (Celery) task. Not the request deadline: the queued path exists to escape it (#18067). |
@@ -142,7 +166,9 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_INJECTION_HARDBLOCK_ENABLED` | auth | bool | false | Hard-block prompt injection rather than only flagging it. When on and confidence clears the threshold, the request is refused instead of annotated. |
 | `AUTOBOT_INJECTION_HARDBLOCK_THRESHOLD` | auth | float | `0.75` | Confidence in [0.0, 1.0] at or above which a detected injection is hard-blocked. 0.75 maps to HIGH; 1.0 would block only CRITICAL. |
 | `AUTOBOT_INTERNAL_API_KEY` | auth | str | `""` | Shared secret used to authenticate internal service-to-service calls. |
+| `AUTOBOT_ISSUE_CLAIM_SESSION_TTL_S` | orchestration | int | `14400` | How long a developer session's claim on a GitHub issue survives without a ledger heartbeat (#17098). The session ledger writes through to the work-claims registry for its issue kind; a crashed session frees the issue after this long. Mirrors the ledger's own 4h default. Range: 60–172800. |
 | `AUTOBOT_JUDGE_FAIL_CLOSED` | judges | bool | false | When true, a workflow step whose LLM judgment could not be read is HELD instead of approved. Default false keeps #1464's fail-open posture; either way the evaluation result carries judge_available and a degradation code, and the outcome is counted (judges/__init__.py, #17307). |
+| `AUTOBOT_JWT_CLOCK_SKEW_LEEWAY_SECONDS` | security | int | `5` | Clock-skew tolerance in seconds for JWT verification (#18792). A backward wall-clock step (WSL2) or skew between issuing and verifying hosts otherwise rejects a fresh token whose iat is ahead of the verifier's clock. Applies to the iat and nbf claims only; exp stays strict. Clamped to 0-60. |
 | `AUTOBOT_KB_CHUNK_MAX_TOKENS` | knowledge | int | `800` | Token budget (~4 chars per token) per stored chunk when KnowledgeBase.add_document splits a long document; read by knowledge/document_ingest.py (#17830). Range: 50–100000. |
 | `AUTOBOT_KB_INGEST_RECORD_TTL_SECONDS` | knowledge | int | `2592000` | Seconds a per-document ingest status record (success/partial/timeout) is kept so a retry can resume after the last stored chunk; read by knowledge/document_ingest.py (#17986). |
 | `AUTOBOT_KB_TIMEOUT` | kb | int | `30` | Timeout in seconds for knowledge-base HTTP requests. Range: 1–300. |
@@ -152,6 +178,9 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_LEARNED_TEMPLATE_MAX` | self_improvement | int | `500` | Maximum characters kept from untrusted imported free-text when importing a reviewer-curated learned strategy (#11060). Raising it preserves more of a long imported template; lowering it truncates more aggressively, reducing how much unsanitized text is retained (api/agents_self_improvement.py). |
 | `AUTOBOT_LEDGER_EVENT_CAP` | orchestration | int | `500` | How many coordination events the agent ledger retains, newest first (#18391): claims that expired while held, releases aimed at another holder's claim, and yield requests with their answers. A bounded audit trail for the ledger screens, not an archive. Range: 50–5000. |
 | `AUTOBOT_LEDGER_EVENT_TTL_S` | orchestration | int | `604800` | Idle lifetime of the agent ledger's event list, refreshed by every write (#18391). Nothing is aged out individually: only the event cap trims the list, and this TTL (reset on every write) only stops an abandoned list outliving the install. Range: 3600–7776000. |
+| `AUTOBOT_LEDGER_ID_MAX_LEN` | orchestration | int | `256` | Longest holder task id a yield request may name (#18607). A longer request body is refused with HTTP 422 at parse time, before anything reads it. Range: 32–1024. |
+| `AUTOBOT_LEDGER_PROJECTION_TTL_S` | orchestration | int | `120` | How long the user backend's snapshot of live agent state (presence, pending peer messages, idle subscriptions) stays readable by the SLM ledger without a refresh (#18632). Longer than the presence sweep so one slow sweep does not blank the SLM; a stopped backend's snapshot expires and reads as 'couldn't read', never as stale. Range: 10–3600. |
+| `AUTOBOT_LEDGER_SCOPE_MAX_LEN` | orchestration | int | `512` | Longest claim scope a yield request may name (#18607). A longer request body is refused with HTTP 422 at parse time, before anything reads it. Range: 64–4096. |
 | `AUTOBOT_LEDGER_TEXT_CAP` | orchestration | int | `280` | Longest caller-supplied free text (a yield request's reason) an agent-ledger event keeps (#18391). The activity screen shows it to other viewers, so it is bounded on write. Range: 32–2000. |
 | `AUTOBOT_LEDGER_YIELD_ASK_LIMIT` | orchestration | int | `1` | How many times one person may ask the holder of one claim to release it inside AUTOBOT_LEDGER_YIELD_ASK_WINDOW_S (#18599); further asks answer HTTP 429. Range: 1–100. |
 | `AUTOBOT_LEDGER_YIELD_ASK_WINDOW_S` | orchestration | int | `60` | Seconds over which one person may ask the holder of one claim to release it at most AUTOBOT_LEDGER_YIELD_ASK_LIMIT times (#18599). Keyed by user and scope. Range: 1–86400. |
@@ -185,6 +214,11 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_MAX_FALLBACK_ATTEMPTS` | llm | int | `3` | Maximum model-level fallback attempts the coordinator makes after a quota/rate-limit exhaustion before giving up. Raising it tries more fallback models before failing; lowering it gives up sooner, failing faster but with less fallback coverage (llm_shared/model_fallback_coordinator.py). |
 | `AUTOBOT_MAX_TASK_TYPE_KEYS_PER_TENANT` | agents | int | `64` | Per-tenant cap on distinct task_type keys the pattern learner tracks in Redis, beyond the known-vocabulary allowlist (GH#11534). Raising it tolerates more distinct task types per tenant before capping; lowering it bounds Redis key growth more tightly against a runaway integration (agents/task_pattern_learner.py). |
 | `AUTOBOT_MAX_UNMATCHED_OUTPUT_CHARS` | tools | int | `20000` | Cap on unmatched tool-output characters retained before the filter truncates. Raising it keeps more raw output for unmatched patterns; lowering it truncates sooner, reducing memory/storage per tool call (services/tool_output_filter.py). |
+| `AUTOBOT_MCP_BROWSER_RATE_LIMIT` | security | int | `60` | Requests per 60-second window accepted by the browser automation MCP bridge, shared by all workers (#18087). One Redis-backed count across all workers; over it the caller is refused (HTTP 429, or JSON-RPC -32029 on the MCP server). Fails open while Redis is unreachable. |
+| `AUTOBOT_MCP_DATABASE_RATE_LIMIT` | security | int | `60` | Requests per 60-second window accepted by the database MCP bridge, shared by all workers (#18087). One Redis-backed count across all workers; over it the caller is refused (HTTP 429, or JSON-RPC -32029 on the MCP server). Fails open while Redis is unreachable. |
+| `AUTOBOT_MCP_GIT_RATE_LIMIT` | security | int | `60` | Requests per 60-second window accepted by the Git MCP bridge (/api/git_mcp/*), shared by all workers (#18087). One Redis-backed count across all workers; over it the caller is refused (HTTP 429, or JSON-RPC -32029 on the MCP server). Fails open while Redis is unreachable. |
+| `AUTOBOT_MCP_HTTP_CLIENT_RATE_LIMIT` | security | int | `120` | Requests per 60-second window accepted by the HTTP client MCP bridge, shared by all workers (#18087). One Redis-backed count across all workers; over it the caller is refused (HTTP 429, or JSON-RPC -32029 on the MCP server). Fails open while Redis is unreachable. |
+| `AUTOBOT_MCP_SERVER_RATE_LIMIT` | security | int | `50` | Requests per 60-second window accepted per token by the AutoBot MCP server (post-auth), shared by all workers (#18087). One Redis-backed count across all workers; over it the caller is refused (HTTP 429, or JSON-RPC -32029 on the MCP server). Fails open while Redis is unreachable. |
 | `AUTOBOT_MIGRATION_BACKFILL_BATCH_SIZE` | backend | int | `1000` | Rows per statement when a migration backfills a column in chunks. An unbounded UPDATE holds locks for its whole duration and can exceed the bind-parameter limit, stopping a rolling update mid-flight (migrations/templates/chunked_backfill.py, #15776). |
 | `AUTOBOT_MULTIMODAL_VOICE_CONFIDENCE_THRESHOLD` | voice | float | `0.7` | Fallback confidence threshold for VoiceProcessor when the multimodal.voice config section omits it (#13207). Range: 0.0–1.0. |
 | `AUTOBOT_MULTIMODAL_VOICE_PROCESSING_TIMEOUT` | voice | int | `30` | Fallback processing timeout in seconds for VoiceProcessor when the multimodal.voice config section omits it (#13207). |
@@ -248,6 +282,7 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_RAG_GRAPH_TIMEOUT_SECONDS` | rag | float | `10.0` | Default graph-RAG search deadline in seconds (RAGConfig.graph_timeout_seconds, #18141). |
 | `AUTOBOT_RAG_GRAPH_WEIGHT` | rag | float | `0.3` | Graph-signal weight in the one pre-rerank vector+graph blend (RAGConfig.graph_weight, #18141). Range: 0.0–1.0. |
 | `AUTOBOT_RANKING_ALPHA` | code_analysis | float | `1.0` | Multiplicative weight applied to the runtime_risk boost when ranking anti-pattern findings (0 disables the boost; 1.0 lets a fully-risky file double its effective score). Raising it weights runtime risk more heavily in the ranking; lowering it toward 0 weights it less (code_analysis/src/anti_pattern_detector.py). |
+| `AUTOBOT_RATE_LIMITER_FAIL_OPEN_WARN_INTERVAL` | security | float | `60.0` | Minimum seconds between fail-open warnings per rate-limiter instance (#18617). While Redis is unreachable the limiters allow requests; the warning names only the limiter scope and is emitted at most once per interval so an outage cannot flood the log. |
 | `AUTOBOT_REDIS_DB_ANALYTICS` | redis | int | `11` | Redis logical database number for analytics data. Range: 0–15. |
 | `AUTOBOT_REDIS_DB_KNOWLEDGE` | redis | int | `1` | Redis logical database number for knowledge-base vectors. Range: 0–15. |
 | `AUTOBOT_REDIS_DB_MAIN` | redis | int | `0` | Redis logical database number for primary application data. Range: 0–15. |
@@ -297,6 +332,8 @@ conflict when their rows sort next to each other.
 | `AUTOBOT_SKILL_DISTILLATION_MAX_FAILURES` | backend | int | `3` | Consecutive failures on the SAME conversation before the distillation pass stops waiting for it and moves on. Below this the pass halts and retries next run, so a transient fault costs nothing; at it, the conversation is quarantined with a warning and the cursor advances, so one unreadable conversation cannot starve every newer one behind it in an oldest-first queue (#14255). A success resets the count. |
 | `AUTOBOT_SKILL_DISTILLATION_MAX_SESSIONS` | backend | int | `10` | Conversations distilled per pass. Bounds the LLM spend of any one run; the remainder is picked up next time because the cursor only advances over what was handled. |
 | `AUTOBOT_SKILL_DISTILLATION_MIN_MESSAGES` | backend | int | `4` | Minimum messages a conversation needs before distillation attempts it. Shorter ones cannot contain a reusable workflow and the extractor rejects them anyway. |
+| `AUTOBOT_SLM_FAILURE_DIAG_JOURNAL_LINES` | slm | int | `30` | Journal lines fetched from a node whose fleet start/stop/restart failed, returned in the response `diagnostics` (services/service_restart.py, #18714). Range: 1–500. |
+| `AUTOBOT_SLM_FAILURE_DIAG_MAX_CHARS` | slm | int | `4000` | Characters kept (the tail) of each failure-diagnostics section, `systemctl status` and journal, per failed node (services/service_restart.py, #18714). Range: 200–65536. |
 | `AUTOBOT_SLM_JOURNAL_SSH_TIMEOUT_SECONDS` | slm | float | `30.0` | Wall-clock ceiling on the journalctl-over-SSH fetch behind GET /nodes/{node_id}/services/{service_name}/logs (api/services.py, #15620). Fetching journal entries from a node under load is slower than restarting a unit on it, and the request is operator-facing, so the cost runs both ways: raise it and an API worker stays occupied that much longer per unresponsive node, which a fleet-wide log sweep multiplies; lower it and a busy node answers HTTP 504 instead of returning its logs, and the operator has to retry asking for fewer lines. Tune it to the slowest link in the fleet, not to the fastest. Range: 5.0–600.0. |
 | `AUTOBOT_SLM_RESTART_FLUSH_DELAY_SECONDS` | slm | float | `1.0` | Seconds the deferred SLM service restart waits for the HTTP response to flush before it starts killing the services that carried it. Too short and the caller sees a dropped connection instead of its 202; too long and the restart is needlessly delayed, so the right value follows the deployment's network rather than anything fixed (services/service_restart.py, #15611). Range: 0.0–60.0. |
 | `AUTOBOT_SLM_RESTART_SSH_TIMEOUT_SECONDS` | slm | float | `30.0` | Seconds a single `systemctl restart` over SSH may take before it is abandoned and reported as failed. A slow node restarting a heavy unit legitimately exceeds a value that is generous on a fast one, so this belongs to the deployment (services/service_restart.py, #15611). Range: 1.0–600.0. |
