@@ -322,9 +322,9 @@ class LinkPipeline(BasePipeline):
 
     def _parse_body(self, body: str, url: str, content_type: str, metadata: Dict) -> Dict[str, Any]:
         """Dispatch on Content-Type as ``WebFetcher`` does (#18826): HTML parsed, text/JSON kept, rest refused."""
-        from web_fetch.content_types import BodyKind, classify
+        from web_fetch.content_types import BodyKind, classify_body
 
-        kind = classify(content_type, body)
+        kind = classify_body(content_type, body)
         if kind is BodyKind.HTML:
             return self._parse_html(body, url, content_type, metadata)
         if kind is BodyKind.UNSUPPORTED:

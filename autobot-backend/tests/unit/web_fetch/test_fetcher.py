@@ -462,7 +462,7 @@ class TestCacheIntegration:
         redis, store = _make_redis()
         from web_fetch.cache import _content_cache_key
 
-        key = _content_cache_key("https://example.com", "auto")
+        key = _content_cache_key("https://example.com", "auto", "document")
         store[key] = json.dumps(cached_payload)
 
         jina_called = False

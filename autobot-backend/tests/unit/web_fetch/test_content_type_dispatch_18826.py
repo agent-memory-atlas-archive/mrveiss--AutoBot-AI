@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from web_fetch.content_types import BodyKind, classify
+from web_fetch.content_types import BodyKind, classify_body
 from web_fetch.fetcher import WebFetcher
 from web_fetch.profile import IngestProfile, extract_page
 from web_fetch.types import ERR_UNSUPPORTED_CONTENT_TYPE, RenderMode
@@ -59,7 +59,7 @@ def _served(body, content_type, extractor_allowed=True):
     ],
 )
 def test_classify(content_type, body, kind):
-    assert classify(content_type, body) is kind
+    assert classify_body(content_type, body) is kind
 
 
 @pytest.mark.asyncio

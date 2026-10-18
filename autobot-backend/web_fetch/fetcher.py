@@ -190,7 +190,7 @@ async def _fetch_bs4(url: str, timeout: float) -> tuple[str | None, int | None, 
     the caller dispatches on what the server said the body is (#18826).
 
     Single round-trip (#7459): streams the response body in 64 KiB chunks,
-    enforces ``WEB_FETCH_MAX_BYTES``, and returns ``("", status)`` for empty
+    enforces ``WEB_FETCH_MAX_BYTES``, and returns ``("", status, content_type)`` for empty
     bodies — the prior implementation issued a 1-byte probe request and
     then re-fetched the full URL, doubling HTTP load on every fast-path
     attempt.
@@ -207,7 +207,7 @@ async def _fetch_bs4(url: str, timeout: float) -> tuple[str | None, int | None, 
     from autobot_shared.security.ssrf_guard import SSRFError, pinned_request_with_redirects
 
     if not await _is_public_url(url):
-        return None, None
+        return None, None, None
 
     headers = {"User-Agent": _USER_AGENT}
     aio_timeout = aiohttp.ClientTimeout(total=timeout)

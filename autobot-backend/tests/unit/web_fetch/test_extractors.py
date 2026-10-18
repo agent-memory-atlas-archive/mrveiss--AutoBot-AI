@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from media.document.html_extraction import extract_title as _extract_title
+from media.document.html_extraction import extract_html_title as _extract_title
 from web_fetch.extractors import (
     _is_noscript_dominated,
     _strip_boilerplate,

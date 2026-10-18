@@ -100,7 +100,7 @@ _CONTAINERS = frozenset(
 )
 
 
-def extract_title(soup: Any) -> str:
+def extract_html_title(soup: Any) -> str:
     """Extract the page title from ``og:title`` or ``<title>``, at most 300 characters."""
     og = soup.find("meta", property="og:title")
     if og and og.get("content"):
@@ -364,7 +364,7 @@ def extract_html(html: str, base_url: str = "") -> ExtractedDocument:
     *base_url* resolves relative link targets; without it only absolute targets survive.
     """
     soup = BeautifulSoup(html or "", "html.parser")
-    title = extract_title(soup)
+    title = extract_html_title(soup)
     drop_non_content(soup)
     sections = _sections_of(_content_root(soup), base_url)
     return ExtractedDocument(format="html", text=render_sections(sections), info={"title": title}, sections=sections)

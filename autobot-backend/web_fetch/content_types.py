@@ -71,7 +71,7 @@ def _sniff(body: str) -> BodyKind:
     return BodyKind.HTML if _HTML_SNIFF.match(head) else BodyKind.TEXT
 
 
-def classify(content_type: Optional[str], body: str) -> BodyKind:
+def classify_body(content_type: Optional[str], body: str) -> BodyKind:
     """Return the :class:`BodyKind` of *body* as declared by *content_type*."""
     declared = media_type(content_type)
     if not declared:
@@ -103,7 +103,7 @@ def page_from_body(
     body: str, content_type: Optional[str], profile: Union[IngestProfile, str], url: str
 ) -> Tuple[BodyKind, str, str]:
     """Return ``(kind, title, text)`` for a fetched body; raise :class:`UnsupportedContentType` otherwise."""
-    kind = classify(content_type, body)
+    kind = classify_body(content_type, body)
     if kind is BodyKind.HTML:
         document = extract_page(body, profile, base_url=url)
         return kind, document.info.get("title", ""), document.text
