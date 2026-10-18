@@ -84,7 +84,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/components/knowledge/KnowledgeGraph.vue": 2073,
     "autobot-frontend/src/components/knowledge/KnowledgeHealth.vue": 925,
     "autobot-frontend/src/components/knowledge/KnowledgePersistenceDialog.vue": 892,
-    "autobot-frontend/src/components/knowledge/KnowledgeResearchPanel.vue": 1190,
+    "autobot-frontend/src/components/knowledge/KnowledgeResearchPanel.vue": 1189,
     "autobot-frontend/src/components/knowledge/KnowledgeSystemDocs.vue": 863,
     "autobot-frontend/src/components/knowledge/KnowledgeUpload.vue": 1634,
     "autobot-frontend/src/components/knowledge/KnowledgeVerificationQueue.vue": 799,

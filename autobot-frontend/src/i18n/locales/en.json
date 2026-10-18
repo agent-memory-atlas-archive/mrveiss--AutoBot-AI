@@ -6215,6 +6215,7 @@
     },
     "devSpeedup": {
       "title": "Developer Speedup",
+      "optimizedCode": "Optimized code",
       "subtitle": "Code search, generation, and productivity tools",
       "actionsToday": "Actions Today",
       "error": "Error",

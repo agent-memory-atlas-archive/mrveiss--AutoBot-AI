@@ -1,7 +1,7 @@
 <!-- AutoBot - AI-Powered Automation Platform -->
 <!-- Copyright (c) 2025-2026 mrveiss -->
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { formatDuration } from '@/utils/formatHelpers'
 import { useRoute, useRouter } from 'vue-router'
 import UploadModal from '@/components/transcriber/UploadModal.vue'
@@ -18,6 +18,9 @@ const logger = createLogger('TranscriberProjectDetailView')
 
 // Live progress returns with its route (#18746): the SSE /recordings/{id}/progress route is not served.
 const LIVE_PROGRESS_ENABLED = false
+
+// While live progress is off, a pending/processing recording is refreshed by polling its served GET.
+const RECORDING_POLL_MS = Number(import.meta.env.VITE_TRANSCRIBER_POLL_MS ?? 4000)
 
 const route = useRoute()
 const router = useRouter()
@@ -54,7 +57,7 @@ async function load() {
 }
 
 function onUploaded(recording: Recording) {
-  // Surface the new recording immediately; ProcessingProgress drives it to done.
+  // Surface the new recording immediately; polling (or ProcessingProgress) drives it to done.
   recordings.value = [recording, ...recordings.value]
   store.setRecordings(recordings.value)
 }
@@ -101,6 +104,35 @@ function formatDate(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString()
 }
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopPolling() {
+  if (pollTimer === null) return
+  clearInterval(pollTimer)
+  pollTimer = null
+}
+
+async function pollInProgress() {
+  await Promise.all(recordings.value.filter(isInProgress).map((r) => onProcessingSettled(r.id)))
+}
+
+const hasInProgress = computed(() => recordings.value.some(isInProgress))
+
+// Poll only while something is pending/processing and live progress is off.
+watch(
+  hasInProgress,
+  (active) => {
+    if (active && !LIVE_PROGRESS_ENABLED && pollTimer === null) {
+      pollTimer = setInterval(pollInProgress, RECORDING_POLL_MS)
+    } else if (!active) {
+      stopPolling()
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(stopPolling)
 
 // Re-load when navigating directly between sibling project routes.
 watch(projectId, (next, prev) => {

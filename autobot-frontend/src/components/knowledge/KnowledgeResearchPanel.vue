@@ -27,7 +27,7 @@ import type { Board, SourceCard } from './knowledgeResearchTypes'
 
 const logger = createLogger('KnowledgeResearchPanel')
 
-// Accept returns with its route (#18745): no backend route ingests a research source yet.
+// Accept returns with its route (#18745); until then its button is hidden and acceptSource sends nothing.
 const ACCEPT_SOURCE_ENABLED = false
 const userStore = useUserStore()
 
@@ -306,12 +306,11 @@ async function _emitAnnotationFeedback(
 }
 
 async function acceptSource(card: SourceCard): Promise<void> {
+  if (!ACCEPT_SOURCE_ENABLED) return
   card.decision = 'accepted'
   try {
-    await ApiClient.post<Record<string, unknown>>(`${getApiBase()}/knowledge/verification/approve`, {
-      source_url: card.url,
-      title: card.title,
-    })
+    const body = { source_url: card.url, title: card.title }
+    await ApiClient.post<Record<string, unknown>>(`${getApiBase()}/knowledge/verification/approve`, body)
   } catch (e) {
     logger.warn('Accept source API call failed (non-critical):', e)
   }

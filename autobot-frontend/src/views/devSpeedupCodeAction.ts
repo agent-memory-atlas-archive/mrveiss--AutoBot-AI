@@ -4,6 +4,7 @@
 // Author: mrveiss
 /** Code-action dispatch for DevSpeedupView.vue (split out for the size ceiling, #18730). */
 import type { useDevSpeedup } from '@/composables/useDevSpeedup'
+import i18n from '@/i18n'
 import { createLogger } from '@/utils/debugUtils'
 
 const logger = createLogger('DevSpeedupCodeAction')
@@ -30,7 +31,7 @@ export async function runCodeAction(
     case 'optimize': {
       const optimized = await actions.optimizeCode(code, language)
       if (optimized) {
-        alert(`Optimized code:\n\n${optimized}`)
+        alert(`${i18n.global.t('views.devSpeedup.optimizedCode')}:\n\n${optimized}`)
       }
       return null
     }
