@@ -23,10 +23,12 @@
  * `--dry` writes only manifest.md (the cut points), with no backend calls.
  *
  * A self-signed certificate needs NODE_EXTRA_CA_CERTS=<ca.pem>.
+ * [out-dir] defaults to <os temp dir>/autobot-tts-listening-test.
  * Output: <out-dir>/LISTEN.md (what to listen for), <out-dir>/manifest.md
  * (every chunk's text per variant) and <out-dir>/<reply>/<variant>.wav.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSpeechShaper, createTtsStream } from '../src/utils/ttsSentences.ts'
 
@@ -154,7 +156,8 @@ async function main() {
   for (const v of dry ? [] : ['AUTOBOT_API_BASE', 'AUTOBOT_TOKEN']) {
     if (!process.env[v]) throw new Error(`${v} is required (see the header of this script)`)
   }
-  const out = process.argv.slice(2).find((a) => !a.startsWith('--')) || 'tts-listening-test-out'
+  // Default outside the checkout, so a run never leaves untracked WAVs in the repo.
+  const out = process.argv.slice(2).find((a) => !a.startsWith('--')) || join(tmpdir(), 'autobot-tts-listening-test')
   const manifest = ['# Chunks per variant\n']
   for (const [replyId, reply] of Object.entries(REPLIES)) {
     mkdirSync(join(out, replyId), { recursive: true })
