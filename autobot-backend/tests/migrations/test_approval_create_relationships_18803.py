@@ -115,6 +115,45 @@ def response_failures(monkeypatch, approval_route):
     return failures
 
 
+async def _read_approval_snapshot(reader, title):
+    """Read committed ordinary approval fields for #18803."""
+    return (
+        (
+            await reader.execute(
+                select(Approval.id, Approval.company_id, Approval.title, Approval.context, Approval.status).where(
+                    Approval.title == title
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def _read_task_link_rows(reader, approval_id):
+    """Read independent persisted task-link fields for #18803."""
+    return (
+        (
+            await reader.execute(
+                select(TaskApprovalLink.id, TaskApprovalLink.approval_id, TaskApprovalLink.task_id).where(
+                    TaskApprovalLink.approval_id == approval_id
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def _read_task_links(reader, approval_id):
+    """Read the remaining company approval links for #18803."""
+    return (
+        (await reader.execute(select(TaskApprovalLink).where(TaskApprovalLink.approval_id == approval_id)))
+        .scalars()
+        .all()
+    )
+
+
 async def test_http_create_returns_201_and_commits_empty_relationships(
     approval_sessions, response_failures, approval_route
 ):
@@ -125,17 +164,7 @@ async def test_http_create_returns_201_and_commits_empty_relationships(
         approval_route,
     )
     async with approval_sessions() as reader:
-        stored = (
-            (
-                await reader.execute(
-                    select(Approval.id, Approval.company_id, Approval.title, Approval.context, Approval.status).where(
-                        Approval.title == title
-                    )
-                )
-            )
-            .mappings()
-            .all()
-        )
+        stored = await _read_approval_snapshot(reader, title)
     assert len(stored) == 1, f"HTTP={response.status_code} committed_rows={len(stored)}"
     assert stored[0]["company_id"] is None
     assert stored[0]["context"] == {"synthetic": True}
@@ -163,17 +192,7 @@ async def test_http_create_returns_real_committed_task_links(approval_sessions, 
     async with approval_sessions() as reader:
         stored_ids = (await reader.execute(select(Approval.id).where(Approval.title == title))).scalars().all()
         assert len(stored_ids) == 1, f"HTTP={response.status_code} committed_rows={len(stored_ids)}"
-        links = (
-            (
-                await reader.execute(
-                    select(TaskApprovalLink.id, TaskApprovalLink.approval_id, TaskApprovalLink.task_id).where(
-                        TaskApprovalLink.approval_id == stored_ids[0]
-                    )
-                )
-            )
-            .mappings()
-            .all()
-        )
+        links = await _read_task_link_rows(reader, stored_ids[0])
     assert len(links) == 2
     assert {link["task_id"] for link in links} == set(task_ids)
     assert response.status_code == 201, (
@@ -219,9 +238,5 @@ async def test_company_create_is_loaded_detached_and_still_excluded_from_general
     async with approval_sessions() as reader:
         stored = await reader.get(Approval, approval_id)
         assert stored is not None and stored.company_id == company_id
-        links = (
-            (await reader.execute(select(TaskApprovalLink).where(TaskApprovalLink.approval_id == approval_id)))
-            .scalars()
-            .all()
-        )
+        links = await _read_task_links(reader, approval_id)
         assert len(links) == 1 and links[0].task_id == task_id
