@@ -20,8 +20,10 @@ from pathlib import Path
 import pytest
 import yaml
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from tools.lint._comment_syntax import code_lines
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 _GENERATOR = _ROOT / "docker" / "generate-secrets.sh"
@@ -117,3 +119,57 @@ def test_install_md_pulls_the_models_docker_env_names() -> None:
     )
     pulled = runnable_pulls((_ROOT / "INSTALL.md").read_text(encoding="utf-8"))
     assert len(names) == 2 and set(names.values()) <= pulled, (names, pulled)
+
+
+#: A default or example naming the retired mode (#10636): `AUTOBOT_USER_MODE=single_user`,
+#: `${AUTOBOT_USER_MODE:-single_user}`, or a shell branch on it.
+_RETIRED_MODE = re.compile(r"AUTOBOT_USER_MODE(?:=|:-)\s*single_user|USER_MODE\"?\s*!?=+\s*\"?single_user")
+
+
+def retired_mode_sites(files: dict[str, str]) -> list[str]:
+    return sorted(
+        f"{p}:{n}"
+        for p, text in files.items()
+        for n, line in enumerate(text.splitlines(), 1)
+        if _RETIRED_MODE.search(line)
+    )
+
+
+def _mode_carriers(root: Path) -> list[str]:
+    """Compose files, Docker entrypoints and env templates -- where a user-mode default lives."""
+    try:
+        return tracked_paths(
+            root, "docker-compose*.yml", "docker/*entrypoint*.sh", "*.env.example", ".env*", "docker/.env*"
+        )
+    except EmptyEnumeration:
+        return []
+
+
+REACH = declare(
+    "user-mode-default-carriers-18729",
+    discover=_mode_carriers,
+    # Mid-window from REACH.window(): population 15, window (11, 15) -> 13.
+    floor=13,
+    growth=4,
+    what="compose files, Docker entrypoints and env templates",
+    roots=(".env", "autobot-frontend/", "autobot-slm-backend/", "docker-compose", "docker/"),
+)
+
+
+def test_no_compose_file_entrypoint_or_env_template_defaults_to_single_user() -> None:
+    """01's review of #18804: the entrypoint fallback and .env.example's example kept it too."""
+    files = {p: (_ROOT / p).read_text(encoding="utf-8") for p in REACH.examined(_ROOT)}
+    assert (
+        "docker/backend/entrypoint.sh" in files and ".env.example" in files and "docker-compose.yml" in files
+    ), sorted(files)
+    assert not retired_mode_sites(files)
+
+
+def test_the_retired_mode_check_sees_every_shape() -> None:
+    shapes = {
+        "a": 'USER_MODE="${AUTOBOT_USER_MODE:-single_user}"',
+        "b": "# AUTOBOT_USER_MODE=single_user",
+        "c": 'if [ "$USER_MODE" != "single_user" ]; then',
+        "d": "# single_user is retired (#10636)",
+    }
+    assert retired_mode_sites(shapes) == ["a:1", "b:1", "c:1"]
