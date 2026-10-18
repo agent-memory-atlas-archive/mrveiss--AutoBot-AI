@@ -102,3 +102,37 @@ def test_anonymous_is_401():
     with unauthenticated_canonical_gate():
         resp = _client(None, None).get("/api/user-management/users/me")
     assert resp.status_code == 401
+
+
+def test_a_valid_jwt_through_the_real_gate_returns_the_stored_profile(monkeypatch):
+    """Auth is NOT overridden: a real signed JWT passes the canonical gate to the stored row."""
+    import auth_revocation  # noqa: PLC0415
+    from autobot_shared.auth.interactive_principal import LOGIN_TOKEN_TYPE  # noqa: PLC0415
+    from autobot_shared.auth.jwt_core import encode_jwt  # noqa: PLC0415
+    from testkit.canonical_gate import install_canonical_gate  # noqa: PLC0415
+    from tests.conftest import load_real_auth_middleware  # noqa: PLC0415
+
+    secret = "s" * 40
+    real = load_real_auth_middleware()
+    middleware = real.AuthenticationMiddleware.__new__(real.AuthenticationMiddleware)
+    middleware.jwt_secret = secret
+    middleware.jwt_public_key = None
+    middleware.failed_attempts = {}
+    middleware.enable_auth = True
+    middleware.get_session = {}.get
+    install_canonical_gate(monkeypatch, middleware)
+    monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", AsyncMock(return_value=False))
+
+    uid = uuid.uuid4()
+    claims = {"username": "alice", "role": "user", "user_id": str(uid), "token_type": LOGIN_TOKEN_TYPE}
+    token = encode_jwt(claims, secret=secret, expiry_hours=1)
+    # _client(None, ...) overrides only get_user_service, never get_current_user.
+    client = _client(None, _stored_user(uid))
+
+    resp = client.get("/api/user-management/users/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["id"] == str(uid)
+    assert body["created_at"].startswith("2026-01-02T03:04:05")
+    assert body["updated_at"].startswith("2026-02-03T04:05:06")
