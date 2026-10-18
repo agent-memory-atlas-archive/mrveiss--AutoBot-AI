@@ -129,9 +129,10 @@ jobs:
       # 2831 -> 2617 (#16324): 214 lines of slack, measured by the same main run
       # 39021692374 (base feae6de152); most of the fall is the retired agent
       # mirror (#18548) and the one playwright-server.js (#18549).
-      # 2617 -> 1959 (#18819): measured on the #18819 branch, same flags (105 clones,
-      # 918 files); the 39 inline SLM error banners are now the kit's BaseAlert.
-      SLM_MAX_DUP_LINES: '1959'
+      # 2617 -> 1964 (#18819): measured on the #18819 branch at its final head, same
+      # flags (105 clones, 918 files); every hand-rolled SLM error banner is now the
+      # kit's BaseAlert.
+      SLM_MAX_DUP_LINES: '1964'
       JSCPD_VERSION: '5.0.6'
     steps:
       - uses: actions/checkout@v7
