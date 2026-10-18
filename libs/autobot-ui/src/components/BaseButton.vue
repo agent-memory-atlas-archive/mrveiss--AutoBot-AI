@@ -47,6 +47,16 @@ const props = withDefaults(
 
 const isDisabled = computed(() => props.disabled || props.loading)
 const isNative = computed(() => props.as === 'button')
+/** A disabled non-button (`as="a"`, a RouterLink) has no native `disabled`, so it is inert by hand. */
+const isInertLink = computed(() => !isNative.value && isDisabled.value)
+
+// Runs before a caller's fallthrough @click (own listeners merge first), so neither the
+// navigation nor the caller's handler fires.
+function blockInertClick(event: MouseEvent): void {
+  if (!isInertLink.value) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+}
 </script>
 
 <template>
@@ -54,8 +64,10 @@ const isNative = computed(() => props.as === 'button')
     :is="as"
     :type="isNative ? type : undefined"
     :disabled="isNative ? isDisabled : undefined"
-    :aria-disabled="!isNative && isDisabled ? 'true' : undefined"
+    :aria-disabled="isInertLink ? 'true' : undefined"
+    :tabindex="isInertLink ? -1 : undefined"
     :aria-busy="loading || undefined"
+    @click="blockInertClick"
     :class="['aui-btn', `aui-btn--${variant}`, `aui-btn--${size}`, { 'aui-btn--block': block, 'aui-btn--loading': loading }]"
   >
     <span v-if="loading" class="aui-btn__spinner" aria-hidden="true" />
@@ -124,10 +136,10 @@ const isNative = computed(() => props.as === 'button')
   background-color: var(--aui-color-primary);
   color: var(--aui-color-primary-contrast);
 }
-.aui-btn--primary:hover:not(:disabled) {
+.aui-btn--primary:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: var(--aui-color-primary-hover);
 }
-.aui-btn--primary:active:not(:disabled) {
+.aui-btn--primary:active:not(:disabled):not([aria-disabled='true']) {
   background-color: var(--aui-color-primary-active);
 }
 
@@ -136,7 +148,7 @@ const isNative = computed(() => props.as === 'button')
   border-color: var(--aui-color-border-strong);
   color: var(--aui-color-text);
 }
-.aui-btn--secondary:hover:not(:disabled) {
+.aui-btn--secondary:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: var(--aui-color-surface-raised);
 }
 
@@ -144,7 +156,7 @@ const isNative = computed(() => props.as === 'button')
   background-color: transparent;
   color: var(--aui-color-text);
 }
-.aui-btn--ghost:hover:not(:disabled) {
+.aui-btn--ghost:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: var(--aui-color-surface-raised);
 }
 
@@ -152,7 +164,7 @@ const isNative = computed(() => props.as === 'button')
   background-color: var(--aui-color-error);
   color: var(--aui-color-error-contrast);
 }
-.aui-btn--error:hover:not(:disabled) {
+.aui-btn--error:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: color-mix(in srgb, var(--aui-color-error) 88%, black);
 }
 
@@ -160,7 +172,7 @@ const isNative = computed(() => props.as === 'button')
   background-color: var(--aui-color-success);
   color: var(--aui-color-success-contrast);
 }
-.aui-btn--success:hover:not(:disabled) {
+.aui-btn--success:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: color-mix(in srgb, var(--aui-color-success) 88%, black);
 }
 
@@ -168,7 +180,7 @@ const isNative = computed(() => props.as === 'button')
   background-color: var(--aui-color-warning);
   color: var(--aui-color-warning-contrast);
 }
-.aui-btn--warning:hover:not(:disabled) {
+.aui-btn--warning:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: color-mix(in srgb, var(--aui-color-warning) 88%, black);
 }
 
@@ -176,7 +188,7 @@ const isNative = computed(() => props.as === 'button')
   background-color: var(--aui-color-info);
   color: var(--aui-color-info-contrast);
 }
-.aui-btn--info:hover:not(:disabled) {
+.aui-btn--info:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: color-mix(in srgb, var(--aui-color-info) 88%, black);
 }
 
@@ -185,7 +197,7 @@ const isNative = computed(() => props.as === 'button')
   border-color: var(--aui-color-border-strong);
   color: var(--aui-color-text);
 }
-.aui-btn--outline:hover:not(:disabled) {
+.aui-btn--outline:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: var(--aui-color-surface-raised);
 }
 
@@ -196,7 +208,7 @@ const isNative = computed(() => props.as === 'button')
   padding-right: 0;
   text-decoration: none;
 }
-.aui-btn--link:hover:not(:disabled) {
+.aui-btn--link:hover:not(:disabled):not([aria-disabled='true']) {
   color: var(--aui-color-primary-hover);
   text-decoration: underline;
 }

@@ -172,6 +172,38 @@ describe('BaseButton', () => {
     expect(wrapper.attributes('disabled')).toBeUndefined()
   })
 
+  it.each([
+    ['disabled', { disabled: true }],
+    ['loading', { loading: true }],
+  ])('makes a %s link inert: no navigation, no caller click, out of the tab order', (_, state) => {
+    // fails if a disabled/loading `as="a"` still navigates, runs its @click, or takes focus
+    const onClick = vi.fn()
+    const wrapper = mount(BaseButton, { props: { as: 'a', ...state }, attrs: { href: '#x', onClick } })
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    wrapper.element.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(onClick).not.toHaveBeenCalled()
+    expect(wrapper.attributes('tabindex')).toBe('-1')
+  })
+
+  it('leaves an enabled link alone: it navigates, runs its @click and keeps its tab stop', () => {
+    // contrast case: fails if the inert guard fires when the link is enabled
+    const onClick = vi.fn()
+    const wrapper = mount(BaseButton, { props: { as: 'a' }, attrs: { href: '#x', onClick } })
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    wrapper.element.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+    expect(onClick).toHaveBeenCalledOnce()
+    expect(wrapper.attributes('tabindex')).toBeUndefined()
+  })
+
+  it('never shows a hover or active state on an aria-disabled element', () => {
+    // fails if a `:hover:not(:disabled)` rule can still match a disabled link
+    const states = buttonSource.match(/:(hover|active):not\(:disabled\)[^{,]*/g) ?? []
+    expect(states.length).toBeGreaterThan(0)
+    expect(states.every((s) => s.includes(":not([aria-disabled='true'])"))).toBe(true)
+  })
+
   it('styles through kit tokens only: no literal colour or box-shadow in the source', () => {
     // fails if a raw palette value or a shadow enters the component (design system: tokens, no shadows)
     expect(buttonSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|box-shadow/)
