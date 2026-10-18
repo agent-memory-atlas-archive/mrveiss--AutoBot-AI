@@ -500,20 +500,7 @@ register_env_var(
 
 # --- tls: env_registry_tls.py ------------------------------------------
 
-# --- network ----------------------------------------------------------------
-
-register_env_var(
-    EnvVarSpec(
-        name="AUTOBOT_TRUSTED_PROXIES",
-        type=str,
-        default="",
-        description=(
-            "Comma-separated list of trusted reverse-proxy IP addresses or CIDR ranges "
-            "for X-Forwarded-For header trust."
-        ),
-        component="network",
-    )
-)
+# --- network: env_registry_tls.py (#18765, to make room for a sibling import) ---
 
 # --- voice / speech-to-text -------------------------------------------------
 
