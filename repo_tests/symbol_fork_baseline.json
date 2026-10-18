@@ -3,20 +3,12 @@
   "_contract": "Shrink-only and BIDIRECTIONAL: a new name here fails CI, and an entry that is no longer a fork cluster fails just as loudly. Delete it when the duplication goes, or it tolerates whatever takes that name next (#17312).",
   "clusters": [
     "AgentResponse",
-    "AuditAction",
     "AuditEvent",
-    "AuditEventType",
-    "AuditLog",
     "Base",
     "ConflictResolution",
-    "DeploymentConfig",
     "DeploymentMode",
-    "EnforcementMode",
-    "EventType",
-    "FeatureFlags",
     "Organization",
     "Permission",
-    "PolicyStatus",
     "Role",
     "SLMClient",
     "SecurityPolicy",
@@ -29,7 +21,6 @@
     "TaskResult",
     "User",
     "get_current_user",
-    "get_deployment_config",
     "get_service_url"
   ]
 }
