@@ -32,3 +32,22 @@ def test_scenarios_use_benchmark_tool_call():
     calls = [c for s in scenarios for c in s.tool_calls]
     assert calls, "no tool calls: the isinstance check below would pass vacuously"
     assert all(isinstance(c, BenchmarkToolCall) for c in calls)
+
+
+def test_importing_the_benchmark_has_no_side_effects():
+    """Importing it as a library must not stub agent_loop or touch sys.path (#18706)."""
+    import subprocess  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    probe = (
+        "import sys; path = list(sys.path); mods = set(sys.modules)\n"
+        "import benchmarks.benchmark_belief_state as b\n"
+        "added = sorted(m for m in set(sys.modules) - mods if m.startswith('agent_loop'))\n"
+        "assert sys.path == path, 'sys.path changed'\n"
+        "assert not added, added\n"
+        "assert b.build_scenarios()\n"
+    )
+    backend = Path(__file__).resolve().parents[1]
+    env = {"PYTHONPATH": str(backend.parent), "PATH": "/usr/bin:/bin"}
+    done = subprocess.run([sys.executable, "-c", probe], cwd=backend, env=env, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr[-2000:]

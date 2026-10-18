@@ -22,28 +22,22 @@ calls required, since the extraction and assertion logic is purely rule-based.
 from __future__ import annotations
 
 import hashlib
+import importlib.util as _ilu
 import json
 import sys
 import time
+import types as _types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap sys.path so we can import from agent_loop without installing
+# Bootstrap: run only by main(), never at import (#18706 -- importing this module
+# as a library, e.g. for build_scenarios(), must leave sys.path/sys.modules alone)
 # ---------------------------------------------------------------------------
 
+
 _repo_root = Path(__file__).parent.parent
-_autobot_root = _repo_root.parent
-sys.path.insert(0, str(_repo_root))
-sys.path.insert(0, str(_autobot_root))
-
-# Import directly from submodules to avoid agent_loop/__init__.py
-# (which imports AgentLoop → heavy FastAPI/Redis/Celery dependencies)
-import importlib.util as _ilu
-import types as _types
-
-from autobot_shared.doc_chunking import estimate_tokens as _canonical_estimate_tokens  # noqa: E402
 
 
 def _load_submodule(dotted_name: str, file_path: Path):
@@ -64,18 +58,20 @@ def _ensure_pkg_stub(name: str, pkg_path: Path):
         sys.modules[name] = pkg
 
 
-# Register lightweight package stubs so submodule imports resolve correctly
-_ensure_pkg_stub("agent_loop", _repo_root / "agent_loop")
-_ensure_pkg_stub("agent_loop.extractors", _repo_root / "agent_loop" / "extractors")
+def _bootstrap() -> None:
+    """Import agent_loop's types and belief_state without its heavy __init__ (FastAPI/Redis/Celery)."""
+    global AgentLoopConfig, TaskContext, BeliefStateUpdater, _canonical_estimate_tokens
+    sys.path[:0] = [str(_repo_root.parent), str(_repo_root)]  # same order the module-level inserts had
+    from autobot_shared.doc_chunking import estimate_tokens as _canonical_estimate_tokens
 
-# Load types and belief_state directly without triggering the heavy agent_loop/__init__
-# (which imports AgentLoop → requires FastAPI/Redis/Celery runtime deps)
-from agent_loop.types import AgentLoopConfig, TaskContext  # noqa: E402
+    _ensure_pkg_stub("agent_loop", _repo_root / "agent_loop")
+    _ensure_pkg_stub("agent_loop.extractors", _repo_root / "agent_loop" / "extractors")
+    from agent_loop.types import AgentLoopConfig, TaskContext
 
-# Pre-load the extractors package __init__ so EXTRACTOR_REGISTRY is populated
-_load_submodule("agent_loop.extractors", _repo_root / "agent_loop" / "extractors" / "__init__.py")
+    # Pre-load the extractors package __init__ so EXTRACTOR_REGISTRY is populated
+    _load_submodule("agent_loop.extractors", _repo_root / "agent_loop" / "extractors" / "__init__.py")
+    from agent_loop.belief_state import BeliefStateUpdater
 
-from agent_loop.belief_state import BeliefStateUpdater  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Token-cost estimation helpers
@@ -668,6 +664,7 @@ def _task_focus(num: int) -> str:
 
 
 def main() -> None:
+    _bootstrap()
     scenarios = build_scenarios()
     results: list[RunResult] = []
 
