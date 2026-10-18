@@ -22,7 +22,7 @@ import yaml
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
-from tools.lint._comment_syntax import code_lines
+from tools.lint._comment_syntax import code_lines, code_text
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
@@ -171,3 +171,58 @@ def test_the_retired_mode_check_sees_every_shape() -> None:
         "d": "# single_user is retired (#10636)",
     }
     assert retired_mode_sites(shapes) == ["a:1", "b:1", "c:1"]
+
+
+# --- the entrypoint's migration retry is safe only if non-transactional migrations resume ---
+
+_MIGRATIONS = "autobot-backend/migrations/versions"
+
+
+def _migrations(root: Path) -> list[str]:
+    try:
+        return tracked_paths(root, f"{_MIGRATIONS}/*.py")
+    except EmptyEnumeration:
+        return []
+
+
+MIGRATIONS_REACH = declare(
+    "backend-migrations-resume-safe-18729",
+    discover=_migrations,
+    floor=97,  # mid-window: population 107, window (87, 107)
+    growth=20,
+    what="backend alembic migrations",
+    roots=(_MIGRATIONS,),
+)
+
+
+def resume_hazards(name: str, source: str) -> list[str]:
+    """Why a migration using autocommit_block could not be re-run after a partial failure."""
+    if "autocommit_block" not in source:
+        return []
+    code = code_text(source, name=name if name.endswith(".py") else f"{name}.py", strip_trailing=True)
+    hazards = [
+        f"{name}: ADD VALUE without IF NOT EXISTS"
+        for stmt in re.findall(r"ADD VALUE[^\"']*", code)
+        if "IF NOT EXISTS" not in stmt
+    ]
+    if "postgresql_concurrently=True" in code and "indisvalid" not in code:
+        hazards.append(f"{name}: a concurrent index build never drops an invalid leftover")
+    return hazards
+
+
+def test_every_non_transactional_migration_can_resume_after_a_partial_failure() -> None:
+    """CodeRabbit on #18827: the entrypoint retries `upgrade head` once, so a migration that ran
+    half its autocommit work must be safe to run again."""
+    files = {p: (_ROOT / p).read_text(encoding="utf-8") for p in MIGRATIONS_REACH.examined(_ROOT)}
+    autocommit = [p for p, s in files.items() if "autocommit_block" in s]
+    assert len(autocommit) >= 3, f"read {len(autocommit)} autocommit migrations -- the scan is broken"
+    assert not [h for p, s in files.items() for h in resume_hazards(p, s)]
+
+
+def test_the_resume_check_sees_both_hazards() -> None:
+    bad_enum = "with op.get_context().autocommit_block():\n    op.execute(\"ALTER TYPE t ADD VALUE 'x'\")"
+    bad_index = "autocommit_block\nop.create_index('i', 't', ['c'], postgresql_concurrently=True)"
+    good = "autocommit_block\n# ADD VALUE in a comment\nop.execute(\"ALTER TYPE t ADD VALUE IF NOT EXISTS 'x'\")"
+    assert resume_hazards("a", bad_enum) == ["a: ADD VALUE without IF NOT EXISTS"]
+    assert resume_hazards("b", bad_index) == ["b: a concurrent index build never drops an invalid leftover"]
+    assert resume_hazards("c", good) == []

@@ -279,6 +279,7 @@ _DECLARED_SCOPES = {
         "docker-compose",
         "docker/",
     ),
+    "backend-migrations-resume-safe-18729": ("autobot-backend/migrations/versions",),
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "gateway-adapter-package-scan": ("autobot-backend/services/gateway",),
     "architecture-family-definition-scan": (
