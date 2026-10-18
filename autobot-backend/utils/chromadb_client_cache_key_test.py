@@ -90,7 +90,15 @@ def local_chroma(tmp_path):
     """Force the local PersistentClient branch with migrations + chromadb stubbed."""
     fake = _stub_chromadb()
     with (
-        patch.dict(sys.modules, {"chromadb": fake, "chromadb.config": fake.config}),
+        patch.dict(
+            sys.modules,
+            {
+                "chromadb": fake,
+                "chromadb.config": fake.config,
+                # #18789: the async local path delegates to the sync client by name.
+                "utils.chromadb_client": sync_mod,
+            },
+        ),
         patch.object(sync_mod, "_CHROMADB_HOST", ""),
         patch.object(async_mod, "_CHROMADB_HOST", ""),
         patch.object(sync_mod, "_migrate_legacy_collection_configs"),

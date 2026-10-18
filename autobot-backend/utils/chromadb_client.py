@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import pickle  # nosec B403  # restricted Unpickler below; see _RestrictedHnswUnpickler
 import sqlite3
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 
@@ -376,6 +377,46 @@ def _fix_hnsw_pickle_format(chroma_path: Path) -> None:
             logger.warning("HNSW pickle fix failed for %s: %s", pkl_file, e)
 
 
+# #18789: the single local-open implementation. The lock makes the repairs and the
+# PersistentClient creation run once per path even when the async client calls in
+# from several worker threads at once.
+_local_open_lock = threading.RLock()
+_prepared_paths: set = set()
+
+
+def prepare_local_store(chroma_path: Path) -> None:
+    """Create the path and run the 4 legacy in-place repairs, once per path per process."""
+    key = str(chroma_path.resolve())
+    with _local_open_lock:
+        if key in _prepared_paths:
+            return
+        chroma_path.mkdir(parents=True, exist_ok=True)
+        _migrate_legacy_collection_configs(chroma_path)
+        _fix_segment_hnsw_space(chroma_path)
+        _fix_seq_id_blob_type(chroma_path)
+        _fix_hnsw_pickle_format(chroma_path)
+        _prepared_paths.add(key)
+
+
+def _open_local_client(cache_key: tuple, chroma_path: Path, allow_reset: bool, telemetry: bool) -> Any:
+    """Prepare the store, then open (or reuse) the cached local PersistentClient."""
+    import chromadb  # noqa: F811
+    from chromadb.config import Settings as ChromaSettings
+
+    with _local_open_lock:
+        cached = _sync_client_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        prepare_local_store(chroma_path)
+        client = chromadb.PersistentClient(
+            path=str(chroma_path),
+            settings=ChromaSettings(allow_reset=allow_reset, anonymized_telemetry=telemetry),
+        )
+        logger.info("ChromaDB persistent client at: %s", chroma_path)
+        _sync_client_cache[cache_key] = client
+        return client
+
+
 def get_chromadb_client(
     db_path: str = "",
     allow_reset: bool = False,
@@ -429,22 +470,8 @@ def get_chromadb_client(
             _sync_client_cache[cache_key] = client
             return client
 
-        # Fallback: local PersistentClient
-        chroma_path = Path(db_path or "data/chromadb")
-        chroma_path.mkdir(parents=True, exist_ok=True)
-        _migrate_legacy_collection_configs(chroma_path)
-        _fix_segment_hnsw_space(chroma_path)
-        _fix_seq_id_blob_type(chroma_path)
-        _fix_hnsw_pickle_format(chroma_path)
-        client = chromadb.PersistentClient(
-            path=str(chroma_path),
-            settings=ChromaSettings(
-                allow_reset=allow_reset,
-                anonymized_telemetry=anonymized_telemetry,
-            ),
-        )
-        logger.info("ChromaDB persistent client at: %s", chroma_path)
-        _sync_client_cache[cache_key] = client
+        # Fallback: local PersistentClient (shared with the async client, #18789)
+        client = _open_local_client(cache_key, Path(db_path or "data/chromadb"), allow_reset, anonymized_telemetry)
         return client
 
     except Exception as e:
