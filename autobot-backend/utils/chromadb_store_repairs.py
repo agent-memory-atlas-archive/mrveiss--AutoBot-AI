@@ -12,7 +12,9 @@ marked prepared only when all four succeed, so a failed repair is retried on the
 next open instead of being skipped for the life of the process.
 
 Concurrency: threads serialise on an in-process RLock; processes serialise on an
-exclusive ``flock`` on ``.autobot_repair.lock`` in the store directory. ChromaDB
+exclusive, bounded ``flock`` on ``.autobot_repair.lock`` in the store directory
+(non-blocking attempts retried for ``REPAIR_LOCK_TIMEOUT_SECONDS``, then ``OSError``
+so a stuck holder cannot hang a store open). ChromaDB
 never lists the store root (it sizes and removes only its own per-segment
 directories), so the dotfile is invisible to it.
 """
@@ -28,14 +30,20 @@ import pickle  # nosec B403  # restricted Unpickler below; see _RestrictedHnswUn
 import sqlite3
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
+from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
 
 _LOCK_FILE_NAME = ".autobot_repair.lock"
+REPAIR_LOCK_TIMEOUT_SECONDS = env_float_clamped(
+    "AUTOBOT_CHROMA_REPAIR_LOCK_TIMEOUT_SECONDS", 30.0, 0.1, 3600.0, positive_finite=True
+)
+_LOCK_RETRY_INTERVAL_SECONDS = 0.05
 _prepare_lock = threading.RLock()
 _prepared_paths: set = set()
 
@@ -385,6 +393,33 @@ def _atomic_pickle_dump(obj: Any, target: Path) -> None:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp_name)
         raise
+    _fsync_dir(target.parent)
+
+
+def _fsync_dir(directory: Path) -> None:
+    """Make the rename durable; best-effort, since not every platform can fsync a directory."""
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        logger.warning("Could not fsync directory %s after pickle rewrite", directory, exc_info=True)
+
+
+def _sweep_stale_pickle_temps(chroma_path: Path) -> None:
+    """Remove ``.index_metadata.*.tmp`` left behind by a killed rewrite.
+
+    These are this module's own temp files (the exact ``mkstemp`` prefix and suffix
+    used by ``_atomic_pickle_dump``), never user data; the real pickle is untouched.
+    """
+    for tmp in chroma_path.glob("*/.index_metadata.*.tmp"):
+        try:
+            tmp.unlink()
+            logger.info("Removed stale pickle temp file %s", tmp)
+        except FileNotFoundError:
+            continue
 
 
 def _repaired_pickle_object(data: Any, pkl_dir: Path, persistent_data_cls: type) -> Any:
@@ -417,6 +452,7 @@ def _fix_one_hnsw_pickle(pkl_file: Path, persistent_data_cls: type) -> None:
     logger.info("Fixed HNSW pickle: %s (dim=%s)", pkl_file.parent.name[:8], obj.dimensionality)
 
 
+@_guarded("HNSW pickle fix")
 def _fix_hnsw_pickle_format(chroma_path: Path) -> bool:
     """Fix HNSW index_metadata.pickle for ChromaDB 0.5.x (#1390).
 
@@ -431,6 +467,7 @@ def _fix_hnsw_pickle_format(chroma_path: Path) -> bool:
     except ImportError:
         return True
 
+    _sweep_stale_pickle_temps(chroma_path)
     ok = True
     for pkl_file in chroma_path.glob("*/index_metadata.pickle"):
         try:
@@ -441,12 +478,25 @@ def _fix_hnsw_pickle_format(chroma_path: Path) -> bool:
     return ok
 
 
+def _flock_with_timeout(fd: int) -> None:
+    """Take LOCK_EX without blocking, retrying until the deadline; raise OSError on timeout."""
+    deadline = time.monotonic() + REPAIR_LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise OSError(f"repair lock not acquired within {REPAIR_LOCK_TIMEOUT_SECONDS}s") from None
+            time.sleep(_LOCK_RETRY_INTERVAL_SECONDS)
+
+
 @contextlib.contextmanager
 def _cross_process_lock(chroma_path: Path) -> Iterator[None]:
-    """Hold an exclusive flock on the store's lock file; a second process waits here."""
+    """Hold an exclusive flock on the store's lock file; a second process waits here, bounded."""
     fd = os.open(chroma_path / _LOCK_FILE_NAME, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        _flock_with_timeout(fd)
         try:
             yield
         finally:
@@ -466,24 +516,59 @@ def _run_repairs(chroma_path: Path) -> bool:
     return all(r is not False for r in results)
 
 
+def _locked(chroma_path: Path, run: Callable[[Path], bool]) -> Optional[bool]:
+    """Run ``run`` under the cross-process lock; None when the lock was not obtained.
+
+    Only the acquisition is inside the ``except OSError``: an OSError raised by a
+    repair is the repair's own failure and is handled by its guard, not mislogged as
+    a lock failure.
+    """
+    lock = _cross_process_lock(chroma_path)
+    try:
+        lock.__enter__()
+    except OSError:
+        logger.warning("ChromaDB repair lock unavailable for %s", chroma_path, exc_info=True)
+        return None
+    try:
+        return run(chroma_path)
+    finally:
+        lock.__exit__(None, None, None)
+
+
 def prepare_local_store(chroma_path: Path) -> None:
     """Create the path and run the 4 legacy repairs; mark it prepared only if all succeeded.
 
     Never raises for a failed repair or an unobtainable lock: the client still opens,
-    and the next call retries because the path was not marked.
+    and the next call retries because the path was not marked. Already-prepared paths
+    return without taking any lock. Threads serialise on ``_prepare_lock`` because a
+    second thread would only repeat the same repairs; the wait is bounded by the
+    cross-process lock timeout, after which the next thread retries.
     """
     key = str(chroma_path.resolve())
+    if key in _prepared_paths:
+        return
     with _prepare_lock:
         if key in _prepared_paths:
             return
         chroma_path.mkdir(parents=True, exist_ok=True)
-        try:
-            with _cross_process_lock(chroma_path):
-                ok = _run_repairs(chroma_path)
-        except OSError:
-            logger.warning("ChromaDB repair lock unavailable for %s", chroma_path, exc_info=True)
+        ok = _locked(chroma_path, _run_repairs)
+        if ok is None:
             return
         if ok:
             _prepared_paths.add(key)
         else:
             logger.warning("ChromaDB store %s not marked prepared; repairs retry on next open", chroma_path)
+
+
+def repair_hnsw_pickles_locked(chroma_path: Path) -> bool:
+    """Re-run only the pickle repair under the same locks (for after a re-index writes new pickles).
+
+    ``prepare_local_store`` is a no-op once a path is marked prepared, so it cannot
+    serve this: indexing rewrites ``index_metadata.pickle`` after the store opened.
+    Returns False, and logs, when the lock was unobtainable or the repair failed.
+    """
+    with _prepare_lock:
+        ok = _locked(chroma_path, _fix_hnsw_pickle_format)
+    if not ok:
+        logger.warning("HNSW pickle repair did not complete for %s", chroma_path)
+    return bool(ok)

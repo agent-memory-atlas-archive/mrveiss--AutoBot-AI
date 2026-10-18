@@ -5,7 +5,9 @@
 """#18789 review findings: repair success gating, atomic rebuild, atomic pickle, repair lock."""
 
 import fcntl
+import logging
 import sqlite3
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -162,5 +164,103 @@ def test_repairs_run_under_an_exclusive_flock_that_is_released(tmp_path):
         patch.object(repairs, "_run_repairs", side_effect=lambda p: order.append(("repairs", None)) or True),
     ):
         repairs.prepare_local_store(tmp_path / "store")
-    assert order == [("flock", fcntl.LOCK_EX), ("repairs", None), ("flock", fcntl.LOCK_UN)]
+    assert order == [("flock", fcntl.LOCK_EX | fcntl.LOCK_NB), ("repairs", None), ("flock", fcntl.LOCK_UN)]
     assert (tmp_path / "store" / repairs._LOCK_FILE_NAME).exists()
+
+
+def _blocked(*_a):
+    raise BlockingIOError
+
+
+def test_a_stuck_lock_holder_times_out_without_hanging_or_marking(tmp_path, caplog):
+    store = tmp_path / "store"
+    with (
+        patch.object(repairs.fcntl, "flock", side_effect=_blocked),
+        patch.object(repairs, "REPAIR_LOCK_TIMEOUT_SECONDS", 0.2),
+        patch.object(repairs, "_run_repairs") as run,
+        caplog.at_level(logging.WARNING),
+    ):
+        started = time.monotonic()
+        repairs.prepare_local_store(store)
+        elapsed = time.monotonic() - started
+    assert elapsed < 3
+    run.assert_not_called()
+    assert repairs._prepared_paths == set()
+    assert "repair lock unavailable" in caplog.text
+
+
+def test_lock_acquired_on_the_third_attempt_marks_the_path(tmp_path):
+    calls = []
+
+    def flaky(fd, op):
+        calls.append(op)
+        if len(calls) < 3 and op & fcntl.LOCK_NB:
+            raise BlockingIOError
+
+    with (
+        patch.object(repairs.fcntl, "flock", side_effect=flaky),
+        patch.object(repairs, "_LOCK_RETRY_INTERVAL_SECONDS", 0.001),
+        patch.object(repairs, "_run_repairs", return_value=True),
+    ):
+        repairs.prepare_local_store(tmp_path / "store")
+    assert len(calls) == 4  # 3 attempts + unlock
+    assert str((tmp_path / "store").resolve()) in repairs._prepared_paths
+
+
+def test_oserror_inside_a_repair_is_a_repair_failure_not_a_lock_failure(tmp_path, caplog):
+    store = tmp_path / "store"
+    with (
+        patch.object(repairs.Path, "glob", side_effect=OSError("readdir boom")),
+        patch.object(repairs, "_migrate_legacy_collection_configs", return_value=True),
+        patch.object(repairs, "_fix_segment_hnsw_space", return_value=True),
+        patch.object(repairs, "_fix_seq_id_blob_type", return_value=True),
+        patch.dict("sys.modules", {"chromadb.segment.impl.vector.local_persistent_hnsw": MagicMock()}),
+        caplog.at_level(logging.WARNING),
+    ):
+        repairs.prepare_local_store(store)
+    assert "HNSW pickle fix failed" in caplog.text
+    assert "repair lock unavailable" not in caplog.text
+    assert repairs._prepared_paths == set()
+
+
+def test_stale_temp_is_swept_and_the_real_pickle_is_untouched(tmp_path):
+    seg = tmp_path / "seg"
+    seg.mkdir()
+    stale = seg / ".index_metadata.abc123.tmp"
+    stale.write_bytes(b"partial")
+    real = seg / "index_metadata.pickle"
+    real.write_bytes(b"real")
+    other = seg / "notes.tmp"
+    other.write_bytes(b"user")
+    repairs._sweep_stale_pickle_temps(tmp_path)
+    assert not stale.exists()
+    assert real.read_bytes() == b"real"
+    assert other.exists()
+
+
+def test_atomic_pickle_write_fsyncs_the_directory(tmp_path):
+    target = tmp_path / "index_metadata.pickle"
+    target.write_bytes(b"old")
+    with patch.object(repairs, "_fsync_dir") as fsync_dir:
+        repairs._atomic_pickle_dump({"a": 1}, target)
+    fsync_dir.assert_called_once_with(tmp_path)
+
+
+def test_fsync_dir_failure_is_logged_not_raised(tmp_path, caplog):
+    with patch.object(repairs.os, "fsync", side_effect=OSError("nope")), caplog.at_level(logging.WARNING):
+        repairs._fsync_dir(tmp_path)
+    assert "Could not fsync directory" in caplog.text
+
+
+def test_locked_pickle_entry_reports_false_when_lock_unobtainable(tmp_path):
+    with (
+        patch.object(repairs.fcntl, "flock", side_effect=_blocked),
+        patch.object(repairs, "REPAIR_LOCK_TIMEOUT_SECONDS", 0.1),
+    ):
+        assert repairs.repair_hnsw_pickles_locked(tmp_path) is False
+
+
+def test_locked_pickle_entry_runs_the_pickle_repair_under_the_lock(tmp_path):
+    with patch.object(repairs, "_fix_hnsw_pickle_format", return_value=True) as fix:
+        assert repairs.repair_hnsw_pickles_locked(tmp_path) is True
+    fix.assert_called_once_with(tmp_path)
