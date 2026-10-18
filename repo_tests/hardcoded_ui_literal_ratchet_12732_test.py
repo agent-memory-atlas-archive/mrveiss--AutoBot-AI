@@ -50,6 +50,7 @@ from repo_tests._ui_literal_rederive import (
     regex_literals,
     tracked_vue_files,
 )
+from repo_tests._ui_literal_scan import script_literals
 
 _PANEL = "autobot-frontend/src/components/knowledge/connectors/ConnectorHistoryPanel.vue"
 _PANEL_LITERALS = {
@@ -233,3 +234,14 @@ class TestSecondDerivation:
         assert explain_parser_only(src, "template-text", "3 items found") == "outside-regex-class"
         assert explain_parser_only(src, "template-text", "Plain words here") is None
         assert explain_parser_only(src, "attribute", "*.pdf, *.md") == "outside-regex-class"
+
+
+def test_script_blocks_end_at_any_valid_closing_tag() -> None:
+    """`</script >` and `</SCRIPT foo>` close a block too (CodeQL py/bad-tag-filter, #12732)."""
+    source = (
+        "<template><p>Shown text here</p></template>\n"
+        "<script setup>const a = 1</script >\n"
+        '<script>alert("Spaced closing tag")</SCRIPT data-x>\n'
+    )
+    assert script_literals(source) == ["Spaced closing tag"]
+    assert [kind for kind, _ in literals_in(source)] == ["template-text", "script"]
