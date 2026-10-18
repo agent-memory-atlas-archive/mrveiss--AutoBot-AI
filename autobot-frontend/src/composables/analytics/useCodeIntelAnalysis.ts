@@ -217,7 +217,13 @@ export function useCodeIntelAnalysis(
       }
       // The contract types statistics as an open dict, so narrow before comparing.
       const issuesFound = result.statistics.issues_found
-      const issueCount = typeof issuesFound === 'number' ? issuesFound : 0
+      if (typeof issuesFound !== 'number' || !Number.isFinite(issuesFound)) {
+        // Unknown count is not "no issues": never show the success toast for it.
+        logger.warn('scan-file returned no numeric issues_found:', result.statistics)
+        notify(t('analytics.codebase.notify.fileScanFailed'), 'error')
+        return
+      }
+      const issueCount = issuesFound
       if (issueCount > 0) {
         codeIntelFindingsFetched.value = {
           security: true,

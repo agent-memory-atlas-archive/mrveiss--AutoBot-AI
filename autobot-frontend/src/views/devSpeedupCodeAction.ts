@@ -22,6 +22,7 @@ export async function runCodeAction(
   code: string,
   language: string,
   actions: CodeActions,
+  t: (key: string) => string,
 ): Promise<string | null> {
   switch (type) {
     case 'refactor':
@@ -30,7 +31,7 @@ export async function runCodeAction(
     case 'optimize': {
       const optimized = await actions.optimizeCode(code, language)
       if (optimized) {
-        alert(`Optimized code:\n\n${optimized}`)
+        alert(`${t('views.devSpeedup.optimizedCode')}:\n\n${optimized}`)
       }
       return null
     }

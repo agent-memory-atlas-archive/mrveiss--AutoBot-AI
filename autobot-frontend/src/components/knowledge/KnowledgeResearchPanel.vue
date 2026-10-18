@@ -306,6 +306,8 @@ async function _emitAnnotationFeedback(
 }
 
 async function acceptSource(card: SourceCard): Promise<void> {
+  // No route ingests a research source yet (#18745): send nothing while the gate is off.
+  if (!ACCEPT_SOURCE_ENABLED) return
   card.decision = 'accepted'
   try {
     await ApiClient.post<Record<string, unknown>>(`${getApiBase()}/knowledge/verification/approve`, {
