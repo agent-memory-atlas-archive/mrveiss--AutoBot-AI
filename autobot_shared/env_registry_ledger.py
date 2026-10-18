@@ -188,3 +188,31 @@ register_env_var(
         range=(1, 120),
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_ISSUE_CLAIMS_FAILURE_WINDOW_S",
+        type=int,
+        default=300,
+        description=(
+            "Window over which failed issue-claims credential checks are counted per client source and "
+            "aggregated into one audit event (#18811)."
+        ),
+        component="orchestration",
+        range=(10, 86400),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_ISSUE_CLAIMS_FAILURE_LIMIT",
+        type=int,
+        default=10,
+        description=(
+            "Failed issue-claims credential checks one client source may make per window; past it the "
+            "source is refused with 429 before any credential lookup (#18811)."
+        ),
+        component="orchestration",
+        range=(1, 10000),
+    )
+)

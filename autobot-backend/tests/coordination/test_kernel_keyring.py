@@ -13,9 +13,11 @@ import uuid
 import pytest
 
 from autobot_shared.coordination.kernel_keyring import (
+    CREDENTIAL_KEY_PERM,
     KEY_SPEC_USER_KEYRING,
     KEYCTL_READ,
     KEYCTL_SEARCH,
+    KEYCTL_SETPERM,
     KEYCTL_UNLINK,
     KernelKeyring,
     KeyNotFound,
@@ -30,8 +32,33 @@ DESC = "autobot:issue-claims:https://claims.test:443"
 def test_add_is_add_key_of_type_user_into_the_user_keyring():
     fake = FakeSyscall()
     serial = KernelKeyring(syscall=fake, machine="x86_64").add(DESC, b"payload")
-    assert fake.calls == [(ADD_KEY, (b"user", DESC.encode(), b"payload", 7, -4))] and serial > 0
+    assert fake.calls[0] == (ADD_KEY, (b"user", DESC.encode(), b"payload", 7, -4)) and serial > 0
     assert KEY_SPEC_USER_KEYRING == -4
+
+
+def test_add_sets_the_permissions_explicitly_with_keyctl_setperm():
+    fake = FakeSyscall()
+    serial = KernelKeyring(syscall=fake, machine="x86_64").add(DESC, b"payload")
+    assert KEYCTL_SETPERM == 5
+    # possessor view|read|write|search|setattr = 0x2f000000; user view|read = 0x00030000; group, other 0.
+    assert CREDENTIAL_KEY_PERM == 0x2F030000
+    assert fake.calls[1] == (KEYCTL, (5, serial, 0x2F030000)) and len(fake.calls) == 2
+    assert fake.perms == {serial: 0x2F030000}
+
+
+@pytest.mark.parametrize("err", [errno.EPERM, errno.EACCES])
+def test_a_refused_setperm_unlinks_the_key_and_raises(err):
+    fake = FakeSyscall()
+
+    def syscall(number, *args):
+        if number == KEYCTL and args[0] == KEYCTL_SETPERM:
+            fake.calls.append((number, args))
+            return -1, err
+        return fake(number, *args)
+
+    with pytest.raises(KeyringUnavailable):
+        KernelKeyring(syscall=syscall, machine="x86_64").add(DESC, b"payload")
+    assert fake.calls[-1][1][0] == KEYCTL_UNLINK and not fake.keys
 
 
 def test_read_searches_the_user_keyring_then_reads():
@@ -57,7 +84,7 @@ def test_aarch64_uses_its_own_syscall_numbers():
     fake = FakeSyscall()
     calls = []
     KernelKeyring(syscall=lambda n, *a: calls.append(n) or (1, 0), machine="aarch64").add(DESC, b"x")
-    assert calls == [217] and fake.calls == []
+    assert calls == [217, 219] and fake.calls == []
 
 
 @pytest.mark.parametrize("err", [errno.ENOKEY, errno.EKEYEXPIRED, errno.EKEYREVOKED])

@@ -26,6 +26,11 @@ canonical secrets manager, never a token file.
 * **Expiry**: ``AUTOBOT_ISSUE_CLAIMS_CREDENTIAL_TTL_S`` (default 7 days) sets the secret's
   ``expires_at``. A reboot clears the keyring but not the vault, so a credential the CLI can no
   longer present stops verifying on its own instead of staying live until someone revokes it.
+* **One per user**: minting deletes the user's previous live claims credentials in the same
+  commit (each audited as a revoke, reason ``superseded``), so a user holds at most one.
+* **Failed checks** are limited and audited per source by
+  :mod:`api.coordination_issue_claims_throttle`: past the limit a presentation is refused (429)
+  before any lookup, and the misses of a window are ONE audit event with their count.
 """
 
 from __future__ import annotations
@@ -40,6 +45,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth_middleware
+from api.coordination_issue_claims_throttle import FailureThrottle, client_source
 from api.schemas_issue_claims import ClaimsCredentialResponse, ClaimsCredentialRevokedResponse
 from auth_revocation import reject_if_revoked_by_password_change
 from autobot_shared.auth.permissions import Role
@@ -69,6 +75,8 @@ _VERIFIER_BYTES = 32
 #: How long a minted credential verifies; bounds one orphaned by a reboot (the keyring is cleared).
 CREDENTIAL_TTL_S = env_int_clamped("AUTOBOT_ISSUE_CLAIMS_CREDENTIAL_TTL_S", 604800, min_v=3600, max_v=7776000)
 _STORE_DOWN = (SQLAlchemyError, OSError, DecryptionError)
+#: Failed checks per source: limited, then refused before any lookup; audited as one event per window.
+THROTTLE = FailureThrottle(accessor=CLAIMS_DEPENDENT_ID)
 
 
 def _unauthorized(detail: str = "Invalid issue-claims credential") -> HTTPException:
@@ -98,26 +106,33 @@ def _coordinator():
     return get_coordinator()
 
 
-async def _verified_secret(session: AsyncSession, presented: str, request: Request) -> Secret:
-    """The claims-client secret *presented* proves possession of; 401 otherwise, 503 if unreadable."""
-    parsed = parse_credential(presented)
-    if parsed is None:
-        raise _unauthorized()
+async def _check_presented(session: AsyncSession, parsed: tuple[uuid.UUID, str], request: Request) -> Secret | None:
+    """The secret a well-formed credential proves, or ``None``; a miss is left to the throttle to audit."""
     accessor = f"{CLAIMS_DEPENDENT_ID}:{request.method} {request.url.path}"
     try:
-        secret = await _coordinator().verify_bearer(
+        return await _coordinator().verify_bearer(
             session,
             secret_id=parsed[0],
             presented=parsed[1].encode("utf-8"),
             secret_type=CLAIMS_SECRET_TYPE,
             accessor=accessor,
+            record_failure=False,
         )
     except SecretAccessError:
-        secret = None
+        return None
     except _STORE_DOWN as exc:
         logger.error("issue-claims credential check reached no verdict (%s); refusing", type(exc).__name__)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "credential store unavailable") from exc
+
+
+async def _verified_secret(session: AsyncSession, presented: str, request: Request) -> Secret:
+    """The claims-client secret *presented* proves possession of; 401 otherwise, 429 when throttled."""
+    source = client_source(request)
+    await THROTTLE.refuse_if_throttled(source)  # before parsing, so a refused source costs no lookup
+    parsed = parse_credential(presented)
+    secret = await _check_presented(session, parsed, request) if parsed is not None else None
     if secret is None:
+        await THROTTLE.record_failure(source)
         raise _unauthorized()
     return secret
 
@@ -167,9 +182,29 @@ def _minting_human(request: Request, user: dict) -> uuid.UUID:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "A claims credential needs a user account") from exc
 
 
-async def _store_credential(session: AsyncSession, user_id: uuid.UUID, user: dict, verifier: str) -> Secret:
-    """Create the verifier in the minter's own vault, with its consumer edge; committed."""
+async def _revoke_previous(session: AsyncSession, coordinator, user_id: uuid.UUID) -> list[uuid.UUID]:
+    """Delete the user's live claims-client secrets, so the one being minted is their only one."""
+    own_vault = VaultRef(VaultKind.USER, str(user_id)).to_str()
+    held = await coordinator.list(session, user_id=user_id, permissions=set())
+    live = [
+        s.id
+        for s in held
+        if s.type == CLAIMS_SECRET_TYPE and s.owner_vault == own_vault and s.is_active and not s.is_expired
+    ]
+    for secret_id in live:
+        await coordinator.delete(session, user_id=user_id, permissions=set(), secret_id=secret_id)
+    return live
+
+
+async def _store_credential(
+    session: AsyncSession, user_id: uuid.UUID, user: dict, verifier: str
+) -> tuple[Secret, list[uuid.UUID]]:
+    """Replace the minter's live credential with *verifier*, with its consumer edge; committed.
+
+    Returns the new secret and the ids of the credentials it superseded, deleted in the same commit.
+    """
     coordinator, username = _coordinator(), str(user["username"])
+    superseded = await _revoke_previous(session, coordinator, user_id)
     meta = {"username": username, "sub": user.get("sub") or username, "minted_at": int(time.time())}
     secret = await coordinator.create(
         session,
@@ -191,7 +226,20 @@ async def _store_credential(session: AsyncSession, user_id: uuid.UUID, user: dic
         dependent_id=CLAIMS_DEPENDENT_ID,
     )
     await session.commit()
-    return secret
+    return secret, superseded
+
+
+def _audit_mint(username: str, secret_id: uuid.UUID, superseded: list[uuid.UUID]) -> None:
+    """One revoke event per superseded credential, then the mint."""
+    for old_id in superseded:
+        emit_security(
+            AuditAction.CLAIMS_CREDENTIAL_REVOKE,
+            username,
+            resource_type="secret",
+            resource_id=str(old_id),
+            metadata={"reason": "superseded", "superseded_by": str(secret_id)},
+        )
+    emit_security(AuditAction.CLAIMS_CREDENTIAL_MINT, username, resource_type="secret", resource_id=str(secret_id))
 
 
 @router.post("/credentials", response_model=ClaimsCredentialResponse, status_code=status.HTTP_201_CREATED)
@@ -202,10 +250,10 @@ async def mint_credential(
     user_id, username = _minting_human(request, user), str(user.get("username") or "")
     verifier = secrets.token_urlsafe(_VERIFIER_BYTES)
     try:
-        secret = await _store_credential(session, user_id, user, verifier)
+        secret, superseded = await _store_credential(session, user_id, user, verifier)
     except SecretAccessError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not authorized to write to your own vault") from exc
-    emit_security(AuditAction.CLAIMS_CREDENTIAL_MINT, username, resource_type="secret", resource_id=str(secret.id))
+    _audit_mint(username, secret.id, superseded)
     credential = compose_credential(secret.id, verifier)
     return ClaimsCredentialResponse(credential=credential, secret_id=str(secret.id), username=username)
 

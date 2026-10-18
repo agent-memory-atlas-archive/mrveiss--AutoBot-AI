@@ -110,7 +110,7 @@ def test_the_credential_cannot_mint_another(harness):
 
 
 @pytest.mark.parametrize("tamper", ["verifier", "reference", "shape"])
-def test_a_forged_credential_is_401_and_the_attempt_is_audited(harness, tamper):
+def test_a_forged_credential_is_401_and_the_attempt_is_audited_in_aggregate(harness, tamper):
     credential = mint(harness)
     ref, _, verifier = credential.partition(".")
     forged = {
@@ -120,8 +120,8 @@ def test_a_forged_credential_is_401_and_the_attempt_is_audited(harness, tamper):
     }[tamper]
     harness.audit.clear()
     assert _claim(harness, with_credential(forged)).status_code == 401
-    if tamper != "shape":
-        assert [e.outcome for e in _accesses(harness)] == ["failure"]
+    assert _accesses(harness) == []  # a miss is not a row of its own: the throttle's window event counts it
+    assert asyncio.run(cred.THROTTLE.tally.flush("testclient"))["failures"] == 1
 
 
 def test_an_expired_credential_is_401(harness):

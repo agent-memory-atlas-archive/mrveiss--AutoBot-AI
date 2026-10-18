@@ -74,6 +74,7 @@ class AuditAction(str, Enum):
     SECRET_ACCESS = "secret.access"  # nosec B105  # pragma: allowlist secret -- an action name (#18811)
     CLAIMS_CREDENTIAL_MINT = "claims_credential.mint"  # #18811
     CLAIMS_CREDENTIAL_REVOKE = "claims_credential.revoke"  # #18811
+    CLAIMS_CREDENTIAL_CHECK_FAILURES = "claims_credential.check_failures"  # #18811: one per source per window
 
 
 class EventType(str, Enum):

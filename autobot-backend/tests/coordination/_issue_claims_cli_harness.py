@@ -27,6 +27,7 @@ from autobot_shared.coordination.kernel_keyring import (
     KEY_TYPE_USER,
     KEYCTL_READ,
     KEYCTL_SEARCH,
+    KEYCTL_SETPERM,
     KEYCTL_UNLINK,
     KernelKeyring,
 )
@@ -42,6 +43,7 @@ class FakeSyscall:
 
     def __init__(self) -> None:
         self.keys: dict[bytes, tuple[int, bytes]] = {}
+        self.perms: dict[int, int] = {}
         self.calls: list[tuple[int, tuple]] = []
         self._serial = 100
 
@@ -67,6 +69,9 @@ class FakeSyscall:
         description, payload = self._by_serial(args[0])
         if description is None:
             return -1, errno.ENOKEY
+        if op == KEYCTL_SETPERM:
+            self.perms[args[0]] = args[1]
+            return 0, 0
         if op == KEYCTL_READ:
             if args[1] is not None:
                 ctypes.memmove(args[1], payload, min(args[2], len(payload)))

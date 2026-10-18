@@ -108,7 +108,11 @@ async def claims_redis(monkeypatch):
     async def _client(database: str = "main"):
         return client
 
-    monkeypatch.setattr(work_claims, "get_async_redis_client", _client)
+    import autobot_shared.rate_limiter as rate_limiter
+    from api import coordination_issue_claims_throttle as throttle
+
+    for module in (work_claims, rate_limiter, throttle):
+        monkeypatch.setattr(module, "get_async_redis_client", _client)
     yield client
     await client.flushall()
 
@@ -154,7 +158,9 @@ def harness(real_auth_middleware, monkeypatch, claims_redis, secrets_db):
             yield session
 
     app.dependency_overrides[get_session] = _session
+    monkeypatch.setattr(cred.THROTTLE.tally, "_local", {})  # the in-process fallback tally starts empty
     return SimpleNamespace(
+        app=app,
         client=TestClient(app, raise_server_exceptions=False),
         audit=_capture_audit(monkeypatch),
         resolution=resolution,

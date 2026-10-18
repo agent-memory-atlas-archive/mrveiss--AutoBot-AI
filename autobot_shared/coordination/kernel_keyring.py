@@ -12,6 +12,10 @@ not be, so this calls ``libc.syscall`` through ``ctypes``.
   processes of the same user, held in kernel memory, gone on reboot.
 * ``add_key`` replaces the payload of an existing key with the same description, so a re-login
   overwrites rather than duplicates.
+* The key's permissions are then set explicitly (``KEYCTL_SETPERM``) to :data:`CREDENTIAL_KEY_PERM`
+  rather than left to the kernel default: the possessor may view, read, write, search and set
+  attributes; the owning uid without possession may only view and read; group and other get
+  nothing. A failure to set them unlinks the key and raises, so a key with default permissions is not kept.
 * The syscall function is injectable: tests pass a fake and never touch a real keyring.
 """
 
@@ -26,7 +30,17 @@ from typing import Any, Callable
 
 KEY_SPEC_USER_KEYRING = -4
 KEY_TYPE_USER = b"user"
-KEYCTL_UNLINK, KEYCTL_SEARCH, KEYCTL_READ = 9, 10, 11
+KEYCTL_SETPERM, KEYCTL_UNLINK, KEYCTL_SEARCH, KEYCTL_READ = 5, 9, 10, 11
+
+# Permission bits from the kernel's ``include/uapi/linux/keyctl.h`` (``key_perm_t``).
+KEY_POS_VIEW, KEY_POS_READ, KEY_POS_WRITE = 0x01000000, 0x02000000, 0x04000000
+KEY_POS_SEARCH, KEY_POS_SETATTR = 0x08000000, 0x20000000
+KEY_USR_VIEW, KEY_USR_READ = 0x00010000, 0x00020000
+
+#: Possessor view/read/write/search/setattr, user view/read, group and other none (``0x2f030000``).
+CREDENTIAL_KEY_PERM = (
+    KEY_POS_VIEW | KEY_POS_READ | KEY_POS_WRITE | KEY_POS_SEARCH | KEY_POS_SETATTR | KEY_USR_VIEW | KEY_USR_READ
+)
 
 #: ``(add_key, keyctl)`` syscall numbers per machine; anything else is "unavailable".
 SYSCALL_NUMBERS = {"x86_64": (248, 250), "amd64": (248, 250), "aarch64": (217, 219), "arm64": (217, 219)}
@@ -87,8 +101,18 @@ class KernelKeyring:
         raise KeyringUnavailable(err, os.strerror(err) if err else "keyring syscall failed")
 
     def add(self, description: str, payload: bytes) -> int:
-        """Store *payload* under *description* in ``@u``; returns the key serial."""
-        return self._call(0, KEY_TYPE_USER, description.encode("utf-8"), payload, len(payload), KEY_SPEC_USER_KEYRING)
+        """Store *payload* under *description* in ``@u`` with :data:`CREDENTIAL_KEY_PERM`; returns the serial.
+
+        A refused ``KEYCTL_SETPERM`` unlinks the key it was meant to restrict, then raises.
+        """
+        serial = self._call(0, KEY_TYPE_USER, description.encode("utf-8"), payload, len(payload), KEY_SPEC_USER_KEYRING)
+        try:
+            self._call(1, KEYCTL_SETPERM, serial, CREDENTIAL_KEY_PERM)
+        except (KeyringUnavailable, KeyNotFound):
+            # An unlink failure here propagates too, chained to the SETPERM failure; neither is dropped.
+            self._call(1, KEYCTL_UNLINK, serial, KEY_SPEC_USER_KEYRING)
+            raise
+        return serial
 
     def _search(self, description: str) -> int:
         return self._call(1, KEYCTL_SEARCH, KEY_SPEC_USER_KEYRING, KEY_TYPE_USER, description.encode("utf-8"), 0)
