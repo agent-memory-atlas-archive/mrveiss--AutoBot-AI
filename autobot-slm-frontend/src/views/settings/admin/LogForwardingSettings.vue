@@ -11,13 +11,16 @@
  */
 
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAutobotApi } from '@/composables/useAutobotApi'
 import type { LogForwardingDestination } from '@/composables/autobotAdminModels'
-import { defaultForm, buildCreateBody, buildUpdateBody } from './logForwardingForm'
-import config from '@/config/ssot-config'
+import {
+  defaultForm, formFromDestination, destinationTypes, getUrlPlaceholder, buildCreateBody, buildUpdateBody,
+} from './logForwardingForm'
 import { createLogger } from '@/utils/debugUtils'
 
 const logger = createLogger('LogForwardingSettings')
+const { t } = useI18n()
 
 const api = useAutobotApi()
 
@@ -49,15 +52,6 @@ const editingDestination = ref<LogForwardingDestination | null>(null)
 const deleteTarget = ref<string | null>(null)
 
 const formData = reactive(defaultForm())
-
-const destinationTypes = [
-  { value: 'syslog', label: 'Syslog' },
-  { value: 'webhook', label: 'Webhook' },
-  { value: 'file', label: 'File' },
-  { value: 'elasticsearch', label: 'Elasticsearch' },
-  { value: 'loki', label: 'Loki' },
-  { value: 'seq', label: 'Seq' },
-]
 
 // A failed status fetch must not read as "stopped": the defaults in `status`
 // would then offer Start for a service that may be running (#17971 review).
@@ -93,7 +87,7 @@ async function fetchDestinations(): Promise<void> {
   try {
     destinations.value = await api.getLogForwardingDestinations()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to load destinations'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.loadFailed')
   } finally {
     loading.value = false
   }
@@ -112,7 +106,7 @@ async function toggleService(): Promise<void> {
     }
     await fetchStatus()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to toggle service'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.toggleFailed')
   } finally {
     toggling.value = false
   }
@@ -122,10 +116,10 @@ async function toggleAutoStart(): Promise<void> {
   try {
     const result = await api.setLogForwardingAutoStart(!autoStart.value)
     autoStart.value = result.auto_start
-    success.value = `Auto-start ${autoStart.value ? 'enabled' : 'disabled'}`
+    success.value = t(autoStart.value ? 'settings.admin.logForwardingSettings.autoStartEnabled' : 'settings.admin.logForwardingSettings.autoStartDisabled')
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to update auto-start'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.autoStartFailed')
   }
 }
 
@@ -137,19 +131,7 @@ function openAddModal(): void {
 
 function openEditModal(dest: LogForwardingDestination): void {
   editingDestination.value = dest
-  Object.assign(formData, defaultForm(), {
-    name: dest.name,
-    type: dest.type,
-    enabled: dest.enabled,
-    url: dest.url ?? '',
-    syslog_protocol: dest.syslog_protocol,
-    file_path: dest.file_path ?? '',
-    username: dest.username ?? '',
-    index: dest.index ?? '',
-    min_level: dest.min_level,
-    batch_size: dest.batch_size,
-    batch_timeout: dest.batch_timeout,
-  })
+  Object.assign(formData, formFromDestination(dest))
   showModal.value = true
 }
 
@@ -174,13 +156,13 @@ async function saveDestination(): Promise<void> {
       await api.createLogForwardingDestination(buildCreateBody(formData))
     }
 
-    success.value = `Destination ${editingDestination.value ? 'updated' : 'created'} successfully`
+    success.value = t(editingDestination.value ? 'settings.admin.logForwardingSettings.destinationUpdated' : 'settings.admin.logForwardingSettings.destinationCreated')
     closeModal()
     await fetchDestinations()
     await fetchStatus()
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to save destination'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.saveFailed')
   } finally {
     saving.value = false
   }
@@ -193,14 +175,14 @@ async function testDestination(name: string): Promise<void> {
   try {
     const result = await api.testLogForwardingDestination(name)
     if (result.healthy) {
-      success.value = 'Connection test successful'
+      success.value = t('settings.admin.logForwardingSettings.testSucceeded')
     } else {
       error.value = result.message
     }
     await fetchDestinations()
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Connection test failed'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.testFailed')
   } finally {
     testing.value = false
   }
@@ -212,11 +194,11 @@ async function testAllDestinations(): Promise<void> {
 
   try {
     const response = await api.testAllLogForwardingDestinations()
-    success.value = `${response.healthy}/${response.total} destinations healthy`
+    success.value = t('settings.admin.logForwardingSettings.testAllSummary', { healthy: response.healthy, total: response.total })
     await fetchDestinations()
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to test destinations'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.testAllFailed')
   } finally {
     testing.value = false
   }
@@ -234,28 +216,15 @@ async function deleteDestination(): Promise<void> {
 
   try {
     await api.deleteLogForwardingDestination(deleteTarget.value)
-    success.value = 'Destination deleted successfully'
+    success.value = t('settings.admin.logForwardingSettings.destinationDeleted')
     deleteTarget.value = null
     await fetchDestinations()
     await fetchStatus()
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to delete destination'
+    error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.deleteFailed')
   } finally {
     saving.value = false
-  }
-}
-
-function getUrlPlaceholder(): string {
-  switch (formData.type) {
-    case 'syslog':
-      return '192.168.1.100:514'
-    case 'webhook':
-      return 'https://webhook.example.com/logs'
-    case 'elasticsearch':
-      return `http://elasticsearch:${config.port.elasticsearch}`
-    default:
-      return ''
   }
 }
 
@@ -527,6 +496,7 @@ onMounted(async () => {
             <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('settings.admin.logForwardingSettings.type') }}</label>
             <select
               v-model="formData.type"
+              :disabled="!!editingDestination"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option v-for="t in destinationTypes" :key="t.value" :value="t.value">
@@ -543,7 +513,7 @@ onMounted(async () => {
               type="text"
               data-test="field-url"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-              :placeholder="getUrlPlaceholder()"
+              :placeholder="getUrlPlaceholder(formData.type)"
             />
           </div>
 
@@ -566,9 +536,14 @@ onMounted(async () => {
               type="password"
               autocomplete="new-password"
               data-test="field-api-key"
+              :disabled="formData.clear_api_key"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             />
             <p v-if="editingDestination" class="mt-1 text-xs text-gray-500">{{ $t('settings.admin.logForwardingSettings.leaveBlankToKeep') }}</p>
+            <label v-if="editingDestination" class="mt-1 flex items-center gap-2 text-xs text-gray-600">
+              <input v-model="formData.clear_api_key" type="checkbox" data-test="remove-api-key" />
+              {{ $t('settings.admin.logForwardingSettings.removeStoredValue') }}
+            </label>
           </div>
 
           <div v-if="formData.type === 'file'">
@@ -607,9 +582,14 @@ onMounted(async () => {
                 type="password"
                 autocomplete="new-password"
                 data-test="field-password"
+                :disabled="formData.clear_password"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
               />
               <p v-if="editingDestination" class="mt-1 text-xs text-gray-500">{{ $t('settings.admin.logForwardingSettings.leaveBlankToKeep') }}</p>
+              <label v-if="editingDestination" class="mt-1 flex items-center gap-2 text-xs text-gray-600">
+              <input v-model="formData.clear_password" type="checkbox" data-test="remove-password" />
+              {{ $t('settings.admin.logForwardingSettings.removeStoredValue') }}
+            </label>
             </div>
           </div>
 

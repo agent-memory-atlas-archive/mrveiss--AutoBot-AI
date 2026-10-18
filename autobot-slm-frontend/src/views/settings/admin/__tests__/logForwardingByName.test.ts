@@ -127,3 +127,39 @@ describe('Log Forwarding served shapes', () => {
     expect(wrapper.text()).toContain('1/2 destinations healthy')
   })
 })
+
+describe('Log Forwarding edit mode details', () => {
+  async function openEdit() {
+    api.updateLogForwardingDestination.mockResolvedValue({ message: 'ok', destination: {} })
+    const wrapper = await mountPage()
+    await buttonByTitle(wrapper, t.edit).trigger('click')
+    return wrapper
+  }
+  async function save(wrapper: ReturnType<typeof mount>) {
+    await wrapper.findAll('button').find((b) => b.text() === t.update)!.trigger('click')
+    await flushPromises()
+    return api.updateLogForwardingDestination.mock.calls[0][1]
+  }
+
+  it('type is not editable in edit mode', async () => {
+    const wrapper = await openEdit()
+    expect(wrapper.findAll('select')[0].attributes('disabled')).toBeDefined()
+  })
+
+  it('remove sends an explicit null for that credential', async () => {
+    const wrapper = await openEdit()
+    await wrapper.get('[data-test="remove-api-key"]').setValue(true)
+    const body = await save(wrapper)
+    expect(body.api_key).toBeNull()
+    expect('password' in body).toBe(false)
+  })
+
+  it('untouched omits the credential; a typed value sends the value', async () => {
+    const wrapper = await openEdit()
+    expect('api_key' in (await save(wrapper))).toBe(false)
+    api.updateLogForwardingDestination.mockClear()
+    await buttonByTitle(wrapper, t.edit).trigger('click')
+    await wrapper.get('[data-test="field-api-key"]').setValue('typed')
+    expect((await save(wrapper)).api_key).toBe('typed')
+  })
+})

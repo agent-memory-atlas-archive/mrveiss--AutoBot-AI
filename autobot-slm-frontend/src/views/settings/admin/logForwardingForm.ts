@@ -13,6 +13,7 @@ import type {
   LogForwardingDestinationCreate,
   LogForwardingDestinationUpdate,
 } from '@/composables/autobotAdminModels'
+import config from '@/config/ssot-config'
 
 export function defaultForm() {
   return {
@@ -25,6 +26,8 @@ export function defaultForm() {
     api_key: '',
     username: '',
     password: '',
+    clear_api_key: false,
+    clear_password: false,
     index: 'autobot-logs',
     min_level: 'Information',
     batch_size: 10,
@@ -65,7 +68,50 @@ export function buildCreateBody(form: LogForwardingForm): LogForwardingDestinati
 /** A credential is sent only when newly typed; a masked value must never round-trip. */
 export function buildUpdateBody(form: LogForwardingForm): LogForwardingDestinationUpdate {
   const body: LogForwardingDestinationUpdate = buildCommonFields(form)
+  // Typed value wins; "remove" sends an explicit null (the handler clears it); else omit.
   if (form.api_key) body.api_key = form.api_key
+  else if (form.clear_api_key) body.api_key = null
   if (form.password) body.password = form.password
+  else if (form.clear_password) body.password = null
   return body
+}
+
+export const destinationTypes = [
+  { value: 'syslog', label: 'Syslog' },
+  { value: 'webhook', label: 'Webhook' },
+  { value: 'file', label: 'File' },
+  { value: 'elasticsearch', label: 'Elasticsearch' },
+  { value: 'loki', label: 'Loki' },
+  { value: 'seq', label: 'Seq' },
+]
+
+/** Edit-form state for a served destination; credentials stay blank (they come back masked). */
+export function formFromDestination(dest: LogForwardingDestination): LogForwardingForm {
+  return {
+    ...defaultForm(),
+    name: dest.name,
+    type: dest.type,
+    enabled: dest.enabled,
+    url: dest.url ?? '',
+    syslog_protocol: dest.syslog_protocol,
+    file_path: dest.file_path ?? '',
+    username: dest.username ?? '',
+    index: dest.index ?? '',
+    min_level: dest.min_level,
+    batch_size: dest.batch_size,
+    batch_timeout: dest.batch_timeout,
+  }
+}
+
+export function getUrlPlaceholder(type: string): string {
+  switch (type) {
+    case 'syslog':
+      return '192.168.1.100:514'
+    case 'webhook':
+      return 'https://webhook.example.com/logs'
+    case 'elasticsearch':
+      return `http://elasticsearch:${config.port.elasticsearch}`
+    default:
+      return ''
+  }
 }

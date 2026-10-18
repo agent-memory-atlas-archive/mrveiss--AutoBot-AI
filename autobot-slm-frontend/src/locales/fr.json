@@ -2314,7 +2314,22 @@
         "varLogAutobotForwardedLog": "/var/log/autobot-forwarded.log",
         "warning": "Avertissement",
         "statusUnknown": "Inconnu",
-        "leaveBlankToKeep": "Leave blank to keep the current value"
+        "leaveBlankToKeep": "Leave blank to keep the current value",
+        "loadFailed": "Failed to load destinations",
+        "toggleFailed": "Failed to toggle service",
+        "autoStartEnabled": "Auto-start enabled",
+        "autoStartDisabled": "Auto-start disabled",
+        "autoStartFailed": "Failed to update auto-start",
+        "destinationCreated": "Destination created successfully",
+        "destinationUpdated": "Destination updated successfully",
+        "saveFailed": "Failed to save destination",
+        "testSucceeded": "Connection test successful",
+        "testFailed": "Connection test failed",
+        "testAllSummary": "{healthy}/{total} destinations healthy",
+        "testAllFailed": "Failed to test destinations",
+        "destinationDeleted": "Destination deleted successfully",
+        "deleteFailed": "Failed to delete destination",
+        "removeStoredValue": "Remove the stored value"
       },
       "nPUWorkersSettings": {
         "actions": "Actes",
