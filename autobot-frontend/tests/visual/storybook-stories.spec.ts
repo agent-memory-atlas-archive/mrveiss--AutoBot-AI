@@ -28,7 +28,7 @@
  *
  * Issue #5077.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 
 interface StoryEntry {
   id: string;
@@ -59,6 +59,16 @@ async function snapshotStory(
   page: Page,
   story: StoryEntry,
 ): Promise<void> {
+  // Storybook logs `Error rendering story '<id>'` for every story that throws, both when
+  // it shows its error page and when a render error leaves the root empty under
+  // `sb-show-main`. The console line is the one signal that covers both (#18694).
+  const renderErrors: string[] = [];
+  const onConsole = (msg: ConsoleMessage): void => {
+    if (msg.type() === 'error' && msg.text().startsWith('Error rendering story')) {
+      renderErrors.push(msg.text());
+    }
+  };
+  page.on('console', onConsole);
   await page.goto(
     `/iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`,
     { waitUntil: 'load' },
@@ -67,10 +77,18 @@ async function snapshotStory(
   // Storybook adds `sb-show-main` to <body> only after it finishes preparing
   // the story (mounting Vue, running decorators, etc.). Without this wait the
   // screenshot races against the preparation phase and captures a blank page.
+  // A story that throws gets `sb-show-errordisplay` instead (or an empty root under
+  // `sb-show-main`); either way it must fail here rather than be compared (#18694).
   await page.waitForFunction(
-    () => document.body.classList.contains('sb-show-main'),
+    () =>
+      document.body.classList.contains('sb-show-main') ||
+      document.body.classList.contains('sb-show-errordisplay'),
     { timeout: 10_000 },
   );
+  page.off('console', onConsole);
+  if (renderErrors.length > 0) {
+    throw new Error(`story failed to render: ${renderErrors[0].split('\n')[0]}`);
+  }
 
   // Full-page screenshot of the iframe document: avoids element-visibility
   // constraints while scoping the diff to the component story.
