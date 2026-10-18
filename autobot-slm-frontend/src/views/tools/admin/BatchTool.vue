@@ -453,9 +453,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Error Message -->
-        <div v-if="job.error" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <p class="text-sm text-red-700">{{ job.error }}</p>
-        </div>
+        <BaseAlert v-if="job.error" variant="error" class="mt-4" :message="job.error" />
       </div>
     </div>
 

@@ -17,6 +17,7 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { BaseAlert } from '@autobot/ui'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useSlmWebSocket } from '@/composables/useSlmWebSocket'
 import { createLogger } from '@/utils/debugUtils'
@@ -486,10 +487,8 @@ onUnmounted(() => {
                   @click="toggleErrorDetail(service.service_name)"
                   class="text-red-600 hover:text-red-800 underline"
                 >{{ $t('fleet.nodeServicesPanel.value0ErrorContext', { value0: expandedErrors.has(service.service_name) ? $t('fleet.nodeServicesPanel.hide') : $t('fleet.nodeServicesPanel.show') }) }}</button>
-                <pre
-                  v-if="expandedErrors.has(service.service_name)"
-                  class="mt-1 p-2 bg-red-50 border border-red-200 rounded-sm text-red-700 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto"
-                >{{ service.extra_data.error_message }}</pre>
+                <BaseAlert v-if="expandedErrors.has(service.service_name)" variant="error" size="compact" class="mt-1">
+                  <p class="font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">{{ service.extra_data.error_message }}</p></BaseAlert>
               </div>
             </td>
 

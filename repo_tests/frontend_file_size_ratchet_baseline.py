@@ -192,22 +192,22 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-frontend/src/stores/fleet.ts": 994,
     "autobot-slm-frontend/src/types/slm.ts": 838,
     "autobot-slm-frontend/src/views/AgentsView.vue": 737,
-    "autobot-slm-frontend/src/views/CodeSyncView.vue": 2080,
-    "autobot-slm-frontend/src/views/DeploymentsView.vue": 1703,
+    "autobot-slm-frontend/src/views/CodeSyncView.vue": 2069,
+    "autobot-slm-frontend/src/views/DeploymentsView.vue": 1671,
     "autobot-slm-frontend/src/views/FleetOverview.vue": 837,
-    "autobot-slm-frontend/src/views/MaintenanceView.vue": 818,
+    "autobot-slm-frontend/src/views/MaintenanceView.vue": 817,
     "autobot-slm-frontend/src/views/OrchestrationView.vue": 2193,
-    "autobot-slm-frontend/src/views/ReplicationView.vue": 731,
+    "autobot-slm-frontend/src/views/ReplicationView.vue": 730,
     "autobot-slm-frontend/src/views/SecurityView.vue": 1409,
     "autobot-slm-frontend/src/views/SetupWizardView.vue": 1834,
     "autobot-slm-frontend/src/views/SkillsView.vue": 645,
-    "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 638,
+    "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 635,
     "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": 640,
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
-    "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 807,
-    "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 669,
+    "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 796,
+    "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 666,
     "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 727,  # #18819: 736 -> 727
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 724,  # #18819: 733 -> 724
-    "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 856,  # #18819: 869 -> 856
+    "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 844,  # #18819: 869 -> 856
     "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1090,  # #18819: 1099 -> 1090
 }
