@@ -19,8 +19,13 @@ embeds, form controls) and site chrome -- ``nav``, ``aside``, ``dialog``, a
 page-level ``header``/``footer``, any element whose ``role`` is in
 :data:`CHROME_ROLES`, and hidden elements. Generic containers (``div``, ``span``,
 ``section``, ``article``, ``main``, ...) are unwrapped to their content. No
-attribute survives except a link's target. ``<main>``, else a single
-``<article>``, is the content root when the page has one.
+attribute survives except a link's target and a code block's ``language-x``
+class, which becomes :attr:`Block.code_language` metadata and never text.
+``<main>``, else a single ``<article>``, is the content root when the page has one.
+
+Section fields filled here: ``level``, ``heading``, ``heading_path`` (from the
+heading stack) and ``blocks``; a table's ``header`` is its first ``thead`` row,
+else a leading all-``th`` row. Spans stay ``None`` -- a page has no pages or timeline.
 """
 
 from __future__ import annotations
@@ -41,7 +46,7 @@ logger = get_logger(__name__)
 #: Version of this extractor's output. Part of the web_fetch cache key (#18826), so a
 #: page cached by an earlier extractor -- the markdownify path included -- is never
 #: served again. Bump it whenever a change here alters the extracted text.
-EXTRACTOR_VERSION = "18826-1"
+EXTRACTOR_VERSION = "18826-2"
 
 #: Tags whose inner text is never page content: code, CSS, JSON-LD, fallbacks.
 INERT_TAGS = ("script", "style", "noscript", "template")
@@ -85,6 +90,8 @@ _SCOPING_TAGS = ("article", "main", "section", "aside", "nav")
 _HEADINGS = {f"h{level}": level for level in range(1, 7)}
 _LIST_TAGS = ("ul", "ol")
 _LINK_SCHEMES = frozenset({"http", "https", "mailto"})
+# A code block's ``class="language-x"``; the name is bounded so no free-form attribute text survives.
+_CODE_LANGUAGE = re.compile(r"language-([A-Za-z0-9_+#.-]{1,32})")
 # Elements that break a line when their text is read inline (inside a quote or a cell).
 _LINE_BREAKING = frozenset({"p", "div", "li", "tr", "pre", "blockquote", "dt", "dd"}) | frozenset(_HEADINGS)
 _CONTAINERS = frozenset(
@@ -195,9 +202,20 @@ def _quote(node: Any, base_url: str) -> Optional[Block]:
     return Block(kind=BlockKind.QUOTE, text=text, links=tuple(reader.links)) if text else None
 
 
+def _code_language(pre: Any) -> Optional[str]:
+    """The ``language-x`` class on a ``pre`` or its direct ``code`` child, else ``None``."""
+    tags = [tag for tag in (pre, pre.find("code", recursive=False)) if tag is not None]
+    for tag in tags:
+        for name in tag.get("class") or []:
+            match = _CODE_LANGUAGE.fullmatch(name)
+            if match:
+                return match.group(1).lower()
+    return None
+
+
 def _code(node: Any, base_url: str) -> Optional[Block]:
     text = node.get_text().strip("\n")
-    return Block(kind=BlockKind.CODE, text=text) if text.strip() else None
+    return Block(kind=BlockKind.CODE, text=text, code_language=_code_language(node)) if text.strip() else None
 
 
 def _list_items(node: Any, depth: int, reader: _Inline) -> List[ListItem]:
@@ -221,16 +239,31 @@ def _list(node: Any, base_url: str) -> Optional[Block]:
     return Block(kind=BlockKind.LIST, items=items, links=tuple(reader.links)) if items else None
 
 
+def _header_index(trs: List[Any]) -> Optional[int]:
+    """Index of the header row: the first ``thead`` row, else a leading row of only ``th`` cells."""
+    for index, tr in enumerate(trs):
+        if tr.find_parent(("thead", "tbody", "tfoot", "table")).name == "thead":
+            return index
+    cells = trs[0].find_all(["th", "td"], recursive=False) if trs else []
+    return 0 if cells and all(cell.name == "th" for cell in cells) else None
+
+
 def _table(node: Any, base_url: str) -> Optional[Block]:
+    """A table's header row and body rows; rows with no non-blank cell are dropped."""
     reader = _Inline(base_url)
-    rows = []
+    trs, rows = [], []
     for tr in node.find_all("tr"):
         if tr.find_parent("table") is not node:
             continue
         cells = tuple(_one_line(reader.text(cell)) for cell in tr.find_all(["th", "td"], recursive=False))
         if any(cells):
+            trs.append(tr)
             rows.append(cells)
-    return Block(kind=BlockKind.TABLE, rows=tuple(rows), links=tuple(reader.links)) if rows else None
+    if not rows:
+        return None
+    index = _header_index(trs)
+    header = rows.pop(index) if index is not None else ()
+    return Block(kind=BlockKind.TABLE, header=header, rows=tuple(rows), links=tuple(reader.links))
 
 
 _BLOCK_READERS: Dict[str, Callable[[Any, str], Optional[Block]]] = {
@@ -254,6 +287,8 @@ class _SectionBuilder:
         self.base_url = base_url
         self.sections: List[Section] = []
         self.level, self.heading = 0, ""
+        # Open headings as (level, text), outermost first; the current section's path.
+        self.stack: List[Tuple[int, str]] = []
         self.blocks: List[Block] = []
         self.inline = _Inline(base_url)
         self.pending: List[str] = []
@@ -271,13 +306,19 @@ class _SectionBuilder:
             self.blocks.append(block)
 
     def open_section(self, level: int, heading: str) -> None:
+        """Start a section; headings at this level or deeper close, so skipped levels leave no gap."""
         self.flush()
         self._close()
         self.level, self.heading = level, heading
+        self.stack = [entry for entry in self.stack if entry[0] < level]
+        if heading:
+            self.stack.append((level, heading))
 
     def _close(self) -> None:
         if self.heading or self.blocks:
-            self.sections.append(Section(level=self.level, heading=self.heading, blocks=tuple(self.blocks)))
+            path = tuple(text for _, text in self.stack)
+            section = Section(level=self.level, heading=self.heading, blocks=tuple(self.blocks), heading_path=path)
+            self.sections.append(section)
         self.blocks = []
 
     def finish(self) -> Tuple[Section, ...]:

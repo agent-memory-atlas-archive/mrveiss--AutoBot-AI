@@ -90,11 +90,25 @@ class TestCanonicalModel:
         ]
         assert [(s.level, s.heading) for s in document.sections if s.heading] == expected
 
-    def test_tables_keep_every_row_and_cell(self, document) -> None:
+    def test_heading_path_is_the_ancestor_chain_ending_in_the_own_heading(self, document) -> None:
+        summary = "1. Executive summary"
+        assert [s.heading_path for s in document.sections if s.heading] == [
+            (_TITLE,),
+            (_TITLE, "0. Data collection and exact counts"),
+            (_TITLE, summary),
+            (_TITLE, summary, "1.1 Top 10 root causes, ranked by issues likely closed ÷ effort"),
+        ]
+        assert all(s.span is None for s in document.sections)
+
+    def test_tables_keep_every_row_and_cell_with_the_header_split_from_the_body(self, document) -> None:
         expected = _md_tables(_source_md())
-        assert len(expected) == 2
-        assert [block.rows for block in _blocks(document, BlockKind.TABLE)] == expected
-        assert "bug | 578" in document.text and "Union (distinct issues analysed) | 937" in document.text
+        tables = _blocks(document, BlockKind.TABLE)
+        assert len(expected) == len(tables) == 2
+        assert [block.header for block in tables] == [table[0] for table in expected]
+        assert tables[0].header == ("Label", "Open issues")
+        assert [block.rows for block in tables] == [table[1:] for table in expected]
+        assert "Label | Open issues\nbug | 578" in document.text
+        assert "Union (distinct issues analysed) | 937" in document.text
 
     def test_list_items_keep_text_and_nesting(self, document) -> None:
         items = [(item.depth, item.text) for block in _blocks(document, BlockKind.LIST) for item in block.items]
@@ -102,8 +116,12 @@ class TestCanonicalModel:
         assert any(depth == 1 for depth, _ in items)
 
     def test_code_block_is_kept_verbatim(self, document) -> None:
-        code = [block.text for block in _blocks(document, BlockKind.CODE)]
-        assert code == ["GET /repos/mrveiss/AutoBot-AI/issues?labels=<label>&state=open&per_page=100&page=N"]
+        code = _blocks(document, BlockKind.CODE)
+        assert [block.text for block in code] == [
+            "GET /repos/mrveiss/AutoBot-AI/issues?labels=<label>&state=open&per_page=100&page=N"
+        ]
+        assert [block.code_language for block in code] == ["text"]
+        assert "language" not in document.text
 
     def test_links_keep_their_absolute_target(self, document) -> None:
         links = [link for section in document.sections for block in section.blocks for link in block.links]
