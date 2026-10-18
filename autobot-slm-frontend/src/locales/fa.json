@@ -2313,7 +2313,8 @@
         "username": "نام کاربری",
         "varLogAutobotForwardedLog": "/var/log/autobot-forwarded.log",
         "warning": "هشدار",
-        "statusUnknown": "Unknown"
+        "statusUnknown": "Unknown",
+        "leaveBlankToKeep": "Leave blank to keep the current value"
       },
       "nPUWorkersSettings": {
         "actions": "عملیات",

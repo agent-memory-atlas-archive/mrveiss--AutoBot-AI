@@ -2313,7 +2313,8 @@
         "username": "Username",
         "varLogAutobotForwardedLog": "/var/log/autobot-forwarded.log",
         "warning": "Aviso",
-        "statusUnknown": "Desconhecido"
+        "statusUnknown": "Desconhecido",
+        "leaveBlankToKeep": "Leave blank to keep the current value"
       },
       "nPUWorkersSettings": {
         "actions": "Ações",

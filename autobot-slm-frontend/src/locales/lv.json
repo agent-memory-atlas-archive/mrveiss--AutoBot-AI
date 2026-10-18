@@ -2313,7 +2313,8 @@
         "username": "Lietotājvārds",
         "varLogAutobotForwardedLog": "/var/log/autobot-forwarded.log",
         "warning": "Brīdinājums",
-        "statusUnknown": "Nezināms"
+        "statusUnknown": "Nezināms",
+        "leaveBlankToKeep": "Leave blank to keep the current value"
       },
       "nPUWorkersSettings": {
         "actions": "Darbības",
