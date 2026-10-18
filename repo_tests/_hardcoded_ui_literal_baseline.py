@@ -16,7 +16,7 @@ English literals it contains, where:
     interpolations removed, one line at a time, of at least 4 characters with two
     consecutive letters, that is not a URL, a path or a CamelCase/snake/kebab
     identifier. `<code>`, `<pre>`, `<svg>` and `<path>` content is opaque.
-    Unlike the #15665 guard, a plain one-word label (`Running`, `Close`) counts;
+    A plain one-word label (`Running`, `Close`) is prose, for both guards;
   * attribute: a static (unbound) `placeholder`, `title`, `alt`, `aria-label`,
     `aria-description` or `label` whose value passes the same prose test;
   * script: in `<script>`, matching
@@ -35,9 +35,15 @@ reaches 0 leaves the dict.
 `en.json`; do not delete text to get under the check. English-only i18n is the
 current ruling, so this counts literals not yet moved to `t()`.
 
-The SLM console's template text and attributes (excluding single plain words)
-are held at zero by `slm_frontend_bare_ui_literals_test.py`; this ratchet adds
-the script kind there and counts single words in both apps.
+The SLM console's template text and attributes are held at zero by
+`slm_frontend_bare_ui_literals_test.py` on the same detector and the same rule;
+this ratchet adds the script kind there and pins the main GUI per file.
+
+**Known false positives, counted on purpose** rather than special-cased: proper
+nouns and product or language names (`Python`, `Vue`) and units (`KB/s`) are
+not translatable prose in the strict sense but are not mechanically separable
+from a one-word label. They stay in the counts; a migration that moves them to
+`t()` is harmless and one that leaves them is recorded here.
 """
 
 from __future__ import annotations

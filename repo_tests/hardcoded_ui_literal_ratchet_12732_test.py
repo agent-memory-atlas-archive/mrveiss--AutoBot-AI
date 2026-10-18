@@ -17,9 +17,9 @@ the regexes are the narrower prototype. Every difference must be explained by a
 named, enumerated exclusion (listed in `_ui_literal_rederive.py`), and the test
 fails on any difference that none explains. Differences found while freezing:
 a greedy template match that began inside a `<script>` JSDoc mention of
-`<template>` (detector fix: script and style blocks are blanked first), single
-plain words hidden by the #15665 identifier rule (kept for that guard, counted
-here), and attributes skipped on or inside `<pre>`/`<code>` (detector fix: only
+`<template>` (detector fix: script and style blocks are blanked first), the
+#15665 identifier rule, which hid every plain one-word label (narrowed for both
+guards: a plain word is prose), and attributes skipped on or inside `<pre>`/`<code>` (detector fix: only
 the content of an opaque element is opaque).
 
 **The script kind stays un-re-derived, stated rather than left ambiguous.**
@@ -226,3 +226,10 @@ class TestSecondDerivation:
         assert explain_regex_only(src, "template-text", "autobot-backend") == "opaque-element"
         assert explain_parser_only(src, "template-text", "By   here") == "beside-interpolation"
         assert explain_parser_only(src, "template-text", "Nothing explains this") is None
+
+    def test_an_exclusion_is_positional_and_requires_the_rest_to_match(self):
+        src = "<template><p>Same name</p><code>Same name</code></template>"
+        assert explain_regex_only(src, "template-text", "Same name") is None
+        assert explain_parser_only(src, "template-text", "3 items found") == "outside-regex-class"
+        assert explain_parser_only(src, "template-text", "Plain words here") is None
+        assert explain_parser_only(src, "attribute", "*.pdf, *.md") == "outside-regex-class"

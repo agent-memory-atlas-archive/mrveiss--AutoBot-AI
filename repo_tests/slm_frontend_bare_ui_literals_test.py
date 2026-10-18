@@ -180,6 +180,10 @@ _CAUGHT = {
     # these as "not prose", so a guard for internationalisation could not see an
     # untranslated label in four of the locales this repo ships.
     "arabic text node": "<template><button>حذف العقدة</button></template>",
+    # An opaque element's CONTENT is not prose; its own attributes still are.
+    "title on a pre element": '<template><pre title="Copy command">{{ out }}</pre></template>',
+    "title on a code element": '<template><code title="Copy command">{{ out }}</code></template>',
+    "label on a code element nested in a pre": '<template><pre><code aria-label="Shell output" /></pre></template>',
     "hebrew title attribute": '<template><button title="מחק את הצומת">x</button></template>',
 }
 
@@ -192,6 +196,7 @@ _IGNORED = {
     # The other half of the non-Latin contrast pair: widening the word test to
     # every script must not make digits into prose, whatever script they are in.
     "non-latin digits": "<template><span>١٢٣٤٥</span></template>",
+    "text inside pre and code": "<template><pre>Some command output</pre><code>autobot-backend</code></template>",
     "script contents": "<template><div>{{ x }}</div></template><script>const s = 'Delete this node'</script>",
 }
 

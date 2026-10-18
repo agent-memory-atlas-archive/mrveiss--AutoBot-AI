@@ -18,8 +18,10 @@ list of names:
 
 Found by the regexes and not by the parser (`explain_regex_only`):
 
-* `opaque-element`: inside `<code>`, `<pre>`, `<svg>` or `<path>`, whose content
-  is a file name, a command or a drawing, not translatable prose;
+* `opaque-element`: the regex hit's OFFSET lies inside a `<code>`, `<pre>`,
+  `<svg>` or `<path>` element, whose content is a file name, a command or a
+  drawing, not translatable prose (every occurrence the regex found, not a
+  substring test over the file);
 * `below-minimum`: under the parser's 4-character floor (`Vue`, `Git`, `Ask`);
 * `identifier-shaped`: CamelCase or snake/kebab, i.e. a name (`AutoBot`,
   `updated_at`, `autobot-backend`), which the parser does not call prose;
@@ -28,8 +30,13 @@ Found by the regexes and not by the parser (`explain_regex_only`):
 Found by the parser and not by the regexes (`explain_parser_only`):
 
 * `outside-regex-class`: contains a character the prototype regex's class
-  cannot hold (digits, `&`, `:`, `/`, `%`, `{`...), or an attribute value with
-  braces or a quote;
+  cannot hold (digits, `&`, `:`, `/`, `%`...) or begins with a non-letter, AND the literal with those
+  characters removed would have matched the full text predicate -- or, for an
+  attribute, has a leading non-letter, a brace or a quote that the value class
+  refuses, and the rest would have matched;
+* `number-with-unit`: a number and a short unit (`+142ms`), which the parser
+  counts and which has no word left once the number is removed -- a known
+  false positive in the parser, kept rather than special-cased in the detector;
 * `no-lowercase-pair`: the regex requires two consecutive lowercase letters;
 * `beside-interpolation`: sits next to `{{ }}`. The regex needs `>` before and
   `<` after, so `{{ n }} imports` and `By {{ x }}` are invisible to it -- the
@@ -106,14 +113,26 @@ def rederived(root: Path) -> set[tuple[str, str, str]]:
 
 _CODE_ID = re.compile(r"^([A-Za-z][a-z0-9]*[A-Z]\w*|[A-Za-z]\w*([_-]\w+)+)$")
 _TEXT_CLASS = re.compile(r"[A-Za-z][A-Za-z ,.!?'\u2019()-]{2,}")
+_TEXT_OUTSIDE = re.compile(r"[^A-Za-z ,.!?'\u2019()-]+")
 _ATTR_CLASS = re.compile(r"[A-Za-z][^\"{}]{2,}")
+_ATTR_OUTSIDE = re.compile(r"""["{}]+""")
 _OPAQUE_ELEMENT = re.compile(r"<(code|pre|svg|path)\b[^>]*>.*?</\1>", re.DOTALL)
+
+
+def _text_offsets(region: str, literal: str) -> list[int]:
+    """Offsets in *region* of every text node the regex reported as *literal*."""
+    return [m.start(1) for m in _TEXT.finditer(region) if html.unescape(m.group(1).strip()) == literal]
+
+
+def _inside_opaque(region: str, offsets: list[int]) -> bool:
+    spans = [m.span() for m in _OPAQUE_ELEMENT.finditer(region)]
+    return bool(offsets) and all(any(lo <= o < hi for lo, hi in spans) for o in offsets)
 
 
 def explain_regex_only(source: str, kind: str, literal: str) -> str | None:
     """Why the regexes saw *literal* and the parser, by design, did not; None if unexplained."""
-    plain = _COMMENT.sub("", _SCRIPT.sub("", source))
-    if kind == "template-text" and any(literal in m.group(0) for m in _OPAQUE_ELEMENT.finditer(plain)):
+    region = _region(source)
+    if kind == "template-text" and _inside_opaque(region, _text_offsets(region, literal)):
         return "opaque-element"
     if len(literal) < 4:
         return "below-minimum"
@@ -145,14 +164,28 @@ def _other_attribute_form(source: str, literal: str) -> bool:
     return re.search(pattern, source) is not None
 
 
+def _outside_class(kind: str, literal: str) -> bool:
+    """A character the regex class refuses (or a leading non-letter) is present, and the rest would match."""
+    if kind == "template-text":
+        rest = re.sub(r"^[^A-Za-z]+", "", _TEXT_OUTSIDE.sub("", literal)).strip()
+        return rest != literal and bool(_TEXT_CLASS.fullmatch(rest)) and bool(_TWO_LOWER.search(rest))
+    rest = _ATTR_OUTSIDE.sub("", re.sub(r"^[^A-Za-z]+", "", literal))
+    return rest != literal and bool(_ATTR_CLASS.fullmatch(rest))
+
+
+_NUMBER_WITH_UNIT = re.compile(r"^[+-]?\d[\d.,]*\s?[A-Za-z]{1,3}$")
+
+
 def explain_parser_only(source: str, kind: str, literal: str) -> str | None:
     """Why the parser saw *literal* and the regexes, by design, did not; None if unexplained."""
-    if kind == "attribute":
-        if _other_attribute_form(source, literal):
-            return "other-attribute-form"
-        return None if _ATTR_CLASS.fullmatch(literal) else "outside-regex-class"
-    if not _TEXT_CLASS.fullmatch(literal):
+    if kind == "attribute" and _other_attribute_form(source, literal):
+        return "other-attribute-form"
+    if _outside_class(kind, literal):
         return "outside-regex-class"
+    if kind == "attribute":
+        return None
+    if _NUMBER_WITH_UNIT.match(literal):
+        return "number-with-unit"
     if not _TWO_LOWER.search(literal):
         return "no-lowercase-pair"
     if _beside_interpolation(source, literal):
