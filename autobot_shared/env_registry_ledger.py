@@ -154,8 +154,10 @@ register_env_var(
         description=(
             "Base URL of AutoBot's backend for the issue-claims CLI (#18811). When set, "
             "`python -m autobot_shared.coordination.issue_claims` talks to /api/coordination/issue-claims "
-            "instead of Redis, so a developer checkout needs no registry credential. Never derived from "
-            "the SSOT backend URL. Unset keeps the direct Redis transport."
+            "instead of Redis, so a developer checkout needs no registry credential. Must be https, or http "
+            "to a loopback host. Authenticate once with `issue_claims login` (credential kept in the kernel "
+            "keyring, cleared on reboot). Never derived from the SSOT backend URL. Unset keeps the direct "
+            "Redis transport."
         ),
         component="orchestration",
     )
@@ -163,15 +165,16 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
-        name="AUTOBOT_ISSUE_CLAIMS_TOKEN_FILE",
-        type=str,
-        default="",
+        name="AUTOBOT_ISSUE_CLAIMS_CREDENTIAL_TTL_S",
+        type=int,
+        default=604800,
         description=(
-            "Path of a file holding the bearer token the issue-claims CLI sends to the API (#18811). "
-            "Read from the file on each run; the token is never taken from argv or an environment value, "
-            "and never printed. Required when AUTOBOT_ISSUE_CLAIMS_API_URL is set."
+            "Lifetime of an issue-claims client credential minted by `issue_claims login` (#18811). The "
+            "credential is a secret in the minting user's vault; past this age it is refused, so one "
+            "orphaned by a reboot (the kernel keyring is cleared) stops working without a revoke."
         ),
         component="orchestration",
+        range=(3600, 7776000),
     )
 )
 

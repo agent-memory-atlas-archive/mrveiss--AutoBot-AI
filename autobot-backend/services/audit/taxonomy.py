@@ -71,6 +71,9 @@ class AuditAction(str, Enum):
     RUN_JWT_REVOKE = "run_jwt.revoke"
     RUN_JWT_REFRESH = "run_jwt.refresh"
     DEVICE_JWT_MINT = "device_jwt.mint"  # GH#9493
+    SECRET_ACCESS = "secret.access"  # nosec B105  # pragma: allowlist secret -- an action name (#18811)
+    CLAIMS_CREDENTIAL_MINT = "claims_credential.mint"  # #18811
+    CLAIMS_CREDENTIAL_REVOKE = "claims_credential.revoke"  # #18811
 
 
 class EventType(str, Enum):

@@ -40,3 +40,18 @@ class IssueClaimListResponse(BaseModel):
     """Body of ``GET /coordination/issue-claims``."""
 
     claims: list[dict[str, Any]]
+
+
+class ClaimsCredentialResponse(BaseModel):
+    """Body of ``POST /coordination/issue-claims/credentials``: the credential, returned this once."""
+
+    credential: str = Field(..., description="<secret_id>.<verifier>; keep it in the kernel keyring, never on disk")
+    secret_id: str
+    username: str
+
+
+class ClaimsCredentialRevokedResponse(BaseModel):
+    """Body of ``DELETE /coordination/issue-claims/credentials``."""
+
+    revoked: bool
+    secret_id: str

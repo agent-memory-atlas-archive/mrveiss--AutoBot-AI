@@ -19,7 +19,14 @@ Interface (``python -m autobot_shared.coordination.issue_claims``; one JSON obje
     list                                             exit 0, every live issue claim
 
 With ``AUTOBOT_ISSUE_CLAIMS_API_URL`` set the same commands go through AutoBot's API instead of Redis
-(``issue_claims_api``; the token comes from the file named by ``AUTOBOT_ISSUE_CLAIMS_TOKEN_FILE``).
+(``issue_claims_api``), authenticated by a secrets-manager credential kept in the kernel user keyring::
+
+    login                                            prompt (getpass) for username + password, mint the
+                                                     credential, keep it in @u only; exit 0, 3 if refused
+    logout                                           revoke it in the secrets manager, remove it from @u
+
+The kernel keyring is cleared on reboot, so ``login`` again after one; with no credential every
+command exits 3 (``not-logged-in``).
 
 Exit 3 means the registry could not be read; exit 4 means the request itself was invalid (a
 non-positive issue number, an empty owner, a TTL outside the registry's bounds). Any exit other
@@ -130,8 +137,14 @@ async def _dispatch(args: argparse.Namespace) -> tuple[int, dict]:
     return await list_issue_claims()
 
 
+_EPILOG = (
+    "API transport (AUTOBOT_ISSUE_CLAIMS_API_URL set): run `login` once; the credential lives in the "
+    "kernel user keyring only, which is cleared on reboot -- run `login` again after a reboot."
+)
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="issue_claims", description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(prog="issue_claims", description=__doc__.split("\n")[0], epilog=_EPILOG)
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name in ("claim", "release", "who"):
         p = sub.add_parser(name)
@@ -142,6 +155,8 @@ def _parser() -> argparse.ArgumentParser:
             p.add_argument("--note", default="")
             p.add_argument("--ttl-s", type=int, default=None)
     sub.add_parser("list")
+    sub.add_parser("login", help="sign in and keep a claims credential in the kernel keyring (cleared on reboot)")
+    sub.add_parser("logout", help="revoke the claims credential and remove it from the kernel keyring")
     return parser
 
 
@@ -165,8 +180,12 @@ def _invalid_request(args: argparse.Namespace) -> str:
 
 async def _transport(args: argparse.Namespace) -> tuple[int, dict]:
     """The API transport when ``AUTOBOT_ISSUE_CLAIMS_API_URL`` is set (#18811), else direct Redis."""
-    from autobot_shared.coordination import issue_claims_api
+    from autobot_shared.coordination import issue_claims_api, issue_claims_login
 
+    if args.cmd == "login":
+        return await issue_claims_login.run_login()
+    if args.cmd == "logout":
+        return await issue_claims_login.run_logout()
     if issue_claims_api.api_base_url():
         return await issue_claims_api.run_api_command(args)
     return await _dispatch(args)

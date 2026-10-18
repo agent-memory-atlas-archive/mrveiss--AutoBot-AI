@@ -18,6 +18,8 @@ cookie, which is a coordination bug wearing an API.
 The one write surface is `/issue-claims` (#18811, `coordination_issue_claims`): a
 developer session reaches the issue-claims registry through it, and the holder is
 bound to the authenticated principal, so a caller can only touch their own claims.
+It is mounted beside this router, not inside it, because it admits the issue-claims
+client credential, which this router's gate does not read.
 """
 
 from __future__ import annotations
@@ -28,7 +30,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.agent_ledger import CompanyScope, company_scope
 from api.agent_ledger import router as agent_ledger_router  # #18391
-from api.coordination_issue_claims import router as issue_claims_router  # #18811
 from api.user_management.dependencies import get_current_user
 from autobot_shared.coordination.ledger_read import visible
 from autobot_shared.coordination.work_claims import ScopeError
@@ -43,8 +44,6 @@ logger = get_logger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
 # The company-scoped agent ledger (#18391) rides this router: same read-only claim table, same gate.
 router.include_router(agent_ledger_router)
-# Install-wide session issue claims (#18811): no company scope, holder bound to the caller.
-router.include_router(issue_claims_router)
 
 
 @router.get("/claims")

@@ -15,11 +15,16 @@ is the reason ``/coordination/claims`` is read-only. A release aimed at any clai
 409 naming the holder, and leaves the claim in place.
 
 **Install-wide, not tenant-scoped.** These are session coordination, so there is deliberately
-no ``company_scope`` / ``X-Organization-Id`` dependency; the parent router's
-``get_current_user`` gate is the only gate.
+no ``company_scope`` / ``X-Organization-Id`` dependency. The one gate is ``claims_principal``
+(``coordination_issue_claims_credential``): the issue-claims client credential when presented,
+else the canonical ``auth_middleware.get_current_user``. This router is mounted on its own
+(``core_routers``), not under ``api.coordination``'s gated router, because that router's gate
+would refuse the credential before this one could read it.
 
-**Service principal.** The internal-key principal (``service: true``) shares one key and has
-no human identity to bind a holder to, so it may read (who, list) but its writes are 403.
+**Who may write.** The internal-key principal (``service: true``) shares one key and has no
+human identity to bind a holder to, so it may read (who, list) but its writes are 403. With
+auth disabled every caller is the synthetic ``admin``, so a write could claim or release under
+any owner: writes are 403 then too.
 """
 
 from __future__ import annotations
@@ -28,15 +33,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from api.coordination_issue_claims_credential import claims_principal
 from api.schemas_issue_claims import IssueClaimListResponse, IssueClaimRequest, IssueClaimResponse
-from api.user_management.dependencies import get_current_user
 from autobot_shared.coordination import issue_claims as ic
 from autobot_shared.coordination.work_claims import HolderError, ScopeError
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/issue-claims", tags=["issue-claims"])
+# Registered AFTER ``coordination_issue_claims_credential.router`` (core_routers), so
+# ``/issue-claims/credentials`` is never read as an issue ``{number}``.
+router = APIRouter(prefix="/issue-claims", tags=["issue-claims"], dependencies=[Depends(claims_principal)])
 
 #: Separates the principal from the session name inside the stored ``agent_id``.
 HOLDER_SEP = "/"
@@ -47,10 +54,10 @@ def holder_id(principal: str, owner: str) -> str:
     return f"{principal}{HOLDER_SEP}{owner.strip()}"
 
 
-def _writer(user: dict = Depends(get_current_user)) -> str:
-    """The principal a write is bound to; service principals and unbindable names are refused."""
+def _writer(user: dict = Depends(claims_principal)) -> str:
+    """The principal a write is bound to; service, auth-disabled and unbindable names are refused."""
     name = str(user.get("username") or "")
-    if user.get("service") or not name or HOLDER_SEP in name:
+    if user.get("service") or user.get("auth_disabled") or not name or HOLDER_SEP in name:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "A claim needs an authenticated user identity")
     return name
 
