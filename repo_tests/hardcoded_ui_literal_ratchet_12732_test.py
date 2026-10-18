@@ -6,22 +6,21 @@ r"""No new hard-coded English UI text in a `.vue` file (#12732).
 
 The boundary, the kinds of literal and the shrink rule are in
 `repo_tests/_hardcoded_ui_literal_baseline.py`; the detector is
-`repo_tests/_hardcoded_ui_literal_detect.py`.
+`repo_tests/_ui_literal_scan.py` (shared with the SLM guard #15665) and the
+enumeration `repo_tests/_hardcoded_ui_literal_detect.py`.
 
 **Second derivation (template-text and attribute).** The detector walks the
-filesystem and matches with regexes. The re-derivation below enumerates with
-`git ls-files` and parses the template with `html.parser`, applying the same
-predicate (length, lowercase pair, unbound attribute names, comments dropped),
-and the two are compared as SETS of (file, kind, literal).
-
-One enumerated normalisation: the parser decodes character references in
-attribute values (`&#10;` -> newline), the regex reads the source text, so the
-regex side is `html.unescape`d before comparing. Two real differences were found
-and resolved before freezing: the first `git ls-files` pathspec missed the
-top-level `App.vue` of each app (re-derivation bug), and a JSDoc example in a
-`<script>` mentioning `<template #x>` made the detector's greedy template match
-start inside the script, reporting `Edit` from `DataTable.vue` (detector bug,
-fixed by removing script and style blocks first).
+filesystem and reads the template with `html.parser`. `_ui_literal_rederive.py`
+enumerates with `git ls-files` and matches with regexes; the two are compared as
+SETS of (file, kind, literal). They are not equal and are not expected to be:
+the regexes are the narrower prototype. Every difference must be explained by a
+named, enumerated exclusion (listed in `_ui_literal_rederive.py`), and the test
+fails on any difference that none explains. Differences found while freezing:
+a greedy template match that began inside a `<script>` JSDoc mention of
+`<template>` (detector fix: script and style blocks are blanked first), single
+plain words hidden by the #15665 identifier rule (kept for that guard, counted
+here), and attributes skipped on or inside `<pre>`/`<code>` (detector fix: only
+the content of an opaque element is opaque).
 
 **The script kind stays un-re-derived, stated rather than left ambiguous.**
 It matches JavaScript string literals after a handful of call shapes; the only
@@ -32,10 +31,6 @@ by its known positive and by synthetic fixtures instead.
 
 from __future__ import annotations
 
-import html
-import re
-import subprocess
-from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -48,8 +43,13 @@ from repo_tests._hardcoded_ui_literal_detect import (
     scanned_files,
 )
 from repo_tests._paths import repo_root
-
-from autobot_shared.paths import scrubbed_git_env
+from repo_tests._ui_literal_rederive import (
+    explain_parser_only,
+    explain_regex_only,
+    rederived,
+    regex_literals,
+    tracked_vue_files,
+)
 
 _PANEL = "autobot-frontend/src/components/knowledge/connectors/ConnectorHistoryPanel.vue"
 _PANEL_LITERALS = {
@@ -114,7 +114,7 @@ class TestTheBoundaryDoesNotMoveSilently:
     def test_a_known_component_is_in_and_non_product_files_are_out(self):
         files = scanned_files(repo_root())
         assert _PANEL in files
-        tracked = _git_vue_files()
+        tracked = tracked_vue_files(repo_root())
         assert not [f for f in files if "__tests__/" in f or ".stories." in f or ".spec." in f]
         excluded = [f for f in tracked if f not in files]
         assert all("__tests__/" in f or ".stories." in f or ".spec." in f or ".test." in f for f in excluded)
@@ -152,6 +152,11 @@ class TestEachMatcherOnSyntheticSources:
         src = '<template><input placeholder="Search here" aria-label="Go"></template>'
         assert self._kinds(src, "attribute") == ["Search here"]
 
+    def test_aria_description_is_found(self):
+        assert self._kinds('<template><i aria-description="Opens the menu"></i></template>', "attribute") == [
+            "Opens the menu"
+        ]
+
     def test_attribute_negatives(self):
         src = (
             '<template><a :title="x" @title="y" data-title="Some words" '
@@ -173,109 +178,51 @@ class TestEachMatcherOnSyntheticSources:
 
 # ---- second derivation -------------------------------------------------------
 
-_ATTR_NAMES = {"title", "placeholder", "aria-label", "label", "alt"}
-_TEXT_CLASS = re.compile(r"[A-Za-z][A-Za-z ,.!?'’()-]{2,}")
-_ATTR_VALUE = re.compile(r"[A-Za-z][^\"{}]{2,}")
-_LOWER_PAIR = re.compile(r"[a-z][a-z]")
-
-
-def _git_vue_files() -> list[str]:
-    """Tracked `.vue` paths via git, a different enumeration from the filesystem walk."""
-    out = subprocess.run(
-        ["git", "ls-files", "-z", "--", *(t.as_posix() for t in APP_TREES)],
-        cwd=repo_root(),
-        env=scrubbed_git_env(),
-        capture_output=True,
-        check=True,
-    ).stdout.decode("utf-8")
-    return sorted(p for p in out.split("\0") if p.endswith(".vue"))
-
-
-def _in_boundary(rel: str) -> bool:
-    """Restated, not imported: `__tests__/` directory or a stories/spec/test name."""
-    name = rel.rsplit("/", 1)[-1]
-    if "/__tests__/" in rel:
-        return False
-    return not any(marker in name for marker in (".stories.", ".spec.", ".test."))
-
-
-class _Template(HTMLParser):
-    """Collects the same two kinds from the parsed tree of one `.vue` file."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.depth = 0
-        self.found: set[tuple[str, str]] = set()
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "template":
-            self.depth += 1
-        elif self.depth:
-            self._attrs(attrs)
-
-    def handle_startendtag(self, tag, attrs):
-        if self.depth and tag != "template":
-            self._attrs(attrs)
-
-    def handle_endtag(self, tag):
-        if tag == "template" and self.depth:
-            self.depth -= 1
-
-    def handle_data(self, data):
-        text = data.strip()
-        if self.depth and len(text) >= 3 and _TEXT_CLASS.fullmatch(text) and _LOWER_PAIR.search(text):
-            self.found.add(("template-text", text))
-
-    def _attrs(self, attrs):
-        for name, value in attrs:
-            if name in _ATTR_NAMES and value and _ATTR_VALUE.fullmatch(value):
-                self.found.add(("attribute", value))
-
-
-def _parsed_literals(source: str) -> set[tuple[str, str]]:
-    parser = _Template()
-    parser.feed(source)
-    parser.close()
-    return parser.found
-
-
-def _rederived(root: Path) -> set[tuple[str, str, str]]:
-    out: set[tuple[str, str, str]] = set()
-    for rel in _git_vue_files():
-        if _in_boundary(rel):
-            source = (root / rel).read_text(encoding="utf-8", errors="replace")
-            out |= {(rel, kind, text) for kind, text in _parsed_literals(source)}
-    return out
-
 
 def _detected(root: Path) -> set[tuple[str, str, str]]:
-    return {
-        (rel, kind, html.unescape(text))
-        for rel, found in scan(root).items()
-        for kind, text in found
-        if kind != "script"
-    }
+    return {(rel, kind, text) for rel, found in scan(root).items() for kind, text in found if kind != "script"}
+
+
+def _unexplained(root: Path) -> list[tuple[str, str, str, str]]:
+    """Differences between the two derivations that no named exclusion explains."""
+    detected, other = _detected(root), rederived(root)
+    out = []
+    for side, items, explain in (
+        ("regex-only", other - detected, explain_regex_only),
+        ("parser-only", detected - other, explain_parser_only),
+    ):
+        for rel, kind, text in sorted(items):
+            source = (root / rel).read_text(encoding="utf-8", errors="replace")
+            if explain(source, kind, text) is None:
+                out.append((side, rel, kind, text))
+    return out
 
 
 class TestSecondDerivation:
     def test_the_rederivation_finds_its_own_known_positive(self):
-        found = _parsed_literals((repo_root() / _PANEL).read_text(encoding="utf-8"))
+        found = regex_literals((repo_root() / _PANEL).read_text(encoding="utf-8"))
         assert _PANEL_LITERALS <= found
 
-    def test_the_parser_applies_the_predicate_on_synthetic_input(self):
+    def test_the_regexes_apply_the_predicate_on_synthetic_input(self):
         src = (
             '<template><p>Hello world</p><i>OK</i><b>{{ t("x") }}</b>'
             '<!-- <s>Hidden words</s> --><a :title="x" title="Real words"></a></template>'
         )
-        assert _parsed_literals(src) == {("template-text", "Hello world"), ("attribute", "Real words")}
+        assert regex_literals(src) == {("template-text", "Hello world"), ("attribute", "Real words")}
 
     def test_enumerations_agree(self):
-        by_git = {f for f in _git_vue_files() if _in_boundary(f)}
-        assert by_git == set(scanned_files(repo_root()))
+        assert set(tracked_vue_files(repo_root())) == set(scanned_files(repo_root()))
 
-    def test_literal_sets_agree(self):
-        root = repo_root()
-        detected, rederived = _detected(root), _rederived(root)
-        assert detected == rederived, (
-            f"only regex: {sorted(detected - rederived)[:10]}; " f"only parser: {sorted(rederived - detected)[:10]}"
-        )
+    def test_both_derivations_find_a_large_shared_core(self):
+        detected, other = _detected(repo_root()), rederived(repo_root())
+        assert len(detected & other) >= 0.5 * len(other), "the derivations no longer describe the same population"
+
+    def test_every_difference_has_a_named_justification(self):
+        assert not _unexplained(repo_root()), f"unexplained differences: {_unexplained(repo_root())[:10]}"
+
+    def test_the_exclusion_rules_explain_synthetic_differences(self):
+        src = "<template><code>autobot-backend</code><p>By {{ x }} here</p></template>"
+        assert explain_regex_only(src, "template-text", "some directory") is None
+        assert explain_regex_only(src, "template-text", "autobot-backend") == "opaque-element"
+        assert explain_parser_only(src, "template-text", "By   here") == "beside-interpolation"
+        assert explain_parser_only(src, "template-text", "Nothing explains this") is None

@@ -2134,14 +2134,13 @@ onUnmounted(() => {
                 </td>
                 <td class="px-4 py-2 text-sm text-gray-600">
                   {{
-                    orchestration.fleetServices.length > 0
-                      ? orchestration.fleetServices.reduce(
-                          (sum, svc) => sum + svc.nodes.filter((n) => n.node_id === node.node_id).length,
-                          0
-                        )
-                      : 0
+                    t('orchestrationView.serviceCount', {
+                      count: orchestration.fleetServices.reduce(
+                        (sum, svc) => sum + svc.nodes.filter((n) => n.node_id === node.node_id).length,
+                        0
+                      ),
+                    })
                   }}
-                  services
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex flex-wrap gap-1">
