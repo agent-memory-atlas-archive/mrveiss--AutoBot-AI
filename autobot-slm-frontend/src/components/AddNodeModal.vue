@@ -575,13 +575,7 @@
                 </div>
 
                 <!-- Error Message -->
-                <div
-                  v-if="error"
-                  class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-                  role="alert"
-                >
-                  {{ error }}
-                </div>
+                <BaseAlert v-if="error" variant="error" :message="error" />
 
                 <!-- Success Message -->
                 <div
@@ -653,6 +647,7 @@
 </template>
 
 <script setup lang="ts">
+import { BaseAlert } from '@autobot/ui'
 // AutoBot - AI-Powered Automation Platform
 // Copyright (c) 2025 mrveiss
 // Author: mrveiss

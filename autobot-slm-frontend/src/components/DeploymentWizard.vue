@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BaseAlert } from '@autobot/ui'
 // AutoBot - AI-Powered Automation Platform
 // Copyright (c) 2025 mrveiss
 // Author: mrveiss
@@ -440,12 +441,7 @@ function getCategoryIcon(category: string): string {
           <h4 class="text-base font-medium text-gray-900 mb-4">{{ $t('deploymentWizard.reviewDeployment') }}</h4>
 
           <!-- Error Message -->
-          <div
-            v-if="deployError"
-            class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-          >
-            {{ deployError }}
-          </div>
+          <BaseAlert v-if="deployError" variant="error" class="mb-4" :message="deployError" />
 
           <div class="space-y-4">
             <div class="p-4 bg-gray-50 rounded-lg">

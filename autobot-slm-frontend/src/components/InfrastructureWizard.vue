@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BaseAlert } from '@autobot/ui'
 // AutoBot - AI-Powered Automation Platform
 // Copyright (c) 2025 mrveiss
 // Author: mrveiss
@@ -369,12 +370,7 @@ function getStatusColor(status: string): string {
           <h4 class="text-base font-medium text-gray-900 mb-4">{{ $t('infrastructureWizard.reviewConfiguration') }}</h4>
 
           <!-- Error Message -->
-          <div
-            v-if="executeError"
-            class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-          >
-            {{ executeError }}
-          </div>
+          <BaseAlert v-if="executeError" variant="error" class="mb-4" :message="executeError" />
 
           <div class="space-y-4">
             <!-- Playbook Summary -->
@@ -503,12 +499,9 @@ function getStatusColor(status: string): string {
           </div>
 
           <!-- Error Display -->
-          <div
-            v-if="currentExecution.error"
-            class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
-          >
+          <BaseAlert v-if="currentExecution.error" variant="error" class="mt-4">
             <strong>{{ $t('infrastructureWizard.error') }}</strong> {{ currentExecution.error }}
-          </div>
+          </BaseAlert>
 
           <!-- Completion Message -->
           <div

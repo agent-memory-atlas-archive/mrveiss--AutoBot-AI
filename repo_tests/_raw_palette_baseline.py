@@ -263,7 +263,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-red-100": 72,
     "slm:bg-red-200": 10,
     "slm:bg-red-400": 1,
-    "slm:bg-red-50": 102,
+    "slm:bg-red-50": 62,  # #18819: 102 -> 62, inline error banners moved to the kit BaseAlert
     "slm:bg-red-50/30": 1,
     "slm:bg-red-50/50": 1,
     "slm:bg-red-500": 47,
@@ -320,7 +320,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:border-purple-200": 2,
     "slm:border-purple-500/30": 2,
     "slm:border-red-100": 3,
-    "slm:border-red-200": 77,
+    "slm:border-red-200": 37,  # #18819: 77 -> 37, inline error banners moved to the kit BaseAlert
     "slm:border-red-300": 10,
     "slm:border-red-500": 2,
     "slm:border-red-500/30": 3,
@@ -388,9 +388,9 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-red-200": 1,
     "slm:text-red-300": 4,
     "slm:text-red-400": 4,
-    "slm:text-red-500": 23,
+    "slm:text-red-500": 15,  # #18819: 23 -> 15, inline error banners moved to the kit BaseAlert
     "slm:text-red-600": 96,
-    "slm:text-red-700": 150,
+    "slm:text-red-700": 102,  # #18819: 150 -> 102, inline error banners moved to the kit BaseAlert
     "slm:text-red-800": 42,
     "slm:text-red-900": 2,
     "slm:text-slate-400": 1,
@@ -405,4 +405,4 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
 }
 
 #: Frozen total, asserted separately so a hand edit of one number cannot pass.
-TOTAL_OCCURRENCES = 6756
+TOTAL_OCCURRENCES = 6620  # #18819: 6756 -> 6620

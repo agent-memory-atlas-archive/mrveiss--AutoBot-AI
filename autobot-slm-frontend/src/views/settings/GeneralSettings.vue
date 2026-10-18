@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BaseAlert } from '@autobot/ui'
 // AutoBot - AI-Powered Automation Platform
 // Copyright (c) 2025 mrveiss
 // Author: mrveiss
@@ -296,9 +297,7 @@ onMounted(() => {
 
     <template v-else>
       <!-- Messages -->
-      <div v-if="error" class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-        {{ error }}
-      </div>
+      <BaseAlert v-if="error" variant="error" :message="error" />
       <div v-if="success" class="p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
         {{ success }}
       </div>

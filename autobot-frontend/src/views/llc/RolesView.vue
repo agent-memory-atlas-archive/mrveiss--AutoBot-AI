@@ -37,7 +37,7 @@
     <p v-if="!companyId" class="roles-state">{{ t('llcRoles.noCompany') }}</p>
 
     <template v-else>
-      <ErrorBanner v-if="errorMessage" :message="errorMessage" class="roles-error" />
+      <BaseAlert variant="error" v-if="errorMessage" :message="errorMessage" class="roles-error" dismissible :dismiss-label="t('common.dismiss')" />
 
       <p v-if="isLoading" class="roles-state">{{ t('llcRoles.loading') }}</p>
 
@@ -340,8 +340,7 @@ import { createLogger } from '@/utils/debugUtils'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import RoleAttachmentPanel from '@/components/llc/RoleAttachmentPanel.vue'
-import { BaseBadge, BaseModal } from '@autobot/ui'
-import ErrorBanner from '@/components/base/ErrorBanner.vue'
+import { BaseAlert, BaseBadge, BaseModal } from '@autobot/ui'
 import { describeApiError } from '@/composables/llc/apiErrorMessage'
 
 interface RoleRow {
