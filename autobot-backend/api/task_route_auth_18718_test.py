@@ -104,7 +104,8 @@ def _client(module, caller):
     from fastapi.testclient import TestClient
 
     app = FastAPI()
-    app.include_router(importlib.import_module(module).router)
+    mod = importlib.import_module(module)
+    app.include_router(mod.router)
     if caller == "anonymous":
         app.dependency_overrides[get_current_user] = _deny(401)
         app.dependency_overrides[check_admin_permission] = _deny(401)
