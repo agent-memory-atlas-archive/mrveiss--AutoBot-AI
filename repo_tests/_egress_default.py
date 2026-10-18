@@ -119,13 +119,27 @@ def _import_maps(tree: ast.AST) -> tuple[dict[str, str], frozenset[str]]:
     return aliases, frozenset(policies)
 
 
+#: httpx transports that call an application object in this process and open no socket (#18765).
+_IN_PROCESS_TRANSPORTS = frozenset({"httpx.ASGITransport", "httpx.WSGITransport"})
+
+
+def _in_process(ctor: ast.Call, aliases: dict[str, str]) -> bool:
+    """True when an httpx client is built with ``transport=ASGITransport(...)``: no network egress."""
+    return any(
+        kw.arg == "transport"
+        and isinstance(kw.value, ast.Call)
+        and _canon(kw.value.func, aliases) in _IN_PROCESS_TRANSPORTS
+        for kw in ctor.keywords
+    )
+
+
 def _ctor_kind(expr: ast.expr | None, aliases: dict[str, str]) -> str | None:
     """Client kind produced by constructing/obtaining *expr*, if it is a known client factory."""
     if not isinstance(expr, ast.Call):
         return None
     canon = _canon(expr.func, aliases)
     if canon in _CTORS:
-        return _CTORS[canon]
+        return None if _in_process(expr, aliases) else _CTORS[canon]
     if canon.endswith(".tracked_session") or canon.endswith("get_http_client.tracked_session"):
         return "session"
     return "manager" if canon.split(".")[-1] == "get_http_client" else None

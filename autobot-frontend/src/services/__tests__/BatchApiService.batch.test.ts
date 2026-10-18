@@ -1,0 +1,51 @@
+// Copyright 2025-2026 mrveiss
+// SPDX-License-Identifier: Apache-2.0
+/** #18765: BatchApiService sends GETs to the one server batch endpoint and reads per-slot status. */
+import { describe, it, expect, vi } from 'vitest';
+import { BatchApiService } from '@/services/BatchApiService';
+import type { ApiClient } from '@/utils/ApiClient';
+
+function makeClient(results: unknown[]) {
+  return {
+    post: vi.fn().mockResolvedValue({ results }),
+    get: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as ApiClient & { post: ReturnType<typeof vi.fn>; get: ReturnType<typeof vi.fn> };
+}
+
+describe('BatchApiService (server batch)', () => {
+  it('sends every GET in one call to /batch-jobs/load and never calls apiClient.get', async () => {
+    const client = makeClient([
+      { endpoint: '/api/a', method: 'GET', status: 200, body: { ok: 1 }, error: null, timing: 0 },
+      { endpoint: '/api/b', method: 'GET', status: 403, body: { detail: 'nope' }, error: 'nope', timing: 0 },
+    ]);
+    const out = await new BatchApiService(client).batchRequests([
+      { endpoint: '/api/a', method: 'GET' },
+      { endpoint: '/api/b', method: 'GET' },
+    ]);
+    expect(client.post).toHaveBeenCalledTimes(1);
+    expect(client.post.mock.calls[0][0]).toMatch(/\/batch-jobs\/load$/);
+    expect(client.get).not.toHaveBeenCalled();
+    expect(out[0]).toMatchObject({ success: true, data: { ok: 1 } });
+    expect(out[1]).toMatchObject({ success: false, error: 'nope' });
+  });
+
+  it('keeps result order when a mutating request is mixed in, and sends it directly', async () => {
+    const client = makeClient([{ endpoint: '/api/a', method: 'GET', status: 200, body: 1, error: null, timing: 0 }]);
+    (client as unknown as { put: ReturnType<typeof vi.fn> }).put.mockResolvedValue('done');
+    const out = await new BatchApiService(client).batchRequests([
+      { endpoint: '/api/p', method: 'PUT', data: {} },
+      { endpoint: '/api/a', method: 'GET' },
+    ]);
+    expect(out.map(r => r.endpoint)).toEqual(['/api/p', '/api/a']);
+    expect(out.map(r => r.success)).toEqual([true, true]);
+  });
+
+  it('marks every GET failed when the batch call itself fails', async () => {
+    const client = makeClient([]);
+    client.post.mockRejectedValue(new Error('boom'));
+    const out = await new BatchApiService(client).batchRequests([{ endpoint: '/api/a', method: 'GET' }]);
+    expect(out[0].success).toBe(false);
+  });
+});

@@ -12,6 +12,12 @@
  * routed elsewhere: nothing consumed it, so there was no capability to preserve.
  * loadChatInitData() (a separate, unrelated method with the same admin-gated
  * call) was removed outright -- zero real callers, only its own test's mock.
+ *
+ * #18765: GETs no longer fan out as N browser requests. They go to ONE server call,
+ * POST /api/batch-jobs/load, which dispatches each through the ASGI app with the
+ * caller's own credentials, so every target route's own auth gate runs and its own
+ * status lands in that item's slot. Only the server's allow-list of read-only GETs
+ * is batchable; mutating methods keep going through the ApiClient one by one.
  */
 
 import apiClient from '@/utils/ApiClient';
@@ -19,6 +25,22 @@ import type { ApiClient } from '@/utils/ApiClient';
 import { createLogger } from '@/utils/debugUtils';
 import { extractErrorMessage } from '@/utils/errorExtract';
 import { getApiBase } from '@/config/ssot-config';
+import type { operations } from '@/types/generated/api';
+
+// Request/response shape of POST /api/batch-jobs/load, derived from the generated OpenAPI types.
+type BatchLoadOp = operations['batch_load_api_batch_jobs_load_post'];
+type BatchLoadRequest = BatchLoadOp['requestBody']['content']['application/json'];
+type BatchLoadResponse = BatchLoadOp['responses'][200]['content']['application/json'];
+// One result slot, in request order (api/batch_dispatch.py). The generated type carries the list
+// as `unknown`, so the slot is named here.
+interface BatchLoadItem {
+  endpoint: string | null;
+  method: string;
+  status: number;
+  body: unknown;
+  error: string | null;
+  timing: number;
+}
 
 // Create scoped logger for BatchApiService
 const logger = createLogger('BatchApiService');
@@ -116,16 +138,23 @@ export class BatchApiService {
     };
   }
 
+  /** Re-express a batch slot as the settled-promise shape the result builders consume. */
+  private toSettled(result: BatchResult): PromiseSettledResult<Record<string, unknown>> {
+    return result.success
+      ? { status: 'fulfilled', value: result.data as Record<string, unknown> }
+      : { status: 'rejected', reason: new Error(result.error || 'api_failed') };
+  }
+
   async fallbackChatInitialization(): Promise<FallbackResults> {
     logger.info('Using parallel chat initialization with individual API calls');
 
-    const [
-      chatSessionsResult,
-      systemHealthResult
-    ] = await Promise.allSettled([
-      this.apiClient.getChatList(),
-      this.apiClient.getSystemHealth()
+    const base = getApiBase();
+    const [chatSessionsBatch, systemHealthBatch] = await this.batchRequests([
+      { endpoint: `${base}/chat/sessions`, method: 'GET' },
+      { endpoint: `${base}/system/health`, method: 'GET' }
     ]);
+    const chatSessionsResult = this.toSettled(chatSessionsBatch);
+    const systemHealthResult = this.toSettled(systemHealthBatch);
 
     const chatSessionsApiResult = this.buildChatSessionsResult(chatSessionsResult);
 
@@ -151,63 +180,72 @@ export class BatchApiService {
     return results;
   }
 
+  /** One server call for all GETs (#18765); mutating methods go through the ApiClient one by one. */
   async batchRequests(requests: BatchRequest[]): Promise<BatchResult[]> {
     logger.info(`Processing ${requests.length} requests in parallel`);
 
-    const promises = requests.map(async (request): Promise<BatchResult> => {
-      const { endpoint, method, data } = request;
+    const getIdx = requests.map((r, i) => (r.method.toUpperCase() === 'GET' ? i : -1)).filter(i => i >= 0);
+    const results: BatchResult[] = new Array(requests.length);
 
-      try {
-        let response: unknown;
+    const [batched] = await Promise.all([
+      this.loadGetsViaServer(getIdx.map(i => requests[i])),
+      ...requests.map(async (request, i) => {
+        if (request.method.toUpperCase() !== 'GET') results[i] = await this.runDirect(request);
+      })
+    ]);
+    getIdx.forEach((reqIdx, n) => { results[reqIdx] = batched[n]; });
+    return results;
+  }
 
-        switch (method.toUpperCase()) {
-          case 'GET':
-            response = await this.apiClient.get(endpoint);
-            break;
-          case 'POST':
-            response = await this.apiClient.post(endpoint, data);
-            break;
-          case 'PUT':
-            response = await this.apiClient.put(endpoint, data);
-            break;
-          case 'DELETE':
-            response = await this.apiClient.delete(endpoint);
-            break;
-          default:
-            throw new Error(`Unsupported method: ${method}`);
-        }
+  private async loadGetsViaServer(requests: BatchRequest[]): Promise<BatchResult[]> {
+    if (requests.length === 0) return [];
+    const payload: BatchLoadRequest = {
+      requests: requests.map(r => ({ endpoint: r.endpoint, method: 'GET' }))
+    };
+    try {
+      const response = await this.apiClient.post<BatchLoadResponse>(`${getApiBase()}/batch-jobs/load`, payload);
+      const items = ((response as { results?: unknown }).results ?? []) as BatchLoadItem[];
+      return requests.map((r, n) => this.toBatchResult(r, items[n]));
+    } catch (error: unknown) {
+      const message = extractErrorMessage(error, 'Unknown error');
+      logger.warn('Batch load failed:', message);
+      return requests.map(r => ({ endpoint: r.endpoint, method: r.method, success: false, error: message }));
+    }
+  }
 
-        return {
-          endpoint,
-          method,
-          success: true,
-          data: response
-        };
-      } catch (error: unknown) {
-        logger.warn(`Failed request ${method} ${endpoint}:`, extractErrorMessage(error, 'Unknown error'));
-        return {
-          endpoint,
-          method,
-          success: false,
-          error: extractErrorMessage(error, 'Unknown error')
-        };
+  private toBatchResult(request: BatchRequest, item: BatchLoadItem | undefined): BatchResult {
+    const ok = item !== undefined && item.status < 400;
+    if (!ok) logger.warn(`Failed request ${request.method} ${request.endpoint}:`, item?.error ?? 'no result');
+    return {
+      endpoint: request.endpoint,
+      method: request.method,
+      success: ok,
+      ...(ok ? { data: item.body } : { error: item?.error ?? 'api_failed' })
+    };
+  }
+
+  private async runDirect(request: BatchRequest): Promise<BatchResult> {
+    const { endpoint, method, data } = request;
+    try {
+      let response: unknown;
+      switch (method.toUpperCase()) {
+        case 'POST':
+          response = await this.apiClient.post(endpoint, data);
+          break;
+        case 'PUT':
+          response = await this.apiClient.put(endpoint, data);
+          break;
+        case 'DELETE':
+          response = await this.apiClient.delete(endpoint);
+          break;
+        default:
+          throw new Error(`Unsupported method: ${method}`);
       }
-    });
-
-    const results = await Promise.allSettled(promises);
-
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        return {
-          endpoint: requests[index].endpoint,
-          method: requests[index].method,
-          success: false,
-          error: result.reason?.message || String(result.reason)
-        };
-      }
-    });
+      return { endpoint, method, success: true, data: response };
+    } catch (error: unknown) {
+      logger.warn(`Failed request ${method} ${endpoint}:`, extractErrorMessage(error, 'Unknown error'));
+      return { endpoint, method, success: false, error: extractErrorMessage(error, 'Unknown error') };
+    }
   }
 
   queueRequest(endpoint: string, method: string, data?: unknown, priority: number = 0): void {

@@ -78,6 +78,7 @@ from autobot_shared import env_registry_slm  # noqa: E402,F401
 from autobot_shared import env_registry_tls  # noqa: E402,F401
 from autobot_shared import (  # noqa: E402,F401
     env_registry_analytics,
+    env_registry_batch,
     env_registry_ledger,
     env_registry_rag,
     env_registry_terminal,
