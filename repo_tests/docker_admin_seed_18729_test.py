@@ -66,12 +66,29 @@ def test_the_admin_password_reaches_the_backend_container() -> None:
     )
 
 
-def test_the_compose_user_mode_default_is_a_mode_the_backend_accepts() -> None:
+def _user_mode_defaults() -> dict[str, str]:
+    """{service: its AUTOBOT_USER_MODE default} for every compose service that sets one."""
+    compose = yaml.safe_load((_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    found = {}
+    for name, service in compose["services"].items():
+        env = service.get("environment") or []
+        entries = dict(e.split("=", 1) for e in env if "=" in e) if isinstance(env, list) else env
+        value = str(entries.get("AUTOBOT_USER_MODE", ""))
+        if value:
+            match = re.fullmatch(r"\$\{AUTOBOT_USER_MODE:-(\w+)\}", value)
+            found[name] = match.group(1) if match else value
+    return found
+
+
+def test_every_compose_user_mode_default_is_a_mode_the_backend_accepts() -> None:
+    """Every service, not just the backend: autobot-worker kept the retired default (#18729)."""
     source = (_ROOT / "autobot-backend" / "user_management" / "config.py").read_text(encoding="utf-8")
     enum = re.search(r"class DeploymentMode\(str, Enum\):(.*?)\n\n\n", source, re.S).group(1)
     modes = set(re.findall(r'=\s*"(\w+)"', enum))
-    default = re.fullmatch(r"\$\{AUTOBOT_USER_MODE:-(\w+)\}", _backend_env()["AUTOBOT_USER_MODE"]).group(1)
-    assert modes and default in modes, f"{default!r} is not one of {sorted(modes)} -- retired single_user? (#10636)"
+    defaults = _user_mode_defaults()
+    assert {"autobot-backend", "autobot-worker"} <= set(defaults), defaults
+    wrong = {s: d for s, d in defaults.items() if d not in modes}
+    assert modes and not wrong, f"not one of {sorted(modes)} -- retired single_user? (#10636): {wrong}"
 
 
 def runnable_pulls(markdown: str) -> set[str]:
