@@ -173,7 +173,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-infrastructure/shared/ide-extensions/vscode-autobot/src/extension.ts": 741,
     "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/background-monitor.ts": 713,
     "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/index.ts": 957,
-    "autobot-slm-frontend/src/components/AddNodeModal.vue": 1187,  # #18819: 1192 -> 1187
+    "autobot-slm-frontend/src/components/AddNodeModal.vue": 1111,  # #18819: 1192 -> 1111
     "autobot-slm-frontend/src/components/RoleManagementModal.vue": 614,
     "autobot-slm-frontend/src/components/fleet/DecommissionModal.vue": 699,
     "autobot-slm-frontend/src/components/fleet/NodeLifecyclePanel.vue": 984,
@@ -201,6 +201,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 666,  # #18819: 669 -> 666
     "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 727,  # #18819: 736 -> 727
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 724,  # #18819: 733 -> 724
-    "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 844,  # #18819: 869 -> 844
+    "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 835,  # #18819: 869 -> 835
     "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1090,  # #18819: 1099 -> 1090
 }
