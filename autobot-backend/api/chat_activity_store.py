@@ -65,6 +65,23 @@ async def _store_single_activity(
     )
 
 
+async def _try_store_activity(
+    memory_graph: AutoBotMemoryGraph,
+    session_id: str,
+    activity: ActivityCreate,
+    request_id: str,
+    user_id: str,
+    org_id: str | None,
+) -> bool:
+    """Store one activity; a failure is logged and counted by the caller, never raised."""
+    try:
+        await _store_single_activity(memory_graph, session_id, activity, user_id, org_id)
+        return True
+    except Exception as activity_error:
+        logger.warning("[%s] Failed to store activity %s: %s", request_id, activity.activity_id, activity_error)
+        return False
+
+
 async def _process_activity_batch(
     memory_graph: AutoBotMemoryGraph,
     session_id: str,
@@ -88,26 +105,13 @@ async def _process_activity_batch(
     Returns:
         Dict with stored_count, failed_count, and stored_ids
     """
-    stored_count = 0
-    failed_count = 0
     stored_ids: List[str] = []
-
     for activity in activities:
-        try:
-            await _store_single_activity(memory_graph, session_id, activity, user_id, org_id)
-            stored_count += 1
+        if await _try_store_activity(memory_graph, session_id, activity, request_id, user_id, org_id):
             stored_ids.append(activity.activity_id)
-        except Exception as activity_error:
-            logger.warning(
-                "[%s] Failed to store activity %s: %s",
-                request_id,
-                activity.activity_id,
-                activity_error,
-            )
-            failed_count += 1
 
     return {
-        "stored_count": stored_count,
-        "failed_count": failed_count,
+        "stored_count": len(stored_ids),
+        "failed_count": len(activities) - len(stored_ids),
         "stored_ids": stored_ids,
     }

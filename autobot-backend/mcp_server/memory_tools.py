@@ -14,6 +14,21 @@ from typing import Any, Dict
 
 from mcp_server.principal import current_owner
 
+_PATH_DIRECTIONS = ("outgoing", "incoming", "both")
+
+
+def _path_request(from_entity: str, to_entity: str, relation: str | None, max_depth: int, direction: str) -> Any:
+    """The REST route's request model, with ``max_depth`` clamped (#13762) rather than rejected."""
+    from api.schemas_knowledge import GraphRAGPathRequest
+
+    return GraphRAGPathRequest(
+        from_entity=from_entity,
+        to_entity=to_entity,
+        relation=relation,
+        max_depth=max(1, min(max_depth, 10)),
+        direction=direction,
+    )
+
 
 def _created_at(entity: Dict[str, Any]) -> str:
     return (entity.get("metadata") or {}).get("created_at", "")
@@ -143,20 +158,12 @@ class MemoryToolsMixin:
         able to request an unbounded traversal, but asking for too much is not
         an error the way an unbounded entity name is.
         """
-        from api.schemas_knowledge import GraphRAGPathRequest
         from autobot_memory_graph import AutoBotMemoryGraph
 
-        allowed_directions = ("outgoing", "incoming", "both")
-        if direction not in allowed_directions:
-            return {"error": "Invalid direction", "direction": direction, "allowed": list(allowed_directions)}
+        if direction not in _PATH_DIRECTIONS:
+            return {"error": "Invalid direction", "direction": direction, "allowed": list(_PATH_DIRECTIONS)}
 
-        args = GraphRAGPathRequest(
-            from_entity=from_entity,
-            to_entity=to_entity,
-            relation=relation,
-            max_depth=max(1, min(max_depth, 10)),
-            direction=direction,
-        )
+        args = _path_request(from_entity, to_entity, relation, max_depth, direction)
         owner = current_owner()  # the authenticated principal; fails closed without one (#18825)
 
         graph = AutoBotMemoryGraph()

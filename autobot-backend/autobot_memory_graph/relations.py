@@ -33,6 +33,18 @@ from .owner_scope import UNSCOPED_ALL_USERS, require_scope
 logger = get_logger(__name__)
 
 
+def _visible_of_type(
+    rels: List[Dict[str, Any]], end: str, readable: set[str] | None, wanted: set[str] | None
+) -> List[Dict[str, Any]]:
+    """Edges whose ``end`` id is readable (``None`` = unfiltered) and whose type is wanted (#18825, #13452)."""
+    return [
+        rel
+        for rel in rels
+        if (readable is None or rel.get(end) in readable)
+        and (wanted is None or canonical_relation_type(rel.get("type", "")) in wanted)
+    ]
+
+
 class RelationOperationsMixin:
     """
     Mixin class providing relationship management operations.
@@ -287,6 +299,17 @@ class RelationOperationsMixin:
             "metadata": rel.get("metadata", {}),
         }
 
+    async def _visible_relations(
+        self: AutoBotMemoryGraphCore, entity_id: str, side: str, wanted: set[str] | None, owner: Any
+    ) -> List[Dict[str, Any]]:
+        """Formatted ``side`` ("outgoing"/"incoming") relations of the right type whose other end ``owner`` may read."""
+        outgoing = side == "outgoing"
+        end = "to" if outgoing else "from"
+        raw = await (self._get_outgoing_relations(entity_id) if outgoing else self._get_incoming_relations(entity_id))
+        readable = await self._readable_relation_ends(entity_id, raw, end, owner)
+        fmt = self._format_outgoing_relation if outgoing else self._format_incoming_relation
+        return [fmt(entity_id, rel) for rel in _visible_of_type(raw, end, readable, wanted)]
+
     async def get_relations(
         self: AutoBotMemoryGraphCore,
         entity_id: str,
@@ -311,22 +334,9 @@ class RelationOperationsMixin:
         try:
             relations = []
             if direction in OUTGOING_DIRECTIONS:
-                outgoing = await self._get_outgoing_relations(entity_id)
-                readable = await self._readable_relation_ends(entity_id, outgoing, "to", owner)
-                for rel in outgoing:
-                    if (readable is None or rel.get("to") in readable) and (
-                        wanted is None or canonical_relation_type(rel.get("type", "")) in wanted
-                    ):
-                        relations.append(self._format_outgoing_relation(entity_id, rel))
-
+                relations += await self._visible_relations(entity_id, "outgoing", wanted, owner)
             if direction in INCOMING_DIRECTIONS:
-                incoming = await self._get_incoming_relations(entity_id)
-                readable = await self._readable_relation_ends(entity_id, incoming, "from", owner)
-                for rel in incoming:
-                    if (readable is None or rel.get("from") in readable) and (
-                        wanted is None or canonical_relation_type(rel.get("type", "")) in wanted
-                    ):
-                        relations.append(self._format_incoming_relation(entity_id, rel))
+                relations += await self._visible_relations(entity_id, "incoming", wanted, owner)
 
             return {"relations": relations}
         except Exception as e:

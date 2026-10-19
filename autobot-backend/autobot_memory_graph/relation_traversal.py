@@ -73,28 +73,37 @@ class RelationTraversalMixin:
         """Fetch and process relations for BFS traversal. Issue #620."""
         need_outgoing = direction in OUTGOING_DIRECTIONS
         need_incoming = direction in INCOMING_DIRECTIONS
-        related = []
 
         if need_outgoing and need_incoming:
-            outgoing, incoming = await asyncio.gather(
-                self._get_outgoing_relations(current_id),
-                self._get_incoming_relations(current_id),
-            )
-            related.extend(
-                await self._process_direction_relations(
-                    outgoing, relation_type, "outgoing", "to", depth, max_depth, queue, owner
-                )
-            )
-            related.extend(
-                await self._process_direction_relations(
-                    incoming, relation_type, "incoming", "from", depth, max_depth, queue, owner
-                )
-            )
-        elif need_outgoing:
-            related.extend(await self._process_outgoing(current_id, relation_type, depth, max_depth, queue, owner))
-        elif need_incoming:
-            related.extend(await self._process_incoming(current_id, relation_type, depth, max_depth, queue, owner))
+            return await self._process_both_directions(current_id, relation_type, depth, max_depth, queue, owner)
+        if need_outgoing:
+            return await self._process_outgoing(current_id, relation_type, depth, max_depth, queue, owner)
+        if need_incoming:
+            return await self._process_incoming(current_id, relation_type, depth, max_depth, queue, owner)
+        return []
 
+    async def _process_both_directions(
+        self: AutoBotMemoryGraphCore,
+        current_id: str,
+        relation_type: str | None,
+        depth: int,
+        max_depth: int,
+        queue: List,
+        owner: Any,
+    ) -> List[Dict[str, Any]]:
+        """Fetch both edge lists in parallel, then process outgoing before incoming."""
+        outgoing, incoming = await asyncio.gather(
+            self._get_outgoing_relations(current_id),
+            self._get_incoming_relations(current_id),
+        )
+        related = await self._process_direction_relations(
+            outgoing, relation_type, "outgoing", "to", depth, max_depth, queue, owner
+        )
+        related.extend(
+            await self._process_direction_relations(
+                incoming, relation_type, "incoming", "from", depth, max_depth, queue, owner
+            )
+        )
         return related
 
     def _build_related_entry(

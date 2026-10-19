@@ -13,6 +13,19 @@ from autobot_shared.logging_manager import get_llm_logger
 logger = get_llm_logger("graph_rag_service")
 
 
+def _log_connection_path(from_entity: str, to_entity: str, result: Dict[str, Any]) -> None:
+    """One line per traversal: the endpoints, the verdict and the cost."""
+    logger.info(
+        "Connection path '%s' -> '%s': found=%s reason=%s hops=%s in %.3fs",
+        from_entity,
+        to_entity,
+        result.get("found"),
+        result.get("reason"),
+        result.get("hops"),
+        result["traversal_time"],
+    )
+
+
 class GraphPathMixin:
     """Mixin providing ``find_connection_path``; relies on ``self.graph``."""
 
@@ -62,14 +75,5 @@ class GraphPathMixin:
         )
         result = await (asyncio.wait_for(traversal, timeout) if timeout else traversal)
         result["traversal_time"] = time.perf_counter() - start_time
-
-        logger.info(
-            "Connection path '%s' -> '%s': found=%s reason=%s hops=%s in %.3fs",
-            from_entity,
-            to_entity,
-            result.get("found"),
-            result.get("reason"),
-            result.get("hops"),
-            result["traversal_time"],
-        )
+        _log_connection_path(from_entity, to_entity, result)
         return result
