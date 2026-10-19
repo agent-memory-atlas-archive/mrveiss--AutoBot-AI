@@ -9,6 +9,8 @@ filters every leg by visibility, an unstamped doc reads as private and drops out
 results. The indexer writes the grant into each chunk instead, and the one read decision admits it.
 """
 
+import hashlib
+
 import pytest
 
 from autobot_shared.scoping import Principal
@@ -60,3 +62,22 @@ async def test_a_signed_in_user_may_read_a_stamped_doc_and_an_unstamped_one_read
 def test_the_non_private_scope_reads_a_stamped_doc_only():
     assert is_non_private(_indexed_metadata()) is True
     assert is_non_private({"source": "autobot_documentation"}) is False
+
+
+def test_a_file_hashed_under_the_old_index_version_is_reindexed_and_a_current_one_is_skipped(tmp_path):
+    """Incremental startup indexing must stamp the grant on docs that were indexed without it."""
+    from services.knowledge.doc_indexer import _compute_file_hash, _filter_changed_files
+
+    doc = tmp_path / "docs" / "a.md"
+    doc.parent.mkdir()
+    doc.write_text("# T\n\nbody\n", encoding="utf-8")
+    old_hash = hashlib.sha256(doc.read_bytes()).hexdigest()  # what the cache held before the version existed
+    files = [(str(doc), 2)]
+
+    changed, _ = _filter_changed_files(files, {"docs/a.md": old_hash}, tmp_path)
+    assert changed == files
+
+    current = {"docs/a.md": _compute_file_hash(str(doc))}
+    assert current["docs/a.md"] != old_hash
+    changed, _ = _filter_changed_files(files, current, tmp_path)
+    assert changed == []

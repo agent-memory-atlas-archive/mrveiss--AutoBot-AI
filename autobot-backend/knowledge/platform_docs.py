@@ -22,3 +22,9 @@ PLATFORM_DOCS_GRANT = {
     "visibility": VisibilityLevel.SYSTEM.value,
     "access_level": AccessLevel.AUTOBOT.value,
 }
+
+#: Index-format version of the grant, folded into every doc file's change hash by the indexer
+#: (``_compute_file_hash``). Incremental indexing skips a file whose hash is unchanged, so without
+#: this a file indexed before the grant existed would keep grant-less chunks for ever. Bumping it
+#: re-indexes every doc once through the normal indexing path; later runs stay incremental.
+PLATFORM_DOCS_GRANT_VERSION = b"platform-docs-grant-v1\0"
