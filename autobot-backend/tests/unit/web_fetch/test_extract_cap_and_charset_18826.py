@@ -169,7 +169,7 @@ def test_the_css_length_parse_is_linear_on_a_long_non_length():
     from media.document import inline_style
 
     started = time.monotonic()
-    assert inline_style._length("1" * 100000 + "q") is None
+    assert inline_style._length("1" * 100000 + "!") is None  # "!" is no unit, so the match must fail
     assert time.monotonic() - started < 1.0
     assert inline_style._length("1.5em") == (1.5, "em")
 
