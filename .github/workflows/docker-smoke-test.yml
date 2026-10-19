@@ -228,6 +228,52 @@ jobs:
           docker compose --env-file docker/.env.docker logs
           exit 1
 
+      - name: The management network uses the picked range, and fleet node IPs match it (#16833)
+        # #16833 AC1: the picked AUTOBOT_DOCKER_MGMT_PREFIX is the subnet Docker actually
+        # created. AC2 (#9761 regression): every node the SLM registered reports an address
+        # in that range, and each compose service's registered IP is the address Docker gave
+        # its container -- compose_fleet.mgmt_ip() computes them, so drift shows up here.
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          net="$(docker network ls -q --filter label=com.docker.compose.network=autobot-mgmt)"
+          [ -n "$net" ] || fail "no autobot-mgmt network found"
+          net_name="$(docker network inspect -f '{{.Name}}' "$net")"
+          subnet="$(docker network inspect -f '{{(index .IPAM.Config 0).Subnet}}' "$net")"
+          echo "autobot-mgmt (${net_name}) subnet: ${subnet}; picked prefix: ${AUTOBOT_DOCKER_MGMT_PREFIX}"
+          [ "$subnet" = "${AUTOBOT_DOCKER_MGMT_PREFIX}.0/24" ] || fail "subnet ${subnet} is not the picked ${AUTOBOT_DOCKER_MGMT_PREFIX}.0/24"
+
+          declare -A actual
+          for c in $(docker compose --env-file docker/.env.docker ps -q); do
+            svc="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$c")"
+            actual[$svc]="$(docker inspect -f "{{with index .NetworkSettings.Networks \"${net_name}\"}}{{.IPAddress}}{{end}}" "$c")"
+          done
+
+          rows=""
+          # The SLM seeds compose nodes at startup; allow it a minute. A failed query (table not
+          # created yet, connection refused) is a retry, not a step failure under `set -e`. User and
+          # database come from the container, where compose set them, not from guessed defaults.
+          for _ in $(seq 1 12); do
+            rows="$(docker compose --env-file docker/.env.docker exec -T autobot-postgres \
+              sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F " " -c "SELECT node_id, ip_address FROM nodes ORDER BY node_id"' \
+              2>/dev/null)" || rows=""
+            [ -n "$rows" ] && break
+            sleep 5
+          done
+          [ -n "$rows" ] || fail "the SLM registered no fleet nodes"
+          checked=0
+          while read -r id ip; do
+            echo "  node ${id}: ${ip} (container: ${actual[$id]:-n/a})"
+            [[ "$ip" == "${AUTOBOT_DOCKER_MGMT_PREFIX}."* ]] || fail "node ${id} reports ${ip}, outside ${AUTOBOT_DOCKER_MGMT_PREFIX}.0/24"
+            if [ -n "${actual[$id]:-}" ]; then
+              [ "${actual[$id]}" = "$ip" ] || fail "node ${id} reports ${ip}, but its container has ${actual[$id]}"
+              checked=$((checked + 1))
+            fi
+          done <<< "$rows"
+          [ "$checked" -gt 0 ] || fail "no registered node matched a running compose service -- the comparison checked nothing"
+          echo "✓ ${checked} compose node(s) report the address Docker gave them, all in ${subnet}"
+
       - name: Verify services are running
         shell: bash
         run: |
