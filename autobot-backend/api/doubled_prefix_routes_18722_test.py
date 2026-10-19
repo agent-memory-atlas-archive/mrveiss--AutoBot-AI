@@ -233,3 +233,43 @@ def test_a_shim_leaks_no_body(anonymous: TestClient, method: str, old: str, new:
     response = anonymous.request(method, old)
     assert response.status_code == 308
     assert response.content == b""
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", _CANON, {"user_ids": ["u2"]}),
+        ("DELETE", f"{_CANON}/u2?entity_type=user", None),
+    ],
+)
+def test_the_canonical_share_routes_answer_401_to_an_anonymous_caller(
+    anonymous: TestClient, method: str, path: str, body: dict | None
+) -> None:
+    """No credentials: 401 from the real get_current_user gate, before any fact lookup (#18795)."""
+    response = anonymous.request(method, path, json=body)
+    assert response.status_code == 401, (path, response.status_code)
+
+
+@pytest.mark.parametrize(
+    ("method", "old", "body"),
+    [("POST", f"{_KB}/facts/f1/share", {"user_ids": ["u2"]}), ("DELETE", f"{_KB}/facts/f1/share/u2", None)],
+)
+def test_a_followed_share_shim_still_meets_the_gate(
+    anonymous: TestClient, method: str, old: str, body: dict | None
+) -> None:
+    """The shim itself is ungated (it carries nothing), so the gate must hold on the target it 308s to."""
+    response = anonymous.request(method, old, json=body, follow_redirects=True)
+    assert response.status_code == 401, (old, response.status_code)
+
+
+def test_an_authenticated_non_owner_gets_403_not_401(client: TestClient) -> None:
+    """Contrast for the 401s above: a signed-in reader who may not write is refused as 403 (#18795)."""
+    from api import knowledge_collaboration as collab
+
+    kb = MagicMock()
+    kb.get_fact = MagicMock(return_value={"metadata": {"owner_id": "someone-else", "visibility": "public"}})
+    kb.ownership_manager.check_access = AsyncMock(return_value=True)  # can read, may not write
+    client.app.dependency_overrides[get_current_user] = lambda: {"user_id": "reader", "role": "user"}
+    with patch.object(collab, "get_or_create_knowledge_base", AsyncMock(return_value=kb)):
+        response = client.post(_CANON, json={"user_ids": ["u2"]})
+    assert response.status_code == 403, response.status_code
