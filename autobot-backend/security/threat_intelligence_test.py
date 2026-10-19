@@ -564,3 +564,18 @@ class TestGracefulDegradation:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("-5", 1), ("0", 1), ("999999999", 7 * 24 * 3600), ("120", 120)])
+def test_the_threat_intel_ttl_env_is_clamped_to_a_positive_bounded_value(monkeypatch, raw, expected):
+    """A non-positive TTL would expire every verdict at once and re-query the providers (#18888)."""
+    import importlib
+
+    import constants.ttl_constants as ttl
+
+    monkeypatch.setenv("AUTOBOT_THREAT_INTEL_CACHE_TTL", raw)
+    try:
+        assert importlib.reload(ttl).THREAT_INTEL_CACHE_TTL == expected
+    finally:
+        monkeypatch.delenv("AUTOBOT_THREAT_INTEL_CACHE_TTL")
+        importlib.reload(ttl)
