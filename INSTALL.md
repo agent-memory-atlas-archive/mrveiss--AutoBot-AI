@@ -391,6 +391,23 @@ curl -sk -X POST https://localhost/api/setup/reset \
 
 Then refresh the browser.
 
+### Docker: containers cannot reach each other
+
+Symptom: a service restarts in a loop, and its log says it `cannot reach PostgreSQL at
+autobot-postgres:5432` (or Redis, or another service), naming the host and port it tried and
+whether the attempt **timed out**, was **refused**, or the name **did not resolve**.
+
+- **Timed out:** packets are being dropped. On a host firewall, the forwarding policy often
+  drops container-to-container traffic. Check `sudo iptables -S FORWARD` (a `-P FORWARD DROP`
+  with no Docker accept rules is the usual cause), and allow traffic on the Docker bridges, or
+  restore Docker's own chains with `sudo systemctl restart docker`.
+- **Refused:** the target container is not listening yet, or not running. Check
+  `docker compose --env-file docker/.env.docker --env-file docker/.env.secrets ps` and that
+  container's logs.
+- **Did not resolve:** the two containers do not share a network, so Docker's DNS cannot find
+  the name. Start the whole stack with the same compose files and env files, so every service
+  joins the networks it declares.
+
 ### Re-running the installer
 
 Use the `--reinstall` flag to bypass the "already installed" check:
