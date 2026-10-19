@@ -19,7 +19,6 @@
     "SecurityPolicy",
     "ServiceEndpoint",
     "User",
-    "get_current_user",
     "get_deployment_config",
     "get_service_url"
   ]
