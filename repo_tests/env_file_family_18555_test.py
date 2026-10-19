@@ -159,13 +159,64 @@ def test_overlays_hold_only_what_differs_from_the_base() -> None:
     assert not redundant, f"an overlay repeats a base key with the same value -- delete it there: {redundant}"
 
 
+#: Root env files that are not native overlays, each for a stated reason.
+_NOT_OVERLAYS = {
+    _BASE: "the base the overlays build on",
+    ".env.example": "the annotated reference for a native install -- every option, not an environment",
+}
+
+
+def unknown_native_env_files(paths: list[str]) -> list[str]:
+    """Root .env.<env> files that are neither a known overlay nor a stated exception."""
+    return sorted(p for p in paths if "/" not in p and p not in _NOT_OVERLAYS and p not in _OVERLAYS)
+
+
 def test_every_native_env_file_is_a_known_overlay() -> None:
-    """A new root .env.<env> must join the family deliberately, not drift beside it."""
-    native = {p for p in _env_files() if "/" not in p and p not in (_BASE, ".env.example")}
-    assert native == set(_OVERLAYS), sorted(native ^ set(_OVERLAYS))
+    """A new root .env.<env> must join the family deliberately, not drift beside it. The paths come
+    from REACH.examined (`_env_files`), so the env-file-family-18555-scan floor covers this sweep."""
+    files = list(_env_files())
+    assert set(_OVERLAYS) <= set(files)
+    assert not unknown_native_env_files(files)
+
+
+def test_the_overlay_check_catches_a_stray_env_file() -> None:
+    assert unknown_native_env_files([".env.base", ".env.localhost", ".env.staging", "docker/.env.docker"]) == [
+        ".env.staging"
+    ]
 
 
 def test_the_redundancy_check_sees_a_repeat_and_allows_an_override() -> None:
     base = "AUTOBOT_BACKEND_PORT=8001\nAUTOBOT_REDIS_HOST=\n"
     overlays = {".env.x": "AUTOBOT_BACKEND_PORT=8001\nAUTOBOT_REDIS_HOST=127.0.0.1\n"}
     assert redundant_overlay_keys(base, overlays) == [".env.x: AUTOBOT_BACKEND_PORT"]
+
+
+def _script(name: str):
+    import importlib.util
+
+    path = _ROOT / "autobot-infrastructure" / "shared" / "scripts" / name
+    spec = importlib.util.spec_from_file_location(name.replace("-", "_").removesuffix(".py"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_validator_checks_base_plus_overlay(tmp_path: Path) -> None:
+    """27's review: validate-env-files.py read each overlay alone and reported the base keys missing."""
+    validator = _script("validate-env-files.py")
+    (tmp_path / ".env.base").write_text("AUTOBOT_BACKEND_PORT=8001\nAUTOBOT_REDIS_HOST=\n", encoding="utf-8")
+    (tmp_path / ".env.localhost").write_text("AUTOBOT_REDIS_HOST=127.0.0.1\n", encoding="utf-8")
+    assert validator.effective_env_vars(tmp_path / ".env.localhost") == {
+        "AUTOBOT_BACKEND_PORT": "8001",
+        "AUTOBOT_REDIS_HOST": "127.0.0.1",
+    }
+    (tmp_path / ".env").write_text("X=1\n", encoding="utf-8")
+    assert validator.effective_env_vars(tmp_path / ".env") == {"X": "1"}, "a non-overlay file took the base"
+
+
+def test_the_generator_writes_overlay_only_output() -> None:
+    """27's review: a regenerated overlay must not repeat the base and trip the guard."""
+    generator = _script("generate-env-files.py")
+    base = "AUTOBOT_BACKEND_PORT=8001\nREDIS_PORT=6379\n"
+    content = "# header\nAUTOBOT_BACKEND_PORT=8001\nREDIS_PORT=6380\nAUTOBOT_X=1\n"
+    assert generator.strip_base_keys(content, base) == "# header\nREDIS_PORT=6380\nAUTOBOT_X=1\n"

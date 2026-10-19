@@ -63,11 +63,12 @@ case $AUTOBOT_ENVIRONMENT in
 esac
 
 # Load the shared base, then the environment's overlay on top of it (#18555)
+# `set -a; . file` keeps values with spaces intact, where `export $(grep | xargs)` split them.
 if [ -f ".env.base" ]; then
-    export $(grep -v '^#' ".env.base" | xargs)
+    set -a; . ./.env.base; set +a
 fi
 if [ -f "$ENV_FILE" ]; then
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
+    set -a; . "./$ENV_FILE"; set +a
     echo "✅ Loaded environment from $ENV_FILE"
 else
     echo "⚠️  Environment file $ENV_FILE not found, using defaults"
