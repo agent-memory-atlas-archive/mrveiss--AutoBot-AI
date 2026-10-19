@@ -98,8 +98,13 @@ def _role_packages(docs=None) -> dict[str, str]:
 
     for path, doc in docs:
         walk(doc, path)
-    assert not real or len(found) > 100, f"read {len(found)} role packages -- the scan is broken"
+    assert not real or len(found) >= _PACKAGE_FLOOR, f"read {len(found)} role packages -- the scan is broken"
     return found
+
+
+#: Measured 148 resolved role packages on 2026-10-19 (#18727); a floor near the count catches a scan
+#: that silently lost a share of the roles, with headroom for a few packages to go.
+_PACKAGE_FLOOR = 140
 
 
 def _recorded_packages() -> list[str]:
@@ -162,3 +167,23 @@ def test_an_unresolved_expression_that_merely_contains_the_operator_name_is_not_
 
 def test_the_install_record_packages_are_read() -> None:
     assert {"python3.14", "python3.14-venv", "python3.14-dev"} <= set(_recorded_packages())
+
+
+def recorded_but_kept(recorded: list[str], kept: list[str]) -> list[str]:
+    """Install-record packages a KEPT_PACKAGES entry also covers. plan_packages() purges every recorded
+    package, so such a package would be removed although KEPT_PACKAGES promises no uninstall does."""
+    return sorted(n for n in recorded if any(fnmatch.fnmatch(n, k) for k in kept))
+
+
+def test_no_recorded_package_is_also_kept() -> None:
+    """#18727: the install record and KEPT_PACKAGES must be disjoint."""
+    overlap = recorded_but_kept(_recorded_packages(), _array("KEPT_PACKAGES"))
+    assert not overlap, f"recorded (purged) yet listed as kept: {overlap}"
+
+
+def test_the_overlap_check_sees_exact_and_glob_matches() -> None:
+    assert recorded_but_kept(["python3.14", "redis-tools", "libfoo-dev"], ["redis-tools", "lib*-dev", "nginx"]) == [
+        "libfoo-dev",
+        "redis-tools",
+    ]
+    assert recorded_but_kept(["python3.14"], ["nginx", "lib*-dev"]) == []
