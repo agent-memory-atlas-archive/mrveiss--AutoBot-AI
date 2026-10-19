@@ -159,8 +159,32 @@ def test_an_unterminated_style_comment_parses_in_linear_time():
 
     started = time.monotonic()
     inline_style._split_declarations("/*a" * 40000)  # 120 KB, no closing */
-    inline_style.parse_declarations("font-size:" + "1" * 100000 + "q")
     assert time.monotonic() - started < 1.0
+
+
+def test_the_css_length_parse_is_linear_on_a_long_non_length():
+    """``\\d+\\.?\\d*`` split one digit run two ways; the unambiguous ``_LENGTH`` rejects at once (#18869)."""
+    import time
+
+    from media.document import inline_style
+
+    started = time.monotonic()
+    assert inline_style._length("1" * 100000 + "q") is None
+    assert time.monotonic() - started < 1.0
+    assert inline_style._length("1.5em") == (1.5, "em")
+
+
+def test_the_charset_parameter_parse_is_linear_on_padded_whitespace():
+    """Adjacent ``\\s*["']?\\s*`` made ``charset=`` + n spaces + ``;`` quadratic (#18869); one ``\\s*`` suffices."""
+    import time
+
+    from web_fetch.content_types import _CHARSET_PARAM, _META_CHARSET
+
+    started = time.monotonic()
+    assert _CHARSET_PARAM.search("text/html; charset=" + " " * 50000 + ";") is None
+    assert _META_CHARSET.search(b"<meta charset=" + b" " * 50000 + b">") is None
+    assert time.monotonic() - started < 1.0
+    assert _CHARSET_PARAM.search('text/html; charset= "UTF-8"').group(1) == "UTF-8"
 
 
 def test_an_oversized_style_attribute_fails_closed(monkeypatch):

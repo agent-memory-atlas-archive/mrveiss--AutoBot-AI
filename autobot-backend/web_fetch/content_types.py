@@ -50,8 +50,8 @@ _SNIFF_CHARS = 2048
 _BINARY_REPLACEMENT_RATIO = 0.05
 _HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 _TEXT_MEDIA_TYPES = frozenset({"text/plain", "text/markdown", "text/x-markdown"})
-_CHARSET_PARAM = re.compile(r"""charset\s*=\s*["']?\s*([^\s"';,]+)""", re.IGNORECASE)
-_META_CHARSET = re.compile(rb"""<meta[^>]*?charset\s*=\s*["']?\s*([A-Za-z0-9._:-]+)""", re.IGNORECASE)
+_CHARSET_PARAM = re.compile(r"""charset\s*=\s*["']?([^\s"';,]+)""", re.IGNORECASE)
+_META_CHARSET = re.compile(rb"""<meta[^>]*?charset\s*=\s*["']?([A-Za-z0-9._:-]+)""", re.IGNORECASE)
 #: Byte-order marks, longest first: a BOM outranks any declared charset (WHATWG encoding sniffing).
 #: Longest marks first: the UTF-32 LE BOM (FF FE 00 00) starts with the UTF-16 LE BOM (FF FE).
 _BOMS = (
