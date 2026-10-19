@@ -208,10 +208,16 @@ REACH = declare(
     # Re-pinned (#18293): REACH.window() gives [5900, 6300] against population 6600, but
     # completed() reaches only 6068 because more files are skipped than the declared 300.
     # 6000 clears the bottom band (>= 5940) and stays under what actually completes.
-    # train-8: population 6711 -> window [6011, 6411], but completed() reaches 6167 (the loop skips
+    # train-14b: population 6923 -> window [6223, 6623], completed() ~6355 (repo_tests/ skipped); 6309 is the
+    # middle of the legal overlap [6263, 6355].
+    # train-9c: population 6791 -> window [6091, 6491], completed() reaches 6236; 6183 is the middle of
+    # the legal overlap [6131, 6236]. train-8: population 6711 -> window [6011, 6411], completed 6167 (the loop skips
     # repo_tests/, 544 files, past the declared skips=300). 6110 clears the bottom band (>= 6051) and
     # stays under what completes; mid-window (6211) would fail every honest run.
-    floor=6110,
+    # train-26: population 6972 -> window [6272, 6672], completed() ~6377 (594 repo_tests/ files skipped);
+    # 6344 is the middle of the legal overlap [6312, 6377].
+    # train-33: population 7017 -> window [6317, 6717], completed() 6408; 6382 is the middle of [6357, 6408].
+    floor=6382,
     growth=400,
     skips=300,
     what="tracked python files",

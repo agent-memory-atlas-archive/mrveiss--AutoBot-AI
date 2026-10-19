@@ -41,6 +41,8 @@ from initialization import (
 from initialization.integrity_handlers import register_integrity_handlers
 from initialization.registry_handlers import register_registry_handlers
 from initialization.router_registry.route_dependencies import dependencies_for
+from knowledge.upload_rejections import UploadRejection, upload_rejection_handler
+from utils.error_boundaries import register_backend_hooks
 
 # Store logger for app usage
 logger = get_logger(__name__)
@@ -63,6 +65,9 @@ def _register_exception_handlers(app: FastAPI) -> None:
     # concrete case is a secret disclosed through a failed request model
     # validator (#16428 security review).
     register_validation_error_handlers(app)
+
+    # Upload rejections carry a stable detail_code the frontend maps to i18n (#17577).
+    app.add_exception_handler(UploadRejection, upload_rejection_handler)
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -225,6 +230,8 @@ def create_app(**kwargs) -> FastAPI:
         app = create_app(title="My App", version="2.0.0")
         ```
     """
+    # #18554: the shared boundaries get cancel scopes and error metrics only by registration.
+    register_backend_hooks()
     factory = AppFactory()
     return factory.create_fastapi_app(**kwargs)
 

@@ -357,10 +357,19 @@ class _FakeSession:
 
     async def execute(self, _stmt):
         approval = self.approval
+        if getattr(_stmt, "is_update", False):
+            # the atomic claim is one UPDATE ... RETURNING: apply its SET values to the row
+            params = _stmt.compile().params
+            for column in ("status", "decided_by_user", "decided_at"):
+                setattr(approval, column, params[column])
 
         class _R:
             def scalar_one_or_none(self):
                 return approval
+
+            def first(self):
+                # the atomic claim's UPDATE ... RETURNING id: a row means this caller won
+                return (approval.id,)
 
         return _R()
 

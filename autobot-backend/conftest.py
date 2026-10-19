@@ -42,6 +42,7 @@ sys.path.insert(0, str(backend_root))
 # real-loading before its dependent imports it.
 from testkit.module_stubs import make_pkg_stub as _make_pkg_stub
 from testkit.module_stubs import real_load_and_bind as _real_load_and_bind
+from testkit.provider_key_vault_state import empty_reachable_provider_key_vault  # noqa: F401 -- autouse
 
 # Stub chromadb before it is imported. chromadb hangs at import time on
 # machines without a local Chroma server (it fires gRPC keep-alive probes via
@@ -478,7 +479,7 @@ if "llm_shared" not in sys.modules:
     _llm_stub.LLMResponseCache = MagicMock()  # type: ignore[attr-defined]
     _llm_stub.get_llm_cache = MagicMock()  # type: ignore[attr-defined]
     _llm_stub.TORCH_AVAILABLE = False  # type: ignore[attr-defined]
-    _llm_stub.HardwareDetector = MagicMock()  # type: ignore[attr-defined]
+    _llm_stub.AccelerationDetector = MagicMock()  # type: ignore[attr-defined]
     _llm_stub.LLMType = MagicMock()  # type: ignore[attr-defined]
     _llm_stub.ProviderType = MagicMock()  # type: ignore[attr-defined]
     _llm_stub.StreamingManager = MagicMock()  # type: ignore[attr-defined]
@@ -659,8 +660,8 @@ if "llm_shared" not in sys.modules:
         # Parent bind (so patch("llm_shared.hardware.X") targets the real
         # module) now happens inside _real_load_and_bind (#11661); only the
         # top-level re-exports remain here.
-        if hasattr(_hw_mod, "HardwareDetector"):
-            _llm_stub.HardwareDetector = _hw_mod.HardwareDetector  # type: ignore[attr-defined]
+        if hasattr(_hw_mod, "AccelerationDetector"):
+            _llm_stub.AccelerationDetector = _hw_mod.AccelerationDetector  # type: ignore[attr-defined]
         if hasattr(_hw_mod, "TORCH_AVAILABLE"):
             _llm_stub.TORCH_AVAILABLE = _hw_mod.TORCH_AVAILABLE  # type: ignore[attr-defined]
 
@@ -972,11 +973,9 @@ for _ci_sub in [
     "code_intelligence.typescript_analyzer",
     "code_intelligence.vue_analyzer",
     "code_intelligence.doc_generator",
-    "code_intelligence.llm_code_generator",
     "code_intelligence.code_fingerprinting",
     "code_intelligence.code_review_engine",
     "code_intelligence.base_analyzer",
-    "code_intelligence.conversation_flow_analyzer",
 ]:
     if _ci_sub not in sys.modules:
         sys.modules[_ci_sub] = _make_pkg_stub(_ci_sub)
@@ -1264,10 +1263,7 @@ def single_use_fake_redis():
 
 @pytest.fixture(autouse=True)
 def set_test_environment():
-    """
-    Set TEST environment variables for all tests.
-    Prevents tests from affecting production data.
-    """
+    """Set TEST environment variables for all tests, so they cannot affect production data."""
     original_env = dict(os.environ)
 
     config.test_mode = "true"

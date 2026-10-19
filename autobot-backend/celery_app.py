@@ -23,10 +23,14 @@ from autobot_shared.logging_manager import get_logger as _get_logger
 from autobot_shared.redis_management.types import DATABASE_MAPPING
 from autobot_shared.ssot_config import config as ssot_config
 from config.manager import get_config_manager
+from utils.error_boundaries import register_backend_hooks
 
 # Use singleton config instance for extended config values
 config = get_config_manager()
 logger = _get_logger(__name__)
+
+# #18554: Celery workers never run the app lifespan, so register the boundary hooks here.
+register_backend_hooks()
 
 # Build Redis URLs from SSOT configuration (loads directly from .env)
 # DB numbers come from redis-databases.yaml via DATABASE_MAPPING (#2670)
@@ -424,3 +428,16 @@ def _reset_async_redis_pools_on_worker_init(sender=None, **kwargs):
             "worker_process_init: async Redis pool reset failed (worker will still start)",
             exc_info=True,
         )
+
+
+# #18094: a worker resolves provider keys (knowledge tasks build a KnowledgeBase, whose LLM and
+# embedding providers resolve OPENAI/ANTHROPIC keys). The lifespan never runs here, so read the
+# vault once per forked worker before its first task. Never raises: a failure is classified as a
+# vault outage, which refuses keys rather than serving env.
+@worker_process_init.connect
+def _hydrate_provider_keys_on_worker_init(sender=None, **kwargs):
+    """Hydrate the provider-key vault cache in each worker process."""
+    from services.provider_key_process_init import hydrate_this_process
+
+    hydrated = hydrate_this_process()
+    logger.info("worker_process_init: provider keys hydrated from vault: %d (#18094)", len(hydrated))

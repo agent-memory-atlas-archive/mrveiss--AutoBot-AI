@@ -42,7 +42,16 @@ UNPARSED = "(UNPARSED)"
 BASELINE_FILE = Path(__file__).with_name("egress_unguarded_baseline_17576.json")
 
 #: Implementations of the guard itself -- they construct and drive the session on purpose.
-EXEMPT = frozenset({"autobot_shared/http_client_manager.py", "autobot_shared/security/ssrf_guard.py"})
+#: The sticky-comment composite action (#12984) is exempt too: it runs on a bare runner with the standard
+#: library only (so it cannot import the guard, and ``urlopen`` can never be marked guarded), and it talks
+#: only to the runner's own GitHub API root with the job token -- never a user-, LLM- or document-supplied URL.
+EXEMPT = frozenset(
+    {
+        "autobot_shared/http_client_manager.py",
+        "autobot_shared/security/ssrf_guard.py",
+        ".github/actions/upsert-pr-comment/upsert_pr_comment.py",
+    }
+)
 _SKIP_DIRS = frozenset({"tests", "test", "fixtures", "node_modules", "__pycache__"})
 _SKIP_PREFIXES = ("docs/", "repo_tests/")
 

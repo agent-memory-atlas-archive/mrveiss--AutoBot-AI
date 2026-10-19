@@ -31,6 +31,7 @@
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { readSlmToken } from '@/utils/authStorage'
 import { useOrchestrationManagement } from '@/composables/useOrchestrationManagement'
 import {
   useRoles,
@@ -257,6 +258,10 @@ function toggleFleetService(serviceName: string): void {
     next.add(serviceName)
   }
   expandedFleetServices.value = next
+}
+
+function fleetServiceCount(nodeId: string): number {
+  return orchestration.fleetServices.reduce((sum, svc) => sum + svc.nodes.filter((n) => n.node_id === nodeId).length, 0)
 }
 
 function getNodeHostname(nodeId: string): string {
@@ -948,11 +953,10 @@ function toggleAutoRefresh(): void {
 
 onMounted(async () => {
   logger.info('OrchestrationView mounted - checking auth')
-  const token = sessionStorage.getItem('slm_access_token')
+  const token = readSlmToken()
   logger.info('Auth token present:', !!token)
   if (!token) {
-    logger.error('NO AUTH TOKEN - Please log in first')
-    logger.error('Please navigate to /login to authenticate')
+    logger.error('No auth token: log in at /login first')
   }
 
   logger.info('Calling refresh()')
@@ -2133,15 +2137,7 @@ onUnmounted(() => {
                   <ServiceStatusBadge :status="node.status" />
                 </td>
                 <td class="px-4 py-2 text-sm text-gray-600">
-                  {{
-                    orchestration.fleetServices.length > 0
-                      ? orchestration.fleetServices.reduce(
-                          (sum, svc) => sum + svc.nodes.filter((n) => n.node_id === node.node_id).length,
-                          0
-                        )
-                      : 0
-                  }}
-                  services
+                  {{ t('orchestrationView.serviceCount', fleetServiceCount(node.node_id)) }}
                 </td>
                 <td class="px-4 py-2">
                   <div class="flex flex-wrap gap-1">

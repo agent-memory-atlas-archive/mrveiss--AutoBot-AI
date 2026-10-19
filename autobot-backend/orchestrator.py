@@ -20,7 +20,7 @@ Refactored in #5058: god-class decomposed into collaborators.
 
 Primitives extracted in #5060:
   - retry_with_backoff  (orchestration/primitives/retry.py)
-  - publish_event       (orchestration/primitives/events.py)
+  - publish_event       (events/bus.py)
   Supporting modules:   orchestration/orchestrator_config.py
                         orchestration/orchestrator_stubs.py
                         orchestration/orchestrator_legacy_api.py
@@ -43,6 +43,8 @@ from autobot_shared.workflow import ExecutionStrategy
 from config.manager import get_config_manager as _get_config_manager
 from constants.threshold_constants import LLMDefaults, TimingConstants
 from diagnostics import get_performance_diagnostics
+from events.bus import PersistStrategy
+from events.bus import publish_event as _publish_event
 from memory import LongTermMemoryManager
 
 # Issue #5040 / #10666 B3: multi-agent imports (consolidated into orchestration)
@@ -83,8 +85,6 @@ from orchestration.orchestrator_stubs import (
     WorkflowStep,
 )
 from orchestration.performance_tracker import PerformanceTracker
-from orchestration.primitives.events import PersistStrategy
-from orchestration.primitives.events import publish_event as _publish_event
 from orchestration.primitives.retry import (  # noqa: F401 — re-exported
     retry_with_backoff,
 )

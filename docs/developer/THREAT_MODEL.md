@@ -32,10 +32,10 @@ known base · `resolve_within_sandbox` (:288) the file-management sandbox ·
 - `resolve_within_sandbox` forbids **any** `..`, `~`, leading `/`, or `SANDBOX_INVALID_PATH_CHARACTERS` (:45)
   — in-bounds or not. `''`, `'/'`, `'//'` legitimately address the sandbox root and return it unchanged
   (#11823); a diff that makes them raise again breaks root listing.
+- Upload **filenames** are their own gate: [`autobot-backend/security/upload_filename_policy.py`](../../autobot-backend/security/upload_filename_policy.py) `is_safe_file` (:111) — a bare name only (no `/`, no `\\`), one allow-list, a deny-list by name; every upload route imports it, and a route-local copy is a finding (the conversation copy accepted `a/b.txt` until #18704).
 
-**Known bypass shapes:** double percent-encoding (`%252e%252e`), Unicode confusables
-(`﹒﹒`, `‥`), null byte via encoding, symlink pointing out of the root, a `MagicMock`
-or arbitrary object stringifying into a creatable tree (#14217).
+**Known bypass shapes:** double percent-encoding (`%252e%252e`), Unicode confusables (`﹒﹒`, `‥`), null byte via encoding,
+symlink pointing out of the root, a `MagicMock` or arbitrary object stringifying into a creatable tree (#14217).
 
 ## 2. Session / chat ownership
 
@@ -71,27 +71,27 @@ Two postures, one validator (#14016): the contract is the docstring of [`securit
 ## 3. Plugin loading
 
 **Boundary:** the install endpoint. Loading executes arbitrary Python by design
-([`loader.py`](../../autobot_shared/plugin_sdk/loader.py) — `import_module` (:550), then the
-`spec_from_file_location` (:619) fallback). No load-time sandbox exists or is intended.
+([`loader.py`](../../autobot_shared/plugin_sdk/loader.py) — `import_module` (:544), then the
+`spec_from_file_location` (:613) fallback). No load-time sandbox exists or is intended.
 
 **Canonical enforcement:** every route in
 [`autobot-backend/plugin_manager.py`](../../autobot-backend/plugin_manager.py) carries a
 `Depends` on [`auth_middleware.py`](../../autobot-backend/auth_middleware.py)
-`check_admin_permission` (:962).
+`check_admin_permission` (:950).
 Archive safety lives in [`autobot-backend/archive_safety.py`](../../autobot-backend/archive_safety.py)
 — `validate_zip_metadata` (:27), `safe_extract` (:58), `MAX_UPLOAD_BYTES` (:19).
 
 **Invariants**
-- A plugin route without `Depends(check_admin_permission)` is remote code execution.
-  This is the single highest-severity shape in this subsystem — check it first.
+- A plugin route without `Depends(check_admin_permission)` is remote code execution. This is the single highest-severity shape in this subsystem — check it first.
 - Extraction goes through `archive_safety`; [`plugin_install.py`](../../autobot-backend/plugin_install.py) only
   re-exports `_validate_zip_metadata` and `_safe_extract`. A local `zf.extractall` reintroduces zip-slip and symlink escape.
-- Names match `_NAME_PATTERN` (:36) before any filesystem touch; the target is claimed by `_claim_install_target` (:107)
+- Names match `_NAME_PATTERN` (:36) before any filesystem touch; the target is claimed by `_claim_install_target` (:126)
   via `mkdir(exist_ok=False)`, which — with the per-name `_install_locks` — is what makes the collision check TOCTOU-free.
 - Git installs: scheme restricted to http(s), `--` before the URL, `protocol.file.allow=never`, no submodule recursion,
   ref matched against `_GIT_REF_PATTERN` (:39), rejecting a leading `-` or `..`. Dropping any one is a finding on its own.
-- `PluginRegistry._plugins` and `HookRegistry` are process-wide singletons that do not dedupe —
-  a load path re-initialising a live plugin double-registers its callbacks (#14000).
+- `PluginRegistry._plugins` and `HookRegistry` are process-wide singletons that do not dedupe — a load path re-initialising a live plugin double-registers its callbacks (#14000).
+- A credential resolver is injected only into a plugin whose resolved directory lies under a trusted built-in root ([`credential_binding.py`](../../autobot_shared/plugin_sdk/credential_binding.py) `bound_resolver`), never by `manifest.name` alone, since a self-declared name lets any installed plugin claim it (#18094); `plugin_install.py` refuses a community install that takes a built-in name.
+  Both plugin hosts (startup `PluginManager`, API `PluginLoader`) take their search and trust lists from [`plugin_paths.py`](../../autobot-backend/plugin_paths.py); the CWD-relative dev fallback is searched but never trusted. The resolver narrows the sanctioned path and is not isolation: an in-process plugin can still read `os.environ` and module state.
 
 ## 4. Secrets & credentials
 
@@ -101,8 +101,8 @@ response, a log line, an issue, a PR comment — is already redacted.
 **Canonical enforcement:** [`encryption_service.py`](../../autobot-backend/encryption_service.py) AES-GCM + PBKDF2 for data at rest ·
 [`autobot_shared/field_encryption.py`](../../autobot_shared/field_encryption.py) `encrypt_field`/`decrypt_field` for single columns ·
 [`credential_store.py`](../../autobot-backend/knowledge/connectors/credential_store.py) `ConnectorCredentialStore` (:211) for connector/OAuth creds, ownership via `_require_owner` (:642) ·
-[`auth_middleware.py`](../../autobot-backend/auth_middleware.py) `verify_internal_api_key` (:949) for service-to-service ·
-[`services/auth.py`](../../autobot-slm-backend/services/auth.py) `decode_token_async` (:124) for SLM token revocation.
+[`autobot_shared/auth/internal_api_key.py`](../../autobot_shared/auth/internal_api_key.py) `verify_internal_api_key` (:17) for service-to-service (re-exported by `auth_middleware.py` and the SLM `services/auth.py`) ·
+[`services/auth.py`](../../autobot-slm-backend/services/auth.py) `decode_token_async` (:128) for SLM token revocation.
 
 **Invariants**
 - No parallel crypto path. A diff introducing its own `Fernet(...)` or `AESGCM(...)` instead
@@ -118,7 +118,7 @@ response, a log line, an issue, a PR comment — is already redacted.
 - Keys come from SSOT config, never a literal. A default value for an encryption key is a
   finding even when production overrides it via env var.
 - SLM token revocation fails CLOSED (#16387, owner decision): when the HS256 jti-denylist check
-  (`is_jti_revoked` (:132) in [`token_denylist.py`](../../autobot-slm-backend/services/token_denylist.py)) or the password-epoch check can't run because Redis errored,
+  (`is_jti_revoked` (:113) in [`token_denylist.py`](../../autobot-slm-backend/services/token_denylist.py)) or the password-epoch check can't run because its store (the SLM's own PostgreSQL since #18663) errored,
   `decode_token_async` denies the token (401) instead of reading "could not check" as "not revoked" — a Redis outage takes SLM login down, including the backend admin path reached through the proxy (#16374).
 - The RS256 authority-token path fails CLOSED the same way (#16412): [`rs256_denylist.py`](../../autobot-slm-backend/services/rs256_denylist.py)
   `is_rs256_jti_revoked` (:89) raises on a Redis error rather than reporting "not revoked"; its caller

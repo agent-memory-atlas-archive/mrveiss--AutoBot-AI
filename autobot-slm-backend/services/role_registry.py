@@ -485,7 +485,7 @@ DEFAULT_ROLES: List[Dict] = default_roles_for(  # #16025: manifest-augmented, se
 # in setup_wizard.py to build role-based host groups.
 #
 # #14460: a value here is only useful if the ansible layer CONSULTS that
-# group -- a `groups.get(...)` clause in playbooks/vars/role_active_facts.yml,
+# group -- a `groups.get(...)` clause in inventory/group_vars/all.yml,
 # a play's `hosts:`, or a `groups[...]` lookup. Two values were consulted
 # nowhere: "databases" (plural) and "browser_automation". The inventory
 # builder created those groups and no play, fact or group_vars file ever
