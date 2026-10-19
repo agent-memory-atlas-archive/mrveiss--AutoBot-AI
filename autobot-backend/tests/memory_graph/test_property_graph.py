@@ -58,8 +58,8 @@ for name, mod in [
     sys.modules.setdefault(name, mod)
 
 # The in-memory graph doubles are shared with the #13474 wiring test rather than
-# duplicated — see graph_test_doubles.py.
-from tests.memory_graph.graph_test_doubles import (  # noqa: E402
+# duplicated — see _graph_test_doubles.py.
+from tests.memory_graph._graph_test_doubles import (  # noqa: E402
     make_graph,
     make_harness,
 )

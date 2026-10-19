@@ -20,6 +20,7 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.input_sanitizer import escape_redisearch, escape_redisearch_tag
 
 from .core import AutoBotMemoryGraphCore
+from .owner_scope import entity_visible, redis_owner_clause, require_scope
 
 logger = get_logger(__name__)
 
@@ -67,6 +68,7 @@ class QueryOperationsMixin:
         entity_type: str | None = None,
         tags: List[str] | None = None,
         status: str | None = None,
+        owner: Any = None,
     ) -> str:
         """Issue #665: Extracted from search_entities to reduce function length.
 
@@ -77,6 +79,7 @@ class QueryOperationsMixin:
             entity_type: Filter by entity type
             tags: Filter by tags (any match)
             status: Filter by status
+            owner: Required OwnerScope / UNSCOPED_ALL_USERS (#18825); raises if omitted
 
         Returns:
             RediSearch query string
@@ -87,6 +90,9 @@ class QueryOperationsMixin:
         # this without the Pydantic bounds the REST surface applies, so the
         # escaping lives here rather than depending on every caller validating.
         query_parts = []
+        owner_clause = redis_owner_clause(owner)  # raises OwnerScopeRequired when omitted
+        if owner_clause:
+            query_parts.append(owner_clause)
         if entity_type:
             query_parts.append(f"@type:{{{escape_redisearch_tag(entity_type)}}}")
         if status:
@@ -166,9 +172,20 @@ class QueryOperationsMixin:
         entity: Dict[str, Any],
         query_lower: str,
         entity_type: str | None,
+        tags: List[str] | None = None,
+        status: str | None = None,
     ) -> bool:
-        """Check if entity matches search criteria (Issue #315 - extracted helper)."""
+        """Check if entity matches search criteria (Issue #315 - extracted helper).
+
+        #18825: ``tags`` / ``status`` are honoured here too, so the scan fallback
+        applies the same filters RediSearch does.
+        """
         if entity_type and entity.get("type") != entity_type:
+            return False
+        metadata = entity.get("metadata") or {}
+        if status and metadata.get("status") != status:
+            return False
+        if tags and not set(tags) & set(metadata.get("tags") or []):
             return False
 
         if not query_lower or query_lower == "*":
@@ -208,6 +225,10 @@ class QueryOperationsMixin:
         entity_type: str | None,
         limit: int,
         include_expired: bool = False,
+        *,
+        owner: Any,
+        tags: List[str] | None = None,
+        status: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Fetch entities in batches and filter by query criteria.
@@ -221,10 +242,14 @@ class QueryOperationsMixin:
             entity_type: Optional entity type filter
             limit: Maximum entities to return
             include_expired: When False (default), exclude invalidated entities
+            owner: Required OwnerScope / UNSCOPED_ALL_USERS (#18825)
+            tags: Optional tag filter (any match)
+            status: Optional status filter
 
         Returns:
             List of matching entity dictionaries
         """
+        require_scope(owner)
         batch_size = 50
         entities = []
 
@@ -241,7 +266,9 @@ class QueryOperationsMixin:
                     continue
                 if not include_expired and not _is_entity_valid(entity):
                     continue
-                if self._entity_matches_query(entity, query_lower, entity_type):
+                if not entity_visible(entity, owner):
+                    continue
+                if self._entity_matches_query(entity, query_lower, entity_type, tags, status):
                     entities.append(entity)
                     if len(entities) >= limit:
                         return entities
@@ -254,6 +281,10 @@ class QueryOperationsMixin:
         entity_type: str | None,
         limit: int,
         include_expired: bool = False,
+        *,
+        owner: Any,
+        tags: List[str] | None = None,
+        status: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Fallback search when RediSearch is unavailable.
@@ -267,10 +298,14 @@ class QueryOperationsMixin:
             entity_type: Optional entity type filter
             limit: Maximum results to return
             include_expired: When False (default), exclude invalidated entities
+            owner: Required OwnerScope / UNSCOPED_ALL_USERS (#18825)
+            tags: Tag filter (any match) -- kept on this path (#18825)
+            status: Status filter -- kept on this path (#18825)
 
         Returns:
             List of matching entities
         """
+        require_scope(owner)
         try:
             query_lower = query.lower() if query else ""
             keys = await self._collect_entity_keys(limit)
@@ -279,7 +314,14 @@ class QueryOperationsMixin:
                 return []
 
             return await self._batch_fetch_and_filter_entities(
-                keys, query_lower, entity_type, limit, include_expired=include_expired
+                keys,
+                query_lower,
+                entity_type,
+                limit,
+                include_expired=include_expired,
+                owner=owner,
+                tags=tags,
+                status=status,
             )
 
         except Exception as e:
@@ -294,8 +336,10 @@ class QueryOperationsMixin:
         status: str | None = None,
         limit: int = 50,
         include_expired: bool = False,
+        *,
+        owner: Any,
     ) -> List[Dict[str, Any]]:
-        """Semantic search across all entities.
+        """Semantic search across the entities ``owner`` may read.
 
         Args:
             query: Search query (full-text search)
@@ -304,23 +348,29 @@ class QueryOperationsMixin:
             status: Filter by status
             limit: Maximum results to return
             include_expired: When False (default), exclude invalidated entities
+            owner: REQUIRED (#18825) -- an OwnerScope, or UNSCOPED_ALL_USERS for
+                system callers. Omitting it raises OwnerScopeRequired (fails closed).
 
         Returns:
             List of matching entities sorted by relevance
         """
         self.ensure_initialized()
+        require_scope(owner)
 
         try:
-            redis_query = self._build_redis_search_query(query, entity_type, tags, status)
+            redis_query = self._build_redis_search_query(query, entity_type, tags, status, owner)
             try:
                 entities = await self._execute_redis_search(redis_query, limit)
+                entities = [e for e in entities if entity_visible(e, owner)]  # org check + defence in depth
                 if not include_expired:
                     entities = [e for e in entities if _is_entity_valid(e)]
                 logger.info("Search query '%s' returned %d results", query, len(entities))
                 return entities
             except Exception as search_error:
                 logger.warning("RediSearch failed, using fallback: %s", search_error)
-                return await self._fallback_search(query, entity_type, limit, include_expired=include_expired)
+                return await self._fallback_search(
+                    query, entity_type, limit, include_expired=include_expired, owner=owner, tags=tags, status=status
+                )
         except Exception as e:
             logger.error("Search failed: %s", e)
             return []
@@ -329,6 +379,8 @@ class QueryOperationsMixin:
         self: AutoBotMemoryGraphCore,
         entity_type: str,
         as_of: str,
+        *,
+        owner: Any,
     ) -> List[Dict[str, Any]]:
         """Return entities of a given type that were valid at a specific point in time.
 
@@ -338,11 +390,13 @@ class QueryOperationsMixin:
         Args:
             entity_type: Entity type to filter by
             as_of: ISO-8601 timestamp representing the point in time
+            owner: REQUIRED OwnerScope / UNSCOPED_ALL_USERS (#18825)
 
         Returns:
             List of entity dictionaries valid at the given timestamp
         """
         self.ensure_initialized()
+        require_scope(owner)
 
         try:
             keys = await self._collect_entity_keys(limit=1000)
@@ -354,7 +408,11 @@ class QueryOperationsMixin:
                 pipe.json().get(key)
             raw_results = await pipe.execute()
 
-            return [e for e in raw_results if e and e.get("type") == entity_type and _is_entity_valid_at(e, as_of)]
+            return [
+                e
+                for e in raw_results
+                if e and e.get("type") == entity_type and entity_visible(e, owner) and _is_entity_valid_at(e, as_of)
+            ]
 
         except Exception as e:
             logger.error("get_entities_as_of failed: %s", e)

@@ -6,10 +6,27 @@
 
 from typing import Any, Dict, List
 
-from autobot_memory_graph import AutoBotMemoryGraph
+from autobot_memory_graph import AutoBotMemoryGraph, OwnerScope, OwnerScopeRequired
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
+
+
+def _owner_for(source: Dict[str, Any] | None) -> OwnerScope | None:
+    """Owner scope carried by a prefetch context / sync turn / search filters (#18825).
+
+    An explicit ``owner`` (OwnerScope) wins, else ``user_id`` (+ optional ``org_id``).
+    None means the caller supplied no principal; reads then return nothing (fail closed).
+    """
+    source = source or {}
+    if isinstance(source.get("owner"), OwnerScope):
+        return source["owner"]
+    if not source.get("user_id"):
+        return None
+    try:
+        return OwnerScope.for_user(source["user_id"], source.get("org_id"))
+    except OwnerScopeRequired:
+        return None
 
 
 class PostgresMemoryProvider:
@@ -42,15 +59,21 @@ class PostgresMemoryProvider:
         try:
             conversation_id = context.get("conversation_id")
             user_id = context.get("user_id")
+            owner = _owner_for(context)
+            if owner is None:
+                logger.warning("Memory prefetch skipped: no user scope in context")
+                return {}
             result = {}
             if conversation_id:
-                conversation = await self.memory_graph.get_entity(entity_name=f"conversation_{conversation_id}")
+                conversation = await self.memory_graph.get_entity(
+                    entity_name=f"conversation_{conversation_id}", owner=owner
+                )
                 if conversation:
                     result["conversation"] = conversation
-                related = await self.memory_graph.search_entities(conversation_id)
+                related = await self.memory_graph.search_entities(conversation_id, owner=owner)
                 result["related_entities"] = related[:10]
             if user_id:
-                user_entity = await self.memory_graph.get_entity(entity_name=f"user_{user_id}")
+                user_entity = await self.memory_graph.get_entity(entity_name=f"user_{user_id}", owner=owner)
                 if user_entity:
                     result["user"] = user_entity
             return result
@@ -71,6 +94,7 @@ class PostgresMemoryProvider:
                         entity_type=update["entity_type"],
                         name=update["name"],
                         observations=update.get("observations", []),
+                        owner=_owner_for(turn) or OwnerScope.system(),
                     )
                 elif update.get("action") == "update":
                     await self._apply_entity_updates(update["entity_id"], update.get("changes", {}))
@@ -98,8 +122,12 @@ class PostgresMemoryProvider:
         if not self.memory_graph:
             logger.warning("Memory graph not initialized for search")
             return []
+        owner = _owner_for(filters)
+        if owner is None:
+            logger.warning("Memory search refused: filters carry no user scope")
+            return []
         try:
-            results = await self.memory_graph.search_entities(query, limit=limit)
+            results = await self.memory_graph.search_entities(query, limit=limit, owner=owner)
             return results
         except Exception as e:
             logger.error(f"Error searching memory: {e}")

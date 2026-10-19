@@ -99,6 +99,12 @@ def _memory_graph() -> Any:
     return graph
 
 
+def _ab_owner() -> Any:
+    from autobot_memory_graph.owner_scope import OwnerScope
+
+    return OwnerScope.for_user("ab-user")
+
+
 def _knowledge_service() -> Any:
     """Double for the L3 retrieval seam.
 
@@ -138,6 +144,7 @@ async def _build_tiered(case: Dict[str, Any]) -> str:
                 model_name="default",
                 session_id="ab-session",
                 memory_graph=_memory_graph(),
+                owner=_ab_owner(),  # #18825: L2 is owner-scoped; production passes the turn principal
                 # #13866: None, mirroring the production call site
                 # (llm_handler.py) since #13742. Passing a mock here reported L3
                 # as rendering while production could not render it at all —

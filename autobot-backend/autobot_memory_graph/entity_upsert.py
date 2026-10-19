@@ -21,6 +21,15 @@ from typing import Any, Dict, List
 from autobot_shared.logging_manager import get_logger
 
 from .core import AutoBotMemoryGraphCore
+from .owner_scope import (
+    OWNER_USER_FIELD,
+    SHARED_OWNER_ID,
+    SYSTEM_OWNER_ID,
+    UNSCOPED_ALL_USERS,
+    OwnerScope,
+    entity_visible,
+    require_scope,
+)
 
 logger = get_logger(__name__)
 
@@ -70,7 +79,8 @@ async def indexed_entity(graph: AutoBotMemoryGraphCore, name: str) -> Dict[str, 
 
 async def adopt_legacy_entity(graph: AutoBotMemoryGraphCore, name: str) -> Dict[str, Any] | None:
     """Index an exact-name entity that predates the index. The lookup is strict: it raises."""
-    legacy = await graph.get_entity(entity_name=name, strict=True)
+    # Name-index maintenance, not a read for a caller: the owner check happens in get_or_create.
+    legacy = await graph.get_entity(entity_name=name, strict=True, owner=UNSCOPED_ALL_USERS)
     if not legacy or legacy.get("_resolution") != "exact":
         return None
     await graph.redis_client.set(name_index_key(name), legacy["id"], nx=True)
@@ -98,20 +108,27 @@ async def get_or_create(
     observations: List[str],
     metadata: Dict[str, Any] | None,
     tags: List[str] | None,
+    owner: OwnerScope,
 ) -> tuple[Dict[str, Any], bool]:
-    """Return ``(entity, created)``; see ``AutoBotMemoryGraph.get_or_create_entity``."""
+    """Return ``(entity, created)``; see ``AutoBotMemoryGraph.get_or_create_entity``.
+
+    #18825: names are globally unique, so an existing entity the caller may not read is
+    never returned -- that would be a cross-owner read through the name index.
+    """
     graph._validate_entity_inputs(entity_type, name)
     existing = await indexed_entity(graph, name) or await adopt_legacy_entity(graph, name)
     if existing:
+        _require_readable(existing, owner, name)
         return existing, False
     entity_id = str(uuid.uuid4())
-    entity_metadata = graph._prepare_entity_metadata(metadata, tags)
-    entity = graph._build_entity_document(entity_id, entity_type, name, observations, entity_metadata)
+    entity_metadata = graph._prepare_entity_metadata(metadata, tags, owner)
+    entity = graph._build_entity_document(entity_id, entity_type, name, observations, entity_metadata, owner)
     owner = await claim_and_write(graph, name, entity)
     if owner != entity_id:
         winner = await graph.redis_client.json().get(f"{ENTITY_KEY_PREFIX}{owner}")
         if winner is None:
             raise RuntimeError(f"Entity {name!r} changed while being created; retry")
+        _require_readable(winner, owner, name)
         return winner, False
     if graph.knowledge_base:
         await graph._generate_entity_embedding(entity_id, entity)
@@ -119,12 +136,22 @@ async def get_or_create(
     return entity, True
 
 
+def _require_readable(existing: Dict[str, Any], owner: OwnerScope, name: str) -> None:
+    """Refuse to hand back (or reveal) an entity that belongs to someone else. #18825."""
+    # A platform writer re-finding its own pre-#18825 (ownerless) entity is idempotence, not a leak.
+    legacy_platform = not existing.get(OWNER_USER_FIELD) and owner.user_id in (SHARED_OWNER_ID, SYSTEM_OWNER_ID)
+    if not (legacy_platform or entity_visible(existing, owner)):
+        raise PermissionError(f"Entity name {name!r} is already in use")
+
+
 async def release_name(graph: AutoBotMemoryGraphCore, name: str, entity_id: str) -> None:
     """Drop the name index entry, but only if it still points at ``entity_id`` (atomic)."""
     await graph.redis_client.eval(RELEASE_IF_OWNER_LUA, 1, name_index_key(name), entity_id)
 
 
-async def strict_search_by_name(graph: AutoBotMemoryGraphCore, name: str, limit: int) -> List[Dict[str, Any]]:
+async def strict_search_by_name(
+    graph: AutoBotMemoryGraphCore, name: str, limit: int, *, owner: Any
+) -> List[Dict[str, Any]]:
     """Name candidates for ``get_entity(strict=True)``. Redis errors raise, never read as 'none'.
 
     RediSearch first; if the index is unavailable, a full key scan. Both paths raise when
@@ -132,15 +159,22 @@ async def strict_search_by_name(graph: AutoBotMemoryGraphCore, name: str, limit:
     """
     from .queries import _is_entity_valid
 
+    require_scope(owner)
     try:
-        hits = await graph._execute_redis_search(graph._build_redis_search_query(name, None, None, None), limit)
-        return [e for e in hits if _is_entity_valid(e)]
+        query = graph._build_redis_search_query(name, None, None, None, owner)  # raises if owner omitted (#18825)
+        hits = await graph._execute_redis_search(query, limit)
+        return [e for e in hits if _is_entity_valid(e) and entity_visible(e, owner)]
     except Exception as search_error:
         logger.warning("RediSearch unavailable for strict lookup, scanning keys: %s", search_error)
     folded = name.strip().casefold()
     found: List[Dict[str, Any]] = []
     async for key in graph.redis_client.scan_iter(match=f"{ENTITY_KEY_PREFIX}*"):
         doc = await graph.redis_client.json().get(key)
-        if doc and str(doc.get("name", "")).strip().casefold() == folded and _is_entity_valid(doc):
+        if (
+            doc
+            and str(doc.get("name", "")).strip().casefold() == folded
+            and _is_entity_valid(doc)
+            and entity_visible(doc, owner)
+        ):
             found.append(doc)
     return found

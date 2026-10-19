@@ -19,6 +19,7 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import utc_timestamp
 
 from .core import AutoBotMemoryGraphCore
+from .owner_scope import UNSCOPED_ALL_USERS, OwnerScope
 
 logger = get_logger(__name__)
 
@@ -144,6 +145,7 @@ class SecretManagementMixin:
             observations=[f"Secret created: {secret_type} ({scope} scope)"],
             metadata=secret_metadata,
             tags=["secret", secret_type, scope],
+            owner=OwnerScope.for_user(owner_id),  # #18825
         )
         await self._create_secret_owner_relations(owner_id, entity["id"])
         await self._create_secret_scope_relations(entity["id"], scope, session_id, shared_with)
@@ -209,6 +211,7 @@ class SecretManagementMixin:
                 observations=[f"Secret {secret_id} used in {activity_type}"],
                 metadata=audit_metadata,
                 tags=["audit", "secret_usage"],
+                owner=OwnerScope.for_user(user_id),  # #18825
             )
 
             return entity
@@ -264,10 +267,13 @@ class SecretManagementMixin:
     ) -> List[Dict[str, Any]]:
         """Issue #665: Get secrets shared with a user."""
         secrets = []
+        # Authorised by the explicit shared_with check below, not by ownership, so this read is
+        # deliberately unscoped (#18825).
         shared_search = await self.search_entities(
             query=user_id,
             entity_type="secret",
             limit=100,
+            owner=UNSCOPED_ALL_USERS,
         )
 
         for secret in shared_search:

@@ -31,6 +31,7 @@ from autobot_memory_graph.core import (
     canonical_relation_type,
     relation_type_matches,
 )
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS
 from knowledge.relations import KB_RELATION_TYPES, RelationsMixin
 from services.security_memory_integration import (
     SECURITY_TO_BASE_RELATION,
@@ -222,7 +223,9 @@ class TestMemoryGraphRoundTrip:
         )
         graph._get_incoming_relations = AsyncMock(return_value=[])
 
-        related = await graph.get_related_entities("A", relation_type="relates_to", direction="outgoing")
+        related = await graph.get_related_entities(
+            "A", relation_type="relates_to", direction="outgoing", owner=UNSCOPED_ALL_USERS
+        )
 
         assert len(related) == 1
         assert related[0]["relation"]["type"] == "related_to"

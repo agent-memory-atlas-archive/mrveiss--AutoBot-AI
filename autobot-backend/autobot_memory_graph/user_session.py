@@ -21,6 +21,7 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import utc_timestamp
 
 from .core import VALID_ACTIVITY_TYPES, AutoBotMemoryGraphCore
+from .owner_scope import UNSCOPED_ALL_USERS, OwnerScope
 
 logger = get_logger(__name__)
 
@@ -66,7 +67,8 @@ class UserSessionMixin:
         self.ensure_initialized()
 
         try:
-            existing = await self.search_entities(query=user_id, entity_type="user", limit=1)
+            owner = OwnerScope.for_user(user_id)  # #18825: a user entity belongs to that user
+            existing = await self.search_entities(query=user_id, entity_type="user", limit=1, owner=owner)
             if existing:
                 logger.debug("User entity already exists for %s", username)
                 return existing[0]
@@ -78,6 +80,7 @@ class UserSessionMixin:
                 observations=[f"User account created: {username}"],
                 metadata=user_metadata,
                 tags=["user", "account"],
+                owner=owner,
             )
             logger.info("Created user entity for %s (id: %s)", username, user_id)
             return entity
@@ -172,6 +175,7 @@ class UserSessionMixin:
                 observations=[f"Session created by user {owner_id}"],
                 metadata=session_metadata,
                 tags=["session", "chat"],
+                owner=OwnerScope.for_user(owner_id),  # #18825
             )
             await self._create_session_owner_relations(owner_id, entity["id"])
             await self._create_collaborator_relations(entity["id"], collaborators)
@@ -285,6 +289,7 @@ class UserSessionMixin:
                 observations=[content],
                 metadata=activity_metadata,
                 tags=["activity", activity_type.replace("_activity", "")],
+                owner=OwnerScope.for_user(user_id),  # #18825: the acting principal, never an unvetted body field
             )
             await self._create_activity_relations(session_id, entity["id"], user_id)
             await self._create_secret_usage_relations(entity["id"], user_id, activity_type, secrets_used)
@@ -329,10 +334,13 @@ class UserSessionMixin:
                     sessions.append(session)
 
             if include_collaborative:
+                # Authorised by the explicit collaborators check below, not by ownership, so this
+                # one read is deliberately unscoped (#18825).
                 collab_sessions = await self.search_entities(
                     query=user_id,
                     entity_type="chat_session",
                     limit=100,
+                    owner=UNSCOPED_ALL_USERS,
                 )
                 for session in collab_sessions:
                     collaborators = session.get("metadata", {}).get("collaborators", [])

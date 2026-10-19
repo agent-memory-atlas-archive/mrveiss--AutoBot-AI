@@ -32,6 +32,7 @@ from typing import Any, Dict, List
 from autobot_shared.logging_manager import get_logger
 
 from .core import AutoBotMemoryGraphCore
+from .owner_scope import UNSCOPED_ALL_USERS, OwnerScope, entity_visible, require_scope
 from .property_graph import PropertyGraph
 
 logger = get_logger(__name__)
@@ -131,6 +132,8 @@ class PropertyGraphMixin:
         observations: List[str] | None = None,
         metadata: Dict[str, Any] | None = None,
         tags: List[str] | None = None,
+        *,
+        owner: OwnerScope,
     ) -> Dict[str, Any]:
         """Create entity in the standard store AND mirror into PropertyGraph."""
         entity = await super().create_entity(  # type: ignore[misc]
@@ -139,6 +142,7 @@ class PropertyGraphMixin:
             observations=observations,
             metadata=metadata,
             tags=tags,
+            owner=owner,
         )
         if entity:
             node_props: Dict[str, Any] = {
@@ -193,8 +197,13 @@ class PropertyGraphMixin:
                         edge_props[k] = v
             try:
                 # Resolve IDs via existing entity lookup
-                from_entity_data = await self.get_entity(entity_name=from_entity)  # type: ignore[attr-defined]
-                to_entity_data = await self.get_entity(entity_name=to_entity)  # type: ignore[attr-defined]
+                # Mirror of a write that already resolved these names globally (#18825 scopes reads).
+                from_entity_data = await self.get_entity(  # type: ignore[attr-defined]
+                    entity_name=from_entity, owner=UNSCOPED_ALL_USERS
+                )
+                to_entity_data = await self.get_entity(  # type: ignore[attr-defined]
+                    entity_name=to_entity, owner=UNSCOPED_ALL_USERS
+                )
                 if from_entity_data and to_entity_data:
                     await self.graph.add_edge(
                         from_entity_data["id"],
@@ -229,6 +238,8 @@ class PropertyGraphMixin:
         relation: str | None = None,
         max_depth: int = 6,
         direction: str = "both",
+        *,
+        owner: Any,
     ) -> Dict[str, Any]:
         """Return the shortest relationship path between two named entities.
 
@@ -246,6 +257,9 @@ class PropertyGraphMixin:
             max_depth: Maximum path length to search.
             direction: ``"outgoing"``, ``"incoming"``, or ``"both"`` (default —
                 connection questions are usually undirected).
+            owner: REQUIRED OwnerScope / UNSCOPED_ALL_USERS (#18825). Both endpoints
+                are resolved within the scope and the traversal drops every hop the
+                owner may not read, so a path never runs through another owner's node.
 
         Returns:
             Dict with ``found``, ``reason``, ``missing_entities``,
@@ -253,9 +267,10 @@ class PropertyGraphMixin:
             Redis failures propagate: a traversal that could not run must not be
             reported as "no path".
         """
+        require_scope(owner)
         from_node, to_node = await asyncio.gather(
-            self.get_entity(entity_name=from_entity),  # type: ignore[attr-defined]
-            self.get_entity(entity_name=to_entity),  # type: ignore[attr-defined]
+            self.get_entity(entity_name=from_entity, owner=owner),  # type: ignore[attr-defined]
+            self.get_entity(entity_name=to_entity, owner=owner),  # type: ignore[attr-defined]
         )
         query = {
             "from_entity": from_entity,
@@ -290,8 +305,18 @@ class PropertyGraphMixin:
             relation=relation,
             max_depth=max_depth,
             direction=direction,
+            hop_allowed=self._hop_reader(owner),
         )
         return _path_result(from_node, to_node, raw_path, [], query)
+
+    def _hop_reader(self: AutoBotMemoryGraphCore, owner: Any):
+        """Predicate for ``shortest_path``: may ``owner`` read the entity behind this node id? #18825."""
+
+        async def allowed(node_id: str) -> bool:
+            entity = await self.redis_client.json().get(f"memory:entity:{node_id}")
+            return entity_visible(entity, owner)
+
+        return allowed
 
     async def _assert_store_reachable(self: AutoBotMemoryGraphCore) -> None:
         """Raise if the entity store is unreachable. #13474.

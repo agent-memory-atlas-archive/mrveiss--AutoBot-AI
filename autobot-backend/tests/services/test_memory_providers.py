@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, create_autospec, patch
 
 import pytest
 
+from autobot_memory_graph import OwnerScope
 from services.memory import (
     PostgresMemoryProvider,
     RedisMemoryProvider,
@@ -94,10 +95,12 @@ class TestPostgresMemoryProvider:
             {"id": "entity_2", "score": 0.87},
         ]
 
-        results = await provider.search("test query", limit=10)
+        results = await provider.search("test query", limit=10, filters={"user_id": "user_456"})
 
         assert len(results) == 2
-        mock_graph.search_entities.assert_called_once_with("test query", limit=10)
+        mock_graph.search_entities.assert_called_once_with(
+            "test query", limit=10, owner=OwnerScope.for_user("user_456")
+        )
 
     @pytest.mark.asyncio
     async def test_health_check(self, provider):

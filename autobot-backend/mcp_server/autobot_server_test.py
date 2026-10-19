@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS
 from autobot_shared.ssot_config import config
 from mcp_server.autobot_server import AutoBotMCPServer, _stdio_bearer_token
 
@@ -409,6 +410,7 @@ async def test_memory_path_delegates_to_find_path():
         relation="CAUSED",
         max_depth=6,
         direction="both",
+        owner=UNSCOPED_ALL_USERS,
     )
 
 
@@ -550,4 +552,6 @@ async def test_valid_arguments_still_reach_the_graph():
         result = await server._memory_entity_lookup("  Redis Config  ")
 
     assert result["name"] == "Redis Config"
-    fake_graph.get_entity.assert_awaited_once_with(entity_name="Redis Config", include_relations=True)
+    fake_graph.get_entity.assert_awaited_once_with(
+        entity_name="Redis Config", include_relations=True, owner=UNSCOPED_ALL_USERS
+    )

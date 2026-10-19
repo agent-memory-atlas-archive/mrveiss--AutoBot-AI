@@ -79,6 +79,8 @@ async def _upsert_graph_entity(graph, entity: dict, session_id: str) -> None:
 
     A lookup error propagates (the caller counts it as a failure); it is never read as absence.
     """
+    from autobot_memory_graph import OwnerScope
+
     name = entity.get("name", "")
     observations = [f"{k}: {v}" for k, v in (entity.get("properties") or {}).items()]
     _, created = await graph.get_or_create_entity(
@@ -86,6 +88,7 @@ async def _upsert_graph_entity(graph, entity: dict, session_id: str) -> None:
         name=name,
         observations=observations,
         metadata={"session_id": session_id},
+        owner=OwnerScope.system(),  # #18825: no principal on this task -> platform-owned, invisible to users
     )
     if not created and observations:
         await graph.add_observations(entity_name=name, observations=observations)

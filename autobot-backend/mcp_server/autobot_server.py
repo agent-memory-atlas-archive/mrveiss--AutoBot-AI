@@ -667,8 +667,7 @@ class AutoBotMCPServer:
         from knowledge._composed import get_knowledge_base
 
         kb = await get_knowledge_base()
-        result = await kb.list_all_tags()
-        return result
+        return await kb.list_all_tags()
 
     # ------------------------------------------------------------------
     # Memory graph tool implementations
@@ -676,25 +675,25 @@ class AutoBotMCPServer:
 
     async def _memory_entity_lookup(self, name: str) -> Any:
         from api.schemas_knowledge import MemoryEntityLookupRequest
-        from autobot_memory_graph import AutoBotMemoryGraph
+        from autobot_memory_graph import UNSCOPED_ALL_USERS, AutoBotMemoryGraph  # stdio MCP: no user identity (#16727)
 
         name = MemoryEntityLookupRequest(name=name).name
         graph = AutoBotMemoryGraph()
         await graph.initialize()
-        entity = await graph.get_entity(entity_name=name, include_relations=True)
+        entity = await graph.get_entity(entity_name=name, include_relations=True, owner=UNSCOPED_ALL_USERS)
         if entity is None:
             return {"error": "Entity not found", "name": name}
         return entity
 
     async def _memory_timeline(self, entity: str, range: str | None = None) -> Any:
         from api.schemas_knowledge import MemoryTimelineRequest
-        from autobot_memory_graph import AutoBotMemoryGraph
+        from autobot_memory_graph import UNSCOPED_ALL_USERS, AutoBotMemoryGraph  # stdio MCP: no user identity (#16727)
 
         args = MemoryTimelineRequest(entity=entity, range=range)
         entity, range = args.entity, args.range
         graph = AutoBotMemoryGraph()
         await graph.initialize()
-        base = await graph.get_entity(entity_name=entity, include_relations=True)
+        base = await graph.get_entity(entity_name=entity, include_relations=True, owner=UNSCOPED_ALL_USERS)
         if base is None:
             return {"error": "Entity not found", "entity": entity}
 
@@ -729,7 +728,7 @@ class AutoBotMCPServer:
 
     async def _memory_related(self, entity: str, depth: int = 2) -> Any:
         from api.schemas_knowledge import MemoryRelatedRequest
-        from autobot_memory_graph import AutoBotMemoryGraph
+        from autobot_memory_graph import UNSCOPED_ALL_USERS, AutoBotMemoryGraph  # stdio MCP: no user identity (#16727)
 
         # #13762: the entity name was unbounded. ``depth`` keeps its existing
         # clamp rather than becoming a rejection, so the model's ge/le is the
@@ -739,7 +738,7 @@ class AutoBotMCPServer:
         graph = AutoBotMemoryGraph()
         await graph.initialize()
 
-        root = await graph.get_entity(entity_name=entity, include_relations=True)
+        root = await graph.get_entity(entity_name=entity, include_relations=True, owner=UNSCOPED_ALL_USERS)
         if root is None:
             return {"error": "Entity not found", "entity": entity}
 
@@ -790,7 +789,7 @@ class AutoBotMCPServer:
         an error the way an unbounded entity name is.
         """
         from api.schemas_knowledge import GraphRAGPathRequest
-        from autobot_memory_graph import AutoBotMemoryGraph
+        from autobot_memory_graph import UNSCOPED_ALL_USERS, AutoBotMemoryGraph  # stdio MCP: no user identity (#16727)
 
         allowed_directions = ("outgoing", "incoming", "both")
         if direction not in allowed_directions:
@@ -812,6 +811,7 @@ class AutoBotMCPServer:
             relation=args.relation,
             max_depth=args.max_depth,
             direction=args.direction,
+            owner=UNSCOPED_ALL_USERS,
         )
 
     async def _memory_verbatim_search(self, query: str, session_filter: str | None = None) -> Any:

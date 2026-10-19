@@ -16,6 +16,7 @@ from typing import Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
+from api.chat_activity_store import _process_activity_batch, _store_single_activity, activity_principal_id
 from api.schemas_chat import (
     ActivityAddData,
     ActivityBatchCreate,
@@ -1489,78 +1490,6 @@ def _create_activity_unavailable_response(
     )
 
 
-async def _store_single_activity(
-    memory_graph: AutoBotMemoryGraph,
-    session_id: str,
-    activity: ActivityCreate,
-) -> Dict:
-    """
-    Store a single activity in memory graph.
-
-    Issue #665: Extracted helper for activity storage.
-
-    Returns:
-        Entity creation result dict
-    """
-    return await memory_graph.create_activity_entity(
-        activity_type=f"{activity.type}_activity",
-        session_id=session_id,
-        user_id=activity.user_id,
-        content=activity.content,
-        secrets_used=activity.secrets_used,
-        metadata={
-            "frontend_id": activity.activity_id,
-            "frontend_timestamp": activity.timestamp,
-            **(activity.metadata or {}),
-        },
-    )
-
-
-async def _process_activity_batch(
-    memory_graph: AutoBotMemoryGraph,
-    session_id: str,
-    activities: List[ActivityCreate],
-    request_id: str,
-) -> Dict:
-    """
-    Process a batch of activities and store them in memory graph.
-
-    Issue #620.
-
-    Args:
-        memory_graph: Memory graph instance for storage
-        session_id: Session ID for the activities
-        activities: List of activities to process
-        request_id: Request ID for logging
-
-    Returns:
-        Dict with stored_count, failed_count, and stored_ids
-    """
-    stored_count = 0
-    failed_count = 0
-    stored_ids: List[str] = []
-
-    for activity in activities:
-        try:
-            await _store_single_activity(memory_graph, session_id, activity)
-            stored_count += 1
-            stored_ids.append(activity.activity_id)
-        except Exception as activity_error:
-            logger.warning(
-                "[%s] Failed to store activity %s: %s",
-                request_id,
-                activity.activity_id,
-                activity_error,
-            )
-            failed_count += 1
-
-    return {
-        "stored_count": stored_count,
-        "failed_count": failed_count,
-        "stored_ids": stored_ids,
-    }
-
-
 @router.post("/chat/sessions/{session_id}/activities", response_model=DataResponse[ActivityAddData])
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
@@ -1583,6 +1512,7 @@ async def add_session_activity(
     log_request_context(request, "add_session_activity", request_id)
 
     _validate_session_id_or_raise(session_id)
+    user_id = activity_principal_id(ownership)  # #18825: never activity_data.user_id
 
     memory_graph = _get_memory_graph_or_none(request)
     if not memory_graph:
@@ -1590,7 +1520,7 @@ async def add_session_activity(
         return _create_activity_unavailable_response(1, request_id, is_batch=False)
 
     try:
-        activity_entity = await _store_single_activity(memory_graph, session_id, activity_data)
+        activity_entity = await _store_single_activity(memory_graph, session_id, activity_data, user_id)
 
         log_chat_event(
             "activity_created",
@@ -1598,7 +1528,7 @@ async def add_session_activity(
             {
                 "activity_id": activity_data.activity_id,
                 "type": activity_data.type,
-                "user_id": activity_data.user_id,
+                "user_id": user_id,
                 "request_id": request_id,
             },
         )
@@ -1645,6 +1575,7 @@ async def add_session_activities_batch(
     log_request_context(request, "add_session_activities_batch", request_id)
 
     _validate_session_id_or_raise(session_id)
+    user_id = activity_principal_id(ownership)  # #18825: never the per-activity body user_id
 
     memory_graph = _get_memory_graph_or_none(request)
     total_activities = len(batch_data.activities)
@@ -1658,7 +1589,7 @@ async def add_session_activities_batch(
         return _create_activity_unavailable_response(total_activities, request_id, is_batch=True)
 
     # Process batch using extracted helper (Issue #620)
-    result = await _process_activity_batch(memory_graph, session_id, batch_data.activities, request_id)
+    result = await _process_activity_batch(memory_graph, session_id, batch_data.activities, request_id, user_id)
 
     log_chat_event(
         "activities_batch_created",

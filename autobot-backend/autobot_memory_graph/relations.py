@@ -28,6 +28,7 @@ from .core import (
     canonical_relation_type,
     relation_type_matches,
 )
+from .owner_scope import UNSCOPED_ALL_USERS
 
 logger = get_logger(__name__)
 
@@ -91,8 +92,10 @@ class RelationOperationsMixin:
     ) -> tuple:
         """Resolve entity names to IDs, raising if not found. Issue #620."""
         from_entity_data, to_entity_data = await asyncio.gather(
-            self.get_entity(entity_name=from_entity),
-            self.get_entity(entity_name=to_entity),
+            # Relation writes resolve names globally; #18825 scopes reads and stamps ownership, and
+            # mutation-by-name scoping is a separate follow-up, so the sentinel is explicit here.
+            self.get_entity(entity_name=from_entity, owner=UNSCOPED_ALL_USERS),
+            self.get_entity(entity_name=to_entity, owner=UNSCOPED_ALL_USERS),
         )
         if not from_entity_data or not to_entity_data:
             raise ValueError("Source or target entity not found")
@@ -316,158 +319,6 @@ class RelationOperationsMixin:
             logger.error("Failed to get relations for %s: %s", entity_id, e)
             return {"relations": []}
 
-    async def _process_outgoing(
-        self: AutoBotMemoryGraphCore,
-        current_id: str,
-        relation_type: str | None,
-        depth: int,
-        max_depth: int,
-        queue: List,
-    ) -> List[Dict[str, Any]]:
-        """Process outgoing relations for BFS traversal. Issue #620."""
-        outgoing = await self._get_outgoing_relations(current_id)
-        return await self._process_direction_relations(
-            outgoing, relation_type, "outgoing", "to", depth, max_depth, queue
-        )
-
-    async def _process_incoming(
-        self: AutoBotMemoryGraphCore,
-        current_id: str,
-        relation_type: str | None,
-        depth: int,
-        max_depth: int,
-        queue: List,
-    ) -> List[Dict[str, Any]]:
-        """Process incoming relations for BFS traversal. Issue #620."""
-        incoming = await self._get_incoming_relations(current_id)
-        return await self._process_direction_relations(
-            incoming, relation_type, "incoming", "from", depth, max_depth, queue
-        )
-
-    async def _fetch_and_process_relations(
-        self: AutoBotMemoryGraphCore,
-        current_id: str,
-        direction: str,
-        relation_type: str | None,
-        depth: int,
-        max_depth: int,
-        queue: List,
-    ) -> List[Dict[str, Any]]:
-        """Fetch and process relations for BFS traversal. Issue #620."""
-        need_outgoing = direction in OUTGOING_DIRECTIONS
-        need_incoming = direction in INCOMING_DIRECTIONS
-        related = []
-
-        if need_outgoing and need_incoming:
-            outgoing, incoming = await asyncio.gather(
-                self._get_outgoing_relations(current_id),
-                self._get_incoming_relations(current_id),
-            )
-            related.extend(
-                await self._process_direction_relations(
-                    outgoing, relation_type, "outgoing", "to", depth, max_depth, queue
-                )
-            )
-            related.extend(
-                await self._process_direction_relations(
-                    incoming, relation_type, "incoming", "from", depth, max_depth, queue
-                )
-            )
-        elif need_outgoing:
-            related.extend(await self._process_outgoing(current_id, relation_type, depth, max_depth, queue))
-        elif need_incoming:
-            related.extend(await self._process_incoming(current_id, relation_type, depth, max_depth, queue))
-
-        return related
-
-    def _build_related_entry(
-        self: AutoBotMemoryGraphCore,
-        rel: Dict[str, Any],
-        entity: Dict[str, Any],
-        direction: str,
-    ) -> Dict[str, Any]:
-        """Build a related entity entry for BFS results. Issue #620."""
-        return {"entity": entity, "relation": rel, "direction": direction}
-
-    async def _process_direction_relations(
-        self: AutoBotMemoryGraphCore,
-        relations: List[Dict[str, Any]],
-        relation_type: str | None,
-        direction: str,
-        id_field: str,
-        depth: int,
-        max_depth: int,
-        queue: List,
-    ) -> List[Dict[str, Any]]:
-        """Process relations in a single direction. Issue #620."""
-        # #13452: alias-aware so legacy-spelled stored edges still match.
-        filtered = [rel for rel in relations if relation_type_matches(rel["type"], relation_type)]
-        if not filtered:
-            return []
-
-        entity_ids = [rel[id_field] for rel in filtered]
-        entities = await asyncio.gather(
-            *[self.get_entity(entity_id=eid) for eid in entity_ids],
-            return_exceptions=True,
-        )
-
-        related = []
-        for rel, related_entity in zip(filtered, entities):
-            if related_entity and not isinstance(related_entity, Exception):
-                related.append(self._build_related_entry(rel, related_entity, direction))
-                if depth + 1 <= max_depth:
-                    queue.append((rel[id_field], depth + 1))
-
-        return related
-
-    async def get_related_entities(
-        self: AutoBotMemoryGraphCore,
-        entity_name: str,
-        relation_type: str | None = None,
-        direction: str = "both",
-        max_depth: int = 1,
-    ) -> List[Dict[str, Any]]:
-        """Get entities related to specified entity.
-
-        Args:
-            entity_name: Name of entity
-            relation_type: Filter by relation type (None = all types)
-            direction: "outgoing", "incoming", or "both"
-            max_depth: Relationship traversal depth (1-3)
-
-        Returns:
-            List of related entities with relation metadata
-        """
-        self.ensure_initialized()
-        relation_type = canonical_relation_type(relation_type) if relation_type else relation_type  # #13452
-
-        try:
-            entity = await self.get_entity(entity_name=entity_name)
-            if not entity:
-                return []
-
-            entity_id = entity["id"]
-            related = []
-            visited = set()
-            queue = [(entity_id, 0)]
-
-            while queue:
-                current_id, depth = queue.pop(0)
-                if current_id in visited or depth > max_depth:
-                    continue
-                visited.add(current_id)
-
-                direction_related = await self._fetch_and_process_relations(
-                    current_id, direction, relation_type, depth, max_depth, queue
-                )
-                related.extend(direction_related)
-
-            return related
-
-        except Exception as e:
-            logger.error("Failed to get related entities: %s", e)
-            return []
-
     async def _filter_outgoing_relations(
         self: AutoBotMemoryGraphCore,
         from_id: str,
@@ -614,8 +465,8 @@ class RelationOperationsMixin:
 
         try:
             from_entity_data, to_entity_data = await asyncio.gather(
-                self.get_entity(entity_name=from_entity),
-                self.get_entity(entity_name=to_entity),
+                self.get_entity(entity_name=from_entity, owner=UNSCOPED_ALL_USERS),  # see _resolve_entity_ids
+                self.get_entity(entity_name=to_entity, owner=UNSCOPED_ALL_USERS),
             )
 
             if not from_entity_data or not to_entity_data:
