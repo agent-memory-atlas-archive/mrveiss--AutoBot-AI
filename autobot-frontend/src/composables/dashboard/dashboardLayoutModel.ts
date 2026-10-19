@@ -51,7 +51,7 @@ export function stepSpan(span: WidgetSpan, dir: 1 | -1): WidgetSpan {
 }
 
 /** Move the widget at `from` by `delta` slots, returning a new array. */
-export function moveWidget(widgets: DashboardWidget[], from: number, delta: number): DashboardWidget[] {
+export function moveWidget<T>(widgets: T[], from: number, delta: number): T[] {
   const to = Math.min(widgets.length - 1, Math.max(0, from + delta))
   if (to === from) return widgets
   const next = [...widgets]

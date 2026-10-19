@@ -2,7 +2,7 @@
   Copyright 2025-2026 mrveiss
   SPDX-License-Identifier: Apache-2.0
 -->
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends DashboardWidget">
 /**
  * 12-column dashboard grid (#18242, spec §4.4).
  *
@@ -26,16 +26,17 @@ import {
 import { useDashboardGrabMode } from '@/composables/dashboard/useDashboardGrabMode'
 
 const props = defineProps<{
-  widgets: DashboardWidget[]
+  widgets: T[]
   editing: boolean
 }>()
 
-const emit = defineEmits<{ 'update:widgets': [widgets: DashboardWidget[]] }>()
+const emit = defineEmits<{ 'update:widgets': [widgets: T[]] }>()
+defineSlots<{ widget(props: { widget: T }): unknown }>()
 const { t } = useI18n()
 
 const model = computed({
   get: () => props.widgets,
-  set: (next: DashboardWidget[]) => emit('update:widgets', next),
+  set: (next: T[]) => emit('update:widgets', next),
 })
 const { grabbedId, announcement, onKeydown } = useDashboardGrabMode(model)
 const editing = toRef(props, 'editing')
@@ -53,8 +54,9 @@ function handleKeydown(id: string, e: KeyboardEvent): void {
   if (onKeydown(id, e)) e.preventDefault()
 }
 
-function patch(id: string, change: Partial<DashboardWidget>): void {
-  model.value = props.widgets.map((w) => (w.id === id ? { ...w, ...change } : w))
+// Only span/height change here; the result keeps every field of the caller's own widget type.
+function patch(id: string, change: Pick<Partial<DashboardWidget>, 'span' | 'height'>): void {
+  model.value = props.widgets.map((w) => (w.id === id ? ({ ...w, ...change } as T) : w))
 }
 
 function resizeWidth(w: DashboardWidget, dir: 1 | -1): void {
@@ -106,10 +108,10 @@ const atMaxSpan = (w: DashboardWidget) => w.span === WIDGET_SPANS[WIDGET_SPANS.l
       @dragend="draggingId = null"
     >
       <div v-if="editing" class="absolute top-1 right-1 z-dropdown flex gap-0.5 rounded-md bg-autobot-bg-elevated">
-        <BaseButton size="xs" variant="ghost" :aria-label="t('dashboardGrid.narrower')" :disabled="atMinSpan(w)" @click="resizeWidth(w, -1)">−</BaseButton>
-        <BaseButton size="xs" variant="ghost" :aria-label="t('dashboardGrid.wider')" :disabled="atMaxSpan(w)" @click="resizeWidth(w, 1)">+</BaseButton>
-        <BaseButton size="xs" variant="ghost" :aria-label="t('dashboardGrid.shorter')" @click="resizeHeight(w, -1)">↑</BaseButton>
-        <BaseButton size="xs" variant="ghost" :aria-label="t('dashboardGrid.taller')" @click="resizeHeight(w, 1)">↓</BaseButton>
+        <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.narrower')" :disabled="atMinSpan(w)" @click="resizeWidth(w, -1)">−</BaseButton>
+        <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.wider')" :disabled="atMaxSpan(w)" @click="resizeWidth(w, 1)">+</BaseButton>
+        <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.shorter')" @click="resizeHeight(w, -1)">↑</BaseButton>
+        <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.taller')" @click="resizeHeight(w, 1)">↓</BaseButton>
       </div>
       <slot name="widget" :widget="w" />
     </section>

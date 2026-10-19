@@ -16,11 +16,11 @@ import {
   type DashboardWidget,
 } from './dashboardLayoutModel'
 
-export function useDashboardGrabMode(widgets: Ref<DashboardWidget[]>) {
+export function useDashboardGrabMode<T extends DashboardWidget>(widgets: Ref<T[]>) {
   const { t } = useI18n()
   const grabbedId = ref<string | null>(null)
   const announcement = ref('')
-  let snapshot: DashboardWidget[] | null = null
+  let snapshot: T[] | null = null
 
   const indexOf = (id: string) => widgets.value.findIndex((w) => w.id === id)
   const label = (w: DashboardWidget) => w.title || w.type
@@ -54,10 +54,13 @@ export function useDashboardGrabMode(widgets: Ref<DashboardWidget[]>) {
 
   function resize(id: string, key: string) {
     const i = indexOf(id)
-    const w = { ...widgets.value[i] }
-    if (key === 'ArrowLeft' || key === 'ArrowRight') w.span = stepSpan(w.span, key === 'ArrowRight' ? 1 : -1)
-    else w.height = clampHeight(w.height + (key === 'ArrowDown' ? HEIGHT_STEP : -HEIGHT_STEP))
-    widgets.value = widgets.value.map((x, j) => (j === i ? w : x))
+    const cur = widgets.value[i]
+    const change =
+      key === 'ArrowLeft' || key === 'ArrowRight'
+        ? { span: stepSpan(cur.span, key === 'ArrowRight' ? 1 : -1) }
+        : { height: clampHeight(cur.height + (key === 'ArrowDown' ? HEIGHT_STEP : -HEIGHT_STEP)) }
+    // The caller's widget type keeps its extra fields; only span or height changes.
+    widgets.value = widgets.value.map((x, j) => (j === i ? ({ ...x, ...change } as T) : x))
     announcePosition(id, 'dashboardGrid.announce.resized')
   }
 
