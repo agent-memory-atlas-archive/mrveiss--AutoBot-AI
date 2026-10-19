@@ -22,6 +22,7 @@ import apiClient from '@/utils/ApiClient'
 import { fetchWithAuth } from '@/utils/fetchWithAuth'
 import { createLogger } from '@/utils/debugUtils'
 import { usePollingJob } from '@/composables/usePollingJob'
+import { CLEAR_STUCK_FORBIDDEN_MESSAGE, isClearStuckForbidden } from '@/composables/usePatternClearStuck'
 
 const logger = createLogger('useBackgroundTask')
 
@@ -50,18 +51,17 @@ async function getBackendUrl(): Promise<string> {
 }
 
 /**
- * Clear stuck tasks for a given endpoint.
- * Shared helper used by both 409 recovery and orphan auto-retry.
+ * Clear stuck tasks for a given endpoint; throws CLEAR_STUCK_FORBIDDEN_MESSAGE when refused.
+ * Shared helper used by both 409 recovery and orphan auto-retry, so neither retries
+ * after a refused clear or reports it as "another analysis is still running" (#18718).
  */
 async function clearStuckTasks(clearUrl: string, signal?: AbortSignal): Promise<void> {
   // Note: apiClient.post does not support AbortSignal; signal parameter kept for API compatibility.
   void signal
   try {
-    await apiClient.post<unknown>(`${clearUrl}?force=true`)
+    await apiClient.post(`${clearUrl}?force=true`)
   } catch (e: unknown) {
-    // #18718: clear-stuck is admin-gated; a non-admin 403 is expected, the flow continues.
-    if (!(e instanceof Error) || !e.message.startsWith('HTTP 403')) throw e
-    logger.debug('clear-stuck refused (403, not admin); continuing without it')
+    throw isClearStuckForbidden(e) ? new Error(CLEAR_STUCK_FORBIDDEN_MESSAGE) : e
   }
 }
 

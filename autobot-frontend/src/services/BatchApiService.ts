@@ -197,10 +197,20 @@ export class BatchApiService {
     return results;
   }
 
+  /**
+   * The server allow-list matches its own `/api/...` paths, so a configured client base
+   * (VITE_API_BASE_PATH, e.g. a proxy prefix or an absolute URL) is swapped back for `/api`.
+   * `request.endpoint` itself stays as the caller wrote it, since callers look results up by it.
+   */
+  private toServerPath(endpoint: string): string {
+    const base = getApiBase();
+    return base !== '/api' && endpoint.startsWith(`${base}/`) ? `/api${endpoint.slice(base.length)}` : endpoint;
+  }
+
   private async loadGetsViaServer(requests: BatchRequest[]): Promise<BatchResult[]> {
     if (requests.length === 0) return [];
     const payload: BatchLoadRequest = {
-      requests: requests.map(r => ({ endpoint: r.endpoint, method: 'GET' }))
+      requests: requests.map(r => ({ endpoint: this.toServerPath(r.endpoint), method: 'GET' }))
     };
     try {
       // Typed from the generated contract (BatchLoadOp), not an inline call-site generic.

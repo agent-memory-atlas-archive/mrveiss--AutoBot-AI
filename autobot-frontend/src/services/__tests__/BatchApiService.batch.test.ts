@@ -42,6 +42,24 @@ describe('BatchApiService (server batch)', () => {
     expect(out.map(r => r.success)).toEqual([true, true]);
   });
 
+  it('sends server paths when the client base is a proxy prefix, and keeps the caller endpoint in results', async () => {
+    vi.stubEnv('VITE_API_BASE_PATH', '/autobot/api');
+    try {
+      const client = makeClient([{ endpoint: '/api/a', method: 'GET', status: 200, body: 1, error: null, timing: 0 }]);
+      const out = await new BatchApiService(client).batchRequests([{ endpoint: '/autobot/api/a', method: 'GET' }]);
+      expect(client.post.mock.calls[0][1]).toEqual({ requests: [{ endpoint: '/api/a', method: 'GET' }] });
+      expect(out[0]).toMatchObject({ endpoint: '/autobot/api/a', success: true });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('contrast: with the default base the endpoint is sent unchanged', async () => {
+    const client = makeClient([{ endpoint: '/api/a', method: 'GET', status: 200, body: 1, error: null, timing: 0 }]);
+    await new BatchApiService(client).batchRequests([{ endpoint: '/api/a', method: 'GET' }]);
+    expect(client.post.mock.calls[0][1]).toEqual({ requests: [{ endpoint: '/api/a', method: 'GET' }] });
+  });
+
   it('marks every GET failed when the batch call itself fails', async () => {
     const client = makeClient([]);
     client.post.mockRejectedValue(new Error('boom'));

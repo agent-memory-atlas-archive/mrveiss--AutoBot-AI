@@ -122,6 +122,8 @@ def _import_maps(tree: ast.AST) -> tuple[dict[str, str], frozenset[str]]:
 
 #: httpx transports that call an application object in this process and open no socket (#18765).
 _IN_PROCESS_TRANSPORTS = frozenset({"httpx.ASGITransport", "httpx.WSGITransport"})
+#: The binding kind of such a client: recorded, so a receiver-name fallback (``client``) never re-flags it.
+_IN_PROCESS_KIND = "in-process"
 
 
 def _in_process(ctor: ast.Call, aliases: dict[str, str]) -> bool:
@@ -146,7 +148,7 @@ def _ctor_kind(expr: ast.expr | None, aliases: dict[str, str]) -> str | None:
         return None
     canon = _canon(expr.func, aliases)
     if canon in _CTORS:
-        return None if _in_process(expr, aliases) else _CTORS[canon]
+        return _IN_PROCESS_KIND if _in_process(expr, aliases) else _CTORS[canon]
     if canon.endswith(".tracked_session") or canon.endswith("get_http_client.tracked_session"):
         return "session"
     return "manager" if canon.split(".")[-1] == "get_http_client" else None
@@ -235,7 +237,8 @@ def _kind(call: ast.Call, req: _Req | None, ctx: _Ctx) -> str | None:
     if req is None or (req.verb not in _VERBS and req.verb not in _MANAGER_ONLY):
         return None
     chained = isinstance(call.func, ast.Attribute) and _ctor_kind(call.func.value, ctx.aliases)
-    return chained or _receiver_kind(req, ctx)
+    kind = chained or _receiver_kind(req, ctx)
+    return None if kind == _IN_PROCESS_KIND else kind
 
 
 def _receiver_kind(req: _Req, ctx: _Ctx) -> str | None:

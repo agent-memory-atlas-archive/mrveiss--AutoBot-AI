@@ -11,6 +11,9 @@ import { createLogger } from '@/utils/debugUtils'
 
 const logger = createLogger('usePatternClearStuck')
 
+/** What a refused (non-admin) clear reports, distinct from "another analysis is running". */
+export const CLEAR_STUCK_FORBIDDEN_MESSAGE = 'Clearing stuck tasks requires admin'
+
 /** True for the `HTTP 403: ...` error ApiClient throws on a refused request. */
 export function isClearStuckForbidden(e: unknown): boolean {
   const forbidden = e instanceof Error && e.message.startsWith('HTTP 403')

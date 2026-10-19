@@ -345,6 +345,15 @@ def test_an_in_process_asgi_client_is_not_an_outbound_call() -> None:
     assert len(sites) == 1 and not sites[0].guarded, "contrast: a network httpx client must still be detected"
 
 
+def test_an_in_process_client_named_client_is_not_an_outbound_call() -> None:
+    """The binding is kept, so the ``client`` receiver-name fallback does not re-flag it as httpx."""
+    named = _IN_PROCESS.replace(" as c:", " as client:").replace("c.get(p)", "client.get(p)")
+    assert named != _IN_PROCESS
+    assert outbound_sites(named) == ()
+    network = named.replace("transport=httpx.ASGITransport(app=app), ", "")
+    assert len(outbound_sites(network)) == 1, "contrast: the same name over the network is still detected"
+
+
 def test_an_asgi_client_with_network_mounts_is_still_an_outbound_call() -> None:
     """``mounts=`` sends matching URLs to a network transport, so the exemption does not apply."""
     mounted = _IN_PROCESS.replace(
