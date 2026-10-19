@@ -251,10 +251,13 @@ jobs:
           done
 
           rows=""
-          for _ in $(seq 1 12); do  # the SLM seeds compose nodes at startup; allow it a minute
+          # The SLM seeds compose nodes at startup; allow it a minute. A failed query (table not
+          # created yet, connection refused) is a retry, not a step failure under `set -e`. User and
+          # database come from the container, where compose set them, not from guessed defaults.
+          for _ in $(seq 1 12); do
             rows="$(docker compose --env-file docker/.env.docker exec -T autobot-postgres \
-              psql -U "${AUTOBOT_DB_USER:-autobot}" -d "${AUTOBOT_DB_NAME:-autobot_slm}" -tA -F ' ' \
-              -c "SELECT node_id, ip_address FROM nodes ORDER BY node_id")"
+              sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F " " -c "SELECT node_id, ip_address FROM nodes ORDER BY node_id"' \
+              2>/dev/null)" || rows=""
             [ -n "$rows" ] && break
             sleep 5
           done
