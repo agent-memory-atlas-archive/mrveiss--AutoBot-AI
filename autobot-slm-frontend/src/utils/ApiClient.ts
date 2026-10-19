@@ -39,6 +39,16 @@ const logger = createLogger('SlmApiClient')
 // rejected -- the server could not decide -- so the client keeps it and retries.
 export const SERVICE_UNAVAILABLE_STATUS = 503
 
+// Parse a Retry-After header (delta-seconds or HTTP-date) into milliseconds.
+// Missing, negative or unparseable values yield 0, i.e. plain backoff.
+export function parseRetryAfterMs(header: string | null, now: number = Date.now()): number {
+  if (!header) return 0
+  const value = header.trim()
+  if (/^\d+$/.test(value)) return Number(value) * 1000
+  const at = Date.parse(value)
+  return Number.isNaN(at) ? 0 : Math.max(0, at - now)
+}
+
 // Default request timeout. Module-level constant sourced from an env var so it
 // is never hard-coded at a call site (falls back to 30s when unset).
 const DEFAULT_TIMEOUT_MS = (() => {
@@ -271,13 +281,18 @@ export class SlmApiClient {
     let lastError: Error | undefined
     const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 3
     let attemptsMade = 0
+    let retryAfterMs = 0
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       attemptsMade = attempt
+      retryAfterMs = 0
       try {
         const response = await this.rawRequest(endpoint, { method: 'GET', ...options })
 
         if (!response.ok) {
+          if (response.status === SERVICE_UNAVAILABLE_STATUS) {
+            retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'))
+          }
           const errorData = await this.extractErrorInfo(response)
           throw new Error(`HTTP ${response.status}: ${errorData.message}`)
         }
@@ -293,7 +308,11 @@ export class SlmApiClient {
         }
 
         if (attempt < maxRetries) {
-          const delay = backoffDelay(attempt - 1, RETRY_BACKOFF)
+          // Retry-After is a floor on the backoff, capped at the client's max backoff.
+          const delay = Math.min(
+            Math.max(backoffDelay(attempt - 1, RETRY_BACKOFF), retryAfterMs),
+            RETRY_BACKOFF.max
+          )
           await new Promise((resolve) => setTimeout(resolve, delay))
         }
       }

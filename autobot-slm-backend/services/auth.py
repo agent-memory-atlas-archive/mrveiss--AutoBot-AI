@@ -63,6 +63,9 @@ try:  # redis-py exceptions do NOT inherit builtin ConnectionError/OSError
 except ImportError:  # pragma: no cover - redis is a hard dep in deployments
     _RedisError = ConnectionError  # type: ignore[assignment,misc]
 
+# Stdlib logging, deliberately: the auth test harness (tests/api/test_auth_logout.py) loads
+# this module with the config stack mocked, where logging_manager.get_logger raises (see
+# autobot_shared/user_management/password_epoch.py).
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer()

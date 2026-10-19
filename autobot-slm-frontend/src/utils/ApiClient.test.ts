@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SlmApiClient } from './ApiClient'
+import { SlmApiClient, parseRetryAfterMs } from './ApiClient'
 
 const TOKEN_KEY = 'slm_access_token'
 const USER_KEY = 'slm_user'
@@ -183,6 +183,56 @@ describe('SlmApiClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2) // 5xx is retried, unlike 4xx
     expect(sessionStorage.getItem(TOKEN_KEY)).toBe('live-jwt')
     expect(window.location.href).toBe('')
+  })
+
+  describe('503 Retry-After (#18892)', () => {
+    function unavailable(headers: Record<string, string> = {}): Response {
+      return new Response(JSON.stringify({ detail: 'revocation_check_unavailable' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json', ...headers },
+      })
+    }
+
+    async function firstRetryDelay(headers: Record<string, string>): Promise<number> {
+      vi.useFakeTimers()
+      try {
+        fetchMock.mockImplementationOnce(async () => unavailable(headers))
+        fetchMock.mockImplementationOnce(async () => jsonResponse({ ok: true }))
+        const timeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+        const pending = new SlmApiClient().get('/nodes', { maxRetries: 2 })
+        await vi.advanceTimersByTimeAsync(0)
+        const delays = timeoutSpy.mock.calls
+          .map((c) => c[1] as number)
+          .filter((d) => typeof d === 'number' && d >= 100 && d <= 5000)
+        await vi.advanceTimersByTimeAsync(10_000)
+        await pending
+        return Math.max(...delays)
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+
+    it('waits at least Retry-After seconds before retrying', async () => {
+      expect(await firstRetryDelay({ 'retry-after': '3' })).toBeGreaterThanOrEqual(3000)
+    })
+
+    it('uses plain backoff when Retry-After is missing', async () => {
+      const d = await firstRetryDelay({})
+      expect(d).toBeGreaterThan(0)
+      expect(d).toBeLessThan(3000)
+    })
+
+    it('uses plain backoff when Retry-After is garbage', async () => {
+      const d = await firstRetryDelay({ 'retry-after': 'soon-ish' })
+      expect(d).toBeGreaterThan(0)
+      expect(d).toBeLessThan(3000)
+    })
+
+    it('parses an HTTP-date Retry-After as a floor', () => {
+      const now = Date.parse('2026-10-20T10:00:00Z')
+      expect(parseRetryAfterMs('Tue, 20 Oct 2026 10:00:04 GMT', now)).toBe(4000)
+      expect(parseRetryAfterMs(null, now)).toBe(0)
+    })
   })
 
   it('does NOT clear session on a token-less 401', async () => {
