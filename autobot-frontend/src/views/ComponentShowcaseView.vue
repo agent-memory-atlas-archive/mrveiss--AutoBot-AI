@@ -289,12 +289,11 @@
 </template>
 
 <script setup lang="ts">
+import { BaseBadge, BaseButton, BaseCard } from '@autobot/ui'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createLogger } from '@/utils/debugUtils'
 import BaseInput from '@/components/base/BaseInput.vue'
-import { BaseBadge, BaseButton } from '@autobot/ui'
-import BaseCard from '@/components/base/BaseCard.vue'
 import BaseTable from '@/components/base/BaseTable.vue'
 
 const { t } = useI18n()
