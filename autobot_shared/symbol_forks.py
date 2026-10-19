@@ -257,9 +257,16 @@ def fork_validate_exception(entry: dict) -> list[str]:
     its own checks on top (``tools/lint/check_symbol_forks.validate_exception``)."""
     problems = [f"missing {f!r}" for f in _EXCEPTION_FIELDS if not entry.get(f)]
     sites = entry.get("sites") or []
-    if entry.get("sites") is not None and not isinstance(sites, list):
-        problems.append("'sites' must be a list of path:qualname")
-    bad = [x for x in ([entry.get("canonical")] + list(sites)) if x and ":" not in str(x)]
+    if not isinstance(sites, list) or not all(isinstance(x, str) for x in sites):
+        # A schema error, checked before the sites are read: an int is not iterable, a string would
+        # be judged per character, and a dict inside the list is unhashable where it is applied.
+        problems.append("'sites' must be a list of path:qualname strings")
+        sites = []
+    canonical = entry.get("canonical")
+    if canonical and not isinstance(canonical, str):
+        problems.append("'canonical' must be a path:qualname string")
+        canonical = None
+    bad = [x for x in [canonical, *sites] if x and ":" not in x]
     problems += [f"site {x!r} is not path:qualname" for x in bad]
     return [f"exception {entry.get('symbol', '?')!r}: {p}" for p in problems]
 

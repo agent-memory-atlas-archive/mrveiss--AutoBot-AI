@@ -71,6 +71,19 @@ def test_an_issue_that_is_not_a_link_is_rejected() -> None:
     assert detector.validate_exception(_entry()) == []
 
 
+@pytest.mark.parametrize(
+    "bad",
+    [{"sites": 7}, {"sites": "b.py:gate"}, {"sites": [{"path": "b.py"}]}, {"canonical": {"path": "a.py"}}],
+    ids=["int-sites", "string-sites", "dict-in-sites", "dict-canonical"],
+)
+def test_a_malformed_sites_or_canonical_is_a_schema_error_not_a_crash(tmp_path, monkeypatch, bad) -> None:
+    clusters = _tree(tmp_path, monkeypatch, _TWO)
+    effective, problems = detector.apply_exceptions(clusters, [_entry(**bad)])
+    assert "gate" in effective, "a rejected entry must not exempt anything"
+    assert any("must be a" in p for p in problems) and not any("is not path:qualname" in p for p in problems)
+    assert detector.validate_exception(_entry()) == [], "contrast: the well-formed entry is accepted"
+
+
 def test_an_exception_whose_site_no_longer_exists_is_stale(tmp_path, monkeypatch) -> None:
     clusters = _tree(tmp_path, monkeypatch, _TWO)
     _, ok = detector.apply_exceptions(clusters, [_entry()])

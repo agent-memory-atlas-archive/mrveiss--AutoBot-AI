@@ -28,6 +28,7 @@ from sqlalchemy.ext.compiler import compiles
 
 from api import coordination, coordination_issue_claims
 from api import coordination_issue_claims_credential as cred
+from api import coordination_issue_claims_throttle as claims_throttle
 from api import envelope_secrets
 from autobot_shared.coordination import work_claims
 from llc.deps import get_session
@@ -159,6 +160,7 @@ def harness(real_auth_middleware, monkeypatch, claims_redis, secrets_db):
 
     app.dependency_overrides[get_session] = _session
     monkeypatch.setattr(cred.THROTTLE.tally, "_local", {})  # the in-process fallback tally starts empty
+    monkeypatch.setattr(cred.THROTTLE, "local", claims_throttle.LocalFailureWindow())  # so does the in-process window
     return SimpleNamespace(
         app=app,
         client=TestClient(app, raise_server_exceptions=False),

@@ -92,6 +92,8 @@ const props = defineProps<{
 
 /** Ticks run up front when `staticLayout` is set; enough for the layout to settle. */
 const STATIC_LAYOUT_WARMUP_TICKS = 300
+/** Particles per link; none in a static layout, where they would keep moving between frames. */
+const LINK_PARTICLES = 1
 
 const emit = defineEmits<{
   (e: 'entity-selected', entity: Entity | null): void
@@ -196,7 +198,7 @@ function initGraph(): void {
     .linkWidth(1)
     .linkDirectionalArrowLength(4)
     .linkDirectionalArrowRelPos(1)
-    .linkDirectionalParticles(1)
+    .linkDirectionalParticles(props.staticLayout ? 0 : LINK_PARTICLES)
     .linkDirectionalParticleSpeed(0.004)
     // Interaction
     .onNodeClick((node: object | null) => {

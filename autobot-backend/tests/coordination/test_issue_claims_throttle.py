@@ -88,6 +88,39 @@ def test_the_limit_is_per_source(harness, lookups):
     assert len(lookups) == LIMIT + 1
 
 
+@pytest.fixture
+def redis_down(monkeypatch) -> None:
+    """The shared limiter and the tally cannot reach Redis: the limiter fails open."""
+    import autobot_shared.rate_limiter as rate_limiter
+
+    async def _unreachable(database: str = "main"):
+        return None
+
+    for module in (rate_limiter, throttle):
+        monkeypatch.setattr(module, "get_async_redis_client", _unreachable)
+
+
+def test_with_redis_down_the_limit_still_refuses_without_a_lookup(harness, lookups, redis_down):
+    assert [_claim(harness.client, FORGED).status_code for _ in range(LIMIT)] == [401] * LIMIT
+    assert _claim(harness.client, FORGED).status_code == 429
+    assert len(lookups) == LIMIT  # the in-process window refused before any store lookup
+
+
+def test_with_redis_down_failures_under_the_limit_are_still_looked_up(harness, lookups, redis_down):
+    assert [_claim(harness.client, FORGED).status_code for _ in range(LIMIT)] == [401] * LIMIT
+    assert len(lookups) == LIMIT
+
+
+def test_the_in_process_window_forgets_failures_older_than_the_window(monkeypatch):
+    clock = iter([0.0, 1.0, 2.0, 2.0 + throttle.FAILURE_WINDOW_S])
+    monkeypatch.setattr(throttle.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(throttle, "FAILURE_LIMIT", 1)
+    window = throttle.LocalFailureWindow()  # t=0
+    window.record(SOURCE)  # t=1
+    assert window.remaining(SOURCE) == 0  # t=2: inside the window
+    assert window.remaining(SOURCE) == 1  # one full window later: forgotten
+
+
 def test_minting_again_revokes_the_previous_credential(harness):
     bob = harness.client.post(CREDENTIALS, headers=harness.bob).json()["credential"]
     first, second = mint(harness), mint(harness)

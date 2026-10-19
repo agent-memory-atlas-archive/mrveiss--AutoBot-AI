@@ -194,11 +194,11 @@ class TestResolveSafeIP:
                 await URLValidator.resolve_safe_ip("mixed")
 
     async def test_handles_dns_timeout(self) -> None:
-        """A resolver-side TimeoutError (an OSError) surfaces as the shared resolution error."""
+        """A resolver-side TimeoutError surfaces as a DNS timeout, not as an unresolvable host (#18731)."""
         with patch.object(asyncio.get_running_loop(), "getaddrinfo", new_callable=AsyncMock) as mock_getaddrinfo:
             mock_getaddrinfo.side_effect = asyncio.TimeoutError("timeout")
 
-            with pytest.raises(ValueError, match="Could not resolve host"):
+            with pytest.raises(ValueError, match="DNS resolution timeout"):
                 await URLValidator.resolve_safe_ip("slow.example.com")
 
     async def test_handles_dns_resolution_error(self) -> None:
@@ -260,15 +260,21 @@ class TestResolveSafeIP:
         kept = AsyncMock(return_value="8.8.8.8")
         with patch("services.url_validator.resolve_safe_ip_async", kept):
             assert await URLValidator.resolve_safe_ip("example.com") == "8.8.8.8"
-        kept.assert_awaited_once_with("example.com")
+        kept.assert_awaited_once_with("example.com", timeout=2.0)
 
-    async def test_delegated_resolver_still_enforces_its_timeout(self) -> None:
-        """A hung shared resolver is bounded by ``timeout`` and surfaces as ValueError (#18731)."""
+    async def test_the_timeout_reaches_the_shared_resolver(self) -> None:
+        """The caller's ``timeout`` is forwarded, not dropped for the resolver's default (#18731)."""
+        kept = AsyncMock(return_value="8.8.8.8")
+        with patch("services.url_validator.resolve_safe_ip_async", kept):
+            await URLValidator.resolve_safe_ip("example.com", timeout=0.25)
+        kept.assert_awaited_once_with("example.com", timeout=0.25)
 
-        async def hung(_host: str) -> str:
+    async def test_a_hung_lookup_is_bounded_by_the_timeout(self) -> None:
+        """A DNS lookup that never answers surfaces as ValueError after ``timeout`` (#18731)."""
+
+        async def hung(*_args, **_kwargs):
             await asyncio.Event().wait()
-            return "8.8.8.8"
 
-        with patch("services.url_validator.resolve_safe_ip_async", hung):
+        with patch.object(asyncio.get_running_loop(), "getaddrinfo", hung):
             with pytest.raises(ValueError, match="DNS resolution timeout"):
                 await URLValidator.resolve_safe_ip("slow.example.com", timeout=0.05)

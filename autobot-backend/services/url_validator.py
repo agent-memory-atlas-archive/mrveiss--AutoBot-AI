@@ -9,7 +9,6 @@ Delegates SSRF DNS-resolution checks to autobot_shared.url_safety for
 consistency across the codebase per #6533.
 """
 
-import asyncio
 from typing import List
 from urllib.parse import urlparse
 
@@ -115,11 +114,8 @@ class URLValidator:
         """Resolve *host* to one public IP literal (SSRF / DNS-rebind guard).
 
         Delegates to :func:`autobot_shared.url_safety.resolve_safe_ip_async`, the
-        one implementation of the address rules (#6533, #18731); this entry point
-        only adds the ``timeout`` bound. Raises ``ValueError`` on a DNS timeout,
+        one implementation of the address rules (#6533, #18731), which also enforces
+        ``timeout`` on the lookup itself. Raises ``ValueError`` on a DNS timeout,
         an unresolvable host, a non-public address, or no usable address.
         """
-        try:
-            return await asyncio.wait_for(resolve_safe_ip_async(host), timeout=timeout)
-        except asyncio.TimeoutError as exc:
-            raise ValueError(f"DNS resolution timeout for {host}") from exc
+        return await resolve_safe_ip_async(host, timeout=timeout)

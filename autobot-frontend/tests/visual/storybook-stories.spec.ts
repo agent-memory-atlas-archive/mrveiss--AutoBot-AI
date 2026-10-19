@@ -55,6 +55,22 @@ async function fetchStoryIndex(page: Page): Promise<StoryEntry[]> {
   return Object.values(index.entries).filter((e) => e.type === 'story');
 }
 
+/**
+ * Why the story on *page* must not be compared, or null when it rendered (#18694).
+ * The logged render error names the cause; the error display alone also fails the
+ * story, since Storybook can show it (e.g. a preview-initialisation failure) without
+ * logging `Error rendering story`.
+ */
+async function renderFailure(page: Page, renderErrors: string[]): Promise<string | null> {
+  if (renderErrors.length > 0) {
+    return renderErrors[0].split('\n')[0];
+  }
+  const errorDisplay = await page.evaluate(() =>
+    document.body.classList.contains('sb-show-errordisplay'),
+  );
+  return errorDisplay ? 'Storybook showed its error display' : null;
+}
+
 async function snapshotStory(
   page: Page,
   story: StoryEntry,
@@ -86,8 +102,9 @@ async function snapshotStory(
     { timeout: 10_000 },
   );
   page.off('console', onConsole);
-  if (renderErrors.length > 0) {
-    throw new Error(`story failed to render: ${renderErrors[0].split('\n')[0]}`);
+  const failure = await renderFailure(page, renderErrors);
+  if (failure !== null) {
+    throw new Error(`story failed to render: ${failure}`);
   }
 
   // Full-page screenshot of the iframe document: avoids element-visibility
@@ -124,4 +141,24 @@ test('all Storybook stories match baseline screenshots', async ({ page }) => {
       `${failures.length}/${stories.length} stories failed visual diff:\n${summary}`,
     );
   }
+});
+
+// Contrast pair for renderFailure: no Storybook needed, so it runs with
+// SKIP_STORYBOOK_START=1 too. The error display fails a story that logged nothing;
+// a story under `sb-show-main` with no logged error is compared (#18694).
+test.describe('render-failure detection', () => {
+  test('the error display alone fails the story', async ({ page }) => {
+    await page.setContent('<body class="sb-show-errordisplay"><div id="error-message"></div></body>');
+    expect(await renderFailure(page, [])).toBe('Storybook showed its error display');
+  });
+
+  test('a logged render error names its first line', async ({ page }) => {
+    await page.setContent('<body class="sb-show-main"></body>');
+    expect(await renderFailure(page, ["Error rendering story 'x':\nstack"])).toBe("Error rendering story 'x':");
+  });
+
+  test('a rendered story with no logged error is compared', async ({ page }) => {
+    await page.setContent('<body class="sb-show-main"><div id="storybook-root">ok</div></body>');
+    expect(await renderFailure(page, [])).toBeNull();
+  });
 });

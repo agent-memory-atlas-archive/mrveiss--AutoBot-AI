@@ -27,7 +27,9 @@ canonical secrets manager, never a token file.
   ``expires_at``. A reboot clears the keyring but not the vault, so a credential the CLI can no
   longer present stops verifying on its own instead of staying live until someone revokes it.
 * **One per user**: minting deletes the user's previous live claims credentials in the same
-  commit (each audited as a revoke, reason ``superseded``), so a user holds at most one.
+  commit (each audited as a revoke, reason ``superseded``), so a user holds at most one. Mints for
+  one user are serialised by a transaction-scoped Postgres advisory lock taken before that read,
+  so two concurrent mints cannot both see "none live" and both commit (:func:`_lock_minting`).
 * **Failed checks** are limited and audited per source by
   :mod:`api.coordination_issue_claims_throttle`: past the limit a presentation is refused (429)
   before any lookup, and the misses of a window are ONE audit event with their count.
@@ -41,6 +43,7 @@ import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -182,6 +185,24 @@ def _minting_human(request: Request, user: dict) -> uuid.UUID:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "A claims credential needs a user account") from exc
 
 
+#: Namespace of the per-user advisory lock that serialises minting (one live credential per user).
+MINT_LOCK_NAMESPACE = "issue-claims-mint"
+
+
+async def _lock_minting(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Hold a per-user lock until this transaction ends, so read-revoke-create cannot interleave.
+
+    Postgres, the backend's store, takes ``pg_advisory_xact_lock``. SQLite (the test store) has no
+    advisory locks; its database-wide write lock is the serialisation there.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+        {"lock_key": f"{MINT_LOCK_NAMESPACE}:{user_id}"},
+    )
+
+
 async def _revoke_previous(session: AsyncSession, coordinator, user_id: uuid.UUID) -> list[uuid.UUID]:
     """Delete the user's live claims-client secrets, so the one being minted is their only one."""
     own_vault = VaultRef(VaultKind.USER, str(user_id)).to_str()
@@ -204,6 +225,7 @@ async def _store_credential(
     Returns the new secret and the ids of the credentials it superseded, deleted in the same commit.
     """
     coordinator, username = _coordinator(), str(user["username"])
+    await _lock_minting(session, user_id)
     superseded = await _revoke_previous(session, coordinator, user_id)
     meta = {"username": username, "sub": user.get("sub") or username, "minted_at": int(time.time())}
     secret = await coordinator.create(

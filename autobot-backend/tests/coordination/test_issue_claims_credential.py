@@ -187,3 +187,49 @@ def test_revoking_needs_the_credential_itself_not_a_login(harness):
     credential = mint(harness)
     assert harness.client.delete(CREDENTIALS, headers=harness.creds["login_jwt"]).status_code == 401
     assert _claim(harness, with_credential(credential)).status_code == 200
+
+
+class _DialectSession:
+    """Records the statements a mint issues, on a bind reporting dialect *name*."""
+
+    def __init__(self, name: str):
+        self.bind = type("Bind", (), {"dialect": type("Dialect", (), {"name": name})()})()
+        self.executed: list[tuple[str, dict]] = []
+
+    def get_bind(self):
+        return self.bind
+
+    async def execute(self, statement, params=None):
+        self.executed.append((str(statement), params or {}))
+
+
+def test_postgres_mints_take_a_per_user_transaction_lock():
+    session, user_id = _DialectSession("postgresql"), CALLER
+    asyncio.run(cred._lock_minting(session, user_id))
+    ((statement, params),) = session.executed
+    assert "pg_advisory_xact_lock" in statement
+    assert params == {"lock_key": f"{cred.MINT_LOCK_NAMESPACE}:{user_id}"}
+
+
+def test_a_store_without_advisory_locks_issues_no_lock_statement():
+    session = _DialectSession("sqlite")
+    asyncio.run(cred._lock_minting(session, CALLER))
+    assert session.executed == []
+
+
+def test_the_mint_lock_is_held_before_the_live_credentials_are_read(harness, monkeypatch):
+    order: list[str] = []
+    real_lock, real_revoke = cred._lock_minting, cred._revoke_previous
+
+    async def lock(session, user_id):
+        order.append("lock")
+        await real_lock(session, user_id)
+
+    async def revoke(session, coordinator, user_id):
+        order.append("read-live")
+        return await real_revoke(session, coordinator, user_id)
+
+    monkeypatch.setattr(cred, "_lock_minting", lock)
+    monkeypatch.setattr(cred, "_revoke_previous", revoke)
+    mint(harness)
+    assert order == ["lock", "read-live"]

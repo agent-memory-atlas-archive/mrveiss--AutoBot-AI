@@ -11,7 +11,10 @@ as many as it likes. So:
   ``autobot_shared.proxy_utils.get_client_ip`` -- in the shared ``RateLimiter``'s custom window.
   Once a source has ``AUTOBOT_ISSUE_CLAIMS_FAILURE_LIMIT`` failures inside
   ``AUTOBOT_ISSUE_CLAIMS_FAILURE_WINDOW_S``, its next presentation is refused with 429 before any
-  store lookup. A success is not counted, and one source's failures never limit another's.
+  store lookup. A success is not counted, and one source's failures never limit another's. The
+  shared limiter fails open when Redis is unreachable, so each worker also keeps its own window
+  (:class:`LocalFailureWindow`) and the stricter of the two applies: the limit still holds, per
+  worker, while Redis is down.
 * **Aggregate.** A failure is not one audit row each. The first failure of a source opens a
   window; every failure and every 429 in it is tallied (in Redis, so all workers share one tally;
   in-process while Redis is unreachable), and when the window closes ONE SECURITY event,
@@ -22,7 +25,8 @@ as many as it likes. So:
 from __future__ import annotations
 
 import asyncio
-from collections import Counter
+import time
+from collections import Counter, deque
 
 from fastapi import HTTPException, Request, status
 from redis.exceptions import RedisError
@@ -133,16 +137,45 @@ class FailureTally:
         return counts
 
 
+class LocalFailureWindow:
+    """This worker's own per-source failure times, enforced even when the shared limiter fails open."""
+
+    def __init__(self) -> None:
+        self._hits: dict[str, deque[float]] = {}
+        self._swept = time.monotonic()
+
+    def _live(self, source: str, now: float) -> deque[float]:
+        hits = self._hits.get(source, deque())
+        while hits and hits[0] <= now - FAILURE_WINDOW_S:
+            hits.popleft()
+        return hits
+
+    def remaining(self, source: str) -> int:
+        """Failures *source* may still make in this worker's window."""
+        return max(0, FAILURE_LIMIT - len(self._live(source, time.monotonic())))
+
+    def record(self, source: str) -> None:
+        """Count one failure; sources idle for a whole window are dropped, so memory stays bounded."""
+        now = time.monotonic()
+        if now - self._swept >= FAILURE_WINDOW_S:
+            self._swept = now
+            for idle in [src for src in self._hits if not self._live(src, now)]:
+                del self._hits[idle]
+        self._hits.setdefault(source, deque()).append(now)
+
+
 class FailureThrottle:
     """The per-source failed-check limit plus its aggregated audit."""
 
     def __init__(self, accessor: str) -> None:
         self.tally = FailureTally(accessor)
         self._limiter = RateLimiter("issue-claims-credential-failure", default_tier="anonymous")
+        self.local = LocalFailureWindow()
 
     async def refuse_if_throttled(self, source: str) -> None:
         """429, before any store lookup, once *source* has used up its failures for the window."""
-        if await self._limiter.get_remaining_in_window(source, FAILURE_LIMIT, FAILURE_WINDOW_S) > 0:
+        shared = await self._limiter.get_remaining_in_window(source, FAILURE_LIMIT, FAILURE_WINDOW_S)
+        if min(shared, self.local.remaining(source)) > 0:
             return
         await self.tally.add(source, THROTTLED)
         raise HTTPException(
@@ -153,5 +186,6 @@ class FailureThrottle:
 
     async def record_failure(self, source: str) -> None:
         """Count one failed check against *source*, in the limit and in the window's tally."""
+        self.local.record(source)
         await self._limiter.acquire_window(source, FAILURE_LIMIT, FAILURE_WINDOW_S)
         await self.tally.add(source, FAILED)
