@@ -27,6 +27,8 @@ from pathlib import Path
 import yaml
 from repo_tests._paths import repo_root
 
+from tools.lint._comment_syntax import code_lines
+
 _ROOT = repo_root()
 _NGINX = _ROOT / "docker" / "nginx"
 _HEAVY = {"autobot-backend", "autobot-worker", "autobot-celery-beat", "autobot-chromadb", "autobot-frontend"}
@@ -209,6 +211,6 @@ def test_hsts_is_scheme_gated_wherever_a_location_repeats_it() -> None:
     common = (_NGINX / "nginx-common.conf").read_text(encoding="utf-8")
     assert re.search(r"map\s+\$scheme\s+\$hsts\s*\{[^}]*https\s+\"max-age=[^}]*default\s+\"\"", common), common
     for name in _served_closure():
-        for line in (_NGINX / name).read_text(encoding="utf-8").splitlines():
-            if "Strict-Transport-Security" in line and not line.lstrip().startswith("#"):
-                assert "$hsts" in line, f"{name}: HSTS with a literal value: {line.strip()}"
+        for line in code_lines(_NGINX / name):
+            if "Strict-Transport-Security" in line.text:
+                assert "$hsts" in line.text, f"{name}: HSTS with a literal value: {line.text.strip()}"
