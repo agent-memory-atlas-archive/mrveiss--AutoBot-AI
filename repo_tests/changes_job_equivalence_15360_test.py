@@ -183,6 +183,7 @@ ALLOWED_ADDITIONS = {
             "**/.env*",
             # #18555: root-level env files; `**/` alone does not match the root.
             ".env*",
+            "autobot-slm-frontend/package.json",
             "**/*.env",
             # #18653: uninstall_covers_role_packages_18653_test.py reads .python-version.
             ".python-version",
