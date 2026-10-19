@@ -164,6 +164,11 @@ _PERMISSION_FACTORY_QUALNAME_PREFIXES = ("require_permission.<locals>", "require
 # auth check rather than an unrelated ``Request``-taking function.
 # resolve_human_user: the canonical async resolution (JWT revocation included) the gates call (#18688).
 _AUTH_PRIMITIVE_NAMES = ("get_auth_middleware", "get_user_from_request", "resolve_human_user")
+# A dependency that looks the canonical gate up at call time (``auth_middleware.get_current_user(request)``,
+# so a test can patch the module attribute) holds no identity to compare; the attribute pair in its
+# own code is the gate (#18811's ``canonical_caller`` / ``claims_principal``).
+_LATE_BOUND_GATE_MODULE = "auth_middleware"
+_LATE_BOUND_GATE_NAMES = ("get_current_user", "check_admin_permission")
 
 _WEBSOCKET_AUTH_NAME = "authenticate_websocket"
 
@@ -258,7 +263,9 @@ def _references_auth_primitive(call: Any) -> bool:
     code = getattr(call, "__code__", None)
     if code is None:
         return False
-    return any(primitive in code.co_names for primitive in _AUTH_PRIMITIVE_NAMES)
+    if any(primitive in code.co_names for primitive in _AUTH_PRIMITIVE_NAMES):
+        return True
+    return _LATE_BOUND_GATE_MODULE in code.co_names and any(n in code.co_names for n in _LATE_BOUND_GATE_NAMES)
 
 
 def _dependant_tree_is_gated(dependant: Any) -> bool:
@@ -413,6 +420,16 @@ def get_auth_middleware() -> None:  # noqa: D401 - contrast-pair stand-in, not t
     return None
 
 
+async def _late_bound_gate(request: Any) -> Any:
+    """Looks the canonical gate up at call time, the #18811 shape -- must count as gated."""
+    return await auth_middleware.get_current_user(request)  # noqa: F821 - never executed, co_names only
+
+
+async def _late_bound_lookalike(request: Any) -> Any:
+    """Same attribute name on another module -- must NOT count as gated."""
+    return await session_store.get_current_user(request)  # noqa: F821 - never executed, co_names only
+
+
 class TestContrastPair:
     """A guard that never fires passes its own suite. This proves it can fire.
 
@@ -447,3 +464,12 @@ class TestContrastPair:
         middle = _FakeDependant(call=lambda: None, dependencies=[inner])
         gated_dependant = _FakeDependant(call=lambda: None, dependencies=[middle])
         assert _dependant_tree_is_gated(gated_dependant) is True
+
+    def test_a_late_bound_canonical_gate_counts_and_a_lookalike_does_not(self):
+        """``auth_middleware.get_current_user(...)`` resolved at call time is a gate; another module's is not."""
+        assert _dependant_tree_is_gated(
+            _FakeDependant(call=lambda: None, dependencies=[_FakeDependant(_late_bound_gate)])
+        )
+        assert not _dependant_tree_is_gated(
+            _FakeDependant(call=lambda: None, dependencies=[_FakeDependant(_late_bound_lookalike)])
+        )
