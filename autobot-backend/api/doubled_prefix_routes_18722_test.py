@@ -180,8 +180,10 @@ def test_a_share_redirect_merges_the_request_query_after_the_fixed_one(client: T
 
 
 def test_a_share_redirect_quotes_the_path_params_not_the_fixed_query(client: TestClient) -> None:
-    response = client.delete(f"{_KB}/facts/f1/share/a%20b%3Fc")
-    assert response.headers["location"] == f"{_CANON}/a%20b%3Fc?entity_type=user"
+    # A space must be re-quoted in the path while the fixed ``entity_type=user`` stays literal.
+    # (A ``%3F`` input is decoded to ``?`` by the test client, so it would arrive as a query.)
+    response = client.delete(f"{_KB}/facts/f1/share/a%20b")
+    assert response.headers["location"] == f"{_CANON}/a%20b?entity_type=user"
 
 
 @pytest.mark.parametrize("old_prefix", [f"{_KB}/facts/f1/share", f"{_KB}/api/knowledge/facts/f1/share"])
@@ -209,7 +211,7 @@ def test_a_followed_share_308_replays_the_method_and_body_on_the_canonical_route
 def test_the_openapi_schema_carries_no_knowledge_base_share_path(client: TestClient) -> None:
     """Guard against the fork returning: share/unshare live on the collaboration route only (#18795)."""
     paths = client.app.openapi()["paths"]
-    assert f"{_CANON}" in paths, "the canonical route must be in the schema"
+    assert "/api/knowledge/collaboration/facts/{fact_id}/share" in paths, "the canonical route must be in the schema"
     assert not [p for p in paths if p.startswith(f"{_KB}/") and "/share" in p]
 
 
