@@ -24,6 +24,7 @@ from autobot_shared.logging_manager import get_llm_logger
 
 if TYPE_CHECKING:
     from advanced_rag_optimizer import RAGMetrics, RankedResult
+    from knowledge.search_filters import KbPrincipal
     from services.cag_service import CAGService
     from services.graph_rag_service import GraphRAGService
     from services.rag_config import RAGConfig
@@ -93,13 +94,14 @@ async def _run_kag(
     query: str,
     graph_rag_service: "GraphRAGService",
     model: str | None,
+    principal: "KbPrincipal",
 ) -> "Tuple[str, RAGMetrics]":
     """Run the KAG strategy and adapt to the (context, RAGMetrics) contract.
 
     Returns the graph-augmented context plus a RAGMetrics carrying
     strategy='kag' and graph_results_added from GraphRAGMetrics.
     """
-    results, graph_metrics = await graph_rag_service.graph_aware_search(query=query)
+    results, graph_metrics = await graph_rag_service.graph_aware_search(query=query, principal=principal)
     context = _build_kag_context(results)
     graph_metrics.strategy = "kag"  # type: ignore[attr-defined]
     # graph_results_added already populated by GraphRAGMetrics; mirror defensively.
@@ -121,6 +123,8 @@ async def get_context(
     collection: str | None = None,
     model: str | None = None,
     collection_mode: str | None = None,
+    *,
+    principal: "KbPrincipal",
 ) -> "Tuple[str, RAGMetrics]":
     """Route the query to the selected strategy and return (context, metrics).
 
@@ -134,6 +138,8 @@ async def get_context(
         collection: Optional collection identifier (for logging).
         model: Active model name (used by CAGService for budget calc).
         collection_mode: Per-collection setting from DB/metadata.
+        principal: Who is asking, or SYSTEM_SCOPE (#16664). Scopes the cag and kag searches; the rag strategy's
+            get_optimized_context is not yet scoped (slice 2 of #16664).
 
     Returns:
         (context, metrics) with metrics.strategy reflecting the strategy used.
@@ -150,13 +156,13 @@ async def get_context(
     )
 
     if strategy == "cag":
-        return await cag_service.get_full_context(query=query, collection=collection, model=model)
+        return await cag_service.get_full_context(query=query, collection=collection, model=model, principal=principal)
 
     if strategy == "kag":
         if graph_rag_service is None:
             logger.warning("KAG selected but no GraphRAGService provided — using rag")
         else:
-            return await _run_kag(query=query, graph_rag_service=graph_rag_service, model=model)
+            return await _run_kag(query=query, graph_rag_service=graph_rag_service, model=model, principal=principal)
 
     # RAG path (default, kag/cag-disabled fallback, unknown mode fallback)
     context, metrics = await rag_service.get_optimized_context(query=query)

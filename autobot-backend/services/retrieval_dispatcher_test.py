@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("advanced_rag_optimizer")
 
 from advanced_rag_optimizer import RAGMetrics
+from knowledge.search_filters import SYSTEM_SCOPE
 from services.rag_config import RAGConfig
 from services.retrieval_dispatcher import get_context, select_strategy
 
@@ -100,7 +101,7 @@ def _make_services(enable_cag: bool = True):
 
 async def test_get_context_rag_mode():
     rag, cag = _make_services()
-    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="rag")
+    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="rag", principal=SYSTEM_SCOPE)
     assert ctx == "rag-context"
     assert getattr(metrics, "strategy", None) == "rag"
     cag.get_full_context.assert_not_called()
@@ -108,7 +109,7 @@ async def test_get_context_rag_mode():
 
 async def test_get_context_cag_mode_enabled():
     rag, cag = _make_services(enable_cag=True)
-    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="cag")
+    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="cag", principal=SYSTEM_SCOPE)
     assert ctx == "cag-context"
     assert getattr(metrics, "strategy", None) == "cag"
     rag.get_optimized_context.assert_not_called()
@@ -117,14 +118,14 @@ async def test_get_context_cag_mode_enabled():
 async def test_get_context_cag_mode_disabled():
     """When enable_cag=False, even mode='cag' must route to RAG."""
     rag, cag = _make_services(enable_cag=False)
-    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="cag")
+    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="cag", principal=SYSTEM_SCOPE)
     assert ctx == "rag-context"
     cag.get_full_context.assert_not_called()
 
 
 async def test_get_context_kag_falls_back_to_rag():
     rag, cag = _make_services(enable_cag=True)
-    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="kag")
+    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="kag", principal=SYSTEM_SCOPE)
     assert ctx == "rag-context"
     cag.get_full_context.assert_not_called()
 
@@ -132,7 +133,9 @@ async def test_get_context_kag_falls_back_to_rag():
 async def test_get_context_auto_defaults_to_rag():
     """auto mode without collection_mode='cag' defaults to rag."""
     rag, cag = _make_services(enable_cag=True)
-    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="auto", collection_mode=None)
+    ctx, metrics = await get_context(
+        query="q", rag_service=rag, cag_service=cag, mode="auto", collection_mode=None, principal=SYSTEM_SCOPE
+    )
     assert ctx == "rag-context"
     cag.get_full_context.assert_not_called()
 
@@ -140,7 +143,9 @@ async def test_get_context_auto_defaults_to_rag():
 async def test_get_context_auto_collection_cag():
     """auto + collection_mode='cag' + enable_cag=True → CAG."""
     rag, cag = _make_services(enable_cag=True)
-    ctx, metrics = await get_context(query="q", rag_service=rag, cag_service=cag, mode="auto", collection_mode="cag")
+    ctx, metrics = await get_context(
+        query="q", rag_service=rag, cag_service=cag, mode="auto", collection_mode="cag", principal=SYSTEM_SCOPE
+    )
     assert ctx == "cag-context"
     rag.get_optimized_context.assert_not_called()
 
@@ -221,8 +226,9 @@ async def test_get_context_kag_routes_to_graph_aware_search():
         cag_service=cag,
         graph_rag_service=graph_rag,
         mode="kag",
+        principal=SYSTEM_SCOPE,
     )
-    graph_rag.graph_aware_search.assert_awaited_once()
+    graph_rag.graph_aware_search.assert_awaited_once_with(query="relational q", principal=SYSTEM_SCOPE)
     assert isinstance(ctx, str)
     assert "entity observation A" in ctx and "graph:EntityA" in ctx
     assert getattr(metrics, "strategy", None) == "kag"
@@ -239,6 +245,7 @@ async def test_get_context_kag_disabled_falls_back_to_rag():
         cag_service=cag,
         graph_rag_service=graph_rag,
         mode="kag",
+        principal=SYSTEM_SCOPE,
     )
     assert ctx == "rag-context"
     assert getattr(metrics, "strategy", None) == "rag"
@@ -254,6 +261,7 @@ async def test_get_context_kag_no_service_falls_back_to_rag():
         cag_service=cag,
         graph_rag_service=None,
         mode="kag",
+        principal=SYSTEM_SCOPE,
     )
     assert ctx == "rag-context"
     assert getattr(metrics, "strategy", None) == "rag"

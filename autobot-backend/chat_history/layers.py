@@ -254,6 +254,7 @@ class Layer3DeepSearch:
                 top_k=5,
                 score_threshold=0.3,
                 force_retrieval=True,
+                principal=context.get("principal"),  # #16664: None raises, caught below -- never unscoped
             )
             if not knowledge_context:
                 return ""
@@ -409,6 +410,7 @@ class TieredContextBuilder:
         memory_graph: Any | None = None,
         knowledge_service: Any | None = None,
         goal_ancestry: list | None = None,
+        principal: Any | None = None,
     ) -> str:
         """Build the tiered context string.
 
@@ -419,11 +421,12 @@ class TieredContextBuilder:
             goal_ancestry: Optional root-first list of goal-like dicts
                            (``title``, ``level``) from GoalService.get_ancestors().
                            When present, L4 GoalAncestry is appended. GH#6469.
+            principal: KB principal (or SYSTEM_SCOPE) L3 retrieves as (#16664); None makes L3 fail closed.
         """
         if not TIERED_CONTEXT_ENABLED:
             return ""
 
-        base_ctx: dict = {"model_name": model_name}
+        base_ctx: dict = {"model_name": model_name, "principal": principal}
 
         # ------------------------------------------------------------------
         # Always: L0 + L1

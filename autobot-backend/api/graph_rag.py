@@ -43,6 +43,7 @@ from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import utc_timestamp
+from knowledge.search_filters import kb_principal
 from services.graph_rag_service import GraphRAGService
 from type_defs.common import Metadata
 from utils.request_utils import generate_request_id
@@ -178,6 +179,7 @@ async def graph_rag_search(
     Issue #744: Requires authenticated user.
     """
     request_id = generate_request_id()
+    principal = kb_principal(current_user)  # #16664: the KB leg returns what the caller may read
 
     try:
         logger.info(
@@ -192,6 +194,7 @@ async def graph_rag_search(
             max_results=search_request.max_results,
             enable_reranking=search_request.enable_reranking,
             timeout=search_request.timeout,
+            principal=principal,
         )
 
         results_data = _serialize_search_results(results)
