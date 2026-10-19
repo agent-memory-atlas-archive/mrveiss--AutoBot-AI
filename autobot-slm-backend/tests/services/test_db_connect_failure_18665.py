@@ -51,3 +51,12 @@ def test_credentials_never_appear() -> None:
 def test_the_default_port_and_an_unknown_failure() -> None:
     message = describe_connect_failure(ValueError("boom"), _url("db-host"))
     assert message == "cannot reach PostgreSQL at db-host (default port): ValueError"
+
+
+def test_a_password_with_url_delimiters_never_becomes_the_host() -> None:
+    """01's review: an unencoded '/', '?', '#' or '@' in the password broke urlsplit's host."""
+    for odd in ("a/b", "a?b", "a#b", "a@b"):
+        url = f"postgresql+asyncpg://{_USER}:{odd}{_PASSWORD}@autobot-postgres:5433/autobot_slm"
+        message = describe_connect_failure(TimeoutError(), url)
+        assert message.startswith("cannot reach PostgreSQL at autobot-postgres:5433: "), message
+        assert _USER not in message and _PASSWORD not in message, message

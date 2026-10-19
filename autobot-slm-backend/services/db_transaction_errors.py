@@ -18,7 +18,6 @@ any other startup crash.
 
 import errno
 import socket
-from urllib.parse import urlsplit
 
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
@@ -52,10 +51,15 @@ def _failure_kind(exc: BaseException) -> str:
 
 def describe_connect_failure(exc: BaseException, database_url: str) -> str:
     """'cannot reach PostgreSQL at host:port: <timeout | refusal | DNS | type>', never credentials."""
-    parts = urlsplit(database_url)
-    host = parts.hostname or "?"
-    try:
-        where = f"{host}:{parts.port}" if parts.port else f"{host} (default port)"
-    except ValueError:
-        where = f"{host}:?"
-    return f"cannot reach PostgreSQL at {where}: {_failure_kind(exc)}"
+    return f"cannot reach PostgreSQL at {_location(database_url)}: {_failure_kind(exc)}"
+
+
+def _location(database_url: str) -> str:
+    """host:port from a DSN, read only from the text after the LAST '@', so a password holding an
+    unencoded '/', '?', '#' or '@' can never be reported as the host (#18672 review)."""
+    rest = database_url.split("://", 1)[-1].rsplit("@", 1)[-1]
+    hostport = rest.split("/", 1)[0].split("?", 1)[0]
+    host, sep, port = hostport.rpartition(":") if hostport.count(":") == 1 else (hostport, "", "")
+    if not sep:
+        return f"{hostport or '?'} (default port)"
+    return f"{host or '?'}:{port}" if port.isdigit() else f"{host or '?'}:?"

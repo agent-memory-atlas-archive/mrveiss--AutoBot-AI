@@ -11,6 +11,7 @@ issues a token, changes the password through the path, and asks the real revocat
 
 import asyncio
 import importlib.util
+import io
 import secrets
 import sys
 import time
@@ -75,12 +76,40 @@ def test_startup_sync_records_nothing_when_the_password_is_unchanged(epochs) -> 
     assert "admin" not in epochs, "every restart would revoke every admin session"
 
 
+def test_startup_sync_fails_closed_when_the_epoch_cannot_be_recorded() -> None:
+    """01's review: the epoch and the hash are two transactions, so a store failure must leave
+    the password unchanged rather than log revoked sessions that are not."""
+    from services.admin_password_sync import EpochNotRecordedError, sync_admin_password
+
+    async def get_epoch(subject):
+        return None
+
+    async def set_epoch(subject, *, now=None):
+        return None  # what password_epoch_store returns after logging a write failure
+
+    password_epoch.use_epoch_store(get_epoch=get_epoch, set_epoch=set_epoch)
+    try:
+        before = hash_password(_throwaway())
+        user = types.SimpleNamespace(username="admin", password_hash=before)
+        with pytest.raises(EpochNotRecordedError):
+            asyncio.run(sync_admin_password(_Db(), user, _throwaway()))
+        assert user.password_hash == before, "the hash changed although no epoch was recorded"
+    finally:
+        password_epoch.reset_epoch_store()
+
+
+_USERS_DSN, _EPOCH_DSN = "postgresql://h:5432/slm_users", "postgresql://h:5432/slm"
+
+
 class _Cursor:
-    def __init__(self, log):
-        self.log, self.rowcount = log, 1
+    def __init__(self, conn):
+        self.conn = conn
 
     def execute(self, sql, params):
-        self.log.append(("execute", sql, params))
+        self.conn.log.append((self.conn.dsn, "execute", sql.split()[0], params))
+
+    def fetchone(self):
+        return (1,)
 
     def __enter__(self):
         return self
@@ -90,42 +119,55 @@ class _Cursor:
 
 
 class _Conn:
-    def __init__(self, log):
-        self.log = log
+    def __init__(self, dsn, log):
+        self.dsn, self.log = dsn, log
 
     def cursor(self):
-        return _Cursor(self.log)
+        return _Cursor(self)
 
     def commit(self):
-        self.log.append(("commit",))
+        self.log.append((self.dsn, "commit"))
 
     def close(self):
-        self.log.append(("close",))
+        return None
 
 
 def _admin_module(monkeypatch, log):
-    monkeypatch.setitem(sys.modules, "psycopg2", types.SimpleNamespace(connect=lambda url: _Conn(log)))
+    monkeypatch.setitem(sys.modules, "psycopg2", types.SimpleNamespace(connect=lambda dsn: _Conn(dsn, log)))
     monkeypatch.setitem(
         sys.modules, "bcrypt", types.SimpleNamespace(hashpw=lambda pw, salt: b"hashed", gensalt=lambda rounds: b"s")
     )
     spec = importlib.util.spec_from_file_location("autobot_admin_18672", _ADMIN_SCRIPT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module, "get_db_url", lambda: "postgresql://slm-db/slm")
+    monkeypatch.setattr(
+        module,
+        "_secrets_env",
+        lambda: {
+            "SLM_USERS_DATABASE_URL": _USERS_DSN.replace("postgresql://", "postgresql+asyncpg://"),
+            "SLM_DATABASE_URL": _EPOCH_DSN.replace("postgresql://", "postgresql+asyncpg://"),
+        },
+    )
     return module
 
 
-def test_cli_reset_records_the_epoch_in_the_same_transaction(monkeypatch, epochs) -> None:
+def test_cli_reset_writes_each_row_to_its_own_database_epoch_first(monkeypatch, epochs) -> None:
+    """01's review: users and epochs are separate databases (SLM_USERS_DATABASE_URL vs
+    SLM_DATABASE_URL); the epoch must reach the epoch DB and commit before the hash does."""
     log: list = []
     module = _admin_module(monkeypatch, log)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(_throwaway() + "\n"))  # not a TTY: one line
     issued = int(time.time()) - 5
-    # A non-admin user: the reset path is the same, and it skips the admin-only secrets-file sync.
-    module.cmd_reset_password(types.SimpleNamespace(username="operator", new_password=_throwaway()))
-    executes = [entry for entry in log if entry[0] == "execute"]
-    assert [e[1].split()[0] for e in executes[:2]] == ["UPDATE", "INSERT"], executes
-    assert "slm_password_epochs" in executes[1][1]
-    assert log.index(executes[1]) < log.index(("commit",)), "the epoch must commit with the hash"
-    subject, epoch = executes[1][2]
+    module.cmd_reset_password(types.SimpleNamespace(username="operator"))
+    writes = [e for e in log if e[1] == "execute"]
+    assert [(e[0], e[2]) for e in writes] == [(_USERS_DSN, "SELECT"), (_EPOCH_DSN, "INSERT"), (_USERS_DSN, "UPDATE")]
+    assert log.index((_EPOCH_DSN, "commit")) < log.index((_USERS_DSN, "commit")), "the hash committed first"
+    subject, epoch = writes[1][3]
     assert subject == "operator" and epoch >= issued
-    epochs[subject] = epoch  # what the upsert wrote, as the SLM's store would read it back
+    epochs[subject] = epoch  # what the upsert wrote, as the SLM's store reads it back
     assert _revoked("operator", issued), "a token issued before the CLI reset still works"
+
+
+def test_cli_takes_no_password_on_the_command_line() -> None:
+    text = _ADMIN_SCRIPT.read_text(encoding="utf-8")
+    assert "new_password" not in text, "a password argument is visible in ps and shell history"
