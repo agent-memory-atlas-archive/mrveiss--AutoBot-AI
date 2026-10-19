@@ -121,6 +121,40 @@ describe('BaseTable', () => {
     expect(w.emitted('selection-change')?.[1]).toEqual([[1, 2, 3]])
   })
 
+  it('drops the keys of rows the app removed, so a later toggle never re-emits them', async () => {
+    // fails if `selected` keeps stale keys when `rows` changes
+    const w = make({ selectable: true })
+    await w.findAll('input[type="checkbox"]')[0].setValue(true)
+    await w.setProps({ rows: ROWS.filter((r) => r.id !== 2) })
+    expect(w.emitted('selection-change')?.at(-1)).toEqual([[1, 3]])
+    await w.findAll('input[type="checkbox"]')[1].setValue(false)
+    expect(w.emitted('selection-change')?.at(-1)).toEqual([[3]])
+  })
+
+  it('keeps the selection when rows change but every selected row is still there', async () => {
+    // contrast case: fails if the prune emits when nothing was removed
+    const w = make({ selectable: true })
+    await w.findAll('input[type="checkbox"]')[1].setValue(true)
+    const before = w.emitted('selection-change')?.length
+    await w.setProps({ rows: [...ROWS] })
+    expect(w.emitted('selection-change')?.length).toBe(before)
+  })
+
+  it('select-all on rows without the key field uses the row index, never undefined', async () => {
+    // fails if keysOf skips rowKeyOf's index fallback
+    const rows = ROWS.map(({ id: _id, ...rest }) => rest)
+    const w = make({ selectable: true, rows })
+    await w.findAll('input[type="checkbox"]')[0].setValue(true)
+    expect(w.emitted('selection-change')?.at(-1)).toEqual([[0, 1, 2]])
+  })
+
+  it('declares zebra before hover and selected, so both still win on a zebra row', () => {
+    // fails if the zebra rule follows a same-specificity hover or selected rule
+    const at = (sel: string) => tableSource.indexOf(sel)
+    expect(at('.aui-table__row--zebra {')).toBeLessThan(at('.aui-table__row:hover {'))
+    expect(at('.aui-table__row--zebra {')).toBeLessThan(at('.aui-table__row--selected {'))
+  })
+
   it('opens a header tooltip for columns that declare one', () => {
     const w = make({ columns: [{ key: 'name', label: 'Name', tooltip: 'The name' }] })
     expect(w.find('[role="tooltip"]').text()).toBe('The name')

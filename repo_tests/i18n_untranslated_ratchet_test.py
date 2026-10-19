@@ -64,16 +64,16 @@ _LOCALES = LOCALES
 # Lower these as translations land. Never raise one to admit a new untranslated
 # string: translate it, or leave the key out until it can be translated.
 BASELINE = {
-    "ar": 3715,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "de": 1609,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "es": 1657,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "fa": 3778,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "fr": 1854,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "he": 3778,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "lv": 2249,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "pl": 2215,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "pt": 2052,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
-    "ur": 3778,  # #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "ar": 3708,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "de": 1602,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "es": 1650,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "fa": 3771,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "fr": 1847,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "he": 3771,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "lv": 2242,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "pl": 2208,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "pt": 2045,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
+    "ur": 3771,  # #14778: -7, the 10 orphaned ui.dataTable.* keys left with the retired main-app DataTable (7 of them scored untranslated); #17561/#17565: skip-link labels and palette strings translated; #18354: unused theme/darkMode/switchLanguage keys removed (-4)
 }
 
 # The ONE definition of "untranslated" lives in scripts/list_untranslated.py, which

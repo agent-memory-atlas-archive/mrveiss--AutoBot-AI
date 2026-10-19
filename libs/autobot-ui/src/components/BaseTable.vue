@@ -16,7 +16,7 @@
   empty, loading, footer. Header tooltips reuse BaseTooltip and open downwards.
 -->
 <script setup lang="ts">
-import { computed, ref, useSlots } from 'vue'
+import { computed, ref, useSlots, watch } from 'vue'
 import BaseTooltip from './BaseTooltip.vue'
 import EmptyState from './EmptyState.vue'
 import { sortRows, type SortOrder } from '../utils/tableSort'
@@ -105,7 +105,8 @@ const shownRows = computed(() =>
 const colspan = computed(
   () => props.columns.length + (props.selectable ? 1 : 0) + (slots.actions ? 1 : 0),
 )
-const keysOf = (rows: TableRow[]): TableRowKey[] => rows.map((r) => r[props.rowKey] as TableRowKey)
+// The same key rowKeyOf renders with, index fallback included, so select-all never collects undefined.
+const keysOf = (rows: TableRow[]): TableRowKey[] => rows.map((r, i) => rowKeyOf(r, i))
 const allSelected = computed(
   () => props.rows.length > 0 && keysOf(props.rows).every((k) => selected.value.has(k)),
 )
@@ -140,6 +141,16 @@ function toggleRow(key: TableRowKey): void {
   if (!next.delete(key)) next.add(key)
   commitSelection(next)
 }
+
+// Rows the app removed stop being selected, so a later toggle never re-emits their keys.
+watch(
+  () => props.rows,
+  (rows) => {
+    const present = new Set(keysOf(rows))
+    const kept = new Set([...selected.value].filter((k) => present.has(k)))
+    if (kept.size !== selected.value.size) commitSelection(kept)
+  },
+)
 
 function toggleAll(): void {
   commitSelection(allSelected.value ? new Set() : new Set(keysOf(props.rows)))
@@ -359,8 +370,9 @@ tbody .aui-table__check { background: transparent; }
 
 .aui-table__cell--numeric { font-variant-numeric: var(--aui-table-num); }
 
-.aui-table__row:hover { background: var(--aui-table-row-hover); }
+/* Zebra first, so hover and selection (same specificity, later) win over it. */
 .aui-table__row--zebra { background: var(--aui-table-zebra-bg); }
+.aui-table__row:hover { background: var(--aui-table-row-hover); }
 .aui-table__row--selected { background: var(--aui-table-row-selected); }
 
 .aui-table__state { padding: var(--aui-space-4); text-align: center; }
