@@ -25,7 +25,9 @@ vi.mock('vue-router', () => ({
 }))
 // Render BaseModal slots inline (no Teleport) so inputs and buttons are
 // accessible in the wrapper DOM — same pattern used by the debug-modal test.
-vi.mock('@autobot/ui', () => ({
+// Only BaseModal is stubbed; the rest of the kit (BaseInput, #14778) stays real.
+vi.mock('@autobot/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@autobot/ui')>()),
   BaseModal: {
     name: 'BaseModal',
     props: ['modelValue', 'title', 'size'],
