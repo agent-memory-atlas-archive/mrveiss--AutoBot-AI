@@ -228,6 +228,7 @@ class TestFetchBS4SSRFPinning:
 
         ok_resp = MagicMock()
         ok_resp.status = 200
+        ok_resp.headers = {"Content-Type": "text/html; charset=utf-8"}  # a real response's header map
 
         async def _iter_chunked(_size):
             yield b"<html><body>hi</body></html>"
