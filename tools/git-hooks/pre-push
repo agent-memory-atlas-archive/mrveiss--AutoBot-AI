@@ -37,6 +37,12 @@ fi
 # Time-box each check; we'd rather warn than block forever.
 TEST_TIMEOUT=120
 
+# #18694: the union of the vitest `include` roots across the frontend vitest configs
+# (autobot-frontend: src/ and scripts/; autobot-slm-frontend and libs/autobot-ui: src/),
+# relative to the project. repo_tests/prepush_vitest_include_roots_18694_test.py holds
+# it equal to the configs.
+VITEST_INCLUDE_ROOTS='^(src|scripts)/'
+
 # #17451: pytest budget model, defined once. The two per-file costs are measured, not
 # guessed: K=3 s/file parallel from 117.84 s over 46 files under `-n auto`; K=6 s/file
 # serial from the 6-8 s per file seen under `-xvs`. MAX_BUDGET caps every timeout the
@@ -645,11 +651,20 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # expand `$REPO_ROOT` inside a single-quoted `sh -c`, where that variable is
     # unset -- nothing in this file exports it -- so the selector matched nothing
     # for every input, and its absence was indistinguishable from success.
-    test_files=$(echo "$project_changed" \
+    # #18694: only paths under a vitest include root. Every app's vitest.config.ts
+    # collects src/ (autobot-frontend also scripts/) and excludes tests/ and e2e/,
+    # so a changed Playwright spec (tests/visual/*.spec.ts) handed to `vitest run`
+    # collected nothing and blocked the push as COULD NOT RUN.
+    spec_files=$(echo "$project_changed" \
       | grep -E '\.(test|spec)\.ts$' \
       | sed "s|^${project}/||" \
-      | while IFS= read -r rel; do [ -f "$project_dir/$rel" ] && echo "$rel"; done \
-      | head -10 || true)
+      | while IFS= read -r rel; do [ -f "$project_dir/$rel" ] && echo "$rel"; done || true)
+    not_vitest=$(echo "$spec_files" | grep -vE "$VITEST_INCLUDE_ROOTS" | grep -v '^$' || true)
+    if [ -n "$not_vitest" ]; then
+      log "${project}: not vitest files (outside its src/ and scripts/ include roots), not run here:"
+      echo "$not_vitest" | sed 's/^/    /' >&2
+    fi
+    test_files=$(echo "$spec_files" | grep -E "$VITEST_INCLUDE_ROOTS" | head -10 || true)
     # Also test corresponding __tests__/ for any composable changes
     composable_tests=$(echo "$project_changed" \
       | grep -E 'composables/.*\.ts$' \
