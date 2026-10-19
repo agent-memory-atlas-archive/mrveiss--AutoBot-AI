@@ -132,8 +132,11 @@ def test_tls_settings_are_defined_once() -> None:
     for top in ("nginx-ssl.conf", "nginx-slm-ssl.conf"):
         closure = _closure(top)
         assert {"nginx-tls.conf", "nginx-tls-redirect.conf"} <= set(closure), (top, closure)
+    served = {
+        c for top in ("nginx.conf", "nginx-ssl.conf", "nginx-slm.conf", "nginx-slm-ssl.conf") for c in _closure(top)
+    }
     defining = sorted(
-        p.name for p in _NGINX.glob("*.conf") if re.search(r"^\s*ssl_protocols\s", p.read_text(encoding="utf-8"), re.M)
+        c for c in served if re.search(r"^\s*ssl_protocols\s", (_NGINX / c).read_text(encoding="utf-8"), re.M)
     )
     assert defining == ["nginx-tls.conf"], f"TLS settings copied outside nginx-tls.conf: {defining}"
 
