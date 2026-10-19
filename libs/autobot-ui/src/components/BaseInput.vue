@@ -34,6 +34,10 @@ const props = withDefaults(
     clearable?: boolean
     /** Accessible name of the clear button; required text when `clearable`. */
     clearLabel?: string
+    /** Overrides the generated id, for a form that targets the field itself. */
+    id?: string
+    /** Passed to the native input, e.g. 'email' or 'current-password'. */
+    autocomplete?: string
   }>(),
   {
     modelValue: '',
@@ -52,7 +56,7 @@ const emit = defineEmits<{
 }>()
 
 const uid = useId()
-const inputId = `${uid}-input`
+const inputId = computed(() => props.id || `${uid}-input`)
 const helperId = `${uid}-helper`
 const errorId = `${uid}-error`
 const inputRef = ref<HTMLInputElement>()
@@ -97,6 +101,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), blur: () => inputRef.value?
         :disabled="disabled"
         :readonly="readonly"
         :required="required"
+        :autocomplete="autocomplete"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="describedBy"
         @input="onInput"

@@ -149,7 +149,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/vnc_mcp.py": 763,
     "autobot-backend/api/websockets.py": 1120,  # #16457: accepts routed through websocket_subprotocol.accept_websocket
     "autobot-backend/api/workflow.py": 1027,
-    "autobot-backend/auth_middleware.py": 1076,  # #16457: bearer parsing moved to websocket_subprotocol.py
+    "autobot-backend/auth_middleware.py": 1075,  # #16457: bearer parsing moved to websocket_subprotocol.py
     "autobot-backend/autobot_memory_graph/property_graph.py": 630,
     "autobot-backend/autobot_memory_graph/relations.py": 641,
     "autobot-backend/autobot_memory_graph/semantic_search.py": 706,
@@ -273,7 +273,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/markdown_reference_system.py": 707,
     "autobot-backend/mcp_server/autobot_server.py": 932,
     "autobot-backend/mcp_server/mcp_security_test.py": 812,
-    "autobot-backend/media/link/pipeline_test.py": 965,
+    "autobot-backend/media/link/pipeline_test.py": 963,
     "autobot-backend/memory/manager.py": 979,
     "autobot-backend/memory/ownership_reassign_test.py": 886,
     "autobot-backend/memory/transparency.py": 609,

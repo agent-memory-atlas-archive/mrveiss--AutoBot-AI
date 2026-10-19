@@ -46,6 +46,19 @@ describe('BaseInput', () => {
     expect(label.attributes('for')).toBe(wrapper.get('input').attributes('id'))
   })
 
+  it('uses an explicit id for the input and its label', () => {
+    // fails if a caller's id is ignored, so a form's own label or test hook cannot target the field
+    const wrapper = mount(BaseInput, { props: { label: 'Email', id: 'signup-email' } })
+    expect(wrapper.get('input').attributes('id')).toBe('signup-email')
+    expect(wrapper.get('label').attributes('for')).toBe('signup-email')
+  })
+
+  it('passes autocomplete to the native input, and omits it when not given', () => {
+    // fails if autocomplete is dropped, so password managers and autofill lose the field
+    expect(mount(BaseInput, { props: { autocomplete: 'email' } }).get('input').attributes('autocomplete')).toBe('email')
+    expect(mount(BaseInput).get('input').attributes('autocomplete')).toBeUndefined()
+  })
+
   it('gives two instances in one app distinct ids', () => {
     // fails if the generated id is constant, so two labels target the same input.
     // useId() is unique per app, so both inputs must share one app, as on a real page.
