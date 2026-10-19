@@ -128,7 +128,7 @@
           <div class="session-actions">
             <BaseButton
               v-if="session.status === 'active'"
-              variant="outline-solid"
+              variant="outline"
               size="sm"
               @click="pauseSession(session.id)"
             >
@@ -147,7 +147,7 @@
             </BaseButton>
 
             <BaseButton
-              variant="outline-solid"
+              variant="outline"
               size="sm"
               @click="openSession(session.id)"
             >
@@ -201,7 +201,7 @@
         />
       </div>
       <template #actions>
-        <BaseButton variant="outline-solid" @click="showCreateModal = false">
+        <BaseButton variant="outline" @click="showCreateModal = false">
           {{ $t('browser.sessionManager.cancel') }}
         </BaseButton>
         <BaseButton
@@ -223,8 +223,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useBrowserAutomation } from '@/composables/useBrowserAutomation'
-import BaseButton from '@/components/base/BaseButton.vue'
-import { BaseModal } from '@autobot/ui'
+import { BaseModal, BaseButton } from '@autobot/ui'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Icon from '@/components/ui/Icon.vue'

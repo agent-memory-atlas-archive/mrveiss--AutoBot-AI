@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { computed, watchEffect, useSlots } from 'vue'
-import BaseButton from './BaseButton.vue'
+import { BaseButton } from '@autobot/ui'
 import Icon, { type IconName } from '@/components/ui/Icon.vue'
 import { createLogger } from '@/utils/debugUtils'
 

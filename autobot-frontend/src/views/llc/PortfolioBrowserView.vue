@@ -108,9 +108,8 @@ import { useApiClient } from '@/plugins/api'
 import { createLogger } from '@/utils/debugUtils'
 import { formatDate as fmtDate } from '@/utils/formatHelpers'
 import LlcBreadcrumb, { type BreadcrumbItem } from '@/components/llc/LlcBreadcrumb.vue'
-import BaseButton from '@/components/base/BaseButton.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
-import { BaseModal } from '@autobot/ui'
+import { BaseModal, BaseButton } from '@autobot/ui'
 import ErrorBanner from '@/components/base/ErrorBanner.vue'
 
 interface PortfolioResponse {

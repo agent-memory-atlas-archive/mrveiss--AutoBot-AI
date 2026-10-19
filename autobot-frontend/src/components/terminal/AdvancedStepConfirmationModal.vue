@@ -13,8 +13,7 @@
 
 import Icon from '@/components/ui/Icon.vue'
 import { computed, ref, watch } from 'vue'
-import { BaseModal } from '@autobot/ui'
-import BaseButton from '@/components/base/BaseButton.vue'
+import { BaseModal, BaseButton } from '@autobot/ui'
 import { useI18n } from 'vue-i18n'
 import { createLogger } from '@/utils/debugUtils'
 
@@ -308,7 +307,7 @@ function resetEdit(): void {
 
     <template #actions>
       <BaseButton
-        variant="outline-solid"
+        variant="outline"
         @click="handleTakeControl"
       >
         <Icon name="hand-paper" />
@@ -317,7 +316,7 @@ function resetEdit(): void {
 
       <BaseButton
         v-if="remainingStepsCount > 0"
-        variant="outline-solid"
+        variant="outline"
         @click="handleExecuteAll"
       >
         <Icon name="forward" />
