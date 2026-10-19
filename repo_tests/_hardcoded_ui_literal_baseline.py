@@ -29,10 +29,14 @@ English literals it contains, where:
 props defaults, and any language other than English.
 
 **Pinned per file and per literal**, in
-`repo_tests/hardcoded_ui_literal_baseline_12732.json` (`file -> [[kind, text], ...]`, a
-multiset). A literal removed in one file cannot hide a new one in another, and swapping
-one literal for another in the same file fails twice: the new one is unrecorded and the
-old one is stale (#18802; a per-file count passed a swap). A removed literal is deleted
+`repo_tests/hardcoded_ui_literal_baseline_12732.json` (`file -> [digest, ...]`, a
+multiset). A digest is `literal_digest(kind, text)`: the first 8 hex characters of
+SHA-256 over `kind`, a NUL and the text. The text itself is not stored, because some
+literals are placeholder examples shaped like secrets (a PEM header, a DSN), which the
+secret guards rightly refuse in a tracked file (#18802). A literal removed in one file
+cannot hide a new one in another, and swapping one literal for another in the same file
+fails twice: the new one is unrecorded and the old digest is stale. The failure message
+prints the new literal's text from the current scan. A removed literal's digest is deleted
 from the JSON in the commit that did the work, and a file that reaches 0 leaves it.
 
 **Shrink-only.** Replace a literal with `t('...')` and an English key in
@@ -52,16 +56,26 @@ from a one-word label. They stay in the counts; a migration that moves them to
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
-#: The JSON beside this module: ``repo-relative .vue path -> [[kind, literal], ...]``.
+#: The JSON beside this module: ``repo-relative .vue path -> [digest, ...]``.
 BASELINE_PATH = Path(__file__).with_name("hardcoded_ui_literal_baseline_12732.json")
 
-#: ``path -> (kind, literal)`` pairs not yet moved to ``t()``; a multiset, order-free.
-HARDCODED_UI_LITERAL_IDS: dict[str, list[tuple[str, str]]] = {
-    f: [(k, t) for k, t in v] for f, v in json.loads(BASELINE_PATH.read_text(encoding="utf-8")).items()
-}
+
+def literal_digest(kind: str, text: str) -> str:
+    """The identity a literal is recorded under: 8 hex chars of SHA-256 over kind, NUL, text.
+
+    Eight, not more: identity only has to be unique WITHIN one file (at most ~60 literals),
+    and an 8-character string has at most 3.0 bits of Shannon entropy per character, which never
+    exceeds detect-secrets' hex limit (> 3.0). A longer digest is flagged as a secret.
+    """
+    return hashlib.sha256(f"{kind}\0{text}".encode("utf-8")).hexdigest()[:8]
+
+
+#: ``path -> digests`` of the literals not yet moved to ``t()``; a multiset, order-free.
+HARDCODED_UI_LITERAL_IDS: dict[str, list[str]] = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
 #: ``path -> how many``, derived from the identities (kept for the reach and sort checks).
 HARDCODED_UI_LITERALS: dict[str, int] = {f: len(v) for f, v in HARDCODED_UI_LITERAL_IDS.items()}
