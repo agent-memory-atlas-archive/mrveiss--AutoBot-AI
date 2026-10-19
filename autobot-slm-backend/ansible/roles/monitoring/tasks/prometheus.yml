@@ -55,6 +55,11 @@
     group: "{{ prometheus_group }}"
   when: not _prometheus_binary.stat.exists
 
+- name: Remove the Prometheus tarball
+  ansible.builtin.file:
+    path: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+    state: absent
+
 # Topology detection and the config render live in their own file so the same
 # tasks can run again after the fleet roles exist (#14337). In this play they
 # run before the backend role has been provisioned at all, so on a first-ever

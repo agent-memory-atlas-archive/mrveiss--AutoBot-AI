@@ -531,3 +531,22 @@ state instead of the endpoint's. The sites are frozen in `repo_tests/redis_direc
 **Revisit when:** the canonical layer grows an endpoint-probe entry point; delete these constructors then.
 
 **Grep check:** `grep -n "redis.Redis(" autobot-backend/utils/distributed_service_discovery.py autobot-backend/utils/service_discovery.py` — if empty, this exception is obsolete.
+
+---
+
+## Monitoring Role — FHS `/etc` and `/var` Service Paths
+
+**Files:** `autobot-slm-backend/ansible/roles/monitoring/defaults/main.yml`
+**Canonical it does not use:** `autobot.base_dir` (the one install root, #18880)
+**Issue:** #18556
+
+**Reason:** `alertmanager_config_dir`, `alertmanager_data_dir`, `prometheus_config_dir`
+and `prometheus_data_dir` (also `grafana_data_dir`) are `/etc/<svc>` and `/var/lib/<svc>`
+paths. These are the FHS locations for host-wide configuration and variable state, the
+paths the upstream packages and their systemd units use, and operators and backup tooling
+look for them there. Only the install directories (binaries) live under the install root,
+derived as `{{ autobot.base_dir | dirname }}/<svc>`.
+
+**Revisit when:** the platform decides to relocate service state under the install root.
+
+**Grep check:** `grep -n "_config_dir\|_data_dir" autobot-slm-backend/ansible/roles/monitoring/defaults/main.yml` -- if no `/etc` or `/var` literal remains, this exception is obsolete.

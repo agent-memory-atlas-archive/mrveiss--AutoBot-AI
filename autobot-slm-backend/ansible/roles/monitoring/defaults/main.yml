@@ -16,7 +16,13 @@ monitoring_install_node_exporter: true
 # node that hosts alert routing.
 monitoring_install_alertmanager: false
 
-# Prometheus settings
+# Addresses the monitoring services bind to / are reached at (#18556). One
+# declaration each; templates and health checks read these, never a literal.
+monitoring_listen_address: "0.0.0.0"
+monitoring_local_host: "localhost"
+
+# Prometheus settings. prometheus_version is the ONE Prometheus version: CI reads
+# it from this line to pin promtool (.github/workflows/ci.yml, #18556).
 prometheus_version: "2.48.0"
 prometheus_port: 9090
 prometheus_retention_time: "15d"
@@ -32,7 +38,10 @@ alertmanager_port: 9093
 alertmanager_release_host: "github.com"
 alertmanager_user: "alertmanager"
 alertmanager_group: "alertmanager"
-alertmanager_install_dir: "/opt/alertmanager"
+# Install dirs derive from the one install root (#18880): the parent of
+# autobot.base_dir, so the path on a default host is unchanged. /etc and /var
+# below are FHS service locations (docs/developer/ARCHITECTURE_EXCEPTIONS.md).
+alertmanager_install_dir: "{{ autobot.base_dir | dirname }}/alertmanager"
 alertmanager_config_dir: "/etc/alertmanager"
 alertmanager_data_dir: "/var/lib/alertmanager"
 # The routing config and the rule file live once in the repo (the backend's
@@ -63,7 +72,7 @@ grafana_user: "grafana"
 grafana_group: "grafana"
 
 # Installation directories
-prometheus_install_dir: "/opt/prometheus"
+prometheus_install_dir: "{{ autobot.base_dir | dirname }}/prometheus"
 prometheus_config_dir: "/etc/prometheus"
 # #16375: the file Prometheus reads its backend scrape credential from
 # (`bearer_token_file`). Written by this role from `prometheus_scrape_token`,
