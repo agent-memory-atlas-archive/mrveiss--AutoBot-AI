@@ -92,7 +92,11 @@ def _decode_body(response: "httpx.Response") -> Any:
         return response.text
 
 
-def _result(req: Dict, status: int, body: Any, error: Optional[str], started: float) -> Dict[str, Any]:
+def _result(
+    req: Dict, status: int, body: Any, error: Optional[str], started: float, refused: bool = False
+) -> Dict[str, Any]:
+    """One slot. ``refused`` marks a sub-request this loader would not dispatch, so a caller can
+    run it directly; a dispatched route's own 403 keeps ``refused`` False."""
     return {
         "endpoint": req.get("endpoint"),
         "method": str(req.get("method", "GET")).upper(),
@@ -100,6 +104,7 @@ def _result(req: Dict, status: int, body: Any, error: Optional[str], started: fl
         "body": body,
         "error": error,
         "timing": round(time.monotonic() - started, 4),
+        "refused": refused,
     }
 
 
@@ -149,7 +154,7 @@ async def dispatch_batch(request: Request, requests: List[Dict], allow: Optional
         item = req if isinstance(req, dict) else {}
         refusal = refusal_for(item.get("endpoint"), str(item.get("method", "GET")).upper(), allow)
         if refusal:
-            return _result(item, refusal[0], None, refusal[1], started)
+            return _result(item, refusal[0], None, refusal[1], started, refused=True)
         async with gate:
             return await _dispatch_one(asgi_client, item, headers)
 

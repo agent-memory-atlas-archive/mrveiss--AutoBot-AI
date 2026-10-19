@@ -247,6 +247,8 @@ def _receiver_kind(req: _Req, ctx: _Ctx) -> str | None:
     if not req.args and not req.keywords:
         return None  # ``x.get()`` -- a getter, not a request
     bound = ctx.bound.get(req.recv)
+    if bound == _IN_PROCESS_KIND:
+        return _IN_PROCESS_KIND  # before the name checks: an ASGI client named `http_client` is still in-process
     if bound == "manager" or _MANAGER_RECV.search(req.recv):
         return "manager"
     if bound:

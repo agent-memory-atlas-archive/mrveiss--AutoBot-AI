@@ -102,6 +102,7 @@ async def test_a_non_admin_gets_the_admin_route_403_in_its_slot_and_the_handler_
     item = resp.json()["results"][0]
     assert item["status"] == 403
     assert item["error"]
+    assert item["refused"] is False  # contrast: the route's own 403 was dispatched, not refused
     assert calls == []
 
 
@@ -156,6 +157,7 @@ async def test_a_refused_endpoint_never_dispatches(calls, endpoint) -> None:
     item = resp.json()["results"][0]
     assert item["status"] in (400, 403)
     assert item["body"] is None
+    assert item["refused"] is True  # the client runs a refused slot directly
     assert calls == []
 
 

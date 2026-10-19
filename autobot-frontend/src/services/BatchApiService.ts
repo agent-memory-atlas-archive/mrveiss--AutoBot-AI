@@ -40,6 +40,8 @@ interface BatchLoadItem {
   body: unknown;
   error: string | null;
   timing: number;
+  /** The loader would not dispatch this path (not allow-listed); the caller runs it directly. */
+  refused?: boolean;
 }
 
 // Create scoped logger for BatchApiService
@@ -193,7 +195,10 @@ export class BatchApiService {
         if (request.method.toUpperCase() !== 'GET') results[i] = await this.runDirect(request);
       })
     ]);
-    getIdx.forEach((reqIdx, n) => { results[reqIdx] = batched[n]; });
+    // A slot the loader refused (not allow-listed) is fetched directly, as before #18765.
+    await Promise.all(getIdx.map(async (reqIdx, n) => {
+      results[reqIdx] = batched[n] ?? await this.runDirect(requests[reqIdx]);
+    }));
     return results;
   }
 
@@ -207,7 +212,8 @@ export class BatchApiService {
     return base !== '/api' && endpoint.startsWith(`${base}/`) ? `/api${endpoint.slice(base.length)}` : endpoint;
   }
 
-  private async loadGetsViaServer(requests: BatchRequest[]): Promise<BatchResult[]> {
+  /** One result per GET, or null for a slot the loader refused to dispatch. */
+  private async loadGetsViaServer(requests: BatchRequest[]): Promise<(BatchResult | null)[]> {
     if (requests.length === 0) return [];
     const payload: BatchLoadRequest = {
       requests: requests.map(r => ({ endpoint: this.toServerPath(r.endpoint), method: 'GET' }))
@@ -216,7 +222,7 @@ export class BatchApiService {
       // Typed from the generated contract (BatchLoadOp), not an inline call-site generic.
       const response = (await this.apiClient.post(`${getApiBase()}/batch-jobs/load`, payload)) as BatchLoadResponse;
       const items = (response.results ?? []) as BatchLoadItem[];
-      return requests.map((r, n) => this.toBatchResult(r, items[n]));
+      return requests.map((r, n) => (items[n]?.refused ? null : this.toBatchResult(r, items[n])));
     } catch (error: unknown) {
       const message = extractErrorMessage(error, 'Unknown error');
       logger.warn('Batch load failed:', message);
@@ -240,6 +246,9 @@ export class BatchApiService {
     try {
       let response: unknown;
       switch (method.toUpperCase()) {
+        case 'GET':
+          response = await this.apiClient.get(endpoint);
+          break;
         case 'POST':
           response = await this.apiClient.post(endpoint, data);
           break;

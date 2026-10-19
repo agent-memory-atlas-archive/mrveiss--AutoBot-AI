@@ -47,6 +47,7 @@ describe('BatchApiService (server batch)', () => {
     try {
       const client = makeClient([{ endpoint: '/api/a', method: 'GET', status: 200, body: 1, error: null, timing: 0 }]);
       const out = await new BatchApiService(client).batchRequests([{ endpoint: '/autobot/api/a', method: 'GET' }]);
+      expect(client.post.mock.calls[0][0]).toBe('/autobot/api/batch-jobs/load');
       expect(client.post.mock.calls[0][1]).toEqual({ requests: [{ endpoint: '/api/a', method: 'GET' }] });
       expect(out[0]).toMatchObject({ endpoint: '/autobot/api/a', success: true });
     } finally {
@@ -58,6 +59,30 @@ describe('BatchApiService (server batch)', () => {
     const client = makeClient([{ endpoint: '/api/a', method: 'GET', status: 200, body: 1, error: null, timing: 0 }]);
     await new BatchApiService(client).batchRequests([{ endpoint: '/api/a', method: 'GET' }]);
     expect(client.post.mock.calls[0][1]).toEqual({ requests: [{ endpoint: '/api/a', method: 'GET' }] });
+  });
+
+  it('fetches a GET the loader refused (not allow-listed) directly, keeping order', async () => {
+    const client = makeClient([
+      { endpoint: '/api/a', method: 'GET', status: 200, body: 1, error: null, timing: 0, refused: false },
+      { endpoint: '/api/other', method: 'GET', status: 403, body: null, error: 'endpoint is not batchable', timing: 0, refused: true },
+    ]);
+    client.get.mockResolvedValue({ direct: true });
+    const out = await new BatchApiService(client).batchRequests([
+      { endpoint: '/api/a', method: 'GET' },
+      { endpoint: '/api/other', method: 'GET' },
+    ]);
+    expect(client.get).toHaveBeenCalledWith('/api/other');
+    expect(out.map(r => r.success)).toEqual([true, true]);
+    expect(out[1]).toMatchObject({ data: { direct: true } });
+  });
+
+  it('contrast: a dispatched route\'s own 403 stays a failure and is not retried', async () => {
+    const client = makeClient([
+      { endpoint: '/api/b', method: 'GET', status: 403, body: { detail: 'nope' }, error: 'nope', timing: 0, refused: false },
+    ]);
+    const out = await new BatchApiService(client).batchRequests([{ endpoint: '/api/b', method: 'GET' }]);
+    expect(client.get).not.toHaveBeenCalled();
+    expect(out[0]).toMatchObject({ success: false, error: 'nope' });
   });
 
   it('marks every GET failed when the batch call itself fails', async () => {

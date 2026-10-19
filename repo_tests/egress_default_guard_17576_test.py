@@ -345,9 +345,10 @@ def test_an_in_process_asgi_client_is_not_an_outbound_call() -> None:
     assert len(sites) == 1 and not sites[0].guarded, "contrast: a network httpx client must still be detected"
 
 
-def test_an_in_process_client_named_client_is_not_an_outbound_call() -> None:
-    """The binding is kept, so the ``client`` receiver-name fallback does not re-flag it as httpx."""
-    named = _IN_PROCESS.replace(" as c:", " as client:").replace("c.get(p)", "client.get(p)")
+@pytest.mark.parametrize("name", ["client", "http_client"])
+def test_an_in_process_client_is_not_flagged_by_its_receiver_name(name: str) -> None:
+    """The binding is honoured before the name fallbacks (``client``) and the manager-name match (``http_client``)."""
+    named = _IN_PROCESS.replace(" as c:", f" as {name}:").replace("c.get(p)", f"{name}.get(p)")
     assert named != _IN_PROCESS
     assert outbound_sites(named) == ()
     network = named.replace("transport=httpx.ASGITransport(app=app), ", "")
