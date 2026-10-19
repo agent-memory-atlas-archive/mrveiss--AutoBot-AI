@@ -69,7 +69,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "bg-purple-900": 1,
     "bg-red-100": 10,
     "bg-red-400/10": 1,
-    "bg-red-50": 10,
+    "bg-red-50": 5,  # #18819: 10 -> 5, hand-rolled notices moved to the kit BaseAlert
     "bg-red-500": 10,
     "bg-red-500/10": 5,
     "bg-red-500/20": 1,
@@ -77,7 +77,6 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "bg-red-600": 5,
     "bg-red-700": 5,
     "bg-red-900": 2,
-    "bg-red-900/20": 1,
     "bg-red-900/30": 3,
     "bg-yellow-100": 7,
     "bg-yellow-400": 2,
@@ -113,11 +112,10 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "border-purple-200": 1,
     "border-purple-300": 1,
     "border-purple-500/30": 1,
-    "border-red-200": 7,
+    "border-red-200": 2,  # #18819: 7 -> 2, hand-rolled notices moved to the kit BaseAlert
     "border-red-500": 1,
     "border-red-500/20": 3,
     "border-red-500/50": 1,
-    "border-red-800": 1,
     "border-yellow-200": 2,
     "border-yellow-300": 1,
     "border-yellow-700": 1,
@@ -177,10 +175,10 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "text-purple-800": 1,
     "text-red-200": 2,
     "text-red-300": 3,
-    "text-red-400": 21,
-    "text-red-500": 9,
-    "text-red-600": 28,
-    "text-red-700": 11,
+    "text-red-400": 19,  # #18819: 21 -> 19, hand-rolled notices moved to the kit BaseAlert
+    "text-red-500": 8,  # #18819: 9 -> 8, hand-rolled notices moved to the kit BaseAlert
+    "text-red-600": 27,  # #18819: 28 -> 27, hand-rolled notices moved to the kit BaseAlert
+    "text-red-700": 6,  # #18819: 11 -> 6, hand-rolled notices moved to the kit BaseAlert
     "text-red-800": 6,
     "text-red-900": 1,
     "text-yellow-200": 2,
@@ -236,7 +234,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-gray-950": 1,
     "slm:bg-green-100": 63,  # #18819: 64 -> 63, the remaining SLM notice banners use the kit BaseAlert
     "slm:bg-green-200": 4,
-    "slm:bg-green-50": 50,  # #18819: 54 -> 50, the remaining SLM notice banners use the kit BaseAlert
+    "slm:bg-green-50": 49,  # #18819: 54 -> 49, hand-rolled notices moved to the kit BaseAlert
     "slm:bg-green-500": 56,  # #18819: 57 -> 56, the remaining SLM notice banners use the kit BaseAlert
     "slm:bg-green-600": 17,
     "slm:bg-green-700": 7,
@@ -263,7 +261,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-red-100": 71,  # #18819: 72 -> 71, the remaining SLM notice banners use the kit BaseAlert
     "slm:bg-red-200": 10,
     "slm:bg-red-400": 1,
-    "slm:bg-red-50": 34,  # #18819: 102 -> 34, the remaining SLM notice banners use the kit BaseAlert
+    "slm:bg-red-50": 28,  # #18819: 102 -> 28, hand-rolled notices moved to the kit BaseAlert
     "slm:bg-red-50/30": 1,
     "slm:bg-red-50/50": 1,
     "slm:bg-red-500": 46,  # #18819: 47 -> 46, the remaining SLM notice banners use the kit BaseAlert
@@ -280,7 +278,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-yellow-100": 39,
     "slm:bg-yellow-200": 1,
     "slm:bg-yellow-400": 1,
-    "slm:bg-yellow-50": 18,
+    "slm:bg-yellow-50": 17,  # #18819: 18 -> 17, hand-rolled notices moved to the kit BaseAlert
     "slm:bg-yellow-50/50": 1,
     "slm:bg-yellow-500": 21,
     "slm:border-amber-200": 11,
@@ -306,7 +304,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:border-gray-700/50": 1,
     "slm:border-gray-800": 5,
     "slm:border-green-100": 1,
-    "slm:border-green-200": 35,  # #18819: 39 -> 35, the remaining SLM notice banners use the kit BaseAlert
+    "slm:border-green-200": 34,  # #18819: 39 -> 34, hand-rolled notices moved to the kit BaseAlert
     "slm:border-green-300": 6,
     "slm:border-green-500": 2,
     "slm:border-indigo-200": 1,
@@ -319,13 +317,12 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:border-orange-200": 4,
     "slm:border-purple-200": 2,
     "slm:border-purple-500/30": 2,
-    "slm:border-red-100": 3,
-    "slm:border-red-200": 9,  # #18819: 37 -> 9, the remaining SLM notice banners use the kit BaseAlert
+    "slm:border-red-200": 7,  # #18819: 77 -> 7, hand-rolled notices moved to the kit BaseAlert
     "slm:border-red-300": 10,
     "slm:border-red-500": 2,
     "slm:border-red-500/30": 3,
     "slm:border-red-700": 1,
-    "slm:border-yellow-200": 14,
+    "slm:border-yellow-200": 13,  # #18819: 14 -> 13, hand-rolled notices moved to the kit BaseAlert
     "slm:border-yellow-300": 4,
     "slm:border-yellow-500": 2,
     "slm:divide-gray-100": 12,
@@ -371,7 +368,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-green-500": 6,
     "slm:text-green-600": 74,  # #18819: 76 -> 74, the remaining SLM notice banners use the kit BaseAlert
     "slm:text-green-700": 77,  # #18819: 80 -> 77, the remaining SLM notice banners use the kit BaseAlert
-    "slm:text-green-800": 33,  # #18819: 34 -> 33, the remaining SLM notice banners use the kit BaseAlert
+    "slm:text-green-800": 32,  # #18819: 34 -> 32, hand-rolled notices moved to the kit BaseAlert
     "slm:text-green-900": 2,
     "slm:text-indigo-700": 8,
     "slm:text-orange-600": 18,
@@ -388,20 +385,20 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-red-200": 1,
     "slm:text-red-300": 4,
     "slm:text-red-400": 4,
-    "slm:text-red-500": 14,  # #18819: 15 -> 14, the remaining SLM notice banners use the kit BaseAlert
-    "slm:text-red-600": 89,  # #18819: 96 -> 89, the remaining SLM notice banners use the kit BaseAlert
-    "slm:text-red-700": 79,  # #18819: 102 -> 79, the remaining SLM notice banners use the kit BaseAlert
-    "slm:text-red-800": 33,  # #18819: 42 -> 33, the remaining SLM notice banners use the kit BaseAlert
+    "slm:text-red-500": 12,  # #18819: 23 -> 12, hand-rolled notices moved to the kit BaseAlert
+    "slm:text-red-600": 88,  # #18819: 96 -> 88, hand-rolled notices moved to the kit BaseAlert
+    "slm:text-red-700": 72,  # #18819: 150 -> 72, hand-rolled notices moved to the kit BaseAlert
+    "slm:text-red-800": 32,  # #18819: 42 -> 32, hand-rolled notices moved to the kit BaseAlert
     "slm:text-slate-400": 1,
     "slm:text-teal-700": 1,
     "slm:text-yellow-300": 1,
     "slm:text-yellow-400": 2,
     "slm:text-yellow-500": 7,
     "slm:text-yellow-600": 41,
-    "slm:text-yellow-700": 34,
+    "slm:text-yellow-700": 33,  # #18819: 34 -> 33, hand-rolled notices moved to the kit BaseAlert
     "slm:text-yellow-800": 28,
     "slm:text-yellow-900": 1,
 }
 
 #: Frozen total, asserted separately so a hand edit of one number cannot pass.
-TOTAL_OCCURRENCES = 6502  # #18819: 6756 -> 6502
+TOTAL_OCCURRENCES = 6453  # #18819: 6756 -> 6453

@@ -365,10 +365,12 @@ onMounted(() => {
     </div>
 
     <!-- Fleet health detail (degraded/critical) -->
-    <div v-if="fleetHealth && fleetHealth.health !== 'healthy'" class="mb-4 p-3 rounded-lg border text-sm"
-      :class="fleetHealth.health === 'critical' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'">
-      {{ fleetHealth.detail }}
-    </div>
+    <BaseAlert
+      v-if="fleetHealth && fleetHealth.health !== 'healthy'"
+      :variant="fleetHealth.health === 'critical' ? 'error' : 'warning'"
+      class="mb-4"
+      :message="fleetHealth.detail"
+    />
 
     <!-- Node Status Summary -->
     <div class="grid grid-cols-4 gap-4 mb-6">

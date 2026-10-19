@@ -405,10 +405,12 @@ onMounted(async () => {
           </div>
 
           <!-- Detection Error -->
-          <div v-if="npuStatus?.detectionError" class="bg-red-50 rounded-lg p-4">
-            <h3 class="text-sm font-medium text-red-700 mb-2">{{ $t('fleet.nPUDetailsPanel.detectionError') }}</h3>
-            <p class="text-sm text-red-600">{{ npuStatus.detectionError }}</p>
-          </div>
+          <BaseAlert
+            v-if="npuStatus?.detectionError"
+            variant="error"
+            :title="$t('fleet.nPUDetailsPanel.detectionError')"
+            :message="npuStatus.detectionError"
+          />
         </div>
 
         <!-- Footer Actions -->
