@@ -3460,7 +3460,7 @@ before summarizing.
             self._fire_pre_compact_hook(
                 session_id=session.session_id,
                 conversation_history=session.conversation_history or [],
-                user_id=context.get("user_id") if context else None,
+                user_id=session.metadata.get("user_id"),  # the verified identity stamped above (#18825)
                 model_name=llm_params.get("model", ""),
             )
         )

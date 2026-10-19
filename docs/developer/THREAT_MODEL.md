@@ -124,10 +124,10 @@ refused `1008` before any RFB byte. Full reasoning is in that function's docstri
 ## 6. Memory graph / Graph-RAG ownership
 
 **Boundary:** one authenticated user vs. *another user's* memory-graph entities and relations; a scope-less read looks like a working feature (#18825).
-**Canonical enforcement:** [`owner_scope.py`](../../autobot-backend/autobot_memory_graph/owner_scope.py) `OwnerScope` (:72) is a REQUIRED argument of every graph read; `require_scope` (:119) fails closed; `entity_visible` (:138) / `redis_owner_clause` (:155) are the one rule; `from_tenant` (:102) builds it from the principal, never a request body.
+**Canonical enforcement:** [`owner_scope.py`](../../autobot-backend/autobot_memory_graph/owner_scope.py) `OwnerScope` (:72) is a REQUIRED argument of every graph read; `require_scope` (:138) fails closed; `entity_visible` (:157) / `redis_owner_clause` (:174) are the one rule; `from_tenant` (:104) builds it from the principal, never a request body.
 
 **Invariants**
-- A relation needs BOTH ends readable: [`queries.py`](../../autobot-backend/autobot_memory_graph/queries.py) `_readable_relation_ends` (:239) drops the edge, or its id and type leak.
+- A relation needs BOTH ends readable: [`queries.py`](../../autobot-backend/autobot_memory_graph/queries.py) `_readable_relation_ends` (:232) drops the edge, or its id and type leak.
 - No admin bypass (`is_platform_admin` ignored); cross-user reads are `UNSCOPED_ALL_USERS`, system callers only. Ownerless entities are invisible, never rewritten (#17038).
 
 ## Cross-cutting
