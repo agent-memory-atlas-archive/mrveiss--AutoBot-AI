@@ -7,27 +7,10 @@
 from typing import Any, Dict, List
 
 from autobot_memory_graph import AutoBotMemoryGraph
-from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS, OwnerScope, OwnerScopeRequired
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS, OwnerScope, owner_from_source
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
-
-
-def _owner_for(source: Dict[str, Any] | None) -> OwnerScope | None:
-    """Owner scope carried by a prefetch context / sync turn / search filters (#18825).
-
-    An explicit ``owner`` (OwnerScope) wins, else ``user_id`` (+ optional ``org_id``).
-    None means the caller supplied no principal; reads then return nothing (fail closed).
-    """
-    source = source or {}
-    if isinstance(source.get("owner"), OwnerScope):
-        return source["owner"]
-    if not source.get("user_id"):
-        return None
-    try:
-        return OwnerScope.for_user(source["user_id"], source.get("org_id"))
-    except OwnerScopeRequired:
-        return None
 
 
 class PostgresMemoryProvider:
@@ -60,7 +43,7 @@ class PostgresMemoryProvider:
         try:
             conversation_id = context.get("conversation_id")
             user_id = context.get("user_id")
-            owner = _owner_for(context)
+            owner = owner_from_source(context)
             if owner is None:
                 logger.warning("Memory prefetch skipped: no user scope in context")
                 return {}
@@ -95,7 +78,7 @@ class PostgresMemoryProvider:
                         entity_type=update["entity_type"],
                         name=update["name"],
                         observations=update.get("observations", []),
-                        owner=_owner_for(turn) or OwnerScope.system(),
+                        owner=owner_from_source(turn) or OwnerScope.system(),
                     )
                 elif update.get("action") == "update":
                     await self._apply_entity_updates(update["entity_id"], update.get("changes", {}))
@@ -123,7 +106,7 @@ class PostgresMemoryProvider:
         if not self.memory_graph:
             logger.warning("Memory graph not initialized for search")
             return []
-        owner = _owner_for(filters)
+        owner = owner_from_source(filters)
         if owner is None:
             logger.warning("Memory search refused: filters carry no user scope")
             return []

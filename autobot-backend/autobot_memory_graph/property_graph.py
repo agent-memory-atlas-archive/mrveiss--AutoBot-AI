@@ -615,8 +615,8 @@ class PropertyGraph:
             neighbours = await self.get_neighbors(current_id, relation=relation, direction=direction)
             for entry in neighbours:
                 neighbour_id = entry["node"].get("id")
-                if not neighbour_id:
-                    continue
+                if not neighbour_id or (neighbour_id != to_id and neighbour_id in visited):
+                    continue  # visited: skip the per-hop read (#18825)
                 if hop_allowed is not None and not await hop_allowed(neighbour_id):
                     continue
                 new_path = path + [_traversal_step(entry, current_id)]

@@ -49,7 +49,7 @@ from .models import (
     filter_internal_prompts,
 )
 from .session_handler import SessionHandlerMixin
-from .session_role import resolve_auth_role
+from .session_role import resolve_auth_role, stamp_verified_identity
 from .thought_markers import detect_content_type, find_last_tag_positions, find_new_segment_start
 from .tool_handler import ToolHandlerMixin
 from .turn_control import CHAT_LLM_CALL_TIMEOUT_SECONDS, stream_graph_turn, stream_legacy_turn
@@ -3401,11 +3401,10 @@ before summarizing.
         if language:
             session.metadata["language"] = language
 
-        # #11261/#18825: stash caller identity (user, tenant, org) to scope trajectory and graph reads (#11089).
+        # #11261/#18825: tenant scopes trajectory reads (#11089); user/org are the VERIFIED principal, every turn.
+        stamp_verified_identity(session.metadata, context)
         if context:
-            session.metadata["user_id"] = context.get("user_id") or ""
             session.metadata["tenant_id"] = context.get("tenant_id") or context.get("org_id") or ""
-            session.metadata["org_id"] = context.get("org_id") or ""
             # #11501 T2: CEO-chat path carries company_id — used to append the
             # board-tool teaching to the system prompt for this turn only.
             session.metadata["company_id"] = context.get("company_id") or ""

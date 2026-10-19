@@ -82,6 +82,8 @@ class OwnerScope:
     @classmethod
     def for_user(cls, user_id: Any, org_id: Any = None) -> "OwnerScope":
         """Scope for an authenticated principal (ids are normalised to ``str``)."""
+        if user_id is None or not str(user_id).strip():
+            raise OwnerScopeRequired("OwnerScope.user_id must be non-empty")
         if str(user_id) in _RESERVED_OWNER_IDS:
             raise OwnerScopeRequired("user_id collides with a reserved owner id")
         return cls(str(user_id), str(org_id) if org_id else None)
@@ -114,6 +116,23 @@ class OwnerScope:
     def system(cls) -> "OwnerScope":
         """Marker for platform-owned entities no user-scoped read can see."""
         return cls(SYSTEM_OWNER_ID)
+
+
+def owner_from_source(source: Dict[str, Any] | None) -> OwnerScope | None:
+    """Owner scope carried by a prefetch context / sync turn / search filters (#18825).
+
+    An explicit ``owner`` (OwnerScope) wins, else ``user_id`` (+ optional ``org_id``).
+    None means the caller supplied no principal; readers then return nothing (fail closed).
+    """
+    source = source or {}
+    if isinstance(source.get("owner"), OwnerScope):
+        return source["owner"]
+    if not source.get("user_id"):
+        return None
+    try:
+        return OwnerScope.for_user(source["user_id"], source.get("org_id"))
+    except OwnerScopeRequired:
+        return None
 
 
 def require_scope(owner: Any) -> Any:

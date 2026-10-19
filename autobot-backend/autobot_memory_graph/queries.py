@@ -198,27 +198,20 @@ class QueryOperationsMixin:
 
         return any(query_lower in obs.lower() for obs in entity.get("observations", []))
 
-    async def _collect_entity_keys(
-        self: AutoBotMemoryGraphCore,
-        limit: int,
-    ) -> List[str]:
+    async def _scan_entity_key_batches(self: AutoBotMemoryGraphCore):
+        """Yield entity keys in ``_FETCH_BATCH_SIZE`` batches until the keyspace is exhausted.
+
+        No cap on keys scanned: callers filter per batch and stop at their own result limit, so
+        other owners' keys cannot starve a scoped caller's results (#18825, #620).
         """
-        Collect entity keys from Redis for fallback search.
-
-        Issue #620.
-
-        Args:
-            limit: Maximum entities to eventually return (collects limit*10 keys)
-
-        Returns:
-            List of Redis keys for entity documents
-        """
-        keys = []
+        batch: List[str] = []
         async for key in self.redis_client.scan_iter(match="memory:entity:*"):
-            keys.append(key)
-            if len(keys) >= limit * 10:
-                break
-        return keys
+            batch.append(key)
+            if len(batch) >= _FETCH_BATCH_SIZE:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
     async def _iter_entity_batches(self: AutoBotMemoryGraphCore, keys: List[str]):
         """Yield the document under each key (None when absent), pipelined 50 keys per round trip."""
@@ -313,21 +306,23 @@ class QueryOperationsMixin:
         require_scope(owner)
         try:
             query_lower = query.lower() if query else ""
-            keys = await self._collect_entity_keys(limit)
-
-            if not keys:
-                return []
-
-            return await self._batch_fetch_and_filter_entities(
-                keys,
-                query_lower,
-                entity_type,
-                limit,
-                include_expired=include_expired,
-                owner=owner,
-                tags=tags,
-                status=status,
-            )
+            matches: List[Dict[str, Any]] = []
+            async for keys in self._scan_entity_key_batches():
+                matches.extend(
+                    await self._batch_fetch_and_filter_entities(
+                        keys,
+                        query_lower,
+                        entity_type,
+                        limit - len(matches),
+                        include_expired=include_expired,
+                        owner=owner,
+                        tags=tags,
+                        status=status,
+                    )
+                )
+                if len(matches) >= limit:
+                    break
+            return matches
 
         except Exception as e:
             logger.error("Fallback search failed: %s", e)
@@ -406,20 +401,17 @@ class QueryOperationsMixin:
         require_scope(owner)
 
         try:
-            keys = await self._collect_entity_keys(limit=1000)
-            if not keys:
-                return []
-
-            pipe = self.redis_client.pipeline()
-            for key in keys:
-                pipe.json().get(key)
-            raw_results = await pipe.execute()
-
-            return [
-                e
-                for e in raw_results
-                if e and e.get("type") == entity_type and entity_visible(e, owner) and _is_entity_valid_at(e, as_of)
-            ]
+            found: List[Dict[str, Any]] = []
+            async for keys in self._scan_entity_key_batches():  # owner filter applies while scanning (#18825)
+                async for e in self._iter_entity_batches(keys):
+                    if (
+                        e
+                        and e.get("type") == entity_type
+                        and entity_visible(e, owner)
+                        and _is_entity_valid_at(e, as_of)
+                    ):
+                        found.append(e)
+            return found
 
         except Exception as e:
             logger.error("get_entities_as_of failed: %s", e)

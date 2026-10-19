@@ -183,6 +183,7 @@ class TestRedisMemoryProvider:
 
         turn = {
             "conversation_id": "conv_123",
+            "user_id": "user-1",  # #18825: a turn with no owner is not cached
             "timestamp": "2025-04-13T10:00:00Z",
             "entity_updates": [{"action": "create", "name": "Task 1"}],
             "relation_updates": [],
