@@ -6,13 +6,14 @@
 doubled path answers a method-preserving 308 to it (shim removal: #18793)."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.routing import Match
 
+from api.knowledge_collaboration import router as collaboration_router
 from api.knowledge_grounding import router as grounding_router
 from api.knowledge_ownership import router as ownership_router
 from api.system_cache_coordinator import router as coordinator_router
@@ -26,8 +27,6 @@ _MOVES = [
     ("GET", f"{_SYSTEM}/api/cache/stats", f"{_SYSTEM}/cache/coordinator/stats"),
     ("POST", f"{_SYSTEM}/api/cache/evict", f"{_SYSTEM}/cache/evict"),
     ("POST", f"{_SYSTEM}/api/cache/clear/lru_memory", f"{_SYSTEM}/cache/clear/lru_memory"),
-    ("POST", f"{_KB}/api/knowledge/facts/f1/share", f"{_KB}/facts/f1/share"),
-    ("DELETE", f"{_KB}/api/knowledge/facts/f1/share/u2", f"{_KB}/facts/f1/share/u2"),
     ("PUT", f"{_KB}/api/knowledge/facts/f1/visibility", f"{_KB}/facts/f1/visibility"),
     ("GET", f"{_KB}/api/knowledge/facts/mine", f"{_KB}/facts/mine"),
     ("GET", f"{_KB}/api/knowledge/facts/shared-with-me", f"{_KB}/facts/shared-with-me"),
@@ -44,6 +43,7 @@ def _app() -> FastAPI:
     app.include_router(coordinator_router, prefix=_SYSTEM)
     app.include_router(ownership_router, prefix=_KB)
     app.include_router(grounding_router, prefix=_KB)
+    app.include_router(collaboration_router, prefix="/api")
     return app
 
 
@@ -146,6 +146,71 @@ def test_a_post_redirect_followed_by_a_client_replays_the_post(client: TestClien
         response = follower.post(f"{_SYSTEM}/api/cache/clear/lru_memory")
     assert response.status_code == 200
     assert response.json()["status"] == "cleared"
+
+
+_CANON = "/api/knowledge/collaboration/facts/f1/share"
+
+#: (method, old path, served canonical path, Location) -- the share routes moved to the
+#: collaboration router, an absolute 308 target (#18795); unshare carries ?entity_type=user.
+_SHARE_MOVES = [
+    (method, old, _CANON + suffix, _CANON + suffix + query)
+    for old_prefix in (f"{_KB}/facts/f1/share", f"{_KB}/api/knowledge/facts/f1/share")
+    for method, old, suffix, query in (
+        ("POST", old_prefix, "", ""),
+        ("DELETE", old_prefix + "/u2", "/u2", "?entity_type=user"),
+    )
+]
+
+
+@pytest.mark.parametrize(("method", "old", "served", "location"), _SHARE_MOVES)
+def test_the_share_routes_answer_one_hop_308_to_the_collaboration_route(
+    client: TestClient, method: str, old: str, served: str, location: str
+) -> None:
+    response = client.request(method, old)
+    assert response.status_code == 308
+    assert response.headers["location"] == location
+    assert response.headers["deprecation"] == "true"
+    assert _serves(client.app, method, served)
+    assert response.content == b""
+
+
+def test_a_share_redirect_merges_the_request_query_after_the_fixed_one(client: TestClient) -> None:
+    response = client.delete(f"{_KB}/facts/f1/share/u2?x=1")
+    assert response.headers["location"] == f"{_CANON}/u2?entity_type=user&x=1"
+
+
+def test_a_share_redirect_quotes_the_path_params_not_the_fixed_query(client: TestClient) -> None:
+    response = client.delete(f"{_KB}/facts/f1/share/a%20b%3Fc")
+    assert response.headers["location"] == f"{_CANON}/a%20b%3Fc?entity_type=user"
+
+
+@pytest.mark.parametrize("old_prefix", [f"{_KB}/facts/f1/share", f"{_KB}/api/knowledge/facts/f1/share"])
+def test_a_followed_share_308_replays_the_method_and_body_on_the_canonical_route(
+    client: TestClient, old_prefix: str
+) -> None:
+    from api import knowledge_collaboration as collab
+
+    kb = MagicMock()
+    kb.ownership_manager.share_fact = AsyncMock(return_value={"shared_with": ["u2"]})
+    kb.ownership_manager.unshare_fact = AsyncMock(return_value={"shared_with": []})
+    kb.get_fact = MagicMock(return_value={"metadata": {"owner_id": "test-user"}})
+    kb.update_fact = AsyncMock(return_value={"status": "success"})
+    client.app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user", "role": "user"}
+    follower = TestClient(client.app, follow_redirects=True)
+    with patch.object(collab, "get_or_create_knowledge_base", AsyncMock(return_value=kb)):
+        shared = follower.post(old_prefix, json={"user_ids": ["u2"]})
+        unshared = follower.delete(f"{old_prefix}/u2")
+    assert (shared.status_code, shared.json()["shared_with"]) == (200, ["u2"])
+    assert kb.ownership_manager.share_fact.await_args.kwargs["user_ids"] == ["u2"]
+    assert (unshared.status_code, unshared.json()["shared_with"]) == (200, [])
+    assert kb.ownership_manager.unshare_fact.await_args.kwargs["user_ids"] == ["u2"]
+
+
+def test_the_openapi_schema_carries_no_knowledge_base_share_path(client: TestClient) -> None:
+    """Guard against the fork returning: share/unshare live on the collaboration route only (#18795)."""
+    paths = client.app.openapi()["paths"]
+    assert f"{_CANON}" in paths, "the canonical route must be in the schema"
+    assert not [p for p in paths if p.startswith(f"{_KB}/") and "/share" in p]
 
 
 _DENIED = (401, 403)
