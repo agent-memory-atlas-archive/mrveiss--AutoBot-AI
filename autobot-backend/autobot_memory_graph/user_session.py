@@ -321,7 +321,8 @@ class UserSessionMixin:
         """
         Get all sessions for a user.
 
-        Issue #608: Returns both owned sessions and collaborative sessions.
+        Issue #608: Returns both owned sessions and collaborative sessions. A graph
+        failure is logged and re-raised, never turned into an empty list (#18825).
 
         Args:
             user_id: User ID to query
@@ -331,42 +332,45 @@ class UserSessionMixin:
             List of session entities
         """
         self.ensure_initialized()
-
         try:
-            sessions = []
-
-            owned_relations = await self.get_relations(
-                entity_id=user_id,
-                relation_types=["owns", "has_session"],
-                direction="outgoing",
-                owner=UNSCOPED_ALL_USERS,  # the user's own edges; the edge is the authorization
-            )
-
-            for rel in owned_relations.get("relations", []):
-                # Following the user's own owns/has_session edges: the edge from user_id is the authorization.
-                session = await self.get_entity(entity_id=rel["to"], owner=UNSCOPED_ALL_USERS)
-                if session and session.get("metadata", {}).get("session_id"):
-                    sessions.append(session)
-
+            sessions = await self._owned_sessions(user_id)
             if include_collaborative:
-                # Authorised by the explicit collaborators check below, not by ownership, so this
-                # one read is deliberately unscoped (#18825).
-                collab_sessions = await self.search_entities(
-                    query=user_id,
-                    entity_type="chat_session",
-                    limit=100,
-                    owner=UNSCOPED_ALL_USERS,
-                )
-                for session in collab_sessions:
-                    collaborators = session.get("metadata", {}).get("collaborators", [])
-                    if user_id in collaborators and session not in sessions:
-                        sessions.append(session)
-
+                sessions.extend(await self._collaborative_sessions(user_id, sessions))
             return sessions
-
         except Exception as e:
             logger.error("Failed to get user sessions: %s", e)
-            return []
+            raise
+
+    async def _owned_sessions(self: AutoBotMemoryGraphCore, user_id: str) -> List[Dict[str, Any]]:
+        """Sessions reached over the user's own owns/has_session edges; the edge is the authorization."""
+        owned_relations = await self.get_relations(
+            entity_id=user_id,
+            relation_types=["owns", "has_session"],
+            direction="outgoing",
+            owner=UNSCOPED_ALL_USERS,  # the user's own edges; the edge is the authorization
+        )
+        sessions = []
+        for rel in owned_relations.get("relations", []):
+            session = await self.get_entity(entity_id=rel["to"], owner=UNSCOPED_ALL_USERS)
+            if session and session.get("metadata", {}).get("session_id"):
+                sessions.append(session)
+        return sessions
+
+    async def _collaborative_sessions(
+        self: AutoBotMemoryGraphCore, user_id: str, already: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Sessions listing ``user_id`` as a collaborator, not already in ``already``.
+
+        Authorised by the explicit collaborators check, not by ownership, so this one
+        read is deliberately unscoped (#18825).
+        """
+        candidates = await self.search_entities(
+            query=user_id,
+            entity_type="chat_session",
+            limit=100,
+            owner=UNSCOPED_ALL_USERS,
+        )
+        return [s for s in candidates if user_id in s.get("metadata", {}).get("collaborators", []) and s not in already]
 
     def _activity_matches_filters(
         self: AutoBotMemoryGraphCore,
@@ -472,5 +476,6 @@ class UserSessionMixin:
             return activities
 
         except Exception as e:
+            # Re-raised: an empty list here read as "no activities" while the graph was down (#18825).
             logger.error("Failed to get session activities: %s", e)
-            return []
+            raise
