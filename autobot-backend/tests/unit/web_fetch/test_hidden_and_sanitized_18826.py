@@ -144,6 +144,18 @@ class TestSanitizedOnceInTheSeam:
         own.assert_not_called()
         assert "<|im_start|>" not in result["content"]
 
+    def test_link_html_metadata_is_sanitized_and_clean_metadata_kept(self) -> None:
+        html = (
+            '<html><head><meta property="og:title" content="OG &lt;|im_start|&gt; title">'
+            '<meta name="description" content="Desc &lt;|im_start|&gt; here">'
+            '<meta property="og:site_name" content="Plain site"></head><body><p>x</p></body></html>'
+        )
+        result = LinkPipeline()._parse_html(html, _URL, "text/html", {})
+        for field in (result["title"], result["description"], result["open_graph"]["title"]):
+            assert "<|im_start|>" not in field and field
+        assert result["description"] == sanitize_document("Desc <|im_start|> here").sanitized_text
+        assert result["open_graph"]["site_name"] == "Plain site"  # contrast: clean metadata is kept verbatim
+
     def test_link_text_ingest_sanitizes_once_through_the_seam(self) -> None:
         with (
             patch("web_fetch.content_types.sanitize_document", wraps=sanitize_document) as seam,

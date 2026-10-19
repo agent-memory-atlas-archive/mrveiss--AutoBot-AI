@@ -25,8 +25,10 @@ const NUMERIC: BaseTableColumn[] = [
 ]
 const WIDE: BaseTableColumn[] = [
   ...NUMERIC,
-  ...Array.from({ length: 10 }, (_, i) => ({ key: 'note', label: `Column ${i + 1}`, width: '180px' })),
+  ...Array.from({ length: 10 }, (_, i) => ({ key: `col${i + 1}`, label: `Column ${i + 1}`, width: '180px' })),
 ]
+// Each wide column has its own key (unique v-for keys) and shows the row's note.
+const WIDE_ROWS = ROWS.map((r) => ({ ...r, ...Object.fromEntries(WIDE.slice(NUMERIC.length).map((c) => [c.key, r.note])) }))
 
 const meta = {
   title: 'Kit/BaseTable',
@@ -44,7 +46,7 @@ export const Sortable: Story = { args: { columns: NUMERIC, caption: 'Sortable ho
 export const Empty: Story = { args: { rows: [], emptyTitle: 'No hosts', emptyDescription: 'Nothing is registered yet.' } }
 export const Loading: Story = { args: { loading: true, loadingLabel: 'Loading hosts' } }
 export const Wide: Story = {
-  args: { columns: WIDE },
+  args: { columns: WIDE, rows: WIDE_ROWS },
   render: (args) => ({
     components: { BaseTable },
     setup: () => ({ args }),

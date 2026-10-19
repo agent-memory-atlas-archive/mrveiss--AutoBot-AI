@@ -345,53 +345,28 @@ class LinkPipeline(BasePipeline):
         result.update(confidence=0.9 if text else 0.5, metadata=metadata)
         return result
 
-    def _parse_html(
-        self,
-        html: str,
-        url: str,
-        content_type: str,
-        metadata: Dict,
-    ) -> Dict[str, Any]:
+    def _parse_html(self, html: str, url: str, content_type: str, metadata: Dict) -> Dict[str, Any]:
         """Parse HTML with BeautifulSoup and extract structured content."""
         from media.document.html_extraction import drop_non_content
+        from web_fetch.section_sanitizer import sanitize_field
 
         soup = BeautifulSoup(html, "html.parser")
-
-        title = self._extract_title(soup)
-        description = self._extract_description(soup)
-        og_data = self._extract_open_graph(soup)
-        # Already sanitized: extract_page runs the canonical sanitizer once for every caller (#18826).
-        main_text = self._extract_main_text(html, url)
+        # Every stored text field goes through the canonical sanitizer exactly once (#18826):
+        # extract_page cleans the title and body, sanitize_field the metadata it does not read.
+        document = self._extract_document(html, url)
+        title, main_text = document.info.get("title", ""), document.text
+        description = sanitize_field(self._extract_description(soup))
+        og_data = {key: sanitize_field(value) for key, value in self._extract_open_graph(soup).items()}
         # Outbound links come from content only, never from site chrome: the same
         # chrome rule the document extractor applies (#18826). It drops <head>, so
         # the metadata above is read first.
         drop_non_content(soup)
         links = self._extract_links(soup, url)
-
-        word_count = len(main_text.split()) if main_text else 0
-        confidence = 0.9 if main_text else 0.5
-
-        return {
-            "type": "link_fetch",
-            "url": url,
-            "title": title,
-            "description": description,
-            "content": main_text,
-            "word_count": word_count,
-            "links": links[:50],  # Cap at 50 outbound links
-            "open_graph": og_data,
-            "content_type": content_type,
-            "confidence": confidence,
-            "metadata": metadata,
-        }
-
-    def _extract_title(self, soup: Any) -> str:
-        """Extract page title from <title> or og:title."""
-        og_title = soup.find("meta", property="og:title")
-        if og_title and og_title.get("content"):
-            return og_title["content"].strip()
-        title_tag = soup.find("title")
-        return title_tag.get_text(strip=True) if title_tag else ""
+        result = {"type": "link_fetch", "url": url, "title": title, "description": description, "content": main_text}
+        result.update(word_count=len(main_text.split()), links=links[:50], open_graph=og_data)  # cap: 50 links
+        result.update(content_type=content_type)
+        result.update(confidence=0.9 if main_text else 0.5, metadata=metadata)
+        return result
 
     def _extract_description(self, soup: Any) -> str:
         """Extract meta description or og:description."""
@@ -404,16 +379,17 @@ class LinkPipeline(BasePipeline):
                 return tag["content"].strip()
         return ""
 
-    def _extract_main_text(self, html: str, url: str) -> str:
-        """Extract the page's document text through the one HTML extractor (#18826).
+    def _extract_document(self, html: str, url: str) -> Any:
+        """Extract the page through the one HTML extractor (#18826), sanitized title and text.
 
         Link ingest used to flatten ``<article>``/``<main>`` with its own
-        ``get_text``. It now stores what every other HTML ingest path stores:
-        the ``document`` profile's text, structure kept, chrome dropped.
+        ``get_text`` and read ``<title>`` with its own copy of the title rule. It
+        now stores what every other HTML ingest path stores: the ``document``
+        profile's text, structure kept, chrome dropped, and its capped title.
         """
         from web_fetch.profile import IngestProfile, extract_page
 
-        return extract_page(html, IngestProfile.DOCUMENT, base_url=url).text
+        return extract_page(html, IngestProfile.DOCUMENT, base_url=url)
 
     def _extract_links(self, soup: Any, base_url: str) -> List[Dict[str, str]]:
         """Extract and resolve all <a href> links on the page."""

@@ -50,7 +50,7 @@ async def test_crawled_page_fact_body_is_the_document_only():
     connector = WebCrawlerConnector(
         ConnectorConfig(connector_id="c", connector_type="web_crawler", name="c", config={"urls": [_PAGE_URL]})
     )
-    with patch.object(WebFetcher, "fetch_raw_html", AsyncMock(return_value=(_page_html(), 200))):
+    with patch.object(WebFetcher, "fetch_raw_page", AsyncMock(return_value=(_page_html(), 200, "text/html"))):
         result, raw_html = await connector._fetch_page_with_html(WebFetcher(), _PAGE_URL)
     content = _fetch_result_to_content(result, "c")
     assert content is not None and raw_html
@@ -70,3 +70,31 @@ async def test_scraped_page_body_is_the_document_only():
         result = await WebFetcher.fetch(_PAGE_URL, render=RenderMode.FAST)
     assert result.success and result.source == "bs4"
     _assert_document_only(result.markdown)
+
+
+_XHTML_PROLOGUE = '<?xml version="1.0" encoding="utf-8"?>\n'
+
+
+async def _crawl_body(body: str, content_type):
+    connector = WebCrawlerConnector(
+        ConnectorConfig(connector_id="c", connector_type="web_crawler", name="c", config={"urls": [_PAGE_URL]})
+    )
+    with patch.object(WebFetcher, "fetch_raw_page", AsyncMock(return_value=(body, 200, content_type))):
+        result, _raw = await connector._fetch_page_with_html(WebFetcher(), _PAGE_URL)
+    return result
+
+
+@pytest.mark.asyncio
+async def test_crawler_trusts_the_served_content_type_over_the_body_shape():
+    """An XHTML page whose body opens with ``<?xml`` is parsed as HTML when served as text/html."""
+    result = await _crawl_body(_XHTML_PROLOGUE + _page_html(), "text/html; charset=utf-8")
+    assert result.success
+    _assert_document_only(result.markdown)
+
+
+@pytest.mark.asyncio
+async def test_crawler_without_a_content_type_sniffs_the_xml_prologue_as_text():
+    """Contrast: the same body with no header is sniffed, and the sniff cannot see HTML behind ``<?xml``."""
+    result = await _crawl_body(_XHTML_PROLOGUE + _page_html(), None)
+    assert result.success
+    assert "MARKER" in result.markdown

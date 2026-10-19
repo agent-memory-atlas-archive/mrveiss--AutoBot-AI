@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { h } from 'vue'
+import { h, nextTick, reactive } from 'vue'
 import tableSource from '../BaseTable.vue?raw'
 import BaseTable, { type BaseTableColumn } from '../BaseTable.vue'
 
@@ -137,6 +137,28 @@ describe('BaseTable', () => {
     await w.findAll('input[type="checkbox"]')[1].setValue(true)
     const before = w.emitted('selection-change')?.length
     await w.setProps({ rows: [...ROWS] })
+    expect(w.emitted('selection-change')?.length).toBe(before)
+  })
+
+  it('drops the key of a row the app spliced out of the same array in place', async () => {
+    // fails if the prune watches only the rows array reference, which splice leaves unchanged
+    const rows = reactive(ROWS.map((r) => ({ ...r })))
+    const w = make({ selectable: true, rows })
+    await w.findAll('input[type="checkbox"]')[0].setValue(true)
+    rows.splice(1, 1)
+    await nextTick()
+    expect(w.emitted('selection-change')?.at(-1)).toEqual([[1, 3]])
+  })
+
+  it('keeps the selection when a row is edited in place but no key goes away', async () => {
+    // contrast case: fails if an in-place edit that removes no key emits a selection change
+    const rows = reactive(ROWS.map((r) => ({ ...r })))
+    const w = make({ selectable: true, rows })
+    await w.findAll('input[type="checkbox"]')[1].setValue(true)
+    const before = w.emitted('selection-change')?.length
+    rows[0].note = 'edited'
+    rows.push({ id: 4, name: 'Delta', count: 1, note: 'd' })
+    await nextTick()
     expect(w.emitted('selection-change')?.length).toBe(before)
   })
 

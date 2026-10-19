@@ -53,7 +53,7 @@ register_env_var(
         type=int,
         default=300,
         description=(
-            "Longest page title, in characters, the HTML extractor keeps from og:title or <title> "
+            "Longest page title, in characters, the HTML extractor keeps from `og:title` or `<title>` "
             "(media/document/html_extraction.py, #18826)."
         ),
         component="knowledge",

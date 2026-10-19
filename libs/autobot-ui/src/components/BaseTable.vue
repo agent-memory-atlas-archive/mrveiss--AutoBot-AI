@@ -143,16 +143,6 @@ function toggleRow(key: TableRowKey): void {
   commitSelection(next)
 }
 
-// Rows the app removed stop being selected, so a later toggle never re-emits their keys.
-watch(
-  () => props.rows,
-  (rows) => {
-    const present = new Set(keysOf(rows))
-    const kept = new Set([...selected.value].filter((k) => present.has(k)))
-    if (kept.size !== selected.value.size) commitSelection(kept)
-  },
-)
-
 function toggleAll(): void {
   commitSelection(allSelected.value ? new Set() : new Set(keysOf(props.rows)))
 }
@@ -192,6 +182,17 @@ function rowKeyOf(row: TableRow): TableRowKey {
   }
   return key
 }
+
+// Rows the app removed stop being selected, so a later toggle never re-emits their keys.
+// The source is the key list, not the array reference, so an in-place splice prunes too.
+watch(
+  () => keysOf(props.rows),
+  (keys) => {
+    const present = new Set(keys)
+    const kept = new Set([...selected.value].filter((k) => present.has(k)))
+    if (kept.size !== selected.value.size) commitSelection(kept)
+  },
+)
 
 watchEffect(() => {
   if (props.selectable && (!props.selectAllLabel || !props.selectRowLabel)) {
@@ -394,6 +395,7 @@ tbody .aui-table__check { background: transparent; }
 .aui-table__row--zebra { background: var(--aui-table-zebra-bg); }
 .aui-table__row:hover { background: var(--aui-table-row-hover); }
 .aui-table__row--selected { background: var(--aui-table-row-selected); }
+.aui-table__row--selected > :first-child { border-left: var(--aui-table-row-selected-edge); }
 
 .aui-table__state { padding: var(--aui-space-4); text-align: center; }
 

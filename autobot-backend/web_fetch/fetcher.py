@@ -386,8 +386,17 @@ class WebFetcher:
             on empty body with a successful status — same shape as ``fetch()``
             for empty content.
         """
-        html, status, _content_type = await _fetch_bs4(url, timeout)
+        html, status, _content_type = await cls.fetch_raw_page(url, timeout)
         return html, status
+
+    @classmethod
+    async def fetch_raw_page(cls, url: str, timeout: float = 30.0) -> tuple[str | None, int | None, str | None]:
+        """Like :meth:`fetch_raw_html`, plus the response Content-Type (``None`` when absent).
+
+        Callers that turn the body into stored text pass the header on to
+        :meth:`page_text`, so the page type is declared, not sniffed (#18826).
+        """
+        return await _fetch_bs4(url, timeout)
 
     async def _fetch(self, url: str, render: RenderMode, timeout: float) -> FetchResult:
         """Internal fetch dispatcher."""

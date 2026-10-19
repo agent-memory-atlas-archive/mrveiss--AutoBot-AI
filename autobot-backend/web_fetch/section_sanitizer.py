@@ -26,30 +26,30 @@ from media.document.sections import Block, Section, render_sections
 SANITIZER_SOURCE = "web_html"
 
 
-def _clean(text: str) -> str:
+def sanitize_field(text: str) -> str:
     """One field through the canonical sanitizer; an empty field is not a call."""
     return sanitize_document(text, source=SANITIZER_SOURCE).sanitized_text if text else text
 
 
 def _clean_all(texts: Tuple[str, ...]) -> Tuple[str, ...]:
-    return tuple(_clean(text) for text in texts)
+    return tuple(sanitize_field(text) for text in texts)
 
 
 def _block(block: Block) -> Block:
     return replace(
         block,
-        text=_clean(block.text),
-        items=tuple(replace(item, text=_clean(item.text)) for item in block.items),
+        text=sanitize_field(block.text),
+        items=tuple(replace(item, text=sanitize_field(item.text)) for item in block.items),
         rows=tuple(_clean_all(row) for row in block.rows),
         header=_clean_all(block.header),
-        links=tuple(replace(link, text=_clean(link.text)) for link in block.links),
+        links=tuple(replace(link, text=sanitize_field(link.text)) for link in block.links),
     )
 
 
 def _section(section: Section) -> Section:
     return replace(
         section,
-        heading=_clean(section.heading),
+        heading=sanitize_field(section.heading),
         heading_path=_clean_all(section.heading_path),
         blocks=tuple(_block(block) for block in section.blocks),
     )
@@ -58,5 +58,5 @@ def _section(section: Section) -> Section:
 def sanitized_document(document: ExtractedDocument) -> ExtractedDocument:
     """*document* with sanitized sections and title, and ``text`` rendered from those sections."""
     sections = tuple(_section(section) for section in document.sections)
-    title = _clean(document.info.get("title", ""))
+    title = sanitize_field(document.info.get("title", ""))
     return replace(document, sections=sections, text=render_sections(sections), info={**document.info, "title": title})

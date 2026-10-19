@@ -396,7 +396,7 @@ class WebCrawlerConnector(AbstractConnector):
         """BFS crawl starting from *seed_urls*.
 
         Uses web_fetch.Frontier for BFS queue/dedup, web_fetch.RobotsCache
-        for per-domain robots.txt enforcement, and ``WebFetcher.fetch_raw_html``
+        for per-domain robots.txt enforcement, and ``WebFetcher.fetch_raw_page``
         for every URL (single request yields both HTML for link extraction and
         content for KB ingest).
 
@@ -508,13 +508,13 @@ class WebCrawlerConnector(AbstractConnector):
                 return FetchResult(url=url, success=False, error_code=ERR_ROBOTS_BLOCKED), ""
 
         async def _do_fetch():
-            h, s = await WebFetcher.fetch_raw_html(url, timeout=30.0)
+            h, s, ct = await WebFetcher.fetch_raw_page(url, timeout=30.0)
             if s is None or s in (429, 500, 502, 503, 504):
                 raise RetryableError("HTTP %s" % (s or "connection error"), s or 0)
-            return h, s
+            return h, s, ct
 
         try:
-            html, status = await self.fetch_with_retry(_do_fetch)
+            html, status, content_type = await self.fetch_with_retry(_do_fetch)
         except RetryableError as exc:
             # Retries exhausted. status_code is preserved so the report can show
             # HTTP 429/5xx; None means a genuine connection failure.
@@ -532,8 +532,8 @@ class WebCrawlerConnector(AbstractConnector):
             return FetchResult(url=url, success=False, error_code=ERR_HTTP_ERROR, status_code=status), ""
 
         try:
-            # fetch_raw_html carries no Content-Type, so the body is sniffed (#18826).
-            title, markdown = fetcher.page_text(html, url)
+            # The response's own Content-Type decides the page type; the body is sniffed only without one (#18826).
+            title, markdown = fetcher.page_text(html, url, content_type)
         except UnsupportedContentType:
             return FetchResult(url=url, success=False, error_code=ERR_UNSUPPORTED_CONTENT_TYPE, status_code=status), ""
         fetch_result = FetchResult(

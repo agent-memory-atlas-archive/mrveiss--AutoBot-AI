@@ -138,7 +138,7 @@ async def test_crawler_refuses_a_binary_page_with_a_specific_reason():
     connector = WebCrawlerConnector(
         ConnectorConfig(connector_id="c", connector_type="web_crawler", name="c", config={"urls": [_URL]})
     )
-    with patch.object(WebFetcher, "fetch_raw_html", AsyncMock(return_value=("\x00\x01PK binary", 200))):
+    with patch.object(WebFetcher, "fetch_raw_page", AsyncMock(return_value=("\x00\x01PK binary", 200, None))):
         result, raw_html = await connector._fetch_page_with_html(WebFetcher(), _URL)
     assert result.success is False and result.error_code == ERR_UNSUPPORTED_CONTENT_TYPE and raw_html == ""
     assert _no_content_reason(result).startswith("skipped: not an HTML, text or JSON page")

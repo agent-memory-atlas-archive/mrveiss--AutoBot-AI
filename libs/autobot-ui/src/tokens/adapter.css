@@ -115,6 +115,7 @@
   --aui-table-border: var(--tbl-border);
   --aui-table-row-hover: var(--tbl-row-hover);
   --aui-table-row-selected: var(--tbl-row-selected);
+  --aui-table-row-selected-edge: var(--tbl-selected-edge);
   --aui-table-zebra-bg: var(--tbl-zebra-bg);
   --aui-table-check-w: var(--tbl-check-col-w);
   --aui-table-min-col: var(--tbl-min-col);
