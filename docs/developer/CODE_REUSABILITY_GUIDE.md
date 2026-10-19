@@ -369,6 +369,12 @@ These components already exist and should be used:
 
 #### Buttons
 - `BaseButton.vue` - Base button component
+- `BaseInput` - **Moved to the shared kit** (#14778): `import { BaseInput } from '@autobot/ui'`
+  (`libs/autobot-ui/src/components/BaseInput.vue`). The main app's local copy is deleted. Props:
+  `modelValue`, `type`, `label`, `placeholder`, `helperText`, `error`, `size`, `disabled`,
+  `readonly`, `required`, `clearable`, `clearLabel`; slots `prefix`/`suffix`; label and helper
+  text come from the app (no i18n in the kit). Styled by the `--aui-input-*` tokens, mapped in
+  `libs/autobot-ui/src/tokens/adapter.css`.
 - `TouchFriendlyButton.vue` - Touch-optimized button
 
 #### Progress

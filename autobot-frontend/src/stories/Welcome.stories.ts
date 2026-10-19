@@ -21,7 +21,7 @@ interface Card {
 
 const baseCards: Card[] = [
   { name: 'BaseButton', description: 'Interactive button component with variants and states', href: '?path=/docs/components-base-basebutton--docs' },
-  { name: 'BaseInput', description: 'Form input component with validation and helpers', href: '?path=/docs/components-base-baseinput--docs' },
+  { name: 'BaseInput', description: 'Text input with label, helper and error text (shared kit)', href: '?path=/docs/kit-baseinput--docs' },
   { name: 'BaseCard', description: 'Card and panel container, variants and sizes (shared kit)', href: '?path=/docs/kit-basecard--docs' },
   { name: 'BaseBadge', description: 'Badge component for labels and status indicators (shared kit)', href: '?path=/docs/kit-basebadge--docs' },
   { name: 'BaseTable', description: 'Data table component with sorting and filtering', href: '?path=/docs/components-base-basetable--docs' },

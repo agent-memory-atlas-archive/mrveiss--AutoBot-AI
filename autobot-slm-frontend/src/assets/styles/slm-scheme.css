@@ -402,6 +402,10 @@
   --table-border: var(--border);
   --input-bg: var(--surface);
   --input-border: var(--border);
+  --input-height-sm: 32px;
+  --input-height-md: 40px;
+  --input-height-lg: 48px;
+  --input-padding-x: var(--spacing-3);
   --color-focus: var(--focus);
   --color-focus-ring: var(--focus);
   --color-accent: var(--accent);
