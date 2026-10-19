@@ -195,10 +195,10 @@ describe('SlmApiClient', () => {
 
     async function firstRetryDelay(headers: Record<string, string>): Promise<number> {
       vi.useFakeTimers()
+      const timeoutSpy = vi.spyOn(globalThis, 'setTimeout')
       try {
         fetchMock.mockImplementationOnce(async () => unavailable(headers))
         fetchMock.mockImplementationOnce(async () => jsonResponse({ ok: true }))
-        const timeoutSpy = vi.spyOn(globalThis, 'setTimeout')
         const pending = new SlmApiClient().get('/nodes', { maxRetries: 2 })
         await vi.advanceTimersByTimeAsync(0)
         const delays = timeoutSpy.mock.calls
@@ -208,6 +208,9 @@ describe('SlmApiClient', () => {
         await pending
         return Math.max(...delays)
       } finally {
+        // Restore the spy BEFORE the real timers: a leaked spy keeps wrapping the fake
+        // setTimeout, and every later test's retry delay never fires.
+        timeoutSpy.mockRestore()
         vi.useRealTimers()
       }
     }
