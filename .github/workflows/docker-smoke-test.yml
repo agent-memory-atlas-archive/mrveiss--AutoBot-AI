@@ -290,7 +290,7 @@ jobs:
             if [ -n "$rows" ]; then why="$(compare_nodes "$rows")" && { why=""; break; }; fi
             sleep 5
           done
-          echo "$rows" | sed 's/^/  node /'
+          while IFS= read -r row; do echo "  node $row"; done <<< "$rows"
           [ -z "$why" ] || fail "$why"
           echo "✓ all ${#declared[@]} compose services are registered at the address Docker gave them, all in ${subnet}"
 
