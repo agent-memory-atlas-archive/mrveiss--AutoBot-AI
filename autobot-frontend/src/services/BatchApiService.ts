@@ -185,7 +185,7 @@ export class BatchApiService {
     logger.info(`Processing ${requests.length} requests in parallel`);
 
     const getIdx = requests.map((r, i) => (r.method.toUpperCase() === 'GET' ? i : -1)).filter(i => i >= 0);
-    const results: BatchResult[] = new Array(requests.length);
+    const results: BatchResult[] = [];
 
     const [batched] = await Promise.all([
       this.loadGetsViaServer(getIdx.map(i => requests[i])),
@@ -203,8 +203,9 @@ export class BatchApiService {
       requests: requests.map(r => ({ endpoint: r.endpoint, method: 'GET' }))
     };
     try {
-      const response = await this.apiClient.post<BatchLoadResponse>(`${getApiBase()}/batch-jobs/load`, payload);
-      const items = ((response as { results?: unknown }).results ?? []) as BatchLoadItem[];
+      // Typed from the generated contract (BatchLoadOp), not an inline call-site generic.
+      const response = (await this.apiClient.post(`${getApiBase()}/batch-jobs/load`, payload)) as BatchLoadResponse;
+      const items = (response.results ?? []) as BatchLoadItem[];
       return requests.map((r, n) => this.toBatchResult(r, items[n]));
     } catch (error: unknown) {
       const message = extractErrorMessage(error, 'Unknown error');
