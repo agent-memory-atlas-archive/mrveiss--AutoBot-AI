@@ -13,9 +13,11 @@ This module contains search and query operations:
 Part of the modular autobot_memory_graph package (Issue #716).
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.input_sanitizer import escape_redisearch, escape_redisearch_tag
 
@@ -25,6 +27,23 @@ from .owner_scope import UNSCOPED_ALL_USERS, entity_visible, redis_owner_clause,
 logger = get_logger(__name__)
 
 _FETCH_BATCH_SIZE = 50
+
+#: Most ``memory:entity:*`` keys one scan-fallback call may examine (#18825). The scan filters by owner while
+#: it walks, so without a ceiling one request could walk every owner's keyspace.
+_SCAN_KEY_BUDGET = env_int_clamped("AUTOBOT_MEMORY_GRAPH_SCAN_KEY_BUDGET", 20000, min_v=1, max_v=1_000_000)
+
+
+@dataclass
+class _ScanStats:
+    """What one scan examined and whether the budget cut it short."""
+
+    examined: int = 0
+    truncated: bool = False
+
+
+def _owner_kind(owner: Any) -> str:
+    """Log-safe owner kind: never an id."""
+    return "unscoped_all_users" if owner is UNSCOPED_ALL_USERS else "user"
 
 
 def _is_entity_valid(entity: Dict[str, Any]) -> bool:
@@ -198,14 +217,26 @@ class QueryOperationsMixin:
 
         return any(query_lower in obs.lower() for obs in entity.get("observations", []))
 
-    async def _scan_entity_key_batches(self: AutoBotMemoryGraphCore):
-        """Yield entity keys in ``_FETCH_BATCH_SIZE`` batches until the keyspace is exhausted.
+    async def _scan_entity_key_batches(self: AutoBotMemoryGraphCore, owner: Any, stats: _ScanStats):
+        """Yield entity keys in ``_FETCH_BATCH_SIZE`` batches, examining at most ``_SCAN_KEY_BUDGET`` keys.
 
-        No cap on keys scanned: callers filter per batch and stop at their own result limit, so
-        other owners' keys cannot starve a scoped caller's results (#18825, #620).
+        Callers filter per batch and stop at their own result limit, so other owners' keys cannot
+        starve a scoped caller within the budget (#18825, #620). Past the budget the scan stops, sets
+        ``stats.truncated`` and logs a warning (budget, keys examined, owner kind; no ids): the caller
+        returns what it has, and a per-owner index is the real fix.
         """
         batch: List[str] = []
         async for key in self.redis_client.scan_iter(match="memory:entity:*"):
+            if stats.examined >= _SCAN_KEY_BUDGET:
+                stats.truncated = True
+                logger.warning(
+                    "memory-graph scan budget exhausted: budget=%d examined=%d owner_kind=%s; results incomplete",
+                    _SCAN_KEY_BUDGET,
+                    stats.examined,
+                    _owner_kind(owner),
+                )
+                break
+            stats.examined += 1
             batch.append(key)
             if len(batch) >= _FETCH_BATCH_SIZE:
                 yield batch
@@ -307,7 +338,7 @@ class QueryOperationsMixin:
         try:
             query_lower = query.lower() if query else ""
             matches: List[Dict[str, Any]] = []
-            async for keys in self._scan_entity_key_batches():
+            async for keys in self._scan_entity_key_batches(owner, _ScanStats()):
                 matches.extend(
                     await self._batch_fetch_and_filter_entities(
                         keys,
@@ -402,7 +433,9 @@ class QueryOperationsMixin:
 
         try:
             found: List[Dict[str, Any]] = []
-            async for keys in self._scan_entity_key_batches():  # owner filter applies while scanning (#18825)
+            async for keys in self._scan_entity_key_batches(
+                owner, _ScanStats()
+            ):  # owner filter applies while scanning (#18825)
                 async for e in self._iter_entity_batches(keys):
                     if (
                         e

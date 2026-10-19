@@ -12,6 +12,7 @@
 * ``shortest_path`` skips the per-hop read for nodes it has already visited.
 """
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -67,6 +68,85 @@ class TestScansFilterWhileScanning:
         found = await host.get_entities_as_of("conversation", "2999-01-01T00:00:00+00:00", owner=ALICE)
 
         assert sorted(e["name"] for e in found) == ["Alice 0", "Alice 1"]
+
+
+class TestScanBudget:
+    """A scan-fallback call examines at most ``_SCAN_KEY_BUDGET`` keys, whatever the keyspace holds (#18825)."""
+
+    BUDGET = 100
+
+    @pytest.fixture(autouse=True)
+    def _budget(self, monkeypatch):
+        from autobot_memory_graph import queries
+
+        monkeypatch.setattr(queries, "_SCAN_KEY_BUDGET", self.BUDGET)
+
+    @staticmethod
+    def _counting(host):
+        seen = []
+        original = host.redis_client.scan_iter
+
+        async def counting(match=None):
+            async for key in original(match=match):
+                seen.append(key)
+                yield key
+
+        host.redis_client.scan_iter = counting
+        return seen
+
+    @pytest.mark.asyncio
+    async def test_fallback_search_stops_at_the_budget_and_warns(self, caplog):
+        host = QueryHost([_doc(f"b{i}", f"Bob {i}", BOB_ID) for i in range(1000)])
+        seen = self._counting(host)
+
+        with caplog.at_level("WARNING", logger="autobot_memory_graph.queries"):
+            found = await host._fallback_search("*", None, 5, owner=ALICE)
+
+        assert found == []
+        assert len(seen) <= self.BUDGET + 1  # the one key that proved the budget was exceeded
+        message = next(r.getMessage() for r in caplog.records if "scan budget exhausted" in r.getMessage())
+        assert f"budget={self.BUDGET}" in message and f"examined={self.BUDGET}" in message
+        assert "owner_kind=user" in message and BOB_ID not in message and ALICE_ID not in message
+
+    @pytest.mark.asyncio
+    async def test_a_match_inside_the_budget_is_found_past_many_foreign_entries(self, caplog):
+        docs = [_doc(f"b{i}", f"Bob {i}", BOB_ID) for i in range(self.BUDGET - 10)]
+        docs.append(_doc("a0", "Alice 0", ALICE_ID))
+        host = QueryHost(docs + [_doc(f"c{i}", f"Bob late {i}", BOB_ID) for i in range(500)])
+
+        with caplog.at_level("WARNING", logger="autobot_memory_graph.queries"):
+            found = await host._fallback_search("*", None, 1, owner=ALICE)
+
+        assert [e["name"] for e in found] == ["Alice 0"]
+        assert not [r for r in caplog.records if "scan budget exhausted" in r.getMessage()]
+
+    @pytest.mark.asyncio
+    async def test_a_match_beyond_the_budget_is_not_reached(self):
+        docs = [_doc(f"b{i}", f"Bob {i}", BOB_ID) for i in range(self.BUDGET + 50)] + [_doc("a0", "Alice 0", ALICE_ID)]
+
+        found = await QueryHost(docs)._fallback_search("*", None, 1, owner=ALICE)
+
+        assert found == []
+
+    @pytest.mark.asyncio
+    async def test_get_entities_as_of_respects_the_budget(self, caplog):
+        host = QueryHost([_doc(f"b{i}", f"Bob {i}", BOB_ID) for i in range(1000)])
+        seen = self._counting(host)
+
+        with caplog.at_level("WARNING", logger="autobot_memory_graph.queries"):
+            found = await host.get_entities_as_of("conversation", "2999-01-01T00:00:00+00:00", owner=ALICE)
+
+        assert found == [] and len(seen) <= self.BUDGET + 1
+        assert any("scan budget exhausted" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_get_entities_as_of_returns_matches_found_before_the_budget(self):
+        docs = [_doc(f"a{i}", f"Alice {i}", ALICE_ID) for i in range(3)]
+        docs += [_doc(f"b{i}", f"Bob {i}", BOB_ID) for i in range(500)]
+
+        found = await QueryHost(docs).get_entities_as_of("conversation", "2999-01-01T00:00:00+00:00", owner=ALICE)
+
+        assert sorted(e["name"] for e in found) == ["Alice 0", "Alice 1", "Alice 2"]
 
 
 class _CacheRedis:
@@ -227,15 +307,41 @@ class TestSessionOwnerIsTheAuthenticatedPrincipal:
 
         assert resolve_owner_scope(SimpleNamespace(metadata=metadata)) is None
 
-    def test_the_workflow_stamps_identity_through_the_verified_keys(self):
-        """Wiring: ``_prepare_llm_workflow_params`` must use the helper, not ``context['user_id']``."""
-        import inspect
-
+    @pytest.mark.asyncio
+    async def test_the_pre_compact_hook_receives_the_verified_user_never_the_spoofed_one(self):
+        """Behaviour: drive ``_prepare_llm_workflow_params`` with a spoofed request ``user_id``."""
         from chat_workflow.manager import ChatWorkflowManager
 
-        source = inspect.getsource(ChatWorkflowManager._prepare_llm_workflow_params)
-        assert "stamp_verified_identity(session.metadata, context)" in source
-        assert 'context.get("user_id")' not in source
+        manager = ChatWorkflowManager.__new__(ChatWorkflowManager)
+        manager._register_user_message_in_history = MagicMock()
+        manager._prepare_llm_request_params = AsyncMock(return_value={"prompt": "p", "model": "m"})
+        manager._fire_pre_compact_hook = AsyncMock()
+        session = SimpleNamespace(session_id="s1", metadata={}, conversation_history=[])
+        context = apply_auth_role({"user_id": "spoofed", "org_id": "evil"}, "user", {"user_id": ALICE_ID})
+
+        await manager._prepare_llm_workflow_params(session, "hello", context)
+        await asyncio.sleep(0)  # let the fire-and-forget hook task run
+
+        manager._fire_pre_compact_hook.assert_called_once()
+        assert manager._fire_pre_compact_hook.call_args.kwargs["user_id"] == ALICE_ID
+        assert session.metadata["user_id"] == ALICE_ID
+
+    @pytest.mark.asyncio
+    async def test_an_unverified_turn_gives_the_hook_no_user_not_the_spoofed_one(self):
+        from chat_workflow.manager import ChatWorkflowManager
+
+        manager = ChatWorkflowManager.__new__(ChatWorkflowManager)
+        manager._register_user_message_in_history = MagicMock()
+        manager._prepare_llm_request_params = AsyncMock(return_value={"prompt": "p", "model": "m"})
+        manager._fire_pre_compact_hook = AsyncMock()
+        session = SimpleNamespace(session_id="s1", metadata={"user_id": ALICE_ID}, conversation_history=[])
+
+        await manager._prepare_llm_workflow_params(
+            session, "hello", apply_auth_role({"user_id": "spoofed"}, None, None)
+        )
+        await asyncio.sleep(0)  # let the fire-and-forget hook task run
+
+        assert not manager._fire_pre_compact_hook.call_args.kwargs["user_id"]
 
 
 class TestShortestPathSkipsVisitedBeforeTheHopRead:
