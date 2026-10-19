@@ -45,3 +45,18 @@ register_env_var(
         range=(64 * 1024, 256 * 1024 * 1024),
     )
 )
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_HTML_TITLE_MAX_CHARS",
+        type=int,
+        default=300,
+        description=(
+            "Longest page title, in characters, the HTML extractor keeps from og:title or <title> "
+            "(media/document/html_extraction.py, #18826)."
+        ),
+        component="knowledge",
+        range=(40, 4096),
+    )
+)

@@ -129,3 +129,20 @@ class TestEveryFetcherDecodesThroughIt:
         ):
             await pipe._fetch_and_parse("https://example.org/page", {})
         assert parse.call_args.args[0] == "café"
+
+
+def test_the_title_cap_is_the_named_constant(monkeypatch):
+    """The title cap is HTML_TITLE_MAX_CHARS (env AUTOBOT_HTML_TITLE_MAX_CHARS), not a literal (#18826)."""
+    from media.document import html_extraction
+
+    monkeypatch.setattr(html_extraction, "HTML_TITLE_MAX_CHARS", 10)
+    doc = html_extraction.extract_html("<html><head><title>" + "T" * 50 + "</title></head><body><p>x</p></body></html>")
+    assert doc.info["title"] == "T" * 10
+
+
+def test_link_schemes_are_a_fixed_allowlist():
+    """Only http/https/mailto targets survive; the list is deliberately not configurable."""
+    from media.document.html_extraction import LINK_SCHEMES
+
+    assert LINK_SCHEMES == frozenset({"http", "https", "mailto"})
+    assert not {"javascript", "data", "file", "vbscript"} & LINK_SCHEMES

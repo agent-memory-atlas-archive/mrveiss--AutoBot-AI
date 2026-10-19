@@ -58,6 +58,8 @@ EXTRACTOR_VERSION = "18826-4"
 
 #: Largest HTML input, in UTF-8 bytes, the extractor parses; a longer page is truncated first.
 #: Default 10 MiB, clamped to [64 KiB, 256 MiB]. Registered in ``env_registry_rag``.
+#: Longest page title kept (from ``og:title`` or ``<title>``), in characters (#18826).
+HTML_TITLE_MAX_CHARS = env_int_clamped("AUTOBOT_HTML_TITLE_MAX_CHARS", 300, min_v=40, max_v=4096)
 HTML_EXTRACT_MAX_BYTES = env_int_clamped(
     "AUTOBOT_HTML_EXTRACT_MAX_BYTES", 10 * 1024 * 1024, min_v=64 * 1024, max_v=256 * 1024 * 1024
 )
@@ -103,9 +105,13 @@ _ALWAYS_CHROME = frozenset({"nav", "aside", "dialog"})
 _SCOPING_TAGS = ("article", "main", "section", "aside", "nav")
 _HEADINGS = {f"h{level}": level for level in range(1, 7)}
 _LIST_TAGS = ("ul", "ol")
-_LINK_SCHEMES = frozenset({"http", "https", "mailto"})
+#: The one list of link schemes whose targets survive extraction (#18826). Deliberately NOT
+#: configurable: a setting could re-admit ``javascript:``/``data:`` targets into KB text.
+LINK_SCHEMES = frozenset({"http", "https", "mailto"})
 # A code block's ``class="language-x"``; the name is bounded so no free-form attribute text survives.
-_CODE_LANGUAGE = re.compile(r"language-([A-Za-z0-9_+#.-]{1,32})")
+#: Longest ``language-x`` class name read as a code block's language; a format bound, not a knob.
+CODE_LANGUAGE_MAX_CHARS = 32
+_CODE_LANGUAGE = re.compile(rf"language-([A-Za-z0-9_+#.-]{{1,{CODE_LANGUAGE_MAX_CHARS}}})")
 # Elements that break a line when their text is read inline (inside a quote or a cell).
 _LINE_BREAKING = frozenset({"p", "div", "li", "tr", "pre", "blockquote", "dt", "dd"}) | frozenset(_HEADINGS)
 _CONTAINERS = frozenset(
@@ -115,12 +121,12 @@ _CONTAINERS = frozenset(
 
 
 def extract_html_title(soup: Any) -> str:
-    """Extract the page title from ``og:title`` or ``<title>``, at most 300 characters."""
+    """Extract the page title from ``og:title`` or ``<title>``, at most :data:`HTML_TITLE_MAX_CHARS`."""
     og = soup.find("meta", property="og:title")
     if og and og.get("content"):
-        return og["content"].strip()[:300]
+        return og["content"].strip()[:HTML_TITLE_MAX_CHARS]
     tag = soup.find("title")
-    return tag.get_text(strip=True)[:300] if tag else ""
+    return tag.get_text(strip=True)[:HTML_TITLE_MAX_CHARS] if tag else ""
 
 
 def _is_chrome(tag: Any) -> bool:
@@ -173,7 +179,7 @@ def _link_target(href: Any, base_url: str) -> str:
     if not href or href.startswith("#"):
         return ""
     resolved = urljoin(base_url, href) if base_url else href
-    return resolved if urlparse(resolved).scheme.lower() in _LINK_SCHEMES else ""
+    return resolved if urlparse(resolved).scheme.lower() in LINK_SCHEMES else ""
 
 
 class _Inline:
