@@ -171,8 +171,10 @@ AUTOBOT_DOCKER_SLM_NGINX_CONF=./docker/nginx/nginx-slm-ssl.conf \
   docker compose --env-file docker/.env.docker --env-file docker/.env.secrets --profile slm up -d autobot-slm-gui
 ```
 
-The GUI is then at **https://localhost/slm/**. The full stack's frontend switches the same way,
-with `AUTOBOT_DOCKER_NGINX_CONF=./docker/nginx/nginx-ssl.conf`.
+The GUI is then at **https://localhost/slm/**. If host port 443 is already in use, publish
+HTTPS on another port with `AUTOBOT_DOCKER_SLM_HTTPS_PORT=<port>` (the GUI is then at
+`https://localhost:<port>/slm/`). The full stack's frontend switches to TLS the same way, with
+`AUTOBOT_DOCKER_NGINX_CONF=./docker/nginx/nginx-ssl.conf`.
 
 ### Full stack
 
