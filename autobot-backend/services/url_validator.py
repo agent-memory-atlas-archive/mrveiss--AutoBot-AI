@@ -10,12 +10,10 @@ consistency across the codebase per #6533.
 """
 
 import asyncio
-import ipaddress
-import socket
 from typing import List
 from urllib.parse import urlparse
 
-from autobot_shared.url_safety import is_public_url
+from autobot_shared.url_safety import is_public_url, resolve_safe_ip_async
 from constants.network_constants import NetworkConstants
 
 # Issue #380: Module-level tuple for URL scheme validation
@@ -114,59 +112,14 @@ class URLValidator:
 
     @staticmethod
     async def resolve_safe_ip(host: str, timeout: float = 2.0) -> str:
-        """
-        Async DNS resolution that rejects non-public addresses (SSRF guard).
-        Returns a single IP literal for direct connection, defeating DNS rebind
-        attacks where a second resolution might redirect to a private address.
+        """Resolve *host* to one public IP literal (SSRF / DNS-rebind guard).
 
-        Issue #6533: consolidates SSRF guards across marketplace_sources,
-        media/link/pipeline, a2a/capability_verifier, and api/knowledge.
-
-        Blocks: loopback, RFC1918, link-local (incl. cloud metadata IPs),
-        IPv6 unique-local, multicast, reserved, unspecified.
-
-        Args:
-            host: hostname to resolve
-            timeout: DNS timeout in seconds (default 2.0)
-
-        Returns:
-            A single safe public IP address as a string
-
-        Raises:
-            ValueError: if the hostname cannot be resolved, resolves to no
-                usable IPs, or resolves to a non-public address
+        Delegates to :func:`autobot_shared.url_safety.resolve_safe_ip_async`, the
+        one implementation of the address rules (#6533, #18731); this entry point
+        only adds the ``timeout`` bound. Raises ``ValueError`` on a DNS timeout,
+        an unresolvable host, a non-public address, or no usable address.
         """
         try:
-            loop = asyncio.get_event_loop()
-            infos = await asyncio.wait_for(loop.getaddrinfo(host, None, type=socket.SOCK_STREAM), timeout=timeout)
+            return await asyncio.wait_for(resolve_safe_ip_async(host), timeout=timeout)
         except asyncio.TimeoutError as exc:
             raise ValueError(f"DNS resolution timeout for {host}") from exc
-        except (socket.gaierror, OSError) as exc:
-            raise ValueError(f"Cannot resolve hostname {host}: {exc}") from exc
-
-        safe_ip: str | None = None
-        for info in infos:
-            ip_str = info[4][0]
-            try:
-                ip = ipaddress.ip_address(ip_str)
-            except ValueError:
-                continue
-
-            if (
-                ip.is_loopback
-                or ip.is_private
-                or ip.is_link_local
-                or ip.is_multicast
-                or ip.is_reserved
-                or ip.is_unspecified
-            ):
-                raise ValueError(f"Hostname {host} resolves to a non-public address: {ip_str}")
-
-            # Pick the first global address; caller will connect to it explicitly
-            if safe_ip is None:
-                safe_ip = ip_str
-
-        if safe_ip is None:
-            raise ValueError(f"Hostname {host} has no usable IP addresses")
-
-        return safe_ip
