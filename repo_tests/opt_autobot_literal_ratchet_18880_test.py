@@ -1,0 +1,109 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+"""The install root is written once, as `autobot_base_dir` (#18587 part 1, #18880).
+
+`/opt/autobot` stays the folder AutoBot deploys to; the point is one definition. The literal
+elsewhere in Ansible code is frozen per file in opt_autobot_literal_ratchet_18880_baseline.py
+and only goes down; install.sh hands its AUTOBOT_BASE to Ansible so the two cannot drift.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from repo_tests._paths import repo_root
+from repo_tests._reach import declare
+from repo_tests.opt_autobot_literal_ratchet_18880_baseline import BASELINE
+
+from tools.lint._comment_syntax import code_lines
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
+
+_ROOT = repo_root()
+_ANSIBLE = "autobot-slm-backend/ansible"
+_DEFINITION_FILE = f"{_ANSIBLE}/inventory/group_vars/all.yml"
+_DEFINITION = "autobot_base_dir: /opt/autobot"
+
+
+def _ansible_files(root: Path) -> list[str]:
+    try:
+        return tracked_paths(root, _ANSIBLE)
+    except EmptyEnumeration:
+        return []
+
+
+REACH = declare(
+    "opt-autobot-literal-ratchet-18880",
+    discover=_ansible_files,
+    floor=458,  # mid-window: population 478, window (438, 478)
+    growth=40,
+    what="tracked ansible files",
+    roots=(_ANSIBLE,),
+)
+
+
+def literal_counts(files: dict[str, str]) -> dict[str, int]:
+    """{path: code occurrences of /opt/autobot}, the one definition excluded, zeros dropped."""
+    counts = {}
+    for path, text in files.items():
+        lines = code_lines(text, name=path, strip_trailing=True)
+        n = sum(
+            line.text.count("/opt/autobot")
+            for line in lines
+            if not (path == _DEFINITION_FILE and line.text.strip() == _DEFINITION)
+        )
+        if n:
+            counts[path] = n
+    return counts
+
+
+def _live() -> dict[str, int]:
+    files = {}
+    for rel in REACH.examined(_ROOT):
+        try:
+            files[rel] = (_ROOT / rel).read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue  # binary assets carry no path literal
+    return literal_counts(files)
+
+
+def test_the_literal_count_only_goes_down() -> None:
+    live = _live()
+    grown = {p: (BASELINE.get(p, 0), n) for p, n in live.items() if n > BASELINE.get(p, 0)}
+    assert not grown, f"new /opt/autobot literals -- use {{{{ autobot_base_dir }}}}: {grown}"
+    shrunk = {p: (b, live.get(p, 0)) for p, b in BASELINE.items() if live.get(p, 0) < b}
+    assert not shrunk, f"literals removed -- lower BASELINE to match, so the slack is not re-spent: {shrunk}"
+
+
+def test_the_install_root_is_defined_once() -> None:
+    text = (_ROOT / _DEFINITION_FILE).read_text(encoding="utf-8")
+    assert re.search(rf"^{re.escape(_DEFINITION)}$", text, re.M), _DEFINITION_FILE
+    others = [
+        rel
+        for rel in REACH.examined(_ROOT)
+        if rel != _DEFINITION_FILE
+        and rel.endswith((".yml", ".yaml"))
+        and re.search(r"^\s*autobot_base_dir\s*:", (_ROOT / rel).read_text(encoding="utf-8"), re.M)
+    ]
+    assert not others, f"autobot_base_dir defined a second time: {others}"
+
+
+def test_install_sh_hands_its_root_to_ansible() -> None:
+    install = (_ROOT / "install.sh").read_text(encoding="utf-8")
+    assert 'readonly AUTOBOT_BASE="/opt/autobot"' in install
+    assert '-e "autobot_base_dir=${AUTOBOT_BASE}"' in install
+
+
+def test_no_role_default_or_group_var_restates_the_root() -> None:
+    """#18880 AC: every role default / vars / group_vars path under the root derives from it."""
+    leftover = [p for p in BASELINE if re.search(r"/(defaults|vars|group_vars)/", p)]
+    assert not leftover, leftover
+
+
+def test_the_counter_sees_code_and_ignores_comments_and_the_definition() -> None:
+    files = {
+        _DEFINITION_FILE: "autobot_base_dir: /opt/autobot\n# lives in /opt/autobot\nx: /opt/autobot/y\n",
+        "a.yml": "dest: /opt/autobot/a  # under /opt/autobot\n",
+        "b.j2": "ExecStart={{ autobot_base_dir }}/run\n",
+    }
+    assert literal_counts(files) == {_DEFINITION_FILE: 1, "a.yml": 1}

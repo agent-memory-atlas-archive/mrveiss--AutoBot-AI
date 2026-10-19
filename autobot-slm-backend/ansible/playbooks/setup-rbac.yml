@@ -22,7 +22,7 @@
   become: true
   become_user: autobot
   vars:
-    autobot_base_dir: "/opt/autobot"
+    # autobot_base_dir comes from inventory/group_vars/all.yml, the one definition (#18880).
     python_venv: "{{ autobot_base_dir }}/venv"
     create_admin: false
     admin_username: "admin"
@@ -444,7 +444,7 @@
   become: true
   become_user: autobot
   vars:
-    autobot_base_dir: "/opt/autobot"
+    # autobot_base_dir comes from inventory/group_vars/all.yml, the one definition (#18880).
     python_venv: "{{ autobot_base_dir }}/venv"
 
   tasks:

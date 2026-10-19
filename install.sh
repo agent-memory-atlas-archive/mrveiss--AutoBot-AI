@@ -721,7 +721,7 @@ EOF
         playbooks/deploy-slm-manager.yml \
         --skip-tags "seed" \
         -e "slm_admin_password=${ADMIN_PASSWORD}" \
-        -e "target_host=localhost" \
+        -e "target_host=localhost" -e "autobot_base_dir=${AUTOBOT_BASE}" \
         2>&1 | tee -a "${LOG_FILE}" | \
         grep --line-buffered -E \
             "^(PLAY \[|TASK \[|ok: \[|changed: \[|failed: \[|skipping: \[|fatal:|PLAY RECAP|[A-Za-z0-9_-].*: ok=)"
