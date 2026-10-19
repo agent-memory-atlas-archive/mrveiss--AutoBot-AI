@@ -144,6 +144,20 @@
 <template><p>TEMPLATE-MARKER</p></template>
 <iframe src="https://ads.example.net/IFRAME-SRC-MARKER">IFRAME-TEXT-MARKER</iframe>
 <div hidden>HIDDEN-ATTR-MARKER</div><div aria-hidden="true">ARIA-HIDDEN-MARKER</div>
+<div style="display:none">STYLE-DISPLAY-NONE-MARKER</div>
+<p style="Visibility : Hidden !important">STYLE-VISIBILITY-HIDDEN-MARKER</p>
+<div style="visibility:collapse">STYLE-VISIBILITY-COLLAPSE-MARKER</div>
+<div style="color: #333; font-size: 0em">STYLE-FONT-SIZE-ZERO-MARKER</div>
+<div style="font: 0/0 a">STYLE-FONT-SHORTHAND-MARKER</div>
+<div style="opacity: 0.0">STYLE-OPACITY-ZERO-MARKER</div>
+<span style="position:absolute; clip: rect(0 0 0 0)">STYLE-CLIP-RECT-MARKER</span>
+<span style="clip:rect(0,0,0,0)">STYLE-CLIP-RECT-COMMA-MARKER</span>
+<div style="clip-path: inset(50%)">STYLE-CLIP-PATH-MARKER</div>
+<div style="width:1px;height:1px;overflow:hidden">STYLE-TINY-BOX-MARKER</div>
+<div style="position:absolute;left:-9999px">STYLE-OFFSCREEN-MARKER</div>
+<div style="text-indent:-9999px">STYLE-TEXT-INDENT-MARKER</div>
+<div style="display:none !important; display:block">STYLE-IMPORTANT-CASCADE-MARKER</div>
+<div style="display:block; DISPLAY: none">STYLE-LAST-WINS-MARKER</div>
 </article>
 </main>
 <div role="complementary">ROLE-COMPLEMENTARY-MARKER</div>

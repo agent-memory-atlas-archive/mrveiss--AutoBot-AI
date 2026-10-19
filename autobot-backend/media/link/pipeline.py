@@ -280,6 +280,7 @@ class LinkPipeline(BasePipeline):
         # cert verification for known-safe internal URLs.
         ssl_context = False if metadata.get("allow_self_signed") else None
         from autobot_shared.security.ssrf_guard import SSRFError, pinned_request_with_redirects
+        from web_fetch.content_types import decode_body
 
         try:
             async with pinned_request_with_redirects(
@@ -303,7 +304,7 @@ class LinkPipeline(BasePipeline):
                 )
             if raw_bytes is None:
                 return self._error_result(url, "response body exceeded max content length", metadata)
-            body = raw_bytes.decode("utf-8", errors="replace")
+            body = decode_body(raw_bytes, content_type)
             return self._parse_body(body, final_url, content_type, metadata)
 
         except SSRFError as exc:
@@ -337,8 +338,8 @@ class LinkPipeline(BasePipeline):
         from web_fetch.content_types import page_from_body
         from web_fetch.profile import IngestProfile
 
+        # page_from_body sanitizes the text once, as it does for every fetcher (#18826).
         text = page_from_body(body, content_type, IngestProfile.DOCUMENT, url)[2]
-        text = _sanitize_document(text, source="web_text").sanitized_text
         result = {"type": "link_fetch", "url": url, "title": "", "description": "", "content": text}
         result.update(word_count=len(text.split()), links=[], open_graph={}, content_type=content_type)
         result.update(confidence=0.9 if text else 0.5, metadata=metadata)
@@ -359,16 +360,13 @@ class LinkPipeline(BasePipeline):
         title = self._extract_title(soup)
         description = self._extract_description(soup)
         og_data = self._extract_open_graph(soup)
+        # Already sanitized: extract_page runs the canonical sanitizer once for every caller (#18826).
         main_text = self._extract_main_text(html, url)
         # Outbound links come from content only, never from site chrome: the same
         # chrome rule the document extractor applies (#18826). It drops <head>, so
         # the metadata above is read first.
         drop_non_content(soup)
         links = self._extract_links(soup, url)
-
-        # Issue #5064: strip prompt-injection tokens from extracted page text
-        # before it reaches the KB or the LLM context.
-        main_text = _sanitize_document(main_text, source="web_html").sanitized_text
 
         word_count = len(main_text.split()) if main_text else 0
         confidence = 0.9 if main_text else 0.5

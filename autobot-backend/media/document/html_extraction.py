@@ -17,7 +17,10 @@ every other inline element contribute their text and nothing else.
 Dropped **with** their text: :data:`DROPPED_TAGS` (scripts, styles, JSON-LD,
 embeds, form controls) and site chrome -- ``nav``, ``aside``, ``dialog``, a
 page-level ``header``/``footer``, any element whose ``role`` is in
-:data:`CHROME_ROLES`, and hidden elements. Generic containers (``div``, ``span``,
+:data:`CHROME_ROLES`, and hidden elements -- the ``hidden`` attribute,
+``aria-hidden="true"``, and an inline ``style`` that hides the element
+(:func:`media.document.inline_style.hidden_by_style`), since text no reader sees is
+a prompt-injection path, not document content. Generic containers (``div``, ``span``,
 ``section``, ``article``, ``main``, ...) are unwrapped to their content. No
 attribute survives except a link's target and a code block's ``language-x``
 class, which becomes :attr:`Block.code_language` metadata and never text.
@@ -26,6 +29,9 @@ class, which becomes :attr:`Block.code_language` metadata and never text.
 Section fields filled here: ``level``, ``heading``, ``heading_path`` (from the
 heading stack) and ``blocks``; a table's ``header`` is its first ``thead`` row,
 else a leading all-``th`` row. Spans stay ``None`` -- a page has no pages or timeline.
+
+Input is capped at :data:`HTML_EXTRACT_MAX_BYTES` (UTF-8) before parsing: a longer page is
+truncated at a character and tag boundary and yields its leading content, never refused.
 """
 
 from __future__ import annotations
@@ -37,8 +43,10 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, PreformattedString, Tag
 
+from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 from media.document.extraction import ExtractedDocument
+from media.document.inline_style import hidden_by_style
 from media.document.sections import Block, BlockKind, Link, ListItem, Section, render_sections
 
 logger = get_logger(__name__)
@@ -46,7 +54,13 @@ logger = get_logger(__name__)
 #: Version of this extractor's output. Part of the web_fetch cache key (#18826), so a
 #: page cached by an earlier extractor -- the markdownify path included -- is never
 #: served again. Bump it whenever a change here alters the extracted text.
-EXTRACTOR_VERSION = "18826-2"
+EXTRACTOR_VERSION = "18826-3"
+
+#: Largest HTML input, in UTF-8 bytes, the extractor parses; a longer page is truncated first.
+#: Default 10 MiB, clamped to [64 KiB, 256 MiB]. Registered in ``env_registry_rag``.
+HTML_EXTRACT_MAX_BYTES = env_int_clamped(
+    "AUTOBOT_HTML_EXTRACT_MAX_BYTES", 10 * 1024 * 1024, min_v=64 * 1024, max_v=256 * 1024 * 1024
+)
 
 #: Tags whose inner text is never page content: code, CSS, JSON-LD, fallbacks.
 INERT_TAGS = ("script", "style", "noscript", "template")
@@ -114,6 +128,8 @@ def _is_chrome(tag: Any) -> bool:
     if (tag.get("role") or "").strip().lower() in CHROME_ROLES:
         return True
     if tag.get("hidden") is not None or (tag.get("aria-hidden") or "").strip().lower() == "true":
+        return True
+    if hidden_by_style(tag.get("style") or ""):
         return True
     if tag.name in _ALWAYS_CHROME:
         return True
@@ -358,12 +374,37 @@ def _sections_of(root: Any, base_url: str) -> Tuple[Section, ...]:
     return builder.finish()
 
 
+def _capped(html: str, max_bytes: int) -> str:
+    """*html* cut to at most *max_bytes* UTF-8 bytes, at a character and tag boundary.
+
+    ``errors="ignore"`` drops a character the byte cut split, and a tag the cut left
+    open (a ``<`` after the last ``>``) is dropped, so the parser never reads half a
+    tag as text. Text after the last complete tag is kept.
+    """
+    if len(html) * 4 <= max_bytes:
+        return html
+    encoded = html.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return html
+    head = encoded[:max_bytes].decode("utf-8", errors="ignore")
+    open_tag = head.rfind("<")
+    head = head[:open_tag] if open_tag > head.rfind(">") else head
+    logger.warning(
+        "HTML input of %d bytes exceeds AUTOBOT_HTML_EXTRACT_MAX_BYTES=%d; extracting its first %d bytes (#18826)",
+        len(encoded),
+        max_bytes,
+        len(head.encode("utf-8")),
+    )
+    return head
+
+
 def extract_html(html: str, base_url: str = "") -> ExtractedDocument:
     """Extract an HTML page's document text and structure into ``ExtractedDocument`` (format ``html``).
 
     *base_url* resolves relative link targets; without it only absolute targets survive.
+    Input over :data:`HTML_EXTRACT_MAX_BYTES` is truncated before it is parsed.
     """
-    soup = BeautifulSoup(html or "", "html.parser")
+    soup = BeautifulSoup(_capped(html or "", HTML_EXTRACT_MAX_BYTES), "html.parser")
     title = extract_html_title(soup)
     drop_non_content(soup)
     sections = _sections_of(_content_root(soup), base_url)

@@ -42,7 +42,7 @@ from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from web_fetch.cache import WEB_FETCH_MAX_BYTES, get_cached_result, set_cached_result
-from web_fetch.content_types import BodyKind, UnsupportedContentType, page_from_body
+from web_fetch.content_types import BodyKind, UnsupportedContentType, decode_body, page_from_body
 from web_fetch.extractors import _MIN_CONTENT_CHARS, is_spa_content
 from web_fetch.profile import IngestProfile, require_implemented
 
@@ -188,6 +188,7 @@ async def _fetch_bs4(url: str, timeout: float) -> tuple[str | None, int | None, 
 
     ``content_type`` is the response's Content-Type header, ``None`` when absent, so
     the caller dispatches on what the server said the body is (#18826).
+    The body is decoded in its declared charset (:func:`decode_body`), not always UTF-8.
 
     Single round-trip (#7459): streams the response body in 64 KiB chunks,
     enforces ``WEB_FETCH_MAX_BYTES``, and returns ``("", status, content_type)`` for empty
@@ -223,7 +224,7 @@ async def _fetch_bs4(url: str, timeout: float) -> tuple[str | None, int | None, 
                     return None, None, None  # too large
             if not content:
                 return "", resp.status, content_type
-            return content.decode("utf-8", errors="replace"), resp.status, content_type
+            return decode_body(content, content_type), resp.status, content_type
     except SSRFError as exc:
         logger.warning("web_fetch BS4 fetch blocked by SSRF guard for %s: %s", url, exc)
         return None, None, None

@@ -21,16 +21,28 @@ missing                                sniffed: HTML only when the body looks li
                                        ``unsupported`` when it looks binary, else text
 anything else (binary, image, PDF)     :class:`UnsupportedContentType`, never extracted
 =====================================  =====================================================
+
+Every text this returns is sanitized exactly once: HTML inside :func:`extract_page`, text
+and JSON here, both through :func:`knowledge.query_sanitizer.sanitize_document`.
+
+:func:`decode_body` turns the fetched bytes into that body for every fetcher: the
+byte-order mark, then the Content-Type ``charset=``, then (HTML or undeclared bodies
+only) a ``<meta charset>`` in the first 2 KB, then UTF-8 with replacement characters.
 """
 
 from __future__ import annotations
 
+import codecs
 import json
 import re
 from enum import Enum
 from typing import Optional, Tuple, Union
 
+from autobot_shared.logging_manager import get_logger
+from knowledge.query_sanitizer import sanitize_document
 from web_fetch.profile import IngestProfile, extract_page
+
+logger = get_logger(__name__)
 
 #: How much of a body without a Content-Type is inspected to sniff its kind.
 _SNIFF_CHARS = 2048
@@ -38,6 +50,14 @@ _SNIFF_CHARS = 2048
 _BINARY_REPLACEMENT_RATIO = 0.05
 _HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 _TEXT_MEDIA_TYPES = frozenset({"text/plain", "text/markdown", "text/x-markdown"})
+_CHARSET_PARAM = re.compile(r"""charset\s*=\s*["']?\s*([^\s"';,]+)""", re.IGNORECASE)
+_META_CHARSET = re.compile(rb"""<meta[^>]*?charset\s*=\s*["']?\s*([A-Za-z0-9._:-]+)""", re.IGNORECASE)
+#: Byte-order marks, longest first: a BOM outranks any declared charset (WHATWG encoding sniffing).
+_BOMS = ((codecs.BOM_UTF8, "utf-8-sig"), (codecs.BOM_UTF16_LE, "utf-16"), (codecs.BOM_UTF16_BE, "utf-16"))
+#: Codecs a page may not select: UTF-7 can spell markup out of plain ASCII (WHATWG refuses it).
+_REFUSED_CODECS = frozenset({"utf-7"})
+#: Labels browsers read as windows-1252 (WHATWG): a page saying latin-1 means cp1252's smart quotes.
+_AS_CP1252 = frozenset({"iso8859-1", "ascii"})
 _HTML_SNIFF = re.compile(r"^\s*(<!--.*?-->\s*)*<(!doctype\s+html|html|head|body)[\s>]", re.IGNORECASE | re.DOTALL)
 
 
@@ -61,6 +81,44 @@ class UnsupportedContentType(ValueError):
 def media_type(content_type: Optional[str]) -> str:
     """Return the lowercased media type of a Content-Type header, parameters dropped."""
     return (content_type or "").split(";", 1)[0].strip().lower()
+
+
+def _codec(label: Optional[str], origin: str) -> Optional[str]:
+    """The Python codec for a charset *label*, or ``None`` (logged) when it is unknown or refused."""
+    if not label:
+        return None
+    try:
+        name = codecs.lookup(label.strip().lower()).name
+    except LookupError:
+        name = ""
+    if not name or name in _REFUSED_CODECS:
+        logger.warning("Ignoring unknown or refused charset %r from %s; decoding falls back (#18826)", label, origin)
+        return None
+    return "cp1252" if name in _AS_CP1252 else name
+
+
+def _declared_charset(raw: bytes, content_type: Optional[str]) -> Optional[str]:
+    """The header charset, else -- for an HTML or undeclared body -- a ``<meta>`` charset in the first 2 KB."""
+    match = _CHARSET_PARAM.search(content_type or "")
+    codec = _codec(match.group(1), "the Content-Type header") if match else None
+    if codec or media_type(content_type) not in _HTML_MEDIA_TYPES | {""}:
+        return codec
+    meta = _META_CHARSET.search(raw[:_SNIFF_CHARS])
+    return _codec(meta.group(1).decode("ascii"), "a <meta> tag") if meta else None
+
+
+def decode_body(raw: bytes, content_type: Optional[str]) -> str:
+    """Decode a fetched body: BOM, then declared charset, then UTF-8; undecodable bytes become U+FFFD."""
+    for bom, codec in _BOMS:
+        if raw.startswith(bom):
+            return raw.decode(codec, errors="replace")
+    codec = _declared_charset(raw, content_type) or "utf-8"
+    try:
+        return raw.decode(codec, errors="replace")
+    except LookupError:
+        # A codec that looks up but is not a text encoding (``base64``, ``rot13``, ...).
+        logger.warning("Charset %r is not a text encoding; decoding as UTF-8 (#18826)", codec)
+        return raw.decode("utf-8", errors="replace")
 
 
 def _sniff(body: str) -> BodyKind:
@@ -108,7 +166,7 @@ def page_from_body(
         document = extract_page(body, profile, base_url=url)
         return kind, document.info.get("title", ""), document.text
     if kind is BodyKind.TEXT:
-        return kind, "", normalise_text(body)
+        return kind, "", sanitize_document(normalise_text(body), source="web_text").sanitized_text
     if kind is BodyKind.JSON:
-        return kind, "", _json_text(body)
+        return kind, "", sanitize_document(_json_text(body), source="web_text").sanitized_text
     raise UnsupportedContentType(content_type)
