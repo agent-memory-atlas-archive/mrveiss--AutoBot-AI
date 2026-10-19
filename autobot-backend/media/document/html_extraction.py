@@ -54,7 +54,7 @@ logger = get_logger(__name__)
 #: Version of this extractor's output. Part of the web_fetch cache key (#18826), so a
 #: page cached by an earlier extractor -- the markdownify path included -- is never
 #: served again. Bump it whenever a change here alters the extracted text.
-EXTRACTOR_VERSION = "18826-3"
+EXTRACTOR_VERSION = "18826-4"
 
 #: Largest HTML input, in UTF-8 bytes, the extractor parses; a longer page is truncated first.
 #: Default 10 MiB, clamped to [64 KiB, 256 MiB]. Registered in ``env_registry_rag``.

@@ -15,28 +15,25 @@ one function that turns a page into the canonical ``ExtractedDocument``.
 them, and refuse with :class:`ProfileNotImplementedError` until they land. An
 unknown profile is rejected; it is never treated as ``document``.
 
-The seam is also where page text is sanitized, once, for every caller: the extracted
-``text`` and ``title`` pass through :func:`knowledge.query_sanitizer.sanitize_document`
-(#5064) -- the sanitizer link ingest used on its own before -- which strips fake role
+The seam is also where page text is sanitized, once, for every caller: every text field
+of the extracted sections, and the title, pass through
+:func:`knowledge.query_sanitizer.sanitize_document` (#5064) via
+:func:`web_fetch.section_sanitizer.sanitized_document`, and ``text`` is rendered from
+the sanitized sections. That sanitizer -- the one link ingest used on its own before -- strips fake role
 markers (``<system-reminder>``, ``<system>``), LLM special-token literals, AI-role
 hijack phrasing and bidi/zero-width characters, and logs every hit by rule. Its REJECT
 rules (instruction-override phrasing) short-circuit and leave the text as it stood:
 that defect is #16782, and its fix reaches every HTML path through this one call.
-``sections`` keep the extractor's structure unsanitized; every caller reads ``text``.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
 from enum import Enum
 from typing import Union
 
-from knowledge.query_sanitizer import sanitize_document
 from media.document.extraction import ExtractedDocument
 from media.document.html_extraction import extract_html
-
-#: Metrics/log label of the sanitizer hits this seam records (link ingest's label before #18826).
-_SANITIZER_SOURCE = "web_html"
+from web_fetch.section_sanitizer import sanitized_document
 
 
 class IngestProfile(str, Enum):
@@ -83,11 +80,4 @@ def extract_page(html: str, profile: Union[IngestProfile, str], base_url: str = 
     output is sanitized. *base_url* resolves relative link targets.
     """
     require_implemented(profile)
-    return _sanitized(extract_html(html, base_url=base_url))
-
-
-def _sanitized(document: ExtractedDocument) -> ExtractedDocument:
-    """*document* with its ``text`` and ``title`` through the canonical document sanitizer."""
-    text = sanitize_document(document.text, source=_SANITIZER_SOURCE).sanitized_text
-    title = sanitize_document(document.info.get("title", ""), source=_SANITIZER_SOURCE).sanitized_text
-    return replace(document, text=text, info={**document.info, "title": title})
+    return sanitized_document(extract_html(html, base_url=base_url))

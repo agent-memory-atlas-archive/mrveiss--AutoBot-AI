@@ -12,7 +12,9 @@ from unittest.mock import patch
 import pytest
 
 from knowledge.query_sanitizer import sanitize_document
+from media.document.html_extraction import extract_html
 from media.document.inline_style import hidden_by_style, parse_declarations
+from media.document.sections import render_sections
 from media.link.pipeline import LinkPipeline
 from web_fetch.content_types import page_from_body
 from web_fetch.profile import IngestProfile, extract_page
@@ -134,11 +136,11 @@ class TestSanitizedOnceInTheSeam:
 
     def test_link_html_ingest_sanitizes_once_through_the_seam(self) -> None:
         with (
-            patch("web_fetch.profile.sanitize_document", wraps=sanitize_document) as seam,
+            patch("web_fetch.section_sanitizer.sanitize_document", wraps=sanitize_document) as seam,
             patch("media.link.pipeline._sanitize_document") as own,
         ):
             result = LinkPipeline()._parse_html(self._HTML, _URL, "text/html", {})
-        assert seam.call_count == 2  # the document text and its title, once each
+        assert seam.call_count == 2  # the one paragraph and the title, once each
         own.assert_not_called()
         assert "<|im_start|>" not in result["content"]
 
@@ -151,3 +153,49 @@ class TestSanitizedOnceInTheSeam:
         assert seam.call_count == 1
         own.assert_not_called()
         assert re.sub(r"\s+", " ", result["content"]) == "x y"
+
+
+def _text_fields(document) -> list:
+    """Every non-empty text field of the section contract, plus the title; never a link target."""
+    fields = [document.info.get("title", "")]
+    for section in document.sections:
+        fields += [section.heading, *section.heading_path]
+        for block in section.blocks:
+            fields += [block.text, *(item.text for item in block.items), *block.header]
+            fields += [cell for row in block.rows for cell in row] + [link.text for link in block.links]
+    return [field for field in fields if field]
+
+
+class TestSectionContractSanitized:
+    _TARGET = "https://example.org/<|im_start|>"
+    _HTML = (
+        "<h1>Guide &lt;|im_start|&gt;</h1><h2>Sub &lt;system-reminder&gt;</h2>"
+        "<ul><li>item &lt;|im_start|&gt; one</li></ul>"
+        "<table><tr><th>Head &lt;|im_end|&gt;</th></tr><tr><td>cell &lt;|im_start|&gt;</td></tr></table>"
+        f'<p><a href="{_TARGET}">link &lt;|im_start|&gt;</a></p>'
+    )
+
+    def test_markers_in_heading_list_item_and_cell_leave_sections_and_text(self) -> None:
+        document = extract_page(self._HTML, IngestProfile.DOCUMENT)
+        fields = _text_fields(document)
+        assert any("item" in f for f in fields) and any("cell" in f for f in fields)
+        assert [field for field in fields if "<|" in field or "system-reminder" in field] == []
+        assert [s.heading.strip() for s in document.sections] == ["Guide", "Sub"]
+        assert tuple(p.strip() for p in document.sections[1].heading_path) == ("Guide", "Sub")
+        assert "<|" not in document.text and "system-reminder" not in document.text
+
+    def test_text_is_rendered_from_the_sanitized_sections(self) -> None:
+        document = extract_page(self._HTML, IngestProfile.DOCUMENT)
+        assert document.text == render_sections(document.sections)
+
+    def test_the_sanitizer_runs_once_per_text_field(self) -> None:
+        expected = _text_fields(extract_html(self._HTML))
+        with patch("web_fetch.section_sanitizer.sanitize_document", wraps=sanitize_document) as seam:
+            extract_page(self._HTML, IngestProfile.DOCUMENT)
+        assert sorted(call.args[0] for call in seam.call_args_list) == sorted(expected)
+
+    def test_link_targets_are_untouched(self) -> None:
+        document = extract_page(self._HTML, IngestProfile.DOCUMENT)
+        links = [link for section in document.sections for block in section.blocks for link in block.links]
+        assert [link.target for link in links] == [self._TARGET]
+        assert "<|" not in links[0].text
