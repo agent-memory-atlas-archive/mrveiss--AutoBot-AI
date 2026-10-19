@@ -43,6 +43,7 @@ from autobot_shared.auth.jwt_core import _peek_alg, decode_jwt_or_none, encode_j
 from autobot_shared.auth.permission_evaluator import evaluate_permission
 from autobot_shared.auth.permission_gate import PermissionGate
 from autobot_shared.auth.permissions import Permission
+from autobot_shared.auth.revocation_unavailable import revocation_unavailable_error
 from autobot_shared.time_utils import now_utc
 from autobot_shared.user_management.password_epoch import (
     is_token_revoked_by_password_change,
@@ -138,8 +139,8 @@ class AuthService:
         Returns the normalized claims dict, or ``None`` when the token is
         absent, malformed, expired, or actually revoked.
 
-        Raises ``HTTPException`` (401, matching ``get_current_user``'s normal
-        invalid-token response) when a revocation check itself cannot run --
+        Raises ``HTTPException`` (503 ``revocation_check_unavailable`` + ``Retry-After``,
+        #18892; a 401 would make clients log a valid session out) when a revocation check itself cannot run --
         the HS256 jti denylist or the password-epoch check -- because its store
         (the SLM's PostgreSQL since #18663) could not answer. Fail CLOSED (#16387): the caller must not treat "could not
         check" as "not revoked".
@@ -171,11 +172,7 @@ class AuthService:
                         "decode_token_async: jti denylist check failed (%s); denying token",
                         exc.__class__.__name__,
                     )
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Invalid or expired token",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    ) from exc
+                    raise revocation_unavailable_error() from exc
                 if revoked:
                     logger.warning("decode_token_async: HS256 token with jti=%r is revoked", jti)
                     return None
@@ -192,11 +189,7 @@ class AuthService:
                     "decode_token_async: password-epoch check failed (%s); denying token",
                     exc.__class__.__name__,
                 )
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired token",
-                    headers={"WWW-Authenticate": "Bearer"},
-                ) from exc
+                raise revocation_unavailable_error() from exc
             if password_revoked:
                 return None
 

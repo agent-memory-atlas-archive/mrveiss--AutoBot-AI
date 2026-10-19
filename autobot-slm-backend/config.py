@@ -185,6 +185,11 @@ class Settings(RedactedReprMixin, BaseSettings):
     data_dir: Path = Path(os.getenv("SLM_DATA_DIR", str(Path(__file__).parent / "data")))
     config_dir: Path = Path(os.getenv("SLM_CONFIG_DIR", str(Path(__file__).parent / "config")))
     ansible_dir: Path = Path(__file__).parent / "ansible"
+    # #18892: where the SLM SPA is served (vite `base: '/slm/'`). Browser redirects
+    # the backend issues -- the SSO callback -- must carry it: a bare `/sso-callback`
+    # is served by the USER frontend on the shared vhost. No trailing slash.
+    frontend_base_path: str = os.getenv("SLM_FRONTEND_BASE_PATH", "/slm").rstrip("/")
+
     # #13307: was `Path.home() / "slm-backups"`, which put every backup in the
     # service account's home directory — on the root filesystem, in a place
     # nobody thinks to look, chosen by a fallback rather than a decision. It also

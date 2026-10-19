@@ -16,7 +16,7 @@
  *  - Auth token read through `utils/authStorage` (sessionStorage, then the
  *    legacy localStorage copy) -- the same reader `stores/auth.ts` uses.
  *  - 401 handling matches SLM's convention: clear the session keys and redirect
- *    to `/login` (the target of `authStore.logout()`), but only when the request
+ *    to the base-aware login (`<BASE_URL>login?redirect=...`, #18892), but only when the request
  *    actually carried a bearer token and did not target an auth/mfa endpoint.
  *  - Timeout via AbortController, exponential-backoff retry on GET, FormData
  *    passthrough, `rawRequest` for streaming/blob access, and 204 handling.
@@ -29,13 +29,15 @@
 import { createLogger } from '@/utils/debugUtils'
 import { getSlmApiBase } from '@/config/ssot-config'
 import { clearSlmSession, readSlmToken } from '@/utils/authStorage'
+import { buildLoginUrl, isLoginPathname } from '@/utils/loginRedirect'
 import { backoffDelay, RETRY_BACKOFF, type GetPath, type GetResponse } from '@autobot/ui'
 import type { paths } from '@/types/generated/api'
 
 const logger = createLogger('SlmApiClient')
 
-// Login route users are redirected to on session rejection (authStore.logout()).
-const LOGIN_PATH = '/login'
+// HTTP status for "revocation check unavailable" (#18892). The session is NOT
+// rejected -- the server could not decide -- so the client keeps it and retries.
+export const SERVICE_UNAVAILABLE_STATUS = 503
 
 // Default request timeout. Module-level constant sourced from an env var so it
 // is never hard-coded at a call site (falls back to 30s when unset).
@@ -129,11 +131,8 @@ export class SlmApiClient {
     }
     logger.warn('401 Unauthorized, clearing SLM session:', endpoint)
     clearSlmSession()
-    if (
-      typeof window !== 'undefined' &&
-      !window.location.pathname.includes(LOGIN_PATH)
-    ) {
-      window.location.href = LOGIN_PATH
+    if (typeof window !== 'undefined' && !isLoginPathname(window.location.pathname)) {
+      window.location.href = buildLoginUrl(window.location)
     }
   }
 
@@ -213,6 +212,13 @@ export class SlmApiClient {
       // on a genuine rejection of an authenticated request.
       if (response.status === 401 && !this.isAuthEndpoint(endpoint)) {
         this.handleUnauthorized(endpoint, authToken != null)
+      }
+
+      // 503 is "could not decide" (e.g. the revocation store timed out, #18892):
+      // never clear the session or redirect. The error surfaces to the caller,
+      // and GET retries it with backoff (only 4xx are non-retryable).
+      if (response.status === SERVICE_UNAVAILABLE_STATUS) {
+        logger.warn('503 Service Unavailable, keeping SLM session (retryable):', endpoint)
       }
 
       return response

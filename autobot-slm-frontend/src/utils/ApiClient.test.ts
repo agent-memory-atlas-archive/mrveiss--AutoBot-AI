@@ -130,7 +130,56 @@ describe('SlmApiClient', () => {
     expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
     expect(sessionStorage.getItem(USER_KEY)).toBeNull()
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull()
-    expect(window.location.href).toBe('/login')
+    expect(window.location.href).toBe(`/login?redirect=${encodeURIComponent('/fleet')}`)
+  })
+
+  it('redirects to the base-aware login with the current route as redirect (#18892)', async () => {
+    vi.stubEnv('BASE_URL', '/slm/')
+    window.location = {
+      pathname: '/slm/updates/summary',
+      search: '?tab=system',
+      hash: '',
+      href: '',
+    } as unknown as Location
+    sessionStorage.setItem(TOKEN_KEY, 'expired-jwt')
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'unauthorized' }, 401))
+    const client = new SlmApiClient()
+
+    await expect(client.get('/nodes', { maxRetries: 1 })).rejects.toThrow('HTTP 401')
+
+    expect(window.location.href).toBe(
+      `/slm/login?redirect=${encodeURIComponent('/updates/summary?tab=system')}`
+    )
+    vi.unstubAllEnvs()
+  })
+
+  it('does not redirect again when already on the base-aware login page (#18892)', async () => {
+    vi.stubEnv('BASE_URL', '/slm/')
+    window.location = { pathname: '/slm/login', search: '', hash: '', href: '' } as unknown as Location
+    sessionStorage.setItem(TOKEN_KEY, 'expired-jwt')
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'unauthorized' }, 401))
+    const client = new SlmApiClient()
+
+    await expect(client.get('/nodes', { maxRetries: 1 })).rejects.toThrow('HTTP 401')
+
+    expect(window.location.href).toBe('')
+    vi.unstubAllEnvs()
+  })
+
+  it('keeps the session and does not redirect on 503, surfacing a retryable error (#18892)', async () => {
+    sessionStorage.setItem(TOKEN_KEY, 'live-jwt')
+    fetchMock.mockImplementation(async () =>
+      jsonResponse({ detail: 'revocation_check_unavailable' }, 503)
+    )
+    const client = new SlmApiClient()
+
+    await expect(client.get('/nodes', { maxRetries: 2 })).rejects.toThrow(
+      'HTTP 503: revocation_check_unavailable'
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(2) // 5xx is retried, unlike 4xx
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('live-jwt')
+    expect(window.location.href).toBe('')
   })
 
   it('does NOT clear session on a token-less 401', async () => {
