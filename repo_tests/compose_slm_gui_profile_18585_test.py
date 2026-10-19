@@ -80,7 +80,8 @@ def test_the_slm_gui_is_profiled_and_pulls_in_no_platform_service() -> None:
 
 
 def test_the_slm_only_nginx_never_names_the_main_backend() -> None:
-    for conf in _closure("nginx-slm.conf"):
+    """Both SLM-only configs, plain and TLS (#18593), include nothing that names the backend."""
+    for conf in {*_closure("nginx-slm.conf"), *_closure("nginx-slm-ssl.conf")}:
         text = (_NGINX / conf).read_text(encoding="utf-8")
         assert "autobot-backend" not in text and "http://backend" not in text, conf
 
@@ -97,7 +98,12 @@ def _mounted(service: dict) -> set[str]:
 def test_each_nginx_service_mounts_every_file_its_config_includes() -> None:
     """A compose mount overrides the image copy; a missing one leaves an include stale."""
     services = _services()
-    for name, top in (("autobot-frontend", "nginx.conf"), ("autobot-slm-gui", "nginx-slm.conf")):
+    for name, top in (
+        ("autobot-frontend", "nginx.conf"),
+        ("autobot-frontend", "nginx-ssl.conf"),  # the TLS switch must find its includes too (#18593)
+        ("autobot-slm-gui", "nginx-slm.conf"),
+        ("autobot-slm-gui", "nginx-slm-ssl.conf"),
+    ):
         needed = set(_closure(top)) - {top}
         assert needed <= _mounted(services[name]), (name, sorted(needed - _mounted(services[name])))
 
@@ -108,3 +114,35 @@ def test_production_stays_the_default_dockerfile_target() -> None:
     )
     assert "slm-gui" in stages
     assert stages[-1] == "production", stages
+
+
+# --- the SLM-only GUI has a TLS option (#18593) ---
+
+
+def test_the_slm_gui_switches_to_tls_like_the_frontend() -> None:
+    gui = _services()["autobot-slm-gui"]
+    volumes = gui["volumes"]
+    assert "${AUTOBOT_DOCKER_SLM_NGINX_CONF:-./docker/nginx/nginx-slm.conf}:/etc/nginx/nginx.conf:ro" in volumes
+    assert "./docker/certs:/etc/nginx/certs:ro" in volumes, "the TLS config would find no certificate"
+    assert {"80:80", "443:443"} <= set(gui["ports"])
+
+
+def test_tls_settings_are_defined_once() -> None:
+    """Both TLS configs take their settings and port-80 server from the shared includes."""
+    for top in ("nginx-ssl.conf", "nginx-slm-ssl.conf"):
+        closure = _closure(top)
+        assert {"nginx-tls.conf", "nginx-tls-redirect.conf"} <= set(closure), (top, closure)
+    defining = sorted(
+        p.name for p in _NGINX.glob("*.conf") if re.search(r"^\s*ssl_protocols\s", p.read_text(encoding="utf-8"), re.M)
+    )
+    assert defining == ["nginx-tls.conf"], f"TLS settings copied outside nginx-tls.conf: {defining}"
+
+
+def test_the_tls_redirect_keeps_the_healthcheck_on_plain_http() -> None:
+    """The container healthcheck fetches http://localhost/health; a redirect to a self-signed
+    HTTPS endpoint would fail it, so /health is answered on port 80."""
+    text = (_NGINX / "nginx-tls-redirect.conf").read_text(encoding="utf-8")
+    assert re.search(r"location\s*=\s*/health\s*\{[^}]*return 200", text), text
+    assert re.search(r"location\s*/\s*\{\s*return 301 https://", text), text
+    for name in ("autobot-frontend", "autobot-slm-gui"):
+        assert "http://localhost/health" in " ".join(_services()[name]["healthcheck"]["test"]), name
