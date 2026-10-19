@@ -98,6 +98,45 @@ describe('BaseAlert', () => {
     expect(wrapper.find('.aui-alert').exists()).toBe(false)
   })
 
+  it('gives a new message its own full autoDismiss delay', async () => {
+    // fails if the first message's timer still fires and cuts the second one short
+    vi.useFakeTimers()
+    const wrapper = mount(BaseAlert, { props: { autoDismiss: 3000, message: 'first' } })
+    vi.advanceTimersByTime(2000)
+    await wrapper.setProps({ message: 'second' })
+    vi.advanceTimersByTime(1500) // 3500 ms after mount: the old timer would have fired at 3000
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toBeUndefined()
+    expect(wrapper.find('.aui-alert').exists()).toBe(true)
+    vi.advanceTimersByTime(1500) // 3000 ms after the new message
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toHaveLength(1)
+  })
+
+  it('a message that stays the same keeps its original timer', async () => {
+    // contrast: fails if a re-render without a new message restarts the delay
+    vi.useFakeTimers()
+    const wrapper = mount(BaseAlert, { props: { autoDismiss: 3000, message: 'same', title: 'a' } })
+    vi.advanceTimersByTime(2000)
+    await wrapper.setProps({ title: 'b' })
+    vi.advanceTimersByTime(1000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toHaveLength(1)
+  })
+
+  it('reshows a dismissed alert for a new message and dismisses it again on time', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(BaseAlert, { props: { autoDismiss: 1000, message: 'one' } })
+    vi.advanceTimersByTime(1000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.aui-alert').exists()).toBe(false)
+    await wrapper.setProps({ message: 'two' })
+    expect(wrapper.find('.aui-alert').exists()).toBe(true)
+    vi.advanceTimersByTime(1000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toHaveLength(2)
+  })
+
   it('clears the autoDismiss timer on unmount', () => {
     vi.useFakeTimers()
     const wrapper = mount(BaseAlert, { props: { autoDismiss: 3000, message: 'm' } })

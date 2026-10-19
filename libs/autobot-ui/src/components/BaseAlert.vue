@@ -61,11 +61,18 @@ const CLOSE_PATH = 'M6 18L18 6M6 6l12 12'
 const dismissed = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 
-// A new message is a new alert: it shows again after an earlier dismissal.
+function startTimer(): void {
+  if (timer !== undefined) clearTimeout(timer)
+  timer = props.autoDismiss > 0 ? setTimeout(dismiss, props.autoDismiss) : undefined
+}
+
+// A new message is a new alert: it shows again after an earlier dismissal and gets
+// its own full auto-dismiss delay, so the previous message's timer cannot cut it short.
 watch(
   () => props.message,
   () => {
     dismissed.value = false
+    startTimer()
   },
 )
 
@@ -77,9 +84,7 @@ function dismiss(): void {
   emit('dismiss')
 }
 
-onMounted(() => {
-  if (props.autoDismiss > 0) timer = setTimeout(dismiss, props.autoDismiss)
-})
+onMounted(startTimer)
 
 onBeforeUnmount(() => {
   if (timer !== undefined) clearTimeout(timer)
