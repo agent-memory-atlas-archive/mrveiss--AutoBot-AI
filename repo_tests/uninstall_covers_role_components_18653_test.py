@@ -66,7 +66,7 @@ def _docs() -> list[tuple[Path, object]]:
 
 def _variables(docs) -> dict[str, str]:
     """String values from role defaults, group_vars and play-level vars, with references to
-    other such variables resolved (`"{{ autobot_base_dir }}/x"`, #18880); unresolvable ones drop."""
+    other such variables resolved (`"{{ autobot.base_dir }}/x"`, #18880); unresolvable ones drop."""
     values: dict[str, str] = {}
 
     def take(mapping) -> None:
@@ -86,7 +86,7 @@ def _variables(docs) -> dict[str, str]:
                 if isinstance(play, dict) and isinstance(play.get("vars"), dict):
                     take(play["vars"])
     ref = re.compile(r"\{\{\s*([\w.]+)\s*\}\}")
-    for _ in range(5):  # chains are short: install_dir -> autobot_base_dir
+    for _ in range(5):  # chains are short: install_dir -> autobot.base_dir
         values = {
             k: ref.sub(lambda m: values.get(m[1], m[0]) if "{{" not in values.get(m[1], "{{") else m[0], v)
             for k, v in values.items()

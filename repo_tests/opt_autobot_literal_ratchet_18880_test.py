@@ -100,7 +100,11 @@ def test_install_sh_and_ansible_agree_on_the_root() -> None:
     install = (_ROOT / "install.sh").read_text(encoding="utf-8")
     m = re.search(r'^readonly AUTOBOT_BASE="([^"]+)"', install, re.M)
     assert m, "install.sh no longer declares AUTOBOT_BASE"
-    assert m.group(1) == _group_vars_all()["autobot"]["base_dir"], (m.group(1), "autobot.base_dir")
+    root = _group_vars_all()["autobot"]["base_dir"]
+    assert m.group(1) == root, (
+        f"install.sh AUTOBOT_BASE={m.group(1)!r} != autobot.base_dir={root!r} in {_DEFINITION_FILE}; "
+        "change both together"
+    )
 
 
 def test_no_role_default_or_group_var_restates_the_root() -> None:
