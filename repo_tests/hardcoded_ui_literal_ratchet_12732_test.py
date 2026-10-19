@@ -31,11 +31,16 @@ by its known positive and by synthetic fixtures instead.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from pathlib import Path
 
 import pytest
-from repo_tests._hardcoded_ui_literal_baseline import HARDCODED_UI_LITERAL_IDS, HARDCODED_UI_LITERALS
+from repo_tests._hardcoded_ui_literal_baseline import (
+    HARDCODED_UI_LITERAL_IDS,
+    HARDCODED_UI_LITERALS,
+    literal_digest,
+)
 from repo_tests._hardcoded_ui_literal_detect import (
     APP_TREES,
     REACH_UI_LITERAL_FILES,
@@ -73,12 +78,20 @@ def measured() -> dict[str, list[tuple[str, str]]]:
 
 
 def identity_diff(recorded, measured):
-    """(new, stale) as {file: [(kind, literal), ...]}, compared per file as multisets."""
+    """Per-file multiset diff of recorded digests against measured (kind, literal) pairs.
+
+    Returns (new, stale): new is {file: [(kind, literal)]} with the CURRENT text from the scan,
+    stale is {file: [digest]}. The baseline holds digests only (#18802), so a stale entry is
+    named by its digest.
+    """
     new, stale = {}, {}
     for f in sorted(set(recorded) | set(measured)):
-        have, had = Counter(measured.get(f, [])), Counter(recorded.get(f, []))
-        if added := sorted((have - had).elements()):
-            new[f] = added
+        pairs = measured.get(f, [])
+        have, had = Counter(literal_digest(k, t) for k, t in pairs), Counter(recorded.get(f, []))
+        added = have - had
+        if added:
+            text = {literal_digest(k, t): (k, t) for k, t in pairs}
+            new[f] = sorted(text[d] for d in added.elements())
         if gone := sorted((had - have).elements()):
             stale[f] = gone
     return new, stale
@@ -91,18 +104,33 @@ class TestThePopulationOnlyShrinks:
 
     def test_a_removed_literal_is_deleted_in_the_commit_that_did_the_work(self, measured):
         _, stale = identity_diff(HARDCODED_UI_LITERAL_IDS, measured)
-        assert not stale, f"delete these from hardcoded_ui_literal_baseline_12732.json: {stale}"
+        assert not stale, (
+            "literals gone from these files; delete these digests from "
+            f"hardcoded_ui_literal_baseline_12732.json: {stale}"
+        )
 
     def test_a_swap_in_one_file_fails_both_ways(self):
         """A per-file count passed this (#18802): one literal out, another in, same total."""
-        recorded = {"A.vue": [("script", "Old text")]}
+        recorded = {"A.vue": [literal_digest("script", "Old text")]}
         new, stale = identity_diff(recorded, {"A.vue": [("script", "New text")]})
-        assert new == {"A.vue": [("script", "New text")]} and stale == {"A.vue": [("script", "Old text")]}
+        assert new == {"A.vue": [("script", "New text")]}
+        assert stale == {"A.vue": [literal_digest("script", "Old text")]}
         assert identity_diff(recorded, {"A.vue": [("script", "Old text")]}) == ({}, {})
 
     def test_a_duplicate_literal_counts_twice(self):
-        new, _ = identity_diff({"A.vue": [("attribute", "Close")]}, {"A.vue": [("attribute", "Close")] * 2})
+        recorded = {"A.vue": [literal_digest("attribute", "Close")]}
+        new, _ = identity_diff(recorded, {"A.vue": [("attribute", "Close")] * 2})
         assert new == {"A.vue": [("attribute", "Close")]}
+
+    def test_the_kind_is_part_of_the_identity(self):
+        """The same text as a different kind is a different literal."""
+        assert literal_digest("attribute", "Close") != literal_digest("template-text", "Close")
+
+    def test_the_baseline_stores_no_literal_text(self):
+        """Digests only: no secret-shaped placeholder text in a tracked file (#18802)."""
+        digest = re.compile(r"^[0-9a-f]{8}$")
+        bad = {f: d for f, v in HARDCODED_UI_LITERAL_IDS.items() for d in v if not digest.match(d)}
+        assert not bad, f"baseline entries that are not 8-hex digests: {bad}"
 
     def test_a_file_that_reaches_zero_leaves_the_dict(self, measured):
         gone = sorted(f for f in HARDCODED_UI_LITERALS if f not in measured)
@@ -117,7 +145,7 @@ class TestThePopulationOnlyShrinks:
         keys = list(HARDCODED_UI_LITERAL_IDS)
         assert keys == sorted(keys)
         unsorted = [f for f, v in HARDCODED_UI_LITERAL_IDS.items() if v != sorted(v)]
-        assert not unsorted, f"literals not sorted within: {unsorted}"
+        assert not unsorted, f"digests not sorted within: {unsorted}"
 
 
 class TestTheBoundaryDoesNotMoveSilently:
