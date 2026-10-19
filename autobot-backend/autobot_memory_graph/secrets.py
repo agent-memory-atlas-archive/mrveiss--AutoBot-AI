@@ -255,6 +255,7 @@ class SecretManagementMixin:
             entity_id=user_id,
             relation_types=["has_secret"],
             direction="outgoing",
+            owner=UNSCOPED_ALL_USERS,  # the user's own has_secret edges; the edge is the authorization
         )
 
         for rel in owned_relations.get("relations", []):

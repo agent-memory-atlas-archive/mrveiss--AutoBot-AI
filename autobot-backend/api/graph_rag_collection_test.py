@@ -68,7 +68,6 @@ async def test_collect_collection_edges_dedupes():
     # Same edge returned twice (e1 then duplicate path) must dedupe to one.
     service.graph = MagicMock()
     service.graph.get_relations = AsyncMock(return_value={"relations": [rel]})
-    service.graph.readable_entity_ids = AsyncMock(return_value={"e2"})  # the target is readable by the caller
     edges = await _collect_collection_edges(service, ["e1", "e1"], _OWNER)
     assert len(edges) == 1
     assert edges[0]["type"] == "OWNS"
@@ -85,11 +84,10 @@ async def test_collection_graph_returns_nodes_and_edges():
     service.graph = MagicMock()
     service.graph.search_entities = AsyncMock(return_value=entities)
 
-    async def _rels(entity_id, direction="both"):
+    async def _rels(entity_id, direction="both", owner=None):
         return {"relations": [rel]} if entity_id == "e1" else {"relations": []}
 
     service.graph.get_relations = AsyncMock(side_effect=_rels)
-    service.graph.readable_entity_ids = AsyncMock(return_value={"e2"})
 
     response = await collection_graph(
         collection_id="col-123",

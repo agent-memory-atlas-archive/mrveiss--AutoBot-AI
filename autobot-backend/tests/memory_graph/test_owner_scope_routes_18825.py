@@ -34,6 +34,7 @@ from tests.memory_graph._owner_scope_doubles import (  # noqa: E402
     BOB_CONV,
     BOB_ID,
     QueryHost,
+    RelationHost,
     TraversalHost,
 )
 
@@ -65,10 +66,8 @@ class TestGraphRagRoutes:
 
     @pytest.mark.asyncio
     async def test_collection_graph_drops_edges_into_entities_the_caller_cannot_read(self):
-        service = _collection_service()
-        to_bob = {"from": "c-alice", "to": "c-bob", "type": "REFERENCES", "metadata": {}}
-        to_shared = {"from": "c-alice", "to": "s-1", "type": "MENTIONS", "metadata": {}}
-        service.graph.get_relations = AsyncMock(return_value={"relations": [to_bob, to_shared]})
+        out = {"c-alice": [{"to": "c-bob", "type": "REFERENCES"}, {"to": "s-1", "type": "MENTIONS"}]}
+        service = SimpleNamespace(graph=RelationHost(ALL_DOCS, out=out))
 
         response = await collection_graph(collection_id="conversation", service=service, tenant=ALICE_TENANT)
 

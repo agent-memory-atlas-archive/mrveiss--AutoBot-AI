@@ -339,6 +339,7 @@ class UserSessionMixin:
                 entity_id=user_id,
                 relation_types=["owns", "has_session"],
                 direction="outgoing",
+                owner=UNSCOPED_ALL_USERS,  # the user's own edges; the edge is the authorization
             )
 
             for rel in owned_relations.get("relations", []):
@@ -419,6 +420,7 @@ class UserSessionMixin:
             entity_id=session_id,
             relation_types=["has_activity"],
             direction="outgoing",
+            owner=UNSCOPED_ALL_USERS,  # edges of a session the caller already resolved
         )
 
         activities = []

@@ -20,7 +20,7 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.input_sanitizer import escape_redisearch, escape_redisearch_tag
 
 from .core import AutoBotMemoryGraphCore
-from .owner_scope import entity_visible, redis_owner_clause, require_scope
+from .owner_scope import UNSCOPED_ALL_USERS, entity_visible, redis_owner_clause, require_scope
 
 logger = get_logger(__name__)
 
@@ -235,6 +235,21 @@ class QueryOperationsMixin:
         unique = list(dict.fromkeys(i for i in entity_ids if i))
         docs = [d async for d in self._iter_entity_batches([f"memory:entity:{i}" for i in unique])]
         return {i for i, doc in zip(unique, docs) if entity_visible(doc, owner)}
+
+    async def _readable_relation_ends(
+        self: AutoBotMemoryGraphCore, entity_id: str, relations: List[Dict[str, Any]], end: str, owner: Any
+    ) -> set[str] | None:
+        """Ids at the ``end`` ("to"/"from") of ``relations`` that ``owner`` may read.
+
+        Empty when ``entity_id`` itself is not readable.
+
+        ``None`` means "do not filter" (UNSCOPED_ALL_USERS). One batched check for every distinct
+        endpoint, never one get per edge (#18825).
+        """
+        if require_scope(owner) is UNSCOPED_ALL_USERS:
+            return None
+        readable = await self.readable_entity_ids([entity_id] + [r.get(end) for r in relations], owner=owner)
+        return readable if entity_id in readable else set()  # an unreadable anchor exposes none of its edges
 
     async def _batch_fetch_and_filter_entities(
         self: AutoBotMemoryGraphCore,

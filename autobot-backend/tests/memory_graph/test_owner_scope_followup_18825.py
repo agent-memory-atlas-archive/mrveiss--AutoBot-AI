@@ -24,7 +24,6 @@ from api.chat_activity_store import _store_single_activity, activity_principal  
 from api.graph_rag import _collect_collection_edges  # noqa: E402
 from api.schemas_chat import ActivityCreate  # noqa: E402
 from autobot_memory_graph import AutoBotMemoryGraph  # noqa: E402
-from autobot_memory_graph.entities import EntityOperationsMixin  # noqa: E402
 from autobot_memory_graph.owner_scope import (  # noqa: E402
     NO_ORG,
     UNSCOPED_ALL_USERS,
@@ -45,10 +44,12 @@ from tests.memory_graph._owner_scope_doubles import (  # noqa: E402
     ALICE,
     ALICE_CONV,
     ALICE_ID,
+    ALICE_UNTAGGED,
     BOB_CONV,
     BOB_ID,
     SHARED_DOC,
     QueryHost,
+    RelationHost,
     TraversalHost,
     _doc,
 )
@@ -182,20 +183,26 @@ class TestOrgRule:
 MCP_KEY = "unit-test-placeholder"
 
 
-class _McpGraph(EntityOperationsMixin, QueryHost):
-    """A real owner-scoped graph over the in-memory Redis double, shaped for the MCP tools."""
+class _McpGraph(RelationHost):
+    """A real owner-scoped graph over the in-memory Redis double, shaped for the MCP tools.
 
-    async def initialize(self):
-        return None
+    alice's conversation points at her own note, at bob's conversation and at a shared entity;
+    bob's conversation points back at alice's.
+    """
 
-    async def _get_outgoing_relations(self, entity_id):
-        return []
-
-    async def _get_incoming_relations(self, entity_id):
-        return []
-
-    async def get_relations(self, entity_id, direction="both"):
-        return {"relations": []}
+    def __init__(self):
+        super().__init__(
+            [ALICE_CONV, BOB_CONV, SHARED_DOC, ALICE_UNTAGGED],
+            out={
+                "c-alice": [
+                    {"to": "n-alice", "type": "related_to"},
+                    {"to": "c-bob", "type": "references"},
+                    {"to": "s-1", "type": "mentions"},
+                ],
+                "c-bob": [{"to": "c-alice", "type": "blocks"}],
+            },
+            inc={"c-alice": [{"from": "c-bob", "type": "blocks"}]},
+        )
 
 
 def _lookup(name, **extra):
@@ -207,7 +214,7 @@ def _claims(agent_id, tenant_id="org-1"):
 
 
 async def _call(server, params, token="", client_ip=None):
-    graph = _McpGraph([ALICE_CONV, BOB_CONV, SHARED_DOC])
+    graph = _McpGraph()
     with patch("autobot_memory_graph.AutoBotMemoryGraph", return_value=graph):
         resp = await server.handle_request("tools/call", params, token, req_id=1, client_ip=client_ip)
     if "error" in resp:
@@ -310,20 +317,70 @@ class TestCollectionEdgesAreBatched:
     async def test_many_edges_cost_batched_fetches_and_no_get_entity(self):
         docs = [_doc(f"a{i}", f"Conversation a{i}", ALICE_ID) for i in range(30)]
         docs += [_doc(f"b{i}", f"Conversation b{i}", BOB_ID) for i in range(30)]
-        graph = QueryHost(docs)
+        targets = [{"to": f"{kind}{i}", "type": "related_to"} for kind in "ab" for i in range(30)]
+        graph = RelationHost(docs, out={"a0": targets, "a1": targets})
         graph.get_entity = AsyncMock(side_effect=AssertionError("per-edge get_entity"))
         pipelines = []
         real_pipeline = graph.redis_client.pipeline
         graph.redis_client.pipeline = lambda: pipelines.append(1) or real_pipeline()
 
-        async def relations(entity_id, direction="outgoing"):
-            targets = [f"{kind}{i}" for kind in "ab" for i in range(30)]
-            return {"relations": [{"from": entity_id, "to": t, "type": "related_to"} for t in targets]}
-
-        graph.get_relations = relations
-
         edges = await _collect_collection_edges(SimpleNamespace(graph=graph), ["a0", "a1"], ALICE)
 
         assert {e["to"] for e in edges} == {f"a{i}" for i in range(30)}  # bob's targets dropped
         assert len(edges) == 60
-        assert len(pipelines) == 2  # 60 distinct targets at 50 per round trip, not 60 gets
+        assert len(pipelines) == 4  # per node: 60 targets + the node at 50 per round trip, not 60 gets
+
+
+# ---------------------------------------------------------------------------
+# Relations never reveal an endpoint the principal cannot read (#18825)
+# ---------------------------------------------------------------------------
+
+
+def _rendered(payload):
+    return json.dumps(payload)
+
+
+class TestMcpRelationsStayInTheCallersScope:
+    @pytest.mark.asyncio
+    async def test_timeline_for_a_omits_relations_to_bs_entities_and_keeps_a_to_a(self):
+        server = AutoBotMCPServer()
+        params = {"name": "memory.timeline", "arguments": {"entity": "Conversation alice"}, "run_jwt": "t"}
+        with patch("mcp_server.autobot_server.validate_run_jwt", new=AsyncMock(return_value=_claims(ALICE_ID))):
+            out = await _call(server, params)
+
+        rels = out["entity"]["relations"]
+        assert [r["to"] for r in rels["outgoing"]] == ["n-alice", "s-1"]  # A->A and A->shared kept
+        assert rels["incoming"] == []  # bob's edge into alice is gone with its type
+        assert "c-bob" not in _rendered(out) and "references" not in _rendered(out) and "blocks" not in _rendered(out)
+        assert {e["id"] for e in out["timeline"]} == {"n-alice", "s-1"}
+
+    @pytest.mark.asyncio
+    async def test_related_for_a_omits_relations_to_bs_entities_and_keeps_a_to_a(self):
+        server = AutoBotMCPServer()
+        params = {"name": "memory.related", "arguments": {"entity": "Conversation alice"}, "run_jwt": "t"}
+        with patch("mcp_server.autobot_server.validate_run_jwt", new=AsyncMock(return_value=_claims(ALICE_ID))):
+            out = await _call(server, params)
+
+        assert [r["to"] for r in out["root"]["relations"]["outgoing"]] == ["n-alice", "s-1"]
+        assert {e["id"] for e in out["related"]} == {"c-alice", "n-alice", "s-1"}
+        assert "c-bob" not in _rendered(out) and "references" not in _rendered(out)
+
+    @pytest.mark.asyncio
+    async def test_get_relations_needs_an_owner_and_the_sentinel_still_sees_everything(self):
+        graph = _McpGraph()
+        with pytest.raises(TypeError):
+            await graph.get_relations("c-alice")  # keyword-only, no default
+        with pytest.raises(OwnerScopeRequired):
+            await graph.get_relations("c-alice", owner=None)
+
+        everything = await graph.get_relations("c-alice", direction="both", owner=UNSCOPED_ALL_USERS)
+        scoped = await graph.get_relations("c-alice", direction="both", owner=ALICE)
+
+        assert {r["type"] for r in everything["relations"]} == {"related_to", "references", "mentions", "blocks"}
+        assert {r["type"] for r in scoped["relations"]} == {"related_to", "mentions"}
+
+    @pytest.mark.asyncio
+    async def test_get_relations_on_an_entity_the_caller_cannot_read_returns_nothing(self):
+        out = await _McpGraph().get_relations("c-bob", direction="both", owner=ALICE)
+
+        assert out == {"relations": []}  # bob's c-bob -> alice's c-alice edge is not alice's to see

@@ -8,6 +8,7 @@ from autobot_memory_graph.entities import EntityOperationsMixin
 from autobot_memory_graph.owner_scope import SHARED_OWNER_ID, OwnerScope, entity_visible
 from autobot_memory_graph.queries import QueryOperationsMixin
 from autobot_memory_graph.relation_traversal import RelationTraversalMixin
+from autobot_memory_graph.relations import RelationOperationsMixin
 
 ALICE_ID = "11111111-1111-1111-1111-111111111111"
 BOB_ID = "22222222-2222-2222-2222-222222222222"
@@ -125,3 +126,20 @@ class TraversalHost(RelationTraversalMixin, EntityOperationsMixin):
 
     async def _get_incoming_relations(self, entity_id):
         return []
+
+
+class RelationHost(RelationOperationsMixin, EntityOperationsMixin, QueryHost):
+    """Real ``get_relations`` / ``get_entity`` over stored edges: ``out`` and ``inc`` map entity id -> raw edges."""
+
+    def __init__(self, docs, out=None, inc=None, search_down=True):
+        super().__init__(docs, search_down)
+        self._out, self._in = out or {}, inc or {}
+
+    async def initialize(self):
+        return None
+
+    async def _get_outgoing_relations(self, entity_id):
+        return list(self._out.get(entity_id, []))
+
+    async def _get_incoming_relations(self, entity_id):
+        return list(self._in.get(entity_id, []))

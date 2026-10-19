@@ -304,7 +304,7 @@ class EntityOperationsMixin:
             if not entity:
                 return None
             if include_relations:
-                await self._attach_relations(entity, entity_id or entity["id"])
+                await self._attach_relations(entity, entity_id or entity["id"], owner)
             return entity
         except Exception as e:
             logger.error("Failed to get entity: %s", e)
@@ -327,13 +327,23 @@ class EntityOperationsMixin:
             return await self._resolve_entity_by_name(entity_name, strict=strict, owner=owner)
         raise ValueError("Either entity_id or entity_name must be provided")
 
-    async def _attach_relations(self: AutoBotMemoryGraphCore, entity: Dict[str, Any], entity_id: str) -> None:
-        """Fetch outgoing and incoming relations in parallel onto ``entity``."""
+    async def _attach_relations(
+        self: AutoBotMemoryGraphCore, entity: Dict[str, Any], entity_id: str, owner: Any
+    ) -> None:
+        """Fetch outgoing and incoming relations in parallel onto ``entity``, as ``owner`` (#18825).
+
+        A relation whose OTHER endpoint ``owner`` cannot read is dropped (id and type both).
+        """
         outgoing, incoming = await asyncio.gather(
             self._get_outgoing_relations(entity_id),
             self._get_incoming_relations(entity_id),
         )
-        entity["relations"] = {"outgoing": outgoing, "incoming": incoming}
+        out_ok = await self._readable_relation_ends(entity_id, outgoing, "to", owner)
+        in_ok = await self._readable_relation_ends(entity_id, incoming, "from", owner)
+        entity["relations"] = {
+            "outgoing": [r for r in outgoing if out_ok is None or r.get("to") in out_ok],
+            "incoming": [r for r in incoming if in_ok is None or r.get("from") in in_ok],
+        }
 
     async def _append_observations_to_entity(
         self: AutoBotMemoryGraphCore,

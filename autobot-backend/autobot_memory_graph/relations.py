@@ -28,7 +28,7 @@ from .core import (
     canonical_relation_type,
     relation_type_matches,
 )
-from .owner_scope import UNSCOPED_ALL_USERS
+from .owner_scope import UNSCOPED_ALL_USERS, require_scope
 
 logger = get_logger(__name__)
 
@@ -292,9 +292,17 @@ class RelationOperationsMixin:
         entity_id: str,
         relation_types: List[str] | None = None,
         direction: str = "both",
+        *,
+        owner: Any,
     ) -> Dict[str, Any]:
-        """Get relations for an entity. Issue #620."""
+        """Get the relations of an entity that ``owner`` may see. Issue #620.
+
+        ``owner`` (#18825) is REQUIRED: an OwnerScope or UNSCOPED_ALL_USERS. A relation is returned only if
+        ``owner`` can read BOTH endpoints, so neither another user's entity id nor the relation type
+        to it leaves the owner's scope.
+        """
         self.ensure_initialized()
+        require_scope(owner)  # before the try: a missing scope must raise, not read as "no relations"
 
         # #13452: reads must canonicalise both sides, exactly as writes do, or a
         # relation created as "relates_to" (stored "related_to") is unreachable.
@@ -304,14 +312,20 @@ class RelationOperationsMixin:
             relations = []
             if direction in OUTGOING_DIRECTIONS:
                 outgoing = await self._get_outgoing_relations(entity_id)
+                readable = await self._readable_relation_ends(entity_id, outgoing, "to", owner)
                 for rel in outgoing:
-                    if wanted is None or canonical_relation_type(rel.get("type", "")) in wanted:
+                    if (readable is None or rel.get("to") in readable) and (
+                        wanted is None or canonical_relation_type(rel.get("type", "")) in wanted
+                    ):
                         relations.append(self._format_outgoing_relation(entity_id, rel))
 
             if direction in INCOMING_DIRECTIONS:
                 incoming = await self._get_incoming_relations(entity_id)
+                readable = await self._readable_relation_ends(entity_id, incoming, "from", owner)
                 for rel in incoming:
-                    if wanted is None or canonical_relation_type(rel.get("type", "")) in wanted:
+                    if (readable is None or rel.get("from") in readable) and (
+                        wanted is None or canonical_relation_type(rel.get("type", "")) in wanted
+                    ):
                         relations.append(self._format_incoming_relation(entity_id, rel))
 
             return {"relations": relations}

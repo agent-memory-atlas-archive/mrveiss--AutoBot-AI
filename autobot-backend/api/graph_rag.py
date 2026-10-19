@@ -407,22 +407,20 @@ def _serialize_graph_nodes(entities: List[Metadata]) -> List[Metadata]:
 async def _collect_collection_edges(service: GraphRAGService, node_ids: List[str], owner: OwnerScope) -> List[Metadata]:
     """Gather outgoing relations for the given node ids, deduped. #9018 Phase 2.
 
-    #18825: an edge whose target the caller may not read is dropped, so neither the target's
-    id nor the relation type to it leaves the owner's scope.
+    #18825: ``get_relations`` takes the owner and drops an edge whose target the caller may not
+    read, so neither the target's id nor the relation type to it leaves the owner's scope.
     """
     candidates: List[Metadata] = []
     seen: set = set()
     for entity_id in node_ids:
-        relations = await service.graph.get_relations(entity_id=entity_id, direction="outgoing")
+        relations = await service.graph.get_relations(entity_id=entity_id, direction="outgoing", owner=owner)
         for rel in relations.get("relations", []):
             key = (rel.get("from"), rel.get("to"), rel.get("type"))
             if key in seen:
                 continue
             seen.add(key)
             candidates.append(rel)
-    # One batched visibility check for every distinct target, not one get_entity per edge (#18825).
-    readable = await service.graph.readable_entity_ids([r.get("to") for r in candidates], owner=owner)
-    return [rel for rel in candidates if rel.get("to") in readable]
+    return candidates
 
 
 @router.get("/collections/{collection_id}/graph")

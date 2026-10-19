@@ -200,7 +200,7 @@ class TestMemoryGraphRoundTrip:
         graph._get_outgoing_relations = AsyncMock(return_value=[{"to": "id-b", "type": "related_to"}])
         graph._get_incoming_relations = AsyncMock(return_value=[])
 
-        result = await graph.get_relations("id-a", relation_types=["relates_to"])
+        result = await graph.get_relations("id-a", relation_types=["relates_to"], owner=UNSCOPED_ALL_USERS)
 
         assert len(result["relations"]) == 1
 
@@ -210,7 +210,7 @@ class TestMemoryGraphRoundTrip:
         graph._get_outgoing_relations = AsyncMock(return_value=[{"to": "id-b", "type": "relates_to"}])
         graph._get_incoming_relations = AsyncMock(return_value=[])
 
-        result = await graph.get_relations("id-a", relation_types=["related_to"])
+        result = await graph.get_relations("id-a", relation_types=["related_to"], owner=UNSCOPED_ALL_USERS)
 
         assert len(result["relations"]) == 1
 
@@ -365,6 +365,8 @@ class TestUserSessionVocabulary:
         )
         graph._get_incoming_relations = AsyncMock(return_value=[])
 
-        result = await graph.get_relations("user-1", relation_types=["owns", "has_session"], direction="outgoing")
+        result = await graph.get_relations(
+            "user-1", relation_types=["owns", "has_session"], direction="outgoing", owner=UNSCOPED_ALL_USERS
+        )
 
         assert len(result["relations"]) == 1
