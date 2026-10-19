@@ -13,7 +13,10 @@ import { ref } from 'vue'
 import apiClient from '@/utils/ApiClient'
 import { getApiBase } from '@/config/ssot-config'
 import { createLogger } from '@/utils/debugUtils'
-import { fromLegacyDashboards, storedLayoutFrom, type DashboardLayout } from './dashboardLayoutModel'
+import type { components } from '@/types/generated/api'
+import { fromLegacyDashboards, fromStoredLayout, type DashboardLayout } from './dashboardLayoutModel'
+
+type LayoutResponse = components['schemas']['DataResponse_DashboardLayoutData_']
 
 export type DashboardPage = 'home' | 'company-os'
 
@@ -59,16 +62,16 @@ export function useDashboardLayout(page: DashboardPage, defaults: () => Dashboar
   }
 
   async function load(): Promise<void> {
-    let body: unknown
+    let body: LayoutResponse
     try {
-      body = await apiClient.get(url)
+      body = await apiClient.get(url) // typed by `body: LayoutResponse` (generated contract)
     } catch (e) {
       loadError.value = e instanceof Error ? e.message : String(e)
       logger.error('Loading dashboard layout failed; editing stays off until a load succeeds:', e)
       return
     }
     loadError.value = null
-    const stored = storedLayoutFrom(body)
+    const stored = body.data ? fromStoredLayout(body.data.layout) : null
     if (stored?.dashboards.length) layout.value = stored
     else await migrateLegacy()
     loaded.value = true

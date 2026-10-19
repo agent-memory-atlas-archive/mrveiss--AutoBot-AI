@@ -11,7 +11,7 @@ import {
   moveWidget,
   spanFromLegacyWidth,
   stepSpan,
-  storedLayoutFrom,
+  fromStoredLayout,
   type DashboardWidget,
 } from '../dashboardLayoutModel'
 
@@ -69,18 +69,21 @@ describe('dashboardLayoutModel', () => {
     expect(layout.activeId).toBe('default')
   })
 
-  it('reads a stored layout from the response body', () => {
-    const layout = { dashboards: [{ id: 'main', name: 'Main', widgets: [] }], activeId: 'main' }
-    expect(storedLayoutFrom({ success: true, data: { page: 'home', layout } })).toEqual(layout)
+  it('fills the contract\'s optional fields with the model defaults', () => {
+    // fails if a stored layout without widgets, props or activeId breaks the model's invariants
+    const layout = fromStoredLayout({
+      dashboards: [
+        { id: 'a', name: 'A', createdAt: 1, updatedAt: 1 },
+        { id: 'b', name: 'B', createdAt: 1, updatedAt: 1, widgets: [{ id: 'w', type: 'system', title: '', span: 6, height: 320 }] },
+      ],
+    })
+    expect(layout.activeId).toBeNull()
+    expect(layout.dashboards[0].widgets).toEqual([])
+    expect(layout.dashboards[1].widgets[0].props).toEqual({})
   })
 
-  it.each([
-    ['no body', undefined],
-    ['no data', { success: true }],
-    ['dashboards not a list', { data: { layout: { dashboards: 'x' } } }],
-    ['a dashboard without widgets', { data: { layout: { dashboards: [{ id: 'main' }] } } }],
-  ])('reads %s as nothing stored', (_, body) => {
-    expect(storedLayoutFrom(body)).toBeNull()
+  it('reads an empty stored layout as no dashboards', () => {
+    expect(fromStoredLayout({}).dashboards).toEqual([])
   })
 
   it('fits legacy names, titles and ids to the server limits so a load never 422s', () => {

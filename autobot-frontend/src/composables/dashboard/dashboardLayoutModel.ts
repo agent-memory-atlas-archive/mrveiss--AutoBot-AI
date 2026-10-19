@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Dashboard layout model and pure transforms (#18242). No Vue, no I/O, so it is unit-testable.
+ * The server's shapes come from the generated contract (`@/types/generated/api`).
  */
+
+import type { components } from '@/types/generated/api'
 
 export const WIDGET_SPANS = [4, 6, 8, 12] as const
 export type WidgetSpan = (typeof WIDGET_SPANS)[number]
@@ -135,16 +138,16 @@ export function fromLegacyDashboards(raw: LegacyDashboard[]): DashboardLayout {
   return { dashboards, activeId: dashboards[0]?.id ?? null }
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+/** The server's layout shape (generated contract); a few fields there are optional. */
+export type StoredLayout = components['schemas']['DashboardLayout']
 
-/**
- * The layout inside a GET /users/me/dashboard-layouts/{page} body (`{ data: { layout } }`),
- * checked at runtime: anything not shaped like a layout reads as "nothing stored", so a
- * changed or broken response falls back to the defaults instead of rendering garbage.
- */
-export function storedLayoutFrom(body: unknown): DashboardLayout | null {
-  const layout = isRecord(body) && isRecord(body.data) ? body.data.layout : undefined
-  if (!isRecord(layout) || !Array.isArray(layout.dashboards)) return null
-  const ok = layout.dashboards.every((d) => isRecord(d) && typeof d.id === 'string' && Array.isArray(d.widgets))
-  return ok ? (layout as unknown as DashboardLayout) : null
+/** The generated contract's layout, with its optional fields given the model's defaults. */
+export function fromStoredLayout(stored: StoredLayout): DashboardLayout {
+  return {
+    dashboards: (stored.dashboards ?? []).map((d) => ({
+      ...d,
+      widgets: (d.widgets ?? []).map((w) => ({ ...w, props: w.props ?? {} })),
+    })),
+    activeId: stored.activeId ?? null,
+  }
 }
