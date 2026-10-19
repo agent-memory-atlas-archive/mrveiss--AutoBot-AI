@@ -243,3 +243,42 @@ class TestAdminsGetNoCrossUserPath:
         graph = RelationHost(ALL_DOCS)
         admin = TenantContext(user_id=uuid.UUID(ALICE_ID), is_platform_admin=True)
         assert await graph.get_entity(entity_id="c-bob", owner=_owner_scope(admin)) is None
+
+
+class TestSessionActivitiesReachTheGraph:
+    """The activities route passed ``activity_type=`` to a graph method whose parameter is
+    ``activity_types``; the TypeError was swallowed into an empty 200 (#18825)."""
+
+    class _Graph:
+        def __init__(self):
+            self.calls = []
+
+        async def get_session_activities(self, session_id, activity_types=None, user_id=None, limit=100):
+            self.calls.append({"session_id": session_id, "activity_types": activity_types, "user_id": user_id})
+            return [{"type": "terminal", "session_id": session_id}]
+
+    @pytest.mark.asyncio
+    async def test_a_type_filter_reaches_the_graph_as_a_list_and_activities_come_back(self):
+        from api.chat_sessions import _fetch_activities_from_graph
+
+        graph = self._Graph()
+        response = await _fetch_activities_from_graph(graph, "s1", "terminal", "u1", 10, "req")
+        assert graph.calls == [{"session_id": "s1", "activity_types": ["terminal"], "user_id": "u1"}]
+        assert json.loads(response.body)["data"]["total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_no_type_filter_is_none_not_an_empty_list(self):
+        from api.chat_sessions import _fetch_activities_from_graph
+
+        graph = self._Graph()
+        await _fetch_activities_from_graph(graph, "s1", None, "u1", 10, "req")
+        assert graph.calls[0]["activity_types"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_graph_failure_is_not_turned_into_an_empty_success(self):
+        from api.chat_sessions import _fetch_activities_from_graph
+
+        graph = MagicMock()
+        graph.get_session_activities = AsyncMock(side_effect=RuntimeError("graph down"))
+        with pytest.raises(RuntimeError):
+            await _fetch_activities_from_graph(graph, "s1", None, "u1", 10, "req")

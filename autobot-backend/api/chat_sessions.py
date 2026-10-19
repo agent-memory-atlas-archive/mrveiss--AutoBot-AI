@@ -1621,34 +1621,27 @@ async def _fetch_activities_from_graph(
     limit: int,
     request_id: str,
 ):
-    """Helper for get_session_activities. Ref: #1088."""
-    try:
-        activities = await memory_graph.get_session_activities(
-            session_id=session_id,
-            activity_type=activity_type,
-            user_id=user_id,
-            limit=limit,
-        )
-        return create_chat_response(
-            data={
-                "activities": activities,
-                "total": len(activities),
-                "session_id": session_id,
-            },
-            message="Activities retrieved successfully",
-            request_id=request_id,
-        )
-    except Exception as graph_error:
-        logger.warning(
-            "[%s] Failed to retrieve activities: %s",
-            request_id,
-            graph_error,
-        )
-        return create_chat_response(
-            data={"activities": [], "total": 0},
-            message="Failed to retrieve activities",
-            request_id=request_id,
-        )
+    """Helper for get_session_activities. Ref: #1088.
+
+    The graph's parameter is ``activity_types`` (a list). Passing ``activity_type=`` raised a
+    TypeError that a blanket ``except`` turned into an empty 200, so this route never returned
+    an activity (#18825). Errors now reach the route's ``with_error_handling``.
+    """
+    activities = await memory_graph.get_session_activities(
+        session_id=session_id,
+        activity_types=[activity_type] if activity_type else None,
+        user_id=user_id,
+        limit=limit,
+    )
+    return create_chat_response(
+        data={
+            "activities": activities,
+            "total": len(activities),
+            "session_id": session_id,
+        },
+        message="Activities retrieved successfully",
+        request_id=request_id,
+    )
 
 
 @router.get("/chat/sessions/{session_id}/activities", response_model=DataResponse[SessionActivitiesData])
