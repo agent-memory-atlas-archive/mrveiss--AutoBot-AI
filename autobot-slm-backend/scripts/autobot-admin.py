@@ -15,9 +15,13 @@ Works without the SLM backend running (direct PostgreSQL access).
 """
 
 import argparse
+import logging
 import os
 import re
 import sys
+import time
+
+logger = logging.getLogger("autobot-admin")
 
 
 def load_env_file(path: str) -> dict:
@@ -52,6 +56,14 @@ def get_db_url() -> str:
     return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
 
+#: A reset records the subject's password epoch in the SLM's own store (#18663), so every token
+#: issued before it is refused (#12924). GREATEST keeps a later epoch from going backwards.
+_UPSERT_EPOCH_SQL = (
+    "INSERT INTO slm_password_epochs (subject, epoch) VALUES (%s, %s) "
+    "ON CONFLICT (subject) DO UPDATE SET epoch = GREATEST(slm_password_epochs.epoch, EXCLUDED.epoch)"
+)
+
+
 def cmd_reset_password(args: argparse.Namespace) -> None:
     """Bcrypt-hash new_password and write it to slm_users, then sync secrets."""
     try:
@@ -72,11 +84,13 @@ def cmd_reset_password(args: argparse.Namespace) -> None:
             )
             if cur.rowcount == 0:
                 sys.exit(f"Error: user '{args.username}' not found.")
+            # Same transaction: tokens issued before this reset stop working (#18672, #12924).
+            cur.execute(_UPSERT_EPOCH_SQL, (args.username, int(time.time())))
         conn.commit()
     finally:
         conn.close()
 
-    print(f"Password for '{args.username}' updated in database.")
+    logger.info("Password for '%s' updated in database.", args.username)
 
     # Sync SLM_ADMIN_PASSWORD in secrets file for the admin user so the next
     # SLM service restart picks up the new plaintext value used by seed plays.
@@ -94,12 +108,14 @@ def cmd_reset_password(args: argparse.Namespace) -> None:
             updated += f"\nSLM_ADMIN_PASSWORD={args.new_password}\n"
         with open(secrets_path, "w", encoding="utf-8") as fh:
             fh.write(updated)
-        print(f"Updated SLM_ADMIN_PASSWORD in {secrets_path}")
+        logger.info("Updated SLM_ADMIN_PASSWORD in %s", secrets_path)
 
-    print("Done.")
+    logger.info("Done.")
 
 
 def main() -> None:
+    # Operator-facing output: the message alone, on stdout, as before (#1082 logging standard).
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
     parser = argparse.ArgumentParser(
         prog="autobot-admin",
         description="AutoBot server administration tool",
