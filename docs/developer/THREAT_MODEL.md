@@ -146,6 +146,21 @@ refused `1008` before any RFB byte. Full reasoning is in that function's docstri
   fix that in `ROLE_PERMISSIONS`, not in the gate. `desktop_ws_role_gate_17054_test.py` asserts
   both the table's answer and the socket's.
 
+## 6. Memory graph / Graph-RAG ownership
+
+**Boundary:** one authenticated user vs. *another user's* memory-graph entities and the relations between them. The
+caller is logged in, so a graph read with no scope reads as a working feature (#18825).
+
+**Canonical enforcement:** [`owner_scope.py`](../../autobot-backend/autobot_memory_graph/owner_scope.py) `OwnerScope` (:72) is a REQUIRED
+argument of every graph read; `require_scope` (:119) fails closed. `entity_visible` (:138) and `redis_owner_clause` (:155) are the one rule, in
+Python and in the RediSearch query. `from_tenant` (:102) builds the scope from the authenticated principal, never a request body.
+
+**Invariants**
+- **A relation needs BOTH ends readable.** [`queries.py`](../../autobot-backend/autobot_memory_graph/queries.py) `_readable_relation_ends` (:239) drops an edge whose
+  other endpoint the caller cannot read; its id and relation type would otherwise leak via `get_entity`/`get_relations`/MCP.
+- **No admin bypass.** `is_platform_admin` is ignored; cross-user reads are the `UNSCOPED_ALL_USERS` sentinel, system callers only.
+- **Ownerless entities are invisible** to scoped reads and never rewritten here (#17038). Known gap: the KB step of `/graph-rag/search` (#16664).
+
 ## Cross-cutting
 
 - **Egress:** any new outbound HTTP goes through the guarded fetch —

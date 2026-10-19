@@ -10,6 +10,14 @@ explicit :data:`UNSCOPED_ALL_USERS` sentinel (same pattern as
 ``memory/verbatim_store.py``, #16701); omitting the argument raises
 :class:`OwnerScopeRequired` instead of silently returning every user's data.
 
+ADMINS: there is no admin bypass. ``OwnerScope.from_tenant`` / ``from_auth_user`` never read a role
+or ``is_platform_admin``, so an admin's scope is their own and they see no other user's entity.
+Cross-user reads are the explicit :data:`UNSCOPED_ALL_USERS` sentinel for system callers only.
+
+NOT THE KB MODEL: this is a per-owner model, deliberately different from the knowledge base's
+visibility/ownership model in ``knowledge/search_filters.py`` -- see "Memory graph vs knowledge-base
+visibility" in ``docs/developer/ARCHITECTURE_EXCEPTIONS.md``.
+
 Entities that carry no owner (everything written before #18825) are invisible to scoped
 reads. They are never rewritten here -- a backfill is a human-approved action (#17038).
 

@@ -383,7 +383,13 @@ async def graph_rag_metrics(
 
 
 def _owner_scope(tenant: TenantContext) -> OwnerScope:
-    """The caller's memory-graph scope; a context with no user is refused (403), never unscoped. #18825."""
+    """The caller's memory-graph scope; a context with no user is refused (403), never unscoped. #18825.
+
+    ADMIN RULE: ``is_platform_admin`` is deliberately ignored. An admin reads exactly what their own
+    scope reads -- the safe default -- and there is no cross-user path through these routes. A
+    cross-user read would need its own explicit, audited entry point that passes
+    ``UNSCOPED_ALL_USERS``; none exists here.
+    """
     try:
         return OwnerScope.from_tenant(tenant)
     except OwnerScopeRequired:

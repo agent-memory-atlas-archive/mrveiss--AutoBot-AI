@@ -92,10 +92,14 @@ def _anchors() -> list[tuple[str, str, int]]:
 #: conclusion, from an instrument that cannot see the boundary it is measuring
 #: to. Both are honest measurements; only one measures the thing it names.
 #:
+#: Raised 160 -> 175 (#18825) for a SIXTH trust boundary, memory-graph / Graph-RAG ownership:
+#: 175 / 6 boundaries = 29.2 lines each (down from 32.0), the new section being 15 lines
+#: heading-to-heading with EVERY `## ` line delimiting.
+#:
 #: MOVE THIS ONLY FOR A NEW BOUNDARY, and state the arithmetic when you do.
 #: Prose growth inside the existing sections must still hit this wall -- that is
 #: the property being kept, and raising the number for prose retires it.
-_MAX_LINES = 160
+_MAX_LINES = 175
 
 
 def test_document_exists_and_is_short_enough_to_read_every_review():

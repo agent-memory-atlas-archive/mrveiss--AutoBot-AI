@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from api.chat_activity_store import _store_single_activity, activity_principal_id  # noqa: E402
-from api.graph_rag import collection_graph, graph_rag_path, graph_rag_search  # noqa: E402
+from api.graph_rag import _owner_scope, collection_graph, graph_rag_path, graph_rag_search  # noqa: E402
 from api.schemas_chat import ActivityCreate  # noqa: E402
 from api.schemas_knowledge import GraphRAGPathRequest, GraphRAGSearchRequest  # noqa: E402
 from autobot_memory_graph.owner_scope import OwnerScopeRequired  # noqa: E402
@@ -214,3 +214,32 @@ class TestOtherReadersAreScoped:
         assert await provider.search("plan", limit=5) == []
         assert await provider.search("plan", limit=5, filters={"user_id": ALICE_ID}) == [BOB_CONV]
         assert provider.memory_graph.search_entities.await_args.kwargs["owner"] == ALICE
+
+
+class TestAdminsGetNoCrossUserPath:
+    """ADMIN RULE (#18825): ``is_platform_admin`` widens nothing on the graph routes."""
+
+    @pytest.mark.asyncio
+    async def test_an_admin_does_not_see_another_users_entity_through_collection_graph(self):
+        admin_tenant = TenantContext(user_id=uuid.UUID(ALICE_ID), is_platform_admin=True)
+        out = {"c-alice": [{"to": "c-bob", "type": "REFERENCES"}]}
+        service = SimpleNamespace(graph=RelationHost(ALL_DOCS, out=out))
+
+        response = await collection_graph(collection_id="conversation", service=service, tenant=admin_tenant)
+
+        body = json.loads(bytes(response.body).decode("utf-8"))
+        assert "Conversation bob" not in {n["name"] for n in body["nodes"]}
+        assert "bob's private plan" not in json.dumps(body)
+        assert body["edges"] == []  # the edge into bob's conversation is gone for the admin too
+
+    def test_the_admin_flag_does_not_change_the_scope(self):
+        plain = TenantContext(user_id=uuid.UUID(ALICE_ID))
+        admin = TenantContext(user_id=uuid.UUID(ALICE_ID), is_platform_admin=True)
+
+        assert _owner_scope(admin) == _owner_scope(plain) == ALICE
+
+    @pytest.mark.asyncio
+    async def test_an_admin_scope_cannot_get_another_users_entity_by_id(self):
+        graph = RelationHost(ALL_DOCS)
+        admin = TenantContext(user_id=uuid.UUID(ALICE_ID), is_platform_admin=True)
+        assert await graph.get_entity(entity_id="c-bob", owner=_owner_scope(admin)) is None
