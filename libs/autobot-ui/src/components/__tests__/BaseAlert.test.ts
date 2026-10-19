@@ -137,6 +137,19 @@ describe('BaseAlert', () => {
     expect(wrapper.emitted('dismiss')).toHaveLength(2)
   })
 
+  it('warns when dismissible is set without a dismissLabel', () => {
+    // fails if an icon-only dismiss button can render without an accessible name silently
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mount(BaseAlert, { props: { message: 'm', dismissible: true } })
+    expect(spy.mock.calls.some((c) => String(c[0]).includes('dismissLabel'))).toBe(true)
+    spy.mockClear()
+    // contrast: a labelled dismissible alert, and a non-dismissible one, stay quiet
+    mount(BaseAlert, { props: { message: 'm', dismissible: true, dismissLabel: 'Dismiss' } })
+    mount(BaseAlert, { props: { message: 'm' } })
+    expect(spy.mock.calls.some((c) => String(c[0]).includes('dismissLabel'))).toBe(false)
+    spy.mockRestore()
+  })
+
   it('clears the autoDismiss timer on unmount', () => {
     vi.useFakeTimers()
     const wrapper = mount(BaseAlert, { props: { autoDismiss: 3000, message: 'm' } })

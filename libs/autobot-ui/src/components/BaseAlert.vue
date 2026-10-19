@@ -13,7 +13,7 @@
   that clears its own ref works as well as one that does not.
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, warn, watch, watchEffect } from 'vue'
 
 export type AlertVariant = 'success' | 'info' | 'warning' | 'error' | 'critical'
 export type AlertSize = 'default' | 'compact'
@@ -26,7 +26,7 @@ export interface BaseAlertProps {
   message?: string | null
   /** Show the variant icon (the `icon` slot overrides it). */
   icon?: boolean
-  /** Shows a dismiss button. Pass `dismissLabel` for its accessible name. */
+  /** Shows a dismiss button. Requires `dismissLabel`: the button is icon-only, so it is its only name. */
   dismissible?: boolean
   dismissLabel?: string
   bordered?: boolean
@@ -75,6 +75,12 @@ watch(
     startTimer()
   },
 )
+
+watchEffect(() => {
+  if (props.dismissible && !props.dismissLabel) {
+    warn('BaseAlert: `dismissible` needs `dismissLabel`, or its icon-only dismiss button has no accessible name.')
+  }
+})
 
 const assertive = computed(() => props.variant === 'error' || props.variant === 'critical')
 const iconPath = computed(() => ICON_PATHS[props.variant] ?? ICON_PATHS.info)
