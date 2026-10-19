@@ -316,7 +316,7 @@
 </template>
 
 <script>
-import { BaseCard } from '@autobot/ui'
+import { BaseButton, BaseCard } from '@autobot/ui'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createLogger } from '@/utils/debugUtils'
@@ -329,7 +329,6 @@ import { useKnowledgeIcons } from '@/composables/knowledge/useKnowledgeIcons'
 import { formatDate } from '@/utils/formatHelpers'
 import { useLoadingState } from '@/composables/useLoadingState'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import { BaseButton } from '@autobot/ui'
 import Icon from '@/components/ui/Icon.vue'
 
 export default {

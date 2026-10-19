@@ -26,7 +26,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/components/__tests__/ChatInterface.test.ts": 760,
     "autobot-frontend/src/components/__tests__/TerminalWindow.test.ts": 627,
     "autobot-frontend/src/components/agents/HeartbeatPanel.vue": 723,
-    "autobot-frontend/src/components/analytics/AdvancedAnalytics.vue": 903,
+    "autobot-frontend/src/components/analytics/AdvancedAnalytics.vue": 902,  # #18849: 903 -> 902
     "autobot-frontend/src/components/analytics/CodeEvolutionTimeline.vue": 775,
     "autobot-frontend/src/components/analytics/CodeGenerationDashboard.vue": 1108,
     "autobot-frontend/src/components/analytics/CodeQualityDashboard.vue": 1903,
@@ -81,14 +81,14 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/components/knowledge/KnowledgeSystemDocs.vue": 863,
     "autobot-frontend/src/components/knowledge/KnowledgeUpload.vue": 1634,
     "autobot-frontend/src/components/knowledge/KnowledgeVerificationQueue.vue": 799,
-    "autobot-frontend/src/components/knowledge/SystemKnowledgeManager.vue": 1035,
+    "autobot-frontend/src/components/knowledge/SystemKnowledgeManager.vue": 1034,  # #18849: 1035 -> 1034
     "autobot-frontend/src/components/knowledge/WebResearchPanel.vue": 779,
     "autobot-frontend/src/components/knowledge/WebResearchSettings.vue": 1028,
     "autobot-frontend/src/components/knowledge/connectors/ConnectorConfigModal.vue": 1626,  # #18849: 1627 -> 1626
     "autobot-frontend/src/components/knowledge/modals/BulkEditModal.vue": 615,  # #18849: 616 -> 615
     "autobot-frontend/src/components/knowledge/modals/CategoryEditModal.vue": 726,  # #18849: 727 -> 726
     "autobot-frontend/src/components/llc/TemplateBrowser.vue": 806,
-    "autobot-frontend/src/components/manpage/ManPageManager.vue": 1214,
+    "autobot-frontend/src/components/manpage/ManPageManager.vue": 1213,  # #18849: 1214 -> 1213
     "autobot-frontend/src/components/security/SecretsManager.vue": 2775,
     "autobot-frontend/src/components/security/ThreatIntelligenceDashboard.vue": 838,
     "autobot-frontend/src/components/security/ThreatIntelligenceSettings.vue": 652,

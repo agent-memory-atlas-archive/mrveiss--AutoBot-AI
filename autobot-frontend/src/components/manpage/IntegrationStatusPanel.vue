@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { BaseCard } from '@autobot/ui'
+import { BaseButton, BaseCard } from '@autobot/ui'
 // AutoBot - AI-Powered Automation Platform
 // Copyright (c) 2025 mrveiss
 // Author: mrveiss
@@ -92,7 +92,6 @@ import { BaseCard } from '@autobot/ui'
  */
 
 import Icon from '@/components/ui/Icon.vue'
-import { BaseButton } from '@autobot/ui'
 import { formatDate } from '@/utils/formatHelpers'
 
 interface IntegrationStatus {
