@@ -61,7 +61,12 @@ _TABLE = [
 ]
 
 
-@pytest.mark.parametrize(("metadata", "expected"), _TABLE, ids=[repr(row[0]) for row in _TABLE])
+def _stable_id(metadata: Dict[str, Any]) -> str:
+    """A test id without the run's clock, so every xdist worker collects the same ids."""
+    return repr(metadata).replace(_PAST, "PAST").replace(_FUTURE, "FUTURE")
+
+
+@pytest.mark.parametrize(("metadata", "expected"), _TABLE, ids=[_stable_id(row[0]) for row in _TABLE])
 def test_the_unit_table(metadata: Dict[str, Any], expected: ServingVerdict) -> None:
     """Every row, in the search-result shape (``metadata`` nested)."""
     hit = {"content": "c", "score": 0.9, "metadata": metadata}
