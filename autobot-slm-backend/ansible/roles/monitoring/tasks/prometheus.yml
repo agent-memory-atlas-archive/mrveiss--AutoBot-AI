@@ -159,7 +159,7 @@
 
 - name: "Prometheus | Ask the running server which rules it loaded (#14531)"
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/rules"
+    url: "http://{{ monitoring_local_host }}:{{ prometheus_port }}/api/v1/rules"
     return_content: true
   register: _prometheus_loaded_rules
   retries: "{{ prometheus_rules_check_retries | default(12) }}"
