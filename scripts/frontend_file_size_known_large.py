@@ -147,7 +147,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/views/AdvancedControlView.vue": 1103,
     "autobot-frontend/src/views/BudgetPolicies.vue": 940,
     "autobot-frontend/src/views/BusinessIntelligenceView.vue": 988,
-    "autobot-frontend/src/views/CustomDashboard.vue": 1106,
+    "autobot-frontend/src/views/CustomDashboard.vue": 925,  # #18242: 1106 -> 925
     "autobot-frontend/src/views/DevSpeedupView.vue": 672,
     "autobot-frontend/src/views/ErrorMonitoringView.vue": 872,
     "autobot-frontend/src/views/EvolutionView.vue": 781,
