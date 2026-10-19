@@ -105,13 +105,14 @@ def test_an_unknown_architecture_is_keyring_unavailable():
 
 
 def _real_keyring_usable() -> bool:
+    """A full add/unlink round trip: a sandbox can allow the read lookup yet deny add (EACCES)."""
     if not sys.platform.startswith("linux"):
         return False
+    ring, desc = KernelKeyring(), f"autobot:probe:{uuid.uuid4()}"
     try:
-        KernelKeyring().read(f"autobot:probe:{uuid.uuid4()}")
-    except KeyNotFound:
-        return True
-    except (KeyringUnavailable, OSError):
+        ring.add(desc, b"probe")
+        ring.unlink(desc)
+    except (KeyringUnavailable, KeyNotFound, OSError):
         return False
     return True
 

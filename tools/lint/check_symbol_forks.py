@@ -94,6 +94,24 @@ _SHARED_NAMES = {
 }
 
 
+def load_exceptions(path: Path | None = None) -> list[dict]:
+    """The recorded per-service exceptions; none if the record does not exist."""
+    return _shared().fork_load_exceptions(path or EXCEPTIONS)
+
+
+def validate_exception(entry: dict) -> list[str]:
+    """The shared shape checks, plus: an exception links the issue that owns it (a URL or `#N`)."""
+    problems = _shared().fork_validate_exception(entry)
+    if entry.get("issue") and not _ISSUE_LINK.match(str(entry["issue"])):
+        problems.append(f"exception {entry.get('symbol', '?')!r}: 'issue' {entry['issue']!r} is not an issue URL or #N")
+    return problems
+
+
+def apply_exceptions(clusters: dict, exceptions: list[dict]):
+    """The shared application, validated with this ratchet's full checks."""
+    return _shared().fork_apply_exceptions(clusters, exceptions, validate_exception)
+
+
 def __getattr__(name: str):
     """PEP 562: the detector's names, without importing it at module load."""
     if name in _SHARED_NAMES:
@@ -113,7 +131,6 @@ EXCEPTIONS = _REPO_ROOT / "repo_tests" / "symbol_fork_exceptions.json"
 
 #: A recorded exception links the issue that owns it: a full URL or `#N`.
 _ISSUE_LINK = re.compile(r"^(https://github\.com/[\w.-]+/[\w.-]+/issues/\d+|#\d+)$")
-_EXCEPTION_FIELDS = ("symbol", "canonical", "sites", "reason", "issue")
 
 
 def tracked_python_files() -> list[Path]:
@@ -216,56 +233,6 @@ def load_baseline() -> set[str]:
     if not BASELINE.exists():
         return set()
     return set(json.loads(BASELINE.read_text(encoding="utf-8"))["clusters"])
-
-
-def load_exceptions(path: Path | None = None) -> list[dict]:
-    """The recorded per-service exceptions; none if the record does not exist."""
-    path = path or EXCEPTIONS
-    if not path.exists():
-        return []
-    return list(json.loads(path.read_text(encoding="utf-8"))["exceptions"])
-
-
-def validate_exception(entry: dict) -> list[str]:
-    """Why an exception entry is unusable. An exception with no reason or issue is not a record."""
-    problems = [f"missing {f!r}" for f in _EXCEPTION_FIELDS if not entry.get(f)]
-    sites = entry.get("sites") or []
-    if entry.get("sites") is not None and not isinstance(sites, list):
-        problems.append("'sites' must be a list of path:qualname")
-    bad = [x for x in ([entry.get("canonical")] + list(sites)) if x and ":" not in str(x)]
-    problems += [f"site {x!r} is not path:qualname" for x in bad]
-    if entry.get("issue") and not _ISSUE_LINK.match(str(entry["issue"])):
-        problems.append(f"'issue' {entry['issue']!r} is not an issue URL or #N")
-    return [f"exception {entry.get('symbol', '?')!r}: {p}" for p in problems]
-
-
-def _live_sites(cluster: Cluster | None) -> set[str]:
-    """Binding sites as `path:qualname`; a module-level binding's qualname is its name."""
-    return {f"{d.path}:{cluster.name}" for d in cluster.definitions} if cluster else set()
-
-
-def apply_exceptions(clusters: dict[str, Cluster], exceptions: list[dict]):
-    """Drop clusters whose EVERY binding is canonical or a recorded exception.
-
-    Returns `(effective clusters, problems)`. A binding outside the record keeps
-    its cluster; an invalid entry or a recorded site that no longer exists is a
-    problem, so the record shrinks with the tree exactly as the baseline does.
-    """
-    effective, problems = dict(clusters), []
-    for entry in exceptions:
-        bad = validate_exception(entry)
-        problems += bad
-        if bad:
-            continue
-        name, cluster = entry["symbol"], clusters.get(entry["symbol"])
-        recorded = {entry["canonical"], *entry["sites"]}
-        problems += [
-            f"STALE exception {name!r}: site {s!r} is not a live binding"
-            for s in sorted(recorded - _live_sites(cluster))
-        ]
-        if cluster and _live_sites(cluster) <= recorded:
-            effective.pop(name, None)
-    return effective, problems
 
 
 def write_baseline(names: set[str]) -> None:
