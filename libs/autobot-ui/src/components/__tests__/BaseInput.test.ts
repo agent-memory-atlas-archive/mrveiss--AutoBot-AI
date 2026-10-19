@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import inputSource from '../BaseInput.vue?raw'
 import BaseInput, { type InputSize, type InputType } from '../BaseInput.vue'
 
@@ -45,10 +46,14 @@ describe('BaseInput', () => {
     expect(label.attributes('for')).toBe(wrapper.get('input').attributes('id'))
   })
 
-  it('gives two instances distinct ids', () => {
-    // fails if the generated id is constant, so two labels target the same input
-    const a = mount(BaseInput, { props: { label: 'A' } }).get('input').attributes('id')
-    const b = mount(BaseInput, { props: { label: 'B' } }).get('input').attributes('id')
+  it('gives two instances in one app distinct ids', () => {
+    // fails if the generated id is constant, so two labels target the same input.
+    // useId() is unique per app, so both inputs must share one app, as on a real page.
+    const Pair = defineComponent({
+      render: () => h('div', [h(BaseInput, { label: 'A' }), h(BaseInput, { label: 'B' })]),
+    })
+    const [a, b] = mount(Pair).findAll('input').map((i) => i.attributes('id'))
+    expect(a).toBeTruthy()
     expect(a).not.toBe(b)
   })
 
