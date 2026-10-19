@@ -27,7 +27,7 @@ from pathlib import Path
 import yaml
 from repo_tests._paths import repo_root
 
-from tools.lint._comment_syntax import code_lines
+from tools.lint._comment_syntax import code_lines, code_text
 
 _ROOT = repo_root()
 _NGINX = _ROOT / "docker" / "nginx"
@@ -171,6 +171,8 @@ def _servers(text: str) -> list[str]:
 def tls_leaks(files: dict[str, str]) -> list[str]:
     """TLS-only material outside a `listen 443 ssl` server (01's review, #18593)."""
     leaks = []
+    # Comments stripped first: a comment naming HSTS, ssl_ or holding a brace is not config.
+    files = {name: code_text(text, name=name, strip_trailing=True) for name, text in files.items()}
     redirect = files.get("nginx-tls-redirect.conf", "")
     if re.search(r"Strict-Transport-Security|^\s*ssl_", redirect, re.M | re.I):
         leaks.append("nginx-tls-redirect.conf carries HSTS or an ssl_ directive")
@@ -203,6 +205,13 @@ def test_the_tls_leak_check_sees_both_shapes() -> None:
         "x.conf: nginx-tls.conf included in a server without `listen 443 ssl`"
     ]
     assert tls_leaks({"x.conf": good}) == []
+    commented = (
+        "# the HTTPS server sets Strict-Transport-Security; no ssl_ here { not a block\n"
+        "server { listen 80; return 301 https://$host$request_uri; }  # nginx-tls.conf is 443-only }\n"
+    )
+    assert tls_leaks({"nginx-tls-redirect.conf": commented}) == []
+    braces = "http {\n  # a stray } in a comment\n  server { listen 80; include /etc/nginx/nginx-tls.conf; }\n}\n"
+    assert tls_leaks({"y.conf": braces}) == ["y.conf: nginx-tls.conf included in a server without `listen 443 ssl`"]
 
 
 def test_hsts_is_scheme_gated_wherever_a_location_repeats_it() -> None:
