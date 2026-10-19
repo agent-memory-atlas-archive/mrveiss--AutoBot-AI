@@ -16,7 +16,7 @@ from typing import Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-from api.chat_activity_store import _process_activity_batch, _store_single_activity, activity_principal_id
+from api.chat_activity_store import _process_activity_batch, _store_single_activity, activity_principal
 from api.schemas_chat import (
     ActivityAddData,
     ActivityBatchCreate,
@@ -744,17 +744,15 @@ async def _track_session_in_memory_graph(
         username = user_data.get("username", "anonymous")
 
         # Create user entity (idempotent - returns existing if found)
-        await memory_graph.create_user_entity(
-            user_id=user_id,
-            username=username,
-            metadata={"source": "session_creation"},
-        )
+        org_id = user_data.get("org_id") or None  # #18825: the principal's JWT org
+        await memory_graph.create_user_entity(user_id, username, {"source": "session_creation"}, org_id=org_id)
 
         # Create chat session entity linked to user
         await memory_graph.create_chat_session_entity(
             session_id=session_id,
             owner_id=user_id,
             title=session_title,
+            org_id=org_id,
             metadata={
                 "created_via": "api",
                 "request_id": request_id,
@@ -1512,7 +1510,7 @@ async def add_session_activity(
     log_request_context(request, "add_session_activity", request_id)
 
     _validate_session_id_or_raise(session_id)
-    user_id = activity_principal_id(ownership)  # #18825: never activity_data.user_id
+    user_id, org_id = activity_principal(ownership)  # #18825: never activity_data.user_id
 
     memory_graph = _get_memory_graph_or_none(request)
     if not memory_graph:
@@ -1520,7 +1518,7 @@ async def add_session_activity(
         return _create_activity_unavailable_response(1, request_id, is_batch=False)
 
     try:
-        activity_entity = await _store_single_activity(memory_graph, session_id, activity_data, user_id)
+        activity_entity = await _store_single_activity(memory_graph, session_id, activity_data, user_id, org_id)
 
         log_chat_event(
             "activity_created",
@@ -1575,7 +1573,7 @@ async def add_session_activities_batch(
     log_request_context(request, "add_session_activities_batch", request_id)
 
     _validate_session_id_or_raise(session_id)
-    user_id = activity_principal_id(ownership)  # #18825: never the per-activity body user_id
+    user_id, org_id = activity_principal(ownership)  # #18825: never the per-activity body user_id
 
     memory_graph = _get_memory_graph_or_none(request)
     total_activities = len(batch_data.activities)
@@ -1589,7 +1587,7 @@ async def add_session_activities_batch(
         return _create_activity_unavailable_response(total_activities, request_id, is_batch=True)
 
     # Process batch using extracted helper (Issue #620)
-    result = await _process_activity_batch(memory_graph, session_id, batch_data.activities, request_id, user_id)
+    result = await _process_activity_batch(memory_graph, session_id, batch_data.activities, request_id, user_id, org_id)
 
     log_chat_event(
         "activities_batch_created",

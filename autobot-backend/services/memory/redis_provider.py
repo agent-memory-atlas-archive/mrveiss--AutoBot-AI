@@ -88,7 +88,7 @@ class RedisMemoryProvider:
             logger.error(f"Error searching Redis cache: {e}")
             return []
 
-    async def get_entity(self, entity_id: str) -> Dict[str, Any] | None:
+    async def get_entity(self, entity_id: str, *, owner: Any = None) -> Dict[str, Any] | None:
         if not self.redis:
             return None
         try:

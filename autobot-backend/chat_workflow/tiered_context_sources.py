@@ -61,7 +61,7 @@ def resolve_owner_scope(session: Any) -> Any | None:
     if not user_id:
         return None
     try:
-        return OwnerScope.for_user(user_id, metadata.get("tenant_id") or None)
+        return OwnerScope.for_user(user_id, metadata.get("org_id") or None)  # same key graph_owner.py stamps
     except OwnerScopeRequired:
         return None
 

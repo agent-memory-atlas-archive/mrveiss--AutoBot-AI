@@ -136,6 +136,7 @@ class SecretManagementMixin:
         session_id: str | None,
         shared_with: List[str] | None,
         metadata: Dict[str, Any] | None,
+        org_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create secret entity and its relations. Issue #620."""
         secret_metadata = self._build_secret_metadata(owner_id, secret_type, scope, session_id, shared_with, metadata)
@@ -145,7 +146,7 @@ class SecretManagementMixin:
             observations=[f"Secret created: {secret_type} ({scope} scope)"],
             metadata=secret_metadata,
             tags=["secret", secret_type, scope],
-            owner=OwnerScope.for_user(owner_id),  # #18825
+            owner=OwnerScope.for_user(owner_id, org_id),  # #18825
         )
         await self._create_secret_owner_relations(owner_id, entity["id"])
         await self._create_secret_scope_relations(entity["id"], scope, session_id, shared_with)
@@ -160,6 +161,8 @@ class SecretManagementMixin:
         session_id: str | None = None,
         shared_with: List[str] | None = None,
         metadata: Dict[str, Any] | None = None,
+        *,
+        org_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create a secret entity with ownership and scoping. Issue #620."""
         self.ensure_initialized()
@@ -167,7 +170,7 @@ class SecretManagementMixin:
 
         try:
             entity = await self._create_and_link_secret_entity(
-                name, secret_type, owner_id, scope, session_id, shared_with, metadata
+                name, secret_type, owner_id, scope, session_id, shared_with, metadata, org_id
             )
             logger.info("Created secret entity: %s (scope: %s)", name, scope)
             return entity
@@ -181,6 +184,8 @@ class SecretManagementMixin:
         user_id: str,
         activity_type: str,
         activity_id: str,
+        *,
+        org_id: str | None = None,
     ) -> Dict[str, Any]:
         """
         Create a secret usage audit entity for tracking access.
@@ -211,7 +216,7 @@ class SecretManagementMixin:
                 observations=[f"Secret {secret_id} used in {activity_type}"],
                 metadata=audit_metadata,
                 tags=["audit", "secret_usage"],
-                owner=OwnerScope.for_user(user_id),  # #18825
+                owner=OwnerScope.for_user(user_id, org_id),  # #18825
             )
 
             return entity
@@ -253,7 +258,8 @@ class SecretManagementMixin:
         )
 
         for rel in owned_relations.get("relations", []):
-            secret = await self.get_entity(entity_id=rel["to"])
+            # Following the user's own has_secret edges: the edge from user_id is the authorization.
+            secret = await self.get_entity(entity_id=rel["to"], owner=UNSCOPED_ALL_USERS)
             if secret and self._secret_matches_filters(secret, scope, session_id):
                 secrets.append(secret)
 

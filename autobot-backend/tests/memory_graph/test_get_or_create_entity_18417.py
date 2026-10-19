@@ -180,6 +180,28 @@ async def test_a_racer_stalled_between_lookup_and_write_cannot_duplicate():
 
 
 @pytest.mark.asyncio
+async def test_a_racer_that_loses_the_claim_to_another_owner_is_refused_not_handed_their_entity():
+    """The lost-race path re-checks the owner: the winner belongs to someone else (#18825)."""
+    from autobot_memory_graph.entity_upsert import EntityNameInUse
+
+    redis = FakeRedis()
+    redis.eval_gate = asyncio.Event()
+    graph = _graph(redis)
+
+    stalled = asyncio.ensure_future(
+        graph.get_or_create_entity("TASK", "Redis", ["a"], owner=OwnerScope.for_user("user-a"))
+    )
+    await asyncio.sleep(0.01)  # user-a is parked inside eval
+    await graph.get_or_create_entity("TASK", "Redis", ["b"], owner=OwnerScope.for_user("user-b"))
+    redis.eval_gate.set()
+
+    with pytest.raises(EntityNameInUse) as refused:
+        await stalled
+    assert "Redis" not in str(refused.value)
+    assert len(redis.docs) == 1
+
+
+@pytest.mark.asyncio
 async def test_a_dangling_claim_is_repaired_atomically_not_duplicated():
     redis = FakeRedis()
     graph = _graph(redis)
@@ -219,9 +241,9 @@ async def test_get_entity_strict_raises_where_default_returns_none():
     graph._initialized = True
     graph.redis_client = redis
 
-    assert await graph.get_entity(entity_id="x") is None
+    assert await graph.get_entity(entity_id="x", owner=UNSCOPED_ALL_USERS) is None
     with pytest.raises(ConnectionError):
-        await graph.get_entity(entity_id="x", strict=True)
+        await graph.get_entity(entity_id="x", strict=True, owner=UNSCOPED_ALL_USERS)
     with pytest.raises(ConnectionError):
         await graph.get_entity(entity_name="x", strict=True, owner=UNSCOPED_ALL_USERS)
 

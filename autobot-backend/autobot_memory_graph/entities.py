@@ -240,7 +240,7 @@ class EntityOperationsMixin:
         entity_name: str,
         strict: bool = False,
         *,
-        owner: Any = None,
+        owner: Any,
     ) -> Dict[str, Any] | None:
         """Resolve a name to an entity, preferring an exact match (#13761).
 
@@ -288,64 +288,52 @@ class EntityOperationsMixin:
         include_relations: bool = False,
         strict: bool = False,
         *,
-        owner: Any = None,
+        owner: Any,
     ) -> Dict[str, Any] | None:
-        """
-        Retrieve entity by ID or name.
+        """Retrieve an entity by ID or name, as ``owner``.
 
-        Args:
-            entity_id: UUID of entity to retrieve
-            entity_name: Name of entity to retrieve (alternative to ID)
-            include_relations: Include related entities in response
-            strict: Raise on a read error instead of returning None, so "not
-                found" and "could not read" are distinguishable (#18417). Name
-                lookups then use a search path that does not swallow errors.
-            owner: An OwnerScope or UNSCOPED_ALL_USERS (#18825). REQUIRED for a
-                lookup by name (raises OwnerScopeRequired when omitted); when given
-                with an id, an entity the owner may not read is reported as absent.
-                A bare id lookup without ``owner`` is internal-only.
-
-        Returns:
-            Entity data or None if not found. When resolved by name the dict
-            carries ``_resolution`` — ``"exact"`` or ``"fuzzy"`` (#13761).
+        ``owner`` (#18825) is REQUIRED, keyword-only, for id and name lookups alike: an OwnerScope or
+        UNSCOPED_ALL_USERS; omitting it raises OwnerScopeRequired. An entity it may not read is absent.
+        ``strict`` raises on a read error (#18417). A name lookup carries ``_resolution`` (#13761).
         """
         self.ensure_initialized()
-        if entity_name and not entity_id:
-            require_scope(owner)  # before the try: a missing scope must raise, not read as "not found"
+        require_scope(owner)  # before the try: a missing scope must raise, not read as "not found"
 
         try:
-            # Find entity by ID or name
-            if entity_id:
-                entity_key = f"memory:entity:{entity_id}"
-                entity = await self.redis_client.json().get(entity_key)
-                if owner is not None and not entity_visible(entity, owner):
-                    return None
-            elif entity_name:
-                entity = await self._resolve_entity_by_name(entity_name, strict=strict, owner=owner)
-                if entity is None:
-                    return None
-                entity_id = entity["id"]
-            else:
-                raise ValueError("Either entity_id or entity_name must be provided")
-
+            entity = await self._load_entity(entity_id, entity_name, strict, owner)
             if not entity:
                 return None
-
-            # Include relations if requested - fetch in parallel
-            if include_relations and entity_id:
-                outgoing, incoming = await asyncio.gather(
-                    self._get_outgoing_relations(entity_id),
-                    self._get_incoming_relations(entity_id),
-                )
-                entity["relations"] = {"outgoing": outgoing, "incoming": incoming}
-
+            if include_relations:
+                await self._attach_relations(entity, entity_id or entity["id"])
             return entity
-
         except Exception as e:
             logger.error("Failed to get entity: %s", e)
             if strict:
                 raise
             return None
+
+    async def _load_entity(
+        self: AutoBotMemoryGraphCore,
+        entity_id: str | None,
+        entity_name: str | None,
+        strict: bool,
+        owner: Any,
+    ) -> Dict[str, Any] | None:
+        """The entity ``owner`` may read for an id or a name; None when absent or not visible."""
+        if entity_id:
+            entity = await self.redis_client.json().get(f"memory:entity:{entity_id}")
+            return entity if entity_visible(entity, owner) else None
+        if entity_name:
+            return await self._resolve_entity_by_name(entity_name, strict=strict, owner=owner)
+        raise ValueError("Either entity_id or entity_name must be provided")
+
+    async def _attach_relations(self: AutoBotMemoryGraphCore, entity: Dict[str, Any], entity_id: str) -> None:
+        """Fetch outgoing and incoming relations in parallel onto ``entity``."""
+        outgoing, incoming = await asyncio.gather(
+            self._get_outgoing_relations(entity_id),
+            self._get_incoming_relations(entity_id),
+        )
+        entity["relations"] = {"outgoing": outgoing, "incoming": incoming}
 
     async def _append_observations_to_entity(
         self: AutoBotMemoryGraphCore,

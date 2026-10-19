@@ -62,12 +62,16 @@ class UserSessionMixin:
         user_id: str,
         username: str,
         metadata: Dict[str, Any] | None = None,
+        *,
+        org_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create or get a user entity. Issue #620."""
         self.ensure_initialized()
 
         try:
-            owner = OwnerScope.for_user(user_id)  # #18825: a user entity belongs to that user
+            owner = OwnerScope.for_user(
+                user_id, org_id
+            )  # #18825: a user entity belongs to that user (in the principal's org)
             existing = await self.search_entities(query=user_id, entity_type="user", limit=1, owner=owner)
             if existing:
                 logger.debug("User entity already exists for %s", username)
@@ -150,6 +154,8 @@ class UserSessionMixin:
         title: str | None = None,
         collaborators: List[str] | None = None,
         metadata: Dict[str, Any] | None = None,
+        *,
+        org_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create a chat session entity with user ownership tracking.
 
@@ -175,7 +181,7 @@ class UserSessionMixin:
                 observations=[f"Session created by user {owner_id}"],
                 metadata=session_metadata,
                 tags=["session", "chat"],
-                owner=OwnerScope.for_user(owner_id),  # #18825
+                owner=OwnerScope.for_user(owner_id, org_id),  # #18825
             )
             await self._create_session_owner_relations(owner_id, entity["id"])
             await self._create_collaborator_relations(entity["id"], collaborators)
@@ -237,6 +243,8 @@ class UserSessionMixin:
         user_id: str,
         activity_type: str,
         secrets_used: List[str] | None,
+        *,
+        org_id: str | None = None,
     ) -> None:
         """Issue #665: Create secret usage relationships and audit trail."""
         if not secrets_used:
@@ -252,6 +260,7 @@ class UserSessionMixin:
                 user_id=user_id,
                 activity_type=activity_type,
                 activity_id=entity_id,
+                org_id=org_id,
             )
 
     async def create_activity_entity(
@@ -262,6 +271,8 @@ class UserSessionMixin:
         content: str,
         secrets_used: List[str] | None = None,
         metadata: Dict[str, Any] | None = None,
+        *,
+        org_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create an activity entity within a chat session.
 
@@ -289,10 +300,12 @@ class UserSessionMixin:
                 observations=[content],
                 metadata=activity_metadata,
                 tags=["activity", activity_type.replace("_activity", "")],
-                owner=OwnerScope.for_user(user_id),  # #18825: the acting principal, never an unvetted body field
+                owner=OwnerScope.for_user(
+                    user_id, org_id
+                ),  # #18825: the acting principal, never an unvetted body field
             )
             await self._create_activity_relations(session_id, entity["id"], user_id)
-            await self._create_secret_usage_relations(entity["id"], user_id, activity_type, secrets_used)
+            await self._create_secret_usage_relations(entity["id"], user_id, activity_type, secrets_used, org_id=org_id)
             logger.info("Created %s entity for session %s", activity_type, session_id)
             return entity
 
@@ -329,7 +342,8 @@ class UserSessionMixin:
             )
 
             for rel in owned_relations.get("relations", []):
-                session = await self.get_entity(entity_id=rel["to"])
+                # Following the user's own owns/has_session edges: the edge from user_id is the authorization.
+                session = await self.get_entity(entity_id=rel["to"], owner=UNSCOPED_ALL_USERS)
                 if session and session.get("metadata", {}).get("session_id"):
                     sessions.append(session)
 
@@ -409,7 +423,8 @@ class UserSessionMixin:
 
         activities = []
         for rel in relations.get("relations", []):
-            activity = await self.get_entity(entity_id=rel["to"])
+            # Following has_activity edges of a session the caller already resolved: the edge is the authorization.
+            activity = await self.get_entity(entity_id=rel["to"], owner=UNSCOPED_ALL_USERS)
             if not activity:
                 continue
 

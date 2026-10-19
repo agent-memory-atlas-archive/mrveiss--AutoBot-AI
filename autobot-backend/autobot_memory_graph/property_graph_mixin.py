@@ -65,6 +65,19 @@ def _serialize_hop(hop: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _path_query(
+    from_entity: str, to_entity: str, relation: str | None, max_depth: int, direction: str
+) -> Dict[str, Any]:
+    """The echo of the caller's request carried on every path result."""
+    return {
+        "from_entity": from_entity,
+        "to_entity": to_entity,
+        "relation": relation,
+        "max_depth": max_depth,
+        "direction": direction,
+    }
+
+
 def _path_result(
     from_node: Dict[str, Any] | None,
     to_node: Dict[str, Any] | None,
@@ -241,55 +254,50 @@ class PropertyGraphMixin:
         *,
         owner: Any,
     ) -> Dict[str, Any]:
-        """Return the shortest relationship path between two named entities.
+        """Shortest relationship path between two named entities, within ``owner``'s scope.
 
-        This is the name-addressed entry point to ``PropertyGraph.shortest_path``
-        — callers hold entity *names*, the property graph is keyed by entity
-        *ids*, and #13474 wired the two together so the traversal has a
-        production caller (the Graph-RAG ``/path`` endpoint and the
-        ``memory.path`` MCP tool both land here, so the resolution and
-        serialisation live in exactly one place).
-
-        Args:
-            from_entity: Source entity name.
-            to_entity: Target entity name.
-            relation: Restrict traversal to this relation type; None = all.
-            max_depth: Maximum path length to search.
-            direction: ``"outgoing"``, ``"incoming"``, or ``"both"`` (default —
-                connection questions are usually undirected).
-            owner: REQUIRED OwnerScope / UNSCOPED_ALL_USERS (#18825). Both endpoints
-                are resolved within the scope and the traversal drops every hop the
-                owner may not read, so a path never runs through another owner's node.
-
-        Returns:
-            Dict with ``found``, ``reason``, ``missing_entities``,
-            ``from_entity``, ``to_entity``, ``hops``, ``path`` and ``query``.
-            Redis failures propagate: a traversal that could not run must not be
-            reported as "no path".
+        Name-addressed entry point to ``PropertyGraph.shortest_path`` (#13474), shared by the
+        Graph-RAG ``/path`` endpoint and the ``memory.path`` MCP tool. ``owner`` is REQUIRED
+        (#18825): both endpoints resolve within it and every hop it may not read is dropped.
+        Returns ``found``, ``reason``, ``missing_entities``, ``from_entity``, ``to_entity``,
+        ``hops``, ``path``, ``query``. Redis failures propagate: not-run is never "no path".
         """
         require_scope(owner)
+        query = _path_query(from_entity, to_entity, relation, max_depth, direction)
         from_node, to_node = await asyncio.gather(
             self.get_entity(entity_name=from_entity, owner=owner),  # type: ignore[attr-defined]
             self.get_entity(entity_name=to_entity, owner=owner),  # type: ignore[attr-defined]
         )
-        query = {
-            "from_entity": from_entity,
-            "to_entity": to_entity,
-            "relation": relation,
-            "max_depth": max_depth,
-            "direction": direction,
-        }
         missing = [name for name, node in ((from_entity, from_node), (to_entity, to_node)) if node is None]
         if missing:
-            # get_entity swallows infrastructure errors and returns None, so a
-            # bare None cannot be trusted to mean "no such entity" — during a
-            # Redis outage it means "we could not look". Telling the user their
-            # name is wrong when the store was unreachable is a false negative
-            # dressed as an answer, so confirm the store is up before saying it.
-            await self._assert_store_reachable()
-            logger.info("find_path: unresolved entity names %s", missing)
-            return _path_result(from_node, to_node, None, missing, query)
+            return await self._unresolved_path(from_node, to_node, missing, query)
+        return await self._path_between(from_node, to_node, query, owner)
 
+    async def _unresolved_path(
+        self: AutoBotMemoryGraphCore,
+        from_node: Dict[str, Any] | None,
+        to_node: Dict[str, Any] | None,
+        missing: List[str],
+        query: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """The result for names that did not resolve, once the store is confirmed reachable."""
+        # get_entity swallows infrastructure errors and returns None, so a
+        # bare None cannot be trusted to mean "no such entity" — during a
+        # Redis outage it means "we could not look". Telling the user their
+        # name is wrong when the store was unreachable is a false negative
+        # dressed as an answer, so confirm the store is up before saying it.
+        await self._assert_store_reachable()
+        logger.info("find_path: unresolved entity names %s", missing)
+        return _path_result(from_node, to_node, None, missing, query)
+
+    async def _path_between(
+        self: AutoBotMemoryGraphCore,
+        from_node: Dict[str, Any],
+        to_node: Dict[str, Any],
+        query: Dict[str, Any],
+        owner: Any,
+    ) -> Dict[str, Any]:
+        """Shortest path between two resolved endpoints, dropping hops ``owner`` may not read."""
         # An entity can exist in the main store yet have no property-graph node:
         # create_entity mirrors into the graph best-effort, and anything created
         # before the mirror existed was never mirrored at all. Reporting that as
@@ -302,9 +310,9 @@ class PropertyGraphMixin:
         raw_path = await self.graph.shortest_path(
             from_node["id"],
             to_node["id"],
-            relation=relation,
-            max_depth=max_depth,
-            direction=direction,
+            relation=query["relation"],
+            max_depth=query["max_depth"],
+            direction=query["direction"],
             hop_allowed=self._hop_reader(owner),
         )
         return _path_result(from_node, to_node, raw_path, [], query)

@@ -27,11 +27,17 @@ def activity_principal_id(ownership: Dict) -> str:
         raise HTTPException(status_code=403, detail="Authenticated user required")
 
 
+def activity_principal(ownership: Dict) -> tuple[str, str | None]:
+    """``(user_id, org_id)`` of the authenticated principal; the org is its JWT/TenantContext org, or None (#18825)."""
+    return activity_principal_id(ownership), ((ownership or {}).get("user_data") or {}).get("org_id") or None
+
+
 async def _store_single_activity(
     memory_graph: AutoBotMemoryGraph,
     session_id: str,
     activity: ActivityCreate,
     user_id: str,
+    org_id: str | None = None,
 ) -> Dict:
     """
     Store a single activity in memory graph.
@@ -47,6 +53,7 @@ async def _store_single_activity(
         activity_type=f"{activity.type}_activity",
         session_id=session_id,
         user_id=user_id,
+        org_id=org_id,
         content=activity.content,
         secrets_used=activity.secrets_used,
         metadata={
@@ -63,6 +70,7 @@ async def _process_activity_batch(
     activities: List[ActivityCreate],
     request_id: str,
     user_id: str,
+    org_id: str | None = None,
 ) -> Dict:
     """
     Process a batch of activities and store them in memory graph.
@@ -85,7 +93,7 @@ async def _process_activity_batch(
 
     for activity in activities:
         try:
-            await _store_single_activity(memory_graph, session_id, activity, user_id)
+            await _store_single_activity(memory_graph, session_id, activity, user_id, org_id)
             stored_count += 1
             stored_ids.append(activity.activity_id)
         except Exception as activity_error:

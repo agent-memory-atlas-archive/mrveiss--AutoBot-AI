@@ -3401,11 +3401,11 @@ before summarizing.
         if language:
             session.metadata["language"] = language
 
-        # #11261: stash caller identity so the prompt-build path can scope
-        # trajectory retrieval to this user/tenant (strict isolation, #11089).
+        # #11261/#18825: stash caller identity (user, tenant, org) to scope trajectory and graph reads (#11089).
         if context:
             session.metadata["user_id"] = context.get("user_id") or ""
             session.metadata["tenant_id"] = context.get("tenant_id") or context.get("org_id") or ""
+            session.metadata["org_id"] = context.get("org_id") or ""
             # #11501 T2: CEO-chat path carries company_id — used to append the
             # board-tool teaching to the system prompt for this turn only.
             session.metadata["company_id"] = context.get("company_id") or ""

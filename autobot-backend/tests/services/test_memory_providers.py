@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, create_autospec, patch
 
 import pytest
 
-from autobot_memory_graph import OwnerScope
+from autobot_memory_graph import UNSCOPED_ALL_USERS, OwnerScope
 from services.memory import (
     PostgresMemoryProvider,
     RedisMemoryProvider,
@@ -120,7 +120,7 @@ class TestPostgresMemoryProvider:
 
         await provider.update_entity("e1", {"observations": ["port: 6379"]})
 
-        graph.get_entity.assert_awaited_once_with(entity_id="e1")
+        graph.get_entity.assert_awaited_once_with(entity_id="e1", owner=UNSCOPED_ALL_USERS)
         graph.add_observations.assert_awaited_once_with("Redis", ["port: 6379"])
 
     @pytest.mark.asyncio

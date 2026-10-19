@@ -83,7 +83,8 @@ class TestEntityVisibility:
 
     def test_the_redis_clause_filters_on_the_owner_tag_and_is_empty_when_unscoped(self):
         clause = redis_owner_clause(ALICE)
-        assert clause.startswith("@owner_user_id:{") and "__shared__" in clause
+        assert "@owner_user_id:{" in clause and "__shared__" in clause
+        assert "@owner_org_id:{" in clause and "__no_org__" in clause
         assert redis_owner_clause(UNSCOPED_ALL_USERS) == ""
         with pytest.raises(OwnerScopeRequired):
             redis_owner_clause(None)

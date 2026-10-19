@@ -35,6 +35,18 @@ logger = get_logger(__name__)
 
 ENTITY_KEY_PREFIX = "memory:entity:"
 
+
+class EntityNameInUse(PermissionError):
+    """The name belongs to an entity the caller may not read.
+
+    The message is fixed on purpose: it never carries the name, so neither a response nor a
+    log line built from it can act as an existence oracle (#18825).
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Entity name already in use")
+
+
 #: KEYS[1] name index, KEYS[2] new entity document; ARGV[1] new id, ARGV[2] document
 #: JSON, ARGV[3] entity key prefix. Returns the id that owns the name afterwards.
 CLAIM_AND_WRITE_LUA = """
@@ -118,30 +130,30 @@ async def get_or_create(
     graph._validate_entity_inputs(entity_type, name)
     existing = await indexed_entity(graph, name) or await adopt_legacy_entity(graph, name)
     if existing:
-        _require_readable(existing, owner, name)
+        _require_readable(existing, owner)
         return existing, False
     entity_id = str(uuid.uuid4())
     entity_metadata = graph._prepare_entity_metadata(metadata, tags, owner)
     entity = graph._build_entity_document(entity_id, entity_type, name, observations, entity_metadata, owner)
-    owner = await claim_and_write(graph, name, entity)
-    if owner != entity_id:
-        winner = await graph.redis_client.json().get(f"{ENTITY_KEY_PREFIX}{owner}")
+    winner_id = await claim_and_write(graph, name, entity)
+    if winner_id != entity_id:
+        winner = await graph.redis_client.json().get(f"{ENTITY_KEY_PREFIX}{winner_id}")
         if winner is None:
             raise RuntimeError(f"Entity {name!r} changed while being created; retry")
-        _require_readable(winner, owner, name)
+        _require_readable(winner, owner)
         return winner, False
     if graph.knowledge_base:
         await graph._generate_entity_embedding(entity_id, entity)
-    logger.info("Created entity: %s (%s) with ID %s", name, entity_type, entity_id[:8] + "...")
+    logger.info("Created entity of type %s with ID %s", entity_type, entity_id[:8] + "...")
     return entity, True
 
 
-def _require_readable(existing: Dict[str, Any], owner: OwnerScope, name: str) -> None:
+def _require_readable(existing: Dict[str, Any], owner: OwnerScope) -> None:
     """Refuse to hand back (or reveal) an entity that belongs to someone else. #18825."""
     # A platform writer re-finding its own pre-#18825 (ownerless) entity is idempotence, not a leak.
     legacy_platform = not existing.get(OWNER_USER_FIELD) and owner.user_id in (SHARED_OWNER_ID, SYSTEM_OWNER_ID)
     if not (legacy_platform or entity_visible(existing, owner)):
-        raise PermissionError(f"Entity name {name!r} is already in use")
+        raise EntityNameInUse()
 
 
 async def release_name(graph: AutoBotMemoryGraphCore, name: str, entity_id: str) -> None:

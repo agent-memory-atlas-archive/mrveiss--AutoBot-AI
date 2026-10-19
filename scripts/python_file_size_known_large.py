@@ -77,7 +77,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/browser_mcp.py": 1323,
     "autobot-backend/api/cache_management.py": 779,
     "autobot-backend/api/chat.py": 2690,  # #18316: delete delegates to the canonical path
-    "autobot-backend/api/chat_sessions.py": 1869,  # #18293: legacy transcripts only ever proposed
+    "autobot-backend/api/chat_sessions.py": 1867,  # #18293: legacy transcripts only ever proposed
     "autobot-backend/api/code_intelligence.py": 2154,
     "autobot-backend/api/code_search.py": 828,
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,
@@ -133,7 +133,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_knowledge.py": 5133,
     "autobot-backend/api/schemas_system.py": 4362,  # #13051: SecretModel ownership fields
     "autobot-backend/api/schemas_workflows.py": 2917,
-    "autobot-backend/api/secrets.py": 1182,  # #16444 review: except HTTPException, ValueError handlers
+    "autobot-backend/api/secrets.py": 1179,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
     "autobot-backend/api/settings.py": 881,
     "autobot-backend/api/system.py": 1011,
@@ -265,7 +265,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/llm_shared/provider_auth.py": 653,
     "autobot-backend/llm_shared/tests/test_provider_auth.py": 1187,
     "autobot-backend/markdown_reference_system.py": 707,
-    "autobot-backend/mcp_server/autobot_server.py": 932,
+    "autobot-backend/mcp_server/autobot_server.py": 790,
     "autobot-backend/mcp_server/mcp_security_test.py": 812,
     "autobot-backend/media/link/pipeline_test.py": 965,
     "autobot-backend/memory/manager.py": 979,

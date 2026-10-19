@@ -24,6 +24,8 @@ from .owner_scope import entity_visible, redis_owner_clause, require_scope
 
 logger = get_logger(__name__)
 
+_FETCH_BATCH_SIZE = 50
+
 
 def _is_entity_valid(entity: Dict[str, Any]) -> bool:
     """Return True if entity is currently valid.
@@ -218,6 +220,22 @@ class QueryOperationsMixin:
                 break
         return keys
 
+    async def _iter_entity_batches(self: AutoBotMemoryGraphCore, keys: List[str]):
+        """Yield the document under each key (None when absent), pipelined 50 keys per round trip."""
+        for i in range(0, len(keys), _FETCH_BATCH_SIZE):
+            pipe = self.redis_client.pipeline()
+            for key in keys[i : i + _FETCH_BATCH_SIZE]:
+                pipe.json().get(key)
+            for entity in await pipe.execute():
+                yield entity
+
+    async def readable_entity_ids(self: AutoBotMemoryGraphCore, entity_ids: List[str], *, owner: Any) -> set[str]:
+        """The subset of ``entity_ids`` that exist and ``owner`` may read: batched, not one get per id (#18825)."""
+        require_scope(owner)
+        unique = list(dict.fromkeys(i for i in entity_ids if i))
+        docs = [d async for d in self._iter_entity_batches([f"memory:entity:{i}" for i in unique])]
+        return {i for i, doc in zip(unique, docs) if entity_visible(doc, owner)}
+
     async def _batch_fetch_and_filter_entities(
         self: AutoBotMemoryGraphCore,
         keys: List[str],
@@ -230,49 +248,21 @@ class QueryOperationsMixin:
         tags: List[str] | None = None,
         status: str | None = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Fetch entities in batches and filter by query criteria.
+        """Fetch entities in batches, keep up to ``limit`` that match the query and ``owner`` may read.
 
-        Issue #620.
-        Issue #3790: added include_expired filter.
-
-        Args:
-            keys: List of Redis keys to fetch
-            query_lower: Lowercase search query
-            entity_type: Optional entity type filter
-            limit: Maximum entities to return
-            include_expired: When False (default), exclude invalidated entities
-            owner: Required OwnerScope / UNSCOPED_ALL_USERS (#18825)
-            tags: Optional tag filter (any match)
-            status: Optional status filter
-
-        Returns:
-            List of matching entity dictionaries
+        Issue #620, #3790 (``include_expired``), #18825 (``owner`` is required).
         """
         require_scope(owner)
-        batch_size = 50
-        entities = []
-
-        for i in range(0, len(keys), batch_size):
-            batch_keys = keys[i : i + batch_size]
-
-            pipe = self.redis_client.pipeline()
-            for key in batch_keys:
-                pipe.json().get(key)
-            batch_results = await pipe.execute()
-
-            for entity in batch_results:
-                if not entity:
-                    continue
-                if not include_expired and not _is_entity_valid(entity):
-                    continue
-                if not entity_visible(entity, owner):
-                    continue
-                if self._entity_matches_query(entity, query_lower, entity_type, tags, status):
-                    entities.append(entity)
-                    if len(entities) >= limit:
-                        return entities
-
+        entities: List[Dict[str, Any]] = []
+        async for entity in self._iter_entity_batches(keys):
+            if not entity or (not include_expired and not _is_entity_valid(entity)):
+                continue
+            if entity_visible(entity, owner) and self._entity_matches_query(
+                entity, query_lower, entity_type, tags, status
+            ):
+                entities.append(entity)
+                if len(entities) >= limit:
+                    break
         return entities
 
     async def _fallback_search(
@@ -361,7 +351,9 @@ class QueryOperationsMixin:
             redis_query = self._build_redis_search_query(query, entity_type, tags, status, owner)
             try:
                 entities = await self._execute_redis_search(redis_query, limit)
-                entities = [e for e in entities if entity_visible(e, owner)]  # org check + defence in depth
+                entities = [
+                    e for e in entities if entity_visible(e, owner)
+                ]  # backstop: the query already carries the owner/org clause
                 if not include_expired:
                     entities = [e for e in entities if _is_entity_valid(e)]
                 logger.info("Search query '%s' returned %d results", query, len(entities))

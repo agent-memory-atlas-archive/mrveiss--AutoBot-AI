@@ -147,19 +147,11 @@ class RelationTraversalMixin:
         *,
         owner: Any,
     ) -> List[Dict[str, Any]]:
-        """Get entities related to specified entity.
+        """Entities related to ``entity_name``, each with relation metadata.
 
-        Args:
-            entity_name: Name of entity
-            relation_type: Filter by relation type (None = all types)
-            direction: "outgoing", "incoming", or "both"
-            max_depth: Relationship traversal depth (1-3)
-            owner: REQUIRED OwnerScope / UNSCOPED_ALL_USERS (#18825). The start entity
-                is resolved within the scope; neighbours the owner may not read are
-                dropped and not traversed through.
-
-        Returns:
-            List of related entities with relation metadata
+        ``relation_type`` filters (None = all); ``direction`` is "outgoing", "incoming" or "both";
+        ``max_depth`` is the traversal depth (1-3). ``owner`` is REQUIRED (#18825): the start entity
+        is resolved within it, and neighbours it may not read are dropped and not traversed through.
         """
         self.ensure_initialized()
         require_scope(owner)
@@ -169,25 +161,31 @@ class RelationTraversalMixin:
             entity = await self.get_entity(entity_name=entity_name, owner=owner)
             if not entity:
                 return []
-
-            entity_id = entity["id"]
-            related = []
-            visited = set()
-            queue = [(entity_id, 0)]
-
-            while queue:
-                current_id, depth = queue.pop(0)
-                if current_id in visited or depth > max_depth:
-                    continue
-                visited.add(current_id)
-
-                direction_related = await self._fetch_and_process_relations(
-                    current_id, direction, relation_type, depth, max_depth, queue, owner
-                )
-                related.extend(direction_related)
-
-            return related
-
+            return await self._traverse_related(entity["id"], direction, relation_type, max_depth, owner)
         except Exception as e:
             logger.error("Failed to get related entities: %s", e)
             return []
+
+    async def _traverse_related(
+        self: AutoBotMemoryGraphCore,
+        entity_id: str,
+        direction: str,
+        relation_type: str | None,
+        max_depth: int,
+        owner: Any,
+    ) -> List[Dict[str, Any]]:
+        """Breadth-first walk from ``entity_id`` collecting readable neighbours up to ``max_depth``."""
+        related: List[Dict[str, Any]] = []
+        visited: set = set()
+        queue = [(entity_id, 0)]
+        while queue:
+            current_id, depth = queue.pop(0)
+            if current_id in visited or depth > max_depth:
+                continue
+            visited.add(current_id)
+            related.extend(
+                await self._fetch_and_process_relations(
+                    current_id, direction, relation_type, depth, max_depth, queue, owner
+                )
+            )
+        return related

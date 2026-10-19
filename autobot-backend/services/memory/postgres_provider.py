@@ -6,7 +6,7 @@
 
 from typing import Any, Dict, List
 
-from autobot_memory_graph import AutoBotMemoryGraph, OwnerScope, OwnerScopeRequired
+from autobot_memory_graph import UNSCOPED_ALL_USERS, AutoBotMemoryGraph, OwnerScope, OwnerScopeRequired
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
@@ -133,18 +133,22 @@ class PostgresMemoryProvider:
             logger.error(f"Error searching memory: {e}")
             return []
 
-    async def get_entity(self, entity_id: str) -> Dict[str, Any] | None:
+    async def get_entity(self, entity_id: str, *, owner: OwnerScope | None = None) -> Dict[str, Any] | None:
         if not self.memory_graph:
             return None
+        if owner is None:
+            logger.warning("Entity read refused: no caller scope supplied (fail closed, #18825)")
+            return None
         try:
-            return await self.memory_graph.get_entity(entity_id)
+            return await self.memory_graph.get_entity(entity_id=entity_id, owner=owner)
         except Exception as e:
             logger.error(f"Error getting entity {entity_id}: {e}")
             return None
 
     async def _name_for_id(self, entity_id: str) -> str:
         """Resolve an entity id to the name the graph's write API is keyed by (#18414)."""
-        entity = await self.memory_graph.get_entity(entity_id=entity_id)
+        # Id -> name resolution for a by-name mutation; by-name mutations are not owner-scoped (#18876).
+        entity = await self.memory_graph.get_entity(entity_id=entity_id, owner=UNSCOPED_ALL_USERS)
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
         return entity["name"]
@@ -191,7 +195,9 @@ class PostgresMemoryProvider:
         if not self.memory_graph:
             return False
         try:
-            await self.memory_graph.get_entity("_health_check")
+            await self.memory_graph.get_entity(
+                "_health_check", owner=UNSCOPED_ALL_USERS
+            )  # liveness probe, reads no user data
             return True
         except Exception as e:
             logger.error(f"PostgreSQL memory provider health check failed: {e}")

@@ -12,6 +12,18 @@ explicit :data:`UNSCOPED_ALL_USERS` sentinel (same pattern as
 
 Entities that carry no owner (everything written before #18825) are invisible to scoped
 reads. They are never rewritten here -- a backfill is a human-approved action (#17038).
+
+ORG RULE (one rule, applied on write and read):
+
+* WRITE: the org is the principal's org from its TenantContext / JWT (``org_id``), under the
+  one key ``owner_org_id``. A principal with no org stamps the sentinel :data:`NO_ORG`
+  (a real tag value, because RediSearch cannot match a missing or null TAG).
+* READ: an entity owned by user U with no org is visible to U in ANY org context. An entity
+  stamped with org X is visible only in org X. ``__shared__`` entities are visible to everyone.
+  The same rule is built into the RediSearch query (:func:`redis_owner_clause`) and enforced
+  again in Python (:func:`entity_visible`), so the two cannot disagree.
+  A document stored earlier with a null org is read by the Python path only (the scan fallback);
+  RediSearch cannot match a null TAG, and nothing here rewrites stored entities (#17038).
 """
 
 from __future__ import annotations
@@ -21,6 +33,8 @@ from typing import Any, Dict
 
 OWNER_USER_FIELD = "owner_user_id"
 OWNER_ORG_FIELD = "owner_org_id"
+#: Tag stamped in ``owner_org_id`` when the owner has no org (RediSearch cannot index a null TAG).
+NO_ORG = "__no_org__"
 
 #: Entities every authenticated principal may read (explicit, never a default).
 SHARED_OWNER_ID = "__shared__"
@@ -110,7 +124,7 @@ def require_writer(owner: Any) -> OwnerScope:
 
 def owner_fields(owner: OwnerScope) -> Dict[str, Any]:
     """The top-level document fields that record ownership."""
-    return {OWNER_USER_FIELD: owner.user_id, OWNER_ORG_FIELD: owner.org_id}
+    return {OWNER_USER_FIELD: owner.user_id, OWNER_ORG_FIELD: owner.org_id or NO_ORG}
 
 
 def entity_visible(entity: Dict[str, Any] | None, owner: Any) -> bool:
@@ -124,14 +138,23 @@ def entity_visible(entity: Dict[str, Any] | None, owner: Any) -> bool:
         return False
     if entity_user == SHARED_OWNER_ID:
         return True
-    return entity_user == owner.user_id and (entity.get(OWNER_ORG_FIELD) or None) == owner.org_id
+    if entity_user != owner.user_id:
+        return False
+    entity_org = entity.get(OWNER_ORG_FIELD)
+    return entity_org in (None, "", NO_ORG) or entity_org == owner.org_id
 
 
 def redis_owner_clause(owner: Any) -> str:
-    """RediSearch filter fragment for the owner (empty when unscoped). Org is checked post-fetch."""
+    """RediSearch filter for the owner (empty when unscoped); same rule as :func:`entity_visible`.
+
+    ``(own entities in an org the owner may see) | shared``. Entities written without an org
+    carry the :data:`NO_ORG` tag, so they match in every org context. Python re-checks every hit.
+    """
     from autobot_shared.security.input_sanitizer import escape_redisearch_tag
 
     if require_scope(owner) is UNSCOPED_ALL_USERS:
         return ""
-    ids = "|".join(escape_redisearch_tag(i) for i in (owner.user_id, SHARED_OWNER_ID))
-    return f"@{OWNER_USER_FIELD}:{{{ids}}}"
+    orgs = [NO_ORG] + ([owner.org_id] if owner.org_id else [])
+    org_tags = "|".join(escape_redisearch_tag(o) for o in orgs)
+    own = f"(@{OWNER_USER_FIELD}:{{{escape_redisearch_tag(owner.user_id)}}} @{OWNER_ORG_FIELD}:{{{org_tags}}})"
+    return f"({own} | @{OWNER_USER_FIELD}:{{{escape_redisearch_tag(SHARED_OWNER_ID)}}})"

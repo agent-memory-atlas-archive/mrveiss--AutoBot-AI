@@ -410,7 +410,7 @@ async def _collect_collection_edges(service: GraphRAGService, node_ids: List[str
     #18825: an edge whose target the caller may not read is dropped, so neither the target's
     id nor the relation type to it leaves the owner's scope.
     """
-    edges: List[Metadata] = []
+    candidates: List[Metadata] = []
     seen: set = set()
     for entity_id in node_ids:
         relations = await service.graph.get_relations(entity_id=entity_id, direction="outgoing")
@@ -419,9 +419,10 @@ async def _collect_collection_edges(service: GraphRAGService, node_ids: List[str
             if key in seen:
                 continue
             seen.add(key)
-            if await service.graph.get_entity(entity_id=rel.get("to"), owner=owner):
-                edges.append(rel)
-    return edges
+            candidates.append(rel)
+    # One batched visibility check for every distinct target, not one get_entity per edge (#18825).
+    readable = await service.graph.readable_entity_ids([r.get("to") for r in candidates], owner=owner)
+    return [rel for rel in candidates if rel.get("to") in readable]
 
 
 @router.get("/collections/{collection_id}/graph")

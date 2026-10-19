@@ -21,7 +21,7 @@ from api.chat_activity_store import _store_single_activity, activity_principal_i
 from api.graph_rag import collection_graph, graph_rag_path, graph_rag_search  # noqa: E402
 from api.schemas_chat import ActivityCreate  # noqa: E402
 from api.schemas_knowledge import GraphRAGPathRequest, GraphRAGSearchRequest  # noqa: E402
-from autobot_memory_graph.owner_scope import OwnerScopeRequired, entity_visible  # noqa: E402
+from autobot_memory_graph.owner_scope import OwnerScopeRequired  # noqa: E402
 from autobot_shared.user_management.base_service import TenantContext  # noqa: E402
 from chat_history.layers import Layer2OnDemand  # noqa: E402
 from services.memory.postgres_provider import PostgresMemoryProvider  # noqa: E402
@@ -45,11 +45,6 @@ def _collection_service(search_down=True):
     graph = QueryHost(ALL_DOCS, search_down)
     graph.get_relations = AsyncMock(return_value={"relations": []})
 
-    async def get_entity(entity_id=None, owner=None, **_):
-        doc = graph.redis_client.docs.get(f"memory:entity:{entity_id}")
-        return doc if entity_visible(doc, owner) else None
-
-    graph.get_entity = get_entity
     return SimpleNamespace(graph=graph)
 
 

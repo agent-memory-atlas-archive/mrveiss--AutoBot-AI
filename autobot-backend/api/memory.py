@@ -121,7 +121,7 @@ async def _get_entity_name_by_id(memory_graph: AutoBotMemoryGraph, entity_id: st
     Raises:
         HTTPException: If entity not found
     """
-    entity = await memory_graph.get_entity(entity_id=entity_id)
+    entity = await memory_graph.get_entity(entity_id=entity_id, owner=_ADMIN_SCOPE)
     if entity is None:
         raise HTTPException(status_code=404, detail=f"Entity not found: {entity_id}")
     return entity["name"]
@@ -155,7 +155,7 @@ async def _get_entity_graph_for_id(
     Raises:
         HTTPException: If entity not found
     """
-    entity = await memory_graph.get_entity(entity_id=entity_id, include_relations=True)
+    entity = await memory_graph.get_entity(entity_id=entity_id, include_relations=True, owner=_ADMIN_SCOPE)
 
     if entity is None:
         raise HTTPException(status_code=404, detail=f"Entity not found: {entity_id}")
@@ -764,7 +764,7 @@ async def get_entity_by_id(
     try:
         logger.info("[%s] Retrieving entity: %s", request_id, entity_id)
 
-        entity = await memory_graph.get_entity(entity_id=entity_id, include_relations=include_relations)
+        entity = await memory_graph.get_entity(entity_id, include_relations=include_relations, owner=_ADMIN_SCOPE)
 
         if entity is None:
             logger.warning("[%s] Entity not found: %s", request_id, entity_id)
