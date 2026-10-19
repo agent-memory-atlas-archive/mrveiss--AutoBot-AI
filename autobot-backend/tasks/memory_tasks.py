@@ -79,7 +79,7 @@ async def _upsert_graph_entity(graph, entity: dict, session_id: str) -> None:
 
     A lookup error propagates (the caller counts it as a failure); it is never read as absence.
     """
-    from autobot_memory_graph import OwnerScope
+    from autobot_memory_graph.owner_scope import OwnerScope
 
     name = entity.get("name", "")
     observations = [f"{k}: {v}" for k, v in (entity.get("properties") or {}).items()]

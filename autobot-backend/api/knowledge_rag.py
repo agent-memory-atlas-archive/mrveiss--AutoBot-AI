@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.knowledge_rag_loop import router as _loop_router
 from auth_middleware import check_admin_permission, get_current_user
-from autobot_memory_graph import OwnerScope, OwnerScopeRequired
+from autobot_memory_graph.owner_scope import OwnerScope, OwnerScopeRequired
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from knowledge.schemas.rag import (

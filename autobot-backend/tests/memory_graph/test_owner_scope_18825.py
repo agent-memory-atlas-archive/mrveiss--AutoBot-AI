@@ -197,7 +197,7 @@ class TestWritesStampTheOwner:
     async def test_create_entity_records_owner_user_and_org_and_created_by(self):
         host = WriteHost()
 
-        entity = await host.create_entity("task", "T", ["o"], owner=OwnerScope.for_user(ALICE_ID, "org-1"))
+        entity = await host.create_entity("TASK", "T", ["o"], owner=OwnerScope.for_user(ALICE_ID, "org-1"))
 
         assert entity["owner_user_id"] == ALICE_ID and entity["owner_org_id"] == "org-1"
         assert entity["metadata"]["created_by"] == ALICE_ID  # no longer overwritten with "autobot"
@@ -209,15 +209,15 @@ class TestWritesStampTheOwner:
         host = WriteHost()
 
         with pytest.raises(TypeError):
-            await host.create_entity("task", "T", ["o"])
+            await host.create_entity("TASK", "T", ["o"])
         with pytest.raises(OwnerScopeRequired):
-            await host.create_entity("task", "T", ["o"], owner=UNSCOPED_ALL_USERS)
+            await host.create_entity("TASK", "T", ["o"], owner=UNSCOPED_ALL_USERS)
         with pytest.raises(OwnerScopeRequired):
-            await host.create_entity("task", "T", ["o"], owner=None)
+            await host.create_entity("TASK", "T", ["o"], owner=None)
 
     @pytest.mark.asyncio
     async def test_platform_entities_are_stamped_system_and_hidden_from_users(self):
-        entity = await WriteHost().create_entity("task", "T", ["o"], owner=OwnerScope.system())
+        entity = await WriteHost().create_entity("TASK", "T", ["o"], owner=OwnerScope.system())
 
         assert not entity_visible(entity, ALICE)
         assert entity_visible(entity, UNSCOPED_ALL_USERS)
@@ -233,8 +233,8 @@ class TestWritesStampTheOwner:
         graph.redis_client = redis
 
         with pytest.raises(PermissionError):
-            await graph.get_or_create_entity("conversation", "Conversation bob", [], owner=ALICE)
-        entity, created = await graph.get_or_create_entity("conversation", "Conversation bob", [], owner=BOB)
+            await graph.get_or_create_entity("CONVERSATION", "Conversation bob", [], owner=ALICE)
+        entity, created = await graph.get_or_create_entity("CONVERSATION", "Conversation bob", [], owner=BOB)
         assert created is False and entity["id"] == "c-bob"
 
     def test_session_owner_scope_uses_the_stamped_identity_and_never_fails_open(self):

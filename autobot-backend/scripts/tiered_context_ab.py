@@ -41,6 +41,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from autobot_memory_graph.owner_scope import OwnerScope, owner_fields  # noqa: E402
+
+_AB_OWNER = OwnerScope.for_user("ab-user")  # L2 is owner-scoped; production passes the turn principal (#18825)
+
 REPEATS = 20
 
 # Prompts chosen to exercise one trigger each, plus one that fires none.
@@ -86,6 +90,7 @@ ENTITY_FACTS = [
         "updated_at": 0,
         "observations": ["in-memory store backing session state"],
         "metadata": {},
+        **owner_fields(_AB_OWNER),
     }
 ]
 # L3 returns whatever the knowledge service hands back — it adds no heading of
@@ -100,9 +105,7 @@ def _memory_graph() -> Any:
 
 
 def _ab_owner() -> Any:
-    from autobot_memory_graph.owner_scope import OwnerScope
-
-    return OwnerScope.for_user("ab-user")
+    return _AB_OWNER
 
 
 def _knowledge_service() -> Any:

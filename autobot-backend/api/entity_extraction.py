@@ -39,7 +39,7 @@ from api.schemas_knowledge import (
     ExtractionMessage,
 )
 from auth_middleware import get_current_user
-from autobot_memory_graph import OwnerScope, OwnerScopeRequired
+from autobot_memory_graph.owner_scope import OwnerScope, OwnerScopeRequired
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import utc_timestamp

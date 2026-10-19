@@ -8,8 +8,8 @@ Existing service tests exercise traversal, blending and timeouts, not scoping, s
 across owners on purpose. Owner scoping itself is proved in ``test_owner_scope_18825.py``.
 """
 
-from functools import partial
-from typing import Any
+import inspect
+from typing import Any, Callable
 
 from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS
 from services.graph_rag_service import GraphRAGService as _BaseGraphRAGService
@@ -23,10 +23,22 @@ _OWNER_SCOPED_METHODS = (
 )
 
 
+def _with_default_owner(method: Callable) -> Callable:
+    """Supply ``owner=UNSCOPED_ALL_USERS`` only when the caller (a test or an internal call) gave none."""
+    signature = inspect.signature(method)
+
+    async def call(*args: Any, **kwargs: Any) -> Any:
+        if "owner" not in signature.bind_partial(*args, **kwargs).arguments:
+            kwargs["owner"] = UNSCOPED_ALL_USERS
+        return await method(*args, **kwargs)
+
+    return call
+
+
 def unscoped(service: Any) -> Any:
-    """Bind ``owner=UNSCOPED_ALL_USERS`` as the default for the service's owner-scoped methods."""
+    """Default the service's owner-scoped methods to the unscoped sentinel; an explicit or positional owner wins."""
     for name in _OWNER_SCOPED_METHODS:
-        setattr(service, name, partial(getattr(service, name), owner=UNSCOPED_ALL_USERS))
+        setattr(service, name, _with_default_owner(getattr(service, name)))
     return service
 
 

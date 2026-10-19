@@ -57,8 +57,8 @@ from api.schemas_knowledge import (
 )
 from api.system_health import ComponentHealth, register_health_probe
 from auth_middleware import check_admin_permission
-from autobot_memory_graph import UNSCOPED_ALL_USERS as _ADMIN_SCOPE  # admin-gated routes read across owners (#18825)
-from autobot_memory_graph import AutoBotMemoryGraph, OwnerScope
+from autobot_memory_graph import AutoBotMemoryGraph
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS, OwnerScope
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import now_utc
@@ -121,7 +121,7 @@ async def _get_entity_name_by_id(memory_graph: AutoBotMemoryGraph, entity_id: st
     Raises:
         HTTPException: If entity not found
     """
-    entity = await memory_graph.get_entity(entity_id=entity_id, owner=_ADMIN_SCOPE)
+    entity = await memory_graph.get_entity(entity_id=entity_id, owner=UNSCOPED_ALL_USERS)
     if entity is None:
         raise HTTPException(status_code=404, detail=f"Entity not found: {entity_id}")
     return entity["name"]
@@ -155,7 +155,7 @@ async def _get_entity_graph_for_id(
     Raises:
         HTTPException: If entity not found
     """
-    entity = await memory_graph.get_entity(entity_id=entity_id, include_relations=True, owner=_ADMIN_SCOPE)
+    entity = await memory_graph.get_entity(entity_id=entity_id, include_relations=True, owner=UNSCOPED_ALL_USERS)
 
     if entity is None:
         raise HTTPException(status_code=404, detail=f"Entity not found: {entity_id}")
@@ -175,7 +175,7 @@ async def _get_entity_graph_sample(memory_graph: AutoBotMemoryGraph) -> Dict:
     Returns:
         Dict with sample entity graph data
     """
-    entities = await memory_graph.search_entities(query="*", limit=50, owner=_ADMIN_SCOPE)
+    entities = await memory_graph.search_entities(query="*", limit=50, owner=UNSCOPED_ALL_USERS)
 
     return {
         "entities": entities[:20],  # Limit to 20 for graph visualization
@@ -370,7 +370,7 @@ async def list_all_entities(
         logger.info("[%s] Listing entities: type=%s, limit=%s", request_id, entity_type, limit)
 
         entities = await memory_graph.search_entities(
-            query="*", entity_type=entity_type, limit=limit, owner=_ADMIN_SCOPE
+            query="*", entity_type=entity_type, limit=limit, owner=UNSCOPED_ALL_USERS
         )
 
         logger.info("[%s] Found %s entities", request_id, len(entities))
@@ -412,7 +412,7 @@ async def find_orphaned_conversation_entities(
         logger.info("[%s] Scanning for orphaned conversation entities", request_id)
 
         all_entities = await memory_graph.search_entities(
-            query="*", entity_type="conversation", limit=1000, owner=_ADMIN_SCOPE
+            query="*", entity_type="conversation", limit=1000, owner=UNSCOPED_ALL_USERS
         )
 
         if not all_entities:
@@ -676,7 +676,7 @@ async def _detect_orphaned_entities(memory_graph: AutoBotMemoryGraph, request: R
         List of orphaned entities, empty list if none found
     """
     all_entities = await memory_graph.search_entities(
-        query="*", entity_type="conversation", limit=1000, owner=_ADMIN_SCOPE
+        query="*", entity_type="conversation", limit=1000, owner=UNSCOPED_ALL_USERS
     )
 
     if not all_entities:
@@ -764,7 +764,7 @@ async def get_entity_by_id(
     try:
         logger.info("[%s] Retrieving entity: %s", request_id, entity_id)
 
-        entity = await memory_graph.get_entity(entity_id, include_relations=include_relations, owner=_ADMIN_SCOPE)
+        entity = await memory_graph.get_entity(entity_id, include_relations=include_relations, owner=UNSCOPED_ALL_USERS)
 
         if entity is None:
             logger.warning("[%s] Entity not found: %s", request_id, entity_id)
@@ -819,7 +819,7 @@ async def get_entity_by_name(
         logger.info("[%s] Searching for entity by name: %s", request_id, name)
 
         entity = await memory_graph.get_entity(
-            entity_name=name, include_relations=include_relations, owner=_ADMIN_SCOPE
+            entity_name=name, include_relations=include_relations, owner=UNSCOPED_ALL_USERS
         )
 
         if entity is None:
@@ -1056,7 +1056,7 @@ async def get_related_entities(
             relation_type=relation_type,
             direction=direction,
             max_depth=max_depth,
-            owner=_ADMIN_SCOPE,
+            owner=UNSCOPED_ALL_USERS,
         )
         logger.info("[%s] Found %s related entities", request_id, len(related))
 
@@ -1189,7 +1189,7 @@ async def search_entities(
             tags=tag_list,
             status=status,
             limit=limit,
-            owner=_ADMIN_SCOPE,
+            owner=UNSCOPED_ALL_USERS,
         )
         logger.info("[%s] Search returned %s entities", request_id, len(entities))
 

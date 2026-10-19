@@ -15,12 +15,13 @@ hash/set/sorted-set operations PropertyGraph actually issues.
 
 from typing import Dict, List
 
-from autobot_memory_graph.owner_scope import entity_visible, require_scope
+from autobot_memory_graph.owner_scope import OwnerScope, entity_visible, require_scope
 from autobot_memory_graph.property_graph import PropertyGraph
 from autobot_memory_graph.property_graph_mixin import PropertyGraphMixin
 
 #: Owner id stamped on the harness entities (#18825); the wiring test's tenant uses the same id.
 HARNESS_OWNER_ID = "11111111-1111-1111-1111-111111111111"
+HARNESS_OWNER = OwnerScope.for_user(HARNESS_OWNER_ID)  # what the harness entities are stamped with
 
 
 class FakeRedis:

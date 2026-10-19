@@ -58,7 +58,7 @@ from autobot_shared.ssot_constants import QueryDefaults
 from knowledge.search_filters import filter_non_private_results, is_non_private, non_private_where
 from mcp_server.auth_throttle import UNKNOWN_IP, get_pre_auth_throttle
 from mcp_server.memory_tools import MemoryToolsMixin
-from mcp_server.principal import STDIO_CLIENT, bind_owner, principal_scope, unbind_owner
+from mcp_server.principal import STDIO_CLIENT, bind_owner, mcp_owner_scope, unbind_owner
 from services.run_jwt import validate_run_jwt
 
 logger = get_logger(__name__)
@@ -492,7 +492,7 @@ class AutoBotMCPServer(MemoryToolsMixin):
             if error:
                 return None, False, self._reject_auth(client_ip, error, req_id), None
             get_pre_auth_throttle().record_success(client_ip)
-            return scopes, True, None, principal_scope(claims, auth_token, client_ip)
+            return scopes, True, None, mcp_owner_scope(claims, auth_token, client_ip)
 
         scopes = self._validate_token(auth_token)
         if scopes is None:
@@ -501,7 +501,7 @@ class AutoBotMCPServer(MemoryToolsMixin):
         if scopes is None:
             return None, False, self._reject_auth(client_ip, "Unauthorized: invalid or missing token", req_id), None
         get_pre_auth_throttle().record_success(client_ip)
-        return scopes, False, None, principal_scope(None, auth_token, client_ip)
+        return scopes, False, None, mcp_owner_scope(None, auth_token, client_ip)
 
     @staticmethod
     def _reject_auth(client_ip: str, message: str, req_id: Any) -> Dict[str, Any]:

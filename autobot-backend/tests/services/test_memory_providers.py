@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, create_autospec, patch
 
 import pytest
 
-from autobot_memory_graph import UNSCOPED_ALL_USERS, OwnerScope
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS, OwnerScope
 from services.memory import (
     PostgresMemoryProvider,
     RedisMemoryProvider,

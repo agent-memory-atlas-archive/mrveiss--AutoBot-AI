@@ -12,7 +12,7 @@ safe only because every caller of this service sits behind an admin check.
 
 from typing import Any, Dict, List
 
-from autobot_memory_graph import UNSCOPED_ALL_USERS, OwnerScope
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS, OwnerScope
 
 _PLATFORM_OWNER = OwnerScope.system()
 

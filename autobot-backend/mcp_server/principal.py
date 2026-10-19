@@ -28,7 +28,7 @@ STDIO_CLIENT = "stdio"
 _MCP_OWNER: ContextVar[OwnerScope | None] = ContextVar("mcp_owner_scope", default=None)
 
 
-def principal_scope(claims: Mapping[str, Any] | None, auth_token: str, client_ip: str) -> OwnerScope | None:
+def mcp_owner_scope(claims: Mapping[str, Any] | None, auth_token: str, client_ip: str) -> OwnerScope | None:
     """OwnerScope for an authenticated request, or None when the caller has no identity."""
     try:
         if claims is not None:

@@ -9,7 +9,8 @@ from typing import Dict, List
 from fastapi import HTTPException
 
 from api.schemas_chat import ActivityCreate
-from autobot_memory_graph import AutoBotMemoryGraph, OwnerScope, OwnerScopeRequired
+from autobot_memory_graph import AutoBotMemoryGraph
+from autobot_memory_graph.owner_scope import OwnerScope, OwnerScopeRequired
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)

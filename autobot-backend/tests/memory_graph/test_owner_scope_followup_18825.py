@@ -276,7 +276,7 @@ class TestNameCollisionIsAGeneric409:
 
         @app.post("/entity")
         async def create():
-            await graph.get_or_create_entity("conversation", "Conversation bob", [], owner=ALICE)
+            await graph.get_or_create_entity("CONVERSATION", "Conversation bob", [], owner=ALICE)
 
         return TestClient(app, raise_server_exceptions=False)
 
@@ -307,7 +307,7 @@ class TestNameCollisionIsAGeneric409:
 
 class TestCollectionEdgesAreBatched:
     @pytest.mark.asyncio
-    async def test_many_edges_cost_one_pipelined_fetch_and_no_get_entity(self):
+    async def test_many_edges_cost_batched_fetches_and_no_get_entity(self):
         docs = [_doc(f"a{i}", f"Conversation a{i}", ALICE_ID) for i in range(30)]
         docs += [_doc(f"b{i}", f"Conversation b{i}", BOB_ID) for i in range(30)]
         graph = QueryHost(docs)
@@ -325,4 +325,5 @@ class TestCollectionEdgesAreBatched:
         edges = await _collect_collection_edges(SimpleNamespace(graph=graph), ["a0", "a1"], ALICE)
 
         assert {e["to"] for e in edges} == {f"a{i}" for i in range(30)}  # bob's targets dropped
-        assert len(edges) == 60 and len(pipelines) == 1
+        assert len(edges) == 60
+        assert len(pipelines) == 2  # 60 distinct targets at 50 per round trip, not 60 gets

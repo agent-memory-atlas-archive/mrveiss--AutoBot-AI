@@ -6,7 +6,8 @@
 
 from typing import Any, Dict, List
 
-from autobot_memory_graph import UNSCOPED_ALL_USERS, AutoBotMemoryGraph, OwnerScope, OwnerScopeRequired
+from autobot_memory_graph import AutoBotMemoryGraph
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS, OwnerScope, OwnerScopeRequired
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)

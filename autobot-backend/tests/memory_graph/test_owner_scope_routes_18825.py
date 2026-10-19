@@ -173,8 +173,10 @@ class TestExtractionAndLookupByName:
     async def test_a_name_lookup_without_a_scope_raises_instead_of_reading_as_not_found(self):
         host = TraversalHost()
 
+        with pytest.raises(TypeError):
+            await host.get_entity(entity_name="A")  # keyword-only, no default
         with pytest.raises(OwnerScopeRequired):
-            await host.get_entity(entity_name="A")
+            await host.get_entity(entity_name="A", owner=None)
 
     @pytest.mark.asyncio
     async def test_an_id_lookup_with_a_scope_hides_another_owners_entity(self):
