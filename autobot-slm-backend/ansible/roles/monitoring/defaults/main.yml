@@ -10,6 +10,11 @@
 monitoring_install_prometheus: true
 monitoring_install_grafana: true
 monitoring_install_node_exporter: true
+# #18556: Alertmanager was installed only by the retired
+# autobot-infrastructure/shared/scripts/install-prometheus-stack.sh. Off by
+# default so a host that never ran that script is unchanged; set true on the
+# node that hosts alert routing.
+monitoring_install_alertmanager: false
 
 # Prometheus settings
 prometheus_version: "2.48.0"
@@ -19,12 +24,33 @@ prometheus_retention_size: "10GB"
 prometheus_scrape_interval: "15s"
 prometheus_evaluation_interval: "15s"
 
+# Alertmanager settings (#18556, ported from install-prometheus-stack.sh)
+alertmanager_version: "0.26.0"
+alertmanager_port: 9093
+# Host the release tarball is fetched from; a var so an air-gapped fleet can
+# point it at an internal mirror without editing the task.
+alertmanager_release_host: "github.com"
+alertmanager_user: "alertmanager"
+alertmanager_group: "alertmanager"
+alertmanager_install_dir: "/opt/alertmanager"
+alertmanager_config_dir: "/etc/alertmanager"
+alertmanager_data_dir: "/var/lib/alertmanager"
+# The routing config and the rule file live once in the repo (the backend's
+# webhook tests read the same alertmanager.yml); copied from the repo clone,
+# as the alert rules are, never duplicated into the role.
+alertmanager_config_src: "{{ code_source_dir }}/autobot-infrastructure/shared/config/prometheus/alertmanager.yml"
+alertmanager_rules_src: "{{ code_source_dir }}/autobot-infrastructure/shared/config/prometheus/alertmanager_rules.yml"
+alertmanager_health_check_retries: 12
+alertmanager_health_check_delay: 5
+
 # Grafana settings
 grafana_version: "10.2.0"
 grafana_port: 3000
 grafana_admin_user: "admin"
 grafana_admin_password: "admin"  # Should be overridden in production
 grafana_allow_anonymous: true  # Required for iframe embedding in SLM frontend
+grafana_health_check_retries: 12
+grafana_health_check_delay: 5
 
 # Node exporter settings
 node_exporter_version: "1.7.0"

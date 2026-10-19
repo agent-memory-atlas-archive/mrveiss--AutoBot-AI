@@ -349,8 +349,9 @@ jobs:
     # against 0.15 and could never fire. Every Python test passed, because they
     # asserted substrings of the expr strings. The promtool suite catches it.
     #
-    # Version pinned to match install-prometheus-stack.sh, so CI validates rules
-    # with the same binary the hosts run.
+    # Version pinned to the Prometheus 2.47.0 the retired install-prometheus-stack.sh
+    # deployed; the monitoring role's prometheus_version is the host-side source
+    # of truth now, so keep the two in step (#18556).
     # Cached: the tarball is ~95.7 MB and this job runs 12 shards, so an
     # uncached download is ~1.15 GB per run of which ~1.05 GB is waste — the
     # promtool tests collect into exactly one shard. Not gated on the shard

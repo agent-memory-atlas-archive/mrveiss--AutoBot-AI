@@ -109,6 +109,22 @@
     label: "{{ item.path | basename }}"
   notify: Restart prometheus
 
+# #18556: install-prometheus-stack.sh copied alertmanager_rules.yml next to the
+# Prometheus config. It is a Prometheus rule file (it routes to Alertmanager via
+# labels), so it goes in rules/ where `rule_files` actually loads it; the script
+# put it outside any glob. Only on a node that runs Alertmanager, so a host that
+# never ran the script keeps exactly the rules it has today.
+- name: Install Alertmanager-routed Prometheus rules (#18556)
+  ansible.builtin.copy:
+    src: "{{ alertmanager_rules_src }}"
+    dest: "{{ prometheus_config_dir }}/rules/alertmanager_rules.yml"
+    remote_src: true
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: "0644"
+  when: monitoring_install_alertmanager | bool
+  notify: Restart prometheus
+
 - name: Create Prometheus systemd service
   ansible.builtin.template:
     src: prometheus.service.j2

@@ -10,6 +10,10 @@
   ansible.builtin.include_tasks: prometheus.yml
   when: monitoring_install_prometheus | bool
 
+- name: Include Alertmanager installation
+  ansible.builtin.include_tasks: alertmanager.yml
+  when: monitoring_install_alertmanager | bool
+
 - name: Include Grafana installation
   ansible.builtin.include_tasks: grafana.yml
   when: monitoring_install_grafana | bool

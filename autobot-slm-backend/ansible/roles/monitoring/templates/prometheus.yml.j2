@@ -10,7 +10,13 @@ global:
   evaluation_interval: {{ prometheus_evaluation_interval }}
 
 alerting:
+{% if monitoring_install_alertmanager | bool %}
+  alertmanagers:
+    - static_configs:
+        - targets: ["localhost:{{ alertmanager_port }}"]
+{% else %}
   alertmanagers: []
+{% endif %}
 
 rule_files:
   # #12460: was [], so no alert rule ever loaded on a fleet deployment —
