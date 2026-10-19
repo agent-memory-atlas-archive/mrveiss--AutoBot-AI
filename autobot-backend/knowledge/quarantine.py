@@ -26,10 +26,19 @@ Research-internal readers (the corroboration/promotion gate itself --
 ``services/claim_verifier.py``, ``services/research/orchestrator.py``,
 ``services/research/planner.py``) must NOT use this filter: they exist to
 read the quarantine collection.
+
+The same filter carries the store-side half of the serving predicate
+(#18820): ``knowledge.serving.SERVING_TRUST_WHERE`` is AND-ed in, so every
+call site that already excludes quarantined facts also excludes rejected ones,
+and ``KB.search`` applies ``knowledge.serving.is_servable`` as the final check
+to whatever a query carrying this filter returns.
 """
 
 from autobot_shared.ssot_config import config
+from knowledge.serving import SERVING_TRUST_WHERE
 
 # Module-level constant (not a function): the filter is a static dict, cheap
 # to import and share; no per-call construction needed.
-RESEARCH_QUARANTINE_FILTER: dict = {"collection": {"$ne": config.research_quarantine_collection}}
+RESEARCH_QUARANTINE_FILTER: dict = {
+    "$and": [{"collection": {"$ne": config.research_quarantine_collection}}, SERVING_TRUST_WHERE]
+}

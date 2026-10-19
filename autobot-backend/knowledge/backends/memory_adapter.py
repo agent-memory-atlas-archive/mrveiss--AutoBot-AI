@@ -58,19 +58,24 @@ def _match_field(actual: Any, expected: Any) -> bool:
             return actual != expected["$ne"]
         if "$eq" in expected:
             return actual == expected["$eq"]
+        if "$nin" in expected:  # #18820: the serving clause once several trust states are withheld
+            return actual not in expected["$nin"]
         return False  # unsupported operator -> fail-safe: no match
     return actual == expected
 
 
 def _match_where(meta: Metadata | None, where: Where | None) -> bool:
-    """Minimal ``where`` filter: equality plus ``$ne``/``$eq`` on top-level keys.
+    """Minimal ``where`` filter: equality plus ``$ne``/``$eq``/``$nin`` on top-level keys, and ``$and``.
 
-    Full ChromaDB where syntax (``$and``, ``$or``, ``$in`` ...) is out of
-    scope for the in-memory fake — tests that need it should use ChromaDB
+    ``$and`` (#18820) is here because the shared grounding filter is an ``$and`` of the
+    quarantine and serving clauses. The rest of ChromaDB's where syntax (``$or``, ``$in`` ...)
+    is out of scope for the in-memory fake — tests that need it should use ChromaDB
     directly or extend this helper.
     """
     if not where:
         return True
+    if "$and" in where:
+        return all(_match_where(meta, clause) for clause in where["$and"])
     for key, expected in where.items():
         actual = meta.get(key) if meta is not None else None
         if not _match_field(actual, expected):

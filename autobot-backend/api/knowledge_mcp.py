@@ -45,6 +45,7 @@ from knowledge.schemas.mcp import (
     McpToolsResponse,
     McpVectorSimilarityResponse,
 )
+from knowledge.serving import servable
 from knowledge_base import KnowledgeBase
 from services.mcp_bridge_manifest import MCPBridgeManifest
 from type_defs.common import Metadata
@@ -461,9 +462,8 @@ async def mcp_search_knowledge_base(
     try:
         kb = get_knowledge_base()
 
-        # Perform the search
-        # Issue #13009: exclude quarantined research facts (#12622) when the
-        # caller doesn't request a specific filter of their own.
+        # Issue #13009: exclude quarantined research facts (#12622) when the caller doesn't
+        # request a filter of their own; #18820: a caller filter never serves a rejected fact.
         results = await kb.search(
             query=request.query,
             top_k=request.top_k,
@@ -472,7 +472,7 @@ async def mcp_search_knowledge_base(
 
         # Format results for MCP
         formatted_results = []
-        for result in results:
+        for result in servable(results):
             formatted_results.append(
                 {
                     "content": result.get("content", ""),

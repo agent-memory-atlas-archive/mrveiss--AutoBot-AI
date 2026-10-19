@@ -13,11 +13,11 @@ This module contains search and query operations:
 Part of the modular autobot_memory_graph package (Issue #716).
 """
 
-from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.security.input_sanitizer import escape_redisearch, escape_redisearch_tag
+from knowledge.serving import is_servable
 
 from .core import AutoBotMemoryGraphCore
 
@@ -25,32 +25,23 @@ logger = get_logger(__name__)
 
 
 def _is_entity_valid(entity: Dict[str, Any]) -> bool:
-    """Return True if entity is currently valid.
+    """Return True if entity is currently valid, by the one serving predicate (#18829).
 
-    An entity is valid when valid_to is absent (None) or is a future timestamp.
-    Entities without valid_to in Redis (legacy) are treated as valid.
+    Timestamps are parsed, never compared as strings, and an unparseable
+    ``valid_from`` / ``valid_to`` fails closed. Entities without ``valid_to``
+    (legacy, or still open) stay valid.
     """
-    valid_to = (entity.get("metadata") or {}).get("valid_to")
-    if valid_to is None:
-        return True
-    # valid_to is an ISO-8601 string; compare lexicographically (works for UTC ISO strings)
-    return valid_to > datetime.now(tz=timezone.utc).isoformat()
+    return is_servable(entity)
 
 
 def _is_entity_valid_at(entity: Dict[str, Any], as_of: str) -> bool:
-    """Return True if entity was valid at the given ISO-8601 timestamp.
+    """Return True if entity was valid at the given ISO-8601 timestamp (#18829).
 
-    Conditions: valid_from <= as_of AND (valid_to IS NULL OR valid_to >= as_of)
+    Conditions: valid_from <= as_of AND (valid_to IS NULL OR valid_to >= as_of),
+    judged on parsed instants; an unparseable bound fails closed. An unparseable
+    *as_of* raises ``ValueError`` -- that is the caller's input, not the entity's.
     """
-    metadata = entity.get("metadata") or {}
-    valid_from = metadata.get("valid_from")
-    valid_to = metadata.get("valid_to")
-
-    if valid_from and valid_from > as_of:
-        return False
-    if valid_to is not None and valid_to < as_of:
-        return False
-    return True
+    return is_servable(entity, as_of=as_of)
 
 
 class QueryOperationsMixin:
