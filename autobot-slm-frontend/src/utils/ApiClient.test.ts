@@ -193,42 +193,38 @@ describe('SlmApiClient', () => {
       })
     }
 
-    async function firstRetryDelay(headers: Record<string, string>): Promise<number> {
+    // Measured on the fake clock, never by spying on setTimeout: a spy installed over the
+    // fake timer outlives useRealTimers() and leaves later tests' timers that never fire.
+    async function fetchesAfter(headers: Record<string, string>, elapsedMs: number): Promise<number> {
       vi.useFakeTimers()
-      const timeoutSpy = vi.spyOn(globalThis, 'setTimeout')
       try {
         fetchMock.mockImplementationOnce(async () => unavailable(headers))
         fetchMock.mockImplementationOnce(async () => jsonResponse({ ok: true }))
         const pending = new SlmApiClient().get('/nodes', { maxRetries: 2 })
-        await vi.advanceTimersByTimeAsync(0)
-        const delays = timeoutSpy.mock.calls
-          .map((c) => c[1] as number)
-          .filter((d) => typeof d === 'number' && d >= 100 && d <= 5000)
+        await vi.advanceTimersByTimeAsync(elapsedMs)
+        const calls = fetchMock.mock.calls.length
         await vi.advanceTimersByTimeAsync(10_000)
         await pending
-        return Math.max(...delays)
+        return calls
       } finally {
-        // Restore the spy BEFORE the real timers: a leaked spy keeps wrapping the fake
-        // setTimeout, and every later test's retry delay never fires.
-        timeoutSpy.mockRestore()
         vi.useRealTimers()
       }
     }
 
     it('waits at least Retry-After seconds before retrying', async () => {
-      expect(await firstRetryDelay({ 'retry-after': '3' })).toBeGreaterThanOrEqual(3000)
+      expect(await fetchesAfter({ 'retry-after': '3' }, 2_999)).toBe(1)
+    })
+
+    it('retries once Retry-After has elapsed', async () => {
+      expect(await fetchesAfter({ 'retry-after': '3' }, 3_001)).toBe(2)
     })
 
     it('uses plain backoff when Retry-After is missing', async () => {
-      const d = await firstRetryDelay({})
-      expect(d).toBeGreaterThan(0)
-      expect(d).toBeLessThan(3000)
+      expect(await fetchesAfter({}, 2_999)).toBe(2)
     })
 
     it('uses plain backoff when Retry-After is garbage', async () => {
-      const d = await firstRetryDelay({ 'retry-after': 'soon-ish' })
-      expect(d).toBeGreaterThan(0)
-      expect(d).toBeLessThan(3000)
+      expect(await fetchesAfter({ 'retry-after': 'soon-ish' }, 2_999)).toBe(2)
     })
 
     it('parses an HTTP-date Retry-After as a floor', () => {
