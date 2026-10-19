@@ -349,7 +349,6 @@ class TestSyncSchedulerPath:
         cfg = _make_config(["https://example.com"], max_depth=3, max_pages=50)
         connector = WebCrawlerConnector(cfg)
         result = await connector.sync(incremental=True)
-
         mock_crawl.assert_awaited_once_with(
             seed_urls=["https://example.com"],
             max_depth=3,
@@ -358,6 +357,7 @@ class TestSyncSchedulerPath:
             ingest=False,
             same_origin=True,
             on_seed_complete=ANY,
+            profile="document",  # #18826: the connector's profile, a str enum
         )
         assert result.status == "success"
 
