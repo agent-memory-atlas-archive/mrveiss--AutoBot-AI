@@ -14,11 +14,11 @@ Tests cover:
 - Graceful degradation when APIs unavailable
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autobot_shared.monotonic_clock import FakeClock
 from autobot_shared.ssot_constants import TTL_1_HOUR
 from security.threat_intelligence import (
     ThreatIntelligenceCache,
@@ -173,7 +173,8 @@ class TestThreatIntelligenceCache:
     @pytest.mark.asyncio
     async def test_cache_expiration(self):
         """Test cache entry expiration."""
-        cache = ThreatIntelligenceCache(default_ttl=1)  # 1 second TTL
+        clock = FakeClock()
+        cache = ThreatIntelligenceCache(default_ttl=1, clock=clock)  # 1 second TTL
 
         test_score = ThreatScore(overall_score=0.9)
         await cache.set("https://example.com", test_score)
@@ -182,23 +183,32 @@ class TestThreatIntelligenceCache:
         result = await cache.get("https://example.com")
         assert result is not None
 
-        # fixed sleep on purpose (#16255): TTL expiry via time.time() is the subject; no injectable clock
-        await asyncio.sleep(1.1)
+        clock.advance(1.1)
 
         # Should be expired
         result = await cache.get("https://example.com")
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_backward_wall_clock_step_does_not_extend_ttl(self):
+        """A backward time.time() step must not keep an entry alive (#18888)."""
+        clock = FakeClock()
+        cache = ThreatIntelligenceCache(default_ttl=1, clock=clock)
+        await cache.set("https://example.com", ThreatScore())
+        clock.advance(1.1)
+        with patch("time.time", return_value=0.0):
+            assert await cache.get("https://example.com") is None
+
+    @pytest.mark.asyncio
     async def test_clear_expired(self):
         """Test clearing expired entries."""
-        cache = ThreatIntelligenceCache(default_ttl=1)
+        clock = FakeClock()
+        cache = ThreatIntelligenceCache(default_ttl=1, clock=clock)
 
         await cache.set("https://example1.com", ThreatScore())
         await cache.set("https://example2.com", ThreatScore())
 
-        # fixed sleep on purpose (#16255): TTL expiry via time.time() is the subject; no injectable clock
-        await asyncio.sleep(1.1)
+        clock.advance(1.1)
 
         # Add fresh entry
         await cache.set("https://example3.com", ThreatScore(), ttl=TTL_1_HOUR)
