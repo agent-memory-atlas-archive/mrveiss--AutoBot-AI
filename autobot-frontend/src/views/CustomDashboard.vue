@@ -11,7 +11,11 @@
         <p class="header-description">{{ $t('views.customDashboard.subtitle') }}</p>
       </div>
       <div class="header-actions">
-        <button @click="toggleEditMode" class="action-btn" :class="{ active: isEditMode }">
+        <button v-if="loadError" @click="retryLoad" class="action-btn">
+          <Icon name="redo" />
+          {{ $t('views.customDashboard.retryLoad') }}
+        </button>
+        <button v-else @click="toggleEditMode" class="action-btn" :class="{ active: isEditMode }" :disabled="!loaded">
           <Icon :name="isEditMode ? 'check' : 'edit'" />
           {{ isEditMode ? $t('views.customDashboard.done') : $t('views.customDashboard.editLayout') }}
         </button>
@@ -27,7 +31,7 @@
           @click="saveDashboard"
           class="action-btn"
           :class="{ primary: isDirty }"
-          :disabled="!isDirty"
+          :disabled="!isDirty || !loaded"
           :aria-label="isDirty ? $t('views.customDashboard.save') : $t('views.customDashboard.saved')"
         >
           <Icon name="save" />
@@ -36,7 +40,7 @@
         <div class="dashboard-selector">
           <select v-model="currentDashboardId" @change="loadDashboard">
             <option v-for="dash in availableDashboards" :key="dash.id" :value="dash.id">
-              {{ dash.name }}
+              {{ tr(dash.name) }}
             </option>
           </select>
           <button @click="createNewDashboard" class="icon-btn" :title="$t('views.customDashboard.createNewDashboard')" :aria-label="$t('views.customDashboard.createNewDashboard')">
@@ -67,12 +71,12 @@
 
     <!-- Dashboard Grid -->
     <div class="dashboard-body" @dragover.prevent="handleDragOver" @drop="handleDrop">
-      <DashboardGrid v-model:widgets="widgets" :editing="isEditMode" @update:widgets="isDirty = true">
+      <DashboardGrid v-model:widgets="widgets" :label-of="(w) => tr(w.title) || w.type" :editing="isEditMode" @update:widgets="isDirty = true">
         <template #widget="{ widget }">
           <div class="widget-header">
             <h3>
               <Icon :name="getWidgetIcon(widget.type)" />
-              {{ widget.title }}
+              {{ tr(widget.title) }}
             </h3>
             <div class="widget-actions" v-if="isEditMode">
               <button @click="configureWidget(widget)" :title="$t('views.customDashboard.configure')" :aria-label="$t('views.customDashboard.configure')">
@@ -227,7 +231,6 @@
 
 import { ref, computed, onMounted, shallowRef, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { createLogger } from '@/utils/debugUtils'
 import { usePollingJob } from '@/composables/usePollingJob'
 import { useToast } from '@/composables/useToast'
 import Icon, { type IconName } from '@/components/ui/Icon.vue'
@@ -241,11 +244,7 @@ import {
   type DashboardLayout,
   type DashboardWidget,
 } from '@/composables/dashboard/dashboardLayoutModel'
-import {
-  defaultHomeLayout,
-  defaultHomeWidgets,
-  templateWidgets,
-} from '@/composables/dashboard/defaultDashboards'
+import { defaultHomeLayout, defaultHomeWidgets, templateWidgets, WIDGET_DEFINITIONS, type WidgetDefinitionSpec } from '@/composables/dashboard/defaultDashboards'
 
 // Import visualization components
 import ResourceHeatmap from '@/components/visualizations/ResourceHeatmap.vue'
@@ -253,11 +252,12 @@ import WorkflowVisualization from '@/components/visualizations/WorkflowVisualiza
 import AgentActivityVisualization from '@/components/visualizations/AgentActivityVisualization.vue'
 import SystemArchitectureDiagram from '@/components/visualizations/SystemArchitectureDiagram.vue'
 
-const { t } = useI18n()
-const logger = createLogger('CustomDashboard')
+const { t, te } = useI18n()
+/** Stored defaults are i18n keys; anything else is text the user typed. */
+const tr = (s: string) => (te(s) ? t(s) : s)
 const { showToast } = useToast()
 const { confirm } = useConfirmDialog()
-const { layout, load, save, reset } = useDashboardLayout('home', defaultHomeLayout)
+const { layout, loaded, loadError, load, save, reset } = useDashboardLayout('home', defaultHomeLayout)
 
 // ============================================================================
 // Types
@@ -266,15 +266,7 @@ const { layout, load, save, reset } = useDashboardLayout('home', defaultHomeLayo
 // refreshKey is local and never persisted (stripped on save).
 type Widget = DashboardWidget & { refreshKey?: number }
 
-interface WidgetDefinition {
-  type: string
-  name: string
-  icon: IconName
-  description: string
-  defaultSpan: DashboardWidget['span']
-  defaultHeight: number
-  defaultProps: Record<string, unknown>
-}
+type WidgetDefinition = WidgetDefinitionSpec & { name: string; description: string }
 
 // ============================================================================
 // State
@@ -303,45 +295,10 @@ const componentRegistry = shallowRef<Record<string, unknown>>({
   architecture: markRaw(SystemArchitectureDiagram)
 })
 
-// Available widget definitions (computed for i18n reactivity)
-const availableWidgetDefs = computed<WidgetDefinition[]>(() => [
-  {
-    type: 'heatmap',
-    name: t('views.customDashboard.widgetHeatmap'),
-    icon: 'th-large',
-    description: t('views.customDashboard.widgetHeatmapDesc'),
-    defaultSpan: 8,
-    defaultHeight: 300,
-    defaultProps: { height: 300, metric: 'cpu' }
-  },
-  {
-    type: 'workflow',
-    name: t('views.customDashboard.widgetWorkflow'),
-    icon: 'project-diagram',
-    description: t('views.customDashboard.widgetWorkflowDesc'),
-    defaultSpan: 8,
-    defaultHeight: 400,
-    defaultProps: { height: 400 }
-  },
-  {
-    type: 'agents',
-    name: t('views.customDashboard.widgetAgents'),
-    icon: 'robot',
-    description: t('views.customDashboard.widgetAgentsDesc'),
-    defaultSpan: 8,
-    defaultHeight: 400,
-    defaultProps: { height: 400 }
-  },
-  {
-    type: 'architecture',
-    name: t('views.customDashboard.widgetArchitecture'),
-    icon: 'sitemap',
-    description: t('views.customDashboard.widgetArchitectureDesc'),
-    defaultSpan: 12,
-    defaultHeight: 500,
-    defaultProps: { height: 500 }
-  },
-])
+// Available widget definitions; names and descriptions translate at render.
+const availableWidgetDefs = computed<WidgetDefinition[]>(() =>
+  WIDGET_DEFINITIONS.map((d) => ({ ...d, name: t(d.nameKey), description: t(d.descriptionKey) })),
+)
 
 // ============================================================================
 // Computed
@@ -349,7 +306,7 @@ const availableWidgetDefs = computed<WidgetDefinition[]>(() => [
 
 const dashboardTitle = computed(() => {
   const dash = availableDashboards.value.find(d => d.id === currentDashboardId.value)
-  return dash?.name || t('views.customDashboard.defaultTitle')
+  return dash?.name ? tr(dash.name) : t('views.customDashboard.defaultTitle')
 })
 
 // ============================================================================
@@ -421,7 +378,19 @@ function confirmCreateDashboard() {
 // ============================================================================
 
 function toggleEditMode() {
+  // Editing the defaults shown after a failed load would overwrite the real saved layout.
+  if (!loaded.value) return
   isEditMode.value = !isEditMode.value
+}
+
+async function loadLayout() {
+  await load()
+  if (loadError.value) showToast(t('views.customDashboard.loadFailed'), 'error')
+  loadDashboard()
+}
+
+function retryLoad() {
+  void loadLayout()
 }
 
 function addWidget() {
@@ -529,12 +498,7 @@ const { start: startDashboardPolling, stop: stopDashboardPolling } = usePollingJ
 // ============================================================================
 
 onMounted(async () => {
-  try {
-    await load()
-  } catch (e) {
-    logger.error('Failed to load dashboard layout:', e)
-  }
-  loadDashboard()
+  await loadLayout()
   startDashboardPolling('')
 })
 

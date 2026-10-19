@@ -6,6 +6,7 @@ import {
   HEIGHT_MAX,
   HEIGHT_MIN,
   clampHeight,
+  fitId,
   fromLegacyDashboards,
   moveWidget,
   spanFromLegacyWidth,
@@ -80,5 +81,25 @@ describe('dashboardLayoutModel', () => {
     ['a dashboard without widgets', { data: { layout: { dashboards: [{ id: 'main' }] } } }],
   ])('reads %s as nothing stored', (_, body) => {
     expect(storedLayoutFrom(body)).toBeNull()
+  })
+
+  it('fits legacy names, titles and ids to the server limits so a load never 422s', () => {
+    const long = 'x'.repeat(200)
+    const layout = fromLegacyDashboards([
+      { id: 'my dash!', name: '   ', widgets: [{ id: 'a b', type: 'system', title: long }, { id: 'a-b', type: 'system' }] },
+      { id: 'my dash!', name: long, widgets: [] },
+    ])
+    const [first, second] = layout.dashboards
+    expect(first.name).toBe('views.customDashboard.myDashboard')
+    expect(second.name).toHaveLength(120)
+    expect(first.widgets[0].title).toHaveLength(120)
+    expect(first.widgets.map((w) => w.id)).toEqual(['a-b', 'a-b-2'])
+    expect([first.id, second.id]).toEqual(['my-dash-', 'my-dash--2'])
+  })
+
+  it('fitId keeps a valid id and falls back when nothing usable is left', () => {
+    expect(fitId('widget_1', 'f')).toBe('widget_1')
+    expect(fitId('***', 'f')).toBe('f')
+    expect(fitId(undefined, 'f')).toBe('f')
   })
 })

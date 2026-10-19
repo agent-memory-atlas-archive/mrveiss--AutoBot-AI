@@ -80,11 +80,36 @@ interface LegacyDashboard {
   updatedAt?: number
 }
 
-function fromLegacyWidget(w: LegacyWidget): DashboardWidget {
+// The server's limits (schemas_users_dashboard_layouts.py). Legacy localStorage data predates
+// them, so the mapper fits it to them: one out-of-range value would 422 every load.
+const MAX_TEXT = 120
+const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+const DEFAULT_NAME_KEY = 'views.customDashboard.myDashboard'
+
+const fitText = (s: unknown): string => String(s ?? '').trim().slice(0, MAX_TEXT)
+
+/** A server-valid id: invalid characters become '-', and a fallback is used when nothing is left. */
+export function fitId(raw: unknown, fallback: string): string {
+  const s = String(raw ?? '').replace(/[^A-Za-z0-9_-]/g, '-').replace(/^[_-]+/, '').slice(0, 64)
+  return ID_RE.test(s) ? s : fallback
+}
+
+/** Suffixes repeats so the ids in one list stay unique after fitId (a duplicate is a 422). */
+function uniqueIds<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>()
+  return items.map((item) => {
+    let id = item.id
+    for (let n = 2; seen.has(id); n++) id = `${item.id.slice(0, 60)}-${n}`
+    seen.add(id)
+    return id === item.id ? item : { ...item, id }
+  })
+}
+
+function fromLegacyWidget(w: LegacyWidget, i: number): DashboardWidget {
   return {
-    id: w.id,
-    type: w.type,
-    title: w.title ?? '',
+    id: fitId(w.id, `widget-${i + 1}`),
+    type: fitId(w.type, 'system'),
+    title: fitText(w.title),
     span: spanFromLegacyWidth(w.width ?? 1),
     height: clampHeight(w.height ?? 320),
     props: w.props ?? {},
@@ -94,15 +119,19 @@ function fromLegacyWidget(w: LegacyWidget): DashboardWidget {
 
 /** Legacy localStorage dashboards → server layout, widgets ordered by (y, x). */
 export function fromLegacyDashboards(raw: LegacyDashboard[]): DashboardLayout {
-  const dashboards = raw.map((d) => ({
-    id: d.id,
-    name: d.name,
-    widgets: [...(d.widgets ?? [])]
-      .sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0))
-      .map(fromLegacyWidget),
-    createdAt: d.createdAt ?? 0,
-    updatedAt: d.updatedAt ?? 0,
-  }))
+  const dashboards = uniqueIds(
+    raw.map((d, i) => ({
+      id: fitId(d.id, `dashboard-${i + 1}`),
+      name: fitText(d.name) || DEFAULT_NAME_KEY,
+      widgets: uniqueIds(
+        [...(d.widgets ?? [])]
+          .sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0))
+          .map((w, i) => fromLegacyWidget(w, i)),
+      ),
+      createdAt: d.createdAt ?? 0,
+      updatedAt: d.updatedAt ?? 0,
+    })),
+  )
   return { dashboards, activeId: dashboards[0]?.id ?? null }
 }
 

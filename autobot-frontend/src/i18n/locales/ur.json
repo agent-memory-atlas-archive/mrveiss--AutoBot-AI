@@ -7567,10 +7567,6 @@
     },
     "input": {
       "clearInput": "Clear input"
-    },
-    "panel": {
-      "collapse": "Collapse panel",
-      "expand": "Expand panel"
     }
   },
   "voice": {

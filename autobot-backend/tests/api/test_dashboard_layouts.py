@@ -100,3 +100,35 @@ def test_the_height_is_bounded():
     widget = {"id": "a", "type": "system", "height": 100}
     with pytest.raises(pydantic.ValidationError):
         DashboardLayout(dashboards=[{"id": "main", "name": "Main", "widgets": [widget]}])
+
+
+@pytest.mark.asyncio
+async def test_a_layout_over_64_kb_is_413_and_writes_nothing():
+    client, store = _fake_redis()
+    big = DashboardLayout(
+        dashboards=[
+            {"id": "main", "name": "Main", "widgets": [{"id": "a", "type": "system", "props": {"blob": "x" * 70_000}}]}
+        ]
+    )
+    with pytest.raises(HTTPException) as err:
+        await _call(put_dashboard_layout, "home", big, MagicMock(), _ALICE, client=client)
+    assert err.value.status_code == 413 and store == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: (get_dashboard_layout, ("home", MagicMock(), {})),
+        lambda: (put_dashboard_layout, ("home", _layout("a"), MagicMock(), {})),
+        lambda: (reset_dashboard_layout, ("home", MagicMock(), {})),
+    ],
+    ids=["get", "put", "delete"],
+)
+async def test_a_token_without_a_user_id_is_401_on_every_endpoint(call):
+    client, store = _fake_redis()
+    fn, args = call()
+    with pytest.raises(HTTPException) as err:
+        await _call(fn, *args, client=client)
+    assert err.value.status_code == 401 and store == {}
+    client.get.assert_not_awaited()

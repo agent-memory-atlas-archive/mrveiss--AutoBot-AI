@@ -4,6 +4,10 @@
  * Server-persisted dashboard layout per user and page (#18242).
  * GET/PUT/DELETE /users/me/dashboard-layouts/{page}. A failed save keeps the local
  * state and sets `saveError`; the grid shows it, so nothing fails silently.
+ *
+ * Nothing is written until a load has succeeded (`loaded`): after a failed GET the page
+ * shows defaults, and saving or resetting those would overwrite or delete the user's real
+ * server layout (#18896 review). `loadError` says why; `load()` retries.
  */
 import { ref } from 'vue'
 import apiClient from '@/utils/ApiClient'
@@ -19,6 +23,7 @@ const logger = createLogger('useDashboardLayout')
 export function useDashboardLayout(page: DashboardPage, defaults: () => DashboardLayout) {
   const layout = ref<DashboardLayout>(defaults())
   const loaded = ref(false)
+  const loadError = ref<string | null>(null)
   const saveError = ref<string | null>(null)
   const url = `${getApiBase()}/users/me/dashboard-layouts/${page}`
 
@@ -54,7 +59,16 @@ export function useDashboardLayout(page: DashboardPage, defaults: () => Dashboar
   }
 
   async function load(): Promise<void> {
-    const stored = storedLayoutFrom(await apiClient.get(url))
+    let body: unknown
+    try {
+      body = await apiClient.get(url)
+    } catch (e) {
+      loadError.value = e instanceof Error ? e.message : String(e)
+      logger.error('Loading dashboard layout failed; editing stays off until a load succeeds:', e)
+      return
+    }
+    loadError.value = null
+    const stored = storedLayoutFrom(body)
     if (stored?.dashboards.length) layout.value = stored
     else await migrateLegacy()
     loaded.value = true
@@ -62,14 +76,17 @@ export function useDashboardLayout(page: DashboardPage, defaults: () => Dashboar
 
   /** Saves explicitly (the view's Save button); resolves false and sets saveError on failure. */
   async function save(next: DashboardLayout): Promise<boolean> {
+    if (!loaded.value) return false
     layout.value = next
     return put(next)
   }
 
-  async function reset(): Promise<void> {
+  async function reset(): Promise<boolean> {
+    if (!loaded.value) return false
     await apiClient.delete(url)
     layout.value = defaults()
+    return true
   }
 
-  return { layout, loaded, saveError, load, save, reset }
+  return { layout, loaded, loadError, saveError, load, save, reset }
 }

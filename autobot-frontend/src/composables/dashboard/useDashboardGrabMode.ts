@@ -16,19 +16,21 @@ import {
   type DashboardWidget,
 } from './dashboardLayoutModel'
 
-export function useDashboardGrabMode<T extends DashboardWidget>(widgets: Ref<T[]>) {
+export function useDashboardGrabMode<T extends DashboardWidget>(
+  widgets: Ref<T[]>,
+  labelOf: (w: T) => string = (w) => w.title || w.type,
+) {
   const { t } = useI18n()
   const grabbedId = ref<string | null>(null)
   const announcement = ref('')
   let snapshot: T[] | null = null
 
   const indexOf = (id: string) => widgets.value.findIndex((w) => w.id === id)
-  const label = (w: DashboardWidget) => w.title || w.type
 
   function announcePosition(id: string, key: string) {
     const i = indexOf(id)
     const w = widgets.value[i]
-    announcement.value = t(key, { name: label(w), position: i + 1, total: widgets.value.length, span: w.span, height: w.height })
+    announcement.value = t(key, { name: labelOf(w), position: i + 1, total: widgets.value.length, span: w.span, height: w.height })
   }
 
   function toggleGrab(id: string) {

@@ -1,11 +1,16 @@
 // Copyright 2025-2026 mrveiss
 // SPDX-License-Identifier: Apache-2.0
-/** Home dashboard defaults and new-dashboard templates (#18242). Pure data, no Vue. */
+/**
+ * Home dashboard defaults and new-dashboard templates (#18242). Pure data, no Vue.
+ * Titles and names are i18n KEYS, stored as such on the server and translated at render,
+ * so a stored default follows the reader's language; a title the user types stays as typed.
+ */
 import {
   spanFromLegacyWidth,
   type DashboardLayout,
   type DashboardWidget,
 } from './dashboardLayoutModel'
+import type { IconName } from '@/components/ui/Icon.vue'
 
 export const DEFAULT_DASHBOARD_ID = 'default'
 
@@ -22,9 +27,9 @@ function widget(
 
 export function defaultHomeWidgets(): DashboardWidget[] {
   return [
-    widget('widget-1', 'system', 'System Monitor', 1, 350),
-    widget('widget-2', 'heatmap', 'Resource Heatmap', 2, 300, { height: 300 }),
-    widget('widget-3', 'agents', 'Agent Activity', 2, 400, { height: 400 }),
+    widget('widget-1', 'system', 'views.customDashboard.widgetSystemMonitor', 1, 350),
+    widget('widget-2', 'heatmap', 'views.customDashboard.widgetHeatmap', 2, 300, { height: 300 }),
+    widget('widget-3', 'agents', 'views.customDashboard.widgetAgents', 2, 400, { height: 400 }),
   ]
 }
 
@@ -32,7 +37,7 @@ export function defaultHomeLayout(): DashboardLayout {
   const now = Date.now()
   return {
     dashboards: [
-      { id: DEFAULT_DASHBOARD_ID, name: 'Main Dashboard', widgets: defaultHomeWidgets(), createdAt: now, updatedAt: now },
+      { id: DEFAULT_DASHBOARD_ID, name: 'views.customDashboard.mainDashboard', widgets: defaultHomeWidgets(), createdAt: now, updatedAt: now },
     ],
     activeId: DEFAULT_DASHBOARD_ID,
   }
@@ -42,14 +47,34 @@ export function templateWidgets(template: string): DashboardWidget[] {
   switch (template) {
     case 'monitoring':
       return [
-        widget('w1', 'system', 'System Monitor', 1, 350),
-        widget('w2', 'heatmap', 'CPU Heatmap', 2, 300, { height: 300, metric: 'cpu' }),
+        widget('w1', 'system', 'views.customDashboard.widgetSystemMonitor', 1, 350),
+        widget('w2', 'heatmap', 'views.customDashboard.widgetCpuHeatmap', 2, 300, { height: 300, metric: 'cpu' }),
       ]
     case 'agents':
-      return [widget('w1', 'agents', 'Agent Activity', 3, 450, { height: 450 })]
+      return [widget('w1', 'agents', 'views.customDashboard.widgetAgents', 3, 450, { height: 450 })]
     case 'workflows':
-      return [widget('w1', 'workflow', 'Workflow View', 3, 500, { height: 500 })]
+      return [widget('w1', 'workflow', 'views.customDashboard.widgetWorkflow', 3, 500, { height: 500 })]
     default:
       return []
   }
 }
+
+/** A widget kind the palette offers; names and descriptions are i18n keys. */
+export interface WidgetDefinitionSpec {
+  type: string
+  nameKey: string
+  descriptionKey: string
+  icon: IconName
+  defaultSpan: DashboardWidget['span']
+  defaultHeight: number
+  defaultProps: Record<string, unknown>
+}
+
+const K = 'views.customDashboard.'
+
+export const WIDGET_DEFINITIONS: WidgetDefinitionSpec[] = [
+  { type: 'heatmap', nameKey: `${K}widgetHeatmap`, descriptionKey: `${K}widgetHeatmapDesc`, icon: 'th-large', defaultSpan: 8, defaultHeight: 300, defaultProps: { height: 300, metric: 'cpu' } },
+  { type: 'workflow', nameKey: `${K}widgetWorkflow`, descriptionKey: `${K}widgetWorkflowDesc`, icon: 'project-diagram', defaultSpan: 8, defaultHeight: 400, defaultProps: { height: 400 } },
+  { type: 'agents', nameKey: `${K}widgetAgents`, descriptionKey: `${K}widgetAgentsDesc`, icon: 'robot', defaultSpan: 8, defaultHeight: 400, defaultProps: { height: 400 } },
+  { type: 'architecture', nameKey: `${K}widgetArchitecture`, descriptionKey: `${K}widgetArchitectureDesc`, icon: 'sitemap', defaultSpan: 12, defaultHeight: 500, defaultProps: { height: 500 } },
+]

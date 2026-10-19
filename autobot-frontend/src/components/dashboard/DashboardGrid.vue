@@ -12,7 +12,7 @@
  * `update:widgets`. The parent persists it (useDashboardLayout); this component holds
  * no storage. Styled with token utility classes only: no component-local style block (#12730).
  */
-import { computed, ref, toRef } from 'vue'
+import { computed, nextTick, ref, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { BaseButton } from '@autobot/ui'
 import {
@@ -28,6 +28,8 @@ import { useDashboardGrabMode } from '@/composables/dashboard/useDashboardGrabMo
 const props = defineProps<{
   widgets: T[]
   editing: boolean
+  /** The name a widget is announced by; the view translates stored i18n keys here. */
+  labelOf?: (widget: T) => string
 }>()
 
 const emit = defineEmits<{ 'update:widgets': [widgets: T[]] }>()
@@ -38,7 +40,8 @@ const model = computed({
   get: () => props.widgets,
   set: (next: T[]) => emit('update:widgets', next),
 })
-const { grabbedId, announcement, onKeydown } = useDashboardGrabMode(model)
+const label = (w: T) => props.labelOf?.(w) || w.title || w.type
+const { grabbedId, announcement, onKeydown, cancel } = useDashboardGrabMode(model, label)
 const editing = toRef(props, 'editing')
 const draggingId = ref<string | null>(null)
 
@@ -48,10 +51,23 @@ function itemStyle(w: DashboardWidget): Record<string, string> {
   return { '--item-span': `var(${SPAN_TOKEN[w.span]})`, '--item-height': `${w.height}px` }
 }
 
-function handleKeydown(id: string, e: KeyboardEvent): void {
-  // Only the widget itself: Space/Enter on a resize button inside it must press that button.
-  if (!editing.value || e.target !== e.currentTarget) return
-  if (onKeydown(id, e)) e.preventDefault()
+const root = ref<HTMLElement | null>(null)
+// True while a keyboard move re-renders the keyed list: moving a node can blur its handle,
+// and that blur is ours, not the user leaving, so it must not cancel the grab.
+let moving = false
+
+async function handleKeydown(id: string, e: KeyboardEvent): Promise<void> {
+  if (!editing.value || !onKeydown(id, e)) return
+  e.preventDefault()
+  moving = true
+  await nextTick()
+  root.value?.querySelector<HTMLElement>(`[data-grab-handle="${CSS.escape(id)}"]`)?.focus()
+  moving = false
+}
+
+// Leaving the handle while a widget is grabbed puts it back, as Escape would.
+function handleBlur(id: string): void {
+  if (!moving && grabbedId.value === id) cancel()
 }
 
 // Only span/height change here; the result keeps every field of the caller's own widget type.
@@ -85,29 +101,35 @@ const atMaxSpan = (w: DashboardWidget) => w.span === WIDGET_SPANS[WIDGET_SPANS.l
 </script>
 
 <template>
-  <div class="grid grid-cols-12 gap-(--stack)">
+  <div ref="root" class="grid grid-cols-12 gap-(--stack)">
     <section
       v-for="w in widgets"
       :key="w.id"
-      class="relative col-span-(--item-span) h-(--item-height) overflow-auto rounded-lg border bg-autobot-bg-card border-autobot-border max-md:col-span-12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-autobot-focus"
+      class="relative col-span-(--item-span) h-(--item-height) overflow-auto rounded-lg border bg-autobot-bg-card border-autobot-border max-md:col-span-12"
       :class="{
         'cursor-grab border-dashed': editing,
         'outline-2 outline-offset-2 outline-autobot-focus': grabbedId === w.id,
         'opacity-50': draggingId === w.id,
       }"
       :style="itemStyle(w)"
-      :tabindex="editing ? 0 : undefined"
-      :aria-roledescription="editing ? t('dashboardGrid.movableWidget') : undefined"
-      :aria-label="editing ? t('dashboardGrid.widgetLabel', { name: w.title || w.type }) : undefined"
-      :aria-describedby="editing ? 'dashboard-grid-help' : undefined"
       :draggable="editing"
-      @keydown="handleKeydown(w.id, $event)"
       @dragstart="onDragStart(w.id, $event)"
       @dragover.prevent
       @drop.prevent="onDrop(w.id)"
       @dragend="draggingId = null"
     >
       <div v-if="editing" class="absolute top-1 right-1 z-dropdown flex gap-0.5 rounded-md bg-autobot-bg-elevated">
+        <button
+          type="button"
+          class="cursor-grab rounded-md px-1.5 text-autobot-text-secondary focus-visible:outline-2 focus-visible:outline-autobot-focus"
+          :data-grab-handle="w.id"
+          :aria-pressed="grabbedId === w.id"
+          :aria-roledescription="t('dashboardGrid.movableWidget')"
+          :aria-label="t('dashboardGrid.widgetLabel', { name: label(w) })"
+          aria-describedby="dashboard-grid-help"
+          @keydown="handleKeydown(w.id, $event)"
+          @blur="handleBlur(w.id)"
+        >⠿</button>
         <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.narrower')" :disabled="atMinSpan(w)" @click="resizeWidth(w, -1)">−</BaseButton>
         <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.wider')" :disabled="atMaxSpan(w)" @click="resizeWidth(w, 1)">+</BaseButton>
         <BaseButton size="sm" variant="ghost" :aria-label="t('dashboardGrid.shorter')" @click="resizeHeight(w, -1)">↑</BaseButton>

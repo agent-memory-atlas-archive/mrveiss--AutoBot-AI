@@ -5952,10 +5952,6 @@
       "actions": "Actions",
       "noDataAvailable": "No data available",
       "selectRow": "Select row {row}"
-    },
-    "panel": {
-      "collapse": "Collapse panel",
-      "expand": "Expand panel"
     }
   },
   "views": {
@@ -6212,7 +6208,12 @@
       "widgetArchitectureDesc": "Interactive system architecture diagram",
       "saveFailed": "Could not save the dashboard layout. Your changes are kept on this page.",
       "resetLayout": "Reset layout",
-      "resetLayoutConfirm": "Reset this page to the default layout? Your saved layout is removed."
+      "resetLayoutConfirm": "Reset this page to the default layout? Your saved layout is removed.",
+      "widgetSystemMonitor": "System Monitor",
+      "widgetCpuHeatmap": "CPU Heatmap",
+      "mainDashboard": "Main Dashboard",
+      "loadFailed": "Could not load your saved dashboard layout. Editing is off so it cannot be overwritten.",
+      "retryLoad": "Retry loading"
     },
     "devSpeedup": {
       "title": "Developer Speedup",
