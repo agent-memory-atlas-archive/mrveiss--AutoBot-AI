@@ -19,7 +19,7 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.monotonic_clock import Clock, monotonic_now
+from autobot_shared.monotonic_clock import Clock, elapsed_since, monotonic_now
 from autobot_shared.ssot_config import config
 from constants.ttl_constants import TTL_1_HOUR
 
@@ -127,7 +127,7 @@ class EmbeddingCache:
         ts = self._timestamps.get(key)
         if ts is None:
             return True
-        return (self._clock() - ts) > self._ttl_seconds
+        return elapsed_since(ts, self._clock) > self._ttl_seconds
 
     def _remove_live(self, key: str) -> None:
         """Remove a key from whichever live list (T1 or T2) contains it."""
@@ -350,7 +350,7 @@ class EmbeddingCache:
 
 # Global embedding cache instance
 # Issue #743: Uses SSOT config defaults (no explicit size needed)
-_embedding_cache = EmbeddingCache(ttl_seconds=3600)
+_embedding_cache = EmbeddingCache(ttl_seconds=TTL_1_HOUR)
 
 
 def get_embedding_cache() -> EmbeddingCache:
