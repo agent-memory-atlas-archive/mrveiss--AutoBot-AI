@@ -53,12 +53,21 @@ _TEXT_MEDIA_TYPES = frozenset({"text/plain", "text/markdown", "text/x-markdown"}
 _CHARSET_PARAM = re.compile(r"""charset\s*=\s*["']?\s*([^\s"';,]+)""", re.IGNORECASE)
 _META_CHARSET = re.compile(rb"""<meta[^>]*?charset\s*=\s*["']?\s*([A-Za-z0-9._:-]+)""", re.IGNORECASE)
 #: Byte-order marks, longest first: a BOM outranks any declared charset (WHATWG encoding sniffing).
-_BOMS = ((codecs.BOM_UTF8, "utf-8-sig"), (codecs.BOM_UTF16_LE, "utf-16"), (codecs.BOM_UTF16_BE, "utf-16"))
+#: Longest marks first: the UTF-32 LE BOM (FF FE 00 00) starts with the UTF-16 LE BOM (FF FE).
+_BOMS = (
+    (codecs.BOM_UTF32_LE, "utf-32"),
+    (codecs.BOM_UTF32_BE, "utf-32"),
+    (codecs.BOM_UTF8, "utf-8-sig"),
+    (codecs.BOM_UTF16_LE, "utf-16"),
+    (codecs.BOM_UTF16_BE, "utf-16"),
+)
 #: Codecs a page may not select: UTF-7 can spell markup out of plain ASCII (WHATWG refuses it).
 _REFUSED_CODECS = frozenset({"utf-7"})
 #: Labels browsers read as windows-1252 (WHATWG): a page saying latin-1 means cp1252's smart quotes.
 _AS_CP1252 = frozenset({"iso8859-1", "ascii"})
-_HTML_SNIFF = re.compile(r"^\s*(<!--.*?-->\s*)*<(!doctype\s+html|html|head|body)[\s>]", re.IGNORECASE | re.DOTALL)
+#: Opening tags that mark an undeclared body as HTML. Matched by a linear scan (``_looks_like_html``):
+#: a ``(<!--.*?-->\s*)*`` regex backtracks catastrophically on repeated or unclosed comments.
+_HTML_OPENERS = ("<!doctype html", "<html", "<head", "<body")
 
 
 class BodyKind(str, Enum):
@@ -126,7 +135,23 @@ def _sniff(body: str) -> BodyKind:
     head = body[:_SNIFF_CHARS]
     if "\x00" in head or (head and head.count("�") / len(head) > _BINARY_REPLACEMENT_RATIO):
         return BodyKind.UNSUPPORTED
-    return BodyKind.HTML if _HTML_SNIFF.match(head) else BodyKind.TEXT
+    return BodyKind.HTML if _looks_like_html(head) else BodyKind.TEXT
+
+
+def _looks_like_html(head: str) -> bool:
+    """Skip leading whitespace and complete ``<!-- -->`` comments, then test for an HTML opening tag."""
+    i = 0
+    while True:
+        while i < len(head) and head[i].isspace():
+            i += 1
+        if not head.startswith("<!--", i):
+            break
+        end = head.find("-->", i + 4)
+        if end < 0:
+            return False  # an unclosed leading comment is not evidence of HTML
+        i = end + 3
+    rest = head[i : i + 16].lower()
+    return any(rest.startswith(o) and (len(rest) == len(o) or rest[len(o)] in " \t\r\n>") for o in _HTML_OPENERS)
 
 
 def classify_body(content_type: Optional[str], body: str) -> BodyKind:

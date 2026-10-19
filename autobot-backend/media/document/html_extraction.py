@@ -54,12 +54,12 @@ logger = get_logger(__name__)
 #: Version of this extractor's output. Part of the web_fetch cache key (#18826), so a
 #: page cached by an earlier extractor -- the markdownify path included -- is never
 #: served again. Bump it whenever a change here alters the extracted text.
-EXTRACTOR_VERSION = "18826-4"
+EXTRACTOR_VERSION = "18826-5"
 
-#: Largest HTML input, in UTF-8 bytes, the extractor parses; a longer page is truncated first.
-#: Default 10 MiB, clamped to [64 KiB, 256 MiB]. Registered in ``env_registry_rag``.
 #: Longest page title kept (from ``og:title`` or ``<title>``), in characters (#18826).
 HTML_TITLE_MAX_CHARS = env_int_clamped("AUTOBOT_HTML_TITLE_MAX_CHARS", 300, min_v=40, max_v=4096)
+#: Largest HTML input, in UTF-8 bytes, the extractor parses; a longer page is truncated first.
+#: Default 10 MiB, clamped to [64 KiB, 256 MiB]. Registered in ``env_registry_rag``.
 HTML_EXTRACT_MAX_BYTES = env_int_clamped(
     "AUTOBOT_HTML_EXTRACT_MAX_BYTES", 10 * 1024 * 1024, min_v=64 * 1024, max_v=256 * 1024 * 1024
 )

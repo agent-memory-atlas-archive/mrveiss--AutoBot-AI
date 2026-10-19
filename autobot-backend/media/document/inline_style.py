@@ -32,9 +32,14 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional, Tuple
 
-_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+from autobot_shared.env_utils import env_int_clamped
+
+#: Longest inline ``style`` attribute parsed, in characters (#18826). A longer one is treated as
+#: hiding its element (fail closed): truncating instead would let padding push ``display:none``
+#: past the cut, and no legitimate page needs a style attribute this long.
+STYLE_MAX_CHARS = env_int_clamped("AUTOBOT_HTML_STYLE_MAX_CHARS", 4096, min_v=256, max_v=65536)
 _IMPORTANT = re.compile(r"!\s*important\s*$", re.IGNORECASE)
-_LENGTH = re.compile(r"^([+-]?(?:\d+\.?\d*|\.\d+))([a-z%]*)$")
+_LENGTH = re.compile(r"^([+-]?(?:\d+(?:\.\d*)?|\.\d+))([a-z%]*)$")  # unambiguous: no \d+\d* split
 _FUNCTION_ARGS = re.compile(r"^([a-z-]+)\((.*)\)$", re.DOTALL)
 #: An offset at or beyond this many pixels (16px per em) places content off-screen.
 _OFFSCREEN_PX = -1000.0
@@ -42,10 +47,29 @@ _PX_PER_EM = 16.0
 _OFFSET_PROPERTIES = ("left", "top", "right", "bottom")
 
 
+def _strip_comments(style: str) -> str:
+    """Remove ``/* ... */`` comments in one linear pass; an unterminated comment drops the tail.
+
+    A lazy ``.*?`` comment regex is quadratic on an unterminated comment (``'/*a' * 40000`` took ~48s),
+    so the scan uses ``str.find`` twice per comment instead (#18826).
+    """
+    out, i = [], 0
+    while True:
+        start = style.find("/*", i)
+        if start < 0:
+            out.append(style[i:])
+            return " ".join(out)
+        out.append(style[i:start])
+        end = style.find("*/", start + 2)
+        if end < 0:
+            return " ".join(out)
+        i = end + 2
+
+
 def _split_declarations(style: str) -> List[str]:
     """Split *style* on ``;`` outside quotes and parentheses."""
     parts, current, depth, quote = [], [], 0, ""
-    for char in _COMMENT.sub(" ", style):
+    for char in _strip_comments(style):
         if quote:
             quote = "" if char == quote else quote
         elif char in "\"'":
@@ -187,6 +211,8 @@ def hidden_by_style(style: str) -> bool:
     """Whether the inline *style* hides its element's content from a reader."""
     if not style:
         return False
+    if len(style) > STYLE_MAX_CHARS:
+        return True  # fail closed: see STYLE_MAX_CHARS
     decls = parse_declarations(style)
     return (
         _invisible(decls)

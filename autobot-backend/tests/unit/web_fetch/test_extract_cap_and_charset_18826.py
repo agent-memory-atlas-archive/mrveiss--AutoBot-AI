@@ -146,3 +146,73 @@ def test_link_schemes_are_a_fixed_allowlist():
 
     assert LINK_SCHEMES == frozenset({"http", "https", "mailto"})
     assert not {"javascript", "data", "file", "vbscript"} & LINK_SCHEMES
+
+
+# --- review round on #18869: ReDoS, BOM order, the cap through a real caller -------------------
+
+
+def test_an_unterminated_style_comment_parses_in_linear_time():
+    """A ``/\\*.*?\\*/`` regex took ~48s on this (CodeRabbit/review on #18869); the scan is linear."""
+    import time
+
+    from media.document import inline_style
+
+    started = time.monotonic()
+    inline_style._split_declarations("/*a" * 40000)  # 120 KB, no closing */
+    inline_style.parse_declarations("font-size:" + "1" * 100000 + "q")
+    assert time.monotonic() - started < 1.0
+
+
+def test_an_oversized_style_attribute_fails_closed(monkeypatch):
+    """Padding can't push display:none past a truncation point: an over-cap style hides its element."""
+    from media.document import inline_style
+
+    monkeypatch.setattr(inline_style, "STYLE_MAX_CHARS", 256)
+    assert inline_style.hidden_by_style("color:red;" + " " * 300 + "display:none") is True
+    assert inline_style.hidden_by_style("color:red") is False
+
+
+def test_the_html_sniff_is_linear_on_hostile_comments():
+    """The old (<!--.*?-->\\s*)* sniff backtracked catastrophically; the linear scan returns at once."""
+    import time
+
+    from web_fetch.content_types import _looks_like_html, _sniff
+
+    started = time.monotonic()
+    for body in ("<!---->" * 3000 + "x", "<!-- a --> " * 3000 + "x", "<!--" + "-->" * 3000 + "x", "<!--" * 5000):
+        _sniff(body)
+    assert time.monotonic() - started < 1.0
+    assert _looks_like_html("  <!-- c --> <HTML lang=en>") and not _looks_like_html("<!-- open")
+    assert not _looks_like_html("<htmlx>")
+
+
+def test_a_utf32_bom_is_not_misread_as_utf16():
+    import codecs
+
+    from web_fetch.content_types import decode_body
+
+    assert decode_body(codecs.BOM_UTF32_LE + "café".encode("utf-32-le"), None) == "café"
+    assert decode_body(codecs.BOM_UTF16_LE + "café".encode("utf-16-le"), None) == "café"
+
+
+@pytest.mark.asyncio
+async def test_the_cap_applies_through_chat_extract_content(monkeypatch):
+    """A caller of extract_page (chat's extract_content) gets the capped extraction, not the full page."""
+    from unittest.mock import AsyncMock
+
+    from chat_workflow.tool_handler import ToolHandlerMixin
+    from media.document import html_extraction
+
+    monkeypatch.setattr(html_extraction, "HTML_EXTRACT_MAX_BYTES", 64 * 1024)
+    page = "<html><body><p>LEADING-PART</p>" + "<p>filler text here</p>" * 6000 + "<p>TAIL-PART</p></body></html>"
+    mixin = ToolHandlerMixin.__new__(ToolHandlerMixin)
+    mixin._capture_live_page_snapshot = AsyncMock(return_value=(page, "https://example.com/p"))
+    seen = {}
+
+    async def _answer(text, url, goal):
+        seen["text"] = text
+        return "ok"
+
+    mixin._answer_goal_from_markdown = _answer
+    assert await mixin._exec_extract_content({"goal": "g"}, session_id="s") == "ok"
+    assert "LEADING-PART" in seen["text"] and "TAIL-PART" not in seen["text"]

@@ -60,3 +60,19 @@ register_env_var(
         range=(40, 4096),
     )
 )
+
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_HTML_STYLE_MAX_CHARS",
+        type=int,
+        default=4096,
+        description=(
+            "Longest inline style attribute, in characters, the HTML extractor parses for hiding rules; "
+            "a longer one is treated as hiding its element (fail closed) "
+            "(media/document/inline_style.py, #18826)."
+        ),
+        component="knowledge",
+        range=(256, 65536),
+    )
+)
