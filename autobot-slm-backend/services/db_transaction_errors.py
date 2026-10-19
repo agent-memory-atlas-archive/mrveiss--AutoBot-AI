@@ -17,6 +17,7 @@ any other startup crash.
 """
 
 import errno
+import re
 import socket
 
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
@@ -34,7 +35,14 @@ def _causes(exc: BaseException) -> list[BaseException]:
     seen: list[BaseException] = []
     while exc is not None and exc not in seen:
         seen.append(exc)
-        exc = exc.__cause__ or exc.__context__
+        # Explicit, not `or`: a falsy exception (custom __bool__/__len__) must still be followed,
+        # and `raise ... from None` (__suppress_context__) ends the chain.
+        if exc.__cause__ is not None:
+            exc = exc.__cause__
+        elif not exc.__suppress_context__:
+            exc = exc.__context__
+        else:
+            exc = None
     return seen
 
 
@@ -54,12 +62,23 @@ def describe_connect_failure(exc: BaseException, database_url: str) -> str:
     return f"cannot reach PostgreSQL at {_location(database_url)}: {_failure_kind(exc)}"
 
 
+_WITHHELD = "the configured host (location withheld: the DSN has unencoded characters before the host)"
+
+
 def _location(database_url: str) -> str:
-    """host:port from a DSN, read only from the text after the LAST '@', so a password holding an
-    unencoded '/', '?', '#' or '@' can never be reported as the host (#18672 review)."""
-    rest = database_url.split("://", 1)[-1].rsplit("@", 1)[-1]
-    hostport = rest.split("/", 1)[0].split("?", 1)[0]
-    host, sep, port = hostport.rpartition(":") if hostport.count(":") == 1 else (hostport, "", "")
-    if not sep:
-        return f"{hostport or '?'} (default port)"
-    return f"{host or '?'}:{port}" if port.isdigit() else f"{host or '?'}:?"
+    """host:port from a DSN, never any part of the credentials (#18672 review).
+
+    The authority ends at the first '/', '?' or '#' (RFC 3986: those are percent-encoded inside
+    a valid password), and the host follows its last '@' -- so an '@' in the query is not the host.
+    If an '@' only appears after that cut, a password holds unencoded delimiters and nothing here
+    can tell host from secret: the location is withheld rather than guessed.
+    """
+    rest = database_url.split("://", 1)[-1]
+    authority = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if "@" in rest and "@" not in authority:
+        return _WITHHELD
+    host, _, port = authority.rsplit("@", 1)[-1].rpartition(":")
+    host, port = (host, port) if host else (port, "")
+    if not re.fullmatch(r"[A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\]", host or "") or (port and not port.isdigit()):
+        return _WITHHELD
+    return f"{host}:{port}" if port else f"{host} (default port)"

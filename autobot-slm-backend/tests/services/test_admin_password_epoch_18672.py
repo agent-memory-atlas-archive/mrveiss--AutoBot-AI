@@ -171,3 +171,13 @@ def test_cli_reset_writes_each_row_to_its_own_database_epoch_first(monkeypatch, 
 def test_cli_takes_no_password_on_the_command_line() -> None:
     text = _ADMIN_SCRIPT.read_text(encoding="utf-8")
     assert "new_password" not in text, "a password argument is visible in ps and shell history"
+
+
+def test_the_secrets_file_takes_a_backslash_password_literally(monkeypatch, tmp_path) -> None:
+    """27's review: a password used as an re.sub replacement had a backslash or backreference misread."""
+    module = _admin_module(monkeypatch, [])
+    secrets = tmp_path / "slm-secrets.env"
+    secrets.write_text("OTHER=1\nSLM_ADMIN_PASSWORD=old\n", encoding="utf-8")
+    value = _throwaway() + "\\1\\"
+    module._sync_secrets_file("admin", value, str(secrets))
+    assert f"SLM_ADMIN_PASSWORD={value}\n" in secrets.read_text(encoding="utf-8")

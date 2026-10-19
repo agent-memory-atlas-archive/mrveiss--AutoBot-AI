@@ -22,8 +22,9 @@ import re
 import sys
 import time
 
-# Stdlib logging, not autobot_shared.logging_manager: this operator CLI runs standalone on the host,
-# outside the backend's import path (exception recorded in #18672's review).
+# Stdlib logging, as in the other SLM code: the SLM test conftest mocks config, which
+# autobot_shared.logging_manager reads at import (CLAUDE.md's stated exception). This CLI also runs
+# standalone on the host, outside the backend's import path.
 logger = logging.getLogger("autobot-admin")
 
 
@@ -122,14 +123,16 @@ def _write_hash(psycopg2, users_dsn: str, username: str, password_hash: str) -> 
         conn.close()
 
 
-def _sync_secrets_file(username: str, password: str) -> None:
+def _sync_secrets_file(username: str, password: str, secrets_path: str = "/etc/autobot/slm-secrets.env") -> None:
     """Keep SLM_ADMIN_PASSWORD in step so the next SLM restart's seed plays use the new value."""
-    secrets_path = "/etc/autobot/slm-secrets.env"
     if username != "admin" or not os.path.exists(secrets_path):
         return
     with open(secrets_path, encoding="utf-8") as fh:
         content = fh.read()
-    updated = re.sub(r"^SLM_ADMIN_PASSWORD=.*$", f"SLM_ADMIN_PASSWORD={password}", content, flags=re.MULTILINE)
+    # A lambda replacement: a password holding `\\` or `\\1` is written literally, not as a regex escape.
+    updated = re.sub(
+        r"^SLM_ADMIN_PASSWORD=.*$", lambda _m: f"SLM_ADMIN_PASSWORD={password}", content, flags=re.MULTILINE
+    )
     if "SLM_ADMIN_PASSWORD=" not in updated:
         updated += f"\nSLM_ADMIN_PASSWORD={password}\n"
     with open(secrets_path, "w", encoding="utf-8") as fh:
