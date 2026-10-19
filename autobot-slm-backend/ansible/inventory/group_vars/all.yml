@@ -15,15 +15,6 @@
 autobot_ssh_key_path: "/etc/autobot/ssh/autobot_key"
 
 # ==========================================
-# INSTALL ROOT (#18587, #18880)
-# ==========================================
-# The ONE place the install root is written: the folder AutoBot is deployed to. Every role
-# default, playbook and template path under it derives from `autobot_base_dir`, and
-# install.sh passes its own AUTOBOT_BASE as `-e autobot_base_dir=...` so the two cannot
-# drift. repo_tests/opt_autobot_literal_ratchet_18880_test.py counts the literal elsewhere.
-autobot_base_dir: /opt/autobot
-
-# ==========================================
 # AI STACK PORT (#17856)
 # ==========================================
 # The ONE ansible literal for the AI-stack port. Every other home (inventory, role defaults,
@@ -75,7 +66,10 @@ autobot:
   version: "2.0.0"
   environment: "production"
   domain: "autobot.internal"
-  base_dir: "{{ autobot_base_dir }}"
+  # THE install root (#15632): the folder AutoBot deploys to. Every path under it derives
+  # from `autobot.base_dir`; install.sh's AUTOBOT_BASE must equal it (#18880). Plain string:
+  # controller plays read this mapping, so it may hold no template (#15731).
+  base_dir: "/opt/autobot"
   user: "autobot"
   group: "autobot"
   home_dir: "/home/autobot"
@@ -165,11 +159,11 @@ system:
 
   # System directories
   directories:
-    - "{{ autobot_base_dir }}"
+    - "{{ autobot.base_dir }}"
     - "/var/log/autobot"
     - "/var/lib/autobot"
     - "/etc/autobot"
-    - "{{ autobot_base_dir }}/backups"
+    - "{{ autobot.base_dir }}/backups"
 
 # ==========================================
 # SECURITY CONFIGURATION
@@ -266,7 +260,7 @@ backup:
 
   # Backup storage
   storage:
-    local_path: "{{ autobot_base_dir }}/backups"
+    local_path: "{{ autobot.base_dir }}/backups"
     compress: true
     encryption: true
 

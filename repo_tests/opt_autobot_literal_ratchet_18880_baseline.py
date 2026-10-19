@@ -5,7 +5,7 @@
 BOUNDARY: every git-tracked file under autobot-slm-backend/ansible/. Counted: occurrences of
 `/opt/autobot` in CODE -- comments are stripped by tools.lint._comment_syntax, because prose
 that names the deploy folder is documentation, not configuration. Excluded: the one definition,
-`autobot_base_dir: /opt/autobot` in inventory/group_vars/all.yml.
+`autobot.base_dir` (`base_dir: "/opt/autobot"`) in inventory/group_vars/all.yml (#15632).
 
 Frozen 2026-10-19: 309 occurrences in 72 files. Cross-derived once at freeze time by an
 independent grep that dropped `#` comment lines: the same 72-file set. Each entry only goes DOWN;

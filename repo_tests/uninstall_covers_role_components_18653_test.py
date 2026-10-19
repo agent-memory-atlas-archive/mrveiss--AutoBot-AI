@@ -73,6 +73,10 @@ def _variables(docs) -> dict[str, str]:
         for key, value in (mapping or {}).items():
             if isinstance(value, str):
                 values.setdefault(key, value)
+            elif isinstance(value, dict):  # dotted names, e.g. autobot.base_dir (#15632)
+                for sub, inner in value.items():
+                    if isinstance(inner, str):
+                        values.setdefault(f"{key}.{sub}", inner)
 
     for path, doc in docs:
         if path.match("*/defaults/main.yml") or "group_vars" in path.parts:
@@ -81,7 +85,7 @@ def _variables(docs) -> dict[str, str]:
             for play in doc:
                 if isinstance(play, dict) and isinstance(play.get("vars"), dict):
                     take(play["vars"])
-    ref = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+    ref = re.compile(r"\{\{\s*([\w.]+)\s*\}\}")
     for _ in range(5):  # chains are short: install_dir -> autobot_base_dir
         values = {
             k: ref.sub(lambda m: values.get(m[1], m[0]) if "{{" not in values.get(m[1], "{{") else m[0], v)

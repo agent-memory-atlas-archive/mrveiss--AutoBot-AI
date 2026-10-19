@@ -1,10 +1,12 @@
 # Copyright 2025-2026 mrveiss
 # SPDX-License-Identifier: Apache-2.0
-"""The install root is written once, as `autobot_base_dir` (#18587 part 1, #18880).
+"""The install root is written once, as `autobot.base_dir` (#15632; #18587 part 1, #18880).
 
 `/opt/autobot` stays the folder AutoBot deploys to; the point is one definition. The literal
 elsewhere in Ansible code is frozen per file in opt_autobot_literal_ratchet_18880_baseline.py
-and only goes down; install.sh hands its AUTOBOT_BASE to Ansible so the two cannot drift.
+and only goes down. install.sh's AUTOBOT_BASE must equal it: `-e` cannot set one key of the
+`autobot:` mapping without replacing the mapping, and that mapping must stay template-free
+for controller plays (#15731), so equality is pinned here instead of passed at run time.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 _ROOT = repo_root()
 _ANSIBLE = "autobot-slm-backend/ansible"
 _DEFINITION_FILE = f"{_ANSIBLE}/inventory/group_vars/all.yml"
-_DEFINITION = "autobot_base_dir: /opt/autobot"
+_DEFINITION = 'base_dir: "/opt/autobot"'
 
 
 def _ansible_files(root: Path) -> list[str]:
@@ -70,28 +72,35 @@ def _live() -> dict[str, int]:
 def test_the_literal_count_only_goes_down() -> None:
     live = _live()
     grown = {p: (BASELINE.get(p, 0), n) for p, n in live.items() if n > BASELINE.get(p, 0)}
-    assert not grown, f"new /opt/autobot literals -- use {{{{ autobot_base_dir }}}}: {grown}"
+    assert not grown, f"new /opt/autobot literals -- use {{{{ autobot.base_dir }}}}: {grown}"
     shrunk = {p: (b, live.get(p, 0)) for p, b in BASELINE.items() if live.get(p, 0) < b}
     assert not shrunk, f"literals removed -- lower BASELINE to match, so the slack is not re-spent: {shrunk}"
 
 
+def _group_vars_all() -> dict:
+    import yaml
+
+    return yaml.safe_load((_ROOT / _DEFINITION_FILE).read_text(encoding="utf-8"))
+
+
 def test_the_install_root_is_defined_once() -> None:
-    text = (_ROOT / _DEFINITION_FILE).read_text(encoding="utf-8")
-    assert re.search(rf"^{re.escape(_DEFINITION)}$", text, re.M), _DEFINITION_FILE
-    others = [
+    """autobot.base_dir is the one root; a second name for it (the retired top-level
+    autobot_base_dir) must not come back."""
+    assert _group_vars_all()["autobot"]["base_dir"] == "/opt/autobot"
+    seconds = [
         rel
         for rel in REACH.examined(_ROOT)
-        if rel != _DEFINITION_FILE
-        and rel.endswith((".yml", ".yaml"))
+        if rel.endswith((".yml", ".yaml"))
         and re.search(r"^\s*autobot_base_dir\s*:", (_ROOT / rel).read_text(encoding="utf-8"), re.M)
     ]
-    assert not others, f"autobot_base_dir defined a second time: {others}"
+    assert not seconds, f"a second install-root variable: {seconds}"
 
 
-def test_install_sh_hands_its_root_to_ansible() -> None:
+def test_install_sh_and_ansible_agree_on_the_root() -> None:
     install = (_ROOT / "install.sh").read_text(encoding="utf-8")
-    assert 'readonly AUTOBOT_BASE="/opt/autobot"' in install
-    assert '-e "autobot_base_dir=${AUTOBOT_BASE}"' in install
+    m = re.search(r'^readonly AUTOBOT_BASE="([^"]+)"', install, re.M)
+    assert m, "install.sh no longer declares AUTOBOT_BASE"
+    assert m.group(1) == _group_vars_all()["autobot"]["base_dir"], (m.group(1), "autobot.base_dir")
 
 
 def test_no_role_default_or_group_var_restates_the_root() -> None:
@@ -102,8 +111,8 @@ def test_no_role_default_or_group_var_restates_the_root() -> None:
 
 def test_the_counter_sees_code_and_ignores_comments_and_the_definition() -> None:
     files = {
-        _DEFINITION_FILE: "autobot_base_dir: /opt/autobot\n# lives in /opt/autobot\nx: /opt/autobot/y\n",
+        _DEFINITION_FILE: 'autobot:\n  base_dir: "/opt/autobot"\n# lives in /opt/autobot\nx: /opt/autobot/y\n',
         "a.yml": "dest: /opt/autobot/a  # under /opt/autobot\n",
-        "b.j2": "ExecStart={{ autobot_base_dir }}/run\n",
+        "b.j2": "ExecStart={{ autobot.base_dir }}/run\n",
     }
     assert literal_counts(files) == {_DEFINITION_FILE: 1, "a.yml": 1}
