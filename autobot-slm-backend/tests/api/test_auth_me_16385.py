@@ -272,6 +272,13 @@ class TestAuthMePasswordEpoch:
         resp = _get_me(headers={"Authorization": f"Bearer {token}"}, epoch_error=ConnectionError("redis refused"))
         _assert_revocation_unavailable(resp)
 
+    def test_a_non_integer_iat_gets_401_not_503(self):
+        """#18892: a malformed iat is a bad credential; retrying cannot fix it."""
+        token = _mint_token(iat="not-a-number")
+        resp = _get_me(headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 401, resp.text
+        assert "Retry-After" not in resp.headers
+
     def test_no_epoch_redis_client_gets_503(self):
         """#16659, #18892: with no Redis client the epoch check cannot run, so the token is denied (503)."""
         token = _mint_token()

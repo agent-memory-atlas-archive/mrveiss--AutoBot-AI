@@ -129,7 +129,7 @@ async def test_a_non_integer_iat_denies_the_token(real_auth_middleware, monkeypa
         with pytest.raises(HTTPException) as denied:
             await get_current_user(_REQUEST)
 
-    assert denied.value.status_code == 503
+    assert denied.value.status_code == 401
 
 
 @pytest.mark.asyncio

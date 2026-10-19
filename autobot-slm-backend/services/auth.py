@@ -46,6 +46,7 @@ from autobot_shared.auth.permissions import Permission
 from autobot_shared.auth.revocation_unavailable import revocation_unavailable_error
 from autobot_shared.time_utils import now_utc
 from autobot_shared.user_management.password_epoch import (
+    MalformedTokenClaims,
     is_token_revoked_by_password_change,
 )
 from config import settings
@@ -182,6 +183,10 @@ class AuthService:
             # with the old password". The epoch check does that in one lookup.
             try:
                 password_revoked = await is_token_revoked_by_password_change(claims)
+            except MalformedTokenClaims:
+                # #18892: an unreadable iat is a bad credential, not a store outage -- 401, never 503.
+                logger.warning("decode_token_async: token iat is malformed; rejecting token")
+                return None
             except _REVOCATION_CHECK_FAILURES as exc:
                 # #16387: same fail-closed reasoning as the jti check above --
                 # a token this check cannot clear is denied, not honoured.

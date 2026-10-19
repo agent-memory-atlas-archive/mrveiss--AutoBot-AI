@@ -20,6 +20,7 @@ from fastapi import HTTPException, status
 from autobot_shared.auth.revocation_unavailable import revocation_unavailable_error
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.user_management.password_epoch import (
+    MalformedTokenClaims,
     RevocationCheckUnavailable,
     is_token_revoked_by_password_change,
 )
@@ -33,6 +34,14 @@ async def reject_if_revoked_by_password_change(user_data: Dict) -> None:
     """Raise a 503 (check cannot run) or 401 (revoked) unless the password-epoch check clears *user_data*'s token."""
     try:
         revoked = await is_token_revoked_by_password_change(user_data)
+    except MalformedTokenClaims as exc:
+        # #18892: the token's own claim is unreadable -- a bad credential; retrying cannot fix it.
+        logger.warning("password-epoch check refused a token with unreadable claims (%s)", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers=_BEARER_CHALLENGE,
+        ) from exc
     except RevocationCheckUnavailable as exc:
         # The check and the helper's fixed reason only -- never the token, its
         # claims or a stored value (#16411, #16422).
