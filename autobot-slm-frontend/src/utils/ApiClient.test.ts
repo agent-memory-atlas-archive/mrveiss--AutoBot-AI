@@ -135,12 +135,11 @@ describe('SlmApiClient', () => {
 
   it('redirects to the base-aware login with the current route as redirect (#18892)', async () => {
     vi.stubEnv('BASE_URL', '/slm/')
-    window.location = {
-      pathname: '/slm/updates/summary',
-      search: '?tab=system',
-      hash: '',
-      href: '',
-    } as unknown as Location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: { pathname: '/slm/updates/summary', search: '?tab=system', hash: '', href: '' } as unknown as Location,
+    })
     sessionStorage.setItem(TOKEN_KEY, 'expired-jwt')
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'unauthorized' }, 401))
     const client = new SlmApiClient()
@@ -155,7 +154,11 @@ describe('SlmApiClient', () => {
 
   it('does not redirect again when already on the base-aware login page (#18892)', async () => {
     vi.stubEnv('BASE_URL', '/slm/')
-    window.location = { pathname: '/slm/login', search: '', hash: '', href: '' } as unknown as Location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: { pathname: '/slm/login', search: '', hash: '', href: '' } as unknown as Location,
+    })
     sessionStorage.setItem(TOKEN_KEY, 'expired-jwt')
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'unauthorized' }, 401))
     const client = new SlmApiClient()
