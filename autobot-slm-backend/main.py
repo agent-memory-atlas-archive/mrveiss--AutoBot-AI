@@ -197,7 +197,7 @@ async def _startup_database() -> None:
         await db_service.initialize()
         logger.info("Database initialized")
     except Exception as e:
-        logger.error("Database initialization failed: %s", e, exc_info=True)
+        logger.error("Database initialization failed: %s (%s)", db_service.describe_failure(e), e, exc_info=True)
         raise
 
 
