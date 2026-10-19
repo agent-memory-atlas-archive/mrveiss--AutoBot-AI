@@ -212,7 +212,8 @@ def test_the_openapi_schema_carries_no_knowledge_base_share_path(client: TestCli
     """Guard against the fork returning: share/unshare live on the collaboration route only (#18795)."""
     paths = client.app.openapi()["paths"]
     assert "/api/knowledge/collaboration/facts/{fact_id}/share" in paths, "the canonical route must be in the schema"
-    assert not [p for p in paths if p.startswith(f"{_KB}/") and "/share" in p]
+    # Only the share/unshare routes moved; /facts/shared-with-me is a different, still-served route.
+    assert not [p for p in paths if p.startswith(f"{_KB}/") and "/facts/{fact_id}/share" in p]
 
 
 _DENIED = (401, 403)
