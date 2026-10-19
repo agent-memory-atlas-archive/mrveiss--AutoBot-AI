@@ -130,3 +130,42 @@ def test_a_host_with_a_port_and_a_url_without_a_scheme_are_caught() -> None:
 
 def test_the_canonical_docker_file_exists() -> None:
     assert Path(_ROOT / _CANONICAL_DOCKER_ENV).is_file()
+
+
+# --- one base plus overlays (owner decision 2026-10-19, #18555 AC1) ---
+
+_BASE = ".env.base"
+_OVERLAYS = (".env.localhost", ".env.native-vm", ".env.network", ".env.network-template")
+_ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
+
+
+def _pairs(text: str) -> dict[str, str]:
+    return {m[1]: m[2] for line in text.splitlines() if (m := _ASSIGNMENT.match(line.strip()))}
+
+
+def redundant_overlay_keys(base: str, overlays: dict[str, str]) -> list[str]:
+    """`<overlay>: KEY` for every key an overlay sets to exactly the base value."""
+    shared = _pairs(base)
+    return sorted(
+        f"{name}: {k}" for name, text in overlays.items() for k, v in _pairs(text).items() if shared.get(k) == v
+    )
+
+
+def test_overlays_hold_only_what_differs_from_the_base() -> None:
+    files = _env_files()
+    assert _BASE in files and set(_OVERLAYS) <= set(files), sorted(files)
+    assert _pairs(files[_BASE]), ".env.base sets no key"
+    redundant = redundant_overlay_keys(files[_BASE], {n: files[n] for n in _OVERLAYS})
+    assert not redundant, f"an overlay repeats a base key with the same value -- delete it there: {redundant}"
+
+
+def test_every_native_env_file_is_a_known_overlay() -> None:
+    """A new root .env.<env> must join the family deliberately, not drift beside it."""
+    native = {p for p in _env_files() if "/" not in p and p not in (_BASE, ".env.example")}
+    assert native == set(_OVERLAYS), sorted(native ^ set(_OVERLAYS))
+
+
+def test_the_redundancy_check_sees_a_repeat_and_allows_an_override() -> None:
+    base = "AUTOBOT_BACKEND_PORT=8001\nAUTOBOT_REDIS_HOST=\n"
+    overlays = {".env.x": "AUTOBOT_BACKEND_PORT=8001\nAUTOBOT_REDIS_HOST=127.0.0.1\n"}
+    assert redundant_overlay_keys(base, overlays) == [".env.x: AUTOBOT_BACKEND_PORT"]

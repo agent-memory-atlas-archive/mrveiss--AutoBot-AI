@@ -136,10 +136,15 @@
           command: docker cp autobot-backend:/app/config/. "{{ migration_backup_dir }}/config/"
           failed_when: false
 
+        # The repo root is three levels above playbooks/; the old `../` pointed into the ansible
+        # dir, which holds no env file, so the backup never had one (#18555). Base + overlay.
         - name: Copy environment files
           copy:
-            src: "{{ playbook_dir }}/../.env.localhost"
-            dest: "{{ migration_backup_dir }}/config/env.localhost"
+            src: "{{ playbook_dir }}/../../../{{ item }}"
+            dest: "{{ migration_backup_dir }}/config/{{ item | regex_replace('^\\.', '') }}"
+          loop:
+            - .env.base
+            - .env.localhost
           failed_when: false
 
         - name: Copy docker-compose configuration
