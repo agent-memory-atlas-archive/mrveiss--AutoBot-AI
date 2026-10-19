@@ -71,4 +71,27 @@ describe('useDashboardLayout', () => {
     expect(localStorage.getItem('autobot_dashboards')).not.toBeNull()
     expect(d.layout.value.dashboards[0].name).toBe('Old')
   })
+
+  it('a successful reset clears a legacy key a failed migration left behind', async () => {
+    // fails if Reset deletes the server layout but the next load restores the legacy one
+    localStorage.setItem('autobot_dashboards', JSON.stringify([{ id: 'old', name: 'Old', widgets: [] }]))
+    api.get.mockResolvedValueOnce({ data: { layout: STORED } })
+    api.delete.mockResolvedValueOnce({})
+    const d = useDashboardLayout('home', DEFAULTS)
+    await d.load()
+    expect(await d.reset()).toBe(true)
+    expect(localStorage.getItem('autobot_dashboards')).toBeNull()
+  })
+
+  it('storage that throws reads as no legacy layout, not as a failed load', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError')
+    })
+    api.get.mockResolvedValueOnce({ data: { layout: { dashboards: [] } } })
+    const d = useDashboardLayout('home', DEFAULTS)
+    await d.load()
+    expect(d.loaded.value).toBe(true)
+    expect(d.loadError.value).toBeNull()
+    spy.mockRestore()
+  })
 })

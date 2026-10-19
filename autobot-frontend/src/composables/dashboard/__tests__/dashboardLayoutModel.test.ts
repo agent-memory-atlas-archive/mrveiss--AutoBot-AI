@@ -6,6 +6,8 @@ import {
   HEIGHT_MAX,
   HEIGHT_MIN,
   clampHeight,
+  displayText,
+  i18nRef,
   fitId,
   fromLegacyDashboards,
   moveWidget,
@@ -93,7 +95,7 @@ describe('dashboardLayoutModel', () => {
       { id: 'my dash!', name: long, widgets: [] },
     ])
     const [first, second] = layout.dashboards
-    expect(first.name).toBe('views.customDashboard.myDashboard')
+    expect(first.name).toBe('i18n:views.customDashboard.myDashboard')
     expect(second.name).toHaveLength(120)
     expect(first.widgets[0].title).toHaveLength(120)
     expect(first.widgets.map((w) => w.id)).toEqual(['a-b', 'a-b-2'])
@@ -104,5 +106,13 @@ describe('dashboardLayoutModel', () => {
     expect(fitId('widget_1', 'f')).toBe('widget_1')
     expect(fitId('***', 'f')).toBe('f')
     expect(fitId(undefined, 'f')).toBe('f')
+  })
+
+  it('translates only prefixed keys; user text that equals a key is shown as typed', () => {
+    // fails if a user's own dashboard name gets translated because it matches a key
+    const t = (key: string) => `T(${key})`
+    expect(displayText(i18nRef('views.customDashboard.mainDashboard'), t)).toBe('T(views.customDashboard.mainDashboard)')
+    expect(displayText('views.customDashboard.mainDashboard', t)).toBe('views.customDashboard.mainDashboard')
+    expect(displayText('My board', t)).toBe('My board')
   })
 })

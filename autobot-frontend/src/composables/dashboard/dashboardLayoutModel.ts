@@ -7,6 +7,19 @@
 
 import type { components } from '@/types/generated/api'
 
+/**
+ * Stored names and titles that are i18n keys carry this prefix, set only by the defaults and
+ * the legacy mapper. Anything else is text the user typed and is shown as typed, even if it
+ * happens to equal a key (#18896 review).
+ */
+export const I18N_PREFIX = 'i18n:'
+export const i18nRef = (key: string): string => `${I18N_PREFIX}${key}`
+
+/** A stored name or title for display: prefixed keys translate, user text stays verbatim. */
+export function displayText(stored: string, t: (key: string) => string): string {
+  return stored.startsWith(I18N_PREFIX) ? t(stored.slice(I18N_PREFIX.length)) : stored
+}
+
 export const WIDGET_SPANS = [4, 6, 8, 12] as const
 export type WidgetSpan = (typeof WIDGET_SPANS)[number]
 export const HEIGHT_MIN = 160
@@ -87,7 +100,7 @@ interface LegacyDashboard {
 // them, so the mapper fits it to them: one out-of-range value would 422 every load.
 const MAX_TEXT = 120
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
-const DEFAULT_NAME_KEY = 'views.customDashboard.myDashboard'
+const DEFAULT_NAME_KEY = i18nRef('views.customDashboard.myDashboard')
 
 const fitText = (s: unknown): string => String(s ?? '').trim().slice(0, MAX_TEXT)
 

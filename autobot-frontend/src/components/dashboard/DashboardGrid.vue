@@ -12,7 +12,7 @@
  * `update:widgets`. The parent persists it (useDashboardLayout); this component holds
  * no storage. Styled with token utility classes only: no component-local style block (#12730).
  */
-import { computed, nextTick, ref, toRef } from 'vue'
+import { computed, nextTick, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { BaseButton } from '@autobot/ui'
 import {
@@ -44,6 +44,11 @@ const label = (w: T) => props.labelOf?.(w) || w.title || w.type
 const { grabbedId, announcement, onKeydown, cancel } = useDashboardGrabMode(model, label)
 const editing = toRef(props, 'editing')
 const draggingId = ref<string | null>(null)
+
+// Leaving edit mode mid-grab (Done, Save) puts the widget back; no outline or grab outlives it.
+watch(editing, (on) => {
+  if (!on && grabbedId.value) cancel()
+})
 
 const SPAN_TOKEN: Record<number, string> = { 4: '--widget-s', 6: '--widget-m', 8: '--widget-l', 12: '--widget-full' }
 
@@ -118,7 +123,7 @@ const atMaxSpan = (w: DashboardWidget) => w.span === WIDGET_SPANS[WIDGET_SPANS.l
       @drop.prevent="onDrop(w.id)"
       @dragend="draggingId = null"
     >
-      <div v-if="editing" class="absolute top-1 right-1 z-dropdown flex gap-0.5 rounded-md bg-autobot-bg-elevated">
+      <div v-if="editing" class="flex justify-end gap-0.5 border-b border-autobot-border bg-autobot-bg-elevated p-1">
         <button
           type="button"
           class="cursor-grab rounded-md px-1.5 text-autobot-text-secondary focus-visible:outline-2 focus-visible:outline-autobot-focus"

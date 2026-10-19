@@ -6213,7 +6213,9 @@
       "widgetCpuHeatmap": "CPU Heatmap",
       "mainDashboard": "Main Dashboard",
       "loadFailed": "Could not load your saved dashboard layout. Editing is off so it cannot be overwritten.",
-      "retryLoad": "Retry loading"
+      "retryLoad": "Retry loading",
+      "newDashboard": "New Dashboard",
+      "resetFailed": "Could not reset the layout. Your saved layout is unchanged."
     },
     "devSpeedup": {
       "title": "Developer Speedup",

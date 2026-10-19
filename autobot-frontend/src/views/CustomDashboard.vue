@@ -238,13 +238,8 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { BaseModal } from '@autobot/ui'
 import DashboardGrid from '@/components/dashboard/DashboardGrid.vue'
 import { useDashboardLayout } from '@/composables/dashboard/useDashboardLayout'
-import {
-  clampHeight,
-  type Dashboard,
-  type DashboardLayout,
-  type DashboardWidget,
-} from '@/composables/dashboard/dashboardLayoutModel'
-import { defaultHomeLayout, defaultHomeWidgets, templateWidgets, WIDGET_DEFINITIONS, type WidgetDefinitionSpec } from '@/composables/dashboard/defaultDashboards'
+import { i18nRef, displayText, clampHeight, type Dashboard, type DashboardLayout, type DashboardWidget } from '@/composables/dashboard/dashboardLayoutModel'
+import { defaultHomeLayout, templateWidgets, WIDGET_DEFINITIONS, type WidgetDefinitionSpec } from '@/composables/dashboard/defaultDashboards'
 
 // Import visualization components
 import ResourceHeatmap from '@/components/visualizations/ResourceHeatmap.vue'
@@ -252,9 +247,8 @@ import WorkflowVisualization from '@/components/visualizations/WorkflowVisualiza
 import AgentActivityVisualization from '@/components/visualizations/AgentActivityVisualization.vue'
 import SystemArchitectureDiagram from '@/components/visualizations/SystemArchitectureDiagram.vue'
 
-const { t, te } = useI18n()
-/** Stored defaults are i18n keys; anything else is text the user typed. */
-const tr = (s: string) => (te(s) ? t(s) : s)
+const { t } = useI18n()
+const tr = (s: string) => displayText(s, t)
 const { showToast } = useToast()
 const { confirm } = useConfirmDialog()
 const { layout, loaded, loadError, load, save, reset } = useDashboardLayout('home', defaultHomeLayout)
@@ -347,9 +341,13 @@ async function resetLayout() {
     message: t('views.customDashboard.resetLayoutConfirm'),
   })
   if (!ok) return
-  await reset()
-  widgets.value = defaultHomeWidgets()
-  isDirty.value = false
+  try {
+    await reset()
+  } catch {
+    showToast(t('views.customDashboard.resetFailed'), 'error')
+    return
+  }
+  loadDashboard() // widgets and layout both come from the same defaults() value
 }
 
 function createNewDashboard() {
@@ -362,7 +360,7 @@ function confirmCreateDashboard() {
   const id = `dashboard-${Date.now()}`
   const newDashboard: Dashboard = {
     id,
-    name: newDashboardName.value || 'New Dashboard',
+    name: newDashboardName.value || i18nRef('views.customDashboard.newDashboard'),
     widgets: templateWidgets(newDashboardTemplate.value),
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -370,6 +368,7 @@ function confirmCreateDashboard() {
 
   layout.value = { dashboards: [...layout.value.dashboards, newDashboard], activeId: id }
   loadDashboard()
+  isDirty.value = true // not on the server yet: Save stays enabled until it is
   showNewDashboardModal.value = false
 }
 
@@ -399,14 +398,10 @@ function addWidget() {
 
 function confirmAddWidget(widgetDef: WidgetDefinition) {
   const newWidget: Widget = {
-    // #17020: the same millisecond-resolution id collision fixed in
-    // `useCanvasStore.addCell` this commit. Two widgets added in one tick
-    // shared an id, and the layout, removal and `:key` all address a widget by
-    // it. Fixed with the class rather than left for whichever PR next trips
-    // over it.
+    // #17020: a random id, so two widgets added in one tick never share layout, removal and :key.
     id: `widget-${crypto.randomUUID()}`,
     type: widgetDef.type,
-    title: widgetDef.name,
+    title: i18nRef(widgetDef.nameKey),
     span: widgetDef.defaultSpan,
     height: widgetDef.defaultHeight,
     props: { ...widgetDef.defaultProps },

@@ -42,15 +42,23 @@ export function useDashboardLayout(page: DashboardPage, defaults: () => Dashboar
     }
   }
 
+  // Storage can throw (private mode, blocked site data); that only means "no legacy layout".
   function readLegacy(): DashboardLayout | null {
     if (page !== 'home') return null
-    const raw = localStorage.getItem(LEGACY_KEY)
-    if (!raw) return null
     try {
-      return fromLegacyDashboards(JSON.parse(raw))
+      const raw = localStorage.getItem(LEGACY_KEY)
+      return raw ? fromLegacyDashboards(JSON.parse(raw)) : null
     } catch (e) {
       logger.error('Legacy dashboards unreadable; left in place:', e)
       return null
+    }
+  }
+
+  function clearLegacy(): void {
+    try {
+      localStorage.removeItem(LEGACY_KEY)
+    } catch (e) {
+      logger.warn('Could not clear the legacy dashboards key:', e)
     }
   }
 
@@ -58,7 +66,7 @@ export function useDashboardLayout(page: DashboardPage, defaults: () => Dashboar
     const legacy = readLegacy()
     if (!legacy?.dashboards.length) return
     layout.value = legacy
-    if (await put(legacy)) localStorage.removeItem(LEGACY_KEY)
+    if (await put(legacy)) clearLegacy()
   }
 
   async function load(): Promise<void> {
@@ -87,6 +95,8 @@ export function useDashboardLayout(page: DashboardPage, defaults: () => Dashboar
   async function reset(): Promise<boolean> {
     if (!loaded.value) return false
     await apiClient.delete(url)
+    // A legacy key left by a failed migration would otherwise restore the old layout next load.
+    clearLegacy()
     layout.value = defaults()
     return true
   }

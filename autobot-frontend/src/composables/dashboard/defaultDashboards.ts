@@ -6,6 +6,7 @@
  * so a stored default follows the reader's language; a title the user types stays as typed.
  */
 import {
+  i18nRef,
   spanFromLegacyWidth,
   type DashboardLayout,
   type DashboardWidget,
@@ -27,9 +28,9 @@ function widget(
 
 export function defaultHomeWidgets(): DashboardWidget[] {
   return [
-    widget('widget-1', 'system', 'views.customDashboard.widgetSystemMonitor', 1, 350),
-    widget('widget-2', 'heatmap', 'views.customDashboard.widgetHeatmap', 2, 300, { height: 300 }),
-    widget('widget-3', 'agents', 'views.customDashboard.widgetAgents', 2, 400, { height: 400 }),
+    widget('widget-1', 'system', i18nRef('views.customDashboard.widgetSystemMonitor'), 1, 350),
+    widget('widget-2', 'heatmap', i18nRef('views.customDashboard.widgetHeatmap'), 2, 300, { height: 300 }),
+    widget('widget-3', 'agents', i18nRef('views.customDashboard.widgetAgents'), 2, 400, { height: 400 }),
   ]
 }
 
@@ -37,7 +38,7 @@ export function defaultHomeLayout(): DashboardLayout {
   const now = Date.now()
   return {
     dashboards: [
-      { id: DEFAULT_DASHBOARD_ID, name: 'views.customDashboard.mainDashboard', widgets: defaultHomeWidgets(), createdAt: now, updatedAt: now },
+      { id: DEFAULT_DASHBOARD_ID, name: i18nRef('views.customDashboard.mainDashboard'), widgets: defaultHomeWidgets(), createdAt: now, updatedAt: now },
     ],
     activeId: DEFAULT_DASHBOARD_ID,
   }
@@ -47,13 +48,13 @@ export function templateWidgets(template: string): DashboardWidget[] {
   switch (template) {
     case 'monitoring':
       return [
-        widget('w1', 'system', 'views.customDashboard.widgetSystemMonitor', 1, 350),
-        widget('w2', 'heatmap', 'views.customDashboard.widgetCpuHeatmap', 2, 300, { height: 300, metric: 'cpu' }),
+        widget('w1', 'system', i18nRef('views.customDashboard.widgetSystemMonitor'), 1, 350),
+        widget('w2', 'heatmap', i18nRef('views.customDashboard.widgetCpuHeatmap'), 2, 300, { height: 300, metric: 'cpu' }),
       ]
     case 'agents':
-      return [widget('w1', 'agents', 'views.customDashboard.widgetAgents', 3, 450, { height: 450 })]
+      return [widget('w1', 'agents', i18nRef('views.customDashboard.widgetAgents'), 3, 450, { height: 450 })]
     case 'workflows':
-      return [widget('w1', 'workflow', 'views.customDashboard.widgetWorkflow', 3, 500, { height: 500 })]
+      return [widget('w1', 'workflow', i18nRef('views.customDashboard.widgetWorkflow'), 3, 500, { height: 500 })]
     default:
       return []
   }

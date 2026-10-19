@@ -57,6 +57,18 @@ describe('DashboardGrid grab mode', () => {
     wrapper.unmount()
   })
 
+  it('leaving edit mode mid-grab puts the widget back and clears the grab', async () => {
+    // fails if the grab outline and moved order outlive edit mode
+    const wrapper = mountGrid()
+    await handle(wrapper, 'a').trigger('keydown', { key: ' ' })
+    await handle(wrapper, 'a').trigger('keydown', { key: 'ArrowRight' })
+    await nextTick()
+    await wrapper.setProps({ editing: false })
+    expect(wrapper.emitted('update:widgets')?.at(-1)?.[0].map((x: DashboardWidget) => x.id)).toEqual(['a', 'b'])
+    expect(wrapper.find('.outline-2').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('has no handles outside edit mode', () => {
     const wrapper = mount(DashboardGrid, { props: { widgets: [w('a')], editing: false } })
     expect(wrapper.find('[data-grab-handle]').exists()).toBe(false)
