@@ -17,12 +17,14 @@ skipped revocation answers the revoked token instead of raising 401.
 import asyncio
 import importlib
 import inspect
+import time
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from tests.conftest import load_real_auth_middleware
@@ -241,3 +243,76 @@ def test_a_revoked_admin_jwt_does_not_reach_another_users_memories(monkeypatch):
         _resolve(resolve(_JWT_ADMIN, "bob", _request()))
 
     assert exc.value.status_code == 403
+
+
+# --- end to end: real middleware, real JWT, real epoch store; nothing about revocation is mocked ---
+
+_SIGNING_SECRET = "s" * 40
+
+
+@pytest.fixture
+def epochs():
+    """An in-memory epoch store installed through the canonical seam (#18663); removed after."""
+    from autobot_shared.user_management import password_epoch  # noqa: PLC0415
+
+    store: dict[str, int] = {}
+
+    async def get_epoch(subject: str) -> int | None:
+        return store.get(subject)
+
+    async def set_epoch(subject: str, *, now: int | None = None) -> int:
+        store[subject] = int(time.time()) if now is None else now
+        return store[subject]
+
+    password_epoch.use_epoch_store(get_epoch=get_epoch, set_epoch=set_epoch)
+    yield password_epoch
+    password_epoch.reset_epoch_store()
+
+
+def _admin_route_client(monkeypatch) -> TestClient:
+    """``Depends(check_admin_permission)`` of the real module, behind the real JWT-verifying middleware."""
+    real = load_real_auth_middleware()
+    cls = real.AuthenticationMiddleware
+    middleware = cls.__new__(cls)
+    middleware.jwt_secret = _SIGNING_SECRET
+    middleware.jwt_public_key = None
+    middleware.failed_attempts = {}
+    middleware.enable_auth = True
+    middleware.get_session = {}.get
+    monkeypatch.setattr(real, "get_auth_middleware", lambda: middleware)
+    app = FastAPI()
+    app.get("/admin-only", dependencies=[Depends(real.check_admin_permission)])(lambda: {"ok": True})
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def _login_jwt(issued_at: int) -> str:
+    from autobot_shared.auth.interactive_principal import LOGIN_TOKEN_TYPE  # noqa: PLC0415
+    from autobot_shared.auth.jwt_core import encode_jwt  # noqa: PLC0415
+
+    claims = {
+        "username": "alice",
+        "role": "admin",
+        "user_id": str(uuid.uuid4()),
+        "token_type": LOGIN_TOKEN_TYPE,
+        "iat": issued_at,
+    }
+    return encode_jwt(claims, secret=_SIGNING_SECRET, expiry_hours=1)
+
+
+@pytest.mark.parametrize(
+    "epoch_age, expected",
+    [(0, 401), (60, 200), (None, 200)],
+    ids=["epoch after the token", "token after the epoch", "control: no epoch"],
+)
+def test_a_real_jwt_meets_a_real_epoch_at_the_admin_gate(monkeypatch, epochs, epoch_age, expected):
+    now = int(time.time())
+    client = _admin_route_client(monkeypatch)
+    if epoch_age is not None:
+        asyncio.run(epochs.set_password_epoch("alice", now=now - epoch_age))
+    token = _login_jwt(now - 10)
+
+    response = client.get("/admin-only", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == expected, response.text
+    if expected == 401:
+        assert "password was changed" in response.json()["detail"]
