@@ -4,7 +4,7 @@
 // BaseTable behavioral tests (#14778): the one data table for both apps,
 // built to the refined-UI spec 4.6 (real <table>, th scope, numeric cells).
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { h } from 'vue'
 import tableSource from '../BaseTable.vue?raw'
@@ -140,12 +140,36 @@ describe('BaseTable', () => {
     expect(w.emitted('selection-change')?.length).toBe(before)
   })
 
-  it('select-all on rows without the key field uses the row index, never undefined', async () => {
-    // fails if keysOf skips rowKeyOf's index fallback
+  it('select-all on rows without the key field selects every row, never undefined', async () => {
+    // fails if keysOf and row rendering stop sharing the identity-key fallback
     const rows = ROWS.map(({ id: _id, ...rest }) => rest)
     const w = make({ selectable: true, rows })
     await w.findAll('input[type="checkbox"]')[0].setValue(true)
-    expect(w.emitted('selection-change')?.at(-1)).toEqual([[0, 1, 2]])
+    const keys = w.emitted('selection-change')?.at(-1)?.[0] as unknown[]
+    expect(keys).toHaveLength(3)
+    expect(keys.every((k) => typeof k === 'number')).toBe(true)
+    expect(new Set(keys).size).toBe(3)
+  })
+
+  it('keeps the same keyless row selected after a sort reorders it', async () => {
+    // fails if a keyless row is keyed by its position: the selection would jump rows on sort
+    const rows = ROWS.map(({ id: _id, ...rest }) => rest)
+    const w = make({ selectable: true, rows })
+    await w.findAll('tbody input[type="checkbox"]')[0].setValue(true) // Bravo
+    await w.find('th button').trigger('click') // sort by name: Alpha, Bravo, Charlie
+    const checked = w.findAll('tbody tr').filter((tr) => (tr.find('input').element as HTMLInputElement).checked)
+    expect(checked.map((tr) => tr.findAll('td')[1].text())).toEqual(['Bravo'])
+  })
+
+  it('warns when selectable is set without both checkbox labels', () => {
+    // fails if a selectable table can render nameless checkboxes silently
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    make({ selectable: true })
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('selectAllLabel'))).toBe(true)
+    warn.mockClear()
+    make({ selectable: true, selectAllLabel: 'All', selectRowLabel: (n: number) => `Row ${n}` })
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('selectAllLabel'))).toBe(false)
+    warn.mockRestore()
   })
 
   it('declares zebra before hover and selected, so both still win on a zebra row', () => {

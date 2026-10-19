@@ -16,7 +16,7 @@
   empty, loading, footer. Header tooltips reuse BaseTooltip and open downwards.
 -->
 <script setup lang="ts">
-import { computed, ref, useSlots, watch } from 'vue'
+import { computed, ref, useSlots, warn, watch, watchEffect } from 'vue'
 import BaseTooltip from './BaseTooltip.vue'
 import EmptyState from './EmptyState.vue'
 import { sortRows, type SortOrder } from '../utils/tableSort'
@@ -61,6 +61,7 @@ const props = withDefaults(
     /** Controlled sort: when set the app orders `rows` and handles `sort`. */
     sortKey?: string
     sortOrder?: SortOrder
+    /** Requires `selectAllLabel` and `selectRowLabel`: a checkbox without a name is unusable by screen reader. */
     selectable?: boolean
     selectAllLabel?: string
     selectRowLabel?: (rowNumber: number) => string
@@ -105,8 +106,8 @@ const shownRows = computed(() =>
 const colspan = computed(
   () => props.columns.length + (props.selectable ? 1 : 0) + (slots.actions ? 1 : 0),
 )
-// The same key rowKeyOf renders with, index fallback included, so select-all never collects undefined.
-const keysOf = (rows: TableRow[]): TableRowKey[] => rows.map((r, i) => rowKeyOf(r, i))
+// The same key rows render with (identity fallback included), so select-all never collects undefined.
+const keysOf = (rows: TableRow[]): TableRowKey[] => rows.map((r) => rowKeyOf(r))
 const allSelected = computed(
   () => props.rows.length > 0 && keysOf(props.rows).every((k) => selected.value.has(k)),
 )
@@ -175,9 +176,28 @@ function formatCell(row: TableRow, col: BaseTableColumn): string {
   return value === null || value === undefined ? '' : String(value)
 }
 
-function rowKeyOf(row: TableRow, index: number): TableRowKey {
-  return (row[props.rowKey] as TableRowKey | undefined) ?? index
+// A row without its `rowKey` field is keyed by its object identity, never its position:
+// `rows` and the sorted `shownRows` order differ, so a positional key would select a
+// different row after a sort. The keys are negative so they cannot collide with ids.
+const identityKeys = new WeakMap<TableRow, number>()
+let nextIdentityKey = -1
+
+function rowKeyOf(row: TableRow): TableRowKey {
+  const own = row[props.rowKey] as TableRowKey | undefined
+  if (own !== undefined && own !== null) return own
+  let key = identityKeys.get(row)
+  if (key === undefined) {
+    key = nextIdentityKey--
+    identityKeys.set(row, key)
+  }
+  return key
 }
+
+watchEffect(() => {
+  if (props.selectable && (!props.selectAllLabel || !props.selectRowLabel)) {
+    warn('BaseTable: `selectable` needs `selectAllLabel` and `selectRowLabel`, or its checkboxes have no accessible name.')
+  }
+})
 </script>
 
 <template>
@@ -249,17 +269,17 @@ function rowKeyOf(row: TableRow, index: number): TableRowKey {
           <template v-else>
             <tr
               v-for="(row, index) in shownRows"
-              :key="rowKeyOf(row, index)"
+              :key="rowKeyOf(row)"
               class="aui-table__row"
-              :class="{ 'aui-table__row--zebra': zebra && index % 2 === 1, 'aui-table__row--selected': selected.has(rowKeyOf(row, index)) }"
+              :class="{ 'aui-table__row--zebra': zebra && index % 2 === 1, 'aui-table__row--selected': selected.has(rowKeyOf(row)) }"
             >
               <td v-if="selectable" class="aui-table__check">
                 <input
                   type="checkbox"
                   class="aui-table__checkbox"
-                  :checked="selected.has(rowKeyOf(row, index))"
+                  :checked="selected.has(rowKeyOf(row))"
                   :aria-label="selectRowLabel?.(index + 1)"
-                  @change="toggleRow(rowKeyOf(row, index))"
+                  @change="toggleRow(rowKeyOf(row))"
                 />
               </td>
               <td v-for="col in columns" :key="col.key" class="aui-table__cell" :class="cellClasses(col)">
