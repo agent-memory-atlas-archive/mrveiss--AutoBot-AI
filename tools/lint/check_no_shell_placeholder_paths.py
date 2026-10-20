@@ -69,8 +69,7 @@ from dataclasses import dataclass
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from _scan_helpers import configure_logging  # noqa: E402
-
-from autobot_shared.paths import project_root as repo_root  # noqa: E402
+from _scan_helpers import project_root as repo_root  # noqa: E402
 
 # lint job, and `autobot_shared.logging_manager` would drag config loading into
 # that path. Same trade as `tools/lint/check_undefined_names.py`.

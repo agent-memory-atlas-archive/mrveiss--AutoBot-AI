@@ -52,8 +52,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from _scan_helpers import configure_logging  # noqa: E402
-
-from autobot_shared.paths import project_root as repo_root  # noqa: E402
+from _scan_helpers import project_root as repo_root  # noqa: E402
 
 # and check_python_file_size.py): this runs inside `code-quality`, which installs
 # linters only — never the application's own dependencies — so

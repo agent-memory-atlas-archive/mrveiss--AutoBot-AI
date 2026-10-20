@@ -52,8 +52,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import _exclude_anchoring as _shared
 import _scan_helpers
 from _scan_helpers import configure_logging  # noqa: E402
-
-from autobot_shared.paths import project_root as repo_root  # noqa: E402
+from _scan_helpers import project_root as repo_root  # noqa: E402
 
 # Plain stdlib logging, deliberately (#1082). This runs as a bare script inside
 # a lint job, and `autobot_shared.logging_manager` would drag config loading

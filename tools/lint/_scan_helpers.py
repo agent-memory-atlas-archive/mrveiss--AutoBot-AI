@@ -50,6 +50,7 @@ from typing import Collection, Iterable, List, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from autobot_shared.paths import project_root  # noqa: E402,F401  # re-export for lint hooks (#18954)
 from autobot_shared.paths import scrubbed_git_env  # noqa: E402
 
 # Plain stdlib logging, deliberately (#1082): these helpers run inside bare

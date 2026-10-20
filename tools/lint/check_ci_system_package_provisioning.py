@@ -76,9 +76,9 @@ from _comment_syntax import code_text  # noqa: E402
 # same trap as #15914.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from _scan_helpers import configure_logging, scrubbed_git_env, tracked_paths  # noqa: E402
-
-from autobot_shared.paths import project_root as repo_root  # noqa: E402
+from _scan_helpers import configure_logging  # noqa: E402
+from _scan_helpers import project_root as repo_root  # noqa: E402
+from _scan_helpers import scrubbed_git_env, tracked_paths  # noqa: E402
 
 # Plain stdlib logging (matching check_flake8_exclude_anchoring.py and
 # check_requirements_ci_drift.py): this runs inside `code-quality`, which
