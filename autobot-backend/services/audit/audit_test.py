@@ -209,6 +209,18 @@ class TestReadPath:
         sql = str(store.where_clauses(AuditFilter(action="auth.login"))[0].compile(dialect=postgresql.dialect()))
         assert "audit_logs.action IN" in sql
 
+    def test_a_stored_legacy_row_is_found_by_the_canonical_filter_in_sql(self) -> None:
+        """The SQL path (not only ``matches``) must expand the filter to the spellings rows were stored under."""
+        from sqlalchemy.dialects import postgresql
+
+        clauses = store.where_clauses(AuditFilter(action="auth.login"))
+        sql = " AND ".join(
+            str(c.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})) for c in clauses
+        )
+        for stored in ("auth.login", "login_success", "login_failed", "user.login", "login"):
+            assert f"'{stored}'" in sql
+        assert "'auth.logout'" not in sql
+
     def test_one_query_answers_user_in_window_across_categories(self) -> None:
         """ "Everything for user U in window W" is one statement on audit_logs, any category."""
         from sqlalchemy.dialects import postgresql

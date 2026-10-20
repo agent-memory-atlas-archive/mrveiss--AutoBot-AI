@@ -143,6 +143,27 @@ def test_old_spellings_in_stored_rows_are_read_through_the_canonical_mapping(sto
     assert engine_action(stored_action) == expected
 
 
+def test_every_login_literal_a_writer_passes_is_an_authentication_event() -> None:
+    """The bare ``login`` prefix was dropped from the prefixes, so each ``login*`` spelling must be aliased.
+
+    A future unaliased ``login_failure`` fails here instead of silently becoming ``api_request``.
+    """
+    from repo_tests._audit_action_scan import read_enums, scan_source
+    from repo_tests._audit_action_vocabulary_scope import ROOTS, source_python
+    from repo_tests._paths import repo_root
+
+    from tools.lint._scan_helpers import tracked_paths
+
+    root = repo_root()
+    enums = read_enums(root)
+    seen = set()
+    for rel in (r for r in tracked_paths(root, *ROOTS) if source_python(r)):
+        found = scan_source(rel, (root / rel).read_text(encoding="utf-8"), enums)
+        seen.update(w.value for w in found if w.kind == "literal" and w.value.startswith("login"))
+    assert {"login_success", "login_failed"} <= seen, f"control: the scan did not find the login writers: {seen}"
+    assert {v: engine_action(v) for v in seen if engine_action(v) != "authentication"} == {}
+
+
 def test_the_insider_high_risk_action_is_reachable_from_a_bus_event() -> None:
     """``_HIGH_RISK_ACTIONS`` compares against the translated action; a name nothing produces never matches."""
     from security.enterprise.threat_detection.analyzers.insider_threat import InsiderThreatAnalyzer
