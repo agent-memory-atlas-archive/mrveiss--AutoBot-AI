@@ -20,7 +20,14 @@ from services.audit import audit, store
 from services.audit.projection import UNIFIED_KEY, category_key
 from services.audit.purge import purge_expired
 from services.audit.retention import RETENTION_DAYS, ttl_seconds
-from services.audit.taxonomy import AuditAction, AuditCategory, AuditEvent, AuditFilter, ComplianceEventType
+from services.audit.taxonomy import (
+    AuditAction,
+    AuditCategory,
+    AuditEvent,
+    AuditFilter,
+    ComplianceEventType,
+    action_name,
+)
 
 _DAY = 24 * 3600
 
@@ -228,10 +235,11 @@ class TestReadPath:
         ev = _event(AuditCategory.COMPLIANCE, "user.login", "alice", at=1_700_000_000.0, resource_id="/api/x")
         row = store._row_for(ev)
         got = store.row_to_event(row)
+        assert row.action == "auth.login"  # pinned literally so the expected value above cannot drift with the mapping
         assert {k: got[k] for k in ("id", "category", "action", "actor_id", "resource_id", "occurred_at")} == {
             "id": ev.id,
             "category": "compliance",
-            "action": "user.login",
+            "action": action_name(ev.action),  # the write is canonical (#18716): "user.login" is stored as "auth.login"
             "actor_id": "alice",
             "resource_id": "/api/x",
             "occurred_at": 1_700_000_000.0,
