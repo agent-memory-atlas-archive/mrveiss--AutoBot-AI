@@ -44,10 +44,11 @@ alertmanager_group: "alertmanager"
 alertmanager_install_dir: "{{ autobot.base_dir | dirname }}/alertmanager"
 # Downloaded into the install dir (created before the fetch), removed after extract.
 alertmanager_archive: "{{ alertmanager_install_dir }}/alertmanager-{{ alertmanager_version }}.tar.gz"
-# Loopback only: the sole consumer is the co-located Prometheus (monitoring_local_host in
-# prometheus.yml.j2). The API can create/delete silences and has no auth, so it is never
-# bound to monitoring_listen_address and has no firewall rule.
-alertmanager_listen_address: "{{ monitoring_local_host }}"
+# Loopback only, and its own value: the sole consumer is the co-located Prometheus
+# (prometheus.yml.j2 targets this address). The API can create/delete silences and has
+# no auth, so it never follows monitoring_local_host (a scrape-target name an operator
+# may point at a routable address) nor monitoring_listen_address, and has no firewall rule.
+alertmanager_listen_address: "127.0.0.1"
 alertmanager_config_dir: "/etc/alertmanager"
 alertmanager_data_dir: "/var/lib/alertmanager"
 # #18556: what the role creates where a host may run its own Alertmanager. Each path absent

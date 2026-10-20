@@ -13,7 +13,7 @@ alerting:
 {% if monitoring_install_alertmanager | bool %}
   alertmanagers:
     - static_configs:
-        - targets: ["{{ monitoring_local_host }}:{{ alertmanager_port }}"]
+        - targets: ["{{ alertmanager_listen_address }}:{{ alertmanager_port }}"]
 {% else %}
   alertmanagers: []
 {% endif %}

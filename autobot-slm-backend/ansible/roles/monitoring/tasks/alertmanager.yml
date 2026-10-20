@@ -46,10 +46,12 @@
     label: "{{ item.item }}"
   when: not item.stat.exists
 
-- name: Check if Alertmanager binary exists
-  ansible.builtin.stat:
-    path: "{{ alertmanager_install_dir }}/alertmanager"
-  register: _alertmanager_binary
+# A version bump replaces the installed binary, not only a missing one (#18556 review).
+- name: Check whether the pinned Alertmanager release is installed
+  ansible.builtin.include_tasks: release_binary.yml
+  vars:
+    release_binary: "{{ alertmanager_install_dir }}/alertmanager"
+    release_version: "{{ alertmanager_version }}"
 
 - name: Create alertmanager directories
   ansible.builtin.file:
@@ -68,7 +70,7 @@
     url: "https://{{ alertmanager_release_host }}/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
     dest: "{{ alertmanager_archive }}"
     mode: "0644"
-  when: not _alertmanager_binary.stat.exists
+  when: release_install_needed | bool
 
 - name: Extract Alertmanager
   ansible.builtin.unarchive:
@@ -79,7 +81,8 @@
       - --strip-components=1
     owner: "{{ alertmanager_user }}"
     group: "{{ alertmanager_group }}"
-  when: not _alertmanager_binary.stat.exists
+  when: release_install_needed | bool
+  notify: Restart alertmanager
 
 - name: Remove the Alertmanager tarball
   ansible.builtin.file:
@@ -123,7 +126,7 @@
 
 - name: "Alertmanager | Ask the running server whether it is healthy (#18556)"
   ansible.builtin.uri:
-    url: "http://{{ monitoring_local_host }}:{{ alertmanager_port }}/-/healthy"
+    url: "http://{{ alertmanager_listen_address }}:{{ alertmanager_port }}/-/healthy"
   register: _alertmanager_health
   retries: "{{ alertmanager_health_check_retries }}"
   delay: "{{ alertmanager_health_check_delay }}"

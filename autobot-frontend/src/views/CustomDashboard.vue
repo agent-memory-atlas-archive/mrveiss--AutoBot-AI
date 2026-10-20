@@ -20,12 +20,10 @@
           {{ isEditMode ? $t('views.customDashboard.done') : $t('views.customDashboard.editLayout') }}
         </button>
         <button @click="addWidget" class="action-btn" v-if="isEditMode">
-          <Icon name="plus" />
-          {{ $t('views.customDashboard.addWidget') }}
+          <Icon name="plus" /> {{ $t('views.customDashboard.addWidget') }}
         </button>
         <button v-if="isEditMode" @click="resetLayout" class="action-btn">
-          <Icon name="undo" />
-          {{ $t('views.customDashboard.resetLayout') }}
+          <Icon name="undo" /> {{ $t('views.customDashboard.resetLayout') }}
         </button>
         <button
           @click="saveDashboard"
@@ -38,7 +36,7 @@
           {{ isDirty ? $t('views.customDashboard.save') : $t('views.customDashboard.saved') }}
         </button>
         <div class="dashboard-selector">
-          <select v-model="currentDashboardId" @change="loadDashboard">
+          <select v-model="currentDashboardId" @change="loadDashboard(false)">
             <option v-for="dash in availableDashboards" :key="dash.id" :value="dash.id">
               {{ tr(dash.name) }}
             </option>
@@ -273,7 +271,8 @@ const widgets = ref<Widget[]>([])
 const availableDashboards = computed(() => layout.value.dashboards)
 const currentDashboardId = computed({
   get: () => layout.value.activeId ?? '',
-  set: (id: string) => { layout.value = { ...layout.value, activeId: id } },
+  // Fold the old dashboard's unsaved widgets in before activeId moves, so a switch never drops them.
+  set: (id: string) => { layout.value = { ...(isDirty.value ? nextLayout() : layout.value), activeId: id } },
 })
 const showConfigModal = ref(false)
 const showNewDashboardModal = ref(false)
@@ -308,12 +307,11 @@ const dashboardTitle = computed(() => {
 // Methods - Dashboard Management
 // ============================================================================
 
-function loadDashboard() {
+/** `clean = false` on a switch: unsaved work is still unsaved, so Save stays enabled. */
+function loadDashboard(clean = true) {
   const dashboard = availableDashboards.value.find(d => d.id === currentDashboardId.value)
-  if (dashboard) {
-    widgets.value = dashboard.widgets.map(w => ({ ...w, props: { ...w.props } }))
-  }
-  isDirty.value = false
+  if (dashboard) widgets.value = dashboard.widgets.map(w => ({ ...w, props: { ...w.props } }))
+  if (clean) isDirty.value = false
 }
 
 function nextLayout(): DashboardLayout {
@@ -368,7 +366,8 @@ function confirmCreateDashboard() {
     updatedAt: Date.now()
   }
 
-  layout.value = { dashboards: [...layout.value.dashboards, newDashboard], activeId: id }
+  layout.value = { ...layout.value, dashboards: [...layout.value.dashboards, newDashboard] }
+  currentDashboardId.value = id // through the setter, so the old dashboard's unsaved edits are kept
   loadDashboard()
   isDirty.value = true // not on the server yet: Save stays enabled until it is
   showNewDashboardModal.value = false

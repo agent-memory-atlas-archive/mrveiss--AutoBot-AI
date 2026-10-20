@@ -20,10 +20,12 @@
     shell: /usr/sbin/nologin
     create_home: false
 
-- name: Check if Prometheus binary exists
-  ansible.builtin.stat:
-    path: "{{ prometheus_install_dir }}/prometheus"
-  register: _prometheus_binary
+# A version bump replaces the installed binary, not only a missing one (#18556 review).
+- name: Check whether the pinned Prometheus release is installed
+  ansible.builtin.include_tasks: release_binary.yml
+  vars:
+    release_binary: "{{ prometheus_install_dir }}/prometheus"
+    release_version: "{{ prometheus_version }}"
 
 - name: Create prometheus directories
   ansible.builtin.file:
@@ -42,7 +44,7 @@
     url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
     dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
     mode: "0644"
-  when: not _prometheus_binary.stat.exists
+  when: release_install_needed | bool
 
 - name: Extract Prometheus
   ansible.builtin.unarchive:
@@ -53,7 +55,8 @@
       - --strip-components=1
     owner: "{{ prometheus_user }}"
     group: "{{ prometheus_group }}"
-  when: not _prometheus_binary.stat.exists
+  when: release_install_needed | bool
+  notify: Restart prometheus
 
 - name: Remove the Prometheus tarball
   ansible.builtin.file:

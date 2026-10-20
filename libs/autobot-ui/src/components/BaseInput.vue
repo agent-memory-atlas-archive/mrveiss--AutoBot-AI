@@ -10,13 +10,17 @@
     - no text of its own: label, helper, error and the clear-button label all
       come from the consuming app (the kit has no i18n catalog for it);
     - accessible by default: a real <label for> tied to a generated id,
-      aria-invalid on error, aria-describedby pointing at the helper/error text.
+      aria-invalid on error, aria-describedby pointing at the helper/error text;
+      a caller's own aria-describedby ids are kept (the generated id is appended)
+      and its aria-invalid stands whenever `error` is not set;
+    - the clear button is icon-only, so it renders only with a non-empty
+      `clearLabel` (its accessible name); `clearable` without one warns in dev.
     - class, style and data-* attrs land on the outer wrapper; every other attr
       (aria-label, aria-labelledby, name, maxlength, inputmode, listeners) lands on
       the native <input>, so a field with no visible label can still be named.
 -->
 <script setup lang="ts">
-import { computed, ref, useAttrs, useId } from 'vue'
+import { computed, ref, useAttrs, useId, warn, watchEffect } from 'vue'
 
 defineOptions({ inheritAttrs: false })
 
@@ -36,7 +40,7 @@ const props = withDefaults(
     readonly?: boolean
     required?: boolean
     clearable?: boolean
-    /** Accessible name of the clear button; required text when `clearable`. */
+    /** Accessible name of the clear button; without it `clearable` shows no button (and warns). */
     clearLabel?: string
     /** Overrides the generated id, for a form that targets the field itself. */
     id?: string
@@ -71,11 +75,21 @@ const helperId = `${uid}-helper`
 const errorId = `${uid}-error`
 const inputRef = ref<HTMLInputElement>()
 
-const describedBy = computed(() => {
-  if (props.error) return errorId
-  return props.helperText ? helperId : undefined
+// Plain functions for the same reason as pickAttrs: both read the caller's attrs.
+const describedBy = () => {
+  const own = props.error ? errorId : props.helperText ? helperId : undefined
+  return [attrs['aria-describedby'], own].filter(Boolean).join(' ') || undefined
+}
+const ariaInvalid = () => (props.error ? 'true' : (attrs['aria-invalid'] as string | boolean | undefined))
+
+const clearName = computed(() => props.clearLabel?.trim() ?? '')
+// An icon-only button with no name is announced as just "button": better no button at all.
+const showClear = computed(() => props.clearable && !!clearName.value && !!props.modelValue && !props.disabled && !props.readonly)
+watchEffect(() => {
+  if (props.clearable && !clearName.value) {
+    warn('BaseInput: `clearable` needs `clearLabel`, or its icon-only clear button has no accessible name.')
+  }
 })
-const showClear = computed(() => props.clearable && !!props.modelValue && !props.disabled && !props.readonly)
 
 function onInput(event: Event) {
   emit('update:modelValue', (event.target as HTMLInputElement).value)
@@ -113,8 +127,8 @@ defineExpose({ focus: () => inputRef.value?.focus(), blur: () => inputRef.value?
         :readonly="readonly"
         :required="required"
         :autocomplete="autocomplete"
-        :aria-invalid="error ? 'true' : undefined"
-        :aria-describedby="describedBy"
+        :aria-invalid="ariaInvalid()"
+        :aria-describedby="describedBy()"
         @input="onInput"
       />
       <span v-if="$slots.suffix || showClear" class="aui-input__affix">
@@ -122,7 +136,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), blur: () => inputRef.value?
           v-if="showClear"
           type="button"
           class="aui-input__clear"
-          :aria-label="clearLabel"
+          :aria-label="clearName"
           @click="onClear"
         >
           <span aria-hidden="true">&times;</span>

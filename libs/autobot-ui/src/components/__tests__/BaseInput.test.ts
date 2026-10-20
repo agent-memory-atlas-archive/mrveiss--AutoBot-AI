@@ -5,7 +5,7 @@
 // label/for linkage, the error and helper aria wiring, every ported prop and
 // both slots — the main app's four llc views and the showcase depend on it.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import inputSource from '../BaseInput.vue?raw'
@@ -96,6 +96,26 @@ describe('BaseInput', () => {
     expect(input.attributes('aria-invalid')).toBeUndefined()
   })
 
+  it("keeps the caller's aria-describedby ids and appends the generated one", () => {
+    // fails if the generated helper/error id replaces external help text the caller linked
+    const attrs = { 'aria-describedby': 'outside-hint' }
+    const helper = mount(BaseInput, { props: { helperText: 'Help' }, attrs })
+    expect(helper.get('input').attributes('aria-describedby')).toBe(`outside-hint ${helper.get('.aui-input__helper').attributes('id')}`)
+    const error = mount(BaseInput, { props: { error: 'Bad' }, attrs })
+    expect(error.get('input').attributes('aria-describedby')).toBe(`outside-hint ${error.get('.aui-input__error').attributes('id')}`)
+    // Contrast: with no helper or error, the caller's ids alone remain.
+    expect(mount(BaseInput, { attrs }).get('input').attributes('aria-describedby')).toBe('outside-hint')
+  })
+
+  it("keeps the caller's aria-invalid unless error sets it", () => {
+    // fails if a caller's validation state is dropped because the kit shows no error text
+    expect(mount(BaseInput, { attrs: { 'aria-invalid': 'true' } }).get('input').attributes('aria-invalid')).toBe('true')
+    // Contrast: error overrides a caller's "false", and nothing set means no attribute.
+    const both = mount(BaseInput, { props: { error: 'Bad' }, attrs: { 'aria-invalid': 'false' } })
+    expect(both.get('input').attributes('aria-invalid')).toBe('true')
+    expect(mount(BaseInput).get('input').attributes('aria-invalid')).toBeUndefined()
+  })
+
   it('omits aria-describedby when there is neither helper nor error', () => {
     // fails if aria-describedby dangles at an element that does not exist
     expect(mount(BaseInput).get('input').attributes('aria-describedby')).toBeUndefined()
@@ -161,8 +181,25 @@ describe('BaseInput', () => {
 
   it('does not offer clear on a disabled field', () => {
     // fails if a disabled field can still be wiped through the clear button
-    const wrapper = mount(BaseInput, { props: { clearable: true, disabled: true, modelValue: 'x' } })
+    const wrapper = mount(BaseInput, { props: { clearable: true, clearLabel: 'Clear', disabled: true, modelValue: 'x' } })
     expect(wrapper.find('.aui-input__clear').exists()).toBe(false)
+  })
+
+  it('renders no nameless clear button and warns when clearable lacks clearLabel', () => {
+    // fails if an icon-only clear button renders with no accessible name, or the gap is silent
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const warned = () => spy.mock.calls.some((c) => String(c[0]).includes('clearLabel'))
+    for (const clearLabel of [undefined, '', '   ']) {
+      const wrapper = mount(BaseInput, { props: { clearable: true, clearLabel, modelValue: 'x' } })
+      expect(wrapper.find('.aui-input__clear').exists()).toBe(false)
+    }
+    expect(warned()).toBe(true)
+    spy.mockClear()
+    // Contrast: with a name the button renders, named, and nothing is warned.
+    const named = mount(BaseInput, { props: { clearable: true, clearLabel: 'Clear', modelValue: 'x' } })
+    expect(named.get('.aui-input__clear').attributes('aria-label')).toBe('Clear')
+    expect(warned()).toBe(false)
+    spy.mockRestore()
   })
 
   it('puts parent attrs (class, style) on the wrapper, not the input', () => {
