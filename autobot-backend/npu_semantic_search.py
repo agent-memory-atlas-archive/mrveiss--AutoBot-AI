@@ -1390,7 +1390,7 @@ class NPUSemanticSearch:
                 n_results=limit,
                 include=["metadatas", "documents", "distances"],
             )
-            modality_results = _convert_chroma_results(search_results, modality, threshold)
+            modality_results = servable_response(_convert_chroma_results(search_results, modality, threshold))
             logger.info(f"Found {len(modality_results)} results in {modality} collection")
             return modality_results
         except Exception as e:

@@ -83,3 +83,21 @@ def test_batch_path_reads_the_text_collection_not_the_code_collection():
         query_batch=AsyncMock(return_value={"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]})
     )
     assert asyncio.run(obj._batch_chromadb_search([0], [[0.0]], 5, None, "cpu"))[0][0] == []
+
+
+def test_cross_modal_text_leg_drops_rejected_and_expired_keeps_valid(monkeypatch):
+    """cross_modal_search's text modality reads autobot_text_embeddings, which may hold KB facts (#18820)."""
+    import npu_semantic_search as mod
+
+    monkeypatch.setattr(mod, "require_query_dim", lambda *_a, **_k: None)
+    obj = _engine()
+    ids = list(CASES)
+    found = {
+        "ids": [ids],
+        "documents": [ids],
+        "metadatas": [[CASES[i] for i in ids]],
+        "distances": [[0.1, 0.2, 0.3]],
+    }
+    obj.collections["text"] = SimpleNamespace(query=MagicMock(return_value=found))
+    results = obj._search_single_modality("text", mod.np.zeros(3), 5, 0.0)
+    assert [r.doc_id for r in results] == ["valid"]
