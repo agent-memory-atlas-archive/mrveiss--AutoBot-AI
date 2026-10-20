@@ -53,7 +53,19 @@ with real_modules_swapped():
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 _NODE_ID = "n-scan"
-_HOSTILE = ["{{ lookup('pipe', 'id') }}", "a b", 'x"y', "x'y", "a;b", "a\nb", "-H", "x" * 300]
+_HOSTILE = [
+    "{{ lookup('pipe', 'id') }}",
+    "a b",
+    'x"y',
+    "x'y",
+    "a;b",
+    "a\nb",
+    "-H",
+    "x" * 300,
+    "../x",
+    "redis\u2010stack",
+    "r\u00e9dis",
+]
 _ACTIVE = {"active": "active", "sub": "running"}
 
 

@@ -53,6 +53,9 @@ _HOSTILE = [
     "a\nb",
     "-H",
     "x" * 300,
+    "../x",
+    "redis\u2010stack",
+    "r\u00e9dis",
     123,
 ]
 _VALID = "redis-stack.service"

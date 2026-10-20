@@ -74,7 +74,18 @@ async def env(monkeypatch):
 
 @pytest.mark.parametrize("action", _ACTIONS)
 @pytest.mark.parametrize(
-    "name", ["x;%20rm%20-rf%20~", "a%0Ab", "$(id)", "a&&b", "-H", "%7B%7B%207*7%20%7D%7D", "x" * 300]
+    "name",
+    [
+        "x;%20rm%20-rf%20~",
+        "a%0Ab",
+        "$(id)",
+        "a&&b",
+        "-H",
+        "%7B%7B%207*7%20%7D%7D",
+        "r%C3%A9dis",
+        "redis%E2%80%90stack",
+        "x" * 300,
+    ],
 )
 async def test_a_hostile_name_is_422_and_no_playbook_runs(env, name, action):
     response = await env.post(name, action)

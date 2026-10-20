@@ -74,11 +74,17 @@ def discovered_unit_name_ok(node_id: str, name: object) -> bool:
     return True
 
 
-def validate_service_name_extra_var(extra_vars: Mapping[str, object] | None) -> None:
-    """Raise ValueError if *extra_vars* carries a ``service_name`` that is not a unit name (#19005).
+# Extra-var keys whose value is handed to a service module as a unit name: ``manage-service.yml``
+# (service_name), ``remove-role.yml`` (systemd_service, from the admin-set Role row) and
+# ``deploy-certificate.yml`` (reload_service). Found by reading every execute_playbook caller's keys.
+UNIT_NAME_EXTRA_VAR_KEYS = frozenset({"service_name", "systemd_service", "reload_service"})
+
+
+def validate_unit_extra_vars(extra_vars: Mapping[str, object] | None) -> None:
+    """Raise ValueError if a unit-bearing key of *extra_vars* is not a unit name (#19005).
 
     Called by ``PlaybookExecutor.execute_playbook`` before anything is spawned, so every
     caller is covered, not only the ones that remembered to validate.
     """
-    if extra_vars and "service_name" in extra_vars:
-        validate_unit_name(extra_vars["service_name"])  # type: ignore[arg-type]
+    for key in UNIT_NAME_EXTRA_VAR_KEYS & set(extra_vars or ()):
+        validate_unit_name(extra_vars[key])  # type: ignore[index,arg-type]

@@ -23,6 +23,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import yaml
 
+from services.unit_names import UNIT_NAME_EXTRA_VAR_KEYS
+
 _SLM_ROOT = Path(__file__).resolve().parent.parent
 if str(_SLM_ROOT) not in sys.path:
     sys.path.insert(0, str(_SLM_ROOT))
@@ -40,7 +42,20 @@ def _load_real_playbook_executor():
 
 playbook_executor = _load_real_playbook_executor()
 
-_HOSTILE = ["{{ lookup('pipe', 'id') }}", "a b", 'x"y', "a;b", "a\nb", "-H", "x" * 300, 123, ""]
+_HOSTILE = [
+    "{{ lookup('pipe', 'id') }}",
+    "a b",
+    'x"y',
+    "a;b",
+    "a\nb",
+    "-H",
+    "x" * 300,
+    123,
+    "",
+    "../x",
+    "redis\u2010stack",
+    "r\u00e9dis",
+]
 _SECRET = "s3cr3t-{{ not_a_template }}"  # pragma: allowlist secret  # nosec B105  # test fixture
 
 
@@ -87,12 +102,13 @@ class _Run:
             return asyncio.run(self.executor.execute_playbook("manage-service.yml", extra_vars=extra_vars))
 
 
+@pytest.mark.parametrize("key", sorted(UNIT_NAME_EXTRA_VAR_KEYS))
 @pytest.mark.parametrize("name", _HOSTILE, ids=lambda n: repr(n)[:30])
-def test_a_hostile_service_name_raises_and_nothing_is_synced_or_spawned(tmp_path, monkeypatch, name):
+def test_a_hostile_unit_extra_var_raises_and_nothing_is_synced_or_spawned(tmp_path, monkeypatch, name, key):
     run = _Run(tmp_path, monkeypatch)
 
     with pytest.raises(ValueError, match="invalid systemd unit name"):
-        run.execute({"service_name": name, "service_action": "restarted"})
+        run.execute({key: name, "service_action": "restarted"})
 
     run.sync.assert_not_awaited()
     run.run_subprocess.assert_not_awaited()
@@ -105,6 +121,14 @@ def test_a_valid_service_name_proceeds_to_the_spawn(tmp_path, monkeypatch):
     result = run.execute({"service_name": "redis-stack.service", "service_action": "restarted"})
 
     assert result["success"] is True
+    run.run_subprocess.assert_awaited_once()
+
+
+@pytest.mark.parametrize("key", sorted(UNIT_NAME_EXTRA_VAR_KEYS))
+def test_a_valid_unit_extra_var_proceeds_for_every_unit_bearing_key(tmp_path, monkeypatch, key):
+    run = _Run(tmp_path, monkeypatch)
+
+    assert run.execute({key: "redis-stack-server"})["success"] is True
     run.run_subprocess.assert_awaited_once()
 
 

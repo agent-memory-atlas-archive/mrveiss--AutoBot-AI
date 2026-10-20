@@ -33,7 +33,7 @@ from services.inventory_builder import (
 )
 from services.playbook_output_stream import PIPE_LINE_LIMIT, iter_pipe_lines
 from services.provision_progress import TaskProgressTracker
-from services.unit_names import validate_service_name_extra_var
+from services.unit_names import validate_unit_extra_vars
 
 logger = logging.getLogger(__name__)
 
@@ -1303,7 +1303,7 @@ class PlaybookExecutor:
             Dict with keys: success (bool), output (str), returncode (int),
             timed_out (bool) -- True only when ``timeout_s`` was exceeded.
         """
-        validate_service_name_extra_var(extra_vars)  # #19005: ValueError before anything is spawned
+        validate_unit_extra_vars(extra_vars)  # #19005: ValueError before anything is spawned
         # #17150: re-detect before syncing, as _update_code_source derives its sync target from self.ansible_dir.
         self._refresh_ansible_dir()
         code_source_synced = await self._update_code_source()
