@@ -8,6 +8,7 @@ Provides real-time metrics for AutoBot system components.
 """
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass
 from typing import Any, Dict
@@ -17,6 +18,7 @@ import psutil
 
 from autobot_shared.http_client import get_http_client
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.redis_scan import count_keys
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.ssot_config import config as ssot_config
 from config.manager import get_config_manager
@@ -37,6 +39,10 @@ class SystemMetric:
     metadata: Dict[str, Any] = None
 
 
+# #18999: doc:* / kb_cache:* counts are keyspace walks; refresh at most this often.
+KB_COUNT_REFRESH_SECONDS = float(os.getenv("AUTOBOT_KB_METRICS_COUNT_REFRESH_SECONDS", "300"))
+
+
 class SystemMetricsCollector:
     """
     Collects and aggregates system metrics in real-time.
@@ -52,6 +58,7 @@ class SystemMetricsCollector:
         self._collection_interval = config.get("monitoring.metrics.collection_interval", 5)
         self._is_collecting = False
         self._auth_error_logged = False  # Track if auth error was already logged
+        self._kb_counts: Dict[str, tuple] = {}  # pattern -> (monotonic ts, count)
 
         # Phase 5 (Issue #348): Prometheus is now the primary metrics store
         try:
@@ -360,6 +367,16 @@ class SystemMetricsCollector:
         kb_redis_client = await get_async_redis_client(database="knowledge")
         return kb_redis_client
 
+    async def _cached_key_count(self, redis_client, pattern: str) -> int:
+        """Keys matching ``pattern``, walked at most once per refresh window (#18999)."""
+        cached = self._kb_counts.get(pattern)
+        now = time.monotonic()
+        if cached and now - cached[0] < KB_COUNT_REFRESH_SECONDS:
+            return cached[1]
+        count = await count_keys(redis_client, pattern)
+        self._kb_counts[pattern] = (now, count)
+        return count
+
     async def _collect_kb_vector_metrics(
         self, redis_client, timestamp: float, metrics: Dict[str, "SystemMetric"]
     ) -> None:
@@ -373,9 +390,7 @@ class SystemMetricsCollector:
             timestamp: Metric timestamp
             metrics: Dictionary to add metrics to
         """
-        vector_count = 0
-        async for key in redis_client.scan_iter(match="doc:*"):
-            vector_count += 1
+        vector_count = await self._cached_key_count(redis_client, "doc:*")
 
         metrics["kb_vector_count"] = SystemMetric(
             timestamp=timestamp,
@@ -399,9 +414,7 @@ class SystemMetricsCollector:
             metrics: Dictionary to add metrics to
         """
         # Count cache entries
-        cache_count = 0
-        async for key in redis_client.scan_iter(match="kb_cache:*"):
-            cache_count += 1
+        cache_count = await self._cached_key_count(redis_client, "kb_cache:*")
 
         metrics["kb_cache_entries"] = SystemMetric(
             timestamp=timestamp,
