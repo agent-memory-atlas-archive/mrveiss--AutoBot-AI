@@ -22,6 +22,7 @@ import pytest
 
 from autobot_shared.auth.jwt_core import hash_password
 from autobot_shared.user_management import password_epoch
+from testkit.fake_async_session import FakeAsyncSession
 
 _ADMIN_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "autobot-admin.py"
 
@@ -52,18 +53,13 @@ def _revoked(subject: str, issued_at: int) -> bool:
     return asyncio.run(password_epoch.is_token_revoked_by_password_change({"sub": subject, "iat": issued_at}))
 
 
-class _Db:
-    async def flush(self):
-        return None
-
-
 def test_startup_sync_revokes_older_tokens_when_the_password_changed(epochs) -> None:
     from services.admin_password_sync import sync_admin_password
 
     user = types.SimpleNamespace(username="admin", password_hash=hash_password(_throwaway()))
     issued = int(time.time()) - 5
     assert not _revoked("admin", issued)
-    assert asyncio.run(sync_admin_password(_Db(), user, _throwaway())) is True
+    assert asyncio.run(sync_admin_password(FakeAsyncSession(), user, _throwaway())) is True
     assert _revoked("admin", issued), "a token issued before the re-sync still works"
 
 
@@ -72,7 +68,7 @@ def test_startup_sync_records_nothing_when_the_password_is_unchanged(epochs) -> 
 
     value = _throwaway()
     user = types.SimpleNamespace(username="admin", password_hash=hash_password(value))
-    assert asyncio.run(sync_admin_password(_Db(), user, value)) is False
+    assert asyncio.run(sync_admin_password(FakeAsyncSession(), user, value)) is False
     assert "admin" not in epochs, "every restart would revoke every admin session"
 
 
@@ -92,7 +88,7 @@ def test_startup_sync_fails_closed_when_the_epoch_cannot_be_recorded() -> None:
         before = hash_password(_throwaway())
         user = types.SimpleNamespace(username="admin", password_hash=before)
         with pytest.raises(EpochNotRecordedError):
-            asyncio.run(sync_admin_password(_Db(), user, _throwaway()))
+            asyncio.run(sync_admin_password(FakeAsyncSession(), user, _throwaway()))
         assert user.password_hash == before, "the hash changed although no epoch was recorded"
     finally:
         password_epoch.reset_epoch_store()
@@ -111,7 +107,7 @@ def test_startup_survives_an_epoch_store_outage_with_the_hash_unchanged(caplog) 
         before = hash_password(_throwaway())
         user = types.SimpleNamespace(username="admin", password_hash=before)
         with caplog.at_level("CRITICAL", logger="services.admin_password_sync"):
-            assert asyncio.run(sync_admin_password_at_startup(_Db(), user, _throwaway())) is False
+            assert asyncio.run(sync_admin_password_at_startup(FakeAsyncSession(), user, _throwaway())) is False
         assert user.password_hash == before, "the hash changed although no epoch was recorded"
         assert "password epoch not recorded" in caplog.text
     finally:
