@@ -11,8 +11,9 @@ straight from the backend / monitoring tree.
 
 Two rules, both over the tracked file list (git decides what exists, not the filesystem):
 
-* ``error_messages.yaml`` has exactly ONE tracked path, whatever its content (the removed
-  infrastructure copy differed from the canonical one only by a license header).
+* ``error_messages.yaml`` and ``llm_models.yaml`` have exactly ONE tracked path, whatever their
+  content (the removed ``error_messages.yaml`` copy differed only by a license header; the removed
+  ``llm_models.yaml`` infra copy was a different, loader-incompatible file, #18884).
 * No two tracked ``prometheus.yml`` / ``permission_rules.yaml`` files are byte-identical. Same-named
   files with different content (the Grafana datasource, the Ansible task file, the Docker-only
   permission ruleset of #17852) are distinct files, not copies.
@@ -29,7 +30,10 @@ from repo_tests._reach import declare
 
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
-_SINGLE_PATH = {"error_messages.yaml": "autobot-backend/static/error_messages.yaml"}
+_SINGLE_PATH = {
+    "error_messages.yaml": "autobot-backend/static/error_messages.yaml",
+    "llm_models.yaml": "autobot-backend/config/llm_models.yaml",
+}
 _NO_IDENTICAL_COPIES = ("prometheus.yml", "permission_rules.yaml")
 _WATCHED = frozenset(_SINGLE_PATH) | frozenset(_NO_IDENTICAL_COPIES)
 #: Roots that hold a watched file today: the reach claim (every one must be populated).
