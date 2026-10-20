@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 import numpy as np
 
+from autobot_shared.embedding_model import EmbeddingUnavailableError
 from autobot_shared.logging_manager import get_logger
 from desktop_streaming_manager import get_desktop_streaming
 from memory import TaskPriority
@@ -581,11 +582,10 @@ class ScreenAnalyzer:
     ) -> List[UIElement]:
         """Find UI elements matching voice description using cross-modal search"""
         try:
-            # Import npu_semantic_search for cross-modal capabilities
-            from npu_semantic_search import NPUSearchEngine
+            # Get the initialized shared search engine for cross-modal capabilities.
+            from npu_semantic_search import get_npu_search_engine
 
-            # Get NPU search engine instance
-            search_engine = NPUSearchEngine()
+            search_engine = await get_npu_search_engine()
 
             # Use cross-modal search to find UI elements matching voice description
             search_results = await search_engine.cross_modal_search(
@@ -606,6 +606,9 @@ class ScreenAnalyzer:
             )
             return matched_elements
 
+        except EmbeddingUnavailableError:
+            # Surface an unavailable or unrecorded embedding space to the caller.
+            raise
         except Exception as e:
             logger.error("Voice-guided element detection failed: %s", e)
             return []
