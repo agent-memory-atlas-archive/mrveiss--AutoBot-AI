@@ -264,6 +264,15 @@ describe('BaseModal', () => {
       wrapper.unmount()
     })
 
+    it('does NOT close on Escape when closeOnEsc=false', async () => {
+      // fails if a must-answer dialog (a secret shown once, #14777) can still be dismissed with Escape
+      const wrapper = mountModal({ closeOnEsc: false })
+      await wrapper.find('.aui-dialog-overlay').trigger('keydown', { key: 'Escape' })
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+      expect(wrapper.emitted('close')).toBeUndefined()
+      wrapper.unmount()
+    })
+
     it('does NOT close on overlay click when closeOnOverlay=false', async () => {
       // fails if handleOverlayClick stops checking props.closeOnOverlay and
       // closes unconditionally regardless of the prop
@@ -394,5 +403,23 @@ describe('BaseModal focus trap (#5016)', () => {
     expect(document.activeElement).toBe(outside)
     wrapper.unmount()
     outside.remove()
+  })
+
+  describe('subtitle slot', () => {
+    it('renders block content under the title, outside the <h3>', () => {
+      // fails if a subtitle has to go inside the title slot, i.e. a <p> inside an <h3> (#14777)
+      const wrapper = mountModal({}, { ...DEFAULT_SLOTS, subtitle: '<p class="sub">node-01</p>' })
+      const sub = wrapper.find('.aui-dialog-subtitle .sub')
+      expect(sub.exists()).toBe(true)
+      expect(wrapper.find('h3 .sub').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('renders no subtitle wrapper when the slot is absent', () => {
+      // contrast case: fails if an empty subtitle box is always rendered
+      const wrapper = mountModal()
+      expect(wrapper.find('.aui-dialog-subtitle').exists()).toBe(false)
+      wrapper.unmount()
+    })
   })
 })

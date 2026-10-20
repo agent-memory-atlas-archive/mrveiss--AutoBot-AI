@@ -223,18 +223,18 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-gray-300": 9,
     "slm:bg-gray-400": 41,
     "slm:bg-gray-400/15": 1,
-    "slm:bg-gray-50": 254,
+    "slm:bg-gray-50": 252,  # #14777: 254 -> 252, SLM dialogs moved onto the kit BaseModal
     "slm:bg-gray-500": 4,
     "slm:bg-gray-500/20": 4,
-    "slm:bg-gray-500/50": 2,
-    "slm:bg-gray-500/75": 9,
+    "slm:bg-gray-500/50": 1,  # #14777: 2 -> 1, SLM dialogs moved onto the kit BaseModal
+    "slm:bg-gray-500/75": 4,  # #14777: 9 -> 4, SLM dialogs moved onto the kit BaseModal
     "slm:bg-gray-600": 9,
     "slm:bg-gray-700": 12,
-    "slm:bg-gray-800": 26,
+    "slm:bg-gray-800": 22,  # #14777: 26 -> 22, SLM dialogs moved onto the kit BaseModal
     "slm:bg-gray-800/50": 1,
     "slm:bg-gray-900": 31,
     "slm:bg-gray-950": 1,
-    "slm:bg-green-100": 64,
+    "slm:bg-green-100": 63,  # #14777: 64 -> 63, SLM dialogs moved onto the kit BaseModal
     "slm:bg-green-200": 4,
     "slm:bg-green-50": 54,
     "slm:bg-green-500": 57,
@@ -245,7 +245,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-indigo-50": 4,
     "slm:bg-indigo-600": 6,
     "slm:bg-indigo-700": 4,
-    "slm:bg-orange-100": 16,
+    "slm:bg-orange-100": 15,  # #14777: 16 -> 15, SLM dialogs moved onto the kit BaseModal
     "slm:bg-orange-200": 2,
     "slm:bg-orange-50": 1,
     "slm:bg-orange-500": 3,
@@ -260,7 +260,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-purple-600": 5,
     "slm:bg-purple-700": 4,
     "slm:bg-purple-900/30": 1,
-    "slm:bg-red-100": 72,
+    "slm:bg-red-100": 70,  # #14777: 72 -> 70, SLM dialogs moved onto the kit BaseModal
     "slm:bg-red-200": 10,
     "slm:bg-red-400": 1,
     "slm:bg-red-50": 102,
@@ -296,13 +296,13 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:border-cyan-500/30": 2,
     "slm:border-emerald-500/30": 2,
     "slm:border-gray-100": 55,
-    "slm:border-gray-200": 348,
+    "slm:border-gray-200": 322,  # #14777: 348 -> 322, SLM dialogs moved onto the kit BaseModal
     "slm:border-gray-300": 347,
     "slm:border-gray-50": 4,
     "slm:border-gray-500": 2,
     "slm:border-gray-500/30": 4,
     "slm:border-gray-600": 14,
-    "slm:border-gray-700": 34,
+    "slm:border-gray-700": 29,  # #14777: 34 -> 29, SLM dialogs moved onto the kit BaseModal
     "slm:border-gray-700/50": 1,
     "slm:border-gray-800": 5,
     "slm:border-green-100": 1,
@@ -357,24 +357,24 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-cyan-900": 1,
     "slm:text-emerald-300": 2,
     "slm:text-emerald-400": 2,
-    "slm:text-gray-100": 14,
+    "slm:text-gray-100": 12,  # #14777: 14 -> 12, SLM dialogs moved onto the kit BaseModal
     "slm:text-gray-200": 6,
     "slm:text-gray-300": 51,
-    "slm:text-gray-400": 240,
-    "slm:text-gray-500": 885,
-    "slm:text-gray-600": 286,
+    "slm:text-gray-400": 228,  # #14777: 240 -> 228, SLM dialogs moved onto the kit BaseModal
+    "slm:text-gray-500": 879,  # #14777: 885 -> 879, SLM dialogs moved onto the kit BaseModal
+    "slm:text-gray-600": 276,  # #14777: 286 -> 276, SLM dialogs moved onto the kit BaseModal
     "slm:text-gray-700": 431,
-    "slm:text-gray-800": 43,
-    "slm:text-gray-900": 486,
+    "slm:text-gray-800": 41,  # #14777: 43 -> 41, SLM dialogs moved onto the kit BaseModal
+    "slm:text-gray-900": 450,  # #14777: 486 -> 450, SLM dialogs moved onto the kit BaseModal
     "slm:text-green-300": 4,
     "slm:text-green-400": 4,
     "slm:text-green-500": 6,
-    "slm:text-green-600": 76,
+    "slm:text-green-600": 75,  # #14777: 76 -> 75, SLM dialogs moved onto the kit BaseModal
     "slm:text-green-700": 80,
     "slm:text-green-800": 34,
     "slm:text-green-900": 2,
     "slm:text-indigo-700": 8,
-    "slm:text-orange-600": 18,
+    "slm:text-orange-600": 17,  # #14777: 18 -> 17, SLM dialogs moved onto the kit BaseModal
     "slm:text-orange-700": 8,
     "slm:text-orange-800": 6,
     "slm:text-pink-700": 1,
@@ -389,7 +389,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-red-300": 4,
     "slm:text-red-400": 4,
     "slm:text-red-500": 23,
-    "slm:text-red-600": 96,
+    "slm:text-red-600": 94,  # #14777: 96 -> 94, SLM dialogs moved onto the kit BaseModal
     "slm:text-red-700": 150,
     "slm:text-red-800": 42,
     "slm:text-red-900": 2,
@@ -405,4 +405,4 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
 }
 
 #: Frozen total, asserted separately so a hand edit of one number cannot pass.
-TOTAL_OCCURRENCES = 6756
+TOTAL_OCCURRENCES = 6637  # #14777: 6756 -> 6637;

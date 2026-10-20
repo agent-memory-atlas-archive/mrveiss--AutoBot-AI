@@ -13,9 +13,9 @@
   Public API is preserved unchanged from the app version:
     props   : modelValue (v-model), title, size (sm|md|lg), width (custom
               px/CSS width overriding size), showClose, closeOnOverlay,
-              scrollable, closeLabel
-    slots   : title (rich header, falls back to `title` prop), default (body),
-              actions (footer)
+              scrollable, closeLabel, closeOnEsc (#14777)
+    slots   : title (rich header, falls back to `title` prop), subtitle (block
+              content under the title, #14777), default (body), actions (footer)
     emits   : update:modelValue, close
 
   Accessibility (unchanged behavior):
@@ -60,6 +60,11 @@ interface Props {
   scrollable?: boolean
   /** aria-label for the close button (apps pass a translated string) */
   closeLabel?: string
+  /**
+   * Close on Escape. Set false (with `closeOnOverlay` and `showClose` false) for a dialog
+   * the user must answer, e.g. one that shows a secret exactly once (#14777).
+   */
+  closeOnEsc?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -68,6 +73,7 @@ const props = withDefaults(defineProps<Props>(), {
   closeOnOverlay: true,
   scrollable: true,
   closeLabel: 'Close',
+  closeOnEsc: true,
 })
 
 const emit = defineEmits<{
@@ -135,7 +141,7 @@ const onAfterEnter = () => focusFirst()
         v-if="modelValue"
         class="aui-dialog-overlay"
         @click="handleOverlayClick"
-        @keydown.esc="handleClose"
+        @keydown.esc="closeOnEsc && handleClose()"
       >
         <div
           ref="dialogRef"
@@ -152,7 +158,12 @@ const onAfterEnter = () => focusFirst()
         >
           <!-- Header -->
           <div class="aui-dialog-header">
-            <h3 :id="titleId"><slot name="title">{{ title }}</slot></h3>
+            <div class="aui-dialog-heading">
+              <h3 :id="titleId"><slot name="title">{{ title }}</slot></h3>
+              <!-- Block content under the title (a subtitle, a status badge): an <h3> may hold
+                   only phrasing content, so it lives here, not in the title slot. -->
+              <div v-if="$slots.subtitle" class="aui-dialog-subtitle"><slot name="subtitle" /></div>
+            </div>
             <button
               v-if="showClose"
               class="aui-dialog-close"
@@ -248,6 +259,16 @@ const onAfterEnter = () => focusFirst()
   /* #10882: pin the chrome so only .aui-dialog-content yields space on short
      viewports; default flex-shrink:1 let the header/footer compress and clip. */
   flex-shrink: 0;
+}
+
+.aui-dialog-heading {
+  min-width: 0;
+}
+
+.aui-dialog-subtitle {
+  margin-top: var(--aui-space-1);
+  font-size: var(--aui-text-sm);
+  color: var(--aui-color-text-muted);
 }
 
 .aui-dialog-header h3 {
