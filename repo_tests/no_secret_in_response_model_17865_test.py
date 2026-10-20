@@ -138,7 +138,7 @@ REACH = declare(
     # the bottom tenth of `growth`, because that is zero tolerance dressed as an allowance.
     # Re-measured by the mechanism itself, not carried across (#15928); the arithmetic is in
     # the commit message, which cannot drift from the tree it describes.
-    floor=5493,  # re-pinned mid-window 2026-10-20: population 5568, window [5418, 5568]
+    floor=5496,  # re-pinned mid-window (train 38): population 5571, window [5421, 5571]
     growth=150,
     skips=0,
     what="backend Python modules scanned for response_model= reaching a stored credential",

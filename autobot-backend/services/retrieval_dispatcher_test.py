@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("advanced_rag_optimizer")
 
 from advanced_rag_optimizer import RAGMetrics
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS
 from knowledge.search_filters import SYSTEM_SCOPE
 from services.rag_config import RAGConfig
 from services.retrieval_dispatcher import get_context, select_strategy
@@ -227,8 +228,11 @@ async def test_get_context_kag_routes_to_graph_aware_search():
         graph_rag_service=graph_rag,
         mode="kag",
         principal=SYSTEM_SCOPE,
+        owner=UNSCOPED_ALL_USERS,
     )
-    graph_rag.graph_aware_search.assert_awaited_once_with(query="relational q", principal=SYSTEM_SCOPE)
+    graph_rag.graph_aware_search.assert_awaited_once_with(
+        query="relational q", principal=SYSTEM_SCOPE, owner=UNSCOPED_ALL_USERS
+    )  # #16664 + #18825: both forwarded
     assert isinstance(ctx, str)
     assert "entity observation A" in ctx and "graph:EntityA" in ctx
     assert getattr(metrics, "strategy", None) == "kag"

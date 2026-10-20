@@ -426,9 +426,26 @@ def kb_principal(current_user) -> Principal:
     grounding never bypass visibility.
     """
     user_id, org_id, group_ids = extract_user_context_from_request(current_user)
+    return _authenticated_principal(user_id, org_id, group_ids)
+
+
+def _authenticated_principal(user_id, org_id, group_ids) -> Principal:
+    """The one place a KB ``Principal`` is constructed; no user id is refused (#16664)."""
     if not user_id:
         raise ValueError("kb_principal needs an authenticated user; use SYSTEM_SCOPE for a no-user read")
     return Principal(user_id=user_id, company_id=org_id, group_ids=frozenset(group_ids), is_authenticated=True)
+
+
+def kb_principal_from_tenant(tenant) -> Principal:
+    """The visibility principal of a verified ``TenantContext`` (#16664, #18825).
+
+    For routes that take ``get_tenant_context`` and no user dict. Same ``Principal`` as
+    :func:`kb_principal`: user and org come from the verified context; a tenant context carries
+    no team memberships, so ``group_ids`` is empty (as for dict-based auth). No admin bypass.
+    """
+    user_id = str(tenant.user_id) if getattr(tenant, "user_id", None) else None
+    org_id = str(tenant.org_id) if getattr(tenant, "org_id", None) else None
+    return _authenticated_principal(user_id, org_id, [])
 
 
 def principal_for_identity(user_id: str | None, org_id: str | None = None) -> KbPrincipal:

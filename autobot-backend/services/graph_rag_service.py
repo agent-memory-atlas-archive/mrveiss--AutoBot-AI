@@ -56,6 +56,7 @@ from typing import Any, Dict, List, Set, Tuple
 
 from advanced_rag_optimizer import RankedResult
 from autobot_memory_graph import AutoBotMemoryGraph
+from autobot_memory_graph.owner_scope import require_scope
 from autobot_shared.error_boundaries import error_boundary
 from autobot_shared.logging_manager import get_llm_logger
 from constants.rag_graph_constants import RAG_GRAPH_TRAVERSAL_DEPTH
@@ -63,6 +64,7 @@ from knowledge.search_components.graph_blend import blend_graph_score
 from knowledge.search_components.reranking import provenance_adjustment
 from knowledge.search_filters import KbPrincipal
 from services.graph_rag_metrics import GraphRAGMetrics
+from services.graph_rag_path import GraphPathMixin
 from services.rag_config import get_rag_config
 from services.rag_service import RAGService
 
@@ -87,7 +89,7 @@ class EntityMatch:
     relationship_path: List[Dict[str, Any]] = field(default_factory=list)
 
 
-class GraphRAGService:
+class GraphRAGService(GraphPathMixin):
     """
     Reusable service for graph-aware RAG retrieval.
 
@@ -169,6 +171,7 @@ class GraphRAGService:
         timeout: float | None = None,
         *,
         principal: KbPrincipal,
+        owner: Any,
     ) -> Tuple[List[RankedResult], GraphRAGMetrics]:
         """
         Perform graph-aware RAG search with relationship-based expansion.
@@ -181,10 +184,13 @@ class GraphRAGService:
             enable_reranking: Whether to apply cross-encoder reranking
             timeout: Optional timeout in seconds
             principal: Who is asking, or SYSTEM_SCOPE; the KB leg returns only what it may read (#16664)
+            owner: REQUIRED OwnerScope / UNSCOPED_ALL_USERS (#18825); graph entity
+                lookups and traversal only see what it may read
 
         Returns:
             Tuple of (search_results, metrics). Issue #620.
         """
+        require_scope(owner)  # before the try below, which turns every error into an empty result
         start_time = time.perf_counter()
         metrics = GraphRAGMetrics()
 
@@ -196,7 +202,7 @@ class GraphRAGService:
             )
 
             all_results = await self._extract_and_expand_graph(
-                query, rag_results, start_entity, max_depth, max_results, metrics
+                query, rag_results, start_entity, max_depth, max_results, metrics, owner
             )
 
             final_results = await self._deduplicate_and_rank(all_results, max_results)
@@ -212,7 +218,7 @@ class GraphRAGService:
         except (asyncio.TimeoutError, Exception) as e:
             return self._handle_search_error(e, metrics, start_time, timeout)
 
-    async def _extract_entities_from_results(self, results: List[RankedResult]) -> List[EntityMatch]:
+    async def _extract_entities_from_results(self, results: List[RankedResult], owner: Any) -> List[EntityMatch]:
         """
         Extract entity references from search results.
 
@@ -220,6 +226,7 @@ class GraphRAGService:
 
         Args:
             results: Search results from RAG search
+            owner: OwnerScope / UNSCOPED_ALL_USERS for the graph lookups (#18825)
 
         Returns:
             List of EntityMatch objects with entity data and relevance scores
@@ -231,7 +238,7 @@ class GraphRAGService:
             entity_refs = self._collect_entity_refs_from_result(result)
 
             if entity_refs:
-                matches = await self._query_and_build_matches(entity_refs, relevance)
+                matches = await self._query_and_build_matches(entity_refs, relevance, owner)
                 entity_matches.extend(matches)
 
         return entity_matches
@@ -243,6 +250,7 @@ class GraphRAGService:
         entity_matches: List[EntityMatch],
         max_depth: int,
         max_results: int,
+        owner: Any,
     ) -> List[RankedResult]:
         """
         Expand context using graph relationships.
@@ -267,7 +275,7 @@ class GraphRAGService:
             max_depth,
         )
 
-        all_related_results = await self._fetch_related_entities_parallel(start_points, max_depth)
+        all_related_results = await self._fetch_related_entities_parallel(start_points, max_depth, owner)
 
         expanded_results = self._process_graph_traversal_results(start_points, all_related_results, max_depth)
 
@@ -278,6 +286,7 @@ class GraphRAGService:
         self,
         start_points: List[Tuple[str, float]],
         max_depth: int,
+        owner: Any,
     ) -> List[Any]:
         """
         Fetch related entities from graph in parallel.
@@ -298,6 +307,7 @@ class GraphRAGService:
                     relation_type=None,
                     direction="both",
                     max_depth=max_depth,
+                    owner=owner,
                 )
                 for entity_name, _ in start_points
             ],
@@ -460,6 +470,7 @@ class GraphRAGService:
         max_depth: int,
         max_results: int,
         metrics: GraphRAGMetrics,
+        owner: Any,
     ) -> List[RankedResult]:
         """
         Extract entities and expand via graph traversal.
@@ -472,7 +483,7 @@ class GraphRAGService:
 
         if self.enable_entity_extraction:
             entity_matches = await self._extract_entities_from_results(
-                rag_results[:5]  # Only top 5 for entity extraction
+                rag_results[:5], owner  # Only top 5 for entity extraction
             )
             logger.info("Extracted %s entity matches", len(entity_matches))
 
@@ -483,6 +494,7 @@ class GraphRAGService:
                 entity_matches=entity_matches,
                 max_depth=max_depth,
                 max_results=max_results,
+                owner=owner,
             )
 
             graph_traversal_time = time.perf_counter() - graph_start
@@ -513,6 +525,7 @@ class GraphRAGService:
         self,
         entity_refs: List[str],
         relevance: float,
+        owner: Any,
     ) -> List[EntityMatch]:
         """
         Query graph for entities and build EntityMatch objects.
@@ -522,7 +535,10 @@ class GraphRAGService:
         matches = []
 
         entities = await asyncio.gather(
-            *[self.graph.get_entity(entity_name=entity_ref, include_relations=False) for entity_ref in entity_refs],
+            *[
+                self.graph.get_entity(entity_name=entity_ref, include_relations=False, owner=owner)
+                for entity_ref in entity_refs
+            ],
             return_exceptions=True,
         )
 
@@ -616,60 +632,6 @@ class GraphRAGService:
             source_path=f"graph:{related_entity.get('name', 'unknown')}",
             chunk_index=0,
         )
-
-    async def find_connection_path(
-        self,
-        from_entity: str,
-        to_entity: str,
-        relation: str | None = None,
-        max_depth: int = 6,
-        direction: str = "both",
-        timeout: float | None = None,
-    ) -> Dict[str, Any]:
-        """
-        Answer "how are these two things connected" with a shortest graph path.
-
-        Issue #13474: ``graph_aware_search`` only expands a *neighbourhood* — it
-        can say what relates to X, never how X reaches Y. This exposes the memory
-        graph's shortest-path traversal, which #8198 implemented and left without
-        a production caller.
-
-        Args:
-            from_entity: Source entity name.
-            to_entity: Target entity name.
-            relation: Restrict traversal to this relation type; None = all.
-            max_depth: Maximum path length to search.
-            direction: ``"outgoing"``, ``"incoming"``, or ``"both"``.
-            timeout: Traversal deadline in seconds; None leaves it unbounded.
-
-        Returns:
-            The ``AutoBotMemoryGraph.find_path`` result dict plus
-            ``traversal_time``. Failures are not swallowed into "no path" — a
-            broken traversal raises so the caller reports an error, not an answer.
-            A timeout raises ``asyncio.TimeoutError`` for the same reason: an
-            abandoned walk is not evidence that two entities are unconnected.
-        """
-        start_time = time.perf_counter()
-        traversal = self.graph.find_path(
-            from_entity=from_entity,
-            to_entity=to_entity,
-            relation=relation,
-            max_depth=max_depth,
-            direction=direction,
-        )
-        result = await (asyncio.wait_for(traversal, timeout) if timeout else traversal)
-        result["traversal_time"] = time.perf_counter() - start_time
-
-        logger.info(
-            "Connection path '%s' -> '%s': found=%s reason=%s hops=%s in %.3fs",
-            from_entity,
-            to_entity,
-            result.get("found"),
-            result.get("reason"),
-            result.get("hops"),
-            result["traversal_time"],
-        )
-        return result
 
     async def get_metrics(self) -> Dict[str, Any]:
         """Get service health and performance metrics (RAG and graph statistics)."""

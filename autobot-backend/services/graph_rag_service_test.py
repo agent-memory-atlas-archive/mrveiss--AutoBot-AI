@@ -27,7 +27,8 @@ import pytest
 
 from advanced_rag_optimizer import RAGMetrics, RankedResult
 from knowledge.search_filters import SYSTEM_SCOPE
-from services.graph_rag_service import EntityMatch, GraphRAGMetrics, GraphRAGService
+from services.graph_rag_service import EntityMatch, GraphRAGMetrics
+from tests.memory_graph._unscoped_service import UNSCOPED_ALL_USERS, GraphRAGService
 
 # ============================================================================
 # Fixtures
@@ -827,9 +828,9 @@ async def test_find_connection_path_delegates_to_memory_graph(graph_rag_service,
         relation="CAUSED",
         max_depth=4,
         direction="outgoing",
+        owner=UNSCOPED_ALL_USERS,
     )
-    assert result["found"] is True
-    assert result["hops"] == 1
+    assert (result["found"], result["hops"]) == (True, 1)
 
 
 @pytest.mark.asyncio
@@ -840,8 +841,7 @@ async def test_find_connection_path_records_traversal_time(graph_rag_service, mo
 
     result = await graph_rag_service.find_connection_path("A", "B")
 
-    assert result["traversal_time"] >= 0.0
-    assert result["found"] is False
+    assert result["traversal_time"] >= 0.0 and result["found"] is False
 
 
 @pytest.mark.asyncio

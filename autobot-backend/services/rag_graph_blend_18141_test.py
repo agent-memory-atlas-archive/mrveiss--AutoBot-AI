@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autobot_memory_graph.owner_scope import UNSCOPED_ALL_USERS
 from knowledge.search_components.graph_blend import blend_graph_score
 from knowledge.search_components.reranking import RerankWeights
 from knowledge.search_filters import SYSTEM_SCOPE
@@ -148,9 +149,9 @@ class TestGraphSearchTimeout:
         graph = MagicMock(initialized=True)
         svc = GraphRAGService(rag_service=rag, memory_graph=graph, enable_entity_extraction=False)
         with patch("services.graph_rag_service.get_rag_config", return_value=RAGConfig(graph_timeout_seconds=10.0)):
-            await svc.graph_aware_search("q", principal=SYSTEM_SCOPE)
+            await svc.graph_aware_search("q", principal=SYSTEM_SCOPE, owner=UNSCOPED_ALL_USERS)
         assert rag.advanced_search.await_args.kwargs["timeout"] == 10.0
         assert rag.advanced_search.await_args.kwargs["principal"] is SYSTEM_SCOPE
         with patch("services.graph_rag_service.get_rag_config", return_value=RAGConfig(graph_timeout_seconds=10.0)):
-            await svc.graph_aware_search("q", timeout=3.0, principal=SYSTEM_SCOPE)
+            await svc.graph_aware_search("q", timeout=3.0, principal=SYSTEM_SCOPE, owner=UNSCOPED_ALL_USERS)
         assert rag.advanced_search.await_args.kwargs["timeout"] == 3.0
