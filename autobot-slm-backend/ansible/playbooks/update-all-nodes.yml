@@ -1044,7 +1044,7 @@
       ansible.builtin.shell:
         cmd: >-
           grep -oP '^AUTOBOT_INTERNAL_API_KEY=\K.*'
-          /etc/autobot/autobot-backend.env 2>/dev/null || true
+          {{ autobot_backend_env_file | quote }} 2>/dev/null || true
       register: existing_internal_api_key
       become: true
       when: "'backend' in group_names"
@@ -2244,9 +2244,14 @@
 
   tasks:
     - name: "[PLAY 2c] Monitoring | Keep the deployed Prometheus scrape token (#16375, #18994)"
-      ansible.builtin.include_tasks: ../_shared/tasks/keep_prometheus_scrape_token.yml
+      # `apply.tags`: a `--tags monitoring` run selects the include but would not pass the tag
+      # to the included tasks, finishing without rendering anything.
+      ansible.builtin.include_tasks:
+        file: ../_shared/tasks/keep_prometheus_scrape_token.yml
+        apply:
+          tags: [monitoring, prometheus]
       vars:
-        scrape_token_env_files: ["/etc/autobot/autobot-backend.env"]
+        scrape_token_env_files: ["{{ autobot_backend_env_file }}"]
 
     # `apply: {become: true}`, not a bare `become` -- ansible rejects the whole
     # playbook for the latter on include_role (#12886).
@@ -2256,6 +2261,7 @@
         tasks_from: prometheus_config
         apply:
           become: true
+          tags: [monitoring, prometheus]
 
     # Same reasoning as Play 2b: a queued handler is discarded if a later play aborts.
     - name: "[PLAY 2c] Monitoring | Apply a pending Prometheus restart (#18994)"
