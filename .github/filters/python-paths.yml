@@ -60,6 +60,8 @@ python:
   - 'autobot-backend/config/permission_rules.yaml'
   - 'autobot-backend/static/error_messages.yaml'
   - 'autobot-monitoring/prometheus.yml'
+  # #18884: docker_backend_llm_models_18884_test.py and the #18556 guard read the one llm_models.yaml.
+  - 'autobot-backend/config/llm_models.yaml'
   # #18549: one_playwright_server_18549_test.py reads the canonical server and its store.
   - 'autobot-browser-worker/playwright-server.js'
   - 'autobot-browser-worker/session-store.js'

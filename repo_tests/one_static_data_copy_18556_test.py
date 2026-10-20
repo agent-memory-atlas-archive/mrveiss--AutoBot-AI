@@ -101,7 +101,12 @@ def test_the_canonical_copies_are_tracked() -> None:
     assert "autobot-backend/config/permission_rules.yaml" in paths
 
 
-_FILES = {"a/prometheus.yml": b"x", "b/prometheus.yml": b"y", "autobot-backend/static/error_messages.yaml": b"e"}
+_FILES = {
+    "a/prometheus.yml": b"x",
+    "b/prometheus.yml": b"y",
+    "autobot-backend/static/error_messages.yaml": b"e",
+    "autobot-backend/config/llm_models.yaml": b"m",
+}
 
 
 def test_contrast_a_clean_tree_passes() -> None:

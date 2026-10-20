@@ -167,6 +167,7 @@ ALLOWED_ADDITIONS = {
             "autobot-backend/config/permission_rules.yaml",
             "autobot-backend/static/error_messages.yaml",
             "autobot-monitoring/prometheus.yml",
+            "autobot-backend/config/llm_models.yaml",
             # #18549: one_playwright_server_18549_test.py reads the canonical server and its store.
             "autobot-browser-worker/playwright-server.js",
             "autobot-browser-worker/session-store.js",
