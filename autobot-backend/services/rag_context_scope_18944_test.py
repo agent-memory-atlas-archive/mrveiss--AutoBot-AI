@@ -151,8 +151,11 @@ async def test_the_optimizer_cache_cannot_carry_one_callers_facts_to_another():
     """The optimizer's own query cache holds unfiltered results; each reader filters after the read."""
     svc = _service_below_cache()
     for_b, _ = await svc.get_optimized_context(QUERY, principal=kb_principal({"user_id": "B"}))
+    searches_after_miss = svc.optimizer.kb.search.await_count  # primary query plus its expanded-query fan-out
+    assert searches_after_miss >= 1
     for_a, _ = await svc.get_optimized_context(QUERY, principal=kb_principal(USER_A))
-    assert svc.optimizer.kb.search.await_count == 1, "the second call must be a real query_cache hit"
+    # The key is query|max_results|rerank|min_score, with no principal: A is served B's cached, unfiltered result.
+    assert svc.optimizer.kb.search.await_count == searches_after_miss, "the second call must be a real query_cache hit"
     assert len(svc.optimizer.query_cache) == 1
     assert f"{B_FACT}-0" in for_b and A_FACT not in for_b
     _assert_scoped(for_a)
@@ -163,9 +166,10 @@ async def test_metrics_report_only_the_callers_visible_count_not_what_others_hol
     """User B holds 5 private facts for the query; A's metrics must not reveal that (existence side-channel)."""
     svc = _service_below_cache(b_facts=5)
     _, for_b = await svc.get_optimized_context(QUERY, principal=kb_principal({"user_id": "B"}))
+    searches_after_miss = svc.optimizer.kb.search.await_count  # primary query plus its expanded-query fan-out
     _, for_a = await svc.get_optimized_context(QUERY, principal=kb_principal(USER_A))
     _, for_b_again = await svc.get_optimized_context(QUERY, principal=kb_principal({"user_id": "B"}))
-    assert svc.optimizer.kb.search.await_count == 1, "all three calls share one cached advanced_search"
+    assert svc.optimizer.kb.search.await_count == searches_after_miss, "calls 2 and 3 share the cached search"
     assert (for_a.final_results_count, for_a.documents_considered) == (1, 1)
     assert (for_b.final_results_count, for_b.documents_considered) == (5, 5)
     assert for_b_again.final_results_count == 5, "A's clamp must not mutate the cached metrics object"
