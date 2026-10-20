@@ -10,16 +10,24 @@ drifted from the real `AsyncSession` signature (a missing `attribute_names`, a k
 cannot make.
 
 WHAT MATCHES (syntax tree only, so a comment or string naming these is not a site)
-    A class in a test file whose OWN body defines `async def commit` or `async def refresh`
-    and which does not extend the canonical `FakeAsyncSession` (resolved through the import of
-    `testkit.fake_async_session`, so a same-named local base does not exempt it). A nested class is judged on its
-    own body. Each is keyed `path::enclosing_function::ClassName`, so several `_Session`
-    classes in one file are distinct (`<module>` when defined at module level).
+    A class whose OWN body defines any of `commit`, `refresh`, `flush`, `execute`, `add` -- as an
+    `async def`, a plain `def`, a class-level assignment (`commit = AsyncMock()`, annotated or not)
+    or an instance assignment in one of its methods (`self.commit = AsyncMock()`) -- and which does
+    not extend the canonical `FakeAsyncSession` (resolved through the import of
+    `testkit.fake_async_session`, so a same-named local base does not exempt it). Also the
+    three-argument `type("Name", bases, {"commit": ...})` form whose dict literal has such a key
+    (a factory function returning one is judged the same way: the call is the site). A nested class
+    is judged on its own body. Each is keyed `path::enclosing_function::ClassName`
+    (`<module>` when defined at module level); the 2nd, 3rd... same-named class in one function gets
+    `#2`, `#3`, so they cannot collapse into one entry.
 BOUNDARY
-    Scanned: tracked test `.py` (`*_test.py`, `test_*.py`, under `/tests/`, `conftest.py`) in
-    `SCAN_ROOTS`. Exempt by path: the canonical fake.
-    NOT seen: a fake that defines neither method (a bare `execute` stub), one built with
-    `MagicMock`/`AsyncMock`, and a test double outside `SCAN_ROOTS`. Those are separate findings.
+    Scanned: tracked `.py` in `SCAN_ROOTS` that is a test file (`*_test.py`, `test_*.py`,
+    `conftest.py`) OR sits under a directory named `tests` or `testkit` at any depth. That second
+    arm is what brings in non-test helper modules (`tests/**/fakes.py`, `tests/**/_*.py`,
+    `testkit/*.py`). Exempt by path: the canonical fake only.
+    NOT seen: a `MagicMock`/`AsyncMock` built inline with no class, a test double outside
+    `SCAN_ROOTS`, and a helper module outside a `tests`/`testkit` directory that is not named like
+    a test. Those are separate findings.
 
 THE ALLOWLIST (`hand_rolled_async_session_baseline_18883.py`) freezes today's offenders. It may
 only shrink: a new match fails, a stale entry fails. Migrating a file deletes its lines.
@@ -29,7 +37,9 @@ from __future__ import annotations
 
 import ast
 import functools
+from collections import Counter
 from pathlib import Path
+from typing import Optional
 
 import pytest
 from repo_tests._paths import repo_root
@@ -42,20 +52,48 @@ CANONICAL = "autobot-backend/testkit/fake_async_session.py"
 CANONICAL_NAME = "FakeAsyncSession"
 CANONICAL_MODULE = "testkit.fake_async_session"
 SCAN_ROOTS = ("autobot-backend", "autobot-slm-backend")
-_SESSION_METHODS = frozenset({"commit", "refresh"})
+_SESSION_METHODS = frozenset({"commit", "refresh", "flush", "execute", "add"})
+HELPER_DIRS = frozenset({"tests", "testkit"})
 
 
 def _is_test_file(rel: str) -> bool:
     name = rel.rsplit("/", 1)[-1]
-    return name.endswith("_test.py") or name.startswith("test_") or name == "conftest.py" or "/tests/" in rel
+    return name.endswith("_test.py") or name.startswith("test_") or name == "conftest.py"
 
 
 def _is_scanned(rel: str) -> bool:
-    return rel.endswith(".py") and rel != CANONICAL and _is_test_file(rel)
+    if not rel.endswith(".py") or rel == CANONICAL:
+        return False
+    return _is_test_file(rel) or bool(HELPER_DIRS & set(rel.split("/")[:-1]))
+
+
+def _assigned_names(node: ast.AST, *, self_only: bool = False) -> set[str]:
+    """Names a statement assigns: plain names (class level only) and `self.` attributes."""
+    if isinstance(node, ast.Assign):
+        targets = node.targets
+    elif isinstance(node, ast.AnnAssign):
+        targets = [node.target]
+    else:
+        return set()
+    names: set[str] = set()
+    for target in targets:
+        if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
+            names.add(target.attr)
+        elif isinstance(target, ast.Name) and not self_only:
+            names.add(target.id)
+    return names
 
 
 def _defines_session_method(cls: ast.ClassDef) -> bool:
-    return any(isinstance(n, ast.AsyncFunctionDef) and n.name in _SESSION_METHODS for n in cls.body)
+    """Own body only: a method, a class-level assignment, or a `self.X =` in one of its methods."""
+    for node in cls.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            inner = {n for sub in ast.walk(node) for n in _assigned_names(sub, self_only=True)}
+            if node.name in _SESSION_METHODS or inner & _SESSION_METHODS:
+                return True
+        elif _assigned_names(node) & _SESSION_METHODS:
+            return True
+    return False
 
 
 def _canonical_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
@@ -73,20 +111,43 @@ def _canonical_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
     return classes, modules
 
 
+def _is_canonical_base(base: ast.AST, classes: set[str], modules: set[str]) -> bool:
+    if isinstance(base, ast.Name):
+        return base.id in classes
+    return isinstance(base, ast.Attribute) and base.attr == CANONICAL_NAME and ast.unparse(base.value) in modules
+
+
 def _extends_canonical(cls: ast.ClassDef, classes: set[str], modules: set[str]) -> bool:
     """True when a base IS the canonical class by import, not merely one with the same name."""
-    for base in cls.bases:
-        if isinstance(base, ast.Name) and base.id in classes:
-            return True
-        if isinstance(base, ast.Attribute) and base.attr == CANONICAL_NAME and ast.unparse(base.value) in modules:
-            return True
-    return False
+    return any(_is_canonical_base(base, classes, modules) for base in cls.bases)
+
+
+def _type_call_name(node: ast.AST, bound: tuple[set[str], set[str]]) -> Optional[str]:
+    """`Name` of `type("Name", bases, {"commit": ...})` when the dict defines a session method, else None."""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "type"):
+        return None
+    if len(node.args) != 3 or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[2], ast.Dict):
+        return None
+    keys = {k.value for k in node.args[2].keys if isinstance(k, ast.Constant)}
+    bases = node.args[1].elts if isinstance(node.args[1], ast.Tuple) else []
+    if not keys & _SESSION_METHODS or any(_is_canonical_base(b, *bound) for b in bases):
+        return None
+    return str(node.args[0].value)
+
+
+def _site(child: ast.AST, bound: tuple[set[str], set[str]]) -> Optional[str]:
+    if isinstance(child, ast.ClassDef):
+        if _defines_session_method(child) and not _extends_canonical(child, *bound):
+            return child.name
+        return None
+    return _type_call_name(child, bound)
 
 
 def _visit(node: ast.AST, enclosing: str, found: list[tuple[str, str]], bound: tuple[set[str], set[str]]) -> None:
     for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.ClassDef) and _defines_session_method(child) and not _extends_canonical(child, *bound):
-            found.append((enclosing, child.name))
+        name = _site(child, bound)
+        if name is not None:
+            found.append((enclosing, name))
         scope = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else enclosing
         _visit(child, scope, found, bound)
 
@@ -97,6 +158,17 @@ def hand_rolled_sessions(source: str) -> list[tuple[str, str]]:
     tree = ast.parse(source)
     _visit(tree, "<module>", found, _canonical_bindings(tree))
     return found
+
+
+def finding_keys(rel: str, source: str) -> list[str]:
+    """`path::func::Class`, with `#2`, `#3` for the 2nd, 3rd... same-named class in one function."""
+    seen: Counter = Counter()
+    keys: list[str] = []
+    for func, name in hand_rolled_sessions(source):
+        seen[(func, name)] += 1
+        n = seen[(func, name)]
+        keys.append(f"{rel}::{func}::{name}" + (f"#{n}" if n > 1 else ""))
+    return keys
 
 
 def _population(root: Path) -> list[str]:
@@ -110,8 +182,8 @@ def _population(root: Path) -> list[str]:
 REACH = declare(
     "hand-rolled-async-session-scan",
     discover=_population,
-    # Mid-window, from REACH.window(): population 2406 at 6fe63f6480 -> (2206, 2406, 2306).
-    floor=2306,
+    # Mid-window, from REACH.window(): population 2431 (test files + tests/testkit helpers) -> (2231, 2431, 2331).
+    floor=2331,
     what="test python source",
     roots=SCAN_ROOTS,
     growth=200,
@@ -123,7 +195,7 @@ def _found() -> frozenset[str]:
     keys: set[str] = set()
     for rel in REACH.examined(repo_root()):
         source = (repo_root() / rel).read_text(encoding="utf-8")
-        keys.update(f"{rel}::{func}::{name}" for func, name in hand_rolled_sessions(source))
+        keys.update(finding_keys(rel, source))
     return frozenset(keys)
 
 
@@ -151,6 +223,11 @@ _LOCAL_SAME_NAME = (
 )
 _ALIASED = "from testkit.fake_async_session import FakeAsyncSession as F\nclass S(F):\n    async def commit(self):\n        pass\n"
 _QUALIFIED = "import testkit.fake_async_session as t\nclass S(t.FakeAsyncSession):\n    async def refresh(self, o):\n        pass\n"
+_CANONICAL_IMPORT = "from testkit.fake_async_session import FakeAsyncSession\n"
+_TYPE_FAKE = "def make():\n    return type('_S', (), {'commit': None})\n"
+_TYPE_FACTORY = "def build():\n    cls = type('_S', (), {'execute': lambda self: None})\n    return cls\n"
+_TYPE_CANONICAL = _CANONICAL_IMPORT + "X = type('S', (FakeAsyncSession,), {'commit': None})\n"
+_FACTORY_CLASS = "def factory():\n    class _S:\n        def add(self, o): ...\n    return _S\n"
 
 
 @pytest.mark.parametrize(
@@ -163,8 +240,28 @@ _QUALIFIED = "import testkit.fake_async_session as t\nclass S(t.FakeAsyncSession
         ("a qualified canonical base", _QUALIFIED, []),
         ("an aliased canonical import", _ALIASED, []),
         ("a same-named local base is not the canonical one", _LOCAL_SAME_NAME, [("<module>", "S")]),
-        ("a sync commit is not a session", "class C:\n    def commit(self):\n        pass\n", []),
-        ("an unrelated async method", "class C:\n    async def execute(self):\n        pass\n", []),
+        ("a sync commit is a session", "class C:\n    def commit(self):\n        pass\n", [("<module>", "C")]),
+        ("a sync add", "class C:\n    def add(self, o):\n        pass\n", [("<module>", "C")]),
+        ("an async execute", "class C:\n    async def execute(self):\n        pass\n", [("<module>", "C")]),
+        ("a flush", "class C:\n    async def flush(self):\n        pass\n", [("<module>", "C")]),
+        ("an unrelated method", "class C:\n    async def fetch(self):\n        pass\n", []),
+        ("a class-level AsyncMock assignment", "class C:\n    commit = AsyncMock()\n", [("<module>", "C")]),
+        ("an annotated class-level assignment", "class C:\n    refresh: object = None\n", [("<module>", "C")]),
+        (
+            "an instance assignment in __init__",
+            "class C:\n    def __init__(self):\n        self.execute = 1\n",
+            [("<module>", "C")],
+        ),
+        (
+            "a local variable named like a method is not a member",
+            "class C:\n    def f(self):\n        commit = 1\n",
+            [],
+        ),
+        ("type() with a session method", _TYPE_FAKE, [("make", "_S")]),
+        ("type() bound to a name in a factory", _TYPE_FACTORY, [("build", "_S")]),
+        ("type() without a session method", "X = type('M', (), {'id': 1})\n", []),
+        ("type() extending the canonical fake", _TYPE_CANONICAL, []),
+        ("a factory returning a class", _FACTORY_CLASS, [("factory", "_S")]),
         ("comments and strings only", '# async def commit\nclass C:\n    """async def refresh"""\n', []),
         (
             "a nested class is judged on its own body",
@@ -179,13 +276,29 @@ def test_the_detector_tells_a_hand_rolled_session_from_a_lookalike(
     assert hand_rolled_sessions(source) == expected, label
 
 
-def test_the_canonical_module_is_exempt_and_only_test_files_are_scanned() -> None:
+def test_two_same_named_classes_in_one_function_get_distinct_keys() -> None:
+    source = "def f():\n    class _S:\n        def add(self): ...\n    class _S:\n        def add(self): ...\n"
+    assert finding_keys("p.py", source) == ["p.py::f::_S", "p.py::f::_S#2"]
+    assert finding_keys("p.py", "class A:\n    def add(self): ...\nclass B:\n    def add(self): ...\n") == [
+        "p.py::<module>::A",
+        "p.py::<module>::B",
+    ]
+
+
+def test_the_canonical_module_is_exempt_and_tests_and_test_helpers_are_scanned() -> None:
     assert not _is_scanned(CANONICAL)
     assert _is_scanned("autobot-backend/foo/x_test.py")
     assert _is_scanned("autobot-backend/foo/test_x.py")
-    assert _is_scanned("autobot-backend/foo/tests/helpers.py")
     assert _is_scanned("autobot-slm-backend/conftest.py")
+    # non-test helper modules under a tests/ or testkit/ directory, at any depth
+    assert _is_scanned("autobot-backend/foo/tests/helpers.py")
+    assert _is_scanned("autobot-backend/tests/api/fakes.py")
+    assert _is_scanned("autobot-backend/tests/api/_doubles.py")
+    assert _is_scanned("autobot-backend/testkit/fake_result.py")
+    # contrast: production code, and a non-python file under a test dir
     assert not _is_scanned("autobot-backend/foo/service.py")
+    assert not _is_scanned("autobot-backend/testing_utils/fakes.py")
+    assert not _is_scanned("autobot-backend/tests/data.json")
 
 
 def test_the_scan_is_not_vacuous() -> None:
