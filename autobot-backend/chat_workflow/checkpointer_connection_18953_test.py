@@ -11,14 +11,17 @@ scheme and port. No log record may carry the password.
 
 import logging
 import os
+import ssl
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import unquote, urlsplit
 
 import pytest
 
+from autobot_shared import tls as shared_tls
 from autobot_shared.redis_management.types import DATABASE_MAPPING
 from autobot_shared.ssot_config import AutoBotConfig
-from autobot_shared.tls import get_internal_tls_context, resolve_redis_mtls_paths
+from autobot_shared.tls import resolve_redis_mtls_paths
 from chat_workflow import checkpointer_connection as cc
 
 _PASSWORD = "pw-18953-s3cret"  # pragma: allowlist secret
@@ -60,7 +63,10 @@ def test_tls_off_uses_redis_scheme_with_ssot_credentials_and_db(plain) -> None:
     assert args == {}
 
 
-def test_tls_on_uses_rediss_scheme_tls_port_and_ssl_args(secure) -> None:
+def test_tls_on_uses_rediss_scheme_tls_port_and_ssl_args(secure, monkeypatch) -> None:
+    # Hermetic: the real context loads cert files this checkout may not have.
+    strict = SimpleNamespace(verify_mode=ssl.CERT_REQUIRED, check_hostname=True)
+    monkeypatch.setattr(shared_tls, "get_internal_tls_context", lambda **_: strict)
     url, args = cc.get_checkpointer_connection()
     parts = urlsplit(url)
     assert parts.scheme == "rediss"
@@ -69,9 +75,20 @@ def test_tls_on_uses_rediss_scheme_tls_port_and_ssl_args(secure) -> None:
     assert unquote(parts.password) == _PASSWORD
     assert set(args) >= {"ssl_ca_certs", "ssl_certfile", "ssl_keyfile"}
     assert args["ssl_cert_reqs"] == "required"
-    # Hostname policy is celery's: whatever get_internal_tls_context sets (True here).
-    ctx = get_internal_tls_context(args["ssl_ca_certs"], client_cert=None, client_key=None)
-    assert args["ssl_check_hostname"] is ctx.check_hostname is True
+    assert args["ssl_check_hostname"] is True
+
+
+@pytest.mark.parametrize(
+    "verify_mode, check_hostname, reqs",
+    [(ssl.CERT_REQUIRED, True, "required"), (ssl.CERT_NONE, False, "none")],
+)
+def test_ssl_args_mirror_the_shared_context_policy(secure, monkeypatch, verify_mode, check_hostname, reqs) -> None:
+    """Hostname and cert policy are celery's: whatever get_internal_tls_context sets, never hardcoded."""
+    ctx = SimpleNamespace(verify_mode=verify_mode, check_hostname=check_hostname)
+    monkeypatch.setattr(shared_tls, "get_internal_tls_context", lambda **_: ctx)
+    args = cc.get_checkpointer_connection()[1]
+    assert args["ssl_cert_reqs"] == reqs
+    assert args["ssl_check_hostname"] is check_hostname
 
 
 def test_tls_off_has_no_ssl_args(plain) -> None:
