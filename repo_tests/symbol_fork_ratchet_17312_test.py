@@ -183,7 +183,19 @@ def _independent_population() -> set[str]:
     # originally caught were hidden by a hand-written `<root>/**/*.py`
     # pathspec — an enumeration bug. That class is no longer covered here. It
     # is covered by the detector no longer hand-writing a pathspec at all.
-    listed = tracked_paths(_REPO_ROOT, "autobot-backend", "autobot-slm-backend", "autobot_shared")
+    listed = tracked_paths(
+        _REPO_ROOT,
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "autobot-npu-worker",
+        "autobot-tts-worker",
+        "autobot-browser-worker",
+        "autobot-infrastructure",
+        "scripts",
+        "tools",
+        "pipeline-scripts",
+    )
     out = [rel for rel in listed if rel.endswith(".py")]
 
     seen: dict[str, set[str]] = defaultdict(set)
@@ -264,9 +276,17 @@ def test_a_single_definition_is_not_a_cluster(tmp_path, monkeypatch) -> None:
     assert detector.find_clusters([Path("only.py")])[0] == {}
 
 
+def _effective_clusters() -> dict:
+    """Live clusters minus those fully covered by the recorded exceptions (#18688)."""
+    raw = detector.find_clusters(detector.tracked_python_files())[0]
+    effective, problems = detector.apply_exceptions(raw, detector.load_exceptions())
+    assert not problems, problems
+    return effective
+
+
 def test_no_new_fork_clusters() -> None:
     """The ratchet itself. A new name here means a new concept fork landed."""
-    current = set(detector.find_clusters(detector.tracked_python_files())[0])
+    current = set(_effective_clusters())
     new = sorted(current - set(BASELINE["clusters"]))
     assert not new, (
         f"{len(new)} new fork cluster(s): {new[:10]}. "
@@ -288,7 +308,7 @@ def test_no_stale_baseline_entries() -> None:
     `require_all_permissions` stayed listed after #18159 removed their second
     definition, tolerating whatever took those names next.
     """
-    current = set(detector.find_clusters(detector.tracked_python_files())[0])
+    current = set(_effective_clusters())
     assert _stale_entries(current, ["ANameNobodyDefinesTwice"]) == [
         "ANameNobodyDefinesTwice"
     ], "contrast: a name that is not a cluster must read as stale, or a pass below proves nothing"

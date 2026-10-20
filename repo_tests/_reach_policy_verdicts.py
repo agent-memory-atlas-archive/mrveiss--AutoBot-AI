@@ -269,17 +269,27 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     "one-static-data-copy-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
-        "Watched-basename files are a subset of tracked files under five roots; same-named unrelated files drift.",
+        "Guarded-basename files are a subset of all tracked files (whole repo); same-named unrelated files drift.",
     ),
     "redis-direct-constructor-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test .py/.sh under the scan roots is a subset of tracked files; the test-file share drifts.",
     ),
+    "hand-rolled-async-session-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Test-file .py under the two backend roots is a subset of tracked files; the non-test share drifts.",
+    ),
     "hand-rolled-circuit-breaker-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under eight roots; the test-file share drifts.",
+    ),
+    "serving-predicate-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under four roots; the test-file share drifts.",
     ),
     "backoff-formula-scan": (
         ABSOLUTE,
@@ -552,5 +562,10 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Alembic revisions, growing.",
+    ),
+    "opt-autobot-literal-ratchet-18880": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Every tracked file under the ansible tree; grows with roles and playbooks.",
     ),
 }
