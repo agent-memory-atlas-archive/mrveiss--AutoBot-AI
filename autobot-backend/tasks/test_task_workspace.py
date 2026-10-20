@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from autobot_shared.isolated_git import isolated_git_env
+from autobot_shared.isolated_git import isolated_git_env, make_repo
 
 
 def _load_tw():
@@ -502,3 +502,22 @@ class TestFetchedBaseRef:
         warnings = _recorded_warnings(monkeypatch)
         assert _tw._fetched_base_ref(git_repo) == _BASE
         assert warnings == []
+
+    def test_the_fixture_branch_name_decides_the_outcome(
+        self, git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Contrast for the `-b work` fixture (#18940): the same self-remote resolves on a `main` repo.
+
+        With a default `main` the fetch finds `main` already there and `origin/main` resolves, so the
+        missing-ref test above would not be testing a missing ref. Only the branch name differs.
+        """
+        _recorded_warnings(monkeypatch)
+        main_repo = make_repo(tmp_path / "main-repo", default_branch="main")
+        (main_repo / "README.md").write_text("test repo")
+        _git(main_repo, "add", ".")
+        _git(main_repo, "commit", "-q", "-m", "init")
+        for repo in (git_repo, main_repo):
+            _git(repo, "remote", "add", "origin", str(repo))
+        assert _tw._fetched_base_ref(main_repo) == _BASE
+        with pytest.raises(RuntimeError, match="cannot resolve workspace base ref"):
+            _tw._fetched_base_ref(git_repo)

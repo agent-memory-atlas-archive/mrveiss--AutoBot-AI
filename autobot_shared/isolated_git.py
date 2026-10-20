@@ -83,6 +83,10 @@ def isolated_git_env(
     author/committer. ``identity=False`` leaves author/committer to the repo's
     own ``user.*`` config, for a test that asserts on the author it configured
     (the environment would otherwise outrank it).
+
+    A repo-local ``core.hooksPath`` is NOT forced off: only the global and system
+    files are cut. That is fine for a fresh tmp repo, which has none; a fixture that
+    copies a real repository's ``.git/config`` must account for it itself.
     """
     env = {k: v for k, v in scrubbed_git_env(base).items() if not k.startswith(_OWNED_PREFIXES)}
     env.pop("GIT_TEMPLATE_DIR", None)

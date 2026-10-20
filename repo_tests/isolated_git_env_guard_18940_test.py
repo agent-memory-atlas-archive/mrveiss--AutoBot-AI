@@ -11,10 +11,12 @@ stops a new test file from hand-rolling the setup again.
 
 The existing offenders are frozen in `isolated_git_env_baseline_18940.py`, which may only shrink.
 The detector lives in `_isolated_git_detect.py`; its KNOWN GAP is stated there.
+A helper-importing file's raw `git` calls are the call-level gate's job; the tests below pin that.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from repo_tests._isolated_git_detect import is_skipped, is_test_file, offends
@@ -82,7 +84,7 @@ def test_baseline_only_shrinks() -> None:
     root = repo_root()
     stale = sorted(ALLOWLIST.keys() - _offenders(root))
     assert not stale, "Migrated (or removed) files still in the baseline; delete these lines:\n  " + "\n  ".join(stale)
-    assert len(ALLOWLIST) <= FROZEN_TOTAL, f"baseline grew to {len(ALLOWLIST)} (cap {FROZEN_TOTAL})"
+    assert len(ALLOWLIST) == FROZEN_TOTAL, f"baseline has {len(ALLOWLIST)} rows but FROZEN_TOTAL is {FROZEN_TOTAL}"
     assert all(reason.strip() for reason in ALLOWLIST.values())
 
 
@@ -116,3 +118,41 @@ def test_helper_is_the_only_accepted_import() -> None:
     assert offends(
         "import subprocess\nfrom autobot_shared.paths import scrubbed_git_env\nsubprocess.run(['git','init'])"
     )
+
+
+_IMPORT_PLAIN = "import subprocess\nimport autobot_shared.isolated_git\nsubprocess.run(['git', 'init'])\n"
+_IMPORT_ALIAS = "import subprocess\nimport autobot_shared.isolated_git as ig\nsubprocess.run(['git', 'init'])\n"
+_IMPORT_PARENT = "import subprocess\nfrom autobot_shared import isolated_git\nsubprocess.run(['git', 'init'])\n"
+_IMPORT_LOOKALIKE = "import subprocess\nimport autobot_shared.isolated_git_other\nsubprocess.run(['git', 'init'])\n"
+_HELPER_SHELL_RAW = "import subprocess\nfrom autobot_shared.isolated_git import make_repo\nsubprocess.run(['bash', '-c', 'git commit -m x'])\n"
+_HELPER_SHELL_ENV = _HELPER_SHELL_RAW + "from autobot_shared.isolated_git import isolated_git_env\nisolated_git_env()\n"
+
+
+def test_every_import_form_of_the_helper_is_accepted() -> None:
+    for source in (_IMPORT_PLAIN, _IMPORT_ALIAS, _IMPORT_PARENT):
+        assert not offends(source), source
+    assert offends(_IMPORT_LOOKALIKE)
+
+
+def test_a_shell_string_write_in_a_helper_importing_file_needs_the_env_helper() -> None:
+    assert offends(_HELPER_SHELL_RAW)
+    assert not offends(_HELPER_SHELL_ENV)
+
+
+def _gate_findings(tmp_path: Path, source: str) -> list:
+    sys.path.insert(0, str(repo_root() / "tools" / "lint"))
+    try:
+        import check_git_write_env_scrubbed as gate
+    finally:
+        sys.path.pop(0)
+    path = tmp_path / "fixture_test.py"
+    path.write_text(source, encoding="utf-8")
+    return gate.scan(path, tmp_path)
+
+
+def test_the_call_level_gate_catches_a_raw_write_in_a_helper_importing_file(tmp_path: Path) -> None:
+    """Importing the helper does not excuse a raw `git commit`: `check_git_write_env_scrubbed` flags it."""
+    head = "import subprocess\nfrom autobot_shared.isolated_git import isolated_git_env\n"
+    assert _gate_findings(tmp_path, head + "subprocess.run(['git', 'commit', '-m', 'x'])\n")
+    assert _gate_findings(tmp_path, head + "def _g(r, *a):\n    subprocess.run(['git', '-C', str(r), *a])\n")
+    assert not _gate_findings(tmp_path, head + "subprocess.run(['git', 'commit'], env=isolated_git_env())\n")

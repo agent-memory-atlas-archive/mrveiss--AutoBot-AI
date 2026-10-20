@@ -9,8 +9,14 @@ A file-level rule, because the call-level shape varies too much to follow: a lit
 A file BUILDS a repo when it imports ``subprocess``, names ``init`` or ``commit`` as an
 argument or argv element, and names ``git``. It is COMPLIANT when it imports from ``autobot_shared.isolated_git``.
 
-KNOWN GAP: a file that imports the helper but also runs one raw ``git commit`` is accepted; the
-call-level scrub is ``tools/lint/check_git_write_env_scrubbed.py``'s job (#15246).
+A file that imports the helper is checked at call level by ``tools/lint/check_git_write_env_scrubbed.py``
+(#15246): a literal ``["git", "commit"]`` argv or a ``["git", "-C", p, *args]`` helper with no scrubbed
+``env=`` is reported there (pinned in ``isolated_git_env_guard_18940_test.py``). That gate cannot see a
+git write inside a shell string, so here a helper-importing file that runs ``bash -c "git init|commit"``
+without ever naming ``isolated_git_env`` also offends.
+
+KNOWN GAP: argv built through a variable (``cmd = ["git", "commit"]; subprocess.run(cmd)``) and a
+``bash -c`` script whose file names ``isolated_git_env`` elsewhere are accepted in a helper-importing file.
 """
 
 from __future__ import annotations
@@ -86,14 +92,33 @@ def builds_git_repo(tree: ast.Module) -> bool:
 
 
 def imports_helper(tree: ast.Module) -> bool:
-    """True when *tree* imports from :data:`HELPER_MODULE`."""
-    return any(isinstance(n, ast.ImportFrom) and n.module == HELPER_MODULE for n in ast.walk(tree))
+    """True when *tree* imports :data:`HELPER_MODULE`: ``from`` it, ``import`` it, or with an alias."""
+    parent, _, leaf = HELPER_MODULE.rpartition(".")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == HELPER_MODULE:
+            return True
+        if isinstance(node, ast.ImportFrom) and node.module == parent and any(a.name == leaf for a in node.names):
+            return True
+        if isinstance(node, ast.Import) and any(a.name == HELPER_MODULE for a in node.names):
+            return True
+    return False
+
+
+def _names_env_helper(tree: ast.Module) -> bool:
+    return any(
+        (isinstance(n, ast.Name) and n.id == "isolated_git_env")
+        or (isinstance(n, ast.Attribute) and n.attr == "isolated_git_env")
+        for n in ast.walk(tree)
+    )
 
 
 def offends(source: str) -> bool:
-    """True for a repo-building test file that does not use the isolated helper."""
+    """True for a repo-building test file that does not use the isolated helper, or that imports it
+    but runs a shell-string git write without ever naming ``isolated_git_env``."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return False
-    return builds_git_repo(tree) and not imports_helper(tree)
+    if not imports_helper(tree):
+        return builds_git_repo(tree)
+    return _imports_subprocess(tree) and _shell_builds_repo(tree) and not _names_env_helper(tree)
