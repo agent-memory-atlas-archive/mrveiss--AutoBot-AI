@@ -7,7 +7,7 @@
 The shared grounding filter (``knowledge/quarantine.py``) already excludes rejected
 facts store-side. These tests simulate the vector store ignoring that ``where`` -- a
 backend bug -- and require ``KB.search`` to apply the serving predicate as the final
-check on both legs, while a query without the grounding filter is unchanged.
+check on both legs, whether or not the query carried the grounding filter.
 """
 
 from __future__ import annotations
@@ -82,9 +82,17 @@ async def test_the_fallback_leg_gets_the_same_final_check():
 
 
 @pytest.mark.asyncio
-async def test_a_search_without_the_grounding_filter_is_unchanged():
-    """Positive control: only a grounding read is filtered; other readers see what the store returns."""
+async def test_a_search_without_the_grounding_filter_is_filtered_too():
+    """The check does not depend on the caller's `where`: a reader that forgot the clause is covered."""
     with patch(_ENGINE, AsyncMock(return_value=_engine_returning_everything())):
         results = await _Store().search("what is autobot", top_k=10, filters={"category": "docs"})
+
+    assert _ids(results) == _SERVED
+
+
+@pytest.mark.asyncio
+async def test_include_unservable_is_the_explicit_opt_out():
+    with patch(_ENGINE, AsyncMock(return_value=_engine_returning_everything())):
+        results = await _Store().search("what is autobot", top_k=10, include_unservable=True)
 
     assert _ids(results) == list(_METADATA)

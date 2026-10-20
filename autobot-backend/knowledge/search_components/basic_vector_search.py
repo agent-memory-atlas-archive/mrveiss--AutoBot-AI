@@ -8,9 +8,8 @@ Extracted so the dispatcher in ``search.py`` stays within the function-length
 limit (#620).  The path delegates to VectorSearchEngine and falls back to a
 direct ChromaDB query.  Issue #398, #934, #3828.
 
-A query whose ``where`` requests servable facts (the shared grounding filter,
-``knowledge/quarantine.py``) gets the serving predicate as its final check on
-both legs (#18820), so a vector-store filter bug cannot serve a rejected fact.
+The serving predicate (#18820) is not applied here: ``SearchMixin.search`` applies it
+once to what every mode returns, so this path stays a plain store read.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
-from knowledge.serving import servable_results
 from knowledge.vector_search_engine import VectorSearchResult, get_vector_search_engine
 
 logger = get_logger(__name__)
@@ -28,17 +26,6 @@ class BasicVectorSearchMixin:
     """The unfiltered, unranked vector-search path of the knowledge base."""
 
     async def _search_basic(
-        self,
-        query: str,
-        top_k: int,
-        similarity_top_k: int | None,
-        filters: Dict[str, Any] | None,
-    ) -> List[Dict[str, Any]]:
-        """Run the basic vector search, then the serving predicate's final check (#18820)."""
-        results = await self._query_basic(query, top_k, similarity_top_k, filters)
-        return servable_results(results, filters)
-
-    async def _query_basic(
         self,
         query: str,
         top_k: int,

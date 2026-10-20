@@ -16,9 +16,9 @@ Two layers, one rule:
 * :data:`SERVING_TRUST_WHERE` -- the store-side vector-store ``where`` clause,
   AND-ed into the shared grounding filter (``knowledge/quarantine.py``) so the
   store never even ranks a withheld fact.
-* :func:`serving_verdict` / :func:`is_servable` -- the final check every serving
-  path applies to what came back, so a store-side bug cannot serve a rejected or
-  expired fact. Validity is only checkable here: the stores hold timestamps as
+* :func:`serving_verdict` / :func:`is_servable` -- the final check, applied once in
+  ``SearchMixin.search`` (via :func:`servable_response`) to what any mode returned, so a
+  store-side bug cannot serve a rejected or expired fact. Validity is only checkable here: the stores hold timestamps as
   strings, and a string comparison is exactly the fail-open defect of #18829.
 
 Fact shapes differ by store -- a search-result dict with a ``metadata`` mapping,
@@ -132,10 +132,19 @@ def _is_inactive(value: Any) -> bool:
 
 
 def _trust_status(fact_like: Any) -> ServingVerdict | None:
-    """The trust verdict, or ``None`` when the trust state does not withhold the fact."""
+    """The trust verdict, or ``None`` when the trust state does not withhold the fact.
+
+    The state is compared case- and whitespace-insensitively (``" REJECTED "`` is rejected). An
+    absent state (``None`` or empty) is a fact that predates the field and is served; a state
+    that is present but not text cannot be read as a trust state, so it fails closed like an
+    unparseable validity bound. Any other text is an open vocabulary and is served.
+    """
     state = _fact_field(fact_like, "verification_status")
-    if not isinstance(state, str):
+    if state is None:
         return None
+    if not isinstance(state, str):
+        return ServingVerdict.UNPARSEABLE
+    state = state.strip().lower()
     if state == REJECTED_STATE:
         return ServingVerdict.REJECTED
     if state in WITHHELD_TRUST_STATES:
@@ -185,17 +194,45 @@ def servable(items: Iterable[Any] | None) -> List[Any]:
     return kept
 
 
-def requests_servable(where: Any) -> bool:
-    """Whether a vector-store ``where`` asks for servable facts only, at any ``$and`` depth."""
-    if where == SERVING_TRUST_WHERE:
-        return True
-    if isinstance(where, Mapping):
-        return any(requests_servable(clause) for clause in where.get("$and") or ())
-    return False
+def _fewer(items: Any, kept: list) -> int:
+    """How many entries *servable* dropped from *items*."""
+    return len(items) - len(kept)
 
 
-def servable_results(results: Any, where: Any) -> Any:
-    """The store's final check: *results* filtered when the query's *where* requested servable facts."""
-    if isinstance(results, list) and requests_servable(where):
-        return servable(results)
-    return results
+def _servable_cluster(cluster: Any) -> Any:
+    """A response cluster without the hits that may not be served; counts follow."""
+    if not isinstance(cluster, dict) or not isinstance(cluster.get("results"), list):
+        return cluster
+    kept = servable(cluster["results"])
+    dropped = _fewer(cluster["results"], kept)
+    out = {**cluster, "results": kept}
+    if dropped and isinstance(out.get("result_count"), int):
+        out["result_count"] = max(0, out["result_count"] - dropped)
+    return out
+
+
+def _reduced(response: dict, key: str, dropped: int) -> None:
+    """Lower the integer count *key* of *response* by *dropped*, never below zero."""
+    if dropped and isinstance(response.get(key), int):
+        response[key] = max(0, response[key] - dropped)
+
+
+def servable_response(response: Any) -> Any:
+    """A KB search response without the facts that may not be served now.
+
+    The single place the predicate meets a search result, whatever the mode returned: a list of
+    hits (basic) or a response dict whose ``results`` and ``clusters`` carry hits (enhanced and
+    advanced). Anything else -- an error dict without ``results`` -- is returned untouched.
+    """
+    if isinstance(response, list):
+        return servable(response)
+    if not isinstance(response, dict) or not isinstance(response.get("results"), list):
+        return response
+    kept = servable(response["results"])
+    out = {**response, "results": kept}
+    dropped = _fewer(response["results"], kept)
+    _reduced(out, "total_count", dropped)
+    _reduced(out, "unclustered_count", dropped)
+    if isinstance(out.get("clusters"), list):
+        out["clusters"] = [_servable_cluster(c) for c in out["clusters"]]
+    return out

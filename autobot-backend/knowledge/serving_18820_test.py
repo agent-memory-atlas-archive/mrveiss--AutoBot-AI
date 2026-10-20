@@ -22,9 +22,8 @@ from knowledge.serving import (
     SERVING_TRUST_WHERE,
     ServingVerdict,
     is_servable,
-    requests_servable,
     servable,
-    servable_results,
+    servable_response,
     serving_verdict,
 )
 
@@ -41,6 +40,15 @@ _TABLE = [
     ({"verification_status": "pending_review"}, ServingVerdict.VALID),
     # A state outside the enum (e.g. a connector mode name, #18077) is not withheld.
     ({"verification_status": "collaborative"}, ServingVerdict.VALID),
+    # Case and padding do not launder a rejected state; an absent or empty one is a legacy fact.
+    ({"verification_status": "REJECTED"}, ServingVerdict.REJECTED),
+    ({"verification_status": " Rejected\n"}, ServingVerdict.REJECTED),
+    ({"verification_status": ""}, ServingVerdict.VALID),
+    ({"verification_status": None}, ServingVerdict.VALID),
+    # Present but not text: unreadable as a trust state, so withheld (fail closed, like a bad bound).
+    ({"verification_status": 1}, ServingVerdict.UNPARSEABLE),
+    ({"verification_status": ["rejected"]}, ServingVerdict.UNPARSEABLE),
+    ({"verification_status": False}, ServingVerdict.UNPARSEABLE),
     ({"valid_to": None}, ServingVerdict.VALID),
     ({"valid_to": ""}, ServingVerdict.VALID),
     ({"valid_to": _FUTURE}, ServingVerdict.VALID),
@@ -158,26 +166,33 @@ def test_the_seam_when_flipped_withholds_both_states_store_side_too() -> None:
     }
 
 
-@pytest.mark.parametrize(
-    ("where", "expected"),
-    [
-        (SERVING_TRUST_WHERE, True),
-        ({"$and": [{"collection": {"$ne": "research"}}, SERVING_TRUST_WHERE]}, True),
-        ({"$and": [{"visibility": "x"}, {"$and": [{"collection": {"$ne": "r"}}, SERVING_TRUST_WHERE]}]}, True),
-        ({"collection": {"$ne": "research"}}, False),
-        ({"category": "docs"}, False),
-        (None, False),
-    ],
-)
-def test_requests_servable_finds_the_clause_at_any_and_depth(where: Any, expected: bool) -> None:
-    assert requests_servable(where) is expected
-
-
-def test_servable_results_filters_only_grounding_queries() -> None:
+def test_servable_response_filters_a_list() -> None:
     hits = [{"metadata": {"verification_status": "rejected"}}, {"metadata": {}}]
-    assert servable_results(hits, {"$and": [{"collection": {"$ne": "r"}}, SERVING_TRUST_WHERE]}) == [hits[1]]
-    assert servable_results(hits, {"category": "docs"}) == hits
-    assert servable_results(hits, None) == hits
+    assert servable_response(hits) == [hits[1]]
+
+
+def test_servable_response_filters_a_dict_its_clusters_and_the_counts() -> None:
+    bad = {"metadata": {"verification_status": "rejected"}}
+    good = {"metadata": {}}
+    response = {
+        "success": True,
+        "results": [bad, good],
+        "total_count": 2,
+        "unclustered_count": 2,
+        "clusters": [{"topic": "t", "results": [bad, good], "result_count": 2}],
+    }
+    out = servable_response(response)
+    assert out["results"] == [good]
+    assert out["total_count"] == 1
+    assert out["unclustered_count"] == 1
+    assert out["clusters"] == [{"topic": "t", "results": [good], "result_count": 1}]
+    assert response["results"] == [bad, good], "the input is not mutated"
+
+
+def test_servable_response_leaves_an_error_dict_alone() -> None:
+    error = {"success": False, "results": None, "error": "Search failed"}
+    assert servable_response(error) == error
+    assert servable_response(None) is None
 
 
 def test_servable_tolerates_none_and_generators() -> None:

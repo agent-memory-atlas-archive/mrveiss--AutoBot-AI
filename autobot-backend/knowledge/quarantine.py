@@ -29,9 +29,9 @@ read the quarantine collection.
 
 The same filter carries the store-side half of the serving predicate
 (#18820): ``knowledge.serving.SERVING_TRUST_WHERE`` is AND-ed in, so every
-call site that already excludes quarantined facts also excludes rejected ones,
-and ``KB.search`` applies ``knowledge.serving.is_servable`` as the final check
-to whatever a query carrying this filter returns.
+call site that already excludes quarantined facts also excludes rejected ones.
+``KB.search`` applies ``knowledge.serving.is_servable`` to every result whatever the
+``where`` (a reader that must see withheld facts passes ``include_unservable=True``).
 """
 
 from autobot_shared.ssot_config import config
