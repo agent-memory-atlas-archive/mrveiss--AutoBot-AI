@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 LOCAL_IP_FALLBACK = "127.0.0.1"
 
-_local_ip_cache: str | None = None  # Cache to avoid repeated socket calls
+_local_ip_cache: dict[str, str] = {}  # backend host -> local IP; avoids repeated socket calls
 
 
 def get_local_ip(backend_host: str) -> str:
@@ -34,10 +34,9 @@ def get_local_ip(backend_host: str) -> str:
     Returns:
         Local IP address string
     """
-    global _local_ip_cache
-
-    if _local_ip_cache is not None:
-        return _local_ip_cache
+    cached = _local_ip_cache.get(backend_host)
+    if cached is not None:
+        return cached
 
     sock = None
     try:
@@ -45,7 +44,7 @@ def get_local_ip(backend_host: str) -> str:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect((backend_host, 80))
         local_ip = sock.getsockname()[0]
-        _local_ip_cache = local_ip
+        _local_ip_cache[backend_host] = local_ip
         return local_ip
     except Exception:
         return LOCAL_IP_FALLBACK

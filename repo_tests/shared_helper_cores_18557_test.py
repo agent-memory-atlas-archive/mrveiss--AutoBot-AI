@@ -74,8 +74,16 @@ def has_inline_role_query(source: str) -> bool:
     return False
 
 
+def _is_route_probe(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """The body shape: a ``SOCK_DGRAM`` socket, a ``connect`` and a ``getsockname`` -- whatever it is called."""
+    nodes = list(ast.walk(fn))
+    dgram = any(isinstance(n, ast.Attribute) and n.attr == "SOCK_DGRAM" for n in nodes)
+    calls = {n.func.attr for n in nodes if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    return dgram and {"connect", "getsockname"} <= calls
+
+
 def defines_local_ip_lookup(source: str) -> bool:
-    return any(fn.name in ("get_local_ip", "_get_local_ip") for fn in _functions(source))
+    return any(fn.name in ("get_local_ip", "_get_local_ip") or _is_route_probe(fn) for fn in _functions(source))
 
 
 def has_inline_celery_404(source: str) -> bool:
@@ -123,3 +131,81 @@ def test_celery_404_check_has_one_home() -> None:
     assert has_inline_celery_404(_read(_CELERY_HOME))
     copies = [rel for rel in _CELERY_404_SITES if has_inline_celery_404(_read(rel))]
     assert not copies, f"#18557: {copies} inline the pending->404 check; call known_task_status_or_404"
+
+
+_OLD_ROLE_COPY = """
+class S:
+    async def _require_role(self, session, company_id, role_id):
+        result = await session.execute(select(Role.id).where(Role.id == role_id, Role.org_id == company_id))
+        if result.scalar_one_or_none() is None:
+            raise ValueError("x")
+"""
+_DELEGATING_ROLE = """
+class S:
+    async def _require_role(self, session, company_id, role_id):
+        await ensure_role_in_company(session, company_id, role_id)
+"""
+_OLD_IP_COPY = """
+def whatever_name(host):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.connect((host, 80))
+    return sock.getsockname()[0]
+"""
+_DELEGATING_IP = """
+def start(host):
+    return get_local_ip(host)
+"""
+_OLD_CELERY_COPY = """
+async def get_x_status(task_id):
+    status = celery_result_to_status(AsyncResult(task_id))
+    if status is None or status["status"] == "pending":
+        raise HTTPException(status_code=404, detail="nf")
+    return status
+"""
+_DELEGATING_CELERY = """
+async def get_x_status(task_id):
+    return known_task_status_or_404(task_id)
+"""
+
+
+def test_role_detector_separates_an_old_copy_from_a_delegating_caller() -> None:
+    assert has_inline_role_query(_OLD_ROLE_COPY)
+    assert not has_inline_role_query(_DELEGATING_ROLE)
+
+
+def test_local_ip_detector_catches_a_renamed_copy_by_body_shape() -> None:
+    assert defines_local_ip_lookup(_OLD_IP_COPY)
+    assert defines_local_ip_lookup("def get_local_ip(h):\n    return h\n")
+    assert not defines_local_ip_lookup(_DELEGATING_IP)
+
+
+def test_celery_detector_separates_an_old_copy_from_a_delegating_caller() -> None:
+    assert has_inline_celery_404(_OLD_CELERY_COPY)
+    assert not has_inline_celery_404(_DELEGATING_CELERY)
+
+
+def test_local_ip_cache_is_keyed_by_backend_host() -> None:
+    import importlib.util
+    import socket
+    from unittest import mock
+
+    spec = importlib.util.spec_from_file_location("local_ip_18557", repo_root() / _LOCAL_IP_HOME)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    ips = iter(["10.0.0.1", "10.0.0.2"])
+
+    class _Sock:
+        def connect(self, addr):
+            self.ip = next(ips)
+
+        def getsockname(self):
+            return (self.ip, 0)
+
+        def close(self):
+            pass
+
+    with mock.patch.object(socket, "socket", lambda *a, **k: _Sock()):
+        assert mod.get_local_ip("host-a") == "10.0.0.1"
+        assert mod.get_local_ip("host-b") == "10.0.0.2"
+        assert mod.get_local_ip("host-a") == "10.0.0.1"
+    assert set(mod._local_ip_cache) == {"host-a", "host-b"}
