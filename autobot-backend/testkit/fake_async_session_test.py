@@ -74,6 +74,18 @@ async def test_assign_ids_numbers_new_objects_on_flush_and_commit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_assign_ids_accepts_a_factory_for_non_integer_keys() -> None:
+    class M:
+        id = None
+
+    a = M()
+    s = FakeAsyncSession(assign_ids=lambda: "uuid-1")
+    s.add(a)
+    await s.flush()
+    assert a.id == "uuid-1"
+
+
+@pytest.mark.asyncio
 async def test_results_queue_then_default_result() -> None:
     s = FakeAsyncSession(results=[FakeResult(["a"]), ["b"], lambda stmt: [stmt]], default_result=["z"])
     assert (await s.execute("q1")).all() == ["a"]

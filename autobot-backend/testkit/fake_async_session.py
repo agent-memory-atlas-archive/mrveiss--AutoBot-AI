@@ -74,7 +74,8 @@ class FakeAsyncSession:
     def __init__(
         self,
         *,
-        assign_ids: bool = False,
+        # True numbers new objects 1, 2, ...; a zero-argument callable (e.g. ``uuid.uuid4``) mints each id.
+        assign_ids: Any = False,
         results: Optional[Iterable[Any]] = None,
         default_result: Any = None,
         rows: Optional[dict] = None,
@@ -112,7 +113,8 @@ class FakeAsyncSession:
 
     def _assign(self, instance: object) -> None:
         if self.assign_ids and getattr(instance, "id", None) is None:
-            instance.id = next(self._ids)
+            make = self.assign_ids if callable(self.assign_ids) else self._ids.__next__
+            instance.id = make()
         self._register(instance)
 
     def add(self, instance: object, _warn: bool = True) -> None:
