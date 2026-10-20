@@ -8,11 +8,39 @@ Tier Configuration - Configuration dataclasses for tiered model routing.
 Issue #748: Tiered Model Distribution Implementation.
 """
 
+import json
+import logging
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Any, Dict
 
 from autobot_shared.ssot_config import CLASSIFICATION_MODEL, DEFAULT_LLM_MODEL, TRIVIAL_MODEL
 from config.registry import ConfigRegistry
+
+# stdlib logging, as config.registry does (GH#7765): this module is imported on the
+# config import chain.
+logger = logging.getLogger(__name__)
+
+TIERED_ROUTING_KEY = "llm.tiered_routing"
+
+
+def _tier_config_mapping(raw: Any) -> Dict[str, Any]:
+    """Coerce the value read for ``llm.tiered_routing`` to a dict.
+
+    Redis (and env) hand back a ``str``, never a dict (#18998). A JSON object is
+    decoded; anything else is rejected with a warning and treated as unset, so
+    the caller never calls ``.get`` on a string.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            decoded = json.loads(raw)
+        except ValueError:
+            decoded = None
+        if isinstance(decoded, dict):
+            return decoded
+    logger.warning("Ignoring %s: expected a JSON object, got %s", TIERED_ROUTING_KEY, type(raw).__name__)
+    return {}
 
 
 @dataclass
@@ -89,8 +117,11 @@ class TierConfig:
         Returns:
             TierConfig instance with values from config or defaults
         """
-        tier_config = ConfigRegistry.get("llm.tiered_routing", {})
+        raw = ConfigRegistry.get(TIERED_ROUTING_KEY, {})
+        if not raw:
+            return cls()
 
+        tier_config = _tier_config_mapping(raw)
         if not tier_config:
             return cls()
 
