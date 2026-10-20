@@ -57,13 +57,28 @@ def test_signing_steps_run_only_when_a_release_is_made() -> None:
         assert _step(name).get("if") == "steps.check.outputs.release_needed == 'true'", name
 
 
+def _pin_problems(texts: dict[str, str]) -> list[str]:
+    """Each workflow must carry exactly one cosign-installer pin, and all pins must be the same."""
+    pins = {name: set(re.findall(r"sigstore/cosign-installer@([0-9a-f]{40})", text)) for name, text in texts.items()}
+    problems = [
+        f"{name}: {len(found)} cosign-installer pins, expected 1" for name, found in pins.items() if len(found) != 1
+    ]
+    if len(set().union(*pins.values())) > 1:
+        problems.append(f"pins differ: {pins}")
+    return problems
+
+
 def test_cosign_installer_is_the_same_pinned_version_everywhere() -> None:
     """One action version, declared once in effect: release.yml matches image-sign.yml."""
-    pins = {
-        path.name: set(re.findall(r"sigstore/cosign-installer@([0-9a-f]{40})", path.read_text(encoding="utf-8")))
-        for path in (_RELEASE, _ROOT / ".github" / "workflows" / "image-sign.yml")
-    }
-    assert len(set().union(*pins.values())) == 1, pins
+    paths = (_RELEASE, _ROOT / ".github" / "workflows" / "image-sign.yml")
+    assert _pin_problems({p.name: p.read_text(encoding="utf-8") for p in paths}) == []
+
+
+def test_contrast_a_missing_or_differing_pin_is_reported() -> None:
+    pin = "uses: sigstore/cosign-installer@" + "a" * 40
+    assert _pin_problems({"a.yml": pin, "b.yml": pin}) == []
+    assert _pin_problems({"a.yml": pin, "b.yml": "no pin here"}) == ["b.yml: 0 cosign-installer pins, expected 1"]
+    assert _pin_problems({"a.yml": pin, "b.yml": pin.replace("a" * 40, "b" * 40)})[0].startswith("pins differ")
 
 
 def test_install_md_documents_verifying_the_release_before_running() -> None:
@@ -74,6 +89,9 @@ def test_install_md_documents_verifying_the_release_before_running() -> None:
         "cosign verify-blob --key cosign.pub --signature install.sh.sig install.sh",
     ):
         assert needed in doc, f"INSTALL.md no longer shows: {needed}"
+    assert re.search(
+        r"sha256sum -c install\.sh\.sha256 \\\n\s+&& cosign verify-blob [^\n]+ \\\n\s+&& sudo bash install\.sh", doc
+    ), "install.sh must run only if the checksum and the signature both verify (an && chain)"
     assert re.search(
         r"curl -fsSL \"https://github\.com/mrveiss/AutoBot-AI/releases/download/\$\{TAG\}/install\.sh\" \| sudo bash",
         doc,

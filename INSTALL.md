@@ -72,10 +72,13 @@ curl -fsSLO "${BASE}/install.sh"
 curl -fsSLO "${BASE}/install.sh.sha256"
 curl -fsSLO "${BASE}/install.sh.sig"
 curl -fsSL -o cosign.pub "https://raw.githubusercontent.com/mrveiss/AutoBot-AI/${TAG}/cosign.pub"
-sha256sum -c install.sh.sha256
-cosign verify-blob --key cosign.pub --signature install.sh.sig install.sh
-sudo bash install.sh
+sha256sum -c install.sh.sha256 \
+  && cosign verify-blob --key cosign.pub --signature install.sh.sig install.sh \
+  && sudo bash install.sh
 ```
+
+The `&&` chain is the point: if a download is missing, the checksum differs or the signature does
+not verify, `install.sh` never runs.
 
 Keep the `cosign.pub` you trust and compare it with later downloads: a signature only proves the
 script matches the key, so the key is the thing to check once.
