@@ -18,6 +18,7 @@ import pytest
 
 from autobot_shared.redis_management.types import DATABASE_MAPPING
 from autobot_shared.ssot_config import AutoBotConfig
+from autobot_shared.tls import get_internal_tls_context, resolve_redis_mtls_paths
 from chat_workflow import checkpointer_connection as cc
 
 _PASSWORD = "pw-18953-s3cret"  # pragma: allowlist secret
@@ -40,6 +41,7 @@ def plain(monkeypatch):
 
 @pytest.fixture
 def secure(monkeypatch):
+    monkeypatch.delenv("AUTOBOT_SKIP_TLS_VERIFY", raising=False)
     cfg = _config(tls=True)
     monkeypatch.setattr(cc, "ssot", cfg)
     return cfg
@@ -67,6 +69,33 @@ def test_tls_on_uses_rediss_scheme_tls_port_and_ssl_args(secure) -> None:
     assert unquote(parts.password) == _PASSWORD
     assert set(args) >= {"ssl_ca_certs", "ssl_certfile", "ssl_keyfile"}
     assert args["ssl_cert_reqs"] == "required"
+    # Hostname policy is celery's: whatever get_internal_tls_context sets (True here).
+    ctx = get_internal_tls_context(args["ssl_ca_certs"], client_cert=None, client_key=None)
+    assert args["ssl_check_hostname"] is ctx.check_hostname is True
+
+
+def test_tls_off_has_no_ssl_args(plain) -> None:
+    assert cc.get_checkpointer_connection()[1] == {}
+
+
+def test_skip_verify_opt_out_is_mirrored_not_hardcoded(secure, monkeypatch) -> None:
+    monkeypatch.setenv("AUTOBOT_SKIP_TLS_VERIFY", "true")
+    monkeypatch.delenv("AUTOBOT_TLS_CA_PATH", raising=False)
+    args = cc.get_checkpointer_connection()[1]
+    assert args["ssl_check_hostname"] is False
+    assert args["ssl_cert_reqs"] == "none"
+
+
+def test_mtls_paths_use_explicit_settings_before_cert_dir(monkeypatch) -> None:
+    cfg = _config(tls=True)
+    monkeypatch.setattr(cfg.misc, "tls_ca_path", "/x/ca.pem")
+    monkeypatch.setattr(cfg.misc, "tls_cert_path", "/x/c.pem")
+    monkeypatch.setattr(cfg.misc, "tls_key_path", "/x/k.pem")
+    monkeypatch.setattr("autobot_shared.ssot_config.config", cfg)
+    assert resolve_redis_mtls_paths() == ("/x/ca.pem", "/x/c.pem", "/x/k.pem")
+    monkeypatch.setattr(cfg.misc, "tls_key_path", "")
+    ca, cert, key = resolve_redis_mtls_paths()
+    assert ca.endswith("ca/ca-cert.pem") and key.endswith("main-host/server-key.pem")
 
 
 def test_describe_connection_masks_credentials(plain) -> None:
@@ -98,6 +127,33 @@ async def test_no_log_record_contains_the_password(plain, monkeypatch, caplog) -
         await graph.get_redis_checkpointer()
     assert _PASSWORD in captured["redis_url"]  # the saver does get the real URL
     assert caplog.records, "expected the init log line"
+    for record in caplog.records:
+        assert _PASSWORD not in record.getMessage()
+        assert _PASSWORD not in str(record.args)
+
+
+@pytest.mark.asyncio
+async def test_failed_setup_leaks_no_password_and_caches_nothing(plain, monkeypatch, caplog) -> None:
+    import chat_workflow.graph as graph
+
+    class _FailingSaver:
+        def __init__(self, **kwargs):
+            self.url = kwargs["redis_url"]
+
+        async def asetup(self):
+            raise ConnectionError(f"cannot reach {self.url}")
+
+        async def adelete_thread(self, thread_id):  # pragma: no cover - never reached
+            raise AssertionError
+
+    monkeypatch.setattr(graph, "_ssot_config", plain)
+    monkeypatch.setattr(graph, "AsyncRedisSaver", _FailingSaver, raising=False)
+    monkeypatch.setattr(graph, "_REDIS_CHECKPOINTER_AVAILABLE", True)
+    monkeypatch.setattr(graph, "_checkpointer", None)
+    with caplog.at_level(logging.DEBUG):
+        await graph.delete_thread_checkpoints("thread-1")
+    assert graph._checkpointer is None
+    assert any("Failed to clear checkpoints" in r.getMessage() for r in caplog.records)
     for record in caplog.records:
         assert _PASSWORD not in record.getMessage()
         assert _PASSWORD not in str(record.args)
