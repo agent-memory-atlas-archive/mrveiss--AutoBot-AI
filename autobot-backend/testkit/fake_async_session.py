@@ -128,6 +128,8 @@ class FakeAsyncSession:
     async def flush(self, objects: Optional[Iterable[Any]] = None) -> None:
         self.flushes += 1
         for instance in self.added:
+            if any(instance is gone for gone in self.deleted):
+                continue
             self._assign(instance)
 
     def _commit_failure(self) -> Optional[BaseException]:
@@ -224,7 +226,7 @@ class FakeAsyncSession:
         self.add(instance)
         return instance
 
-    async def expunge(self, instance: object) -> None:
+    def expunge(self, instance: object) -> None:
         self.rows.pop((type(instance), getattr(instance, "id", None)), None)
 
     def begin(self) -> _FakeTransaction:

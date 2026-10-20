@@ -11,7 +11,8 @@ cannot make.
 
 WHAT MATCHES (syntax tree only, so a comment or string naming these is not a site)
     A class in a test file whose OWN body defines `async def commit` or `async def refresh`
-    and which does not list `FakeAsyncSession` among its bases. A nested class is judged on its
+    and which does not extend the canonical `FakeAsyncSession` (resolved through the import of
+    `testkit.fake_async_session`, so a same-named local base does not exempt it). A nested class is judged on its
     own body. Each is keyed `path::enclosing_function::ClassName`, so several `_Session`
     classes in one file are distinct (`<module>` when defined at module level).
 BOUNDARY
@@ -39,6 +40,7 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 CANONICAL = "autobot-backend/testkit/fake_async_session.py"
 CANONICAL_NAME = "FakeAsyncSession"
+CANONICAL_MODULE = "testkit.fake_async_session"
 SCAN_ROOTS = ("autobot-backend", "autobot-slm-backend")
 _SESSION_METHODS = frozenset({"commit", "refresh"})
 
@@ -56,22 +58,44 @@ def _defines_session_method(cls: ast.ClassDef) -> bool:
     return any(isinstance(n, ast.AsyncFunctionDef) and n.name in _SESSION_METHODS for n in cls.body)
 
 
-def _extends_canonical(cls: ast.ClassDef) -> bool:
-    return any(ast.unparse(base).split(".")[-1] == CANONICAL_NAME for base in cls.bases)
+def _canonical_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Names bound to the canonical class, and names bound to the canonical module, by import."""
+    module_stem = CANONICAL_MODULE.rsplit(".", 1)[-1]
+    classes: set[str] = set()
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == CANONICAL_MODULE:
+            classes.update(a.asname or a.name for a in node.names if a.name == CANONICAL_NAME)
+        elif isinstance(node, ast.ImportFrom) and node.module == CANONICAL_MODULE.rsplit(".", 1)[0]:
+            modules.update(a.asname or a.name for a in node.names if a.name == module_stem)
+        elif isinstance(node, ast.Import):
+            modules.update(a.asname or a.name for a in node.names if a.name == CANONICAL_MODULE)
+    return classes, modules
 
 
-def _visit(node: ast.AST, enclosing: str, found: list[tuple[str, str]]) -> None:
+def _extends_canonical(cls: ast.ClassDef, classes: set[str], modules: set[str]) -> bool:
+    """True when a base IS the canonical class by import, not merely one with the same name."""
+    for base in cls.bases:
+        if isinstance(base, ast.Name) and base.id in classes:
+            return True
+        if isinstance(base, ast.Attribute) and base.attr == CANONICAL_NAME and ast.unparse(base.value) in modules:
+            return True
+    return False
+
+
+def _visit(node: ast.AST, enclosing: str, found: list[tuple[str, str]], bound: tuple[set[str], set[str]]) -> None:
     for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.ClassDef) and _defines_session_method(child) and not _extends_canonical(child):
+        if isinstance(child, ast.ClassDef) and _defines_session_method(child) and not _extends_canonical(child, *bound):
             found.append((enclosing, child.name))
         scope = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else enclosing
-        _visit(child, scope, found)
+        _visit(child, scope, found, bound)
 
 
 def hand_rolled_sessions(source: str) -> list[tuple[str, str]]:
     """`(enclosing function, class name)` for every hand-rolled session class in `source`."""
     found: list[tuple[str, str]] = []
-    _visit(ast.parse(source), "<module>", found)
+    tree = ast.parse(source)
+    _visit(tree, "<module>", found, _canonical_bindings(tree))
     return found
 
 
@@ -122,6 +146,10 @@ def b():
 """
 _MODULE_LEVEL = "class Fake:\n    async def commit(self):\n        pass\n"
 _SUBCLASS = "from testkit.fake_async_session import FakeAsyncSession\nclass S(FakeAsyncSession):\n    async def commit(self):\n        pass\n"
+_LOCAL_SAME_NAME = (
+    "class FakeAsyncSession:\n    pass\nclass S(FakeAsyncSession):\n    async def commit(self):\n        pass\n"
+)
+_ALIASED = "from testkit.fake_async_session import FakeAsyncSession as F\nclass S(F):\n    async def commit(self):\n        pass\n"
 _QUALIFIED = "import testkit.fake_async_session as t\nclass S(t.FakeAsyncSession):\n    async def refresh(self, o):\n        pass\n"
 
 
@@ -133,6 +161,8 @@ _QUALIFIED = "import testkit.fake_async_session as t\nclass S(t.FakeAsyncSession
         ("module level", _MODULE_LEVEL, [("<module>", "Fake")]),
         ("a subclass of the canonical fake", _SUBCLASS, []),
         ("a qualified canonical base", _QUALIFIED, []),
+        ("an aliased canonical import", _ALIASED, []),
+        ("a same-named local base is not the canonical one", _LOCAL_SAME_NAME, [("<module>", "S")]),
         ("a sync commit is not a session", "class C:\n    def commit(self):\n        pass\n", []),
         ("an unrelated async method", "class C:\n    async def execute(self):\n        pass\n", []),
         ("comments and strings only", '# async def commit\nclass C:\n    """async def refresh"""\n', []),
@@ -159,9 +189,7 @@ def test_the_canonical_module_is_exempt_and_only_test_files_are_scanned() -> Non
 
 
 def test_the_scan_is_not_vacuous() -> None:
-    """The scan must see the known offenders: a blind scan reports an empty, clean tree."""
-    found = _found()
-    assert len(found) >= 1, "no hand-rolled session found; the scan stopped reaching the tree or all were migrated"
+    """Bind the floor to the scan's reach, never to the finding count (it may reach zero)."""
     assert len(REACH.examined(repo_root())) > 2000
 
 

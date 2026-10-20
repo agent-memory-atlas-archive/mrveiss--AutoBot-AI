@@ -31,7 +31,9 @@ def test_the_method_set_covers_the_documented_surface() -> None:
 
 @pytest.mark.parametrize("name", REQUIRED_METHODS)
 def test_signature_parity_with_the_real_session(name: str) -> None:
-    assert _shape(getattr(FakeAsyncSession, name)) == _shape(getattr(AsyncSession, name)), name
+    fake, real = getattr(FakeAsyncSession, name), getattr(AsyncSession, name)
+    assert _shape(fake) == _shape(real), name
+    assert inspect.iscoroutinefunction(fake) == inspect.iscoroutinefunction(real), name
 
 
 def test_every_public_method_the_real_session_shares_is_checked() -> None:
@@ -174,3 +176,27 @@ def test_fake_result_reads() -> None:
         FakeResult([]).scalar_one()
     with pytest.raises(MultipleResultsFound):
         FakeResult([1, 2]).scalar_one_or_none()
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_instance_is_not_re_registered_by_the_commit() -> None:
+    """A real session does not hand back a row that was deleted and committed."""
+    model = type("M", (), {})
+    obj = model()
+    obj.id = 7
+    s = FakeAsyncSession()
+    s.add(obj)
+    await s.delete(obj)
+    await s.commit()
+    assert await s.get(model, 7) is None
+
+
+@pytest.mark.asyncio
+async def test_expunge_is_synchronous_and_drops_the_tracked_row() -> None:
+    model = type("M", (), {})
+    obj = model()
+    obj.id = 3
+    s = FakeAsyncSession()
+    s.add(obj)
+    s.expunge(obj)
+    assert await s.get(model, 3) is None
