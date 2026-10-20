@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import os
 import subprocess
 from pathlib import Path
 
@@ -280,27 +281,77 @@ def _main_frozen(source: str) -> tuple[int, int]:
     return sizes["ALLOWLIST"], sizes["FROZEN_TOTAL"]
 
 
-def _baseline_on_main() -> str | None:
-    """The baseline's source on `origin/main`, or None when main has no such file (or no such ref)."""
-    result = subprocess.run(  # nosec B603 B607  # fixed argv, no shell
-        ["git", "show", f"{_MAIN_REF}:{BASELINE_PATH}"],
+def _git_on_main(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(  # nosec B603 B607  # fixed argv, no shell
+        ["git", *args],
         cwd=repo_root(),
         capture_output=True,
         text=True,
         check=False,
         env=scrubbed_git_env(),
     )
+
+
+def _main_ref_resolves() -> bool:
+    """Whether `origin/main` exists in this clone at all (a shallow CI checkout may not fetch it)."""
+    return _git_on_main("rev-parse", "--verify", "--quiet", f"{_MAIN_REF}^{{commit}}").returncode == 0
+
+
+def _baseline_on_main() -> str | None:
+    """The baseline's source on `origin/main`, or None when `git show` cannot produce it."""
+    result = _git_on_main("show", f"{_MAIN_REF}:{BASELINE_PATH}")
     return result.stdout if result.returncode == 0 else None
+
+
+def _main_baseline_outcome(ref_resolves: bool, source: str | None, in_ci: bool) -> tuple[str, str]:
+    """`(action, message)` for the <=-main check: action is `run`, `skip` or `fail`.
+
+    A missing ref under CI is a job that did not fetch main -- the ratchet would silently not
+    run, so it fails. Ref present and file absent means this PR introduces the baseline: skip.
+    Locally a missing ref skips with a reason.
+    """
+    if source is not None:
+        return "run", ""
+    if not ref_resolves:
+        if in_ci:
+            return "fail", f"CI job did not fetch {_MAIN_REF}: cannot check {BASELINE_PATH} against main"
+        return "skip", f"{_MAIN_REF} is not fetched in this clone; the <=-main check cannot run locally"
+    return "skip", f"{BASELINE_PATH} is not on {_MAIN_REF} yet (this PR introduces it)"
 
 
 def test_one_pr_cannot_raise_both_the_frozen_total_and_the_list() -> None:
     """`FROZEN_TOTAL` and `ALLOWLIST` live in one file, so a PR can grow both together; main's copy cannot move."""
     on_main = _baseline_on_main()
-    if on_main is None:
-        pytest.skip(f"{BASELINE_PATH} is not on {_MAIN_REF} yet (this PR introduces it) or the ref is absent")
+    action, message = _main_baseline_outcome(
+        _main_ref_resolves() if on_main is None else True, on_main, bool(os.environ.get("CI"))
+    )
+    if action == "fail":
+        pytest.fail(message)
+    if action == "skip":
+        pytest.skip(message)
     main_entries, main_total = _main_frozen(on_main)
     assert len(ALLOWLIST) <= main_entries, f"{len(ALLOWLIST)} entries; {_MAIN_REF} has {main_entries}"
     assert FROZEN_TOTAL <= main_total, f"FROZEN_TOTAL {FROZEN_TOTAL}; {_MAIN_REF} has {main_total}"
+
+
+def test_a_missing_main_ref_under_ci_fails() -> None:
+    action, message = _main_baseline_outcome(False, None, in_ci=True)
+    assert action == "fail" and "did not fetch origin/main" in message
+
+
+def test_a_present_ref_without_the_baseline_skips_even_under_ci() -> None:
+    """Pre-merge: the PR introduces the baseline, so main legitimately lacks it."""
+    action, message = _main_baseline_outcome(True, None, in_ci=True)
+    assert action == "skip" and "introduces it" in message
+
+
+def test_a_missing_main_ref_locally_skips_with_a_reason() -> None:
+    action, message = _main_baseline_outcome(False, None, in_ci=False)
+    assert action == "skip" and message
+
+
+def test_a_baseline_on_main_runs_the_check() -> None:
+    assert _main_baseline_outcome(True, "ALLOWLIST = {}", in_ci=True)[0] == "run"
 
 
 def test_the_main_baseline_reader_reads_both_sizes() -> None:

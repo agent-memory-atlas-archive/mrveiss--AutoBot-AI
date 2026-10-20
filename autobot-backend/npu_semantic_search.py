@@ -43,6 +43,7 @@ from knowledge.index_embedding_space import (
     index_embedding_space,
     require_query_dim,
 )
+from knowledge.serving import servable_response
 from knowledge_base import KnowledgeBase
 
 # Issue #387: GPU-accelerated vector search
@@ -366,7 +367,7 @@ class NPUSemanticSearch:
         hits, hybrid_metrics = await self.hybrid_search.search(
             query_embedding=embedding, top_k=top_k, metadata_filter=filters, include_documents=True
         )
-        return self._convert_hybrid_results(hits, hybrid_metrics, device), device
+        return servable_response(self._convert_hybrid_results(hits, hybrid_metrics, device)), device
 
     async def _create_search_metrics(
         self,
@@ -575,20 +576,19 @@ class NPUSemanticSearch:
         query_engine = self.knowledge_base.vector_index.as_query_engine(similarity_top_k=top_k, response_mode="no_text")
         response = await asyncio.to_thread(query_engine.query, query)
 
-        results = []
-        if hasattr(response, "source_nodes"):
-            for node in response.source_nodes:
-                result = NpuSearchResult(
-                    content=node.node.text,
-                    metadata=node.node.metadata or {},
-                    score=getattr(node, "score", 0.0),
-                    doc_id=node.node.id_ or str(uuid.uuid4()),
-                    device_used="knowledge_base",
-                    processing_time_ms=0,
-                    embedding_model="enhanced_model",
-                )
-                results.append(result)
-        return results
+        results = [
+            NpuSearchResult(
+                content=node.node.text,
+                metadata=node.node.metadata or {},
+                score=getattr(node, "score", 0.0),
+                doc_id=node.node.id_ or str(uuid.uuid4()),
+                device_used="knowledge_base",
+                processing_time_ms=0,
+                embedding_model="enhanced_model",
+            )
+            for node in getattr(response, "source_nodes", None) or []
+        ]
+        return servable_response(results)  # #18820: source_nodes bypass KB.search
 
     async def _get_hardware_utilization(self) -> Dict[str, float]:
         """Get current hardware utilization metrics."""
@@ -735,7 +735,7 @@ class NPUSemanticSearch:
                 device_used=embedding_device,
                 hardware_utilization={},
             )
-            out[orig_idx] = (results, metrics)
+            out[orig_idx] = (servable_response(results), metrics)  # #18820: bypasses KB.search
 
         return out
 
