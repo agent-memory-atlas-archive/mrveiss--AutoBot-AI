@@ -15,33 +15,15 @@ redisvl) and this deployment's RediSearch only operates on logical db 0
 ``memory`` entry of ``DATABASE_MAPPING`` (db 0) rather than a hardcoded number.
 """
 
-from pathlib import Path
 from typing import Any
 
 from autobot_shared.redis_management.types import DATABASE_MAPPING
-from autobot_shared.secret_redaction import redact_url_userinfo
+from autobot_shared.secret_redaction import redact_content, redact_url_userinfo
 from autobot_shared.ssot_config import config as ssot
+from autobot_shared.tls import redis_ssl_connection_kwargs
 
 # Named database holding the saver's RediSearch indexes (db 0 alias).
 CHECKPOINTER_DB_NAME = "memory"
-
-
-def _tls_connection_args() -> dict[str, Any]:
-    """redis-py SSL kwargs matching the canonical client's TLS material."""
-    ca = ssot.misc.tls_ca_path
-    cert = ssot.misc.tls_cert_path
-    key = ssot.misc.tls_key_path
-    if not (ca and cert and key):
-        root = Path(__file__).parent.parent.parent / ssot.tls.cert_dir
-        ca = str(root / "ca" / "ca-cert.pem")
-        cert = str(root / "main-host" / "server-cert.pem")
-        key = str(root / "main-host" / "server-key.pem")
-    return {
-        "ssl_ca_certs": ca,
-        "ssl_certfile": cert,
-        "ssl_keyfile": key,
-        "ssl_cert_reqs": "required",
-    }
 
 
 def get_checkpointer_connection() -> tuple[str, dict[str, Any]]:
@@ -51,10 +33,15 @@ def get_checkpointer_connection() -> tuple[str, dict[str, Any]]:
     empty unless Redis TLS is enabled.
     """
     url = ssot.get_redis_url_for_db(DATABASE_MAPPING[CHECKPOINTER_DB_NAME])
-    args = _tls_connection_args() if ssot.tls.redis_tls_enabled else {}
+    args = redis_ssl_connection_kwargs() if ssot.tls.redis_tls_enabled else {}
     return url, args
 
 
 def describe_connection(url: str) -> str:
     """Log-safe form of ``url`` (password and username masked)."""
     return redact_url_userinfo(url, mask_username=True)
+
+
+def describe_error(exc: BaseException) -> str:
+    """Log-safe text of ``exc``: Redis errors can echo the credentialed URL."""
+    return redact_content(str(exc))
