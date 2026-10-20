@@ -15,19 +15,28 @@ Matching is by AST on call nodes whose callee resolves to the class defined in
 `knowledge/_composed.py` (exported by `knowledge`, re-exported by `knowledge_base`). A
 docstring mention, `MockKnowledgeBase`, and a same-named class from another module are not
 that class. Decision on the last: a locally defined `class KnowledgeBase` outside the
-defining module shadows the name, so its bare calls do NOT count.
+defining module shadows the name, so its bare calls do NOT count. Simple assignment aliases
+(`cls = KnowledgeBase; cls()`) are followed when every assignment to the name is the class.
+
+Scope (`_SEARCH_ROOTS`): every tracked non-test Python code tree, not only `autobot-backend/`.
+The operator scripts and the embedded MCP tool under `autobot-infrastructure/` put the backend
+on `sys.path` and `from knowledge_base import KnowledgeBase`, so they build the same class; the
+scripts are separate processes that cannot share the backend's published instance. Files matched
+by `_is_test_path` are out of scope in every root. Reach is declared (`REACH`), not hand-floored.
 """
 
 from __future__ import annotations
 
 import ast
 import functools
+from pathlib import Path
 from typing import NamedTuple
 
 import pytest
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 CANONICAL_CREATOR = "autobot-backend/knowledge_factory.py"
 #: Where the class is defined; inside it the bare name is the class itself.
@@ -35,13 +44,36 @@ DEFINER = "autobot-backend/knowledge/_composed.py"
 #: Modules a caller imports the class from (matched on the dotted suffix, so relative
 #: and package-prefixed forms resolve too).
 _SOURCES = ("knowledge", "knowledge._composed", "knowledge_base")
-_SEARCH_ROOTS = ("autobot-backend/",)
+#: Every tracked non-test Python tree that can import the backend class (#18122 review). The
+#: backend is on `sys.path` for the scripts and the MCP tool via `from knowledge_base import
+#: KnowledgeBase`, so `autobot-infrastructure/` is in scope; the rest are listed so a first
+#: construction in any code tree is seen instead of silently out of reach. Excluded: `repo_tests/`
+#: (this guard's own fixtures), `docs/`, `site/` and `.claude/` (not product code).
+_SEARCH_ROOTS = (
+    "autobot-backend/",
+    "autobot-infrastructure/",
+    "autobot-slm-backend/",
+    "autobot_shared/",
+    "autobot-npu-worker/",
+    "autobot-tts-worker/",
+    "autobot-browser-worker/",
+    "tools/",
+    "scripts/",
+    "pipeline-scripts/",
+    "plugins/",
+    "libs/",
+    "debug/",
+)
 _TEST_DIRS = frozenset({"tests", "testing", "testkit"})
 
-_PERM = "PERMANENT (D6)"
+#: Owner decision #18122 D6: these sites never drain. A reason is permanent only by being listed
+#: in `PERMANENT_SITES`, not by how its text starts.
+PERMANENT_SITES = frozenset({"autobot-backend/tasks/knowledge_tasks.py"})
+_PERM = "PERMANENT (owner decision #18122 D6)"
 _DRAIN = "drain"
-#: path -> (count, reason). SHRINK-ONLY. Reasons starting "PERMANENT" are owner-decided
-#: exceptions that never drain; every other entry is debt for a later slice.
+_SCRIPT = f"{_DRAIN} (S4+): standalone script process, cannot share the backend singleton; use knowledge_factory"
+#: path -> (count, reason). SHRINK-ONLY. `PERMANENT_SITES` entries are owner-decided exceptions
+#: that never drain; every other entry is debt for a later slice.
 BASELINE: dict[str, tuple[int, str]] = {
     "autobot-backend/tasks/knowledge_tasks.py": (
         1,
@@ -64,13 +96,32 @@ BASELINE: dict[str, tuple[int, str]] = {
     "autobot-backend/api/intelligent_agent.py": (1, f"{_DRAIN}: route builds a private KB"),
     "autobot-backend/utils/error_boundary_examples.py": (1, f"{_DRAIN}: example code builds a private KB"),
     "autobot-backend/services/advanced_workflow/coordinator.py": (1, f"{_DRAIN}: coordinator builds a private KB"),
+    # autobot-infrastructure: one-shot operator scripts are separate processes that cannot share
+    # the backend's published singleton; they drain by calling `get_knowledge_base_async()`.
+    "autobot-infrastructure/shared/mcp/tools/knowledge-base-mcp/autobot_knowledge_mcp/embedded.py": (
+        1,
+        f"{_DRAIN} (S4+): the embedded MCP server lazily builds its own KB; use knowledge_factory",
+    ),
+    "autobot-infrastructure/shared/scripts/direct_kb_populate.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/fix_kb_dimensions.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/identity_config_utility.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/kb_dimension_utility.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/populate_docs_knowledge.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/populate_kb_fixed.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/populate_knowledge_base.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/quick_populate_kb.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/reset_kb_dimensions.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/setup/knowledge/fresh_kb_setup.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/sync_kb_docs.py": (2, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/index_all_man_pages.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/integrate_system_knowledge.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/manage_system_knowledge.py": (2, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/migrate_redis_to_chromadb.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/quick_test_os_context.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/sync_documentation_kb.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/utilities/vectorize_existing_docs.py": (1, _SCRIPT),
+    "autobot-infrastructure/shared/scripts/verify_knowledge_consistency.py": (3, _SCRIPT),
 }
-
-
-@functools.lru_cache(maxsize=1)
-def _tracked_python_files() -> tuple[str, ...]:
-    # #15926: `tracked_paths` is the one git enumerator and raises on an empty result.
-    return tuple(tracked_paths(repo_root(), "*.py"))
 
 
 def _is_test_path(rel: str) -> bool:
@@ -84,6 +135,34 @@ def _is_test_path(rel: str) -> bool:
 def _from_source(module: str | None) -> bool:
     mod = (module or "").lstrip(".")
     return any(mod == s or mod.endswith("." + s) for s in _SOURCES)
+
+
+def _is_class_ref(value: ast.expr, classes: set[str], modules: set[str]) -> bool:
+    """True when *value* is the class itself: a bound name or `<module>.KnowledgeBase`."""
+    if isinstance(value, ast.Name):
+        return value.id in classes
+    if isinstance(value, ast.Attribute) and value.attr == "KnowledgeBase":
+        tail = value.value.id if isinstance(value.value, ast.Name) else getattr(value.value, "attr", None)
+        return tail in modules
+    return False
+
+
+def _add_aliases(tree: ast.Module, classes: set[str], modules: set[str]) -> None:
+    """`cls = KnowledgeBase; cls()`. A flat per-file pass: a name is an alias only when EVERY
+    simple assignment to it resolves to the class, so `cls = KnowledgeBase; cls = Other` is not."""
+    assigns: dict[str, list[ast.expr]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    assigns.setdefault(t.id, []).append(node.value)
+    for _ in range(len(assigns)):  # chains (`a = KB; b = a`) settle within len(assigns) passes
+        grown = {
+            n for n, vs in assigns.items() if n not in classes and all(_is_class_ref(v, classes, modules) for v in vs)
+        }
+        if not grown:
+            return
+        classes |= grown
 
 
 def _bindings(tree: ast.Module, defines_it: bool) -> tuple[set[str], set[str]]:
@@ -103,6 +182,7 @@ def _bindings(tree: ast.Module, defines_it: bool) -> tuple[set[str], set[str]]:
             modules |= {a.asname or a.name.split(".")[-1] for a in node.names if _from_source(a.name)}
         elif isinstance(node, ast.ClassDef) and node.name == "KnowledgeBase" and not defines_it:
             classes.discard("KnowledgeBase")  # a same-named class from elsewhere shadows it
+    _add_aliases(tree, classes, modules)
     return classes, modules
 
 
@@ -124,10 +204,29 @@ def _construction_lines(source: str, rel: str = "") -> list[int]:
     return sorted(lines)
 
 
+def _population(root: Path) -> list[str]:
+    """Non-test tracked python under `_SEARCH_ROOTS`; [] on an empty tree (declare() contract)."""
+    try:
+        tracked = tracked_paths(root, "*.py")
+    except EmptyEnumeration:
+        return []
+    return [rel for rel in tracked if rel.startswith(_SEARCH_ROOTS) and not _is_test_path(rel)]
+
+
+REACH = declare(
+    "kb-construction-18122-scan",
+    discover=_population,
+    # Mid-window from REACH.window(): population 3595, window [3295, 3595], pinned 3445.
+    floor=3445,
+    what="non-test python source",
+    roots=_SEARCH_ROOTS,
+    growth=300,
+)
+
+
 class _Scan(NamedTuple):
     sites: dict[str, tuple[int, ...]]
     files_parsed: int
-    nodes: int
     unparsable: tuple[str, ...]
 
 
@@ -136,13 +235,10 @@ def _scan() -> _Scan:
     root = repo_root()
     sites: dict[str, tuple[int, ...]] = {}
     bad: list[str] = []
-    parsed = nodes = 0
-    for rel in _tracked_python_files():
-        if not rel.startswith(_SEARCH_ROOTS) or _is_test_path(rel):
-            continue
+    parsed = 0
+    for rel in REACH.examined(root):
         try:
             source = (root / rel).read_text(encoding="utf-8")
-            nodes += sum(1 for _ in ast.walk(ast.parse(source)))
             found = _construction_lines(source, rel)
         except (OSError, SyntaxError) as exc:
             bad.append(f"{rel}: {type(exc).__name__}")
@@ -150,7 +246,7 @@ def _scan() -> _Scan:
         parsed += 1
         if found:
             sites[rel] = tuple(found)
-    return _Scan(sites, parsed, nodes, tuple(bad))
+    return _Scan(sites, parsed, tuple(bad))
 
 
 def _live() -> dict[str, tuple[int, ...]]:
@@ -185,8 +281,12 @@ def test_baseline_only_shrinks() -> None:
 def test_baseline_entries_carry_a_reason_and_the_creator_is_not_listed() -> None:
     assert CANONICAL_CREATOR not in BASELINE, "the canonical creator is always allowed, never baselined"
     assert all(n > 0 and reason for n, reason in BASELINE.values())
-    permanent = [r for r, (_, why) in BASELINE.items() if why.startswith("PERMANENT")]
-    assert permanent == ["autobot-backend/tasks/knowledge_tasks.py"], "permanent exceptions need an owner decision"
+    assert PERMANENT_SITES == {
+        "autobot-backend/tasks/knowledge_tasks.py"
+    }, "permanent exceptions need an owner decision"
+    assert PERMANENT_SITES <= set(BASELINE), "a permanent site must be baselined"
+    assert all(BASELINE[r][1].startswith(_PERM) for r in PERMANENT_SITES), "permanent entries cite #18122 D6"
+    assert not [r for r, (_, why) in BASELINE.items() if r not in PERMANENT_SITES and why.startswith(_PERM)]
 
 
 _IMPORT = "from knowledge_base import KnowledgeBase\n"
@@ -209,6 +309,12 @@ _IMPORT = "from knowledge_base import KnowledgeBase\n"
         ("reference only", _IMPORT + "def f(kb: KnowledgeBase) -> None: ...\n", "", 0),
         ("same name, other module", "from other.store import KnowledgeBase\nKnowledgeBase()\n", "", 0),
         ("same name, local class", _IMPORT + "class KnowledgeBase: ...\nKnowledgeBase()\n", "", 0),
+        ("assignment alias", _IMPORT + "cls = KnowledgeBase\nkb = cls()\n", "", 1),
+        ("module attribute alias", "import knowledge_base as m\ncls = m.KnowledgeBase\ncls()\n", "", 1),
+        ("alias chain", _IMPORT + "a = KnowledgeBase\nb = a\nb()\n", "", 1),
+        ("function-local alias", _IMPORT + "def f():\n    cls = KnowledgeBase\n    return cls()\n", "", 1),
+        ("alias reassigned elsewhere", _IMPORT + "cls = KnowledgeBase\ncls = dict\ncls()\n", "", 0),
+        ("alias of other class", "from other.store import KnowledgeBase\ncls = KnowledgeBase\ncls()\n", "", 0),
         ("unrelated attribute", "import other\nother.KnowledgeBase()\n", "", 0),
     ],
 )
@@ -234,10 +340,8 @@ def test_test_files_are_excluded(rel: str, is_test: bool) -> None:
 
 
 def test_the_scan_is_not_vacuous() -> None:
-    """Floors bind to REACH (files, AST nodes), not to findings; parts are repo-relative."""
+    """Floors bind to REACH (declared above), not to findings; parts are repo-relative."""
     scan = _scan()
-    assert len(_tracked_python_files()) > 3000, "git ls-files returned almost nothing"
-    assert scan.files_parsed > 500, f"only {scan.files_parsed} files parsed -- the roots are wrong"
-    assert scan.nodes > 50_000, f"only {scan.nodes} AST nodes inspected"
+    REACH.completed(scan.files_parsed)
     assert not scan.unparsable, f"lost reach, {len(scan.unparsable)} file(s): {scan.unparsable[:3]}"
     assert CANONICAL_CREATOR in scan.sites, "the matcher no longer sees the canonical creator -- it is broken"
