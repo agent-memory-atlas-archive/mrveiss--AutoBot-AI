@@ -20,11 +20,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import select
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _real_auth_import import load_real_auth  # noqa: E402
-from _real_orm_import import REAL_MODULES, import_modules_with_real_orm, real_modules_swapped  # noqa: E402
+from _real_orm_import import (  # noqa: E402
+    REAL_MODULES,
+    SLM_ROOT,
+    import_modules_with_real_orm,
+    real_modules_swapped,
+)
 
 _auth = load_real_auth(secrets.token_hex(32))
 
@@ -38,10 +42,14 @@ _fake_db.get_db = _real_get_db
 _fake_db.db_service = None
 
 with patch.dict(sys.modules, {"services.auth": _auth, "services.database": _fake_db}):
-    (_api,) = import_modules_with_real_orm(import_names=("api.services",))
+    _categorizer, _api = import_modules_with_real_orm(
+        import_names=("api.services",),
+        path_loaded={"services.service_categorizer": SLM_ROOT / "services" / "service_categorizer.py"},
+    )
 
 _db = REAL_MODULES["models.database"]
 with real_modules_swapped():
+    from sqlalchemy import select
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 _NODE_ID = "n-scan"

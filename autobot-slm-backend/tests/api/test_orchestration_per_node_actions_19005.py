@@ -67,7 +67,7 @@ async def env(monkeypatch):
         async def post(name: str, action: str):
             app.dependency_overrides[_api.get_db] = lambda: FakeAsyncSession(results=[[_NODE], []])
             with patch("services.playbook_executor.get_playbook_executor", return_value=executor):
-                return await client.post(f"/services/{name}/{action}", json={"node_id": "n1"})
+                return await client.post(f"/orchestration/services/{name}/{action}", json={"node_id": "n1"})
 
         yield SimpleNamespace(post=post, executor=executor, who=who)
 
