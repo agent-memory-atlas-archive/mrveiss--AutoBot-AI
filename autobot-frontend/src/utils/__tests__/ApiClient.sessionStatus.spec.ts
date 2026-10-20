@@ -4,7 +4,11 @@
 // ("could not decide", e.g. revocation store unavailable) keeps it.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-const { clearStoredAuth } = vi.hoisted(() => ({ clearStoredAuth: vi.fn() }));
+const { clearStoredAuth, logout } = vi.hoisted(() => ({ clearStoredAuth: vi.fn(), logout: vi.fn() }));
+
+// The 401 path imports the user store lazily; mocked so the import resolves inside the test
+// (an unmocked one loads after teardown, #18833) and so the store logout can be asserted.
+vi.mock('@/stores/useUserStore', () => ({ useUserStore: () => ({ logout }) }));
 
 vi.mock('@/utils/authToken', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/utils/authToken')>()),
@@ -21,6 +25,7 @@ describe('ApiClient session handling on 401 vs 503 (#18892)', () => {
   beforeEach(() => {
     resetCircuitBreakers();
     clearStoredAuth.mockClear();
+    logout.mockClear();
     originalLocation = window.location;
     Object.defineProperty(window, 'location', {
       configurable: true,
@@ -44,6 +49,7 @@ describe('ApiClient session handling on 401 vs 503 (#18892)', () => {
 
     expect(res.status).toBe(503);
     expect(clearStoredAuth).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
     expect(window.location.href).toBe('');
   });
 
@@ -53,5 +59,6 @@ describe('ApiClient session handling on 401 vs 503 (#18892)', () => {
 
     expect(clearStoredAuth).toHaveBeenCalledTimes(1);
     expect(window.location.href).toBe('/login?redirect=%2Ffleet');
+    await vi.waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 });
