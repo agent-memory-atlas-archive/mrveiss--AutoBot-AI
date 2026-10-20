@@ -37,25 +37,37 @@ class FeatureFlagCacheMixin:
     _last_refresh: dict
     _cache_ttl: float
 
+    def _cache_state(self) -> tuple[dict, dict, float]:
+        """The cache dicts and TTL, created on first use so a bare instance (``__new__``) works too."""
+        state = self.__dict__
+        return (
+            state.setdefault("_cache", {}),
+            state.setdefault("_last_refresh", {}),
+            state.setdefault("_cache_ttl", FEATURE_FLAG_CACHE_TTL_SECONDS),
+        )
+
     def _cache_lookup(self, key: str) -> tuple[bool, object]:
         """``(True, value)`` while *key* was read within ``_cache_ttl``, else ``(False, None)``."""
-        stamp = self._last_refresh.get(key)
-        if stamp is not None and (_monotonic() - stamp) < self._cache_ttl:
-            return True, self._cache.get(key)
+        cache, stamps, ttl = self._cache_state()
+        stamp = stamps.get(key)
+        if stamp is not None and (_monotonic() - stamp) < ttl:
+            return True, cache.get(key)
         return False, None
 
     def _cache_store(self, key: str, value: object) -> None:
         """Remember a SUCCESSFUL read; a failed read is never stored."""
-        if key not in self._cache and len(self._cache) >= MAX_CACHED_KEYS:
+        cache, stamps, _ = self._cache_state()
+        if key not in cache and len(cache) >= MAX_CACHED_KEYS:
             return
-        self._cache[key] = value
-        self._last_refresh[key] = _monotonic()
+        cache[key] = value
+        stamps[key] = _monotonic()
 
     def _cache_invalidate(self, key: str | None = None) -> None:
         """Drop one key, or everything, so the next read goes to Redis."""
+        cache, stamps, _ = self._cache_state()
         if key is None:
-            self._cache.clear()
-            self._last_refresh.clear()
+            cache.clear()
+            stamps.clear()
             return
-        self._cache.pop(key, None)
-        self._last_refresh.pop(key, None)
+        cache.pop(key, None)
+        stamps.pop(key, None)
