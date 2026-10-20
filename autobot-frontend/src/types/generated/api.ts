@@ -2149,7 +2149,9 @@ export interface paths {
          *
          *     Security: Verifies the X-Telegram-Bot-Api-Secret-Token header matches the
          *     stored secret, enforced by the ``verify_telegram_secret`` route dependency
-         *     so authentication runs before the request body is parsed.
+         *     so authentication runs before the request body is parsed. While the ingest
+         *     mode is polling the route answers 409 (``reject_webhook_in_polling_mode``),
+         *     so the webhook and the poller are never both live.
          *
          *     Args:
          *         request: FastAPI request (for header access)
