@@ -35,7 +35,7 @@ import threading
 import time
 from typing import Any, Dict
 
-from autobot_shared.env_utils import env_float
+from autobot_shared.env_utils import env_float, env_float_clamped
 
 # stdlib logging avoids circular import: network_constants → config.registry → get_logger
 # → logging_manager → from config import config_manager (partially initialized) GH#7765
@@ -54,7 +54,12 @@ REDIS_RETRY_INTERVAL_SECONDS = env_float("AUTOBOT_CONFIG_REGISTRY_REDIS_RETRY_SE
 # Issue #18998: how long a resolved value, and the fact that Redis holds nothing
 # for a key, are served from process memory before Redis is asked again. A write
 # through another process becomes visible here within this many seconds.
-CACHE_TTL_SECONDS = env_float("AUTOBOT_CONFIG_REGISTRY_CACHE_TTL_SECONDS", 60)
+CACHE_TTL_SECONDS = env_float_clamped("AUTOBOT_CONFIG_REGISTRY_CACHE_TTL_SECONDS", 60.0, 0.0, 3600.0)
+
+
+# Returned by _fetch_from_redis when Redis could not answer (the GET raised), as opposed to
+# None, which means Redis answered and holds nothing. Only the latter may be remembered.
+_FETCH_FAILED = object()
 
 
 def _now() -> float:
@@ -109,10 +114,11 @@ class ConfigRegistry:
             # Try Redis, unless it was recently found to hold nothing for key
             if not redis_missed:
                 value = cls._fetch_from_redis(key)
-                if value is not None:
-                    cls._update_cache(key, value)
-                    return value
-                cls._remember_miss(key)
+                if value is not _FETCH_FAILED:
+                    if value is not None:
+                        cls._update_cache(key, value)
+                        return value
+                    cls._remember_miss(key)
 
             return cls._resolve_without_redis(key, default)
 
@@ -177,8 +183,12 @@ class ConfigRegistry:
             cls._miss_timestamps.pop(key, None)
 
     @classmethod
-    def _fetch_from_redis(cls, key: str) -> str | None:
-        """Fetch value from Redis. Returns None if not found or error."""
+    def _fetch_from_redis(cls, key: str) -> "str | None | object":
+        """Fetch value from Redis.
+
+        Returns the value, ``None`` when Redis answered and holds nothing, or
+        ``_FETCH_FAILED`` when the GET raised (never remembered as a miss).
+        """
         try:
             redis_client = cls._get_redis()
             if redis_client is None:
@@ -190,7 +200,7 @@ class ConfigRegistry:
             return None
         except Exception as e:
             logger.debug("Redis fetch failed for %s: %s", key, e)
-            return None
+            return _FETCH_FAILED
 
     @classmethod
     def _get_redis(cls):

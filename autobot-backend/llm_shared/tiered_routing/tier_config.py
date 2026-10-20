@@ -11,6 +11,7 @@ Issue #748: Tiered Model Distribution Implementation.
 import json
 import logging
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Dict
 
 from autobot_shared.ssot_config import CLASSIFICATION_MODEL, DEFAULT_LLM_MODEL, TRIVIAL_MODEL
@@ -23,6 +24,24 @@ logger = logging.getLogger(__name__)
 TIERED_ROUTING_KEY = "llm.tiered_routing"
 
 
+@lru_cache(maxsize=8)
+def _decode_tier_config(raw: str) -> Dict[str, Any]:
+    """Decode a JSON-object string; warn and return ``{}`` otherwise.
+
+    Memoized on the raw string: this runs on every chat turn, and a malformed
+    value would otherwise be re-decoded and re-warned each time. Callers must
+    not mutate the result.
+    """
+    try:
+        decoded = json.loads(raw)
+    except ValueError:
+        decoded = None
+    if isinstance(decoded, dict):
+        return decoded
+    logger.warning("Ignoring %s: expected a JSON object, got an unparseable string", TIERED_ROUTING_KEY)
+    return {}
+
+
 def _tier_config_mapping(raw: Any) -> Dict[str, Any]:
     """Coerce the value read for ``llm.tiered_routing`` to a dict.
 
@@ -33,12 +52,7 @@ def _tier_config_mapping(raw: Any) -> Dict[str, Any]:
     if isinstance(raw, dict):
         return raw
     if isinstance(raw, str):
-        try:
-            decoded = json.loads(raw)
-        except ValueError:
-            decoded = None
-        if isinstance(decoded, dict):
-            return decoded
+        return dict(_decode_tier_config(raw))
     logger.warning("Ignoring %s: expected a JSON object, got %s", TIERED_ROUTING_KEY, type(raw).__name__)
     return {}
 

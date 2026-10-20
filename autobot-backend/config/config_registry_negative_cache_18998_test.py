@@ -118,6 +118,39 @@ class TestSetInvalidates:
         assert redis.sets == [("autobot:config:llm.tiered_routing", '{"enabled": false}')]
 
 
+class _RaisingRedis(_FakeRedis):
+    def get(self, key):
+        self.gets += 1
+        raise ConnectionError("boom")
+
+
+class TestFailedGetIsNotAMiss:
+    def test_a_raising_get_is_not_remembered_and_the_next_read_asks_again(self, redis):
+        """Reverting ``return _FETCH_FAILED`` to ``return None`` records a miss and hides a real
+        value for the TTL; ``redis.gets`` would stay 1 on the second read."""
+        failing = _RaisingRedis()
+        ConfigRegistry._redis_client = failing
+        assert ConfigRegistry.get("err.key", "d") == "d"
+        assert ConfigRegistry._miss_timestamps == {}
+        assert ConfigRegistry.get("err.key", "d") == "d"
+        assert failing.gets == 2
+
+    def test_a_nil_get_is_remembered_and_the_next_read_does_not_ask(self, redis):
+        """Contrast: a GET that succeeds with nil records the miss and is not repeated."""
+        assert ConfigRegistry.get("nil.key", "d") == "d"
+        assert "nil.key" in ConfigRegistry._miss_timestamps
+        assert ConfigRegistry.get("nil.key", "d") == "d"
+        assert redis.gets == 1
+
+    def test_a_value_is_seen_once_redis_recovers_from_a_failed_get(self, redis):
+        """The failed read must not hide the value Redis holds once it answers again."""
+        ConfigRegistry._redis_client = _RaisingRedis()
+        ConfigRegistry.get("heal.key")
+        ConfigRegistry._redis_client = redis
+        redis.store["autobot:config:heal.key"] = "real"
+        assert ConfigRegistry.get("heal.key") == "real"
+
+
 class TestNoClientNoNegativeCache:
     def test_a_miss_without_a_redis_client_is_not_remembered(self):
         """Reverting the ``_redis_client is None`` guard in ``_remember_miss`` hides a value for a

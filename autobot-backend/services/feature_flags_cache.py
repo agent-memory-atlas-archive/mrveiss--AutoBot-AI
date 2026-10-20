@@ -56,11 +56,23 @@ class FeatureFlagCacheMixin:
 
     def _cache_store(self, key: str, value: object) -> None:
         """Remember a SUCCESSFUL read; a failed read is never stored."""
-        cache, stamps, _ = self._cache_state()
+        cache, stamps, ttl = self._cache_state()
         if key not in cache and len(cache) >= MAX_CACHED_KEYS:
-            return
+            self._prune_expired(cache, stamps, ttl)
+            if len(cache) >= MAX_CACHED_KEYS:
+                # Still full of live entries: refuse the new key. Evicting the oldest would let
+                # a flood of distinct request paths churn out the hot enforcement-mode key.
+                return
         cache[key] = value
         stamps[key] = _monotonic()
+
+    @staticmethod
+    def _prune_expired(cache: dict, stamps: dict, ttl: float) -> None:
+        """Drop entries older than *ttl*; an expired stamp never serves a read, so it only costs a slot."""
+        now = _monotonic()
+        for stale in [k for k, stamp in stamps.items() if (now - stamp) >= ttl]:
+            cache.pop(stale, None)
+            stamps.pop(stale, None)
 
     def _cache_invalidate(self, key: str | None = None) -> None:
         """Drop one key, or everything, so the next read goes to Redis."""

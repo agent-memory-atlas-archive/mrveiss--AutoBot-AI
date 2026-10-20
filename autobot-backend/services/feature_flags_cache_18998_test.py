@@ -144,3 +144,31 @@ async def test_get_feature_flags_fast_path_never_takes_the_lock():
         second = await asyncio.wait_for(ff.get_feature_flags(), timeout=1)
     assert second is first
     ff._feature_flags = None
+
+
+@pytest.mark.asyncio
+async def test_expired_entries_are_pruned_so_a_full_cache_accepts_a_new_key(env):
+    """Reverting ``_prune_expired`` in ``_cache_store`` leaves the cache full of dead stamps, so the
+    new key is refused forever and this reads Redis twice."""
+    from services.feature_flags_cache import MAX_CACHED_KEYS
+
+    flags, redis, clock = env
+    for i in range(MAX_CACHED_KEYS):
+        flags._cache_store(f"k{i}", i)
+    clock[0] += flags._cache_ttl + 1
+    flags._cache_store("new", "v")
+    assert flags._cache_lookup("new") == (True, "v")
+    assert len(flags._cache) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_full_cache_of_live_entries_still_refuses_a_new_key(env):
+    """Contrast: pruning only drops EXPIRED entries; live ones are never evicted."""
+    from services.feature_flags_cache import MAX_CACHED_KEYS
+
+    flags, _, _ = env
+    for i in range(MAX_CACHED_KEYS):
+        flags._cache_store(f"k{i}", i)
+    flags._cache_store("new", "v")
+    assert flags._cache_lookup("new") == (False, None)
+    assert len(flags._cache) == MAX_CACHED_KEYS

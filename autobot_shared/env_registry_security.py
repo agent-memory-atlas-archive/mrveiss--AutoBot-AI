@@ -395,6 +395,7 @@ register_env_var(
             "Clamped to 0-60."
         ),
         component="security",
+        range=(0, 60),
     )
 )
 
@@ -406,8 +407,11 @@ register_env_var(
         description=(
             "Seconds the config registry serves a resolved value, and the fact that "
             "Redis holds nothing for a key, from process memory before asking Redis "
-            "again. A change written by another process is visible within this window."
+            "again. A change written by another process is visible within this window. "
+            "Clamped to 0-3600: an hour is the longest a stale config value is tolerable "
+            "without a restart; 0 disables the cache."
         ),
         component="redis",
+        range=(0, 3600),
     )
 )
