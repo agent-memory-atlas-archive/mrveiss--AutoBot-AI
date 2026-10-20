@@ -107,9 +107,14 @@ async def fix_dimensions():
         return False
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the dimension fix and report the outcome."""
     success = asyncio.run(fix_dimensions())
     if success:
         logger.info("\nKnowledge base is now ready! You can run populate_knowledge_base.py")
     else:
         logger.error("\nFailed to fix dimensions issue")
+
+
+if __name__ == "__main__":
+    main()
