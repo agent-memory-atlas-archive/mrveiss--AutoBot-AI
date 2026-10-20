@@ -165,3 +165,13 @@ def test_an_unsafe_tag_is_written_for_template_syntax_instead_of_the_raw_string(
     assert "- 1" in lines
     assert not any(line.startswith("secret: !unsafe") for line in lines)
     assert oct(path.stat().st_mode & 0o777) == "0o600"
+
+
+def test_secrets_the_executor_merges_are_written_plain_when_the_caller_passes_none(tmp_path, monkeypatch):
+    """The wizard passes no extra vars: its secrets arrive only through the executor's own merge (#19005)."""
+    run = _Run(tmp_path, monkeypatch)
+
+    run.execute(None)
+
+    assert "!unsafe" not in run.written["text"]
+    assert yaml.load(run.written["text"], Loader=_AnsibleLikeLoader) == {"hf_token": _SECRET}
