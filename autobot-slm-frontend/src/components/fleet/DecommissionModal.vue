@@ -308,7 +308,7 @@ function handleMigrateClick() {
           @click="emit('decommissioned')"
         >{{ $t('fleet.decommissionModal.close') }}</button>
       </template>
-      <template v-else-if="state !== 'running'">
+      <template v-else>
         <button
           class="btn btn-cancel"
           @click="emit('close')"

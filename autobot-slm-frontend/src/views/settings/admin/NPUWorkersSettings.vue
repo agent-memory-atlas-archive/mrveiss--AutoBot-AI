@@ -644,7 +644,8 @@ onUnmounted(() => {
 
     <!-- Delete Confirmation -->
     <BaseModal
-      :model-value="!!deleteTarget"
+      v-if="deleteTarget"
+      :model-value="true"
       :title="$t('settings.admin.nPUWorkersSettings.removeWorker')"
       size="sm"
       :close-label="$t('settings.admin.nPUWorkersSettings.close')"
@@ -676,7 +677,8 @@ onUnmounted(() => {
 
     <!-- Metrics Modal -->
     <BaseModal
-      :model-value="showMetrics && !!selectedWorkerMetrics"
+      v-if="selectedWorkerMetrics"
+      :model-value="showMetrics"
       :title="$t('settings.admin.nPUWorkersSettings.hostnameMetrics', { hostname: selectedWorkerMetrics?.hostname })"
       size="md"
       :close-label="$t('settings.admin.nPUWorkersSettings.close')"

@@ -458,7 +458,8 @@ function categoryIcon(category: string): string {
 
     <!-- Skill Detail Modal -->
     <BaseModal
-      :model-value="showDetail && !!selectedSkill"
+      v-if="selectedSkill"
+      :model-value="showDetail"
       :title="selectedSkill?.name ?? ''"
       size="md"
       :close-label="$t('addNodeModal.closeDialogAria')"

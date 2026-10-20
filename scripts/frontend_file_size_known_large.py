@@ -186,21 +186,21 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-frontend/src/types/slm.ts": 838,
     "autobot-slm-frontend/src/views/AgentsView.vue": 737,
     "autobot-slm-frontend/src/views/CodeSyncView.vue": 2080,
-    "autobot-slm-frontend/src/views/DeploymentsView.vue": 1652,  # #14777: 1703 -> 1652
+    "autobot-slm-frontend/src/views/DeploymentsView.vue": 1654,  # #14777: 1703 -> 1654
     "autobot-slm-frontend/src/views/FleetOverview.vue": 786,  # #14777: 837 -> 786
     "autobot-slm-frontend/src/views/MaintenanceView.vue": 818,
     "autobot-slm-frontend/src/views/OrchestrationView.vue": 2189,
-    "autobot-slm-frontend/src/views/ReplicationView.vue": 705,  # #14777: 731 -> 705
+    "autobot-slm-frontend/src/views/ReplicationView.vue": 706,  # #14777: 731 -> 706
     "autobot-slm-frontend/src/views/SecurityView.vue": 1386,  # #14777: 1409 -> 1386
     "autobot-slm-frontend/src/views/SetupWizardView.vue": 1834,
-    "autobot-slm-frontend/src/views/SkillsView.vue": 632,  # #14777: 645 -> 632
+    "autobot-slm-frontend/src/views/SkillsView.vue": 633,  # #14777: 645 -> 633
     "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 638,
-    "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": 616,  # #14777: 640 -> 616
+    "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": 617,  # #14777: 640 -> 617
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
     "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 798,  # #14777: 807 -> 798
     "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 666,  # #14777: 669 -> 666
     "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 730,  # #14777: 736 -> 730
-    "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 727,  # #14777: 733 -> 727
+    "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 729,  # #14777: 733 -> 729
     "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 859,  # #14777: 869 -> 859
     "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1094,  # #14777: 1099 -> 1094
 }

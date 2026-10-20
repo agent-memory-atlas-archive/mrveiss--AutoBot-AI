@@ -1478,7 +1478,8 @@ function getNodeHostname(nodeId: string): string {
 
     <!-- Standard Deployment Details Modal -->
     <BaseModal
-      :model-value="showDetailsModal && !!selectedDeployment"
+      v-if="selectedDeployment"
+      :model-value="showDetailsModal"
       :title="$t('deploymentsView.deploymentDetails')"
       size="md"
       :close-label="$t('deploymentsView.close')"
@@ -1557,7 +1558,8 @@ function getNodeHostname(nodeId: string): string {
 
     <!-- Blue-Green Details Modal -->
     <BaseModal
-      :model-value="showBgDetailsModal && !!selectedBgDeployment"
+      v-if="selectedBgDeployment"
+      :model-value="showBgDetailsModal"
       :title="$t('deploymentsView.blueGreenDeploymentDetails')"
       size="md"
       :close-label="$t('deploymentsView.close')"

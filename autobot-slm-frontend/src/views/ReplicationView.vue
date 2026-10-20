@@ -554,7 +554,8 @@ function getNodeHostname(nodeId: string): string {
 
     <!-- Details Modal -->
     <BaseModal
-      :model-value="showDetailsModal && !!selectedReplication"
+      v-if="selectedReplication"
+      :model-value="showDetailsModal"
       :title="$t('replicationView.replicationDetails')"
       size="md"
       :close-label="$t('replicationView.close')"

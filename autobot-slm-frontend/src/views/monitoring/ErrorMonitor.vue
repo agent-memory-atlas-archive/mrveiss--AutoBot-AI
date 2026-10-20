@@ -515,7 +515,8 @@ onUnmounted(() => {
 
     <!-- Error Detail Modal -->
     <BaseModal
-      :model-value="!!selectedError"
+      v-if="selectedError"
+      :model-value="true"
       :title="$t('monitoring.errorMonitor.errorDetails')"
       size="md"
       :close-label="$t('monitoring.errorMonitor.close')"
