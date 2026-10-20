@@ -113,6 +113,30 @@ describe('BaseAlert', () => {
     expect(wrapper.emitted('dismiss')).toHaveLength(1)
   })
 
+  it('autoDismiss changed to 0 cancels the pending dismissal; a positive value starts one', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(BaseAlert, { props: { autoDismiss: 3000, message: 'm' } })
+    await wrapper.setProps({ autoDismiss: 0 })
+    vi.advanceTimersByTime(5000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toBeUndefined()
+    await wrapper.setProps({ autoDismiss: 1000 })
+    vi.advanceTimersByTime(1000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toHaveLength(1)
+  })
+
+  it('a manual dismissal cancels the timer, so dismiss is emitted once', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(BaseAlert, {
+      props: { autoDismiss: 3000, message: 'm', dismissible: true, dismissLabel: 'Close' },
+    })
+    await wrapper.find('button').trigger('click')
+    vi.advanceTimersByTime(5000)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('dismiss')).toHaveLength(1)
+  })
+
   it('a message that stays the same keeps its original timer', async () => {
     // contrast: fails if a re-render without a new message restarts the delay
     vi.useFakeTimers()

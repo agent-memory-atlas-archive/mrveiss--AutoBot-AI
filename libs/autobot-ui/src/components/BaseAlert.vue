@@ -61,8 +61,13 @@ const CLOSE_PATH = 'M6 18L18 6M6 6l12 12'
 const dismissed = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 
-function startTimer(): void {
+function clearTimer(): void {
   if (timer !== undefined) clearTimeout(timer)
+  timer = undefined
+}
+
+function startTimer(): void {
+  clearTimer()
   timer = props.autoDismiss > 0 ? setTimeout(dismiss, props.autoDismiss) : undefined
 }
 
@@ -76,6 +81,11 @@ watch(
   },
 )
 
+// A changed delay applies at once: 0 cancels a pending dismissal, a positive value starts one.
+watch(() => props.autoDismiss, () => {
+  if (!dismissed.value) startTimer()
+})
+
 watchEffect(() => {
   if (props.dismissible && !props.dismissLabel) {
     warn('BaseAlert: `dismissible` needs `dismissLabel`, or its icon-only dismiss button has no accessible name.')
@@ -86,15 +96,14 @@ const assertive = computed(() => props.variant === 'error' || props.variant === 
 const iconPath = computed(() => ICON_PATHS[props.variant] ?? ICON_PATHS.info)
 
 function dismiss(): void {
+  clearTimer() // a manual dismissal must not be followed by the timer's second `dismiss`
   dismissed.value = true
   emit('dismiss')
 }
 
 onMounted(startTimer)
 
-onBeforeUnmount(() => {
-  if (timer !== undefined) clearTimeout(timer)
-})
+onBeforeUnmount(clearTimer)
 </script>
 
 <template>
