@@ -311,3 +311,12 @@ Three independent platforms in this category, three arrivals at the same
 "any Compose file, pasted directly, works" door. The generalization holds;
 this isn't one platform's quirk.
 
+## Linked issues
+
+Issues this research produced or is the analysis for (#18967). Each one links back to this document.
+
+- #16829 — umbrella: distribute AutoBot through Compose-based NAS/homelab app-store platforms
+- #16830 — feat(deploy): add a distribution Compose variant that references published images instead of building from a repo checkout
+- #16831 — fix(deploy): bake with-secrets.sh / secrets-init.sh / postgres init SQL into images instead of bind-mounting from the repo
+- #16832 — feat(deploy): lean-hardware profile defaulting to a cloud LLM provider instead of mandatory local Ollama
+- #16833 — fix(deploy): parameterize the hardcoded 172.30.0.0/24 management-network subnet
