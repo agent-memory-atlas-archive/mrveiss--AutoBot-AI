@@ -77,19 +77,28 @@ def check_user_groups():
 def check_openvino_detects_npu():
     """Check if OpenVINO can detect NPU
 
-    Detection is ``enable_npu_support.check_openvino_npu`` (#18964); this adds the
-    "not installed" outcome (``None``, reported as SKIPPED) that function folds into False.
+    Enumeration is ``enable_npu_support.list_openvino_devices`` (#18964); the messages
+    and the "not installed" outcome (``None``, reported as SKIPPED) stay this script's.
     """
+    from enable_npu_support import list_openvino_devices
+
     try:
-        import openvino  # noqa: F401
+        devices, npu_devices = list_openvino_devices()
+        logger.info("📋 Available OpenVINO devices: %s", devices)
+
+        if npu_devices:
+            logger.info("✅ OpenVINO NPU devices found: %s", npu_devices)
+            return True
+        else:
+            logger.warning("⚠️ No NPU devices detected by OpenVINO")
+            return False
+
     except ImportError:
         logger.warning("⚠️ OpenVINO not installed - skipping NPU device check")
         return None
-
-    from enable_npu_support import check_openvino_npu
-
-    found, _devices = check_openvino_npu()
-    return found
+    except Exception as e:
+        logger.error("❌ Error checking OpenVINO NPU devices: %s", e)
+        return False
 
 
 def main():

@@ -11,21 +11,29 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Runs from any directory with no PYTHONPATH: put the repository root on the path for
+# `autobot_shared` (#18964).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 # Import centralized Redis client
-from autobot_shared.redis_client import get_redis_client
+from autobot_shared.redis_client import get_redis_client  # noqa: E402
 
 
 async def fix_dimensions():
     """Drop all llama_index traces and let it recreate properly."""
 
-    # Connect to Redis using centralized client
-    r = get_redis_client(database="main")
+    # The llama_index vector store lives in the knowledge DB (db 1, DATABASE_MAPPING["knowledge"];
+    # KnowledgeBase.redis_db), the DB the pre-#18964 script dropped it from.
+    r = get_redis_client(database="knowledge")
 
     logger.info("Cleaning up Redis...")
 
@@ -54,6 +62,7 @@ async def fix_dimensions():
         try:
             r_db = get_redis_client(database=db_name)
             if r_db is None:
+                logger.warning("Database %s: no Redis client available, skipping", db_name)
                 continue
 
             # Delete any llama_index related keys
