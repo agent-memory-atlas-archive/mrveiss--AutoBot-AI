@@ -405,3 +405,17 @@ async def test_outer_pending_work_survives_a_savepoint_rollback() -> None:
             raise RuntimeError("savepoint body fails")
     assert await s.get(model, 1) is a
     assert await s.get(model, 2) is None
+
+
+@pytest.mark.asyncio
+async def test_awaiting_begin_nested_starts_a_savepoint_like_a_real_session() -> None:
+    """``tx = await session.begin_nested()`` is valid SQLAlchemy; the fake must accept it too (#18955)."""
+    model = type("M", (), {})
+    a = model()
+    a.id = 4
+    s = FakeAsyncSession()
+    tx = await s.begin_nested()
+    s.add(a)
+    await tx.rollback()
+    assert await s.get(model, 4) is None
+    assert s.rollbacks == 1

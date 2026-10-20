@@ -59,6 +59,7 @@ ServiceLogsResponse = REAL_MODULES["models.schemas"].ServiceLogsResponse
 
 _PRINCIPAL = {"admin": True, "role": "admin", "sub": "tester"}
 _NODE_ID = "n-logs"
+_NODE_IP = "10.0.0.83"
 _SERVICE = "slm-backend"
 
 # The ceiling the route is driven against. Small enough that the timeout test
@@ -98,7 +99,7 @@ def _node_returning_session(node) -> FakeAsyncSession:
 @pytest.fixture
 def db_session():
     return _node_returning_session(
-        Node(node_id=_NODE_ID, hostname="host-logs", ip_address="10.0.0.83", ssh_user="autobot", ssh_port=22)
+        Node(node_id=_NODE_ID, hostname="host-logs", ip_address=_NODE_IP, ssh_user="autobot", ssh_port=22)
     )
 
 
@@ -201,7 +202,7 @@ class TestServiceLogsDistinguishesCutShortFromEmpty:
 
         assert response.logs == "line one\nline two\n"
         assert recorded["argv"][-1] == f"sudo -n journalctl -u {_SERVICE} -n 25 --no-pager"
-        assert f"autobot@{db_session._node.ip_address}" in recorded["argv"]
+        assert f"autobot@{_NODE_IP}" in recorded["argv"]
 
     def test_the_timeout_type_the_route_catches_is_a_real_exception(self):
         """The precondition that made the 504 test writable at all (#15620).
