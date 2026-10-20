@@ -32,6 +32,26 @@ def bump_acl_epoch(redis_client) -> int:
     return epoch
 
 
+class AclEpochBumpError(RuntimeError):
+    """The epoch could not be bumped after an ownership rewrite: the caches may serve stale access."""
+
+
+async def bump_acl_epoch_async(redis_client) -> int:
+    """INCR the epoch through an async *redis_client*; any failure raises ``AclEpochBumpError``.
+
+    For writers that already hold the async client (ownership reassignment). ``None`` -- an
+    unavailable client -- is a failure too: the rewrite happened and nothing invalidated the caches.
+    """
+    if redis_client is None:
+        raise AclEpochBumpError("KB access-control epoch not bumped: no Redis client")
+    try:
+        epoch = int(await redis_client.incr(ACL_EPOCH_KEY))
+    except Exception as exc:
+        raise AclEpochBumpError(f"KB access-control epoch not bumped: {exc}") from exc
+    logger.info("KB access-control epoch bumped to %d", epoch)
+    return epoch
+
+
 async def read_acl_epoch() -> str | None:
     """The current epoch as text, ``"0"`` before the first bump, or ``None`` if it cannot be read.
 

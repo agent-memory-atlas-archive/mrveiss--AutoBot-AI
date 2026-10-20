@@ -421,11 +421,15 @@ ANSIBLE_SKIP_DIRS = frozenset({".git", "__pycache__", "node_modules", ".worktree
 
 
 def iter_ansible_files(root: Path, suffixes: Collection[str]) -> Iterable[Path]:
-    """Yield files under *root* whose suffix is in *suffixes*, skipping vendored/cached dirs."""
+    """Yield files under *root* whose suffix is in *suffixes*, skipping vendored/cached dirs.
+
+    Only the parts BELOW *root* are matched: a checkout that itself lives under
+    ``.worktrees`` would otherwise skip every file and report a clean scan (#18972).
+    """
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix not in suffixes:
             continue
-        if any(part in ANSIBLE_SKIP_DIRS for part in path.parts):
+        if any(part in ANSIBLE_SKIP_DIRS for part in path.relative_to(root).parts):
             continue
         yield path
 
