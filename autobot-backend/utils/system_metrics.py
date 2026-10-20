@@ -40,7 +40,9 @@ class SystemMetric:
 
 
 # #18999: doc:* / kb_cache:* counts are keyspace walks; refresh at most this often.
-KB_COUNT_REFRESH_SECONDS = env_float_clamped("AUTOBOT_KB_METRICS_COUNT_REFRESH_SECONDS", 300.0, 1.0, 86400.0)
+KB_COUNT_REFRESH_SECONDS = env_float_clamped(
+    "AUTOBOT_KB_METRICS_COUNT_REFRESH_SECONDS", 300.0, 1.0, 86400.0, positive_finite=True
+)
 
 
 class SystemMetricsCollector:
