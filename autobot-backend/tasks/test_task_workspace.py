@@ -45,7 +45,11 @@ cleanup_stale = _tw.cleanup_stale
 @pytest.fixture()
 def git_repo(tmp_path: Path) -> Path:
     """Initialise a minimal git repo in tmp_path with one initial commit."""
-    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True, env=isolated_git_env())
+    # A branch that is NOT the workspace base's name: the fetched-base tests create `main`
+    # themselves, and a default `main` from init would satisfy them by accident (#18940).
+    subprocess.run(
+        ["git", "init", "-b", "work", str(tmp_path)], check=True, capture_output=True, env=isolated_git_env()
+    )
     subprocess.run(
         ["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"],
         check=True,
