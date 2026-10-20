@@ -9494,8 +9494,8 @@ export interface paths {
          *         Updated fact metadata
          *
          *     Raises:
-         *         403: If user is not the owner
-         *         404: If fact not found
+         *         403: If the caller can read the fact but is neither its owner nor an admin
+         *         404: If the fact is absent or the caller cannot read it
          */
         post: operations["share_knowledge_api_knowledge_collaboration_facts__fact_id__share_post"];
         delete?: never;
@@ -9529,8 +9529,8 @@ export interface paths {
          *         Updated fact metadata
          *
          *     Raises:
-         *         403: If user is not the owner
-         *         404: If fact not found
+         *         403: If the caller can read the fact but is neither its owner nor an admin
+         *         404: If the fact is absent or the caller cannot read it
          */
         delete: operations["unshare_knowledge_api_knowledge_collaboration_facts__fact_id__share__entity_id__delete"];
         options?: never;
@@ -81397,22 +81397,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * KnowledgeShareFactResponse
-         * @description Response for POST /api/knowledge_base/facts/{fact_id}/share.
-         */
-        KnowledgeShareFactResponse: {
-            /** Success */
-            success: boolean;
-            /** Fact Id */
-            fact_id: string;
-            /** Shared With */
-            shared_with: unknown[];
-            /** Visibility */
-            visibility?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * KnowledgeShareResponse
          * @description Response for POST /knowledge/collaboration/facts/{id}/share.
          */
@@ -81849,22 +81833,6 @@ export interface components {
             };
             /** Message */
             message?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * KnowledgeUnshareFactResponse
-         * @description Response for DELETE /api/knowledge_base/facts/{fact_id}/share/{user_id_to_remove}.
-         */
-        KnowledgeUnshareFactResponse: {
-            /** Success */
-            success: boolean;
-            /** Fact Id */
-            fact_id: string;
-            /** Shared With */
-            shared_with: unknown[];
-            /** Visibility */
-            visibility?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -97296,19 +97264,6 @@ export interface components {
         ShareBody: {
             /** Grantee */
             grantee: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ShareFactRequest
-         * @description Request model for sharing a fact with users (Issue #688).
-         */
-        ShareFactRequest: {
-            /**
-             * User Ids
-             * @description List of user IDs to share with
-             */
-            user_ids: string[];
         } & {
             [key: string]: unknown;
         };
