@@ -86,6 +86,9 @@ def _load():
         "services.role_registry",
         "services.ansible_extra_vars",
         "services.unit_names",
+        "services.role_manifest_shape",
+        "services.playbook_output_stream",
+        "services.ssh_utils",
     )
     saved = {name: sys.modules.get(name) for name in touched}
     try:
