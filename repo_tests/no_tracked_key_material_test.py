@@ -100,7 +100,7 @@ def _tracked(root: Path) -> list[str]:
 REACH = declare(
     "tracked-key-material",
     discover=_tracked,
-    floor=11_704,  # re-pinned mid-window (train 43 on main): population 12104, window [11304, 12104]
+    floor=11_713,  # re-pinned mid-window (train 46): population 12113, window [11313, 12113]
     growth=800,
     what="tracked files of any extension",
 )
