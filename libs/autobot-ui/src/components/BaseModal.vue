@@ -13,7 +13,7 @@
   Public API is preserved unchanged from the app version:
     props   : modelValue (v-model), title, size (sm|md|lg), width (custom
               px/CSS width overriding size), showClose, closeOnOverlay,
-              scrollable, closeLabel, closeOnEsc (#14777)
+              scrollable, closeLabel, closeOnEsc and locked (#14777)
     slots   : title (rich header, falls back to `title` prop), subtitle (block
               content under the title, #14777), default (body), actions (footer)
     emits   : update:modelValue, close
@@ -61,10 +61,16 @@ interface Props {
   /** aria-label for the close button (apps pass a translated string) */
   closeLabel?: string
   /**
-   * Close on Escape. Set false (with `closeOnOverlay` and `showClose` false) for a dialog
-   * the user must answer, e.g. one that shows a secret exactly once (#14777).
+   * Close on Escape. For a dialog the user must answer, use `locked` instead, which
+   * turns off every exit at once (#14777).
    */
   closeOnEsc?: boolean
+  /**
+   * A dialog the user must answer through its own buttons (a secret shown once, a setup
+   * that cannot be abandoned half-way). Turns off overlay click, Escape and the close
+   * button together, whatever those props say (#14777).
+   */
+  locked?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -74,7 +80,12 @@ const props = withDefaults(defineProps<Props>(), {
   scrollable: true,
   closeLabel: 'Close',
   closeOnEsc: true,
+  locked: false,
 })
+
+const canOverlayClose = computed(() => props.closeOnOverlay && !props.locked)
+const canEscClose = computed(() => props.closeOnEsc && !props.locked)
+const canShowClose = computed(() => props.showClose && !props.locked)
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -125,7 +136,7 @@ const handleClose = () => {
 }
 
 const handleOverlayClick = () => {
-  if (props.closeOnOverlay) {
+  if (canOverlayClose.value) {
     handleClose()
   }
 }
@@ -141,7 +152,7 @@ const onAfterEnter = () => focusFirst()
         v-if="modelValue"
         class="aui-dialog-overlay"
         @click="handleOverlayClick"
-        @keydown.esc="closeOnEsc && handleClose()"
+        @keydown.esc="canEscClose && handleClose()"
       >
         <div
           ref="dialogRef"
@@ -165,7 +176,7 @@ const onAfterEnter = () => focusFirst()
               <div v-if="$slots.subtitle" class="aui-dialog-subtitle"><slot name="subtitle" /></div>
             </div>
             <button
-              v-if="showClose"
+              v-if="canShowClose"
               class="aui-dialog-close"
               type="button"
               :aria-label="closeLabel"

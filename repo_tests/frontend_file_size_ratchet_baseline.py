@@ -204,7 +204,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 638,
     "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": 617,  # #14777: 640 -> 617
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
-    "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 798,  # #14777: 807 -> 798
+    "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 785,  # #14777: 807 -> 785
     "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 666,  # #14777: 669 -> 666
     "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 730,  # #14777: 736 -> 730
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 729,  # #14777: 733 -> 729

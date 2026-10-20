@@ -405,6 +405,28 @@ describe('BaseModal focus trap (#5016)', () => {
     outside.remove()
   })
 
+  describe('locked', () => {
+    it('turns off overlay click, Escape and the close button together', async () => {
+      // fails if a must-answer dialog keeps any exit, whatever the individual props say
+      const wrapper = mountModal({ locked: true, closeOnOverlay: true, closeOnEsc: true, showClose: true })
+      await flushPromises()
+      await wrapper.find('.aui-dialog-overlay').trigger('click')
+      await wrapper.find('.aui-dialog-overlay').trigger('keydown', { key: 'Escape' })
+      expect(wrapper.find('.aui-dialog-close').exists()).toBe(false)
+      expect(wrapper.emitted('close')).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('leaves every exit on when not locked', async () => {
+      // contrast case: fails if locked defaults to true or leaks into ordinary dialogs
+      const wrapper = mountModal()
+      expect(wrapper.find('.aui-dialog-close').exists()).toBe(true)
+      await wrapper.find('.aui-dialog-overlay').trigger('keydown', { key: 'Escape' })
+      expect(wrapper.emitted('close')).toHaveLength(1)
+      wrapper.unmount()
+    })
+  })
+
   describe('subtitle slot', () => {
     it('renders block content under the title, outside the <h3>', () => {
       // fails if a subtitle has to go inside the title slot, i.e. a <p> inside an <h3> (#14777)

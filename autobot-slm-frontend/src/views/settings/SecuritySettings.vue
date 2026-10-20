@@ -467,9 +467,7 @@ onMounted(async () => {
       v-model="showMFASetupModal"
       :title="$t('settings.securitySettings.enableTwoFactorAuthentication1')"
       size="sm"
-      :close-on-overlay="false"
-      :close-on-esc="false"
-      :show-close="false"
+      locked
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">
@@ -534,9 +532,7 @@ onMounted(async () => {
       v-model="showBackupCodes"
       :title="$t('settings.securitySettings.backupCodes')"
       size="sm"
-      :close-on-overlay="false"
-      :close-on-esc="false"
-      :show-close="false"
+      locked
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">
@@ -576,9 +572,7 @@ onMounted(async () => {
       v-model="showDisableModal"
       :title="$t('settings.securitySettings.disableMFA')"
       size="sm"
-      :close-on-overlay="false"
-      :close-on-esc="false"
-      :show-close="false"
+      @close="disablePassword = ''"
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">
@@ -622,9 +616,7 @@ onMounted(async () => {
       v-model="showRegenerateModal"
       :title="$t('settings.securitySettings.regenerateBackupCodes')"
       size="sm"
-      :close-on-overlay="false"
-      :close-on-esc="false"
-      :show-close="false"
+      @close="regeneratePassword = ''"
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">
@@ -671,9 +663,6 @@ onMounted(async () => {
       v-model="showCreateKeyModal"
       :title="$t('settings.securitySettings.createAPIKey')"
       size="sm"
-      :close-on-overlay="false"
-      :close-on-esc="false"
-      :show-close="false"
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">
@@ -763,9 +752,7 @@ onMounted(async () => {
       v-model="showKeyCreatedModal"
       :title="$t('settings.securitySettings.aPIKeyCreated')"
       size="sm"
-      :close-on-overlay="false"
-      :close-on-esc="false"
-      :show-close="false"
+      locked
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">
