@@ -17,6 +17,10 @@ whole service stack), so it reads source with ``ast`` and is blind to what only 
 * ``include_router`` calls whose receiver or child is not a plain imported name;
 * a router mounted with a non-literal ``prefix=``.
 
+``add_api_route``, loop-built routes and computed prefixes are tracked by #19033: enumerate from the real
+router objects. A ``@router.websocket`` route is read as method ``WEBSOCKET``, so it only ever collides with
+another WebSocket route.
+
 Ordering rules it models, each matching how FastAPI builds the list:
 
 * a router's own decorators in source order (``@router.api_route`` expands to one route per literal
@@ -35,7 +39,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 __all__ = ["OrderedRoute", "RouteOrder", "shadowed_literals"]
 
-_VERBS = ("get", "post", "put", "patch", "delete", "head", "options", "api_route")
+_VERBS = ("get", "post", "put", "patch", "delete", "head", "options", "api_route", "websocket")
 _SKIP_PARTS = frozenset({"tests", "node_modules", ".venv", "venv", "__pycache__", "migrations"})
 Key = Tuple[str, str]
 

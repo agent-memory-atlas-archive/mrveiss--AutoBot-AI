@@ -172,3 +172,21 @@ def test_the_same_router_included_twice_into_one_parent_is_caught(tmp_path: Path
     )
     routes = slm_routes(RouteOrder(tmp_path))
     assert len(duplicates(routes)[("GET", "/api/dup")]) == 2
+
+
+def test_a_duplicate_websocket_route_is_caught(tmp_path: Path) -> None:
+    """The AST guard this replaced counted ``@router.websocket``; the route read must too."""
+    (tmp_path / "api").mkdir()
+    (tmp_path / "api" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "api" / "w.py").write_text(
+        'from fastapi import APIRouter\nrouter = APIRouter()\n@router.websocket("/ws")\nasync def a(ws): ...\n'
+        '@router.get("/ws")\ndef b(): ...\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "main.py").write_text(
+        "from api.w import router as w_router\n"
+        'app.include_router(w_router, prefix="/api")\napp.include_router(w_router, prefix="/api")\n',
+        encoding="utf-8",
+    )
+    dupes = duplicates(slm_routes(RouteOrder(tmp_path)))
+    assert set(dupes) == {("WEBSOCKET", "/api/ws"), ("GET", "/api/ws")}
