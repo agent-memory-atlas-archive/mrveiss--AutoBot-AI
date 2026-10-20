@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import ast
 import re
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from repo_tests._paths import repo_root
+
+ROOT = repo_root()
 AUTO_TOOLS = "autobot-backend/code_analysis/auto-tools/"
 MIGRATIONS = "autobot-infrastructure/autobot-backend/scripts/migrations/"
 AGENTS = "autobot-backend/agents/"
