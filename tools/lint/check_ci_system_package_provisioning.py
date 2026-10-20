@@ -78,6 +78,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from _scan_helpers import configure_logging, scrubbed_git_env, tracked_paths  # noqa: E402
 
+from autobot_shared.paths import project_root as repo_root  # noqa: E402
+
 # Plain stdlib logging (matching check_flake8_exclude_anchoring.py and
 # check_requirements_ci_drift.py): this runs inside `code-quality`, which
 # installs linters only, never the application's own dependencies.
@@ -153,11 +155,6 @@ _APT_LIST_ITEM_RE = re.compile(r"^\s*-\s*([A-Za-z0-9][A-Za-z0-9.+-]*)\s*$")
 _SHUTIL_WHICH_RE = re.compile(r"""shutil\.which\(\s*["']([^"']+)["']\s*\)""")
 _PROBE_CALL_RE = re.compile("|".join(re.escape(call) for call in PROBE_CALL_TO_BINARY))
 _APT_INSTALL_LINE_RE = re.compile(r"apt(?:-get)?\s+install[^\n]*")
-
-
-def repo_root() -> pathlib.Path:
-    """Repo root derived from this file, never from the caller's cwd."""
-    return pathlib.Path(__file__).resolve().parents[2]
 
 
 def ansible_feature_packages(root: pathlib.Path | None = None) -> set[str]:

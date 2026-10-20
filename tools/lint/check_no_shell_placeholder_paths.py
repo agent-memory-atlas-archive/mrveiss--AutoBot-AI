@@ -70,6 +70,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from _scan_helpers import configure_logging  # noqa: E402
 
+from autobot_shared.paths import project_root as repo_root  # noqa: E402
+
 # lint job, and `autobot_shared.logging_manager` would drag config loading into
 # that path. Same trade as `tools/lint/check_undefined_names.py`.
 logger = logging.getLogger(__name__)
@@ -153,11 +155,6 @@ EXEMPTIONS: tuple[Exemption, ...] = (
         reason="a parametrised case asserting the ansible guard skips paths it cannot resolve statically",
     ),
 )
-
-
-def repo_root() -> pathlib.Path:
-    """Repo root, derived from this file's location (``tools/lint/`` is two deep)."""
-    return pathlib.Path(__file__).resolve().parents[2]
 
 
 def discover_python_files(base: pathlib.Path | None = None) -> list[pathlib.Path]:
