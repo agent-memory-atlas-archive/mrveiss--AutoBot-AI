@@ -86,3 +86,25 @@ def test_the_shipped_serving_clause_keeps_the_record_with_no_key() -> None:
     ids = _real_collection().query(query_embeddings=[[1.0, 0.0]], n_results=4, where=SERVING_TRUST_WHERE)["ids"][0]
     assert "no_key" in ids
     assert "rejected" not in ids
+
+
+_AND_WITH_SIBLING = {"$and": [{"verification_status": {"$ne": "rejected"}}], "collection": "docs"}
+
+
+def test_real_chromadb_rejects_and_beside_another_top_level_key() -> None:
+    """The control for the fake's rejection: the real library refuses this shape."""
+    with pytest.raises(ValueError, match="exactly one operator"):
+        _real_collection().get(where=_AND_WITH_SIBLING)
+
+
+@pytest.mark.parametrize("call", ["get", "query", "delete"])
+def test_the_in_memory_fake_rejects_and_beside_another_top_level_key(call: str) -> None:
+    """Evaluating ``$and`` alone would ignore ``collection`` and return more than the store would."""
+    fake = _fake_collection()
+    with pytest.raises(ValueError, match="exactly one operator"):
+        if call == "query":
+            fake.query(query_embeddings=[[1.0, 0.0]], n_results=4, where=_AND_WITH_SIBLING)
+        else:
+            getattr(fake, call)(where=_AND_WITH_SIBLING)
+    with pytest.raises(ValueError, match="exactly one operator"):
+        InMemoryCollection("empty_18820").get(where=_AND_WITH_SIBLING)

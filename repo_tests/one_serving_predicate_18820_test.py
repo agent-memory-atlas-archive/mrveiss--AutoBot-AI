@@ -155,12 +155,20 @@ REACH = declare(
 
 
 @functools.lru_cache(maxsize=1)
-def _found() -> frozenset[str]:
+def _scan() -> tuple[frozenset[str], int]:
+    """Every serving-decision key in the tree, and how many files were parsed to find them."""
     keys: set[str] = set()
+    parsed = 0
     for rel in REACH.examined(repo_root()):
         source = (repo_root() / rel).read_text(encoding="utf-8")
         keys.update(f"{rel}::{qualname}::{field}::{kind}" for qualname, field, kind in serving_decisions(source))
-    return frozenset(keys)
+        parsed += 1
+    REACH.completed(parsed)
+    return frozenset(keys), parsed
+
+
+def _found() -> frozenset[str]:
+    return _scan()[0]
 
 
 # --- known-positive contrast fixtures -------------------------------------------------------
@@ -234,10 +242,12 @@ def test_the_canonical_module_is_exempt_and_nothing_else_is() -> None:
 
 
 def test_the_scan_is_not_vacuous() -> None:
-    """A blind scan reports an empty, clean tree; the known readers must be seen."""
-    found = _found()
-    assert len(found) >= 20, f"only {len(found)} readers found; the scan stopped reaching the tree"
-    assert "autobot-backend/models/atomic_fact.py::AtomicFact.to_dict::valid_from::READ" in found
+    """Bound to the sweep's REACH, never to its findings: migrating readers off the allowlist must not fail it.
+
+    The detector fixtures above prove each shape fires; this proves the sweep parsed the tree.
+    """
+    parsed = _scan()[1]
+    assert parsed >= REACH.floor, f"only {parsed} files parsed; the scan stopped reaching the tree"
 
 
 def test_no_module_re_implements_the_serving_decision() -> None:

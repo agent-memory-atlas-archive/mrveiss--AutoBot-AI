@@ -622,16 +622,12 @@ class NPUSemanticSearch:
         return hashlib.md5(cache_string.encode(), usedforsecurity=False).hexdigest()
 
     def _get_cached_result(self, cache_key: str) -> Tuple[List[NpuSearchResult], SearchMetrics] | None:
-        """Get cached search result if available and not expired."""
+        """Cached result if unexpired, re-filtered: serving validity depends on the read time (#18820)."""
         if cache_key in self.search_results_cache:
-            cached_data, timestamp = self.search_results_cache[cache_key]
-
+            (results, metrics), timestamp = self.search_results_cache[cache_key]
             if time.time() - timestamp < self.cache_ttl_seconds:
-                return cached_data
-            else:
-                # Remove expired cache entry
-                del self.search_results_cache[cache_key]
-
+                return servable_response(results), metrics
+            del self.search_results_cache[cache_key]  # expired cache entry
         return None
 
     def _cache_result(self, cache_key: str, result: Tuple[List[NpuSearchResult], SearchMetrics]):

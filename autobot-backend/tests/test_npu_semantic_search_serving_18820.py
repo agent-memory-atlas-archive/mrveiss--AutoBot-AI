@@ -5,9 +5,12 @@
 """#18820/#18829: the NPU engine's retrieval paths that bypass KB.search apply the one serving predicate."""
 
 import asyncio
+import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import knowledge.serving as serving
 from knowledge.index_embedding_space import CODE_INDEX
 from npu_semantic_search import NPUSemanticSearch
 
@@ -101,3 +104,25 @@ def test_cross_modal_text_leg_drops_rejected_and_expired_keeps_valid(monkeypatch
     obj.collections["text"] = SimpleNamespace(query=MagicMock(return_value=found))
     results = obj._search_single_modality("text", mod.np.zeros(3), 5, 0.0)
     assert [r.doc_id for r in results] == ["valid"]
+
+
+def _cached_engine(results: list) -> NPUSemanticSearch:
+    obj = _engine()
+    obj.search_results_cache, obj.cache_ttl_seconds, obj.cache_max_size = {}, 300, 10
+    obj._cache_result("k", (results, SimpleNamespace(cache_hit=False)))
+    return obj
+
+
+def test_a_cached_fact_that_expires_within_the_cache_ttl_is_not_served_on_the_next_hit(monkeypatch):
+    """Store-time filtering is not enough: validity depends on when the cache is READ (#18820)."""
+    soon = datetime.now(tz=timezone.utc) + timedelta(seconds=60)
+    meta = {"verification_status": "verified", "valid_to": soon.isoformat()}
+    fact = SimpleNamespace(content="f", metadata=meta, score=0.5, doc_id="f")
+    obj = _cached_engine([fact])
+    assert [r.doc_id for r in obj._get_cached_result("k")[0]] == ["f"]  # control: valid when cached
+    monkeypatch.setattr(serving, "_as_of_instant", lambda _as_of: soon + timedelta(seconds=1))
+    assert time.time() - obj.search_results_cache["k"][1] < obj.cache_ttl_seconds  # still a cache hit
+    assert obj._get_cached_result("k")[0] == []
+    obj._generate_cache_key = lambda *_a: "k"
+    assert asyncio.run(obj.search("q"))[0] == []
+    assert asyncio.run(obj.batch_search(["q"]))[0][0] == []
