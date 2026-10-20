@@ -139,6 +139,21 @@ def test_the_python_matcher_tells_a_construction_from_a_mention(label: str, sour
         ("# r = redis.Redis(host=h)\n", 0),
         ("r = redis.Redis(host=h)  # kept\nx = 1\n", 1),
         ("echo 'no direct redis'\n", 0),
+        # embedded python goes through the SAME predicate as a .py file (#18553)
+        ('python -c "from redis import Redis as R; R()"\n', 1),
+        ("python3 -c 'import redis as r; r.Redis()'\n", 1),
+        ("python3 -c 'from redis import Redis; Redis(host=1)'\n", 1),
+        ("python3 -c 'import redis; redis.connection.ConnectionPool()'\n", 1),
+        ("python3 -c 'import redis.asyncio; redis.asyncio.connection.ConnectionPool()'\n", 1),
+        ("python3 - <<'EOF'\nimport redis as r\nx = 1\nc = r.Redis()\nEOF\n", 1),
+        ("python <<-EOF\n\tfrom redis import Redis as R\n\tR()\n\tEOF\n", 1),
+        ('python3 -c "import redis\nredis.Redis()"\n', 1),
+        ("python3 -c 'import redis; redis.Redis(); redis.from_url(u)'\n", 2),
+        ("python3 -c 'print(\"redis.Redis(\")'\n", 0),
+        ("python3 -c 'from mylib import Redis; Redis()'\n", 0),
+        ("python3 - <<'EOF'\nx = 'redis.Redis('\nEOF\nredis-cli -n 1 ping\n", 0),
+        ("python3 - <<EOF\nimport redis\nc = redis.Redis(host='${H}')\nEOF\n", 1),  # unparseable body: regex fallback
+        ("#!/bin/sh\nset -e\nredis-cli ping\npython3 -m pytest\n", 0),
     ],
 )
 def test_the_shell_matcher_reads_code_lines_only(source: str, expected: int) -> None:
@@ -186,6 +201,23 @@ def test_the_hook_entry_point_fails_a_new_site_and_passes_a_clean_file(
     rel = "autobot-backend/api/new_module.py"
     assert _run_main_on(monkeypatch, tmp_path, rel, "import redis\nc = redis.from_url('u')\n") == 1
     assert _run_main_on(monkeypatch, tmp_path, rel, "x = 1\n") == 0
+
+
+def test_the_shell_matcher_reports_embedded_python_at_its_own_line() -> None:
+    source = (
+        "echo a\npython3 - <<'EOF'\nimport redis\nc = redis.Redis()\nEOF\npython -c 'import redis; redis.Redis()'\n"
+    )
+    assert shell_sites(source, "x.sh") == [4, 6]
+
+
+def test_the_hook_fails_closed_on_a_python_file_that_does_not_parse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rel = "scripts/broken_probe.py"
+    assert _run_main_on(monkeypatch, tmp_path, rel, "import redis\nc = redis.Redis(\n") == 1
+    out = capsys.readouterr().out
+    assert f"{rel}: cannot parse (line " in out
+    assert "Traceback" not in out
 
 
 def test_the_hook_entry_point_no_longer_honours_noqa_redis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -44,6 +44,7 @@ from autobot_shared.redis_management.config import (
 )
 from autobot_shared.redis_management.database_names import database_number, validated_name
 from autobot_shared.redis_management.pool_params import PoolParamsMixin
+from autobot_shared.redis_management.pool_stats import count_idle_connections, pool_statistics, split_pool_key
 from autobot_shared.redis_management.statistics import (
     ConnectionMetrics,
     ManagerStats,
@@ -1246,61 +1247,36 @@ class RedisConnectionManager(PoolParamsMixin):
         finally:
             await pipe.reset()
 
-    def get_pool_statistics(self, database: str) -> PoolStatistics:
+    def get_pool_statistics(self, database: str, decode_responses: bool | None = None) -> PoolStatistics:
         """
-        Get detailed connection pool statistics (thread-safe).
+        Get connection pool statistics (thread-safe) for one pool of *database*.
 
-        Args:
-            database: Database name to get statistics for
-
-        Returns:
-            PoolStatistics with pool metrics
+        ``decode_responses`` None is the database's default-decode pool; True/False selects that
+        mode's pool. A registry key such as ``main#decode=False`` is accepted too. Use
+        ``get_pool_statistics_by_database`` for every variant at once.
 
         Raises:
-            ValueError: If no pool exists for the database
+            ValueError: If no pool exists for the database and decode mode
         """
-        pool = self._sync_pools.get(database)
+        name, key_decode = split_pool_key(database)
+        decode = key_decode if decode_responses is None else decode_responses
+        pool = self._sync_pools.get(self._pool_key(name, decode))
         if not pool:
             raise ValueError(f"No sync pool found for database '{database}'")
+        return pool_statistics(pool, name, self._database_config_decode(name) if decode is None else decode)
 
-        try:
-            with pool._lock:  # type: ignore[attr-defined]
-                created = getattr(pool, "_created_connections", 0)
-                available_conns = getattr(pool, "_available_connections", [])
-                in_use_conns = getattr(pool, "_in_use_connections", [])
-                available = len(available_conns)
-                in_use = len(in_use_conns)
-                max_conn = pool.max_connections
-                idle_count = self._count_idle_connections(available_conns)
-
-            return PoolStatistics(
-                database_name=database,
-                created_connections=created,
-                available_connections=available,
-                in_use_connections=in_use,
-                max_connections=max_conn,
-                idle_connections=idle_count,
-            )
-        except Exception as e:
-            logger.error("Error getting pool statistics for '%s': %s", database, e)
-            return PoolStatistics(
-                database_name=database,
-                created_connections=0,
-                available_connections=0,
-                in_use_connections=0,
-                max_connections=pool.max_connections,
-                idle_connections=0,
-            )
+    def get_pool_statistics_by_database(self) -> Dict[str, List[PoolStatistics]]:
+        """Statistics of every sync pool grouped by database name, one entry per decode variant."""
+        grouped: Dict[str, List[PoolStatistics]] = {}
+        for key, pool in list(self._sync_pools.items()):
+            name, decode = split_pool_key(key)
+            mode = self._database_config_decode(name) if decode is None else decode
+            grouped.setdefault(name, []).append(pool_statistics(pool, name, mode))
+        return grouped
 
     def _count_idle_connections(self, available_conns: list, threshold: int = 60) -> int:
         """Count connections idle longer than threshold."""
-        idle_count = 0
-        for conn in available_conns:
-            if hasattr(conn, "_last_use"):
-                idle_time = (datetime.now() - conn._last_use).total_seconds()
-                if idle_time > threshold:
-                    idle_count += 1
-        return idle_count
+        return count_idle_connections(available_conns, threshold)
 
     def _identify_idle_connections(self, available_conns: list) -> list:
         """Identify connections idle longer than max_idle_time."""

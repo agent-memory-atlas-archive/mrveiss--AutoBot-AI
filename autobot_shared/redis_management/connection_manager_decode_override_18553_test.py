@@ -12,6 +12,8 @@ different pool for the opposite mode, and leave the default path (None) untouche
 import asyncio
 import threading
 
+import pytest
+
 from autobot_shared.redis_management.config import RedisDbConfig
 from autobot_shared.redis_management.connection_manager import RedisConnectionManager
 
@@ -84,3 +86,30 @@ def test_the_async_registry_holds_one_pool_per_decode_mode():
     asyncio.run(_run())
     assert made == [("temp", True), ("temp", False)]
     assert len(m._async_pools) == 2
+
+
+def test_pool_statistics_are_grouped_by_database_with_a_decode_field():
+    m = _manager(decode=True)
+    m._ensure_sync_pool_exists("temp")
+    m._ensure_sync_pool_exists("temp", False)
+    grouped = m.get_pool_statistics_by_database()
+    assert list(grouped) == ["temp"]  # no "temp#decode=False" entry of its own
+    assert sorted((s.database_name, s.decode_responses) for s in grouped["temp"]) == [("temp", False), ("temp", True)]
+
+
+def test_the_pool_statistics_lookup_finds_both_decode_variants():
+    m = _manager(decode=True)
+    m._ensure_sync_pool_exists("temp")
+    m._ensure_sync_pool_exists("temp", False)
+    default = m.get_pool_statistics("temp")  # the existing call shape is unchanged
+    assert (default.database_name, default.decode_responses) == ("temp", True)
+    for stats in (m.get_pool_statistics("temp", False), m.get_pool_statistics("temp#decode=False")):
+        assert (stats.database_name, stats.decode_responses) == ("temp", False)
+    assert m.get_pool_statistics("temp", True).decode_responses is True
+
+
+def test_the_pool_statistics_lookup_still_raises_for_a_missing_variant():
+    m = _manager(decode=True)
+    m._ensure_sync_pool_exists("temp")
+    with pytest.raises(ValueError):
+        m.get_pool_statistics("temp", False)
