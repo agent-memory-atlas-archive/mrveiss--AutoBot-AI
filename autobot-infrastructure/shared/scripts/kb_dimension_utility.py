@@ -34,6 +34,9 @@ async def fix_dimensions():
     # The llama_index vector store lives in the knowledge DB (db 1, DATABASE_MAPPING["knowledge"];
     # KnowledgeBase.redis_db), the DB the pre-#18964 script dropped it from.
     r = get_redis_client(database="knowledge")
+    if r is None:
+        logger.error("No Redis client available for the knowledge database; aborting before any change")
+        return False
 
     logger.info("Cleaning up Redis...")
 
@@ -116,14 +119,14 @@ async def fix_dimensions():
         return False
 
 
-def main() -> None:
-    """Run the dimension fix and report the outcome."""
-    success = asyncio.run(fix_dimensions())
-    if success:
+def main() -> int:
+    """Run the dimension fix; the process exit code: 0 on success, 1 on failure."""
+    if asyncio.run(fix_dimensions()):
         logger.info("\nKnowledge base is now ready! You can run populate_knowledge_base.py")
-    else:
-        logger.error("\nFailed to fix dimensions issue")
+        return 0
+    logger.error("\nFailed to fix dimensions issue")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

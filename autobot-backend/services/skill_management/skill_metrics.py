@@ -12,7 +12,7 @@ auto-deprecation of underperforming skills.
 
 import json
 from datetime import timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_mixin import AsyncRedisClientMixin
@@ -71,9 +71,12 @@ class SkillMetrics(AsyncRedisClientMixin):
             else:
                 await redis.incr(f"{day_prefix}:failures")
 
-            # Track error type
+            # Track error type; expires like the other per-day keys, so the
+            # error-key walk in get_metrics stays bounded by retention.
             if error_type:
-                await redis.incr(f"{day_prefix}:error:{error_type}")
+                error_key = f"{day_prefix}:error:{error_type}"
+                await redis.incr(error_key)
+                await redis.expire(error_key, TTL_90_DAYS)
 
             # Record duration (for percentile calculations)
             await redis.lpush(f"{day_prefix}:durations", str(duration_ms))
@@ -106,17 +109,20 @@ class SkillMetrics(AsyncRedisClientMixin):
             logger.error("Failed to log skill metrics: %s", e)
 
     @staticmethod
-    async def _error_keys_by_day(redis, skill_id: str) -> Dict[str, List[Any]]:
-        """One SCAN walk for all of a skill's error keys, grouped by date (#18999).
+    async def _error_keys_by_day(redis, skill_id: str, window: Set[str]) -> Dict[str, List[Any]]:
+        """One SCAN walk for a skill's error keys in *window* days, by date (#18999).
 
-        Replaces one ``KEYS <day>:error:*`` per day in the window.
+        Replaces one ``KEYS <day>:error:*`` per day in the window. Keys of days
+        outside *window* are dropped here, so error keys written before they
+        carried a TTL are never grouped or read, however old.
         """
         prefix = f"{REDIS_SKILL_METRICS_PREFIX}{skill_id}:"
         grouped: Dict[str, List[Any]] = {}
         for key in await scan_keys(redis, f"{prefix}*:error:*"):
             key_str = key.decode() if isinstance(key, bytes) else key
             day = key_str[len(prefix) :].split(":", 1)[0]
-            grouped.setdefault(day, []).append(key)
+            if day in window:
+                grouped.setdefault(day, []).append(key)
         return grouped
 
     async def get_metrics(self, skill_id: str, days: int = 30) -> Dict[str, Any]:
@@ -147,9 +153,9 @@ class SkillMetrics(AsyncRedisClientMixin):
         try:
             # Iterate over past N days
             now = now_utc()
-            error_keys_by_day = await self._error_keys_by_day(redis, skill_id)
-            for i in range(days):
-                date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            window = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+            error_keys_by_day = await self._error_keys_by_day(redis, skill_id, set(window))
+            for date in window:
                 day_prefix = f"{REDIS_SKILL_METRICS_PREFIX}{skill_id}:{date}"
 
                 # Get counts for this day

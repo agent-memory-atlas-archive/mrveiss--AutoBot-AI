@@ -9,7 +9,16 @@ Entry point kept for existing invocations; ``SettingsLoadingFixer`` lives in
 ``settings_diagnostic_utility.py`` (#18964).
 """
 
-from settings_diagnostic_utility import main
+import sys
+from pathlib import Path
+
+# Loadable by file path from any working directory: put this script's own directory on
+# the path for the sibling module, as the repo-root bootstrap does for `autobot_shared`.
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+from settings_diagnostic_utility import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

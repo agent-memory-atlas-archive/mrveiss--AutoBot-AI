@@ -11,6 +11,7 @@ webhook.
 """
 
 import asyncio
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -38,16 +39,18 @@ def _update(update_id: int) -> dict:
 @pytest.fixture
 def harness(monkeypatch):
     redis = FakeRedis()
-    state = SimpleNamespace(offsets=[], routed=[], batches=[])
+    state = SimpleNamespace(offsets=[], routed=[], batches=[], token="111:secret-a", limits=[])
 
-    async def fake_redis():
+    async def fake_redis(**kwargs):
+        assert kwargs.get("async_client") is True, "an awaited client must be the async one"
         return redis
 
     async def fake_from_redis():
-        return SimpleNamespace(bot_token="t", base_url="https://api.telegram.org/bott")
+        return SimpleNamespace(bot_token=state.token, base_url="https://api.telegram.org/bott")
 
-    async def fake_fetch(service, offset):
+    async def fake_fetch(service, offset, limit=100):
         state.offsets.append(offset)
+        state.limits.append(limit)
         return state.batches.pop(0) if state.batches else []
 
     async def fake_process(app, update):
@@ -79,6 +82,83 @@ class TestOffsetPersistence:
         assert await tp.poll_once(SimpleNamespace(state=SimpleNamespace())) == 0
         assert harness.offsets == [0, 9]
         assert harness.routed == [7, 8]
+
+
+class TestBackpressure:
+    @pytest.mark.asyncio
+    async def test_full_queue_fetches_nothing_and_holds_the_offset(self, harness, monkeypatch):
+        monkeypatch.setattr(tp, "MAX_PENDING_REPLIES", 3)
+        await tp.save_ingest_mode(tp.INGEST_MODE_POLLING)
+        gate = asyncio.Event()
+
+        async def slow_process(app, update):
+            await gate.wait()
+
+        monkeypatch.setattr("api.telegram_bot.process_telegram_update", slow_process)
+        # Telegram over-delivers: the poller still queues only what fits.
+        harness.batches = [[_update(1), _update(2), _update(3), _update(4)], [_update(5)]]
+        app = SimpleNamespace(state=SimpleNamespace())
+        assert await tp.poll_once(app) == 3
+        assert harness.limits == [3]
+        offset_after_first = await harness.redis.get(tp.offset_key(harness.token))
+        assert offset_after_first == b"4"  # update 4 was never queued, so it is not confirmed
+
+        assert await tp.poll_once(app) == 0  # full: no getUpdates at all
+        assert harness.offsets == [0]
+        assert await harness.redis.get(tp.offset_key(harness.token)) == offset_after_first
+
+        gate.set()
+        await _drain(app)
+        assert await tp.poll_once(app) == 1
+        assert harness.offsets == [0, 4] and harness.limits == [3, 3]
+        await _drain(app)
+
+
+class TestOffsetIsPerBot:
+    @pytest.mark.asyncio
+    async def test_token_swap_starts_from_the_new_bots_own_offset(self, harness):
+        await tp.save_ingest_mode(tp.INGEST_MODE_POLLING)
+        harness.batches = [[_update(500)], [_update(3)], []]
+        for token in ("111:secret-a", "222:secret-b", "111:secret-a"):
+            harness.token = token
+            app = SimpleNamespace(state=SimpleNamespace())
+            await tp.poll_once(app)
+            await _drain(app)
+        # Bot 222 never inherits bot 111's offset 501; bot 111 resumes at its own.
+        assert harness.offsets == [0, 0, 501]
+        harness.token = "222:secret-b"
+        await tp.poll_once(SimpleNamespace(state=SimpleNamespace()))
+        assert harness.offsets[-1] == 4
+
+    def test_key_carries_the_public_bot_id_never_the_secret(self):
+        assert tp.offset_key("123456:ABC-secret") == f"{tp.TELEGRAM_POLL_OFFSET_KEY}:123456"
+        odd = tp.offset_key("not-a-bot-token")
+        assert "not-a-bot-token" not in odd and odd != tp.offset_key("other-token")
+
+
+class TestHttpBudgetFitsTheLease:
+    @pytest.fixture
+    def reload_with_env(self, monkeypatch):
+        def _reload(**env):
+            for name, value in env.items():
+                monkeypatch.setenv(name, value)
+            return importlib.reload(tp)
+
+        yield _reload
+        monkeypatch.undo()
+        importlib.reload(tp)
+
+    @pytest.mark.parametrize("margin,slack", [("1", "1"), ("1", "100"), ("100", "100"), ("5", "5")])
+    def test_total_timeout_ends_inside_the_lease_at_the_cap(self, reload_with_env, margin, slack):
+        mod = reload_with_env(
+            AUTOBOT_TELEGRAM_POLL_TIMEOUT_SECONDS="100000",
+            AUTOBOT_TELEGRAM_POLL_LEASE_MARGIN_SECONDS=margin,
+            AUTOBOT_TELEGRAM_POLL_HTTP_SLACK_SECONDS=slack,
+        )
+        lease_s = mod.DEFAULT_TTL_MS / 1000
+        assert mod._POLL_HTTP_TIMEOUT.total <= lease_s - mod._LEASE_MARGIN_S < lease_s
+        assert mod._POLL_HTTP_TIMEOUT.sock_read <= mod._POLL_HTTP_TIMEOUT.total
+        assert mod.POLL_TIMEOUT_S < mod._POLL_HTTP_TIMEOUT.total
 
 
 class TestModeSwitch:

@@ -271,7 +271,23 @@ async def test_synthesis_leg_drops_a_summary_the_caller_may_not_read():
     with patch("knowledge.backends.get_async_default_client", new=AsyncMock(return_value=client)):
         text = await svc._get_kb_synthesis_context(QUERY, kb_principal(USER_A))
     assert "platform-summary" in text
-    assert "summary-of-b-private" not in text and "summary-without-metadata" not in text
+    assert "summary-of-b-private" not in text
+    # Synthesis collections are platform-only by construction, so a pre-grant summary reads as platform docs.
+    assert "summary-without-metadata" in text
+
+
+@pytest.mark.asyncio
+async def test_legacy_synthesis_summary_is_granted_at_read_time_and_never_rewritten():
+    svc = _service()
+    col = _collection({"legacy-summary": {"source_paths": "docs/a.md"}})
+    client = AsyncMock()
+    client.get_or_create_collection = AsyncMock(return_value=col)
+    with patch("knowledge.backends.get_async_default_client", new=AsyncMock(return_value=client)):
+        assert "legacy-summary" in await svc._get_kb_synthesis_context(QUERY, kb_principal(USER_A))
+        assert "legacy-summary" in await svc._get_kb_synthesis_context(QUERY, SYSTEM_SCOPE)
+    col.upsert.assert_not_called()
+    col.update.assert_not_called()
+    col.delete.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -283,6 +299,18 @@ async def test_lessons_leg_keeps_only_lessons_the_caller_may_read():
     with patch("knowledge.backends.get_async_default_client", new=AsyncMock(return_value=client)):
         text = await svc._get_analyzer_lessons_context(QUERY, kb_principal(USER_A))
     assert "a-lesson" in text and "b-lesson" not in text
+
+
+@pytest.mark.asyncio
+async def test_lessons_leg_grants_nothing_at_read_time_but_honours_a_written_grant():
+    """``autobot_lessons`` can hold lessons derived from a user's query, so a scope-less one stays private."""
+    svc = _service(lessons=True)
+    col = _collection({"granted-lesson": dict(PLATFORM_DOCS_GRANT), "legacy-lesson": {"domain": "retrieval"}})
+    client = AsyncMock()
+    client.get_or_create_collection = AsyncMock(return_value=col)
+    with patch("knowledge.backends.get_async_default_client", new=AsyncMock(return_value=client)):
+        text = await svc._get_analyzer_lessons_context(QUERY, kb_principal(USER_A))
+    assert "granted-lesson" in text and "legacy-lesson" not in text
 
 
 # --- chat doc chunks ----------------------------------------------------------------------------

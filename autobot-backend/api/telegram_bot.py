@@ -311,7 +311,27 @@ async def verify_telegram_secret(request: Request) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
 
-@router.post("/telegram/webhook", dependencies=[Depends(verify_telegram_secret)])
+async def reject_webhook_in_polling_mode() -> None:
+    """Refuse webhook updates while the stored ingest mode is polling (#19010).
+
+    Selecting polling deletes the Telegram webhook but leaves the stored secret
+    in place (credential cleanup is human-approved, #17038), so a request that
+    still carries it would otherwise inject updates alongside the poller. Runs
+    after ``verify_telegram_secret`` so an unauthenticated caller never learns
+    the ingest mode.
+    """
+    if await get_ingest_mode() == INGEST_MODE_POLLING:
+        logger.warning("Telegram webhook call rejected: ingest mode is polling")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Webhook ingest is disabled",
+        )
+
+
+@router.post(
+    "/telegram/webhook",
+    dependencies=[Depends(verify_telegram_secret), Depends(reject_webhook_in_polling_mode)],
+)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="telegram_webhook",
@@ -329,7 +349,9 @@ async def telegram_webhook(
 
     Security: Verifies the X-Telegram-Bot-Api-Secret-Token header matches the
     stored secret, enforced by the ``verify_telegram_secret`` route dependency
-    so authentication runs before the request body is parsed.
+    so authentication runs before the request body is parsed. While the ingest
+    mode is polling the route answers 409 (``reject_webhook_in_polling_mode``),
+    so the webhook and the poller are never both live.
 
     Args:
         request: FastAPI request (for header access)

@@ -745,7 +745,7 @@ class RAGService(RAGDerivedContextMixin, RAGCacheTiersMixin):
         ``synthesis_target`` collections defined in synthesis_schema.yaml.
         Results from all collections are merged.  Per-collection errors are
         logged and swallowed so the main context path is never interrupted.
-        Issue #18944: each hit is kept only if *principal* may read it (:meth:`_visible_docs`).
+        Issue #18944: each hit is kept only if *principal* may read it (:meth:`_visible_synthesis_docs`).
         """
         principal = require_kb_principal(principal)
         from knowledge.backends import get_async_default_client
@@ -771,7 +771,7 @@ class RAGService(RAGDerivedContextMixin, RAGCacheTiersMixin):
         for col_name in collection_names:
             try:
                 collection = await client.get_or_create_collection(name=col_name)
-                all_docs.extend(await self._visible_docs(collection, query, principal))
+                all_docs.extend(await self._visible_synthesis_docs(collection, query, principal))
             except Exception as exc:
                 logger.debug("KB synthesis fetch from '%s' failed (non-fatal): %s", col_name, exc)
 

@@ -11,6 +11,11 @@ server for the whole keyspace (48 ms observed). Existing sites are frozen in
 Skipped directories are matched on the REPO-RELATIVE path parts (#18972), so a checkout living
 under a directory called `tests` or `scripts` is still scanned; `data`/`debug`/`docs`/`logs`/`site`
 are skipped only at the top level. Reach is declared (`REACH`), not hand-floored.
+
+Known blind spot: a ZERO-argument `.keys()` (which sends `KEYS *`) is caught only on a receiver
+named like a Redis client (`_looks_like_redis`). `self._store.keys()` or `cache.keys()` on a Redis
+client passes undetected. Widening to every zero-arg `.keys()` was measured at 246 extra hits on
+the runtime tree, all `dict.keys()`, so it is not done; `.keys(<pattern>)` is always caught.
 """
 
 from __future__ import annotations
@@ -64,6 +69,9 @@ def _looks_like_redis(node: ast.expr) -> bool:
     Whole `_`-separated tokens (`redis_client`, `conn`, `pipe`, `r`), or any name containing
     `redis` (`redisClient`); ALL-CAPS constants (`REDIS_DATABASES`) and plurals such as
     `active_connections` / `pipelines` are dicts on this tree and do not match.
+
+    Blind spot (accepted, see module docstring): a Redis client under any other name
+    (`self._store`, `cache`) calling zero-arg `.keys()` is NOT flagged.
     """
     name = _receiver_name(node)
     if name.isupper():
@@ -187,6 +195,12 @@ def test_detector_ignores_dict_keys_and_scan():
 def test_detector_flags_zero_arg_keys_on_redis_named_receivers():
     src = "redis.keys()\nself.redis_client.keys()\nr.keys()\nawait conn.keys()\npipe.keys()\nget_redis().keys()"
     assert keys_call_lines(src) == [1, 2, 3, 4, 5, 6]
+
+
+def test_known_blind_spot_zero_arg_keys_on_an_unrecognised_receiver_is_not_flagged():
+    """Pins the documented false negative: if this starts failing, detection widened -- update the docs."""
+    src = "self._store.keys()\ncache.keys()\nself._store.keys('a:*')"
+    assert keys_call_lines(src) == [3]
 
 
 def test_unreadable_files_fail_instead_of_being_skipped(tmp_path):

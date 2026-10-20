@@ -62,12 +62,43 @@ register_env_var(
         default=20,
         description=(
             "Long-poll window of each Telegram getUpdates call in polling ingest "
-            "mode. Capped below the poller's 30s leader-lease lifetime so a full "
-            "wait still renews the lease before another worker could take it "
+            "mode. Capped so the whole HTTP budget (window + HTTP slack) ends "
+            "inside the poller's 30s leader-lease lifetime minus the lease "
+            "margin: 20 at the default margin and slack "
             "(services/telegram_polling.py)."
         ),
         component="gateway",
-        range=(1, 25),
+        range=(1, 28),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_TELEGRAM_POLL_LEASE_MARGIN_SECONDS",
+        type=int,
+        default=5,
+        description=(
+            "Seconds a Telegram poller tick must leave unused before its 30s "
+            "leader lease expires, so a stalled getUpdates can never outlive the "
+            "lease and overlap a second worker's poll."
+        ),
+        component="gateway",
+        range=(1, 15),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_TELEGRAM_POLL_HTTP_SLACK_SECONDS",
+        type=int,
+        default=5,
+        description=(
+            "HTTP round-trip allowance added to the Telegram long-poll window; "
+            "window + slack is the getUpdates total timeout and is capped at the "
+            "lease lifetime minus the lease margin."
+        ),
+        component="gateway",
+        range=(1, 12),
     )
 )
 
@@ -98,5 +129,21 @@ register_env_var(
         ),
         component="gateway",
         range=(1, 64),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_TELEGRAM_MAX_PENDING_REPLIES",
+        type=int,
+        default=16,
+        description=(
+            "Most polled Telegram updates held in memory (queued or replying) at "
+            "once. While full, the poller fetches nothing and each getUpdates asks "
+            "for at most the room left, so a backlog stays with Telegram and the "
+            "offset never passes an update that was not queued."
+        ),
+        component="gateway",
+        range=(1, 1000),
     )
 )
