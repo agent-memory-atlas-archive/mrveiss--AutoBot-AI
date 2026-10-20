@@ -8244,7 +8244,8 @@
       "noRuns": "No runs yet",
       "liveActivity": "Live Activity",
       "system": "system",
-      "waitingActivity": "Waiting for activity…"
+      "waitingActivity": "Waiting for activity…",
+      "noApprovals": "No pending approvals"
     },
     "cost": {
       "title": "Cost Dashboard",
