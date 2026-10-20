@@ -75,7 +75,7 @@ REACH = declare(
     "credential-field-name-only-callers",
     discover=_population,
     # Mid-window, from REACH.window(); the arithmetic is on the commit, not here.
-    floor=6782,  # re-pinned mid-window (train 29): population 6932, window [6632, 6932]
+    floor=6906,  # re-pinned mid-window (train 43): population 7056, window [6756, 7056]
     what="tracked python in every tree that holds any",
     roots=SCAN_ROOTS,
     growth=300,

@@ -130,8 +130,8 @@ def _production_files(root: Path) -> list[Path]:
 REACH = declare(
     "model-revision-pinning-sweep",
     discover=_production_files,
-    # Re-pinned MID-window 2026-10-11 (#17576 slice 2): population 3081, window [2881, 3081].
-    floor=3088,
+    # Re-pinned MID-window 2026-10-20 (train-43): population 3270, window [3070, 3270], mid 3170.
+    floor=3170,
     growth=200,
     skips=0,
     # Scope as data (#17844). This one spans THREE trees where its siblings span two, which is
