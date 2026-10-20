@@ -44,6 +44,7 @@ growing while that happens.
 from __future__ import annotations
 
 import argparse
+import functools
 import logging
 import pathlib
 import sys
@@ -115,9 +116,8 @@ KNOWN_LARGE: dict[str, int] = {
 }
 
 
-def tracked_shell_files(root: pathlib.Path) -> list[str]:
-    """In-scope, git-tracked ``*.sh`` paths under *root*, relative to it."""
-    return git_tracked(root, ("*.sh",), EXCLUDED_PREFIXES)
+#: In-scope, git-tracked ``*.sh`` paths under *root*, relative to it.
+tracked_shell_files = functools.partial(git_tracked, globs=("*.sh",), excluded=EXCLUDED_PREFIXES)
 
 
 GUARD = FileSizeGuard(

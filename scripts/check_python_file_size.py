@@ -57,6 +57,7 @@ campaign. This hook only stops them growing while it happens.
 
 from __future__ import annotations
 
+import functools
 import logging
 import pathlib
 import sys
@@ -130,9 +131,8 @@ MIN_TRACKED_PY_FILES = 3000
 KNOWN_LARGE: dict[str, int] = load_known_large(__file__, "python_file_size_known_large.py")
 
 
-def tracked_python_files(root: pathlib.Path) -> list[str]:
-    """In-scope, git-tracked ``*.py`` paths under *root*, relative to it."""
-    return git_tracked(root, ("*.py",), EXCLUDED_PREFIXES)
+#: In-scope, git-tracked ``*.py`` paths under *root*, relative to it.
+tracked_python_files = functools.partial(git_tracked, globs=("*.py",), excluded=EXCLUDED_PREFIXES)
 
 
 GUARD = FileSizeGuard(
