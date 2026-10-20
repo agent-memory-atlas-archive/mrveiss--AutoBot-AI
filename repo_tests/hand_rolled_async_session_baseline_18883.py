@@ -51,6 +51,8 @@ ALLOWLIST: dict[str, str] = {
     _B
     + "llc/tests/test_work_item_relations_async.py::test_relations_to_list_single_query_for_many_relations::_CountingSession": _COUNTING,  # noqa: E501
     _B + "memory/verbatim_symbolic_test.py::<module>::_FakePipe": _PIPE,  # noqa: E501
+    _B
+    + "services/fact_extraction_service_serving_18820_test.py::<module>::_Pipe": _PIPE,  # noqa: E501  train 47: #18945 landed this Redis-pipeline double while #18933 widened the matcher to `execute`
     _B + "protocols/agent_presence_feeds_test.py::<module>::_FakeSession": _EXEC,  # noqa: E501
     _B + "services/feature_flags_enforcement_write_test.py::<module>::_FakePipeline": _PIPE,  # noqa: E501
     _B + "services/orphan_repair_test.py::<module>::_Users": _GETEXEC,  # noqa: E501
@@ -97,4 +99,4 @@ ALLOWLIST: dict[str, str] = {
 }
 
 #: The ceiling. Lower it with the list; never raise it.
-FROZEN_TOTAL = 53
+FROZEN_TOTAL = 54
