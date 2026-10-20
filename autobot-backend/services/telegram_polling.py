@@ -26,10 +26,11 @@ cost of dropping one whose reply was in flight when the worker died.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import aiohttp
 
+from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.http_client import get_http_client
 from autobot_shared.leader_lease import DEFAULT_TTL_MS, LeaderLease
 from autobot_shared.logging_manager import get_logger
@@ -49,13 +50,18 @@ INGEST_MODE_WEBHOOK = "webhook"
 INGEST_MODE_POLLING = "polling"
 INGEST_MODES = (INGEST_MODE_WEBHOOK, INGEST_MODE_POLLING)
 
-#: The lease is renewed at the start of every tick and each tick is one long
-#: poll, so the window must end well inside the lease lifetime -- otherwise a
-#: second worker could take the lease while this one is still polling.
-POLL_TIMEOUT_S = max(1, DEFAULT_TTL_MS // 1000 - 10)
+#: The lease is renewed at the start of every tick and a tick is at most one
+#: long poll or one idle wait, so both must end well inside the lease lifetime
+#: -- otherwise a second worker could take the lease while this one still polls.
+_MAX_TICK_S = DEFAULT_TTL_MS // 1000 - 5
+POLL_TIMEOUT_S = env_int_clamped("AUTOBOT_TELEGRAM_POLL_TIMEOUT_SECONDS", 20, min_v=1, max_v=_MAX_TICK_S)
+#: Wait between ingest-mode checks while not polling, so webhook mode does not
+#: have the leader re-reading Redis every second for ever.
+POLL_IDLE_S = env_float_clamped("AUTOBOT_TELEGRAM_POLL_IDLE_SECONDS", 15.0, min_v=1.0, max_v=float(_MAX_TICK_S))
+MAX_CONCURRENT_REPLIES = env_int_clamped("AUTOBOT_TELEGRAM_MAX_CONCURRENT_REPLIES", 4, min_v=1, max_v=64)
 #: Pause between ticks. The long poll itself is the wait, so this only spaces
-#: out back-to-back batches.
-LEASE_REFRESH_S = 1.0
+#: out back-to-back batches; it is not a tuning knob.
+_LEASE_REFRESH_S = 1.0
 #: The shared client's 10s socket-read limit would cut every long poll short.
 _POLL_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=POLL_TIMEOUT_S + 10, sock_read=POLL_TIMEOUT_S + 5)
 
@@ -118,45 +124,82 @@ async def fetch_updates(service: TelegramBotService, offset: int) -> List[Dict[s
     return await _call_bot_api(service, "getUpdates", payload, timeout=_POLL_HTTP_TIMEOUT) or []
 
 
-async def poll_once(app: "FastAPI") -> int:
-    """Fetch and dispatch one batch; returns how many updates were dispatched.
+async def poll_once(app: "FastAPI") -> Optional[int]:
+    """Fetch and dispatch one batch; the count dispatched, or None when not polling.
 
     The offset is saved before each update is handed off, so a crash mid-reply
     cannot cause the same message to be answered twice after restart.
+
+    A flip to webhook mode is seen at the next tick; a ``getUpdates`` already in
+    flight then ends early, because Telegram fails it once ``setWebhook`` lands.
     """
     if await get_ingest_mode() != INGEST_MODE_POLLING:
-        return 0
+        return None
     redis = await get_redis_client()
     service = await TelegramBotService.from_redis()
     if redis is None or not service.bot_token:
-        return 0
+        return None
     updates = await fetch_updates(service, await _load_offset(redis))
+    dispatcher = _dispatcher_for(app)
     for update in updates:
         await redis.set(TELEGRAM_POLL_OFFSET_KEY, int(update["update_id"]) + 1)
-        _dispatch(app, update)
+        dispatcher.submit(app, update)
     return len(updates)
 
 
-def _dispatch(app: "FastAPI", update: Dict[str, Any]) -> None:
-    """Hand one update to the shared routing path without blocking the poll.
+class _ReplyDispatcher:
+    """Runs polled updates off the poll loop: in order per chat, bounded overall.
 
-    A reply can take as long as the LLM does; awaiting it here would hold the
-    poller past its lease and let a second worker start polling the same token.
+    A reply can take as long as the LLM does; awaiting it in the poll would hold
+    the poller past its lease and let a second worker poll the same token. Each
+    chat gets one lock, taken in submission order, so a chat's messages are
+    answered in the order they were sent; the semaphore caps replies across chats.
     """
-    from api.telegram_bot import process_telegram_update
 
-    tasks = app.state.__dict__.setdefault("telegram_update_tasks", set())
-    task = asyncio.create_task(process_telegram_update(app, update), name="telegram-update")
-    tasks.add(task)
-    task.add_done_callback(tasks.discard)
+    def __init__(self, limit: int) -> None:
+        self._slots = asyncio.Semaphore(limit)
+        self._chats: Dict[str, List[Any]] = {}  # chat id -> [lock, pending count]
+        self.tasks: set = set()
+
+    def submit(self, app: "FastAPI", update: Dict[str, Any]) -> None:
+        chat_id = str((update.get("message") or {}).get("chat", {}).get("id", ""))
+        entry = self._chats.setdefault(chat_id, [asyncio.Lock(), 0])
+        entry[1] += 1
+        task = asyncio.create_task(self._run(app, update, chat_id, entry[0]), name="telegram-update")
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+
+    async def _run(self, app: "FastAPI", update: Dict[str, Any], chat_id: str, lock: asyncio.Lock) -> None:
+        from api.telegram_bot import process_telegram_update
+
+        try:
+            async with lock, self._slots:
+                await process_telegram_update(app, update)
+        except Exception:
+            logger.exception("Failed to process polled Telegram update in chat %s", chat_id)
+        finally:
+            entry = self._chats[chat_id]
+            entry[1] -= 1
+            if entry[1] == 0:
+                del self._chats[chat_id]
+
+
+def _dispatcher_for(app: "FastAPI") -> _ReplyDispatcher:
+    dispatcher = getattr(app.state, "telegram_dispatcher", None)
+    if dispatcher is None:
+        dispatcher = _ReplyDispatcher(MAX_CONCURRENT_REPLIES)
+        app.state.telegram_dispatcher = dispatcher
+        app.state.telegram_update_tasks = dispatcher.tasks
+    return dispatcher
 
 
 async def start(app: "FastAPI") -> None:
     """Start the leader-elected poller (NON-CRITICAL); idle unless mode is polling."""
-    lease = LeaderLease(key=TELEGRAM_POLL_LEASE_KEY, refresh_s=LEASE_REFRESH_S, label="telegram-poller")
+    lease = LeaderLease(key=TELEGRAM_POLL_LEASE_KEY, refresh_s=_LEASE_REFRESH_S, label="telegram-poller")
 
     async def _tick() -> None:
-        await poll_once(app)
+        if await poll_once(app) is None:
+            await asyncio.sleep(POLL_IDLE_S)
 
     async def _run() -> None:
         try:
