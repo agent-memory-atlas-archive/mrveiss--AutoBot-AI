@@ -29,14 +29,14 @@ SKIP_PARTS = {
 
 def keys_call_lines(source: str) -> list[int]:
     """Lines of `<x>.keys(<arg>...)` calls: a call with arguments is Redis KEYS."""
-    return [
+    return sorted(
         n.lineno
         for n in ast.walk(ast.parse(source))
         if isinstance(n, ast.Call)
         and isinstance(n.func, ast.Attribute)
         and n.func.attr == "keys"
         and (n.args or n.keywords)
-    ]
+    )
 
 
 def is_runtime(rel: Path) -> bool:
