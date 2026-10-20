@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from services.unit_names import validate_unit_extra_vars
 from testkit.fake_async_session import FakeAsyncSession
 
 _SLM_ROOT = Path(__file__).resolve().parent.parent
@@ -122,10 +123,13 @@ def test_the_warning_names_the_node_and_carries_only_a_capped_repr_of_the_name(c
 
 
 class _LoopSession:
-    """`db_service.session()` stand-in: the Setting check, the Service list, one Node lookup per node-bearing row."""
+    """`db_service.session()` stand-in: the Setting check, the Service list, then one Node lookup per row."""
 
-    def __init__(self, services, nodes):
-        self._db = FakeAsyncSession(results=[[SimpleNamespace(value="true")], list(services), *[[n] for n in nodes]])
+    def __init__(self, services):
+        node = SimpleNamespace(node_id="node-1", status="online")
+        self._db = FakeAsyncSession(
+            results=[[SimpleNamespace(value="true")], list(services), *[[node]] * len(services)]
+        )
 
     @asynccontextmanager
     async def session(self):
@@ -136,45 +140,86 @@ def _failed_row(name: str) -> SimpleNamespace:
     return SimpleNamespace(node_id="node-1", service_name=name)
 
 
-def _run_remediation(rows, nodes):
-    execute_playbook = AsyncMock(return_value={"success": True, "output": "ok", "returncode": 0, "timed_out": False})
-    executor = SimpleNamespace(execute_playbook=execute_playbook)
+class _Outcome(SimpleNamespace):
+    """``ran``: the playbook runs that got past the sink; ``attempted``: rows that reached the restart call."""
+
+
+def _run_remediation(rows, *, remediation_guard=True, sink_backstop=True) -> _Outcome:
+    """Drive `_remediate_failed_services` with each guard independently switchable.
+
+    The executor applies the REAL sink validator before recording a run, exactly where
+    `PlaybookExecutor.execute_playbook` does. ``remediation_guard=False`` patches out the reconciler's
+    row skip; ``sink_backstop=False`` makes the executor skip the validator.
+    """
+    out = _Outcome(ran=AsyncMock(return_value={"success": True, "output": "ok", "returncode": 0}), attempted=[])
+
+    async def _execute_playbook(**kwargs):
+        if sink_backstop:
+            validate_unit_extra_vars(kwargs.get("extra_vars"))
+        return await out.ran(**kwargs)
+
     svc = reconciler.ReconcilerService()
     svc._is_remediation_suppressed = AsyncMock(return_value=False)
 
     async def _remediate(_db, node, service):
+        out.attempted.append(service.service_name)
         await svc._restart_service_via_ansible(node.node_id, service.service_name, timeout_s=1)
         return True
 
     svc._remediate_failed_service = _remediate
-    fake_module = SimpleNamespace(get_playbook_executor=lambda: executor)
+    fake_module = SimpleNamespace(get_playbook_executor=lambda: SimpleNamespace(execute_playbook=_execute_playbook))
+    guard = patch.object(reconciler, "discovered_unit_name_ok", return_value=True) if not remediation_guard else None
     with (
-        patch.dict(sys.modules, {"services.database": SimpleNamespace(db_service=_LoopSession(rows, nodes))}),
+        patch.dict(sys.modules, {"services.database": SimpleNamespace(db_service=_LoopSession(rows))}),
         patch.dict(sys.modules, {"services.playbook_executor": fake_module}),
     ):
-        asyncio.run(svc._remediate_failed_services())
-    return execute_playbook
+        if guard is None:
+            asyncio.run(svc._remediate_failed_services())
+        else:
+            with guard:
+                asyncio.run(svc._remediate_failed_services())
+    return out
 
 
-@pytest.mark.parametrize("name", [h for h in _HOSTILE if isinstance(h, str)], ids=lambda n: repr(n)[:30])
-def test_a_stored_hostile_failed_row_never_reaches_execute_playbook(name):
-    execute_playbook = _run_remediation([_failed_row(name)], [])
-
-    execute_playbook.assert_not_awaited()
+_HOSTILE_STR = [h for h in _HOSTILE if isinstance(h, str)]
 
 
-def test_a_stored_valid_failed_row_still_reaches_execute_playbook():
-    node = SimpleNamespace(node_id="node-1", status="online")
+@pytest.mark.parametrize("name", _HOSTILE_STR, ids=lambda n: repr(n)[:30])
+def test_a_stored_hostile_failed_row_never_reaches_a_playbook_run(name):
+    out = _run_remediation([_failed_row(name)])
 
-    execute_playbook = _run_remediation([_failed_row("autobot-backend")], [node])
+    out.ran.assert_not_awaited()
 
-    execute_playbook.assert_awaited_once()
-    assert execute_playbook.await_args.kwargs["extra_vars"]["service_name"] == "autobot-backend"
+
+@pytest.mark.parametrize("name", _HOSTILE_STR, ids=lambda n: repr(n)[:30])
+def test_the_remediation_skip_alone_stops_the_row_before_any_restart_attempt(name):
+    """Sink backstop OFF: only the reconciler's skip stands. Removing the skip makes `attempted` non-empty
+    and `ran` awaited, so this fails without it."""
+    out = _run_remediation([_failed_row(name)], sink_backstop=False)
+
+    assert out.attempted == []
+    out.ran.assert_not_awaited()
+
+
+@pytest.mark.parametrize("name", _HOSTILE_STR, ids=lambda n: repr(n)[:30])
+def test_the_sink_backstop_alone_stops_the_run_when_the_row_reaches_the_restart(name):
+    """Remediation skip OFF: the row reaches `_restart_service_via_ansible`, and only the real validator
+    stands between it and the run. Removing the backstop makes `ran` awaited, so this fails without it."""
+    out = _run_remediation([_failed_row(name)], remediation_guard=False)
+
+    assert out.attempted == [name], "the row must have got past the (patched-out) skip, or this proves nothing"
+    out.ran.assert_not_awaited()
+
+
+def test_a_stored_valid_failed_row_still_reaches_a_playbook_run():
+    out = _run_remediation([_failed_row("autobot-backend")])
+
+    out.ran.assert_awaited_once()
+    assert out.ran.await_args.kwargs["extra_vars"]["service_name"] == "autobot-backend"
 
 
 def test_a_hostile_row_does_not_stop_the_valid_row_after_it():
-    node = SimpleNamespace(node_id="node-1", status="online")
+    out = _run_remediation([_failed_row("a b"), _failed_row("autobot-backend")])
 
-    execute_playbook = _run_remediation([_failed_row("a b"), _failed_row("autobot-backend")], [node])
-
-    execute_playbook.assert_awaited_once()
+    out.ran.assert_awaited_once()
+    assert out.attempted == ["autobot-backend"]
