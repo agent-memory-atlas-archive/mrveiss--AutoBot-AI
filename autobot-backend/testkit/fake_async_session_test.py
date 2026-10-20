@@ -178,6 +178,8 @@ def test_fake_result_reads() -> None:
     assert FakeResult([]).scalar() is None and FakeResult([]).first() is None
     assert FakeResult([1, 2]).first() == 1 and FakeResult([1, 2]).scalars().all() == [1, 2]
     assert list(FakeResult([1, 2])) == [1, 2]
+    assert FakeResult([{"a": 1}]).mappings().first() == {"a": 1} and FakeResult([]).mappings().first() is None
+    assert FakeResult([1, 2]).mappings().all() == [1, 2] and list(FakeResult([1, 2]).mappings()) == [1, 2]
     with pytest.raises(NoResultFound):
         FakeResult([]).scalar_one()
     with pytest.raises(MultipleResultsFound):
