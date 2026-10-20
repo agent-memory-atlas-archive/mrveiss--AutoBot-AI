@@ -328,6 +328,7 @@ _DECLARED_SCOPES = {
         "plugins",
         "libs",
     ),
+    "serving-predicate-scan": ("autobot-backend", "autobot_shared", "plugins", "libs"),
     "anthropic-message-split-scan": ("autobot-backend/llm_shared/providers",),
     "backoff-formula-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
     "doubled-api-prefix-scan": ("autobot-backend/api", "autobot-slm-backend/api"),

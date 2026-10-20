@@ -17,8 +17,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from autobot_memory_graph.owner_scope import OWNER_USER_FIELD, OwnerScope
 from autobot_memory_graph.queries import QueryOperationsMixin, _is_entity_valid, _is_entity_valid_at
 
+_OWNER = OwnerScope.for_user("validity-owner")
 _NOW = datetime.now(tz=timezone.utc)
 _PAST = (_NOW - timedelta(hours=1)).isoformat()
 _FUTURE = (_NOW + timedelta(hours=1)).isoformat()
@@ -70,33 +72,46 @@ class _Graph(QueryOperationsMixin):
         pipe = MagicMock()
         pipe.execute = AsyncMock(return_value=list(entities))
         self.redis_client.pipeline.return_value = pipe
-        self._collect_entity_keys = AsyncMock(return_value=[f"memory:entity:{e['id']}" for e in entities])
+        keys = [f"memory:entity:{e['id']}" for e in entities]
+
+        async def _scan_iter(match: str = "*"):
+            for key in keys:
+                yield key
+
+        self.redis_client.scan_iter = _scan_iter  # the owner-scoped scan walks keys (#18825)
 
     def ensure_initialized(self) -> None:
         """No-op: no real Redis."""
 
 
+def _owned(entity: Dict[str, Any], owner_id: str = _OWNER.user_id) -> Dict[str, Any]:
+    return {**entity, OWNER_USER_FIELD: owner_id}
+
+
+#: Owner scope (#18825) and validity (#18829) are both applied: ``foreign`` is valid but not the
+#: owner's, so only ``future`` and ``open`` survive both filters.
 _ENTITIES = [
-    _entity("garbage", valid_to="garbage"),
-    _entity("past", valid_to=_PAST),
-    _entity("future", valid_to=_FUTURE),
-    _entity("open", valid_to=None),
+    _owned(_entity("garbage", valid_to="garbage")),
+    _owned(_entity("past", valid_to=_PAST)),
+    _owned(_entity("future", valid_to=_FUTURE)),
+    _owned(_entity("open", valid_to=None)),
+    _owned(_entity("foreign", valid_to=_FUTURE), "someone-else"),
 ]
 
 
 @pytest.mark.asyncio
 async def test_search_entities_serves_only_valid_entities():
-    found = await _Graph(_ENTITIES).search_entities("*")
+    found = await _Graph(_ENTITIES).search_entities("*", owner=_OWNER)
     assert [e["id"] for e in found] == ["future", "open"]
 
 
 @pytest.mark.asyncio
 async def test_the_fallback_search_serves_only_valid_entities():
-    found = await _Graph(_ENTITIES)._fallback_search("*", None, 10)
+    found = await _Graph(_ENTITIES)._fallback_search("*", None, 10, owner=_OWNER)
     assert [e["id"] for e in found] == ["future", "open"]
 
 
 @pytest.mark.asyncio
 async def test_get_entities_as_of_serves_only_valid_entities():
-    found = await _Graph(_ENTITIES).get_entities_as_of("TASK", _NOW.isoformat())
+    found = await _Graph(_ENTITIES).get_entities_as_of("TASK", _NOW.isoformat(), owner=_OWNER)
     assert [e["id"] for e in found] == ["future", "open"]
