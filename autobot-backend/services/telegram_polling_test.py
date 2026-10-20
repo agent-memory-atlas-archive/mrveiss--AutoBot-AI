@@ -233,7 +233,7 @@ class TestLifecycle:
 
         monkeypatch.setattr(tp, "LeaderLease", FakeLease)
         app = SimpleNamespace(state=SimpleNamespace())
-        await tp.start(app)
+        await tp.start_polling(app)
         await asyncio.sleep(0)
         app.state.telegram_poller_task.cancel()
         await asyncio.gather(app.state.telegram_poller_task, return_exceptions=True)
@@ -261,7 +261,7 @@ class TestLifecycle:
 
         monkeypatch.setattr(tp, "LeaderLease", OneTickLease)
         app = SimpleNamespace(state=SimpleNamespace())
-        await tp.start(app)
+        await tp.start_polling(app)
         await app.state.telegram_poller_task
         monkeypatch.setattr(tp.asyncio, "sleep", fake_sleep)
         await ticks[0]()

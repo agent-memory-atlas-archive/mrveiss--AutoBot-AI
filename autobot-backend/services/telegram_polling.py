@@ -32,6 +32,7 @@ import aiohttp
 
 from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.http_client import get_http_client
+from autobot_shared.http_egress_guard import EGRESS_POLICY
 from autobot_shared.leader_lease import DEFAULT_TTL_MS, LeaderLease
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_redis_client
@@ -101,7 +102,9 @@ async def _call_bot_api(service: TelegramBotService, method: str, payload: Dict[
         raise ValueError("Telegram bot token not configured")
     url = f"{service.base_url}/{method}"
     try:
-        async with get_http_client().tracked_request("POST", url, json=payload, **kwargs) as response:
+        async with get_http_client().tracked_request(
+            "POST", url, json=payload, guard_egress=EGRESS_POLICY, **kwargs
+        ) as response:
             body = await response.json()
     except aiohttp.ClientError as exc:
         # aiohttp errors carry the request URL, and the URL carries the bot token;
@@ -193,7 +196,7 @@ def _dispatcher_for(app: "FastAPI") -> _ReplyDispatcher:
     return dispatcher
 
 
-async def start(app: "FastAPI") -> None:
+async def start_polling(app: "FastAPI") -> None:
     """Start the leader-elected poller (NON-CRITICAL); idle unless mode is polling."""
     lease = LeaderLease(key=TELEGRAM_POLL_LEASE_KEY, refresh_s=_LEASE_REFRESH_S, label="telegram-poller")
 
@@ -221,5 +224,5 @@ __all__ = [
     "get_ingest_mode",
     "poll_once",
     "save_ingest_mode",
-    "start",
+    "start_polling",
 ]

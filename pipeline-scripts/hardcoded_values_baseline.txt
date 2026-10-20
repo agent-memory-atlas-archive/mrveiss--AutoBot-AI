@@ -812,7 +812,6 @@
 1|ssot|autobot-infrastructure/shared/scripts/network/test-dns-resolution.sh|:6379
 1|ssot|autobot-infrastructure/shared/scripts/network/test-dns-resolution.sh|:8001
 1|other|autobot-infrastructure/shared/scripts/performance_dashboard.py|https://cdn.jsdelivr.net/npm/chart.js
-1|ssot|autobot-infrastructure/shared/scripts/search_index_utility.py|:8001
 1|ssot|autobot-infrastructure/shared/scripts/security/mtls-migrate.py|:6379
 2|ssot|autobot-infrastructure/shared/scripts/setup/setup_repair.sh|:3000
 2|ssot|autobot-infrastructure/shared/scripts/setup/setup_repair.sh|:8081

@@ -56,11 +56,11 @@ TelegramSettingsPanel.vue - Telegram Bot Configuration (MVA-2074)
           <Icon name="exchange-alt" />
           {{ t('settings.telegramPanel.modeLabel') }}
         </legend>
-        <label class="mode-option">
+        <label class="flex items-center gap-(--spacing-sm) py-(--spacing-xs) text-autobot-text-primary">
           <input v-model="ingestMode" type="radio" value="webhook" />
           {{ t('settings.telegramPanel.modeWebhook') }}
         </label>
-        <label class="mode-option">
+        <label class="flex items-center gap-(--spacing-sm) py-(--spacing-xs) text-autobot-text-primary">
           <input v-model="ingestMode" type="radio" value="polling" />
           {{ t('settings.telegramPanel.modePolling') }}
         </label>
@@ -202,14 +202,6 @@ onMounted(loadConfig)
 </script>
 
 <style scoped>
-.mode-option {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-0);
-  color: var(--text-primary);
-}
-
 .telegram-panel {
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);

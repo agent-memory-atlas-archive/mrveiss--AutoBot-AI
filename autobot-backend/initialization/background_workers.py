@@ -108,7 +108,7 @@ async def start_telegram_poller(app: FastAPI) -> None:
     try:
         from services import telegram_polling
 
-        await telegram_polling.start(app)
+        await telegram_polling.start_polling(app)
     except Exception:
         logger.exception("Telegram poller NOT started; polling ingest mode will receive nothing")
 

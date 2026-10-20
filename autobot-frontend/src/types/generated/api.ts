@@ -2185,7 +2185,7 @@ export interface paths {
         put?: never;
         /**
          * Configure Telegram Bot
-         * @description Configure Telegram bot token and webhook.
+         * @description Configure Telegram bot token and ingest mode (webhook or polling, #19010).
          *
          *     Requires admin permission.
          *
@@ -100285,6 +100285,13 @@ export interface components {
              * @description Webhook URL (optional)
              */
             webhook_url?: string | null;
+            /**
+             * Ingest Mode
+             * @description How updates arrive: a public webhook, or outbound getUpdates polling (#19010)
+             * @default webhook
+             * @enum {string}
+             */
+            ingest_mode: "webhook" | "polling";
         } & {
             [key: string]: unknown;
         };
@@ -100299,6 +100306,8 @@ export interface components {
             message: string;
             /** Webhook Url */
             webhook_url?: string | null;
+            /** Ingest Mode */
+            ingest_mode?: ("webhook" | "polling") | null;
         } & {
             [key: string]: unknown;
         };
