@@ -18,7 +18,7 @@ nobody could log in to a freshly installed SLM.
 Fail-CLOSED policy for ``is_jti_revoked`` (#16387, unchanged): if the store
 cannot answer, the function raises instead of returning ``False`` -- "not
 revoked" and "unknown" are different answers. ``decode_token_async``
-(``services/auth.py``) catches the raise and returns 401. The store is now the
+(``services/auth.py``) catches the raise and answers 503 (#18892). The store is now the
 database the SLM cannot run without, so this no longer denies a healthy SLM.
 
 Upgrade note: revocations recorded in Redis before #18663 are not carried over --
