@@ -391,7 +391,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/tests/services/test_grounded_agent.py": 679,
     "autobot-backend/tests/services/test_tool_output_filter.py": 1060,
     "autobot-backend/tests/test_claude_adapter_wiring.py": 708,
-    "autobot-backend/tests/test_cross_worker_registries.py": 724,
+    "autobot-backend/tests/test_cross_worker_registries.py": 666,
     "autobot-backend/tests/test_execution_backends.py": 1185,
     "autobot-backend/tests/test_gateway_manager.py": 801,
     "autobot-backend/tests/test_provider_registry.py": 692,
