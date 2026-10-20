@@ -237,9 +237,12 @@ jobs:
         if: steps.check.outputs.release_needed == 'true'
         env:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | base64 -d > /tmp/cosign.key
+          # The key reaches the shell through env, never the script text, and is gone however the step ends.
+          trap 'rm -f /tmp/cosign.key' EXIT
+          (umask 077 && printf '%s' "$COSIGN_PRIVATE_KEY" | base64 -d > /tmp/cosign.key)
           cosign sign-blob --yes --key /tmp/cosign.key --output-signature dist/install.sh.sig dist/install.sh
           rm -f /tmp/cosign.key
           # Self-check: what a user runs from INSTALL.md must pass here first.
