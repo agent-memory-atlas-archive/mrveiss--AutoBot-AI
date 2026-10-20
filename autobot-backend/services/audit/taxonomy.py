@@ -10,7 +10,7 @@ from each other. Before #17225 the canonical service imported its enums from the
 three modules it replaced, which is why those modules could not be retired.
 
 The three legacy enums are vocabularies, not stores: ``AuditAction`` (security
-actions, was ``services/audit/audit_log.py``), ``EventType`` (compliance events,
+actions, was ``services/audit/audit_log.py``), ``ComplianceEventType`` (compliance events,
 was ``services/event_log.py``) and ``AuditEventType`` (knowledge events, was
 ``knowledge/audit_log.py``). Every one of them is recorded as an ``AuditEvent``.
 """
@@ -71,9 +71,13 @@ class AuditAction(str, Enum):
     RUN_JWT_REVOKE = "run_jwt.revoke"
     RUN_JWT_REFRESH = "run_jwt.refresh"
     DEVICE_JWT_MINT = "device_jwt.mint"  # GH#9493
+    SECRET_ACCESS = "secret.access"  # nosec B105  # pragma: allowlist secret -- an action name (#18811)
+    CLAIMS_CREDENTIAL_MINT = "claims_credential.mint"  # #18811
+    CLAIMS_CREDENTIAL_REVOKE = "claims_credential.revoke"  # #18811
+    CLAIMS_CREDENTIAL_CHECK_FAILURES = "claims_credential.check_failures"  # #18811: one per source per window
 
 
-class EventType(str, Enum):
+class ComplianceEventType(str, Enum):
     """Compliance events (was ``services.event_log.EventType``)."""
 
     USER_LOGIN = "user.login"
