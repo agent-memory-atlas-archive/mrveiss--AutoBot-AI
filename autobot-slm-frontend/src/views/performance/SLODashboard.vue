@@ -262,7 +262,7 @@ async function handleDelete(): Promise<void> {
       v-model="showCreateModal"
       :title="$t('performance.sLODashboard.createSLO')"
       width="32rem"
-      :close-label="$t('addNodeModal.closeDialogAria')"
+      :close-label="$t('ui.modal.closeDialog')"
     >
       <form id="slo-create-form" @submit.prevent="handleCreate" class="space-y-4">
         <div>
@@ -387,7 +387,7 @@ async function handleDelete(): Promise<void> {
       v-model="showDeleteConfirm"
       :title="$t('performance.sLODashboard.deleteSLO')"
       size="sm"
-      :close-label="$t('addNodeModal.closeDialogAria')"
+      :close-label="$t('ui.modal.closeDialog')"
     >
       <p class="text-sm text-gray-600">
         {{ $t('performance.sLODashboard.areYouSureYou') }}

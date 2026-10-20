@@ -179,8 +179,10 @@ async function fetchFleetHealth(): Promise<void> {
 }
 
 async function fetchNodes(): Promise<void> {
-  const result = await apiFetch<NodeSummary[]>('/nodes')
-  if (result) nodes.value = result
+  // GET /nodes answers NodeListResponse { nodes, total }, not a bare list (#19002 review):
+  // read as a list, the migrate dialog's target picker iterated the object's fields.
+  const result = await apiFetch<{ nodes: NodeSummary[] }>('/nodes')
+  if (result) nodes.value = result.nodes
 }
 
 function openCreateForm(): void {
@@ -539,13 +541,13 @@ onMounted(() => {
       <div v-if="isLoading" class="p-8 text-center text-gray-500">{{ $t('rolesView.loadingRoles') }}</div>
     </div>
 
-    <!-- Migrate Role Dialog -->
+    <!-- Migrate Role Dialog: locked while the playbook runs, as Cancel is (#14777) -->
     <BaseModal
       v-model="showMigrateDialog"
       :title="`${isRedeploy ? $t('rolesView.redeployRoleTitle') : $t('rolesView.migrateRoleTitle')}: ${migratingRole?.display_name || migratingRole?.name || ''}`"
       width="32rem"
-      :close-on-esc="!migrateLoading"
-      :close-on-overlay="!migrateLoading"
+      :locked="migrateLoading"
+      :close-label="$t('ui.modal.closeDialog')"
       @close="migrateOutput = null"
     >
       <div class="space-y-4">
@@ -575,8 +577,8 @@ onMounted(() => {
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">
-          <button @click="showMigrateDialog = false; migrateOutput = null"
-            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">{{ $t('rolesView.cancel') }}</button>
+          <button @click="showMigrateDialog = false; migrateOutput = null" :disabled="migrateLoading"
+            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50">{{ $t('rolesView.cancel') }}</button>
           <button @click="executeMigrate" :disabled="!targetNodeId || migrateLoading"
             :class="isRedeploy ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-purple-600 hover:bg-purple-700'"
             class="px-4 py-2 text-white rounded-lg disabled:opacity-50 text-sm">

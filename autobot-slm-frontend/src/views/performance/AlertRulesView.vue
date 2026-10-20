@@ -330,7 +330,7 @@ async function handleDelete(): Promise<void> {
       :model-value="showCreateModal || showEditModal"
       :title="showEditModal ? $t('performance.alertRulesView.editAlertRule') : $t('performance.alertRulesView.createAlertRule')"
       width="32rem"
-      :close-label="$t('addNodeModal.closeDialogAria')"
+      :close-label="$t('ui.modal.closeDialog')"
       @close="showCreateModal = false; showEditModal = false"
     >
       <form
@@ -459,7 +459,7 @@ async function handleDelete(): Promise<void> {
       v-model="showDeleteConfirm"
       :title="$t('performance.alertRulesView.deleteAlertRule')"
       size="sm"
-      :close-label="$t('addNodeModal.closeDialogAria')"
+      :close-label="$t('ui.modal.closeDialog')"
     >
       <p class="text-sm text-gray-600">
         {{ $t('performance.alertRulesView.areYouSureYou') }}

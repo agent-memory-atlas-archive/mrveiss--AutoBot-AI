@@ -13,7 +13,7 @@
  */
 
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { BaseModal } from '@autobot/ui'
+import { BaseAlert, BaseModal } from '@autobot/ui'
 import { getSlmApiBase } from '@/config/ssot-config'
 import { createLogger } from '@/utils/debugUtils'
 
@@ -243,7 +243,7 @@ onUnmounted(() => {
     @close="emit('close')"
   >
     <template #subtitle>
-      <span class="text-sm text-gray-400">{{ deploymentId }}</span>
+      <span class="text-sm text-muted">{{ deploymentId }}</span>
       <span
         :class="[
           'ml-2 px-2 py-0.5 text-xs font-medium rounded-full',
@@ -256,10 +256,10 @@ onUnmounted(() => {
     </template>
 
     <!-- Progress Bar -->
-    <div v-if="progress > 0" class="px-4 py-2 border-b border-gray-700">
+    <div v-if="progress > 0" class="pb-3">
       <div class="flex items-center gap-3">
         <div
-          class="flex-1 bg-gray-700 rounded-full h-2"
+          class="flex-1 bg-tertiary rounded-full h-2"
           role="progressbar"
           :aria-valuenow="progress"
           aria-valuemin="0"
@@ -267,11 +267,11 @@ onUnmounted(() => {
           :aria-label="$t('deploymentLogViewer.deploymentProgressAria', { percent: progress })"
         >
           <div
-            class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+            class="bg-primary-600 h-2 rounded-full transition-all duration-300"
             :style="{ width: `${progress}%` }"
           />
         </div>
-        <span class="text-sm text-gray-400 w-12 text-right" aria-hidden="true">{{ progress }}%</span>
+        <span class="text-sm text-muted w-12 text-right" aria-hidden="true">{{ progress }}%</span>
       </div>
     </div>
 
@@ -296,23 +296,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Error Footer -->
-    <div
-      v-if="error"
-      class="px-4 py-3 bg-red-900 border-t border-red-700 text-red-200"
-      role="alert"
-    >
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-          <path
-            fill-rule="evenodd"
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-            clip-rule="evenodd"
-          />
-        </svg>
-        <span>{{ error }}</span>
-      </div>
-    </div>
+    <!-- Error -->
+    <BaseAlert v-if="error" variant="error" class="mt-3" :message="error" />
 
     <template #actions>
       <div class="flex w-full items-center justify-between">
@@ -324,13 +309,13 @@ onUnmounted(() => {
             ]"
             aria-hidden="true"
           />
-          <span class="text-sm text-gray-400">
+          <span class="text-sm text-muted">
             {{ isConnected ? $t('deploymentLogViewer.connected') : $t('deploymentLogViewer.disconnected') }}
           </span>
         </div>
         <button
           @click="emit('close')"
-          class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+          class="btn btn-secondary"
         >
           {{ $t('deploymentLogViewer.close') }}
         </button>
