@@ -465,7 +465,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/services/reconciler.py": 2219,
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
-    "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 843,
+    "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
     "autobot-slm-backend/services/replication.py": 826,
     "autobot-slm-backend/services/role_registry.py": 713,
     "autobot-slm-backend/services/service_orchestrator.py": 915,
