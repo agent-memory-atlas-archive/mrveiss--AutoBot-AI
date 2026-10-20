@@ -40,7 +40,7 @@ repo and was not treated as evidence of anything.
 - **Extension surface:** a hook registry (`on_predict_start/end`, `on_route`, `on_load`,
   `on_evict`, `on_error`); a start hook may rewrite input or short-circuit with a cached answer.
 - **Schema front-end:** a JSON Schema or pydantic model is compiled into typed questions
-  (enum → choice, bounded int → score, boolean → noul) and the answers projected back.
+  (enum → choice, bounded int → score, boolean → yes/no) and the answers projected back.
 - Tech: PyTorch, Hugging Face transformers encoders, optional custom GPU kernels,
   `torch.compile`/AOTI, ONNX Runtime.
 

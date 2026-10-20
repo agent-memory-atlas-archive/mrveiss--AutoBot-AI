@@ -155,3 +155,13 @@ def test_canonical_factories_still_initialize_before_returning() -> None:
 
     delegate = _find_function(tree, "get_knowledge_base_async")
     assert delegate is not None and "_create_under_lock" in _called_names(delegate)
+
+    # The chain must be unbroken from both public entry points down to the constructor.
+    entry = _find_function(tree, "get_or_create_knowledge_base")
+    assert entry is not None and "_create_under_lock" in _called_names(
+        entry
+    ), "knowledge_factory.get_or_create_knowledge_base no longer reaches _create_under_lock"
+    locked = _find_function(tree, "_create_under_lock")
+    assert locked is not None and "_create_new_knowledge_base" in _called_names(
+        locked
+    ), "knowledge_factory._create_under_lock no longer reaches _create_new_knowledge_base"

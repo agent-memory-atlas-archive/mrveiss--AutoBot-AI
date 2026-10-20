@@ -504,16 +504,19 @@ def test_adoption_is_not_gated_behind_the_retry_cooldown() -> None:
     )
 
 
-def test_the_statement_order_probe_has_a_contrast_pair() -> None:
-    """The probe must fail on the broken order, or it proves nothing about the good one."""
-    broken = ast.parse(
+@pytest.mark.parametrize("gate", ["elapsed < KB_RETRY_COOLDOWN_SECONDS", "_cooldown_remaining() > 0"])
+def test_the_statement_order_probe_has_a_contrast_pair(gate: str) -> None:
+    """The probe must fail on the broken order, or it proves nothing about the good one.
+
+    Both spellings of the gate are covered: the constant and the `_cooldown_remaining()` call.
+    """
+    head = (
         "async def get_or_create_knowledge_base(app):\n"
         '    """Mentions KB_RETRY_COOLDOWN_SECONDS in the docstring, as the real one does."""\n'
-        "    if _last_kb_init_failure > 0.0:\n"
-        "        if elapsed < KB_RETRY_COOLDOWN_SECONDS:\n"
-        "            return None\n"
-        "    adopted = peek_knowledge_base()\n"
-        "    return adopted\n"
+    )
+    broken = ast.parse(
+        head + f"    if _last_kb_init_failure > 0.0:\n        if {gate}:\n            return None\n"
+        "    adopted = peek_knowledge_base()\n    return adopted\n"
     )
     func = broken.body[0]
     assert _stmt_index(func, _reads_cooldown) < _stmt_index(
@@ -521,13 +524,8 @@ def test_the_statement_order_probe_has_a_contrast_pair() -> None:
     ), "control: this fixture IS the broken order and the probe must see it that way"
 
     fixed = ast.parse(
-        "async def get_or_create_knowledge_base(app):\n"
-        '    """Mentions KB_RETRY_COOLDOWN_SECONDS in the docstring, as the real one does."""\n'
-        "    adopted = peek_knowledge_base()\n"
-        "    if adopted is not None:\n"
-        "        return adopted\n"
-        "    if elapsed < KB_RETRY_COOLDOWN_SECONDS:\n"
-        "        return None\n"
+        head + "    adopted = peek_knowledge_base()\n    if adopted is not None:\n        return adopted\n"
+        f"    if {gate}:\n        return None\n"
     )
     func = fixed.body[0]
     assert _stmt_index(func, _calls_peek) < _stmt_index(func, _reads_cooldown)
