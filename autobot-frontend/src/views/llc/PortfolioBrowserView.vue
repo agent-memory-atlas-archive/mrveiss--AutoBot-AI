@@ -26,7 +26,7 @@
     <div v-if="loading" class="browser-state">{{ t('llcBrowser.portfolios.loading') }}</div>
 
     <template v-else-if="loadError">
-      <ErrorBanner :message="t('llcBrowser.portfolios.loadError')" class="browser-error" />
+      <BaseAlert variant="error" :message="t('llcBrowser.portfolios.loadError')" class="browser-error" dismissible :dismiss-label="t('common.dismiss')" />
       <BaseButton variant="secondary" size="sm" @click="loadPortfolios">
         {{ t('llcBrowser.retry') }}
       </BaseButton>
@@ -62,7 +62,7 @@
       :title="t('llcBrowser.portfolios.createTitle')"
       size="sm"
     >
-      <ErrorBanner v-if="createError" :message="createError" class="browser-error" />
+      <BaseAlert variant="error" v-if="createError" :message="createError" class="browser-error" dismissible :dismiss-label="t('common.dismiss')" />
       <div class="create-form">
         <BaseInput
           v-model="form.name"
@@ -109,8 +109,7 @@ import { createLogger } from '@/utils/debugUtils'
 import { formatDate as fmtDate } from '@/utils/formatHelpers'
 import LlcBreadcrumb, { type BreadcrumbItem } from '@/components/llc/LlcBreadcrumb.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
-import { BaseModal, BaseButton } from '@autobot/ui'
-import ErrorBanner from '@/components/base/ErrorBanner.vue'
+import { BaseAlert, BaseButton, BaseModal } from '@autobot/ui'
 
 interface PortfolioResponse {
   id: string
