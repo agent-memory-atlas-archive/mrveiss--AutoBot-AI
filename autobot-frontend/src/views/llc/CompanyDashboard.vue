@@ -193,6 +193,11 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- The layout is per user, not per company: its errors show whether or not a company resolved. -->
+      <BaseAlert v-if="loadError" variant="warning" :message="$t('views.customDashboard.loadFailed')" />
+      <BaseAlert v-if="saveError" variant="error" :message="$t('views.customDashboard.saveFailed')" />
+      <BaseAlert v-if="resetError" variant="error" :message="$t('views.customDashboard.resetFailed')" />
+
       <div v-if="!companyId" class="py-12 text-center text-autobot-text-muted">
         {{ $t('llc.dashboard.selectCompany') }}
       </div>
@@ -200,16 +205,14 @@ onMounted(async () => {
       <template v-else>
         <BaseAlert v-if="error" variant="error" :message="error">
           <template #actions>
-            <button class="underline" @click="fetchDashboardData">{{ $t('llc.dashboard.retry') }}</button>
+            <BaseButton size="sm" variant="ghost" @click="fetchDashboardData">{{ $t('llc.dashboard.retry') }}</BaseButton>
           </template>
         </BaseAlert>
-        <BaseAlert v-if="loadError" variant="warning" :message="$t('views.customDashboard.loadFailed')" />
-        <BaseAlert v-if="saveError" variant="error" :message="$t('views.customDashboard.saveFailed')" />
-        <BaseAlert v-if="resetError" variant="error" :message="$t('views.customDashboard.resetFailed')" />
 
-        <div v-if="isLoading" class="py-12 text-center text-autobot-text-muted">{{ $t('llc.dashboard.loading') }}</div>
+        <!-- A refetch keeps the grid mounted, so an edit session in progress survives it. -->
+        <p v-if="isLoading" role="status" class="text-sm text-autobot-text-muted">{{ $t('llc.dashboard.loading') }}</p>
 
-        <DashboardGrid v-else :widgets="widgets" :editing="editing" :label-of="labelOf" @update:widgets="onWidgetsChange">
+        <DashboardGrid :widgets="widgets" :editing="editing" :label-of="labelOf" @update:widgets="onWidgetsChange">
           <template #widget="{ widget }">
             <CompanyDashboardWidget :type="widget.type" :data="data" @approve="quickApprove" />
           </template>
