@@ -284,6 +284,11 @@ def _writes_projection(node: ast.AST) -> bool:
 
 
 _CREATORS = ("_create_new_knowledge_base", "get_knowledge_base_async")
+#: S1 of #18122: `get_knowledge_base_async` no longer constructs; it delegates to
+#: `_create_under_lock`; `_create_new_knowledge_base` builds and hands the instance to
+#: `_accept_new_kb`, the one function that publishes it.
+#: `_CREATORS` stays as the fixtures' shape (they still model two creators).
+_REAL_CREATORS = ("_accept_new_kb",)
 
 #: The real shape: both creators delegate, only the helper writes the global.
 _GOOD_SOURCE = """
@@ -421,7 +426,7 @@ def test_both_creation_paths_publish_through_one_helper() -> None:
     """
     source = (repo_root() / "autobot-backend" / "knowledge_factory.py").read_text(encoding="utf-8")
     callers, assigners, projectors = _publication_report(source)
-    for creator in _CREATORS:
+    for creator in _REAL_CREATORS:
         assert creator in callers, f"{creator} is gone -- re-point this guard"
         assert "_publish_knowledge_base" in callers[creator], (
             f"#18122/#18130: {creator} no longer publishes through _publish_knowledge_base, "
@@ -462,7 +467,8 @@ def _stmt_index(func: ast.AST, predicate) -> int:
 
 
 def _reads_cooldown(node: ast.AST) -> bool:
-    return isinstance(node, ast.Name) and node.id == "KB_RETRY_COOLDOWN_SECONDS"
+    # S1 of #18122 moved the constant read into `_cooldown_remaining`; the gate is its call.
+    return isinstance(node, ast.Name) and node.id in {"KB_RETRY_COOLDOWN_SECONDS", "_cooldown_remaining"}
 
 
 def _calls_peek(node: ast.AST) -> bool:
@@ -482,11 +488,11 @@ def test_adoption_is_not_gated_behind_the_retry_cooldown() -> None:
         (
             n
             for n in ast.walk(tree)
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "get_or_create_knowledge_base"
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "_create_under_lock"
         ),
         None,
     )
-    assert func is not None, "get_or_create_knowledge_base is gone -- re-point this guard"
+    assert func is not None, "_create_under_lock is gone -- re-point this guard"
 
     adopt_at = _stmt_index(func, _calls_peek)
     cooldown_at = _stmt_index(func, _reads_cooldown)
