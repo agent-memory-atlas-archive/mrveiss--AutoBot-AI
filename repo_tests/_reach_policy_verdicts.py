@@ -568,4 +568,9 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Every tracked file under the ansible tree; grows with roles and playbooks.",
     ),
+    "slm-agent-single-definition-19040": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked Python, YAML and Jinja files, a subset of the tree; the other extensions grow at their own rate.",
+    ),
 }
