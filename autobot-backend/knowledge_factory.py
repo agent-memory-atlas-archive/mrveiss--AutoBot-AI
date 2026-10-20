@@ -11,6 +11,7 @@ import time
 from typing import TYPE_CHECKING
 
 from autobot_shared.async_compat import fire_and_forget
+from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.logging_manager import get_logger
 
 if TYPE_CHECKING:
@@ -20,11 +21,15 @@ logger = get_logger(__name__)
 
 # Module-level singleton for knowledge base instance (used when no app context available)
 _knowledge_base_instance: "KnowledgeBase" | None = None  # noqa: F821
+# #18122 / owner decision D6: this Lock is created at import and binds to the first event
+# loop that contends on it, so it cannot be used from a second loop. That is a recorded
+# exception, not an oversight: tasks/knowledge_tasks.py builds its KB inside a new loop
+# (separate loop / worker process) and must not share this lock or this store.
 _knowledge_base_lock = asyncio.Lock()
 
 # Issue #3094/#3106: Retry cooldown — prevent hammering ChromaDB on repeated failures.
 # After a failed init, wait KB_RETRY_COOLDOWN_SECONDS before attempting again.
-KB_RETRY_COOLDOWN_SECONDS = 60
+KB_RETRY_COOLDOWN_SECONDS = env_int_clamped("AUTOBOT_KB_RETRY_COOLDOWN_SECONDS", 60, 1, 86400)
 _last_kb_init_failure: float = 0.0
 
 
@@ -47,19 +52,25 @@ def _log_kb_state(kb) -> None:
     )
 
 
-async def _try_initialize_existing_kb(kb):
-    """Try to initialize an existing but uninitialized knowledge base (Issue #315: extracted).
+async def _try_initialize_existing_kb(kb, app: "FastAPI | None" = None):
+    """Initialize an existing but uninitialized instance in place, under the lock (#18122).
 
-    Returns:
-        Initialized kb on success, None on failure
+    Readiness is re-checked inside the lock so concurrent callers run ``initialize()``
+    once. Success goes through :func:`_accept_new_kb` (publish + adoption, D7); a
+    ``False`` return or an exception stamps the retry cooldown and returns None.
     """
-    logger.info("Knowledge base exists but not initialized, initializing existing instance...")
-    try:
-        await kb.initialize()
-        logger.info("✅ Successfully initialized existing knowledge base instance")
-        return kb
-    except Exception as init_error:
-        logger.warning(f"Failed to initialize existing instance: {init_error}, will create new instance")
+    global _last_kb_init_failure
+    async with _knowledge_base_lock:
+        if _is_kb_initialized(kb):
+            return kb
+        logger.info("Knowledge base exists but not initialized, initializing existing instance...")
+        try:
+            if await kb.initialize():
+                return _accept_new_kb(kb, app)
+            logger.error("❌ Existing KnowledgeBase initialization returned False")
+        except Exception as init_error:
+            logger.error("❌ Failed to initialize existing instance: %s", init_error, exc_info=True)
+        _last_kb_init_failure = time.monotonic()
         return None
 
 
@@ -167,7 +178,10 @@ async def _create_under_lock(app: "FastAPI | None" = None, force_refresh: bool =
             return existing
         remaining = 0.0 if force_refresh else _cooldown_remaining()
         if remaining > 0.0:
-            logger.debug("KB init cooldown active — skipping retry (%ds remaining)", int(remaining))
+            logger.warning("KB init cooldown active — skipping retry (%ds remaining)", int(remaining))
+            # INTERIM contract (owner D2): None, not an error. #18122 S2 makes
+            # knowledge/_composed.get_knowledge_base a facade that raises RuntimeError on
+            # None, which is how the error reaches the llc/memory/mcp callers.
             return None
         return await _create_new_knowledge_base(app)
 
@@ -181,7 +195,7 @@ async def _ready_app_state_kb(app: "FastAPI"):
     if _is_kb_initialized(kb):
         logger.info("Using existing initialized knowledge base from app state")
         return kb
-    return await _try_initialize_existing_kb(kb)
+    return await _try_initialize_existing_kb(kb, app)
 
 
 async def get_or_create_knowledge_base(app: "FastAPI", force_refresh: bool = False):
