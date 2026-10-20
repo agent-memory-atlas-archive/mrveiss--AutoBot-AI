@@ -39,6 +39,8 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException, status
 
+from testkit.fake_async_session import FakeAsyncSession
+
 # Shared real-ORM swap (#15640): api/services.py decorates its routes with
 # `response_model=` Pydantic classes, and the root conftest stubs models.schemas
 # as a MagicMock, which FastAPI rejects at decoration time. The empty-journal
@@ -88,29 +90,14 @@ class _FakeProcess:
         self.killed = True
 
 
-class _NodeResult:
-    def __init__(self, node):
-        self._node = node
-
-    def scalar_one_or_none(self):
-        return self._node
-
-
-class _NodeReturningSession:
-    """The narrowest ``db`` ``_get_node_or_404`` accepts: one node, one query."""
-
-    def __init__(self, node):
-        self._node = node
-        self.statements: list = []
-
-    async def execute(self, statement):
-        self.statements.append(statement)
-        return _NodeResult(self._node)
+def _node_returning_session(node) -> FakeAsyncSession:
+    """The narrowest ``db`` ``_get_node_or_404`` accepts: one node, one query (see ``.statements``)."""
+    return FakeAsyncSession(default_result=[node])
 
 
 @pytest.fixture
 def db_session():
-    return _NodeReturningSession(
+    return _node_returning_session(
         Node(node_id=_NODE_ID, hostname="host-logs", ip_address="10.0.0.83", ssh_user="autobot", ssh_port=22)
     )
 
