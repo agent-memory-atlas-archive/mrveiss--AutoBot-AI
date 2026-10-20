@@ -18,9 +18,10 @@ import ast
 import os
 from pathlib import Path
 
+from repo_tests._paths import repo_root
 from repo_tests.redis_keys_baseline_18999 import BASELINE
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = repo_root()
 SKIP_PARTS = {
     "tests", "test", "scripts", "node_modules", "__pycache__", "site", "docs",
     "MagicMock", "debug", "data", "logs", ".git", ".venv", "venv",
