@@ -1,0 +1,216 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""No module re-implements the serving decision outside `knowledge/serving.py` (#18820, #18829).
+
+`autobot-backend/knowledge/serving.py` is the one predicate for "may this fact reach chat or LLM
+context": a `rejected` trust state never serves, and a validity window that is malformed, ended, or
+not yet open fails closed. A second place that compares `verification_status` to `"rejected"`, or
+reads `valid_to` / `valid_until` / `valid_from` / `is_active` to keep or drop a fact, is a fork:
+#18829 was a string comparison of `valid_to` that treated a malformed value as valid.
+
+WHAT MATCHES (syntax tree only, so a comment or string naming these is not a site)
+    REJECT_CMP  a comparison (`==`, `!=`, `in`, `not in`) between an expression naming
+                `verification_status` and a constant containing `"rejected"`.
+    REJECT_WHERE a dict entry `{"verification_status": {...}}` whose nested operator value names
+                `"rejected"` -- a store-side `$ne` / `$nin` filter, the other half of the decision.
+    READ        a LOAD of `.valid_to` / `.valid_until` / `.valid_from` / `.is_active` /
+                `.verification_status`, or of `x["<field>"]`, or `x.get("<field>")`.
+BOUNDARY
+    Scanned: tracked non-test `.py` under `SCAN_ROOTS`. Exempt by path: `serving.py`.
+    NOT a match: code that SETS the fields (assignment, keyword argument, dict literal with a plain
+    value, column declaration) -- the legitimate writers.
+    NOT seen: `getattr(x, "valid_to")`, a field name held in a variable, SQL text, and the SLM
+    backend (it stores no knowledge facts; its `is_active` is node and account state).
+
+THE ALLOWLIST (`one_serving_predicate_baseline_18820.py`) freezes today's readers that are not a
+serving decision, with a reason each. It may only shrink: a new match fails, a stale entry fails.
+"""
+
+from __future__ import annotations
+
+import ast
+import functools
+from pathlib import Path
+
+import pytest
+from repo_tests._paths import repo_root
+from repo_tests._reach import declare
+from repo_tests.one_serving_predicate_baseline_18820 import ALLOWLIST, FROZEN_TOTAL
+
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
+
+CANONICAL = "autobot-backend/knowledge/serving.py"
+SCAN_ROOTS = ("autobot-backend", "autobot_shared", "plugins", "libs")
+_READ_FIELDS = frozenset({"valid_to", "valid_until", "valid_from", "is_active", "verification_status"})
+_TRUST_FIELD = "verification_status"
+_REJECTED = "rejected"
+
+
+def _is_scanned(rel: str) -> bool:
+    name = rel.rsplit("/", 1)[-1]
+    if not rel.endswith(".py") or rel == CANONICAL:
+        return False
+    return not (name.endswith("_test.py") or name.startswith("test_") or name == "conftest.py" or "/tests/" in rel)
+
+
+def _const_strings(node: ast.AST) -> list[str]:
+    return [n.value for n in ast.walk(node) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+def _names_trust_field(node: ast.AST) -> bool:
+    """True if the expression reads `verification_status` by attribute, name or string key."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Attribute) and sub.attr == _TRUST_FIELD:
+            return True
+        if isinstance(sub, ast.Name) and sub.id == _TRUST_FIELD:
+            return True
+        if isinstance(sub, ast.Constant) and sub.value == _TRUST_FIELD:
+            return True
+    return False
+
+
+def _read_field(node: ast.AST) -> str | None:
+    """The field a node READS, or None. Stores, keywords and plain dict values are writers."""
+    if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load) and node.attr in _READ_FIELDS:
+        return node.attr
+    if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load):
+        key = node.slice
+        if isinstance(key, ast.Constant) and key.value in _READ_FIELDS:
+            return str(key.value)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in ("get", "pop"):
+        first = node.args[0] if node.args else None
+        if isinstance(first, ast.Constant) and first.value in _READ_FIELDS:
+            return str(first.value)
+    return None
+
+
+def _rejected_comparison(node: ast.Compare) -> bool:
+    operands = [node.left, *node.comparators]
+    return any(_names_trust_field(o) for o in operands) and any(_REJECTED in _const_strings(o) for o in operands)
+
+
+def _rejected_where(node: ast.Dict) -> bool:
+    for key, value in zip(node.keys, node.values):
+        is_trust = isinstance(key, ast.Constant) and key.value == _TRUST_FIELD
+        if is_trust and isinstance(value, ast.Dict) and _REJECTED in _const_strings(value):
+            return True
+    return False
+
+
+def serving_decisions(source: str) -> set[tuple[str, str]]:
+    """`(field, kind)` for every serving-decision shape in `source`."""
+    found: set[tuple[str, str]] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Compare) and _rejected_comparison(node):
+            found.add((_TRUST_FIELD, "REJECT_CMP"))
+        elif isinstance(node, ast.Dict) and _rejected_where(node):
+            found.add((_TRUST_FIELD, "REJECT_WHERE"))
+        field = _read_field(node)
+        if field:
+            found.add((field, "READ"))
+    return found
+
+
+def _population(root: Path) -> list[str]:
+    try:
+        tracked = tracked_paths(root, *SCAN_ROOTS)
+    except EmptyEnumeration:
+        return []
+    return [rel for rel in tracked if _is_scanned(rel)]
+
+
+REACH = declare(
+    "serving-predicate-scan",
+    discover=_population,
+    # Mid-window, from REACH.window(): population 2922 at 06e8656eb2 -> (2622, 2922, 2772).
+    floor=2772,
+    what="non-test python source",
+    roots=SCAN_ROOTS,
+    growth=300,
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _found() -> frozenset[str]:
+    keys: set[str] = set()
+    for rel in REACH.examined(repo_root()):
+        source = (repo_root() / rel).read_text(encoding="utf-8")
+        keys.update(f"{rel}::{field}::{kind}" for field, kind in serving_decisions(source))
+    return frozenset(keys)
+
+
+# --- known-positive contrast fixtures -------------------------------------------------------
+_REJECT_COMPARE = 'def f(meta):\n    return meta.get("verification_status") == "rejected"\n'
+_REJECT_NOT_IN = 'def f(fact):\n    return fact.verification_status not in ("rejected", "x")\n'
+_STORE_WHERE = 'WHERE = {"verification_status": {"$ne": "rejected"}}\n'
+_VALIDITY_READ = "def f(fact, now):\n    return fact.valid_to is None or fact.valid_to > now\n"
+_KEY_READ = 'def f(e):\n    return e["valid_until"]\n'
+_GET_READ = 'def f(e):\n    return e.get("is_active", True)\n'
+_WRITER = (
+    "def f(fact, meta):\n"
+    "    fact.valid_to = 1\n"
+    "    fact.is_active = False\n"
+    '    meta["verification_status"] = "rejected"\n'
+    '    return Fact(valid_from=1, is_active=True, extra={"verification_status": "rejected"})\n'
+)
+
+
+@pytest.mark.parametrize(
+    ("label", "source", "expected"),
+    [
+        (
+            "rejected via .get compare",
+            _REJECT_COMPARE,
+            {("verification_status", "REJECT_CMP"), ("verification_status", "READ")},
+        ),
+        (
+            "rejected via attribute not in",
+            _REJECT_NOT_IN,
+            {("verification_status", "REJECT_CMP"), ("verification_status", "READ")},
+        ),
+        ("store-side where", _STORE_WHERE, {("verification_status", "REJECT_WHERE")}),
+        ("validity attribute read", _VALIDITY_READ, {("valid_to", "READ")}),
+        ("validity key read", _KEY_READ, {("valid_until", "READ")}),
+        ("is_active .get read", _GET_READ, {("is_active", "READ")}),
+        ("writers only", _WRITER, set()),
+        ("compare to another state", 'def f(m):\n    return m["other"] == "rejected"\n', set()),
+        ("only comments and strings", '# valid_to == "rejected"\nX = "verification_status rejected"\n', set()),
+    ],
+)
+def test_the_detector_tells_a_decision_from_a_writer(label: str, source: str, expected: set[tuple[str, str]]) -> None:
+    assert serving_decisions(source) == expected, label
+
+
+def test_the_canonical_module_is_exempt_and_nothing_else_is() -> None:
+    assert not _is_scanned(CANONICAL)
+    assert _is_scanned("autobot-backend/knowledge/facts.py")
+    assert not _is_scanned("autobot-backend/knowledge/serving_18820_test.py")
+    assert not _is_scanned("autobot-backend/tests/x/test_serving.py")
+
+
+def test_the_scan_is_not_vacuous() -> None:
+    """A blind scan reports an empty, clean tree; the known readers must be seen."""
+    found = _found()
+    assert len(found) >= 20, f"only {len(found)} readers found; the scan stopped reaching the tree"
+    assert "autobot-backend/models/atomic_fact.py::valid_from::READ" in found
+
+
+def test_no_module_re_implements_the_serving_decision() -> None:
+    new = sorted(_found() - set(ALLOWLIST))
+    assert not new, (
+        f"#18820: {new} read or compare a fact's trust/validity fields outside {CANONICAL}. Ask "
+        "knowledge.serving (serving_verdict / is_servable / servable / SERVING_TRUST_WHERE) instead. "
+        "If it is a writer-side or non-serving read, add it to the allowlist with a reason."
+    )
+
+
+def test_every_allowlist_entry_still_matches() -> None:
+    stale = sorted(set(ALLOWLIST) - _found())
+    assert not stale, f"stale allowlist entries (reader gone or no longer matching); delete these lines: {stale}"
+
+
+def test_the_allowlist_only_shrinks_and_every_entry_has_a_reason() -> None:
+    assert len(ALLOWLIST) <= FROZEN_TOTAL, f"{len(ALLOWLIST)} entries exceeds the frozen {FROZEN_TOTAL}"
+    assert all(reason.strip() for reason in ALLOWLIST.values())
