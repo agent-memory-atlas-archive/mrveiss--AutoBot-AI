@@ -1,0 +1,103 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""#18953: the LangGraph checkpointer's Redis URL comes from the SSOT builder.
+
+Scheme, ACL credentials, TLS port and db index are asserted against a config
+built from a controlled environment; the TLS-off / TLS-on pair contrasts the
+scheme and port. No log record may carry the password.
+"""
+
+import logging
+import os
+from unittest.mock import patch
+from urllib.parse import unquote, urlsplit
+
+import pytest
+
+from autobot_shared.redis_management.types import DATABASE_MAPPING
+from autobot_shared.ssot_config import AutoBotConfig
+from chat_workflow import checkpointer_connection as cc
+
+_PASSWORD = "pw-18953-s3cret"  # pragma: allowlist secret
+_USER = "chat-acl-user"
+_BASE_ENV = {"AUTOBOT_REDIS_PASSWORD": _PASSWORD, "AUTOBOT_REDIS_USERNAME": _USER}
+
+
+def _config(tls: bool) -> AutoBotConfig:
+    env = dict(_BASE_ENV, AUTOBOT_REDIS_TLS_ENABLED="true" if tls else "false")
+    with patch.dict(os.environ, env, clear=True):
+        return AutoBotConfig(_env_file=None)  # type: ignore[call-arg]
+
+
+@pytest.fixture
+def plain(monkeypatch):
+    cfg = _config(tls=False)
+    monkeypatch.setattr(cc, "ssot", cfg)
+    return cfg
+
+
+@pytest.fixture
+def secure(monkeypatch):
+    cfg = _config(tls=True)
+    monkeypatch.setattr(cc, "ssot", cfg)
+    return cfg
+
+
+def test_tls_off_uses_redis_scheme_with_ssot_credentials_and_db(plain) -> None:
+    url, args = cc.get_checkpointer_connection()
+    parts = urlsplit(url)
+    assert parts.scheme == "redis"
+    assert unquote(parts.username) == _USER
+    assert unquote(parts.password) == _PASSWORD
+    assert parts.hostname == plain.vm.redis
+    assert parts.port == plain.port.redis
+    assert parts.path == f"/{DATABASE_MAPPING[cc.CHECKPOINTER_DB_NAME]}"
+    assert url == plain.get_redis_url_for_db(DATABASE_MAPPING[cc.CHECKPOINTER_DB_NAME])
+    assert args == {}
+
+
+def test_tls_on_uses_rediss_scheme_tls_port_and_ssl_args(secure) -> None:
+    url, args = cc.get_checkpointer_connection()
+    parts = urlsplit(url)
+    assert parts.scheme == "rediss"
+    assert parts.port == secure.tls.redis_tls_port
+    assert unquote(parts.username) == _USER
+    assert unquote(parts.password) == _PASSWORD
+    assert set(args) >= {"ssl_ca_certs", "ssl_certfile", "ssl_keyfile"}
+    assert args["ssl_cert_reqs"] == "required"
+
+
+def test_describe_connection_masks_credentials(plain) -> None:
+    url, _ = cc.get_checkpointer_connection()
+    shown = cc.describe_connection(url)
+    assert _PASSWORD not in shown
+    assert _USER not in shown
+    assert urlsplit(shown).hostname == plain.vm.redis
+
+
+@pytest.mark.asyncio
+async def test_no_log_record_contains_the_password(plain, monkeypatch, caplog) -> None:
+    import chat_workflow.graph as graph
+
+    captured = {}
+
+    class _FakeSaver:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def asetup(self):
+            return None
+
+    monkeypatch.setattr(graph, "_ssot_config", plain)
+    monkeypatch.setattr(graph, "AsyncRedisSaver", _FakeSaver, raising=False)
+    monkeypatch.setattr(graph, "_REDIS_CHECKPOINTER_AVAILABLE", True)
+    monkeypatch.setattr(graph, "_checkpointer", None)
+    with caplog.at_level(logging.DEBUG):
+        await graph.get_redis_checkpointer()
+    assert _PASSWORD in captured["redis_url"]  # the saver does get the real URL
+    assert caplog.records, "expected the init log line"
+    for record in caplog.records:
+        assert _PASSWORD not in record.getMessage()
+        assert _PASSWORD not in str(record.args)
