@@ -200,3 +200,30 @@ async def test_expunge_is_synchronous_and_drops_the_tracked_row() -> None:
     s.add(obj)
     s.expunge(obj)
     assert await s.get(model, 3) is None
+
+
+@pytest.mark.asyncio
+async def test_an_expunged_pending_instance_is_not_registered_by_a_later_commit() -> None:
+    """add -> expunge -> commit: the instance is transient, so get() must not return it (CodeRabbit, #18933)."""
+    model = type("M", (), {})
+    obj = model()
+    obj.id = 7
+    s = FakeAsyncSession()
+    s.add(obj)
+    s.expunge(obj)
+    await s.commit()
+    assert await s.get(model, 7) is None
+    assert obj in s.added  # the call record is kept; only the pending work is dropped
+
+
+@pytest.mark.asyncio
+async def test_contrast_re_adding_an_expunged_instance_makes_it_pending_again() -> None:
+    model = type("M", (), {})
+    obj = model()
+    obj.id = 8
+    s = FakeAsyncSession()
+    s.add(obj)
+    s.expunge(obj)
+    s.add(obj)
+    await s.commit()
+    assert await s.get(model, 8) is obj

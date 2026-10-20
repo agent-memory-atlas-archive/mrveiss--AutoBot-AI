@@ -92,6 +92,7 @@ class FakeAsyncSession:
         self.on_get = on_get
         self.added: list = []
         self.deleted: list = []
+        self._expunged: list = []  # detached pending instances flush must skip
         self.statements: list = []
         self.refreshed: list = []
         self.commits = 0
@@ -119,6 +120,8 @@ class FakeAsyncSession:
 
     def add(self, instance: object, _warn: bool = True) -> None:
         self.added.append(instance)
+        # Re-adding an expunged instance makes it pending again, as on a real session.
+        self._expunged = [gone for gone in self._expunged if gone is not instance]
         self._register(instance)
 
     def add_all(self, instances: Iterable[object]) -> None:
@@ -128,7 +131,7 @@ class FakeAsyncSession:
     async def flush(self, objects: Optional[Iterable[Any]] = None) -> None:
         self.flushes += 1
         for instance in self.added:
-            if any(instance is gone for gone in self.deleted):
+            if any(instance is gone for gone in [*self.deleted, *self._expunged]):
                 continue
             self._assign(instance)
 
@@ -227,7 +230,9 @@ class FakeAsyncSession:
         return instance
 
     def expunge(self, instance: object) -> None:
+        """Detach *instance*: an expunged pending object is transient, so no later flush registers it."""
         self.rows.pop((type(instance), getattr(instance, "id", None)), None)
+        self._expunged.append(instance)
 
     def begin(self) -> _FakeTransaction:
         return _FakeTransaction()
