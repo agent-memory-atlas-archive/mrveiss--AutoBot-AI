@@ -54,7 +54,6 @@ growing while that happens.
 from __future__ import annotations
 
 import argparse
-import functools
 import logging
 import pathlib
 import sys
@@ -128,7 +127,9 @@ KNOWN_LARGE: dict[str, int] = load_known_large(__file__, "frontend_file_size_kno
 
 
 #: In-scope, git-tracked ``*.ts``/``*.vue`` paths under *root*, relative to it.
-tracked_frontend_files = functools.partial(git_tracked, globs=TRACKED_GLOBS, excluded=EXCLUDED_PREFIXES)
+def tracked_frontend_files(root: pathlib.Path) -> list[str]:
+    """In-scope tracked paths under *root*; EXCLUDED_PREFIXES is read at call time, not bound at import."""
+    return git_tracked(root, TRACKED_GLOBS, EXCLUDED_PREFIXES)
 
 
 GUARD = FileSizeGuard(
