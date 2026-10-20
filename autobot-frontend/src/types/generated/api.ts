@@ -9290,64 +9290,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/facts/{fact_id}/share": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Share Fact
-         * @description Share a fact with additional users (Issue #688).
-         *
-         *     Args:
-         *         fact_id: Fact ID to share
-         *         request_body: Share request with user_ids
-         *         request: FastAPI request
-         *         _: Admin permission check (required)
-         *
-         *     Returns:
-         *         Success response with updated sharing info
-         */
-        post: operations["share_fact_api_knowledge_base_facts__fact_id__share_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge_base/facts/{fact_id}/share/{user_id_to_remove}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Unshare Fact
-         * @description Remove user from fact sharing list (Issue #688).
-         *
-         *     Args:
-         *         fact_id: Fact ID to unshare
-         *         user_id_to_remove: User ID to remove from sharing
-         *         request: FastAPI request
-         *         _: Admin permission check (required)
-         *
-         *     Returns:
-         *         Success response with updated sharing info
-         */
-        delete: operations["unshare_fact_api_knowledge_base_facts__fact_id__share__user_id_to_remove__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/knowledge_base/facts/{fact_id}/visibility": {
         parameters: {
             query?: never;
@@ -118476,73 +118418,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    share_fact_api_knowledge_base_facts__fact_id__share_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fact_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShareFactRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeShareFactResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    unshare_fact_api_knowledge_base_facts__fact_id__share__user_id_to_remove__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fact_id: string;
-                user_id_to_remove: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeUnshareFactResponse"];
                 };
             };
             /** @description Validation Error */
