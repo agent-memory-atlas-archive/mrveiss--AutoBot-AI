@@ -41,6 +41,8 @@ fi
 trap '[[ "${BASH_SOURCE[0]}" == ${COPY_PATTERN} ]] && rm -f "${BASH_SOURCE[0]}"' EXIT
 
 readonly AUTOBOT_BASE="/opt/autobot"
+# The monitoring role installs Alertmanager beside the base: {{ autobot.base_dir | dirname }}/alertmanager.
+readonly ALERTMANAGER_DIR="${AUTOBOT_BASE%/*}/alertmanager"
 readonly INSTALL_RECORD="/etc/autobot/install-record"
 readonly LOG_FILE="/var/tmp/autobot-uninstall-$(date +%Y%m%d-%H%M%S).log"
 # The `comment:` AutoBot's playbooks give the admin account they create
@@ -51,7 +53,7 @@ readonly ADMIN_MARKERS=("Emergency Admin User (fallback access)" "AutoBot Backup
 # --- What AutoBot's Ansible roles deploy (checked by the #18653 guard) -----------------------
 readonly UNIT_GLOBS=("autobot-*.service" "autobot-*.timer" "autobot-*.socket")
 readonly UNITS=(
-    slm.target slm-agent.service slm-admin-ui.service node_exporter.service prometheus.service
+    slm.target slm-agent.service slm-admin-ui.service node_exporter.service prometheus.service alertmanager.service
     loki.service promtail.service redis_exporter.service redisinsight.service
     vnc-server.service vnc-websockify.service redis-stack-server.service
 )
@@ -92,7 +94,7 @@ readonly OPT_NESTED_DATA=(
     autobot-db-stack/chromadb autobot-db-stack/.env autobot-npu-worker/.env
 )
 readonly PATHS=(
-    /etc/slm-agent /var/log/autobot /opt/node_exporter
+    /etc/slm-agent /var/log/autobot /opt/node_exporter ${ALERTMANAGER_DIR} /etc/alertmanager /var/lib/alertmanager
     /etc/dnsmasq.d/autobot.conf /etc/logrotate.d/autobot /etc/logrotate.d/redis-stack
     /etc/rsyslog.d/30-autobot.conf /etc/rsyslog.d/50-autobot.conf /etc/ssl/slm
     /var/www/slm-admin /var/www/autobot-slm /etc/nginx/sites-available/slm
