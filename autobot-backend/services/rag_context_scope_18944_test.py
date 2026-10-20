@@ -63,6 +63,26 @@ def _service(*, lessons: bool = False) -> RAGService:
     return svc
 
 
+def _kb_fact(content: str, **metadata) -> dict:
+    """A fact as ``kb.search`` returns it -- the layer BELOW the optimizer's query cache."""
+    return {"content": content, "score": 0.9, "metadata": {"fact_id": content, **metadata}}
+
+
+def _service_below_cache(b_facts: int = 1) -> RAGService:
+    """``_service`` with the real ``advanced_search`` (and its real ``query_cache``) left running.
+
+    Only the KB search and the cross-encoder are faked, so a second identical query is a true cache hit.
+    """
+    svc = _service()
+    facts = [_kb_fact(f"{B_FACT}-{i}", owner_id="B", visibility="private") for i in range(b_facts)]
+    facts.append(_kb_fact(A_FACT, owner_id="A", visibility="private"))
+    del svc.optimizer.advanced_search  # drop the instance mock; the class method runs
+    svc.optimizer.kb.search = AsyncMock(return_value=facts)
+    svc.optimizer.kb.get_all_facts = AsyncMock(return_value=[])
+    svc.optimizer._rerank_with_cross_encoder = AsyncMock(side_effect=lambda _q, results: results)
+    return svc
+
+
 @pytest.fixture(autouse=True)
 def _no_firewall_and_no_chroma():
     """Pass the context through the firewall unchanged; leave the synthesis collections unreachable."""
@@ -129,11 +149,39 @@ async def test_system_scope_context_holds_no_private_fact():
 @pytest.mark.asyncio
 async def test_the_optimizer_cache_cannot_carry_one_callers_facts_to_another():
     """The optimizer's own query cache holds unfiltered results; each reader filters after the read."""
-    svc = _service()
+    svc = _service_below_cache()
     for_b, _ = await svc.get_optimized_context(QUERY, principal=kb_principal({"user_id": "B"}))
     for_a, _ = await svc.get_optimized_context(QUERY, principal=kb_principal(USER_A))
-    assert B_FACT in for_b and A_FACT not in for_b
+    assert svc.optimizer.kb.search.await_count == 1, "the second call must be a real query_cache hit"
+    assert len(svc.optimizer.query_cache) == 1
+    assert f"{B_FACT}-0" in for_b and A_FACT not in for_b
     _assert_scoped(for_a)
+
+
+@pytest.mark.asyncio
+async def test_metrics_report_only_the_callers_visible_count_not_what_others_hold():
+    """User B holds 5 private facts for the query; A's metrics must not reveal that (existence side-channel)."""
+    svc = _service_below_cache(b_facts=5)
+    _, for_b = await svc.get_optimized_context(QUERY, principal=kb_principal({"user_id": "B"}))
+    _, for_a = await svc.get_optimized_context(QUERY, principal=kb_principal(USER_A))
+    _, for_b_again = await svc.get_optimized_context(QUERY, principal=kb_principal({"user_id": "B"}))
+    assert svc.optimizer.kb.search.await_count == 1, "all three calls share one cached advanced_search"
+    assert (for_a.final_results_count, for_a.documents_considered) == (1, 1)
+    assert (for_b.final_results_count, for_b.documents_considered) == (5, 5)
+    assert for_b_again.final_results_count == 5, "A's clamp must not mutate the cached metrics object"
+
+
+@pytest.mark.asyncio
+async def test_retrieval_context_rag_response_metrics_hide_other_users_fact_count():
+    svc = _service_below_cache(b_facts=5)
+    response = await retrieval_context(
+        request=RetrievalContextRequest(query=QUERY, mode="rag"),
+        http_request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace())),
+        rag_service=svc,
+        current_user=USER_A,
+    )
+    assert response["metrics"]["final_results_count"] == 1
+    assert response["metrics"]["documents_considered"] == 1
 
 
 # --- the API layer ------------------------------------------------------------------------------
@@ -169,6 +217,22 @@ async def test_retrieval_context_cag_fallback_hides_another_users_private_fact()
     svc = _service()
     context = await _retrieval_context(svc, "cag")
     svc.advanced_search.assert_awaited_once()  # the CAG ranking ran and found nothing, so it fell back
+    _assert_scoped(context)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("miss", ["unreadable", "over_budget"])
+async def test_retrieval_context_cag_unreadable_or_budget_miss_fallback_hides_private_fact(miss):
+    """CAG ranked a candidate but could not load it (unreadable / over budget): the RAG fallback is scoped."""
+    svc = _service()
+    svc.advanced_search = AsyncMock(return_value=([A_OWN], RAGMetrics()))  # a candidate, so no early fallback
+    content = None if miss == "unreadable" else "x" * 400
+    with (
+        patch("services.cag_service._read_source_file", new=AsyncMock(return_value=content)),
+        patch("services.cag_service.CAGService._budget", return_value=1),
+    ):
+        context = await _retrieval_context(svc, "cag")
+    svc.advanced_search.assert_awaited_once()
     _assert_scoped(context)
 
 
