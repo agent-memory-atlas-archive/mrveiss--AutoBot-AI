@@ -577,5 +577,5 @@ def test_the_threat_intel_ttl_env_is_clamped_to_a_positive_bounded_value(monkeyp
     try:
         assert importlib.reload(ttl).THREAT_INTEL_CACHE_TTL == expected
     finally:
-        monkeypatch.delenv("AUTOBOT_THREAT_INTEL_CACHE_TTL")
+        monkeypatch.undo()  # the caller's original env (set or unset), not a forced default
         importlib.reload(ttl)

@@ -50,8 +50,8 @@ const isNative = computed(() => props.as === 'button')
 /** A disabled non-button (`as="a"`, a RouterLink) has no native `disabled`, so it is inert by hand. */
 const isInertLink = computed(() => !isNative.value && isDisabled.value)
 
-// Runs before a caller's fallthrough @click (own listeners merge first), so neither the
-// navigation nor the caller's handler fires.
+// A capture-phase listener: it runs before a RouterLink's own navigate handler on the same
+// element (bubble phase) and before a caller's fallthrough @click, so neither fires.
 function blockInertClick(event: MouseEvent): void {
   if (!isInertLink.value) return
   event.preventDefault()
@@ -67,7 +67,7 @@ function blockInertClick(event: MouseEvent): void {
     :aria-disabled="isInertLink ? 'true' : undefined"
     :tabindex="isInertLink ? -1 : undefined"
     :aria-busy="loading || undefined"
-    @click="blockInertClick"
+    @click.capture="blockInertClick"
     :class="['aui-btn', `aui-btn--${variant}`, `aui-btn--${size}`, { 'aui-btn--block': block, 'aui-btn--loading': loading }]"
   >
     <span v-if="loading" class="aui-btn__spinner" aria-hidden="true" />

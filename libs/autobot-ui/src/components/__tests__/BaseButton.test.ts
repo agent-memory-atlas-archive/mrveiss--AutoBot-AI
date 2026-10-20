@@ -7,6 +7,7 @@
 // in both apps (the main app's local fork was retired into it, #18849) depend on this contract.
 
 import { describe, it, expect, vi } from 'vitest'
+import { h } from 'vue'
 import { mount } from '@vue/test-utils'
 import buttonSource from '../BaseButton.vue?raw'
 import BaseButton, { type ButtonVariant, type ButtonSize } from '../BaseButton.vue'
@@ -184,6 +185,18 @@ describe('BaseButton', () => {
     expect(event.defaultPrevented).toBe(true)
     expect(onClick).not.toHaveBeenCalled()
     expect(wrapper.attributes('tabindex')).toBe('-1')
+  })
+
+  it('blocks a disabled RouterLink-like component whose own root click handler navigates', () => {
+    // fails if the inert guard runs after the component's own handler (RouterLink's navigate)
+    const navigate = vi.fn((e: MouseEvent) => e.preventDefault())
+    const RouterLinkLike = { props: ['to'], setup: (p: { to: string }, { slots }: { slots: Record<string, () => unknown> }) => () => h('a', { href: p.to, onClick: navigate }, slots.default?.()) }
+    const disabled = mount(BaseButton, { props: { as: RouterLinkLike, disabled: true }, attrs: { to: '/x' } })
+    disabled.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(navigate).not.toHaveBeenCalled()
+    const enabled = mount(BaseButton, { props: { as: RouterLinkLike }, attrs: { to: '/x' } })
+    enabled.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(navigate).toHaveBeenCalledOnce()
   })
 
   it('leaves an enabled link alone: it navigates, runs its @click and keeps its tab stop', () => {
