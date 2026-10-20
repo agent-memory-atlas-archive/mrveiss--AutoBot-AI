@@ -582,11 +582,9 @@ class ScreenAnalyzer:
     ) -> List[UIElement]:
         """Find UI elements matching voice description using cross-modal search"""
         try:
-            # Get the initialized shared search engine for cross-modal capabilities.
-            from npu_semantic_search import get_npu_search_engine
+            from npu_semantic_search import get_npu_search_engine  # the initialized shared engine
 
             search_engine = await get_npu_search_engine()
-
             # Use cross-modal search to find UI elements matching voice description
             search_results = await search_engine.cross_modal_search(
                 query=voice_description,
@@ -607,8 +605,7 @@ class ScreenAnalyzer:
             return matched_elements
 
         except EmbeddingUnavailableError:
-            # Surface an unavailable or unrecorded embedding space to the caller.
-            raise
+            raise  # an unavailable or unrecorded embedding space reaches the caller, not "no match"
         except Exception as e:
             logger.error("Voice-guided element detection failed: %s", e)
             return []
