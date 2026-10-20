@@ -318,9 +318,10 @@ onMounted(() => {
 
     <!-- Register / Edit Modal -->
     <BaseModal
+      :close-on-esc="!isSaving"
       v-model="showModal"
       :title="modalMode === 'create' ? $t('externalAgentsView.registerExternalAgent') : $t('externalAgentsView.editAgent')"
-      size="md"
+      width="32rem"
       :close-label="$t('externalAgentsView.close')"
     >
       <div class="space-y-4">
@@ -410,7 +411,7 @@ onMounted(() => {
     <BaseModal
       v-model="showDetail"
       :title="detailAgent?.name ?? ''"
-      size="md"
+      width="42rem"
       :close-label="$t('externalAgentsView.close')"
       @close="closeDetail"
     >

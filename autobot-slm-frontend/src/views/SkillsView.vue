@@ -461,7 +461,7 @@ function categoryIcon(category: string): string {
       v-if="selectedSkill"
       :model-value="showDetail"
       :title="selectedSkill?.name ?? ''"
-      size="md"
+      width="42rem"
       :close-label="$t('addNodeModal.closeDialogAria')"
       @close="closeDetail"
     >

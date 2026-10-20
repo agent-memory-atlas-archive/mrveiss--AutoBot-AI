@@ -531,6 +531,7 @@ onMounted(async () => {
          New Profile Dialog
     ================================================================ -->
     <BaseModal
+      :close-on-esc="!saving"
       v-model="showNewDialog"
       :title="$t('settings.admin.personalitySettings.newPersonalityProfile')"
       size="sm"

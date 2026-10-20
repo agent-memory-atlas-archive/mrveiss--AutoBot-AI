@@ -253,6 +253,7 @@ function getNodeHostname(nodeId: string): string {
 
     <!-- Create Backup Dialog -->
     <BaseModal
+      :close-on-esc="!isCreatingBackup"
       v-model="showCreateBackupDialog"
       :title="$t('backupsView.createBackup')"
       size="sm"

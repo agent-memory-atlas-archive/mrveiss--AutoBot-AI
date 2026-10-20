@@ -1296,7 +1296,7 @@ const scoreColor = computed(() => {
     <BaseModal
       v-model="showUploadModal"
       :title="$t('securityView.uploadTLSCertificate')"
-      size="md"
+      width="42rem"
       :close-label="$t('securityView.closeUploadDialog')"
     >
       <div class="space-y-4">

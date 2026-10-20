@@ -463,9 +463,10 @@ onUnmounted(() => {
 
     <!-- Create Job Modal -->
     <BaseModal
+      :close-on-esc="!loading"
       v-model="showCreateModal"
       :title="$t('tools.admin.batchTool.createBatchJob')"
-      size="md"
+      width="32rem"
       :close-on-overlay="false"
       :close-label="$t('tools.admin.batchTool.close')"
     >

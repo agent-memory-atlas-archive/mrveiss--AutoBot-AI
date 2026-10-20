@@ -518,7 +518,7 @@ onUnmounted(() => {
       v-if="selectedError"
       :model-value="true"
       :title="$t('monitoring.errorMonitor.errorDetails')"
-      size="md"
+      width="42rem"
       :close-label="$t('monitoring.errorMonitor.close')"
       @close="closeDetail"
     >

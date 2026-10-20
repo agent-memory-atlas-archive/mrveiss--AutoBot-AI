@@ -468,7 +468,7 @@ function getNodeHostname(nodeId: string): string {
     <BaseModal
       v-model="showCreateDialog"
       :title="$t('replicationView.newReplication')"
-      size="md"
+      width="32rem"
       :close-label="$t('replicationView.close')"
     >
       <template #subtitle>
@@ -557,7 +557,7 @@ function getNodeHostname(nodeId: string): string {
       v-if="selectedReplication"
       :model-value="showDetailsModal"
       :title="$t('replicationView.replicationDetails')"
-      size="md"
+      width="42rem"
       :close-label="$t('replicationView.close')"
       @close="closeDetails"
     >

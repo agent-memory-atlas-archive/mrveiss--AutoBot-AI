@@ -1169,9 +1169,10 @@ function getNodeHostname(nodeId: string): string {
 
     <!-- Standard Deployment Wizard Dialog -->
     <BaseModal
+      :close-on-esc="!isCreatingDeployment"
       v-model="showWizard"
       :title="$t('deploymentsView.newDeployment')"
-      size="md"
+      width="32rem"
       :close-label="$t('deploymentsView.close')"
     >
       <template #subtitle>
@@ -1334,9 +1335,10 @@ function getNodeHostname(nodeId: string): string {
 
     <!-- Blue-Green Create Dialog -->
     <BaseModal
+      :close-on-esc="!isCreatingBg"
       v-model="showBgCreateDialog"
       :title="$t('deploymentsView.newBlueGreenDeployment')"
-      size="md"
+      width="32rem"
       :close-label="$t('deploymentsView.close')"
     >
       <template #subtitle>
@@ -1481,7 +1483,7 @@ function getNodeHostname(nodeId: string): string {
       v-if="selectedDeployment"
       :model-value="showDetailsModal"
       :title="$t('deploymentsView.deploymentDetails')"
-      size="md"
+      width="42rem"
       :close-label="$t('deploymentsView.close')"
       @close="closeDetails"
     >
@@ -1561,7 +1563,7 @@ function getNodeHostname(nodeId: string): string {
       v-if="selectedBgDeployment"
       :model-value="showBgDetailsModal"
       :title="$t('deploymentsView.blueGreenDeploymentDetails')"
-      size="md"
+      width="42rem"
       :close-label="$t('deploymentsView.close')"
       @close="closeBgDetails"
     >

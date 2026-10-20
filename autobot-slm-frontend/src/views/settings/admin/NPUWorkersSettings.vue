@@ -571,6 +571,7 @@ onUnmounted(() => {
 
     <!-- Add/Edit Worker Modal -->
     <BaseModal
+      :close-on-esc="!saving"
       v-model="showModal"
       :title="editingWorker ? $t('settings.admin.nPUWorkersSettings.editWorker') : $t('settings.admin.nPUWorkersSettings.pairNewWorker')"
       size="sm"
@@ -644,6 +645,7 @@ onUnmounted(() => {
 
     <!-- Delete Confirmation -->
     <BaseModal
+      :close-on-esc="!saving"
       v-if="deleteTarget"
       :model-value="true"
       :title="$t('settings.admin.nPUWorkersSettings.removeWorker')"

@@ -540,7 +540,7 @@ onMounted(fetchProviders)
     <BaseModal
       v-model="showCreateForm"
       :title="$t('settings.admin.sSOSettings.value0SSOProvider', { value0: editingProvider ? $t('settings.admin.sSOSettings.edit') : $t('settings.admin.sSOSettings.create') })"
-      size="md"
+      width="48rem"
       :close-label="$t('addNodeModal.closeDialogAria')"
       @close="closeForm"
     >

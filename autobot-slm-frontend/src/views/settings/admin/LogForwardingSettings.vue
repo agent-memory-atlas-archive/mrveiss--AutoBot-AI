@@ -519,7 +519,7 @@ onMounted(async () => {
     <BaseModal
       v-model="showModal"
       :title="editingDestination ? $t('settings.admin.logForwardingSettings.editDestination') : $t('settings.admin.logForwardingSettings.addDestination')"
-      size="md"
+      width="32rem"
       :close-label="$t('settings.admin.logForwardingSettings.close')"
       @close="closeModal"
     >

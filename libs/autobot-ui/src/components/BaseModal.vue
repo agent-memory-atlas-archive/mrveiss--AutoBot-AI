@@ -147,7 +147,8 @@ const onAfterEnter = () => focusFirst()
 
 <template>
   <Teleport to="body">
-    <Transition name="aui-modal-fade" @after-enter="onAfterEnter">
+    <!-- appear: a dialog mounted already open (a parent v-if) fades in too (#14777). -->
+    <Transition name="aui-modal-fade" appear @after-enter="onAfterEnter">
       <div
         v-if="modelValue"
         class="aui-dialog-overlay"

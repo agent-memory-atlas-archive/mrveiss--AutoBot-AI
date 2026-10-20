@@ -907,7 +907,7 @@ watch(() => authStore.user, (newUser: typeof authStore.user) => {
     <!-- Change Password Modal -->
     <BaseModal
       v-model="showChangePasswordModal"
-      :title="isAdminReset ? `Reset Password for ${selectedUser?.username}` : $t('settings.admin.userManagementSettings.changePassword')"
+      :title="isAdminReset ? $t('settings.admin.userManagementSettings.resetPasswordFor', { username: selectedUser?.username ?? '' }) : $t('settings.admin.userManagementSettings.changePassword')"
       size="sm"
       :close-label="$t('addNodeModal.closeDialogAria')"
       @close="selectedUser = null; selectedUserType = 'slm'"
@@ -930,6 +930,7 @@ watch(() => authStore.user, (newUser: typeof authStore.user) => {
 
     <!-- Create User Modal -->
     <BaseModal
+      :close-on-esc="!saving"
       v-model="showCreateUserModal"
       :title="activeTab === 'slm-admins' ? $t('settings.admin.userManagementSettings.createSLMAdministrator') : $t('settings.admin.userManagementSettings.createAutoBotUser')"
       size="sm"
@@ -969,6 +970,7 @@ watch(() => authStore.user, (newUser: typeof authStore.user) => {
 
     <!-- Create Team Modal -->
     <BaseModal
+      :close-on-esc="!saving"
       v-model="showCreateTeamModal"
       :title="$t('settings.admin.userManagementSettings.createTeam')"
       size="sm"
@@ -1000,6 +1002,7 @@ watch(() => authStore.user, (newUser: typeof authStore.user) => {
 
     <!-- RBAC Init Modal -->
     <BaseModal
+      :close-on-esc="!isInitializingRbac"
       v-model="showRbacModal"
       :title="$t('settings.admin.userManagementSettings.initializeRBACSystem')"
       size="sm"
@@ -1046,9 +1049,10 @@ watch(() => authStore.user, (newUser: typeof authStore.user) => {
 
     <!-- Create SSO Provider Modal -->
     <BaseModal
+      :close-on-esc="!saving"
       v-model="showCreateProviderModal"
       :title="$t('settings.admin.userManagementSettings.addSSOProvider')"
-      size="md"
+      width="32rem"
       :close-label="$t('addNodeModal.closeDialogAria')"
     >
       <div class="space-y-4">

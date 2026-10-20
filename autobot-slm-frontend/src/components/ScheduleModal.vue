@@ -185,7 +185,7 @@ const isFormValid = computed(() => {
   <BaseModal
     :model-value="show"
     :title="modalTitle"
-    size="md"
+    width="32rem"
     :close-label="$t('addNodeModal.closeDialogAria')"
     @close="handleClose"
   >
