@@ -33,6 +33,10 @@ from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config as _ssot_config
 from chat_workflow import limits
 from chat_workflow.approval_binding import ai_line_calls_shown, bind_decision
+from chat_workflow.checkpointer_connection import (
+    describe_connection,
+    get_checkpointer_connection,
+)
 
 try:
     from langgraph.checkpoint.redis.aio import AsyncRedisSaver
@@ -1600,25 +1604,15 @@ async def get_redis_checkpointer() -> "AsyncRedisSaver":  # type: ignore[return]
     if _checkpointer is not None:
         return _checkpointer
 
-    # Get Redis URI and checkpoint TTL from SSOT config.
     # Issue #3231: default raised to 30 days (43200 min) to prevent silent
     # checkpoint expiry during human-in-the-loop pauses.
     ttl_minutes = 43200  # Default: 30 days
     try:
-        from autobot_shared.ssot_config import config as ssot
-
-        redis_host = ssot.vm.redis
-        redis_port = ssot.port.redis
-        _REDIS_URI = f"redis://{redis_host}:{redis_port}"
-        ttl_minutes = ssot.redis.checkpoint_ttl_minutes
+        ttl_minutes = _ssot_config.redis.checkpoint_ttl_minutes
     except Exception:
-        redis_host = _ssot_config.redis_host
-        redis_port = _ssot_config.port.redis
-        _REDIS_URI = f"redis://{redis_host}:{redis_port}"
-        logger.warning(
-            "SSOT config unavailable, using fallback Redis URI: %s",
-            _REDIS_URI,
-        )
+        logger.warning("SSOT checkpoint TTL unavailable, using default %s min", ttl_minutes)
+    # #18953: URL (ACL creds, rediss://, db) and TLS kwargs come from the SSOT builder.
+    _REDIS_URI, connection_args = get_checkpointer_connection()
 
     # Issue #1481: TTL config for checkpoint auto-expiration
     ttl_config = None
@@ -1629,11 +1623,11 @@ async def get_redis_checkpointer() -> "AsyncRedisSaver":  # type: ignore[return]
         }
 
     # Issue #1433: from_conn_string() is an async generator, use direct init
-    _checkpointer = AsyncRedisSaver(redis_url=_REDIS_URI, ttl=ttl_config)
+    _checkpointer = AsyncRedisSaver(redis_url=_REDIS_URI, ttl=ttl_config, connection_args=connection_args or None)
     await _checkpointer.asetup()
     logger.info(
         "LangGraph Redis checkpointer initialized: %s (TTL: %s min)",
-        _REDIS_URI,
+        describe_connection(_REDIS_URI),
         ttl_minutes if ttl_minutes > 0 else "disabled",
     )
     return _checkpointer
