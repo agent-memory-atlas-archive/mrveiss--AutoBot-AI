@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_mixin import AsyncRedisClientMixin
+from autobot_shared.redis_scan import scan_keys
 from autobot_shared.ssot_constants import TTL_90_DAYS
 from autobot_shared.time_utils import now_utc
 
@@ -104,6 +105,20 @@ class SkillMetrics(AsyncRedisClientMixin):
         except Exception as e:
             logger.error("Failed to log skill metrics: %s", e)
 
+    @staticmethod
+    async def _error_keys_by_day(redis, skill_id: str) -> Dict[str, List[Any]]:
+        """One SCAN walk for all of a skill's error keys, grouped by date (#18999).
+
+        Replaces one ``KEYS <day>:error:*`` per day in the window.
+        """
+        prefix = f"{REDIS_SKILL_METRICS_PREFIX}{skill_id}:"
+        grouped: Dict[str, List[Any]] = {}
+        for key in await scan_keys(redis, f"{prefix}*:error:*"):
+            key_str = key.decode() if isinstance(key, bytes) else key
+            day = key_str[len(prefix) :].split(":", 1)[0]
+            grouped.setdefault(day, []).append(key)
+        return grouped
+
     async def get_metrics(self, skill_id: str, days: int = 30) -> Dict[str, Any]:
         """Get aggregated metrics for a skill over past N days.
 
@@ -132,6 +147,7 @@ class SkillMetrics(AsyncRedisClientMixin):
         try:
             # Iterate over past N days
             now = now_utc()
+            error_keys_by_day = await self._error_keys_by_day(redis, skill_id)
             for i in range(days):
                 date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
                 day_prefix = f"{REDIS_SKILL_METRICS_PREFIX}{skill_id}:{date}"
@@ -143,8 +159,7 @@ class SkillMetrics(AsyncRedisClientMixin):
                 total_successes += successes
 
                 # Aggregate error patterns
-                error_keys = await redis.keys(f"{day_prefix}:error:*")
-                for key in error_keys:
+                for key in error_keys_by_day.get(date, []):
                     key_str = key.decode() if isinstance(key, bytes) else key
                     error_type = key_str.split(":")[-1]
                     count = int(await redis.get(key) or 0)
@@ -271,7 +286,7 @@ class SkillMetrics(AsyncRedisClientMixin):
             return []
 
         try:
-            stale_keys = await redis.keys(f"{REDIS_SKILL_HEALTH_PREFIX}*:stale")
+            stale_keys = await scan_keys(redis, f"{REDIS_SKILL_HEALTH_PREFIX}*:stale")
             # The shared client is created with decode_responses=True, so keys
             # arrive as str. Decoding unconditionally raised AttributeError on
             # every call and the except below swallowed it into [] -- the caller
