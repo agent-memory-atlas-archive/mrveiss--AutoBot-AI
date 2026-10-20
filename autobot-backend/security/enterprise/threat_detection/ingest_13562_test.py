@@ -124,6 +124,32 @@ def test_file_actions_land_inside_the_set_the_engine_matches_on(bus_action: str,
     assert SecurityEvent(raw_event={"action": translated}).is_file_operation()
 
 
+@pytest.mark.parametrize(
+    "stored_action,expected",
+    [
+        ("login_successful", "authentication"),  # rows stored before #18716 still count
+        ("user.login", "authentication"),
+        ("sso_login", "authentication"),
+        ("api_key_created", "authentication"),
+        ("password_changed", "authentication"),
+        ("conversation_file_delete", "file_delete"),
+        ("file_delete", "file_delete"),
+        ("config.update", "system_configuration_change"),
+        ("config.changed", "system_configuration_change"),
+        ("something.unrelated", "api_request"),
+    ],
+)
+def test_old_spellings_in_stored_rows_are_read_through_the_canonical_mapping(stored_action: str, expected: str) -> None:
+    assert engine_action(stored_action) == expected
+
+
+def test_the_insider_high_risk_action_is_reachable_from_a_bus_event() -> None:
+    """``_HIGH_RISK_ACTIONS`` compares against the translated action; a name nothing produces never matches."""
+    from security.enterprise.threat_detection.analyzers.insider_threat import InsiderThreatAnalyzer
+
+    assert engine_action("config.update") in InsiderThreatAnalyzer._HIGH_RISK_ACTIONS
+
+
 def test_an_unrecognised_outcome_is_a_failure_not_a_success() -> None:
     """An unknown value scoring as success is how a detector reports clean."""
     assert engine_outcome("success") == "success"
