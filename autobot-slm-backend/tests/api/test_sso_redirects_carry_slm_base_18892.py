@@ -10,6 +10,8 @@ into the SLM SPA must be prefixed with ``settings.frontend_base_path``.
 """
 
 import asyncio
+import os
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_sso_auth import _load_sso_auth_with_real_endpoints  # noqa: E402
 
@@ -59,7 +62,40 @@ def test_the_failed_login_redirect_is_under_the_base():
         assert sso_auth._spa_url("login", "error=sso_failed") == "/slm/login?error=sso_failed"
 
 
-def test_the_configured_default_matches_the_spa_base():
+def _settings_base_path(tmp_path, value):
+    """The real Settings' frontend_base_path in a fresh interpreter (conftest stubs `config` in-process)."""
+    env = {k: v for k, v in os.environ.items() if k != "SLM_FRONTEND_BASE_PATH"}
+    if value is not None:
+        env["SLM_FRONTEND_BASE_PATH"] = value
+    env.update(
+        PYTHONPATH=os.pathsep.join([str(_BACKEND_ROOT.parent), str(_BACKEND_ROOT)]),
+        PYTHONDONTWRITEBYTECODE="1",
+        SLM_DATA_DIR=str(tmp_path / "data"),
+        SLM_CONFIG_DIR=str(tmp_path / "config"),
+    )
+    snippet = "import config; print('BASE=' + config.settings.frontend_base_path + '|')"
+    result = subprocess.run(
+        [sys.executable, "-c", snippet],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        cwd=str(tmp_path),
+        env=env,
+    )
+    assert "BASE=" in result.stdout, result.stdout + result.stderr
+    return result.stdout.split("BASE=", 1)[1].split("|", 1)[0]
+
+
+def test_the_runtime_default_matches_the_spa_base(tmp_path):
     """vite.config.ts builds the SPA with base '/slm/'; the backend default must agree."""
-    source = (Path(__file__).resolve().parents[2] / "config.py").read_text(encoding="utf-8")
-    assert 'os.getenv("SLM_FRONTEND_BASE_PATH", "/slm")' in source
+    assert _settings_base_path(tmp_path, None) == "/slm"
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [("slm", "/slm"), ("/slm/", "/slm"), ("ops/slm", "/ops/slm"), ("/", ""), ("", "")],
+)
+def test_the_configured_base_is_normalised_to_an_absolute_path(tmp_path, configured, expected):
+    """A missing leading slash would make the redirect relative to /api/auth/sso/."""
+    assert _settings_base_path(tmp_path, configured) == expected

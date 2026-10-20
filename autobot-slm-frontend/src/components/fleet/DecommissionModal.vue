@@ -12,10 +12,7 @@
  */
 
 import { ref, computed, onMounted } from 'vue'
-import {
-  useRoles,
-  type DecommissionPreflight,
-} from '@/composables/useRoles'
+import { useRoles, type DecommissionPreflight } from '@/composables/useRoles'
 import { createLogger } from '@/utils/debugUtils'
 import { BaseModal } from '@autobot/ui'
 
@@ -117,8 +114,9 @@ function handleMigrateClick() {
     :model-value="true"
     :title="$t('fleet.decommissionModal.decommissionNodeHostname', { hostname: node.hostname })"
     size="md"
+    :locked="state === 'running'"
     :close-label="$t('fleet.decommissionModal.closeDecommissionModal')"
-    @close="emit('close')"
+    @close="state === 'complete' ? emit('decommissioned') : emit('close')"
   >
     <template #title>
       <span class="header-icon" aria-hidden="true">&#9888;</span>

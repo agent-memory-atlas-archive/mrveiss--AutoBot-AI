@@ -37,3 +37,16 @@ async def sync_admin_password(db, user, password: str) -> bool:
     await db.flush()
     logger.info("Admin password synced from SLM_ADMIN_PASSWORD; sessions issued before it are revoked")
     return True
+
+
+async def sync_admin_password_at_startup(db, user, password: str) -> bool:
+    """`sync_admin_password` for SLM startup: an epoch-store outage must not abort the boot (#18672).
+
+    The fail-closed contract is to leave the password unchanged when the epoch cannot be
+    recorded -- not to stop the whole SLM. Log it critical and carry on with the old hash.
+    """
+    try:
+        return await sync_admin_password(db, user, password)
+    except EpochNotRecordedError as exc:
+        logger.critical("Admin password not synced from SLM_ADMIN_PASSWORD at startup: %s", exc)
+        return False

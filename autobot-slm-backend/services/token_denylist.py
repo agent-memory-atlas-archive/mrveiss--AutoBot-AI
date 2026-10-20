@@ -119,7 +119,8 @@ async def is_jti_revoked(jti: str) -> bool:
     Raises:
         ConnectionError | asyncio.TimeoutError: the denylist could not be checked. A
             database error is raised as ConnectionError, the store-unavailable type
-            ``decode_token_async`` turns into a 401 rather than a 500.
+            ``decode_token_async`` turns into a 503 + Retry-After (#18892): the token is
+            refused, but as "could not decide", not as a dead credential (401) or a 500.
     """
     try:
         return await asyncio.wait_for(_lookup(jti), timeout=_STORE_DEADLINE_SECONDS)

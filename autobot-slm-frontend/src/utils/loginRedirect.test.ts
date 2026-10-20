@@ -36,5 +36,22 @@ describe('loginRedirect (#18892)', () => {
     expect(safeRedirectTarget('//evil.example')).toBe('/')
     expect(safeRedirectTarget('https://evil.example')).toBe('/')
     expect(safeRedirectTarget(undefined)).toBe('/')
+    expect(safeRedirectTarget('/\\evil.example')).toBe('/')
+    expect(safeRedirectTarget(['/fleet'])).toBe('/')
+  })
+
+  it('rejects a target carrying a control character', () => {
+    for (const ch of ['\t', '\r', '\n', '\u0000', '\u001b', '\u007f']) {
+      expect(safeRedirectTarget(`/fleet${ch}/x`)).toBe('/')
+      expect(safeRedirectTarget(`/${ch}/evil.example`)).toBe('/')
+    }
+  })
+
+  it('rejects the login route itself, which would loop back to login', () => {
+    for (const target of ['/login', '/LOGIN', '/login/', '/login?redirect=%2Ffleet', '/login#x']) {
+      expect(safeRedirectTarget(target)).toBe('/')
+    }
+    expect(safeRedirectTarget('/login-history')).toBe('/login-history')
+    expect(safeRedirectTarget('/fleet?tab=login')).toBe('/fleet?tab=login')
   })
 })

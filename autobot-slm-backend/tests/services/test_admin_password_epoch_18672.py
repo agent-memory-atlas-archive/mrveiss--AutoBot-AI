@@ -98,6 +98,26 @@ def test_startup_sync_fails_closed_when_the_epoch_cannot_be_recorded() -> None:
         password_epoch.reset_epoch_store()
 
 
+def test_startup_survives_an_epoch_store_outage_with_the_hash_unchanged(caplog) -> None:
+    """CodeRabbit on #18941: an epoch-store outage aborted SLM startup. Startup now logs it
+    critical, keeps the old hash (fail closed) and continues."""
+    from services.admin_password_sync import sync_admin_password_at_startup
+
+    async def set_epoch(subject, *, now=None):
+        return None
+
+    password_epoch.use_epoch_store(get_epoch=lambda subject: None, set_epoch=set_epoch)
+    try:
+        before = hash_password(_throwaway())
+        user = types.SimpleNamespace(username="admin", password_hash=before)
+        with caplog.at_level("CRITICAL", logger="services.admin_password_sync"):
+            assert asyncio.run(sync_admin_password_at_startup(_Db(), user, _throwaway())) is False
+        assert user.password_hash == before, "the hash changed although no epoch was recorded"
+        assert "password epoch not recorded" in caplog.text
+    finally:
+        password_epoch.reset_epoch_store()
+
+
 _USERS_DSN, _EPOCH_DSN = "postgresql://h:5432/slm_users", "postgresql://h:5432/slm"
 
 

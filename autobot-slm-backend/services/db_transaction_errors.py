@@ -50,7 +50,10 @@ def _failure_kind(exc: BaseException) -> str:
     for cause in _causes(exc):
         if isinstance(cause, socket.gaierror):
             return "the host name did not resolve (DNS)"
-        if isinstance(cause, ConnectionRefusedError) or getattr(cause, "errno", None) == errno.ECONNREFUSED:
+        # errno only means a socket errno on an OSError; a driver exception may carry its own field.
+        if isinstance(cause, ConnectionRefusedError) or (
+            isinstance(cause, OSError) and cause.errno == errno.ECONNREFUSED
+        ):
             return "the connection was refused (nothing listening there, or the wrong port)"
         if isinstance(cause, TimeoutError):
             return "the connection timed out (no answer: a firewall dropping the traffic, or the host is down)"
@@ -77,8 +80,16 @@ def _location(database_url: str) -> str:
     authority = re.split(r"[/?#]", rest, maxsplit=1)[0]
     if "@" in rest and "@" not in authority:
         return _WITHHELD
-    host, _, port = authority.rsplit("@", 1)[-1].rpartition(":")
-    host, port = (host, port) if host else (port, "")
+    host, port = _split_host_port(authority.rsplit("@", 1)[-1])
     if not re.fullmatch(r"[A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\]", host or "") or (port and not port.isdigit()):
         return _WITHHELD
     return f"{host}:{port}" if port else f"{host} (default port)"
+
+
+def _split_host_port(hostport: str) -> tuple[str, str]:
+    """('host', 'port') from 'host[:port]'; a bracketed IPv6 literal keeps its colons ('[::1]', '[::1]:<port>')."""
+    if hostport.startswith("["):
+        host, bracket, tail = hostport.partition("]")
+        return host + bracket, tail[1:] if tail.startswith(":") else tail
+    host, _, port = hostport.partition(":")
+    return host, port

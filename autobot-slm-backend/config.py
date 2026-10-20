@@ -18,7 +18,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Optional
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
 
 from autobot_shared.secret_redaction import RedactedReprMixin
@@ -187,8 +187,19 @@ class Settings(RedactedReprMixin, BaseSettings):
     ansible_dir: Path = Path(__file__).parent / "ansible"
     # #18892: where the SLM SPA is served (vite `base: '/slm/'`). Browser redirects
     # the backend issues -- the SSO callback -- must carry it: a bare `/sso-callback`
-    # is served by the USER frontend on the shared vhost. No trailing slash.
-    frontend_base_path: str = os.getenv("SLM_FRONTEND_BASE_PATH", "/slm").rstrip("/")
+    # is served by the USER frontend on the shared vhost. Read from SLM_FRONTEND_BASE_PATH
+    # (env_prefix) and normalised below: one leading slash, no trailing slash.
+    frontend_base_path: str = "/slm"
+
+    @field_validator("frontend_base_path")
+    @classmethod
+    def _normalise_frontend_base_path(cls, raw: str) -> str:
+        """`slm`, `/slm/` and `/slm` all mean `/slm`; `/` or blank is the root (#18892).
+
+        Without the leading slash the SSO redirect would be relative and resolve under `/api/auth/sso/`.
+        """
+        trimmed = raw.strip().strip("/")
+        return f"/{trimmed}" if trimmed else ""
 
     # #13307: was `Path.home() / "slm-backups"`, which put every backup in the
     # service account's home directory — on the root filesystem, in a place

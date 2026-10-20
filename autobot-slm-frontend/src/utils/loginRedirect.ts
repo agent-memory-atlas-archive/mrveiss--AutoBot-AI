@@ -46,12 +46,28 @@ export function buildLoginUrl(loc: Pick<Location, 'pathname' | 'search' | 'hash'
   return `${loginPath()}?redirect=${encodeURIComponent(currentAppPath(loc))}`
 }
 
+/** True for a C0 control character (tab, CR, LF, ...) or DEL anywhere in `value`. */
+function hasControlCharacter(value: string): boolean {
+  return Array.from(value).some((ch) => {
+    const code = ch.charCodeAt(0)
+    return code < 0x20 || code === 0x7f
+  })
+}
+
+/** True when an app-relative route path is the login route itself (a redirect loop). */
+function isLoginRoute(path: string): boolean {
+  const pathname = path.split(/[?#]/, 1)[0].replace(/\/+$/, '')
+  return pathname.toLowerCase() === `/${LOGIN_ROUTE_PATH}` // vue-router matches case-insensitively
+}
+
 /**
  * Validate a `redirect` query value: only same-app absolute route paths are
- * followed (no scheme, no '//' protocol-relative host, no backslash).
+ * followed (no scheme, no '//' protocol-relative host, no backslash, no control
+ * character, and never the login route itself, which would loop).
  */
 export function safeRedirectTarget(raw: unknown): string {
   if (typeof raw !== 'string') return '/'
   if (!raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return '/'
+  if (hasControlCharacter(raw) || isLoginRoute(raw)) return '/'
   return raw
 }

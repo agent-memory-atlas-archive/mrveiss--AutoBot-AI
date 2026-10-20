@@ -74,13 +74,32 @@ def _log_ws_reject_context(websocket: WebSocket, reason: str) -> None:
     )
 
 
+async def _close_for_decode_error(websocket: WebSocket, exc: HTTPException) -> None:
+    """Deny a token whose decode raised, via a WebSocket close frame (no HTTP response is possible).
+
+    #16387: decode_token_async raises (rather than returning None) when a revocation check could
+    not run. #18892: "could not decide" (503) closes 1013 (try again later), not the 4001 auth
+    failure, so a client does not treat a valid session as dead. Any other HTTPException is a
+    rejected token and closes 4001.
+    """
+    unavailable = exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    _log_ws_reject_context(websocket, "revocation check unavailable" if unavailable else "token rejected")
+    await accept_websocket(websocket)
+    if unavailable:
+        await websocket.close(code=_WS_TRY_AGAIN_LATER, reason=REVOCATION_UNAVAILABLE_DETAIL)
+    else:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+
+
 async def _authenticate_websocket_token(websocket: WebSocket) -> dict | None:
     """Authenticate a WebSocket connection.
 
     Extracts the JWT via subprotocol header (preferred) or query param
     (fallback), validates it, accepts the socket on success, and returns
-    the decoded payload.  On failure, accepts then closes with code 4001
-    so the browser receives a proper WS frame rather than an HTTP 403.
+    the decoded payload.  On failure, accepts then closes so the browser
+    receives a proper WS frame rather than an HTTP 403: code 4001 for a
+    missing, invalid or expired token, code 1013 (try again later) when the
+    revocation check could not run (#18892).
 
     NOTE: the close MUST be preceded by accept() so uvicorn sends a proper
     WebSocket close frame (code 4001) rather than converting an unaccepted
@@ -104,17 +123,7 @@ async def _authenticate_websocket_token(websocket: WebSocket) -> dict | None:
     try:
         payload = await auth_service.decode_token_async(token)
     except HTTPException as exc:
-        # #16387: decode_token_async raises (rather than returning None) when
-        # a revocation check could not run at all, so the token is denied --
-        # via a WebSocket close frame, since no HTTP response can be sent here.
-        # #18892: "could not decide" closes with 1013 (try again later), not the
-        # 4001 auth failure, so a client does not treat a valid session as dead.
-        _log_ws_reject_context(websocket, "revocation check failed")
-        await accept_websocket(websocket)
-        if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
-            await websocket.close(code=_WS_TRY_AGAIN_LATER, reason=REVOCATION_UNAVAILABLE_DETAIL)
-        else:
-            await websocket.close(code=4001, reason="Invalid or expired token")
+        await _close_for_decode_error(websocket, exc)
         return None
 
     # #18338: a session or the backend's service token -- never a token minted for another

@@ -8,6 +8,7 @@ The external Docker test (2026-10-17) logged only asyncpg's bare TimeoutError an
 12 times; the cause was a host firewall dropping container traffic, and nothing pointed there.
 """
 
+import errno
 import socket
 
 from services.db_transaction_errors import describe_connect_failure
@@ -91,3 +92,26 @@ def test_raise_from_none_ends_the_chain() -> None:
     outer.__context__ = TimeoutError()
     outer.__suppress_context__ = True
     assert describe_connect_failure(outer, _url("db-host")).endswith(": RuntimeError")
+
+
+def test_an_errno_refusal_counts_only_on_an_oserror() -> None:
+    """A plain OSError with ECONNREFUSED is a refusal; a driver exception that merely carries an
+    `errno` field of the same value is not."""
+    assert "refused" in describe_connect_failure(OSError(errno.ECONNREFUSED, "refused"), _url("db-host"))
+
+    ECONNREFUSED = errno.ECONNREFUSED
+
+    class _DriverError(Exception):
+        errno = ECONNREFUSED
+
+    message = describe_connect_failure(_DriverError(), _url("db-host"))
+    assert "refused" not in message and message.endswith(": _DriverError")
+
+
+def test_a_bracketed_ipv6_host_with_and_without_a_port() -> None:
+    assert describe_connect_failure(ValueError(), _url("[::1]")).startswith(
+        "cannot reach PostgreSQL at [::1] (default port): "
+    )
+    assert describe_connect_failure(ValueError(), _url("[::1]", ":5432")).startswith(
+        "cannot reach PostgreSQL at [::1]:5432: "
+    )

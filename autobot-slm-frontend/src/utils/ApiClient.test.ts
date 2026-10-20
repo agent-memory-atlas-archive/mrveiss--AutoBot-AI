@@ -46,6 +46,7 @@ describe('SlmApiClient', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs() // here, not in a test body: a failed assertion would leak BASE_URL
     Object.defineProperty(window, 'location', {
       configurable: true,
       writable: true,
@@ -149,7 +150,6 @@ describe('SlmApiClient', () => {
     expect(window.location.href).toBe(
       `/slm/login?redirect=${encodeURIComponent('/updates/summary?tab=system')}`
     )
-    vi.unstubAllEnvs()
   })
 
   it('does not redirect again when already on the base-aware login page (#18892)', async () => {
@@ -166,7 +166,6 @@ describe('SlmApiClient', () => {
     await expect(client.get('/nodes', { maxRetries: 1 })).rejects.toThrow('HTTP 401')
 
     expect(window.location.href).toBe('')
-    vi.unstubAllEnvs()
   })
 
   it('keeps the session and does not redirect on 503, surfacing a retryable error (#18892)', async () => {
