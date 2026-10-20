@@ -43,6 +43,23 @@ def test_the_fact_store_content_hash_is_the_canonical_dedup_key(text: str) -> No
     assert key == _old_connector_content_hash(text)[:FACT_DEDUP_WIDTH]
 
 
+def test_the_dedup_key_is_pinned_to_a_literal() -> None:
+    """A change of hash family or width fails here, not just a change of who computes it."""
+    assert fact_store.content_hash("a") == "ca978112ca1bbdca"
+
+
+@pytest.mark.parametrize("text", _SAMPLES)
+def test_the_fact_row_stores_the_old_algorithms_value(text: str) -> None:
+    """Through the former call site: the row builder writes what the old copy produced."""
+    row = fact_store._row_values(text, {})
+    assert row["content_hash"] == _old_connector_content_hash(text)[:FACT_DEDUP_WIDTH]
+
+
+def test_the_row_hashes_the_pre_redaction_content_when_given() -> None:
+    row = fact_store._row_values("redacted", {}, hash_content="raw secret")
+    assert row["content_hash"] == _old_connector_content_hash("raw secret")[:FACT_DEDUP_WIDTH]
+
+
 def test_different_content_gets_a_different_key() -> None:
     """Contrast: a constant would satisfy the equalities above only if both sides were broken alike."""
     assert fact_store.content_hash("a") != fact_store.content_hash("b")
