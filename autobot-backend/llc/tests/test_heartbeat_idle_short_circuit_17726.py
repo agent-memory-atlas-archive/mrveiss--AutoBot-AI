@@ -36,11 +36,6 @@ _COMPANY_ID = str(uuid.uuid4())
 _HBS = "llc.scheduler.heartbeat_scheduler"
 
 
-def _recording_session() -> FakeAsyncSession:
-    """Captures the statements executed (`.statements`), and offers nothing: every query is empty."""
-    return FakeAsyncSession()
-
-
 def _make_agent(**over: Any) -> Dict[str, Any]:
     agent = {
         "agent_id": _AGENT_SLUG,
@@ -216,10 +211,10 @@ async def test_the_emptiness_check_filters_on_the_same_rule_as_the_checkout():
     """
     from llc.services.work_item_queue import checkout_next, has_pending_work
 
-    probe = _recording_session()
+    probe = FakeAsyncSession()
     await has_pending_work(probe, _NODE_ID, _COMPANY_ID)
 
-    claim = _recording_session()
+    claim = FakeAsyncSession()
     await checkout_next(claim, MagicMock(), _NODE_ID, _COMPANY_ID)
 
     assert len(probe.statements) == 1 and len(claim.statements) == 1
@@ -240,7 +235,7 @@ async def test_the_emptiness_check_is_bounded_to_one_row():
     """Cheap by construction, not by the backlog happening to be short."""
     from llc.services.work_item_queue import has_pending_work
 
-    probe = _recording_session()
+    probe = FakeAsyncSession()
     await has_pending_work(probe, _NODE_ID, _COMPANY_ID)
 
     statement = probe.statements[0]
