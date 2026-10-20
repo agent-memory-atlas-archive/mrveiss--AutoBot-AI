@@ -110,7 +110,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/knowledge_collections.py": 726,
     "autobot-backend/api/knowledge_connectors.py": 929,
     "autobot-backend/api/knowledge_maintenance.py": 1970,
-    "autobot-backend/api/knowledge_mcp.py": 1455,
+    "autobot-backend/api/knowledge_mcp.py": 1454,
     "autobot-backend/api/knowledge_population.py": 1425,
     "autobot-backend/api/knowledge_search.py": 819,  # #16665: analytics endpoints moved out
     "autobot-backend/api/knowledge_search_aggregator.py": 951,  # #16665: doc-search moved out
@@ -237,7 +237,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/knowledge/ownership.py": 757,
     "autobot-backend/knowledge/pipeline/cognifiers/cognifiers_test.py": 806,
     "autobot-backend/knowledge/rag_benchmarks.py": 1607,
-    "autobot-backend/knowledge/search.py": 1050,
+    "autobot-backend/knowledge/search.py": 1047,
     "autobot-backend/knowledge/search_components/retrieval_learner.py": 734,
     "autobot-backend/knowledge/search_quality.py": 931,
     "autobot-backend/knowledge/search_quality_test.py": 667,
@@ -343,7 +343,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/knowledge/autonomous_loop.py": 798,
     "autobot-backend/services/knowledge/code_indexer.py": 1179,
     "autobot-backend/services/knowledge/doc_indexer.py": 1263,
-    "autobot-backend/services/knowledge/service.py": 851,
+    "autobot-backend/services/knowledge/service.py": 850,
     "autobot-backend/services/knowledge/test_autonomous_loop.py": 708,
     "autobot-backend/services/knowledge/test_doc_indexer.py": 1466,
     "autobot-backend/services/knowledge/test_kb_synthesizer.py": 802,
