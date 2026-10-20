@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import os
+import tokenize
 from pathlib import Path
 
 from repo_tests._paths import repo_root
@@ -45,9 +46,37 @@ def _is_raw_keys_command(node: ast.Call) -> bool:
     return bool(words) and words[0].upper() == "KEYS"
 
 
+_REDIS_TOKENS = {"r", "redis", "client", "conn", "pipe", "pipeline"}
+
+
+def _receiver_name(node: ast.expr) -> str:
+    """Final name of a call's receiver: `a.b.c` -> `c`, `get_redis()` -> `get_redis`."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    if isinstance(node, ast.Subscript):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else ""
+
+
+def _looks_like_redis(node: ast.expr) -> bool:
+    """AST cannot type-resolve, so a zero-arg `.keys()` is Redis only if the receiver is named so.
+
+    Whole `_`-separated tokens (`redis_client`, `conn`, `pipe`, `r`), or any name containing
+    `redis` (`redisClient`); ALL-CAPS constants (`REDIS_DATABASES`) and plurals such as
+    `active_connections` / `pipelines` are dicts on this tree and do not match.
+    """
+    name = _receiver_name(node)
+    if name.isupper():
+        return False
+    low = name.lower()
+    return "redis" in low or bool(_REDIS_TOKENS & set(low.split("_")))
+
+
 def _is_keys_method(node: ast.Call) -> bool:
-    """`<x>.keys(<arg>...)`: a call with arguments is Redis KEYS (dict.keys() takes none)."""
-    return isinstance(node.func, ast.Attribute) and node.func.attr == "keys" and bool(node.args or node.keywords)
+    """`<x>.keys(<arg>...)` is Redis KEYS; zero-arg `<redis-ish>.keys()` sends `KEYS *`."""
+    if not (isinstance(node.func, ast.Attribute) and node.func.attr == "keys"):
+        return False
+    return bool(node.args or node.keywords) or _looks_like_redis(node.func.value)
 
 
 def keys_call_lines(source: str) -> list[int]:
@@ -93,19 +122,31 @@ REACH = declare(
 )
 
 
-def scan_counted(root: Path) -> tuple[dict[str, int], int]:
-    """(path -> KEYS sites, files parsed) over the declared runtime population."""
+def _read_source(path: Path) -> str:
+    """Python source decoded with its declared encoding (PEP 263), not assumed UTF-8."""
+    with tokenize.open(path) as fh:
+        return fh.read()
+
+
+def scan_files(root: Path, rels, unreadable: list[str]) -> tuple[dict[str, int], int]:
+    """(path -> KEYS sites, files parsed); a file that cannot be read or parsed goes to `unreadable`."""
     found: dict[str, int] = {}
     parsed = 0
-    for rel in REACH.examined(root):
+    for rel in rels:
         try:
-            lines = keys_call_lines((root / rel).read_text(encoding="utf-8"))
-        except (SyntaxError, UnicodeDecodeError):
+            lines = keys_call_lines(_read_source(root / rel))
+        except (SyntaxError, UnicodeDecodeError, OSError, ValueError):
+            unreadable.append(rel)
             continue
         parsed += 1
         if lines:
             found[rel] = len(lines)
     return found, parsed
+
+
+def scan_counted(root: Path, unreadable: list[str] | None = None) -> tuple[dict[str, int], int]:
+    """`scan_files` over the declared runtime population."""
+    return scan_files(root, REACH.examined(root), [] if unreadable is None else unreadable)
 
 
 def scan(root: Path) -> dict[str, int]:
@@ -114,7 +155,9 @@ def scan(root: Path) -> dict[str, int]:
 
 
 def test_keys_sites_never_grow_and_stale_entries_fail():
-    found = scan(ROOT)
+    unreadable: list[str] = []
+    found = scan_counted(ROOT, unreadable)[0]
+    assert not unreadable, f"runtime files the guard could not read or parse (never skipped): {unreadable}"
     grown = {p: n for p, n in found.items() if n > BASELINE.get(p, 0)}
     stale = {p: n for p, n in BASELINE.items() if found.get(p, 0) < n}
     assert not grown, f"new blocking KEYS call(s); use autobot_shared.redis_scan: {grown}"
@@ -133,7 +176,25 @@ def test_detector_flags_redis_keys_with_pattern():
 
 
 def test_detector_ignores_dict_keys_and_scan():
-    assert keys_call_lines("d.keys()\nfor k in r.scan_iter(match='a:*'): pass") == []
+    assert (
+        keys_call_lines(
+            "d.keys()\nself.config.keys()\nself.active_connections.keys()\nREDIS_DATABASES.keys()\nfor k in r.scan_iter(match='a:*'): pass"
+        )
+        == []
+    )
+
+
+def test_detector_flags_zero_arg_keys_on_redis_named_receivers():
+    src = "redis.keys()\nself.redis_client.keys()\nr.keys()\nawait conn.keys()\npipe.keys()\nget_redis().keys()"
+    assert keys_call_lines(src) == [1, 2, 3, 4, 5, 6]
+
+
+def test_unreadable_files_fail_instead_of_being_skipped(tmp_path):
+    (tmp_path / "bad.py").write_text("def (:\n", encoding="utf-8")
+    (tmp_path / "latin.py").write_bytes(b"# -*- coding: latin-1 -*-\nx = 'caf\xe9'\nr.keys('a:*')\n")
+    bad: list[str] = []
+    found, parsed = scan_files(tmp_path, ["bad.py", "latin.py"], bad)
+    assert bad == ["bad.py"] and found == {"latin.py": 1} and parsed == 1
 
 
 def test_detector_flags_raw_keys_command_both_forms_any_case():

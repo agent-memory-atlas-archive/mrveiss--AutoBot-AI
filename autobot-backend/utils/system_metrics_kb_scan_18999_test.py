@@ -6,6 +6,7 @@ import fnmatch
 
 import pytest
 
+from autobot_shared import redis_scan
 from utils import system_metrics as sm
 
 
@@ -26,6 +27,11 @@ class CountingRedis:
 
 
 KEYS = [f"doc:{i}" for i in range(1569)] + [f"kb_cache:{i}" for i in range(7)]
+
+
+@pytest.fixture(autouse=True)
+def _pin_scan_count(monkeypatch):
+    monkeypatch.setattr(redis_scan, "REDIS_SCAN_COUNT", 1000)  # independent of AUTOBOT_REDIS_SCAN_COUNT
 
 
 def _collector():
