@@ -266,9 +266,13 @@ def _main_frozen(source: str) -> tuple[int, int]:
     """`(len(ALLOWLIST), FROZEN_TOTAL)` as written in a baseline file's source."""
     sizes: dict[str, int] = {}
     for node in ast.parse(source).body:
-        if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+        # `ALLOWLIST: dict[str, str] = {...}` is an AnnAssign; `FROZEN_TOTAL = 76` an Assign.
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            name = node.target.id
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name = node.targets[0].id
+        else:
             continue
-        name = node.targets[0].id
         if name == "ALLOWLIST" and isinstance(node.value, ast.Dict):
             sizes[name] = len(node.value.keys)
         elif name == "FROZEN_TOTAL" and isinstance(node.value, ast.Constant):
