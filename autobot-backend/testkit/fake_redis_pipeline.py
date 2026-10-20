@@ -46,7 +46,7 @@ from redis.exceptions import WatchError
 
 __all__ = ["COMMANDS", "FakeAsyncPipeline", "FakePipeline", "WatchError"]
 
-#: Every command a pipeline double in the tree queued (#18991); each exists on redis-py's pipeline.
+#: Every command a pipeline double or `AsyncFullFakeRedis` user queues (#18991); each exists on redis-py's pipeline.
 COMMANDS = frozenset(
     {
         "delete",
@@ -66,6 +66,7 @@ COMMANDS = frozenset(
         "setex",
         "srem",
         "zadd",
+        "zcard",
         "zrem",
     }
 )
