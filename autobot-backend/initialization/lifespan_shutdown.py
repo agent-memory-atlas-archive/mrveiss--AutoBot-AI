@@ -334,6 +334,15 @@ async def stop_background_loops(app: FastAPI, report: "_ShutdownReport") -> None
     except Exception as _pt_err:
         report.failed("Agent presence sync task cancel", _pt_err)
 
+    # #19010: stop the Telegram poller; it releases its leader lease on cancel.
+    try:
+        poller_task = getattr(app.state, "telegram_poller_task", None)
+        if poller_task is not None and not poller_task.done():
+            poller_task.cancel()
+            await asyncio.gather(poller_task, return_exceptions=True)
+    except Exception as _tp_err:
+        report.failed("Telegram poller task cancel", _tp_err)
+
 
 async def shutdown_agent_runtime(app: FastAPI, report: "_ShutdownReport") -> None:
     """Shut down the orchestrator, WebResearcher and the AI Stack client."""
