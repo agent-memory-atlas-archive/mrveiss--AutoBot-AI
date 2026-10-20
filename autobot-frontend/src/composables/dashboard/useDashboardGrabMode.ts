@@ -9,6 +9,7 @@
 import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+  GRID_COLUMNS,
   HEIGHT_STEP,
   clampHeight,
   moveWidget,
@@ -66,9 +67,10 @@ export function useDashboardGrabMode<T extends DashboardWidget>(
     announcePosition(id, 'dashboardGrid.announce.resized')
   }
 
-  // Up/Down jump by the number of same-span widgets that fit in one 12-column row.
+  // Up/Down jump by the number of same-span widgets that fit in one row: whole widgets only,
+  // so span 8 (1.5 per row) steps by 1, not 2.
   function move(id: string, key: string) {
-    const rowStep = Math.max(1, Math.round(12 / (widgets.value[indexOf(id)].span || 12)))
+    const rowStep = Math.max(1, Math.floor(GRID_COLUMNS / (widgets.value[indexOf(id)].span || GRID_COLUMNS)))
     const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -rowStep, ArrowDown: rowStep }[key] ?? 0
     widgets.value = moveWidget(widgets.value, indexOf(id), delta)
     announcePosition(id, 'dashboardGrid.announce.moved')

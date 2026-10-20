@@ -24,6 +24,28 @@
     shell: /usr/sbin/nologin
     create_home: false
 
+# #18556: a host may run its own Alertmanager on these paths (the upstream tarball's layout).
+# Record each path this role is about to create, before creating it, so scripts/uninstall.sh
+# removes only what AutoBot made -- never an installation that was here first.
+- name: "Alertmanager | Note which of its paths are already on the host (#18556)"
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ alertmanager_owned_paths }}"
+  register: _alertmanager_preexisting
+
+- name: "Alertmanager | Record the paths this role creates, so uninstall may remove them (#18556)"
+  ansible.builtin.lineinfile:
+    path: "{{ autobot_install_record }}"
+    line: "created_path={{ item.item }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ _alertmanager_preexisting.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not item.stat.exists
+
 - name: Check if Alertmanager binary exists
   ansible.builtin.stat:
     path: "{{ alertmanager_install_dir }}/alertmanager"

@@ -50,6 +50,15 @@ alertmanager_archive: "{{ alertmanager_install_dir }}/alertmanager-{{ alertmanag
 alertmanager_listen_address: "{{ monitoring_local_host }}"
 alertmanager_config_dir: "/etc/alertmanager"
 alertmanager_data_dir: "/var/lib/alertmanager"
+# #18556: what the role creates where a host may run its own Alertmanager. Each path absent
+# before the role ran is recorded as created_path= in the install record (install.sh's
+# INSTALL_RECORD), and scripts/uninstall.sh (RECORDED_PATHS) removes only recorded ones.
+alertmanager_owned_paths:
+  - "{{ alertmanager_install_dir }}"
+  - "{{ alertmanager_config_dir }}"
+  - "{{ alertmanager_data_dir }}"
+  - /etc/systemd/system/alertmanager.service
+autobot_install_record: /etc/autobot/install-record
 # The routing config and the rule file live once in the repo (the backend's
 # webhook tests read the same alertmanager.yml); copied from the repo clone,
 # as the alert rules are, never duplicated into the role.

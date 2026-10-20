@@ -6195,6 +6195,8 @@
       "widgetArchitecture": "System Architecture",
       "widgetArchitectureDesc": "Interactive system architecture diagram",
       "saveFailed": "Could not save the dashboard layout. Your changes are kept on this page.",
+      "dashboardLimit": "A page holds at most {max} dashboards.",
+      "widgetLimit": "A dashboard holds at most {max} widgets. Remove one before adding another.",
       "resetLayout": "Reset layout",
       "resetLayoutConfirm": "Reset this page to the default layout? Your saved layout is removed.",
       "widgetSystemMonitor": "System Monitor",

@@ -154,7 +154,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/views/AdvancedControlView.vue": 1103,
     "autobot-frontend/src/views/BudgetPolicies.vue": 940,
     "autobot-frontend/src/views/BusinessIntelligenceView.vue": 988,
-    "autobot-frontend/src/views/CustomDashboard.vue": 884,  # #18242: 1106 -> 884
+    "autobot-frontend/src/views/CustomDashboard.vue": 879,  # #18242: 1106 -> 884; train-42 review: widgetConfig.ts (-5)
     "autobot-frontend/src/views/DevSpeedupView.vue": 658,
     "autobot-frontend/src/views/ErrorMonitoringView.vue": 872,
     "autobot-frontend/src/views/EvolutionView.vue": 781,

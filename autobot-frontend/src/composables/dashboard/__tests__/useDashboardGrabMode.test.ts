@@ -63,6 +63,18 @@ describe('useDashboardGrabMode', () => {
     expect(widgets.value[1].height).toBe(240)
   })
 
+  it.each([
+    [8, ['b', 'a', 'c', 'd']],
+    [4, ['b', 'c', 'd', 'a']],
+  ] as const)('ArrowDown on span %i moves by the whole widgets that fit in a row', (span, order) => {
+    // fails if span 8 (1.5 per row) rounds up to a 2-slot step and skips a slot
+    const widgets = ref([w('a', span), w('b', span), w('c', span), w('d', span)])
+    const { onKeydown } = useDashboardGrabMode(widgets)
+    onKeydown('a', key(' '))
+    onKeydown('a', key('ArrowDown'))
+    expect(widgets.value.map((x) => x.id)).toEqual(order)
+  })
+
   it('a key on a widget that is not the grabbed one does nothing', () => {
     const { widgets, onKeydown } = setup()
     onKeydown('a', key(' '))

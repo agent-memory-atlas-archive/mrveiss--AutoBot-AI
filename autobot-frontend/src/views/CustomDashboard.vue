@@ -90,7 +90,7 @@
           <div class="widget-content">
             <component
               :is="getWidgetComponent(widget.type)"
-              v-bind="widget.props"
+              v-bind="renderProps(widget)"
               :key="`${widget.id}-${widget.refreshKey}`"
             />
           </div>
@@ -125,15 +125,15 @@
       <div class="modal-body" v-if="configWidget">
           <div class="form-group">
             <label>{{ $t('views.customDashboard.widgetTitle') }}</label>
-            <input v-model="configWidget.title" type="text" />
+            <input v-model="configWidget.title" type="text" :maxlength="MAX_TEXT" />
           </div>
           <div class="form-group">
             <label>{{ $t('views.customDashboard.refreshInterval') }}</label>
-            <input v-model.number="configWidget.refreshInterval" type="number" min="5" />
+            <input v-model.number="configWidget.refreshInterval" type="number" min="5" :max="REFRESH_INTERVAL_MAX" />
           </div>
-          <div class="form-group" v-if="hasHeightConfig(configWidget.type)">
+          <div class="form-group" v-if="hasHeightProp(configWidget.type)">
             <label>{{ $t('views.customDashboard.heightPx') }}</label>
-            <input v-model.number="configWidget.props.height" type="number" min="200" @change="syncConfigHeight" />
+            <input v-model.number="configWidget.height" type="number" :min="HEIGHT_MIN" :max="HEIGHT_MAX" />
           </div>
           <!-- Type-specific config options -->
           <div v-if="configWidget.type === 'heatmap'" class="form-group">
@@ -174,7 +174,7 @@
       <div class="modal-body">
           <div class="form-group">
             <label>{{ $t('views.customDashboard.dashboardName') }}</label>
-            <input v-model="newDashboardName" type="text" :placeholder="$t('views.customDashboard.myDashboard')" />
+            <input v-model="newDashboardName" type="text" :maxlength="MAX_TEXT" :placeholder="$t('views.customDashboard.myDashboard')" />
           </div>
           <div class="form-group">
             <label>{{ $t('views.customDashboard.template') }}</label>
@@ -238,7 +238,8 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { BaseModal } from '@autobot/ui'
 import DashboardGrid from '@/components/dashboard/DashboardGrid.vue'
 import { useDashboardLayout } from '@/composables/dashboard/useDashboardLayout'
-import { i18nRef, displayText, clampHeight, type Dashboard, type DashboardLayout, type DashboardWidget } from '@/composables/dashboard/dashboardLayoutModel'
+import { i18nRef, displayText, fitText, HEIGHT_MAX, HEIGHT_MIN, MAX_DASHBOARDS, MAX_TEXT, MAX_WIDGETS, REFRESH_INTERVAL_MAX, type Dashboard, type DashboardLayout, type DashboardWidget } from '@/composables/dashboard/dashboardLayoutModel'
+import { applyConfig, configDraft, hasHeightProp, renderProps } from '@/composables/dashboard/widgetConfig'
 import { defaultHomeLayout, templateWidgets, WIDGET_DEFINITIONS, type WidgetDefinitionSpec } from '@/composables/dashboard/defaultDashboards'
 
 // Import visualization components
@@ -357,10 +358,11 @@ function createNewDashboard() {
 }
 
 function confirmCreateDashboard() {
+  if (layout.value.dashboards.length >= MAX_DASHBOARDS) { showToast(t('views.customDashboard.dashboardLimit', { max: MAX_DASHBOARDS }), 'error'); return }
   const id = `dashboard-${Date.now()}`
   const newDashboard: Dashboard = {
     id,
-    name: newDashboardName.value || i18nRef('views.customDashboard.newDashboard'),
+    name: fitText(newDashboardName.value) || i18nRef('views.customDashboard.newDashboard'),
     widgets: templateWidgets(newDashboardTemplate.value),
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -397,6 +399,7 @@ function addWidget() {
 }
 
 function confirmAddWidget(widgetDef: WidgetDefinition) {
+  if (widgets.value.length >= MAX_WIDGETS) { showToast(t('views.customDashboard.widgetLimit', { max: MAX_WIDGETS }), 'error'); return }
   const newWidget: Widget = {
     // #17020: a random id, so two widgets added in one tick never share layout, removal and :key.
     id: `widget-${crypto.randomUUID()}`,
@@ -419,7 +422,7 @@ function removeWidget(widgetId: string) {
 }
 
 function configureWidget(widget: Widget) {
-  configWidget.value = { ...widget, props: { ...widget.props } }
+  configWidget.value = configDraft(widget, tr)
   showConfigModal.value = true
 }
 
@@ -428,7 +431,8 @@ function saveWidgetConfig() {
 
   const index = widgets.value.findIndex(w => w.id === configWidget.value!.id)
   if (index !== -1) {
-    widgets.value[index] = { ...configWidget.value, refreshKey: (widgets.value[index].refreshKey || 0) + 1 }
+    const original = widgets.value[index]
+    widgets.value[index] = { ...applyConfig(original, configWidget.value, tr), refreshKey: (original.refreshKey || 0) + 1 }
     isDirty.value = true
   }
   showConfigModal.value = false
@@ -442,15 +446,6 @@ function getWidgetComponent(type: string) {
 function getWidgetIcon(type: string): IconName {
   const def = availableWidgetDefs.value.find(w => w.type === type)
   return def?.icon || 'puzzle-piece'
-}
-
-function syncConfigHeight() {
-  const h = configWidget.value?.props.height
-  if (configWidget.value && typeof h === 'number') configWidget.value.height = clampHeight(h)
-}
-
-function hasHeightConfig(type: string): boolean {
-  return ['heatmap', 'workflow', 'agents', 'architecture'].includes(type)
 }
 
 // ============================================================================

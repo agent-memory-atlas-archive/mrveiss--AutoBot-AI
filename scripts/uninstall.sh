@@ -53,7 +53,7 @@ readonly ADMIN_MARKERS=("Emergency Admin User (fallback access)" "AutoBot Backup
 # --- What AutoBot's Ansible roles deploy (checked by the #18653 guard) -----------------------
 readonly UNIT_GLOBS=("autobot-*.service" "autobot-*.timer" "autobot-*.socket")
 readonly UNITS=(
-    slm.target slm-agent.service slm-admin-ui.service node_exporter.service prometheus.service alertmanager.service
+    slm.target slm-agent.service slm-admin-ui.service node_exporter.service prometheus.service
     loki.service promtail.service redis_exporter.service redisinsight.service
     vnc-server.service vnc-websockify.service redis-stack-server.service
 )
@@ -94,13 +94,19 @@ readonly OPT_NESTED_DATA=(
     autobot-db-stack/chromadb autobot-db-stack/.env autobot-npu-worker/.env
 )
 readonly PATHS=(
-    /etc/slm-agent /var/log/autobot /opt/node_exporter ${ALERTMANAGER_DIR} /etc/alertmanager /var/lib/alertmanager
+    /etc/slm-agent /var/log/autobot /opt/node_exporter
     /etc/dnsmasq.d/autobot.conf /etc/logrotate.d/autobot /etc/logrotate.d/redis-stack
     /etc/rsyslog.d/30-autobot.conf /etc/rsyslog.d/50-autobot.conf /etc/ssl/slm
     /var/www/slm-admin /var/www/autobot-slm /etc/nginx/sites-available/slm
     /etc/tmpfiles.d/autobot-slm-self-update.conf /tmp/.autobot_detected_ip
     /usr/local/bin/autobot-admin /usr/local/bin/autobot-time-sync /usr/local/bin/autobot-pg-backup.sh
     /usr/local/bin/check-time-sync.sh /var/lib/systemd/timers/stamp-autobot-pg-backup.timer
+)
+# Alertmanager's: a host may run its own on these same paths. Removed only when the install
+# record says the monitoring role created them (created_path=, written BEFORE it creates each,
+# and only for a path that was absent); an unrecorded one is kept and named (#18556).
+readonly RECORDED_PATHS=(
+    "${ALERTMANAGER_DIR}" /etc/alertmanager /var/lib/alertmanager /etc/systemd/system/alertmanager.service
 )
 readonly PATH_GLOBS=(
     "/etc/nginx/sites-available/autobot-*" "/etc/nginx/sites-enabled/autobot-*"
@@ -216,6 +222,7 @@ plan_units() {
     for unit in "${UNITS[@]}"; do
         [[ -e "/etc/systemd/system/${unit}" ]] && echo "${unit}"
     done
+    recorded_paths yes | sed -n 's|^/etc/systemd/system/||p'
     # No matching unit makes systemctl exit 1; that is an empty answer, not a failure.
     { systemctl list-unit-files --no-legend "${UNIT_GLOBS[@]}" 2>/dev/null || true; } | awk '{print $1}'
     return 0
@@ -254,7 +261,17 @@ plan_apt_sources() {
     done
     existing /usr/share/keyrings/grafana.gpg /usr/share/keyrings/grafana.key
     [[ "${POSTGRES_DECISION}" == "remove" ]] && existing /usr/share/keyrings/pgdg.asc
-    record_values apt_source | grep -qx nodesource && existing /usr/share/keyrings/nodesource.gpg
+    record_values apt_source | grep -x nodesource >/dev/null && existing /usr/share/keyrings/nodesource.gpg
+    return 0
+}
+
+recorded_paths() {  # recorded_paths <yes|no>: RECORDED_PATHS on this host the record does / does not list
+    local path listed
+    for path in $(existing "${RECORDED_PATHS[@]}"); do
+        listed=no
+        record_values created_path | grep -xF -- "${path}" >/dev/null && listed=yes  # no -q: an early exit SIGPIPEs sed under pipefail
+        [[ "${listed}" == "$1" ]] && echo "${path}"
+    done
     return 0
 }
 
@@ -325,6 +342,7 @@ plan_opt_kept() {  # what a default uninstall leaves in /opt/autobot
 
 plan_paths() {
     existing "${PATHS[@]}" "${PATH_GLOBS[@]}" "${UNIT_DROPINS[@]}"
+    recorded_paths yes | grep -v '^/etc/systemd/system/' || true  # the unit goes with remove_units
     plan_opt_code
     ${PURGE_DATA} && existing "${DATA_PATHS[@]}"
     ${PURGE_SHARED} && existing "${SHARED_PATHS[@]}"
@@ -367,6 +385,7 @@ print_plan() {
         log "  KEPT in ${AUTOBOT_BASE} (data, or not AutoBot code): $(plan_opt_kept | tr '\n' ' ')"
         log "  code removed AROUND the data kept inside: $(plan_opt_partial | tr '\n' ' ')"
     fi
+    log "  KEPT (no record that AutoBot created them): $(recorded_paths no | tr '\n' ' ')"
     ${PURGE_SHARED} || log "  KEPT (shared): ${SHARED_PACKAGES[*]} and their data -- add --purge-shared to remove"
     [[ -f "${INSTALL_RECORD}" ]] || log "  (no install record at ${INSTALL_RECORD}: no account, recorded package or recorded apt source is removed)"
     log "Never removed: general-purpose packages (KEPT_PACKAGES in this script), ${KEPT_UNITS[*]}, apt sources ${KEPT_APT_SOURCES[*]}, role service accounts."

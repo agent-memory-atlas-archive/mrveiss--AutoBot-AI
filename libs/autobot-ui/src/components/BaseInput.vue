@@ -11,10 +11,14 @@
       come from the consuming app (the kit has no i18n catalog for it);
     - accessible by default: a real <label for> tied to a generated id,
       aria-invalid on error, aria-describedby pointing at the helper/error text.
-    - attrs (class, style, data-*) land on the outer wrapper.
+    - class, style and data-* attrs land on the outer wrapper; every other attr
+      (aria-label, aria-labelledby, name, maxlength, inputmode, listeners) lands on
+      the native <input>, so a field with no visible label can still be named.
 -->
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue'
+import { computed, ref, useAttrs, useId } from 'vue'
+
+defineOptions({ inheritAttrs: false })
 
 export type InputSize = 'sm' | 'md' | 'lg'
 export type InputType = 'text' | 'email' | 'password' | 'search' | 'tel' | 'url'
@@ -55,6 +59,12 @@ const emit = defineEmits<{
   clear: []
 }>()
 
+const attrs = useAttrs()
+const WRAPPER_ATTR = /^(class|style|data-.+)$/
+// Plain functions, not computed: attrs is not reactive, the render re-reads it on every update.
+const pickAttrs = (onWrapper: boolean) =>
+  Object.fromEntries(Object.entries(attrs).filter(([key]) => WRAPPER_ATTR.test(key) === onWrapper))
+
 const uid = useId()
 const inputId = computed(() => props.id || `${uid}-input`)
 const helperId = `${uid}-helper`
@@ -81,7 +91,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), blur: () => inputRef.value?
 </script>
 
 <template>
-  <div class="aui-input" :class="`aui-input--${size}`">
+  <div class="aui-input" :class="`aui-input--${size}`" v-bind="pickAttrs(true)">
     <label v-if="label" :for="inputId" class="aui-input__label">
       {{ label }}<span v-if="required" class="aui-input__asterisk" aria-hidden="true">*</span>
     </label>
@@ -92,6 +102,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), blur: () => inputRef.value?
     >
       <span v-if="$slots.prefix" class="aui-input__affix"><slot name="prefix" /></span>
       <input
+        v-bind="pickAttrs(false)"
         :id="inputId"
         ref="inputRef"
         class="aui-input__field"

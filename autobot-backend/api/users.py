@@ -274,6 +274,15 @@ def _reject_duplicate_ids(layout: DashboardLayout) -> None:
             raise HTTPException(status_code=422, detail="Duplicate widget id in dashboard")
 
 
+async def _layout_store():
+    """The Redis client that holds layouts; 503 when Redis is disabled or its breaker is open."""
+    client = await get_async_redis_client(database=RedisDatabase.MAIN)
+    if client is None:
+        logger.warning("Dashboard layout store unavailable: no Redis client")
+        raise HTTPException(status_code=503, detail="Dashboard layout storage unavailable")
+    return client
+
+
 def _layout_response(page: str, layout: DashboardLayout, message: str) -> DataResponse[DashboardLayoutData]:
     return DataResponse(success=True, data=DashboardLayoutData(page=page, layout=layout), message=message)
 
@@ -285,7 +294,7 @@ async def get_dashboard_layout(
 ) -> DataResponse[DashboardLayoutData]:
     """Return the caller's stored layout for ``page``; no dashboards when none is stored."""
     user_id = _require_user_and_page(current_user, page)
-    redis_client = await get_async_redis_client(database=RedisDatabase.MAIN)
+    redis_client = await _layout_store()
     raw = await redis_client.get(_layout_key(user_id, page))
     if raw is None:
         return _layout_response(page, DashboardLayout(), "No stored layout; defaults apply")
@@ -308,7 +317,7 @@ async def put_dashboard_layout(
     payload = layout.model_dump_json()
     if len(payload.encode("utf-8")) > MAX_LAYOUT_BYTES:
         raise HTTPException(status_code=413, detail="Dashboard layout too large")
-    redis_client = await get_async_redis_client(database=RedisDatabase.MAIN)
+    redis_client = await _layout_store()
     await redis_client.set(_layout_key(user_id, page), payload)
     return _layout_response(page, layout, "Dashboard layout saved")
 
@@ -320,6 +329,6 @@ async def reset_dashboard_layout(
 ) -> DataResponse[DashboardLayoutData]:
     """Drop the caller's stored layout for ``page`` so the defaults apply again."""
     user_id = _require_user_and_page(current_user, page)
-    redis_client = await get_async_redis_client(database=RedisDatabase.MAIN)
+    redis_client = await _layout_store()
     await redis_client.delete(_layout_key(user_id, page))
     return _layout_response(page, DashboardLayout(), "Dashboard layout reset to defaults")

@@ -20,6 +20,7 @@ export function displayText(stored: string, t: (key: string) => string): string 
   return stored.startsWith(I18N_PREFIX) ? t(stored.slice(I18N_PREFIX.length)) : stored
 }
 
+export const GRID_COLUMNS = 12
 export const WIDGET_SPANS = [4, 6, 8, 12] as const
 export type WidgetSpan = (typeof WIDGET_SPANS)[number]
 export const HEIGHT_MIN = 160
@@ -83,7 +84,7 @@ interface LegacyWidget {
   width?: number
   height?: number
   props?: Record<string, unknown>
-  refreshInterval?: number
+  refreshInterval?: unknown // an unvalidated <input type="number">: may be '', negative or fractional
   y?: number
   x?: number
 }
@@ -96,13 +97,23 @@ interface LegacyDashboard {
   updatedAt?: number
 }
 
-// The server's limits (schemas_users_dashboard_layouts.py). Legacy localStorage data predates
-// them, so the mapper fits it to them: one out-of-range value would 422 every load.
-const MAX_TEXT = 120
+// The server's limits (schemas_users_dashboard_layouts.py), mirrored here once: the generated
+// contract carries the shapes but not the bounds. Legacy localStorage data predates them, so the
+// mapper fits it to them, and the view fits user input: one out-of-range value 422s every save.
+export const MAX_TEXT = 120
+export const MAX_DASHBOARDS = 16
+export const MAX_WIDGETS = 48
+export const REFRESH_INTERVAL_MAX = 86_400_000
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 const DEFAULT_NAME_KEY = i18nRef('views.customDashboard.myDashboard')
 
-const fitText = (s: unknown): string => String(s ?? '').trim().slice(0, MAX_TEXT)
+export const fitText = (s: unknown): string => String(s ?? '').trim().slice(0, MAX_TEXT)
+
+/** A server-valid refresh interval: a whole number in 0..REFRESH_INTERVAL_MAX, or null when unset. */
+export function fitRefreshInterval(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null
+  return Math.min(REFRESH_INTERVAL_MAX, Math.max(0, Math.round(v)))
+}
 
 /** A server-valid id: invalid characters become '-', and a fallback is used when nothing is left. */
 export function fitId(raw: unknown, fallback: string): string {
@@ -129,19 +140,20 @@ function fromLegacyWidget(w: LegacyWidget, i: number): DashboardWidget {
     span: spanFromLegacyWidth(w.width ?? 1),
     height: clampHeight(w.height ?? 320),
     props: w.props ?? {},
-    refreshInterval: w.refreshInterval ?? null,
+    refreshInterval: fitRefreshInterval(w.refreshInterval),
   }
 }
 
 /** Legacy localStorage dashboards → server layout, widgets ordered by (y, x). */
 export function fromLegacyDashboards(raw: LegacyDashboard[]): DashboardLayout {
   const dashboards = uniqueIds(
-    raw.map((d, i) => ({
+    raw.slice(0, MAX_DASHBOARDS).map((d, i) => ({
       id: fitId(d.id, `dashboard-${i + 1}`),
       name: fitText(d.name) || DEFAULT_NAME_KEY,
       widgets: uniqueIds(
         [...(d.widgets ?? [])]
           .sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0))
+          .slice(0, MAX_WIDGETS)
           .map((w, i) => fromLegacyWidget(w, i)),
       ),
       createdAt: d.createdAt ?? 0,

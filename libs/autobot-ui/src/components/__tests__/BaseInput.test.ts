@@ -173,6 +173,30 @@ describe('BaseInput', () => {
     expect(wrapper.get('input').classes()).not.toContain('mine')
   })
 
+  it('names a label-less field through aria-label or aria-labelledby on the <input>', () => {
+    // fails if the accessible name lands on the wrapper div and the native input stays unnamed
+    const named = mount(BaseInput, { attrs: { 'aria-label': 'Search', 'data-testid': 'search' } })
+    expect(named.get('input').attributes('aria-label')).toBe('Search')
+    expect(named.attributes('aria-label')).toBeUndefined()
+    const byRef = mount(BaseInput, { attrs: { 'aria-labelledby': 'heading-1' } })
+    expect(byRef.get('input').attributes('aria-labelledby')).toBe('heading-1')
+    // Contrast: data-* stays on the wrapper, with class and style.
+    expect(named.attributes('data-testid')).toBe('search')
+    expect(named.get('input').attributes('data-testid')).toBeUndefined()
+  })
+
+  it('forwards native input attrs and listeners to the <input>', async () => {
+    // fails if name/maxlength/inputmode or a focus listener stop reaching the field
+    let focused = 0
+    const wrapper = mount(BaseInput, {
+      attrs: { name: 'q', maxlength: '20', inputmode: 'search', onFocus: () => focused++ },
+    })
+    const input = wrapper.get('input')
+    expect([input.attributes('name'), input.attributes('maxlength'), input.attributes('inputmode')]).toEqual(['q', '20', 'search'])
+    await input.trigger('focus')
+    expect(focused).toBe(1)
+  })
+
   it('style block uses no shadow and no raw colour', () => {
     // jsdom does not apply SFC <style>, so the rules are read from the source.
     // fails if a box-shadow or a literal colour sneaks past the token contract

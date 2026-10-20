@@ -20,6 +20,7 @@ points at lands instead of rotting into a licence for a file that is gone.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Iterable
@@ -159,12 +160,17 @@ def test_contrast_an_allow_listed_path_that_vanished_fails() -> None:
     assert any(v.startswith(f"{gone}: allow-listed") for v in _violations([p for p in _CLEAN if p != gone]))
 
 
+def _git_env() -> dict[str, str]:
+    """Hermetic: no global or system config, so a global ignore rule cannot untrack a file here."""
+    return {**scrubbed_git_env(), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+
+
 def _git(root: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=scrubbed_git_env())
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=_git_env())
 
 
 def _tracked_tree(root: Path, files: dict[str, bytes]) -> None:
-    subprocess.run(["git", "init", "-q", str(root)], check=True, env=scrubbed_git_env())
+    subprocess.run(["git", "init", "-q", str(root)], check=True, env=_git_env())
     for rel, body in files.items():
         target = root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -182,3 +188,15 @@ def test_contrast_a_drifted_readded_copy_in_a_real_git_tree_fails(tmp_path: Path
     assert _violations(_population(clean)) == []
     found = _violations(_population(dirty))
     assert [v for v in found if v.startswith(f"{fork}: not an allowed path")]
+
+
+def test_a_global_ignore_rule_cannot_untrack_a_file_in_the_throwaway_tree(tmp_path: Path, monkeypatch) -> None:
+    """The helpers ignore the ambient git config: a global `core.excludesFile` naming a guarded file
+    would otherwise leave it untracked, and the end-to-end test above would pass for the wrong reason."""
+    ignore, config = tmp_path / "ignore", tmp_path / "gitconfig"
+    ignore.write_text("prometheus.yml\n", encoding="utf-8")
+    config.write_text(f"[core]\n\texcludesFile = {ignore}\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    fork = "autobot-infrastructure/shared/config/prometheus/prometheus.yml"
+    _tracked_tree(tmp_path / "repo", {fork: b"x\n"})
+    assert fork in _population(tmp_path / "repo")

@@ -5,7 +5,11 @@ import { describe, it, expect } from 'vitest'
 import {
   HEIGHT_MAX,
   HEIGHT_MIN,
+  MAX_DASHBOARDS,
+  MAX_WIDGETS,
+  REFRESH_INTERVAL_MAX,
   clampHeight,
+  fitRefreshInterval,
   displayText,
   i18nRef,
   fitId,
@@ -100,6 +104,33 @@ describe('dashboardLayoutModel', () => {
     expect(first.widgets[0].title).toHaveLength(120)
     expect(first.widgets.map((w) => w.id)).toEqual(['a-b', 'a-b-2'])
     expect([first.id, second.id]).toEqual(['my-dash-', 'my-dash--2'])
+  })
+
+  it('fits legacy dashboard and widget counts to the server maxima', () => {
+    // fails if a legacy store with too many dashboards or widgets is migrated whole (a 422 on every save)
+    const many = (n: number, p: string) => Array.from({ length: n }, (_, i) => ({ id: `${p}${i}`, type: 'system', name: p }))
+    const over = fromLegacyDashboards([{ id: 'd', name: 'D', widgets: many(MAX_WIDGETS + 3, 'w') }, ...many(MAX_DASHBOARDS + 2, 'x')])
+    expect(over.dashboards).toHaveLength(MAX_DASHBOARDS)
+    expect(over.dashboards[0].widgets).toHaveLength(MAX_WIDGETS)
+    // Contrast: a store within the limits keeps every dashboard and widget.
+    const within = fromLegacyDashboards([{ id: 'd', name: 'D', widgets: many(3, 'w') }, ...many(2, 'x')])
+    expect(within.dashboards).toHaveLength(3)
+    expect(within.dashboards[0].widgets).toHaveLength(3)
+  })
+
+  it.each([
+    [-5, 0],
+    [1500.6, 1501],
+    [REFRESH_INTERVAL_MAX * 2, REFRESH_INTERVAL_MAX],
+    ['', null],
+    [Number.NaN, null],
+    [undefined, null],
+    [30000, 30000],
+  ])('fits a refresh interval %s to %s', (raw, fitted) => {
+    // fails if a negative, fractional, oversized or blank interval reaches the server's int 0..max field
+    expect(fitRefreshInterval(raw)).toBe(fitted)
+    expect(fromLegacyDashboards([{ id: 'd', name: 'D', widgets: [{ id: 'w', type: 'system', refreshInterval: raw }] }])
+      .dashboards[0].widgets[0].refreshInterval).toBe(fitted)
   })
 
   it('fitId keeps a valid id and falls back when nothing usable is left', () => {

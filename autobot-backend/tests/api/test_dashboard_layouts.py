@@ -132,3 +132,23 @@ async def test_a_token_without_a_user_id_is_401_on_every_endpoint(call):
         await _call(fn, *args, client=client)
     assert err.value.status_code == 401 and store == {}
     client.get.assert_not_awaited()
+
+
+_ENDPOINTS = [
+    lambda: (get_dashboard_layout, ("home", MagicMock(), _ALICE)),
+    lambda: (put_dashboard_layout, ("home", _layout("a"), MagicMock(), _ALICE)),
+    lambda: (reset_dashboard_layout, ("home", MagicMock(), _ALICE)),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("call", _ENDPOINTS, ids=["get", "put", "delete"])
+async def test_no_redis_client_is_503_on_every_endpoint(call):
+    """get_async_redis_client returns None when Redis is disabled or its breaker is open (#18242 review)."""
+    fn, args = call()
+    with pytest.raises(HTTPException) as err:
+        await _call(fn, *args, client=None)
+    assert err.value.status_code == 503
+    # Contrast: the same call with a client answers normally.
+    client, _ = _fake_redis()
+    assert (await _call(fn, *args, client=client)).success is True

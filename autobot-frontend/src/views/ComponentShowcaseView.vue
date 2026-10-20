@@ -61,15 +61,16 @@
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.sizes') }}</h4>
           <div class="input-stack">
-            <BaseInput v-model="sampleText" size="sm" :placeholder="$t('views.componentShowcase.smallInput')" />
-            <BaseInput v-model="sampleText" size="md" :placeholder="$t('views.componentShowcase.mediumInput')" />
-            <BaseInput v-model="sampleText" size="lg" :placeholder="$t('views.componentShowcase.largeInput')" />
+            <BaseInput v-model="sampleText" size="sm" :placeholder="$t('views.componentShowcase.smallInput')" :aria-label="$t('views.componentShowcase.smallInput')" />
+            <BaseInput v-model="sampleText" size="md" :placeholder="$t('views.componentShowcase.mediumInput')" :aria-label="$t('views.componentShowcase.mediumInput')" />
+            <BaseInput v-model="sampleText" size="lg" :placeholder="$t('views.componentShowcase.largeInput')" :aria-label="$t('views.componentShowcase.largeInput')" />
           </div>
 
           <h4 class="section-heading">{{ $t('views.componentShowcase.clearable') }}</h4>
           <BaseInput
             v-model="clearableText"
             :placeholder="$t('views.componentShowcase.typeSomething')"
+            :aria-label="$t('views.componentShowcase.clearable')"
             clearable
             :clear-label="$t('base.input.clearInput')"
           />
@@ -183,6 +184,7 @@
                 <BaseInput
                   v-model="tableSearch"
                   :placeholder="$t('views.componentShowcase.searchPlaceholder')"
+                  :aria-label="$t('views.componentShowcase.searchPlaceholder')"
                   size="sm"
                   style="max-width: 300px;"
                 />
