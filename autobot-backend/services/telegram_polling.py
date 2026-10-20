@@ -94,8 +94,13 @@ async def _call_bot_api(service: TelegramBotService, method: str, payload: Dict[
     if not service.bot_token or not service.base_url:
         raise ValueError("Telegram bot token not configured")
     url = f"{service.base_url}/{method}"
-    async with get_http_client().tracked_request("POST", url, json=payload, **kwargs) as response:
-        body = await response.json()
+    try:
+        async with get_http_client().tracked_request("POST", url, json=payload, **kwargs) as response:
+            body = await response.json()
+    except aiohttp.ClientError as exc:
+        # aiohttp errors carry the request URL, and the URL carries the bot token;
+        # the lease loop logs whatever propagates, so only the type leaves here.
+        raise RuntimeError(f"Telegram {method} request failed: {type(exc).__name__}") from None
     if not body.get("ok"):
         raise RuntimeError(f"Telegram {method} failed: {body.get('description')}")
     return body.get("result")

@@ -150,3 +150,27 @@ class TestSharedRoutingPath:
 
         assert [u["update_id"] for _, u in seen] == [3, 4]
         assert all(a is app for a, _ in seen)
+
+
+class TestTokenNeverLogged:
+    @pytest.mark.asyncio
+    async def test_transport_error_drops_the_tokenised_url(self, monkeypatch):
+        """aiohttp errors embed the URL, which embeds the token -- it must not propagate."""
+        import contextlib
+
+        import aiohttp
+
+        token = "123:SECRET"
+
+        @contextlib.asynccontextmanager
+        async def boom(method, url, **kwargs):
+            raise aiohttp.InvalidURL(url)
+            yield  # pragma: no cover
+
+        monkeypatch.setattr(tp, "get_http_client", lambda: SimpleNamespace(tracked_request=boom))
+        service = tp.TelegramBotService(bot_token=token)
+
+        with pytest.raises(RuntimeError) as err:
+            await tp.fetch_updates(service, 0)
+        assert token not in str(err.value)
+        assert err.value.__cause__ is None
