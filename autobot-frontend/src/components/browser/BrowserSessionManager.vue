@@ -519,15 +519,15 @@ export default {
 }
 
 .session-card.status-active {
-  border-left: 4px solid #10b981;
+  border-left: 4px solid var(--color-success);
 }
 
 .session-card.status-idle {
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--color-warning);
 }
 
 .session-card.status-closed {
-  border-left: 4px solid #6b7280;
+  border-left: 4px solid var(--text-muted);
   opacity: 0.7;
 }
 

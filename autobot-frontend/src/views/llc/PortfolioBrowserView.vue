@@ -262,7 +262,7 @@ onMounted(loadPortfolios)
 }
 
 .entity-card:hover {
-  border-color: var(--color-accent, #c4651a);
+  border-color: var(--color-accent);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
