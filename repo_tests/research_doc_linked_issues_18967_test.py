@@ -39,8 +39,8 @@ _MIN_DOCS = 50
 
 
 def _research_docs() -> list[Path]:
-    docs_dir = repo_root() / "docs" / "research"
-    return sorted(p for p in docs_dir.glob("*.md") if p.name != "_index.md")
+    """Run on docs-only PRs by `docs-liquid-tags.yml`, not the python filter (#17930 trade)."""
+    return sorted(p for p in repo_root().glob("docs/research/*.md") if p.name != "_index.md")
 
 
 def section_body(text: str) -> str | None:

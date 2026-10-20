@@ -259,4 +259,10 @@ GLOB_RUN_BY_A_DEDICATED_WORKFLOW: dict[str, tuple[set[str], str, str]] = {
         "in the python filter would instead spend the twelve-shard suite on every documentation "
         "edit, which is the trade this record exists to keep visible (owner decision, #17930)",
     ),
+    "docs/research/*.md": (
+        {"repo_tests/research_doc_linked_issues_18967_test.py"},
+        ".github/workflows/docs-liquid-tags.yml",
+        "the research-doc linking guard rides the same docs-gated job as the Liquid guard, for the "
+        "same reason: a docs-only PR must run it without spending the twelve-shard suite (#18967)",
+    ),
 }
