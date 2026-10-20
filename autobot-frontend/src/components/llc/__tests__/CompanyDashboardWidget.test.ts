@@ -45,6 +45,12 @@ describe('CompanyDashboardWidget', () => {
     ])
   })
 
+  it('labels each run status with its i18n key, never the raw status value', () => {
+    const runs = (['done', 'running', 'failed'] as const).map((status, i) => ({ agent_id: 'a', agent_name: 'a', run_id: `r${i}`, status, started_at: '', duration_ms: 1500 }))
+    const labels = render('company-runs', { runs }).findAll('.aui-badge').map((b) => b.text())
+    expect(labels).toEqual(['llc.dashboard.runStatus.done', 'llc.dashboard.runStatus.running', 'llc.dashboard.runStatus.failed'])
+  })
+
   it('renders only the section its type names', () => {
     const text = render('company-activity').text()
     expect(text).toContain('llc.dashboard.liveActivity')

@@ -128,7 +128,9 @@ function onWidgetsChange(next: CompanyWidget[]) {
 }
 
 async function saveLayout() {
-  if (await save(withCompanyWidgets(layout.value, widgets.value))) {
+  const saved = widgets.value
+  // An edit made while the PUT was in flight replaced `widgets` (onWidgetsChange assigns a new array): keep it dirty.
+  if ((await save(withCompanyWidgets(layout.value, saved))) && widgets.value === saved) {
     dirty.value = false
     editing.value = false
   }

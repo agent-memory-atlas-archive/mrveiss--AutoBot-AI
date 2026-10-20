@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import InvalidRequestError, MultipleResultsFound, NoResultFound
@@ -209,6 +210,48 @@ async def test_expunge_is_synchronous_and_drops_the_tracked_row() -> None:
     assert await s.get(model, 3) is obj  # tracked first, so the test can't pass if expunge is a no-op
     s.expunge(obj)
     assert await s.get(model, 3) is None
+
+
+_CUSTOM_KEY = (SimpleNamespace, "autobot-pg-backup")
+
+
+async def _assert_detached(s: FakeAsyncSession, row: object) -> None:
+    """A detached row is gone from the identity map and refresh/delete raise like the real session."""
+    assert await s.get(*_CUSTOM_KEY) is None and _CUSTOM_KEY not in s.rows
+    with pytest.raises(InvalidRequestError):
+        await s.refresh(row)
+    with pytest.raises(InvalidRequestError):
+        await s.delete(row)
+
+
+@pytest.mark.asyncio
+async def test_delete_then_flush_removes_a_row_seeded_under_a_custom_key() -> None:
+    """Removal is by identity: a row seeded via ``rows=`` under a non-``(type, id)`` key still goes."""
+    row = SimpleNamespace(name="autobot-pg-backup")
+    s = FakeAsyncSession(rows={_CUSTOM_KEY: row})
+    assert await s.get(*_CUSTOM_KEY) is row  # seeded first, so a no-op removal can't pass
+    await s.delete(row)
+    await s.flush()
+    await _assert_detached(s, row)
+
+
+@pytest.mark.asyncio
+async def test_expunge_removes_a_row_seeded_under_a_custom_key() -> None:
+    row = SimpleNamespace(name="autobot-pg-backup")
+    s = FakeAsyncSession(rows={_CUSTOM_KEY: row})
+    assert await s.get(*_CUSTOM_KEY) is row
+    s.expunge(row)
+    await _assert_detached(s, row)
+
+
+@pytest.mark.asyncio
+async def test_rollback_restores_a_custom_key_row_its_flush_deleted() -> None:
+    row = SimpleNamespace(name="autobot-pg-backup")
+    s = FakeAsyncSession(rows={_CUSTOM_KEY: row})
+    await s.delete(row)
+    await s.flush()
+    await s.rollback()
+    assert await s.get(*_CUSTOM_KEY) is row
 
 
 @pytest.mark.asyncio

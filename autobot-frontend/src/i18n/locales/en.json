@@ -8245,7 +8245,12 @@
       "liveActivity": "Live Activity",
       "system": "system",
       "waitingActivity": "Waiting for activity…",
-      "noApprovals": "No pending approvals"
+      "noApprovals": "No pending approvals",
+      "runStatus": {
+        "done": "Done",
+        "running": "Running",
+        "failed": "Failed"
+      }
     },
     "cost": {
       "title": "Cost Dashboard",

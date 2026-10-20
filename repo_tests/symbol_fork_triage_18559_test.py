@@ -50,6 +50,20 @@ def test_no_triage_entry_names_a_cluster_that_left_the_baseline() -> None:
     assert not stale, f"triage entries for clusters no longer in the baseline (delete them): {stale}"
 
 
+def _stale_exemptions(exempt: frozenset[str], baseline: set[str]) -> list[str]:
+    """Exempt names whose cluster left the baseline: the exemption may only shrink with it."""
+    return sorted(exempt - baseline)
+
+
+def test_every_pre_18559_exemption_is_still_in_the_baseline() -> None:
+    stale = _stale_exemptions(PRE_18559_CLUSTERS, _baseline())
+    assert not stale, f"PRE_18559_CLUSTERS names clusters no longer in the baseline (remove them): {stale}"
+
+
+def test_contrast_a_stale_exemption_is_reported() -> None:
+    assert _stale_exemptions(PRE_18559_CLUSTERS | {"GoneCluster"}, _baseline()) == ["GoneCluster"]
+
+
 def test_a_triage_entry_never_covers_a_pre_18559_cluster() -> None:
     assert not sorted(set(_triage()) & PRE_18559_CLUSTERS)
 

@@ -17,6 +17,11 @@ defineProps<{ type: CompanyWidgetType; data: CompanyDashboardData }>()
 const emit = defineEmits<{ approve: [approvalId: string] }>()
 
 const RUN_VARIANT: Record<RunDisplayStatus, BadgeVariant> = { done: 'success', running: 'info', failed: 'error' }
+const RUN_LABEL_KEY: Record<RunDisplayStatus, string> = {
+  done: 'llc.dashboard.runStatus.done',
+  running: 'llc.dashboard.runStatus.running',
+  failed: 'llc.dashboard.runStatus.failed',
+}
 
 const budgetPercent = (b: BudgetInfo) =>
   b.total > 0 ? Math.min(100, Math.round((b.spent / b.total) * 100)) : 0
@@ -115,7 +120,7 @@ function formatTime(ts: string): string {
           <tbody class="divide-y divide-autobot-border bg-autobot-bg-card">
             <tr v-for="run in data.runs" :key="run.run_id">
               <td class="px-4 py-2 font-medium text-autobot-text-primary">{{ run.agent_name }}</td>
-              <td class="px-4 py-2"><BaseBadge size="sm" :rounded="false" :variant="RUN_VARIANT[run.status]">{{ run.status }}</BaseBadge></td>
+              <td class="px-4 py-2"><BaseBadge size="sm" :rounded="false" :variant="RUN_VARIANT[run.status]">{{ $t(RUN_LABEL_KEY[run.status]) }}</BaseBadge></td>
               <td class="px-4 py-2 text-autobot-text-muted">{{ formatTime(run.started_at) }}</td>
               <td class="px-4 py-2 text-autobot-text-muted">{{ formatDuration(run.duration_ms) }}</td>
             </tr>

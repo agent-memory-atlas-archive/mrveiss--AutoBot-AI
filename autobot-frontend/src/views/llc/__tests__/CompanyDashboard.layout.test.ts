@@ -90,6 +90,20 @@ describe('CompanyDashboard layout', () => {
     expect(gridWidgets(w)).toEqual(moved)
   })
 
+  it('stays dirty when the user edits again while the save is in flight', async () => {
+    let resolvePut: (v: unknown) => void = () => {}
+    http.put.mockReturnValue(new Promise((r) => { resolvePut = r }))
+    const w = await mountView()
+    await edit(w)
+    await button(w, K.save)!.trigger('click')
+    const later = await edit(w) // lands while the PUT is pending
+    resolvePut({})
+    await flushPromises()
+    expect(http.put).toHaveBeenCalledTimes(1)
+    expect(button(w, K.save)).toBeDefined() // the later edit is still unsaved
+    expect(gridWidgets(w)).toEqual(later)
+  })
+
   it('offers no working Edit or Save until the layout has loaded', async () => {
     http.get.mockReturnValue(new Promise(() => {})) // load never settles
     const w = await mountView()
