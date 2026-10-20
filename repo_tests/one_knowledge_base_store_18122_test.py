@@ -283,11 +283,10 @@ def _writes_projection(node: ast.AST) -> bool:
     )
 
 
+#: Fixture shape for the matchers below; the real-module structural checks (creator hands
+#: to `_accept_new_kb`, only the publisher assigns the instance, in-place initialize under
+#: the lock) live in `one_knowledge_base_creator_shape_18122_test.py` (#18122 S1).
 _CREATORS = ("_create_new_knowledge_base", "get_knowledge_base_async")
-#: S1 of #18122: `get_knowledge_base_async` no longer constructs; it delegates to
-#: `_create_under_lock`; `_create_new_knowledge_base` builds and hands the instance to
-#: `_accept_new_kb`, the one function that publishes it.
-#: `_CREATORS` stays as the fixtures' shape (they still model two creators).
 _REAL_CREATORS = ("_accept_new_kb",)
 
 #: The real shape: both creators delegate, only the helper writes the global.
