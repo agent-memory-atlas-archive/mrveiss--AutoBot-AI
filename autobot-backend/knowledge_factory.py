@@ -179,9 +179,9 @@ async def _create_under_lock(app: "FastAPI | None" = None, force_refresh: bool =
         remaining = 0.0 if force_refresh else _cooldown_remaining()
         if remaining > 0.0:
             logger.warning("KB init cooldown active — skipping retry (%ds remaining)", int(remaining))
-            # INTERIM contract (owner D2): None, not an error. #18122 S2 makes
-            # knowledge/_composed.get_knowledge_base a facade that raises RuntimeError on
-            # None, which is how the error reaches the llc/memory/mcp callers.
+            # Contract (owner D2): None, not an error here. knowledge/_composed.
+            # get_knowledge_base raises RuntimeError on None, which is how the error
+            # reaches the llc/memory/mcp callers.
             return None
         return await _create_new_knowledge_base(app)
 
@@ -256,3 +256,13 @@ async def get_knowledge_base_async() -> "KnowledgeBase" | None:  # noqa: F821
     except Exception as e:
         logger.error("❌ Failed to create knowledge base singleton: %s", e)
         return None
+
+
+def reset_knowledge_base() -> None:
+    """Clear the singleton through the publisher; the next access creates anew (#18122).
+
+    Synchronous and lock-free like the old ``_composed`` reset (Issue #613): it only
+    rebinds the global. The retry cooldown is left as it was.
+    """
+    _publish_knowledge_base(None)
+    logger.info("KnowledgeBase singleton instance reset")
