@@ -3800,6 +3800,34 @@ export interface paths {
         patch: operations["update_user_preferences_api_users_me_preferences_patch"];
         trace?: never;
     };
+    "/api/users/me/dashboard-layouts/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Dashboard Layout
+         * @description Return the caller's stored layout for ``page``; no dashboards when none is stored.
+         */
+        get: operations["get_dashboard_layout_api_users_me_dashboard_layouts__page__get"];
+        /**
+         * Put Dashboard Layout
+         * @description Replace the caller's layout for ``page``.
+         */
+        put: operations["put_dashboard_layout_api_users_me_dashboard_layouts__page__put"];
+        post?: never;
+        /**
+         * Reset Dashboard Layout
+         * @description Drop the caller's stored layout for ``page`` so the defaults apply again.
+         */
+        delete: operations["reset_dashboard_layout_api_users_me_dashboard_layouts__page__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/devices/pair-qr": {
         parameters: {
             query?: never;
@@ -9262,64 +9290,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/facts/{fact_id}/share": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Share Fact
-         * @description Share a fact with additional users (Issue #688).
-         *
-         *     Args:
-         *         fact_id: Fact ID to share
-         *         request_body: Share request with user_ids
-         *         request: FastAPI request
-         *         _: Admin permission check (required)
-         *
-         *     Returns:
-         *         Success response with updated sharing info
-         */
-        post: operations["share_fact_api_knowledge_base_facts__fact_id__share_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge_base/facts/{fact_id}/share/{user_id_to_remove}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Unshare Fact
-         * @description Remove user from fact sharing list (Issue #688).
-         *
-         *     Args:
-         *         fact_id: Fact ID to unshare
-         *         user_id_to_remove: User ID to remove from sharing
-         *         request: FastAPI request
-         *         _: Admin permission check (required)
-         *
-         *     Returns:
-         *         Success response with updated sharing info
-         */
-        delete: operations["unshare_fact_api_knowledge_base_facts__fact_id__share__user_id_to_remove__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/knowledge_base/facts/{fact_id}/visibility": {
         parameters: {
             query?: never;
@@ -9524,8 +9494,8 @@ export interface paths {
          *         Updated fact metadata
          *
          *     Raises:
-         *         403: If user is not the owner
-         *         404: If fact not found
+         *         403: If the caller can read the fact but is neither its owner nor an admin
+         *         404: If the fact is absent or the caller cannot read it
          */
         post: operations["share_knowledge_api_knowledge_collaboration_facts__fact_id__share_post"];
         delete?: never;
@@ -9559,8 +9529,8 @@ export interface paths {
          *         Updated fact metadata
          *
          *     Raises:
-         *         403: If user is not the owner
-         *         404: If fact not found
+         *         403: If the caller can read the fact but is neither its owner nor an admin
+         *         404: If the fact is absent or the caller cannot read it
          */
         delete: operations["unshare_knowledge_api_knowledge_collaboration_facts__fact_id__share__entity_id__delete"];
         options?: never;
@@ -68185,6 +68155,30 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * Dashboard
+         * @description A named dashboard; widget list order is the visual order.
+         */
+        Dashboard: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Widgets */
+            widgets?: components["schemas"]["DashboardWidget"][];
+            /**
+             * Createdat
+             * @default 0
+             */
+            createdAt: number;
+            /**
+             * Updatedat
+             * @default 0
+             */
+            updatedAt: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * DashboardGenerateRequest
          * @description Request body for validation dashboard generation.
          */
@@ -68204,6 +68198,64 @@ export interface components {
              * @default 30
              */
             refresh_interval: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DashboardLayout
+         * @description Every dashboard the user keeps on one page; no dashboards means 'use defaults'.
+         */
+        DashboardLayout: {
+            /** Dashboards */
+            dashboards?: components["schemas"]["Dashboard"][];
+            /** Activeid */
+            activeId?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DashboardLayoutData
+         * @description Data payload for the dashboard layout endpoints.
+         */
+        DashboardLayoutData: {
+            /** Page */
+            page: string;
+            layout: components["schemas"]["DashboardLayout"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DashboardWidget
+         * @description One widget: its kind, label, config and place on the 12-column grid.
+         */
+        DashboardWidget: {
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Span
+             * @default 6
+             * @enum {integer}
+             */
+            span: 4 | 6 | 8 | 12;
+            /**
+             * Height
+             * @description Widget height in px
+             * @default 320
+             */
+            height: number;
+            /** Props */
+            props?: {
+                [key: string]: unknown;
+            };
+            /** Refreshinterval */
+            refreshInterval?: number | null;
         } & {
             [key: string]: unknown;
         };
@@ -69869,6 +69921,21 @@ export interface components {
              */
             success: boolean;
             data?: components["schemas"]["ConvFileSearchData"] | null;
+            /** Message */
+            message?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DataResponse[DashboardLayoutData] */
+        DataResponse_DashboardLayoutData_: {
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+            data?: components["schemas"]["DashboardLayoutData"] | null;
             /** Message */
             message?: string | null;
             /** Timestamp */
@@ -81330,22 +81397,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * KnowledgeShareFactResponse
-         * @description Response for POST /api/knowledge_base/facts/{fact_id}/share.
-         */
-        KnowledgeShareFactResponse: {
-            /** Success */
-            success: boolean;
-            /** Fact Id */
-            fact_id: string;
-            /** Shared With */
-            shared_with: unknown[];
-            /** Visibility */
-            visibility?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * KnowledgeShareResponse
          * @description Response for POST /knowledge/collaboration/facts/{id}/share.
          */
@@ -81782,22 +81833,6 @@ export interface components {
             };
             /** Message */
             message?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * KnowledgeUnshareFactResponse
-         * @description Response for DELETE /api/knowledge_base/facts/{fact_id}/share/{user_id_to_remove}.
-         */
-        KnowledgeUnshareFactResponse: {
-            /** Success */
-            success: boolean;
-            /** Fact Id */
-            fact_id: string;
-            /** Shared With */
-            shared_with: unknown[];
-            /** Visibility */
-            visibility?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -97233,19 +97268,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * ShareFactRequest
-         * @description Request model for sharing a fact with users (Issue #688).
-         */
-        ShareFactRequest: {
-            /**
-             * User Ids
-             * @description List of user IDs to share with
-             */
-            user_ids: string[];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * ShareKnowledgeRequest
          * @description Request to share knowledge with users or groups.
          */
@@ -111717,6 +111739,103 @@ export interface operations {
             };
         };
     };
+    get_dashboard_layout_api_users_me_dashboard_layouts__page__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DashboardLayoutData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_dashboard_layout_api_users_me_dashboard_layouts__page__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardLayout"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DashboardLayoutData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_dashboard_layout_api_users_me_dashboard_layouts__page__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DashboardLayoutData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_pair_qr_api_devices_pair_qr_get: {
         parameters: {
             query?: never;
@@ -118254,73 +118373,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    share_fact_api_knowledge_base_facts__fact_id__share_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fact_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShareFactRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeShareFactResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    unshare_fact_api_knowledge_base_facts__fact_id__share__user_id_to_remove__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fact_id: string;
-                user_id_to_remove: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeUnshareFactResponse"];
                 };
             };
             /** @description Validation Error */
@@ -142085,6 +142137,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -142243,6 +142296,7 @@ export interface operations {
                 conversation_id?: string | null;
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -142275,6 +142329,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -142311,6 +142366,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142345,6 +142401,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142380,6 +142437,7 @@ export interface operations {
                 session_id: string;
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -142416,6 +142474,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142563,6 +142622,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142601,6 +142661,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142635,6 +142696,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {

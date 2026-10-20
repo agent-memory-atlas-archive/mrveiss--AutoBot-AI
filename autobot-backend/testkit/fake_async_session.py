@@ -217,11 +217,16 @@ class FakeAsyncSession:
             self._persist(instance)
         doomed, self._pending_deletes = self._pending_deletes, []
         for instance in doomed:
-            key = (type(instance), getattr(instance, "id", None))
-            if self.rows.get(key) is instance:
-                del self.rows[key]
+            for key in self._drop_rows(instance):
                 self._removed.append((key, instance))
             self._known.pop(id(instance), None)
+
+    def _drop_rows(self, instance: object) -> list:
+        """Remove every identity-map entry holding *instance* (by identity, whatever its key) and return the keys."""
+        keys = [key for key, row in self.rows.items() if row is instance]
+        for key in keys:
+            del self.rows[key]
+        return keys
 
     def _commit_failure(self) -> Optional[BaseException]:
         err = self.commit_error
@@ -335,7 +340,7 @@ class FakeAsyncSession:
 
     def expunge(self, instance: object) -> None:
         """Detach *instance*: an expunged pending object is transient, so no later flush registers it."""
-        self.rows.pop((type(instance), getattr(instance, "id", None)), None)
+        self._drop_rows(instance)
         self._known.pop(id(instance), None)
         self._pending = [p for p in self._pending if p is not instance]
         self._pending_deletes = [p for p in self._pending_deletes if p is not instance]
