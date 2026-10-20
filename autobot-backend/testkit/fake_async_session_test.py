@@ -9,10 +9,10 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from sqlalchemy.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.exc import InvalidRequestError, MultipleResultsFound, NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from testkit.fake_async_session import FakeAsyncSession, FakeResult
+from testkit.fake_async_session import FakeAsyncSession, FakeResult, ResultsExhausted
 
 REQUIRED_METHODS = (
     "add add_all flush commit rollback close refresh execute scalar scalars get delete merge "
@@ -52,9 +52,9 @@ async def test_recording_is_always_on() -> None:
     obj = object.__new__(type("M", (), {}))
     s.add(obj)
     await s.execute("stmt")
+    await s.flush()
     await s.refresh(obj)
     await s.delete(obj)
-    await s.flush()
     await s.rollback()
     await s.commit()
     assert (s.added, s.statements, s.refreshed, s.deleted) == ([obj], ["stmt"], [obj], [obj])
@@ -118,8 +118,12 @@ async def test_rows_is_the_identity_map_for_get_and_add_registers() -> None:
     assert await s.get(M, 8) is None
     fresh = M(9)
     s.add(fresh)
+    assert await s.get(M, 9) is None  # pending: a real session.get does not see it yet
+    await s.flush()
     assert await s.get(M, 9) is fresh
     await s.delete(fresh)
+    assert await s.get(M, 9) is fresh  # delete is deferred to the flush
+    await s.flush()
     assert await s.get(M, 9) is None
 
 
@@ -152,6 +156,8 @@ async def test_on_refresh_is_called_with_the_instance() -> None:
     seen = []
     s = FakeAsyncSession(on_refresh=seen.append)
     obj = M()
+    s.add(obj)
+    await s.flush()
     await s.refresh(obj)
     assert seen == [obj]
 
@@ -186,6 +192,7 @@ async def test_a_deleted_instance_is_not_re_registered_by_the_commit() -> None:
     obj.id = 7
     s = FakeAsyncSession()
     s.add(obj)
+    await s.commit()
     await s.delete(obj)
     await s.commit()
     assert await s.get(model, 7) is None
@@ -227,3 +234,153 @@ async def test_contrast_re_adding_an_expunged_instance_makes_it_pending_again() 
     s.add(obj)
     await s.commit()
     assert await s.get(model, 8) is obj
+
+
+def _model(id_=None):
+    obj = type("M", (), {})()
+    obj.id = id_
+    return obj
+
+
+@pytest.mark.asyncio
+async def test_add_does_not_register_in_rows_until_flush_or_commit() -> None:
+    obj = _model(4)
+    s = FakeAsyncSession()
+    s.add(obj)
+    assert s.rows == {} and await s.get(type(obj), 4) is None
+    await s.commit()
+    assert await s.get(type(obj), 4) is obj
+
+
+@pytest.mark.asyncio
+async def test_rollback_drops_pending_and_unregisters_what_this_transaction_flushed() -> None:
+    kept, flushed, pending = _model(1), _model(2), _model(3)
+    s = FakeAsyncSession()
+    s.add(kept)
+    await s.commit()
+    s.add(flushed)
+    await s.flush()
+    s.add(pending)
+    await s.rollback()
+    model = type(kept)
+    assert s.rollbacks == 1
+    assert await s.get(model, 1) is kept  # committed earlier: survives
+    assert await s.get(model, 2) is None and await s.get(model, 3) is None
+    await s.commit()  # the rolled-back pending object is not resurrected by a later commit
+    assert await s.get(model, 3) is None
+
+
+@pytest.mark.asyncio
+async def test_rollback_restores_what_this_transaction_deleted() -> None:
+    obj = _model(5)
+    s = FakeAsyncSession(rows={(type(obj), 5): obj})
+    await s.delete(obj)
+    await s.flush()
+    assert await s.get(type(obj), 5) is None
+    await s.rollback()
+    assert await s.get(type(obj), 5) is obj
+
+
+@pytest.mark.asyncio
+async def test_begin_commits_on_a_clean_exit_and_rolls_back_on_an_exception() -> None:
+    obj = _model(6)
+    s = FakeAsyncSession()
+    async with s.begin():
+        s.add(obj)
+    assert (s.commits, s.rollbacks) == (1, 0)
+    assert await s.get(type(obj), 6) is obj
+
+    other = _model(7)
+    with pytest.raises(RuntimeError, match="boom"):  # contrast: the exception propagates
+        async with s.begin():
+            s.add(other)
+            raise RuntimeError("boom")
+    assert (s.commits, s.rollbacks) == (1, 1)
+    assert await s.get(type(obj), 7) is None
+
+
+@pytest.mark.asyncio
+async def test_begin_surfaces_a_commit_error_from_its_exit() -> None:
+    s = FakeAsyncSession(commit_error=ValueError("boom"))
+    with pytest.raises(ValueError):
+        async with s.begin():
+            pass
+
+
+@pytest.mark.asyncio
+async def test_begin_nested_flushes_on_exit_and_undoes_only_its_own_work_on_error() -> None:
+    outer, inner, later = _model(8), _model(9), _model(10)
+    s = FakeAsyncSession()
+    s.add(outer)
+    await s.flush()  # flushed BEFORE the savepoint: the savepoint's rollback must leave it alone
+    with pytest.raises(RuntimeError):
+        async with s.begin_nested():
+            s.add(inner)
+            await s.flush()
+            raise RuntimeError("savepoint failed")
+    assert s.rollbacks == 1 and s.commits == 0
+    assert await s.get(type(inner), 9) is None
+    assert await s.get(type(outer), 8) is outer
+    async with s.begin_nested():
+        s.add(later)
+    assert await s.get(type(later), 10) is later  # a clean exit flushes; the outer transaction owns the commit
+    assert s.commits == 0 and s.rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_and_delete_of_a_never_persisted_object_raise() -> None:
+    obj = _model()
+    s = FakeAsyncSession(assign_ids=True)
+    with pytest.raises(InvalidRequestError):
+        await s.refresh(obj)
+    s.add(obj)  # pending is not persistent either
+    with pytest.raises(InvalidRequestError):
+        await s.refresh(obj)
+    with pytest.raises(InvalidRequestError):
+        await s.delete(obj)
+    assert obj.id is None and s.refreshed == [] and s.deleted == []
+    await s.flush()
+    await s.refresh(obj)
+    assert obj.id == 1 and s.refreshed == [obj]
+
+
+@pytest.mark.asyncio
+async def test_objects_loaded_by_execute_get_or_rows_can_be_refreshed_and_deleted() -> None:
+    a, b, c = _model(1), _model(2), _model(3)
+    s = FakeAsyncSession(results=[[a]], rows={(type(c), 3): c}, on_get=lambda e, i: b)
+    await s.execute("q")
+    await s.get(type(b), 2)
+    for obj in (a, b, c):
+        await s.refresh(obj)
+        await s.delete(obj)
+    assert s.refreshed == [a, b, c] and s.deleted == [a, b, c]
+
+
+@pytest.mark.asyncio
+async def test_strict_raises_when_the_results_queue_is_exhausted() -> None:
+    s = FakeAsyncSession(results=[["a"]], default_result=["z"], strict=True)
+    assert (await s.execute("q1")).all() == ["a"]
+    with pytest.raises(ResultsExhausted):
+        await s.execute("q2")
+    assert s.statements == ["q1", "q2"]
+    # contrast: not strict, the same exhaustion falls back to default_result
+    loose = FakeAsyncSession(default_result=["z"])
+    assert (await loose.execute("q")).all() == ["z"]
+
+
+@pytest.mark.asyncio
+async def test_scalar_and_scalars_forward_every_kwarg_to_execute() -> None:
+    seen: list = []
+
+    class Spy(FakeAsyncSession):
+        async def execute(self, statement, params=None, *, execution_options=None, bind_arguments=None, **kw):
+            seen.append((params, execution_options, bind_arguments, kw))
+            return await super().execute(statement, params, execution_options=execution_options)
+
+    s = Spy(default_result=[1])
+    await s.scalar("q", {"p": 1}, execution_options={"e": 1}, bind_arguments={"b": 1}, extra=1)
+    await s.scalars("q", {"p": 2}, execution_options={"e": 2}, bind_arguments={"b": 2}, extra=2)
+    assert seen == [
+        ({"p": 1}, {"e": 1}, {"b": 1}, {"extra": 1}),
+        ({"p": 2}, {"e": 2}, {"b": 2}, {"extra": 2}),
+    ]

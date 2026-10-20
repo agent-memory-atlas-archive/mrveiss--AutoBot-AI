@@ -48,7 +48,7 @@ class ApprovalClaimSession(FakeAsyncSession):
 
     def add(self, instance: object, _warn: bool = True) -> None:
         # The claim reads ``approval.id`` straight after the proposal, so mint it on add.
-        self._assign(instance)
+        self._mint_id(instance)
         super().add(instance, _warn)
 
     @property

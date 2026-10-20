@@ -36,25 +36,56 @@ import itertools
 from collections import deque
 from typing import Any, Callable, Iterable, Optional
 
+from sqlalchemy.exc import InvalidRequestError
+
 from testkit.fake_result import FakeResult
 
-__all__ = ["FakeAsyncSession", "FakeResult"]
+__all__ = ["FakeAsyncSession", "FakeResult", "ResultsExhausted"]
+
+
+class ResultsExhausted(AssertionError):
+    """``strict=True`` and ``execute`` was called with the ``results`` queue empty."""
 
 
 class _FakeTransaction:
-    """What ``begin`` / ``begin_nested`` return: an async context manager that does nothing."""
+    """What ``begin`` / ``begin_nested`` return, with a real transaction's exit semantics.
+
+    ``begin()``: a clean exit calls the session's ``commit``; an exception calls its ``rollback``.
+    ``begin_nested()`` is a SAVEPOINT: a clean exit ``flush``es (the outer transaction still owns
+    the commit); an exception undoes only the work done since the savepoint opened (objects added,
+    flushed or deleted inside it) and counts as one ``rollbacks``. Neither suppresses the exception.
+    An explicit ``commit()`` / ``rollback()`` ends the transaction, so ``__aexit__`` then does nothing.
+    """
+
+    def __init__(self, session: "FakeAsyncSession", nested: bool = False) -> None:
+        self._session = session
+        self._nested = nested
+        self._done = False
+        self._marks: tuple = (0, 0, 0, 0)
 
     async def __aenter__(self) -> "_FakeTransaction":
+        self._marks = self._session._marks()
         return self
 
-    async def __aexit__(self, type_: Any, value: Any, traceback: Any) -> None:
-        return None
+    async def __aexit__(self, type_: Any, value: Any, traceback: Any) -> bool:
+        if not self._done:
+            if type_ is None:
+                await self.commit()
+            else:
+                await self.rollback()
+        return False
 
     async def commit(self) -> None:
-        return None
+        self._done = True
+        await (self._session.flush() if self._nested else self._session.commit())
 
     async def rollback(self) -> None:
-        return None
+        self._done = True
+        if self._nested:
+            self._session._undo_to(self._marks)
+            self._session.rollbacks += 1
+        else:
+            await self._session.rollback()
 
 
 def _as_result(item: Any, stmt: Any) -> FakeResult:
@@ -69,7 +100,15 @@ def _as_result(item: Any, stmt: Any) -> FakeResult:
 
 
 class FakeAsyncSession:
-    """Records every call; answers ``execute`` / ``get`` / ``commit`` only as told to."""
+    """Records every call; answers ``execute`` / ``get`` / ``commit`` only as told to.
+
+    Unit of work, as on a real session: ``add`` makes an object *pending* and ``get`` does not
+    see it; ``flush`` / ``commit`` register it in ``rows`` (the identity map ``get`` reads).
+    ``delete`` is likewise deferred to the flush. ``rollback`` drops pending work, un-registers
+    what this transaction flushed and restores what it deleted. ``refresh`` / ``delete`` of an
+    object the session never persisted (neither pending-then-flushed, in ``rows``, nor returned
+    by ``get`` / ``execute``) raise ``InvalidRequestError``.
+    """
 
     def __init__(
         self,
@@ -82,6 +121,8 @@ class FakeAsyncSession:
         commit_error: Any = None,
         on_refresh: Optional[Callable[[Any], None]] = None,
         on_get: Optional[Callable[[Any, Any], Any]] = None,
+        # True: ``execute`` raises ``ResultsExhausted`` once ``results`` is empty, not ``default_result``.
+        strict: bool = False,
     ) -> None:
         self.assign_ids = assign_ids
         self.results: deque = deque(results or ())
@@ -90,9 +131,14 @@ class FakeAsyncSession:
         self.commit_error = commit_error
         self.on_refresh = on_refresh
         self.on_get = on_get
+        self.strict = strict
         self.added: list = []
         self.deleted: list = []
-        self._expunged: list = []  # detached pending instances flush must skip
+        self._pending: list = []  # added, not yet flushed
+        self._pending_deletes: list = []  # deleted, not yet flushed
+        self._flushed: list = []  # registered by a flush of the open transaction
+        self._removed: list = []  # (key, instance) removed by a flush of the open transaction
+        self._known: dict = {}  # id(obj) -> obj the session has persisted or loaded
         self.statements: list = []
         self.refreshed: list = []
         self.commits = 0
@@ -107,22 +153,50 @@ class FakeAsyncSession:
         """True once a commit has succeeded."""
         return self.commits > 0 and not self._last_commit_failed
 
-    def _register(self, instance: object) -> None:
-        pk = getattr(instance, "id", None)
-        if pk is not None:
-            self.rows[(type(instance), pk)] = instance
+    def _is_persistent(self, instance: object) -> bool:
+        return id(instance) in self._known or any(row is instance for row in self.rows.values())
 
-    def _assign(self, instance: object) -> None:
+    def _mint_id(self, instance: object) -> None:
         if self.assign_ids and getattr(instance, "id", None) is None:
             make = self.assign_ids if callable(self.assign_ids) else self._ids.__next__
             instance.id = make()
-        self._register(instance)
+
+    def _persist(self, instance: object) -> None:
+        """Flush one pending object: mint its id and register it in the identity map."""
+        self._mint_id(instance)
+        self._known[id(instance)] = instance
+        pk = getattr(instance, "id", None)
+        if pk is not None:
+            self.rows[(type(instance), pk)] = instance
+            self._flushed.append(((type(instance), pk), instance))
+
+    def _loaded(self, instance: Any) -> Any:
+        if instance is not None:
+            self._known[id(instance)] = instance
+        return instance
+
+    def _marks(self) -> tuple:
+        return (len(self._pending), len(self._pending_deletes), len(self._flushed), len(self._removed))
+
+    def _undo_to(self, marks: tuple) -> None:
+        """Undo the pending/flushed/deleted work recorded after *marks* (a savepoint rollback)."""
+        pending, pending_deletes, flushed, removed = marks
+        del self._pending[pending:]
+        del self._pending_deletes[pending_deletes:]
+        for key, instance in reversed(self._flushed[flushed:]):
+            if self.rows.get(key) is instance:
+                del self.rows[key]
+            self._known.pop(id(instance), None)
+        del self._flushed[flushed:]
+        for key, instance in reversed(self._removed[removed:]):
+            self.rows[key] = instance
+            self._known[id(instance)] = instance
+        del self._removed[removed:]
 
     def add(self, instance: object, _warn: bool = True) -> None:
         self.added.append(instance)
-        # Re-adding an expunged instance makes it pending again, as on a real session.
-        self._expunged = [gone for gone in self._expunged if gone is not instance]
-        self._register(instance)
+        if not self._is_persistent(instance) and not any(p is instance for p in self._pending):
+            self._pending.append(instance)
 
     def add_all(self, instances: Iterable[object]) -> None:
         for instance in instances:
@@ -130,10 +204,16 @@ class FakeAsyncSession:
 
     async def flush(self, objects: Optional[Iterable[Any]] = None) -> None:
         self.flushes += 1
-        for instance in self.added:
-            if any(instance is gone for gone in [*self.deleted, *self._expunged]):
-                continue
-            self._assign(instance)
+        pending, self._pending = self._pending, []
+        for instance in pending:
+            self._persist(instance)
+        doomed, self._pending_deletes = self._pending_deletes, []
+        for instance in doomed:
+            key = (type(instance), getattr(instance, "id", None))
+            if self.rows.get(key) is instance:
+                del self.rows[key]
+                self._removed.append((key, instance))
+            self._known.pop(id(instance), None)
 
     def _commit_failure(self) -> Optional[BaseException]:
         err = self.commit_error
@@ -148,9 +228,12 @@ class FakeAsyncSession:
         if err is not None:
             raise err
         await self.flush()
+        self._flushed.clear()
+        self._removed.clear()
 
     async def rollback(self) -> None:
         self.rollbacks += 1
+        self._undo_to((0, 0, 0, 0))
 
     async def close(self) -> None:
         self.closed = True
@@ -161,8 +244,9 @@ class FakeAsyncSession:
         attribute_names: Optional[Iterable[str]] = None,
         with_for_update: Any = None,
     ) -> None:
+        if not self._is_persistent(instance):
+            raise InvalidRequestError(f"Instance '{instance!r}' is not persistent within this Session")
         self.refreshed.append(instance)
-        self._assign(instance)
         if self.on_refresh is not None:
             self.on_refresh(instance)
 
@@ -177,8 +261,14 @@ class FakeAsyncSession:
     ) -> FakeResult:
         self.statements.append(statement)
         if self.results:
-            return _as_result(self.results.popleft(), statement)
-        return _as_result(self.default_result, statement)
+            result = _as_result(self.results.popleft(), statement)
+        elif self.strict:
+            raise ResultsExhausted(f"execute() #{len(self.statements)} has no queued result (strict=True)")
+        else:
+            result = _as_result(self.default_result, statement)
+        for loaded in result.all():
+            self._loaded(loaded)
+        return result
 
     async def scalar(
         self,
@@ -189,7 +279,9 @@ class FakeAsyncSession:
         bind_arguments: Any = None,
         **kw: Any,
     ) -> Any:
-        result = await self.execute(statement, params, execution_options=execution_options, **kw)
+        result = await self.execute(
+            statement, params, execution_options=execution_options, bind_arguments=bind_arguments, **kw
+        )
         return result.scalar()
 
     async def scalars(
@@ -201,7 +293,9 @@ class FakeAsyncSession:
         bind_arguments: Any = None,
         **kw: Any,
     ) -> Any:
-        result = await self.execute(statement, params, execution_options=execution_options, **kw)
+        result = await self.execute(
+            statement, params, execution_options=execution_options, bind_arguments=bind_arguments, **kw
+        )
         return result.scalars()
 
     async def get(
@@ -218,12 +312,14 @@ class FakeAsyncSession:
         """Identity-map hit first, then ``on_get(entity, ident)``, else ``None``."""
         if (entity, ident) in self.rows:
             return self.rows[(entity, ident)]
-        return self.on_get(entity, ident) if self.on_get is not None else None
+        return self._loaded(self.on_get(entity, ident)) if self.on_get is not None else None
 
     async def delete(self, instance: object) -> None:
+        """Queue *instance* for removal at the next flush; ``get`` still returns it until then."""
+        if not self._is_persistent(instance):
+            raise InvalidRequestError(f"Instance '{instance!r}' is not persisted")
         self.deleted.append(instance)
-        pk = getattr(instance, "id", None)
-        self.rows.pop((type(instance), pk), None)
+        self._pending_deletes.append(instance)
 
     async def merge(self, instance: Any, *, load: bool = True, options: Any = None) -> Any:
         self.add(instance)
@@ -232,13 +328,15 @@ class FakeAsyncSession:
     def expunge(self, instance: object) -> None:
         """Detach *instance*: an expunged pending object is transient, so no later flush registers it."""
         self.rows.pop((type(instance), getattr(instance, "id", None)), None)
-        self._expunged.append(instance)
+        self._known.pop(id(instance), None)
+        self._pending = [p for p in self._pending if p is not instance]
+        self._pending_deletes = [p for p in self._pending_deletes if p is not instance]
 
     def begin(self) -> _FakeTransaction:
-        return _FakeTransaction()
+        return _FakeTransaction(self)
 
     def begin_nested(self) -> _FakeTransaction:
-        return _FakeTransaction()
+        return _FakeTransaction(self, nested=True)
 
     async def __aenter__(self) -> "FakeAsyncSession":
         return self

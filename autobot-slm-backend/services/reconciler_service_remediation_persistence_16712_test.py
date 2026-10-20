@@ -168,14 +168,18 @@ def test_reset_service_remediation_tracker_is_a_noop_when_nothing_to_clear():
     db.commit.assert_not_awaited()
 
 
-def _race_simulating_session(*, extra_data_after_refresh) -> FakeAsyncSession:
+def _race_simulating_session(service, *, extra_data_after_refresh) -> FakeAsyncSession:
     """A `db` whose `refresh()` mutates `service.extra_data` mid-call (#17096 review).
 
     Models a heartbeat for the SAME service row landing on a DIFFERENT
     session while `_remediate_failed_service` awaits the (here, fake)
     ansible restart -- exactly what `refresh()` is meant to observe.
     """
-    return FakeAsyncSession(on_refresh=lambda obj: setattr(obj, "extra_data", extra_data_after_refresh))
+    # `service` is already persisted (loaded by the reconciler), so the session may refresh it.
+    return FakeAsyncSession(
+        rows={(type(service), "service-row"): service},
+        on_refresh=lambda obj: setattr(obj, "extra_data", extra_data_after_refresh),
+    )
 
 
 def _node() -> object:
@@ -190,7 +194,9 @@ def test_write_after_restart_uses_the_row_refreshed_after_the_await_not_the_stal
     service = _FakeService(extra_data={"remediation": {"count": 2, "last_attempt": None, "exhausted": False}})
     # Simulates: the heartbeat path observed recovery and cleared the tracker,
     # AND wrote an unrelated key -- both must survive this write.
-    db = _race_simulating_session(extra_data_after_refresh={"error_message": "transient, cleared by heartbeat"})
+    db = _race_simulating_session(
+        service, extra_data_after_refresh={"error_message": "transient, cleared by heartbeat"}
+    )
     svc = reconciler.ReconcilerService()
     svc._restart_service_via_ansible = AsyncMock(
         return_value=(False, "simulated restart failure")
@@ -214,7 +220,7 @@ def test_write_after_restart_increments_normally_when_nothing_raced():
     count still increments the ordinary way.
     """
     service = _FakeService(extra_data={"remediation": {"count": 2, "last_attempt": None, "exhausted": False}})
-    db = _race_simulating_session(extra_data_after_refresh=dict(service.extra_data))
+    db = _race_simulating_session(service, extra_data_after_refresh=dict(service.extra_data))
     svc = reconciler.ReconcilerService()
     svc._restart_service_via_ansible = AsyncMock(return_value=(False, "simulated restart failure"))
 
