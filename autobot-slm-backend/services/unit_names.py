@@ -11,7 +11,14 @@ Stdlib only, so both the restart executor (``service_restart``) and the journal 
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Mapping
+
+logger = logging.getLogger(__name__)
+
+# Longest slice of an untrusted name a log line may carry (#19005).
+_LOGGED_NAME_MAX = 80
 
 # systemd.unit(5): a unit name is ASCII letters, digits and ``: - _ . \ @``; at most 255
 # bytes. Chosen here: ``\`` (escaped instance names) is refused -- no SLM caller needs it --
@@ -46,3 +53,32 @@ def validate_journal_since(since: str) -> str:
     if not isinstance(since, str) or not _SINCE_RE.fullmatch(since):
         raise ValueError(f"invalid journalctl --since value: {since!r}")
     return since
+
+
+def discovered_unit_name_ok(node_id: str, name: object) -> bool:
+    """True if a heartbeat/scan-discovered service *name* may be stored; else warn and say False (#19005).
+
+    The name is node-controlled input that later reaches ``manage-service.yml`` as an extra var,
+    so one that is not a unit name is dropped at ingest. The log line carries the ``repr`` of a
+    length-capped slice, never the raw value (no newline/ANSI forging, no unbounded line).
+    """
+    try:
+        validate_unit_name(name)  # type: ignore[arg-type]
+    except ValueError:
+        logger.warning(
+            "dropping discovered service with an invalid unit name node=%s name=%s",
+            node_id,
+            repr(name)[:_LOGGED_NAME_MAX],
+        )
+        return False
+    return True
+
+
+def validate_service_name_extra_var(extra_vars: Mapping[str, object] | None) -> None:
+    """Raise ValueError if *extra_vars* carries a ``service_name`` that is not a unit name (#19005).
+
+    Called by ``PlaybookExecutor.execute_playbook`` before anything is spawned, so every
+    caller is covered, not only the ones that remembered to validate.
+    """
+    if extra_vars and "service_name" in extra_vars:
+        validate_unit_name(extra_vars["service_name"])  # type: ignore[arg-type]
