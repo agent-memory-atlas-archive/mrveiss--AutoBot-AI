@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from autobot_shared.paths import scrubbed_git_env
+from autobot_shared.isolated_git import isolated_git_env
 
 
 def _load_tw():
@@ -42,38 +42,26 @@ release_for_task = _tw.release_for_task
 cleanup_stale = _tw.cleanup_stale
 
 
-def _test_git_env() -> dict[str, str]:
-    """#15246: env for every git subprocess this suite spawns.
-
-    Scrubbed rather than os.environ: the pre-push hook runs this suite with
-    GIT_DIR pointing at the worktree it is pushing (every checkout here is
-    one), and an unscrubbed `git init`/`git add`/`git commit` here would
-    then operate on THAT repository instead of tmp_path's. See
-    autobot_shared/paths_test.py and #15246 for the reproduced incident.
-    """
-    return {**scrubbed_git_env(), "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
-
-
 @pytest.fixture()
 def git_repo(tmp_path: Path) -> Path:
     """Initialise a minimal git repo in tmp_path with one initial commit."""
-    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True, env=_test_git_env())
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True, env=isolated_git_env())
     subprocess.run(
         ["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"],
         check=True,
         capture_output=True,
-        env=_test_git_env(),
+        env=isolated_git_env(),
     )
     subprocess.run(
         ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
         check=True,
         capture_output=True,
-        env=_test_git_env(),
+        env=isolated_git_env(),
     )
     (tmp_path / "README.md").write_text("test repo")
-    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True, env=_test_git_env())
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True, env=isolated_git_env())
     subprocess.run(
-        ["git", "-C", str(tmp_path), "commit", "-m", "init"], check=True, capture_output=True, env=_test_git_env()
+        ["git", "-C", str(tmp_path), "commit", "-m", "init"], check=True, capture_output=True, env=isolated_git_env()
     )
     return tmp_path
 
@@ -140,9 +128,9 @@ class TestHeartbeatResume:
         ws1 = allocate(task_id, "agent-resume", repo_root=git_repo)
         wt = Path(ws1.worktree_path)
         (wt / "heartbeat_1.txt").write_text("tick 1")
-        subprocess.run(["git", "-C", str(wt), "add", "."], check=True, capture_output=True, env=_test_git_env())
+        subprocess.run(["git", "-C", str(wt), "add", "."], check=True, capture_output=True, env=isolated_git_env())
         subprocess.run(
-            ["git", "-C", str(wt), "commit", "-m", "hb1"], check=True, capture_output=True, env=_test_git_env()
+            ["git", "-C", str(wt), "commit", "-m", "hb1"], check=True, capture_output=True, env=isolated_git_env()
         )
 
         ws2 = allocate(task_id, "agent-resume", repo_root=git_repo)
@@ -337,13 +325,13 @@ def _backdate(workspace_dir: Path) -> None:
 
 def _commit_in_worktree(wt: Path, msg: str) -> None:
     (wt / "work.txt").write_text(msg)
-    subprocess.run(["git", "-C", str(wt), "add", "."], check=True, capture_output=True, env=_test_git_env())
-    subprocess.run(["git", "-C", str(wt), "commit", "-m", msg], check=True, capture_output=True, env=_test_git_env())
+    subprocess.run(["git", "-C", str(wt), "add", "."], check=True, capture_output=True, env=isolated_git_env())
+    subprocess.run(["git", "-C", str(wt), "commit", "-m", msg], check=True, capture_output=True, env=isolated_git_env())
 
 
 def _branch_exists(git_repo: Path, branch: str) -> bool:
     r = subprocess.run(
-        ["git", "-C", str(git_repo), "branch", "--list", branch], capture_output=True, text=True, env=_test_git_env()
+        ["git", "-C", str(git_repo), "branch", "--list", branch], capture_output=True, text=True, env=isolated_git_env()
     )
     return bool(r.stdout.strip())
 
@@ -404,7 +392,7 @@ _BASE = "origin/main"
 
 
 def _git(repo: Path, *argv: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *argv], check=True, capture_output=True, env=_test_git_env())
+    subprocess.run(["git", "-C", str(repo), *argv], check=True, capture_output=True, env=isolated_git_env())
 
 
 def _recorded_warnings(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
@@ -468,7 +456,7 @@ class TestFetchedBaseRef:
             ["git", "-C", str(git_repo), "remote", "add", "origin", str(git_repo)],
             check=True,
             capture_output=True,
-            env=_test_git_env(),
+            env=isolated_git_env(),
         )
         with pytest.raises(RuntimeError, match="cannot resolve workspace base ref"):
             _tw._fetched_base_ref(git_repo)
