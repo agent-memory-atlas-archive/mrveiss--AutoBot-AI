@@ -53,6 +53,45 @@ sudo ./install.sh
 
 The installer takes 10-20 minutes depending on network speed and hardware.
 
+The `main` one-liner runs the newest installer, unpinned and unverified. For a production host,
+install a release instead and verify it first.
+
+### Verified, pinned install (recommended)
+
+Each release publishes three files next to its notes (#18666):
+- `install.sh`, pinned to that release: it installs exactly that tag;
+- `install.sh.sha256`, its checksum;
+- `install.sh.sig`, a cosign signature made with the key in this repository's `cosign.pub`.
+
+Releases made before this change do not carry them. Verify, then run:
+
+```bash
+TAG=v0.0.0   # the release you want, from https://github.com/mrveiss/AutoBot-AI/releases
+BASE="https://github.com/mrveiss/AutoBot-AI/releases/download/${TAG}"
+curl -fsSLO "${BASE}/install.sh"
+curl -fsSLO "${BASE}/install.sh.sha256"
+curl -fsSLO "${BASE}/install.sh.sig"
+curl -fsSL -o cosign.pub "https://raw.githubusercontent.com/mrveiss/AutoBot-AI/${TAG}/cosign.pub"
+sha256sum -c install.sh.sha256 \
+  && cosign verify-blob --key cosign.pub --signature install.sh.sig install.sh \
+  && sudo bash install.sh
+```
+
+The `&&` chain is the point: if a download is missing, the checksum differs or the signature does
+not verify, `install.sh` never runs.
+
+Keep the `cosign.pub` you trust and compare it with later downloads: a signature only proves the
+script matches the key, so the key is the thing to check once.
+
+Pinned but unverified, as a one-liner next to the `main` one:
+
+```bash
+curl -fsSL "https://github.com/mrveiss/AutoBot-AI/releases/download/${TAG}/install.sh" | sudo bash
+```
+
+**Offline or air-gapped installs are out of scope for now.** Phase 3 clones the repository from
+GitHub, and the roles install packages from your distribution's and vendors' mirrors.
+
 ---
 
 ## Installer Phases
@@ -392,6 +431,27 @@ curl -sk -X POST https://localhost/api/setup/reset \
 ```
 
 Then refresh the browser.
+
+### Docker: containers cannot reach each other
+
+Symptom: a service restarts in a loop, and its log says it `cannot reach PostgreSQL at
+autobot-postgres:5432` (or Redis, or another service), naming the host and port it tried and
+whether the attempt **timed out**, was **refused**, or the name **did not resolve**.
+
+- **Timed out:** nothing answered in time. A timeout alone does not say why; possible causes
+  include packets being dropped, a target host or container that is down or overloaded, or
+  routing that leads nowhere. One common cause is a host firewall whose forwarding policy drops
+  container-to-container traffic. Check `sudo iptables -S FORWARD` (a `-P FORWARD DROP` with no
+  Docker accept rules points there), and if so allow traffic on the Docker bridges, or restore
+  Docker's own chains with `sudo systemctl restart docker`.
+- **Refused:** the target container is not listening yet, or not running. Check
+  `docker compose --env-file docker/.env.docker --env-file docker/.env.secrets ps` and that
+  container's logs.
+- **Did not resolve:** Docker's DNS could not find the name. Possible causes include the two
+  containers not sharing a network, the target service not being started (or a different
+  service name), or a host DNS problem. Check that the name matches a service in the compose
+  files, and start the whole stack with the same compose files and env files, so every service
+  joins the networks it declares.
 
 ### Re-running the installer
 
