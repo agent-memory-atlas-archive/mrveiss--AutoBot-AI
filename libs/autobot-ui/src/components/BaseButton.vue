@@ -13,7 +13,7 @@
     - honors prefers-reduced-motion via the token motion values.
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import type { Component } from 'vue'
 
 export type ButtonVariant =
@@ -45,13 +45,24 @@ const props = withDefaults(
   },
 )
 
+defineOptions({ inheritAttrs: false })
+const attrs = useAttrs()
+
 const isDisabled = computed(() => props.disabled || props.loading)
 const isNative = computed(() => props.as === 'button')
 /** A disabled non-button (`as="a"`, a RouterLink) has no native `disabled`, so it is inert by hand. */
 const isInertLink = computed(() => !isNative.value && isDisabled.value)
 
-// A capture-phase listener: it runs before a RouterLink's own navigate handler on the same
-// element (bubble phase) and before a caller's fallthrough @click, so neither fires.
+/** An inert component link (a RouterLink) renders as a plain `<a>` without its routing props:
+ * its own navigate handler is never mounted, so no listener order can let it run. */
+const renderAs = computed(() => (isInertLink.value && typeof props.as !== 'string' ? 'a' : props.as))
+const boundAttrs = computed(() => {
+  if (renderAs.value === props.as) return attrs
+  const { to: _to, replace: _replace, ...rest } = attrs
+  return rest
+})
+
+// Bound before the caller's attrs (v-bind below), so it runs before their @click and blocks it.
 function blockInertClick(event: MouseEvent): void {
   if (!isInertLink.value) return
   event.preventDefault()
@@ -61,13 +72,14 @@ function blockInertClick(event: MouseEvent): void {
 
 <template>
   <component
-    :is="as"
+    :is="renderAs"
     :type="isNative ? type : undefined"
     :disabled="isNative ? isDisabled : undefined"
     :aria-disabled="isInertLink ? 'true' : undefined"
     :tabindex="isInertLink ? -1 : undefined"
     :aria-busy="loading || undefined"
-    @click.capture="blockInertClick"
+    @click="blockInertClick"
+    v-bind="boundAttrs"
     :class="['aui-btn', `aui-btn--${variant}`, `aui-btn--${size}`, { 'aui-btn--block': block, 'aui-btn--loading': loading }]"
   >
     <span v-if="loading" class="aui-btn__spinner" aria-hidden="true" />
