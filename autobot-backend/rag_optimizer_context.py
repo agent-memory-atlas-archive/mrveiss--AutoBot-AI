@@ -12,6 +12,7 @@ required ``principal`` (#18944), not a second retrieval path. Assumes the compos
 
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING, List, Tuple
 
 from autobot_shared.logging_manager import get_llm_logger
@@ -90,12 +91,19 @@ class OptimizedContextMixin:
     async def search_visible(
         self, query: str, max_results: int, principal: KbPrincipal
     ) -> Tuple[List[RankedResult], RAGMetrics]:
-        """``advanced_search`` keeping only what *principal* may read, via ``filter_ranked`` (#18944)."""
+        """``advanced_search`` keeping only what *principal* may read, via ``filter_ranked`` (#18944).
+
+        The counts in the returned metrics are taken over the kept list: ``advanced_search`` counts
+        before filtering, so passing them on would tell the caller how many facts others hold. The
+        metrics object is copied first, because ``query_cache`` hands every reader the same instance.
+        """
         from services.rag_visibility import VISIBILITY_OVERFETCH, filter_ranked  # lazy: it imports this module
 
         results, metrics = await self.advanced_search(query, max_results=max_results * VISIBILITY_OVERFETCH)
         kept = await filter_ranked(results, principal, getattr(self.kb, "ownership_manager", None))
-        return kept[:max_results], metrics
+        kept = kept[:max_results]
+        visible = dataclasses.replace(metrics, documents_considered=len(kept), final_results_count=len(kept))
+        return kept, visible
 
     async def _render_context(self, query: str, results: List[RankedResult], max_context_length: int) -> str:
         """Format *results* into one context string and pass it through the content firewall."""
