@@ -152,6 +152,19 @@ caller) uses the same spelling.
 * Open-ended families are data, not members: `llm_command_parser:<event_type>`, `ai_line.<outcome>`,
   `execute_task_<task_type>`.
 
+**Failures are told apart by `outcome`, never by action.** `login_failed` and `login_success` both map to
+`auth.login` (as do `login_attempt` and `login_attempt_locked_account`). A failed login is an `auth.login`
+row with a non-`success` `outcome`, so no consumer may filter failures by action alone; read `outcome`
+(the SLM's own table carries it in the `success` column).
+
+**A known second vocabulary.** `IdentityAuditAction` (`autobot_shared/user_management/models/audit.py`) is a
+public constant set of the shared package, and only the concepts above are mapped. Its other underscore
+spellings are still stored as written: `mfa_enabled`, `mfa_disabled`, `mfa_verified`, `mfa_failed`,
+`backup_code_used`, `sso_linked`, `sso_unlinked`, `user_activated`, `user_deactivated`, `team_*`, `org_*`,
+`role_created`, `role_updated`, `role_deleted`, `api_key_used`, `account_locked`, `account_unlocked`,
+`suspicious_activity`, `permission_denied`, `password_reset_requested`, `password_reset_completed`. The
+guard lists the ones a writer passes in its baseline. Migrating them to the dotted form is tracked by #19035.
+
 **Guard and adding an action.** `repo_tests/audit_action_vocabulary_18716_test.py` scans the writer calls
 (`audit_log`, `_audit_log`, `log_action`, `audit_row`, `AuditEvent(`, `create_audit_log`,
 `audit_operation`, and the middleware path map) in the backend, the shared package and the SLM backend.
