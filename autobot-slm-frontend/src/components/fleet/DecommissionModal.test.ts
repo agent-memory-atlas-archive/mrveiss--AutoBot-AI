@@ -36,9 +36,13 @@ async function startDecommission() {
   let finish: (r: { success: boolean; output: string }) => void = () => {}
   decommissionNode.mockReturnValue(new Promise((resolve) => { finish = resolve }))
   const wrapper = mountModal()
+  // Each step waits for its own effect: one flush is not enough on a loaded machine (#18833).
+  await vi.waitFor(() => expect(decommissionPreflight).toHaveBeenCalled())
   await flushPromises()
   await wrapper.find('#confirm-node-id').setValue(node.node_id)
+  await vi.waitFor(() => expect(wrapper.find('button.btn-error').attributes('disabled')).toBeUndefined())
   await wrapper.find('button.btn-error').trigger('click')
+  await vi.waitFor(() => expect(decommissionNode).toHaveBeenCalled())
   await flushPromises()
   return { wrapper, finish: (r: { success: boolean; output: string }) => finish(r) }
 }
