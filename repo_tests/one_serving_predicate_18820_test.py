@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,7 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 from repo_tests.one_serving_predicate_baseline_18820 import ALLOWLIST, FROZEN_TOTAL
 
+from autobot_shared.paths import scrubbed_git_env
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 CANONICAL = "autobot-backend/knowledge/serving.py"
@@ -46,6 +48,7 @@ SCAN_ROOTS = ("autobot-backend", "autobot_shared", "plugins", "libs")
 _READ_FIELDS = frozenset({"valid_to", "valid_until", "valid_from", "is_active", "verification_status"})
 _TRUST_FIELD = "verification_status"
 _REJECTED = "rejected"
+MODULE_SCOPE = "<module>"
 
 
 def _is_scanned(rel: str) -> bool:
@@ -99,18 +102,36 @@ def _rejected_where(node: ast.Dict) -> bool:
     return False
 
 
-def serving_decisions(source: str) -> set[tuple[str, str]]:
-    """`(field, kind)` for every serving-decision shape in `source`."""
-    found: set[tuple[str, str]] = set()
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Compare) and _rejected_comparison(node):
-            found.add((_TRUST_FIELD, "REJECT_CMP"))
-        elif isinstance(node, ast.Dict) and _rejected_where(node):
-            found.add((_TRUST_FIELD, "REJECT_WHERE"))
-        field = _read_field(node)
-        if field:
-            found.add((field, "READ"))
+def _decision_kinds(node: ast.AST) -> list[tuple[str, str]]:
+    """`(field, kind)` for the serving-decision shape `node` itself is, else `[]`."""
+    found: list[tuple[str, str]] = []
+    if isinstance(node, ast.Compare) and _rejected_comparison(node):
+        found.append((_TRUST_FIELD, "REJECT_CMP"))
+    elif isinstance(node, ast.Dict) and _rejected_where(node):
+        found.append((_TRUST_FIELD, "REJECT_WHERE"))
+    field = _read_field(node)
+    if field:
+        found.append((field, "READ"))
     return found
+
+
+def _walk_scoped(node: ast.AST, scope: tuple[str, ...]):
+    """Yield `(qualname, node)` for every node under `node`; qualname is the enclosing def/class chain."""
+    for child in ast.iter_child_nodes(node):
+        yield ".".join(scope) or MODULE_SCOPE, child
+        inner = (
+            (*scope, child.name) if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else scope
+        )
+        yield from _walk_scoped(child, inner)
+
+
+def serving_decisions(source: str) -> set[tuple[str, str, str]]:
+    """`(enclosing_qualname, field, kind)` for every serving-decision shape in `source`."""
+    return {
+        (qualname, field, kind)
+        for qualname, node in _walk_scoped(ast.parse(source), ())
+        for field, kind in _decision_kinds(node)
+    }
 
 
 def _population(root: Path) -> list[str]:
@@ -137,7 +158,7 @@ def _found() -> frozenset[str]:
     keys: set[str] = set()
     for rel in REACH.examined(repo_root()):
         source = (repo_root() / rel).read_text(encoding="utf-8")
-        keys.update(f"{rel}::{field}::{kind}" for field, kind in serving_decisions(source))
+        keys.update(f"{rel}::{qualname}::{field}::{kind}" for qualname, field, kind in serving_decisions(source))
     return frozenset(keys)
 
 
@@ -180,7 +201,28 @@ _WRITER = (
     ],
 )
 def test_the_detector_tells_a_decision_from_a_writer(label: str, source: str, expected: set[tuple[str, str]]) -> None:
-    assert serving_decisions(source) == expected, label
+    assert {(field, kind) for _, field, kind in serving_decisions(source)} == expected, label
+
+
+def test_a_decision_is_keyed_by_its_enclosing_function_so_a_second_one_in_the_file_is_new() -> None:
+    source = (
+        'X = {"verification_status": {"$ne": "rejected"}}\n'
+        "class Service:\n"
+        "    def allowed(self, fact):\n"
+        "        return fact.is_active\n"
+        "    async def inner(self, fact):\n"
+        "        def nested():\n"
+        '            return fact.get("valid_to")\n'
+        "        return nested\n"
+        "def free(fact):\n"
+        "    return fact.is_active\n"
+    )
+    assert serving_decisions(source) == {
+        (MODULE_SCOPE, "verification_status", "REJECT_WHERE"),
+        ("Service.allowed", "is_active", "READ"),
+        ("Service.inner.nested", "valid_to", "READ"),
+        ("free", "is_active", "READ"),
+    }
 
 
 def test_the_canonical_module_is_exempt_and_nothing_else_is() -> None:
@@ -194,7 +236,7 @@ def test_the_scan_is_not_vacuous() -> None:
     """A blind scan reports an empty, clean tree; the known readers must be seen."""
     found = _found()
     assert len(found) >= 20, f"only {len(found)} readers found; the scan stopped reaching the tree"
-    assert "autobot-backend/models/atomic_fact.py::valid_from::READ" in found
+    assert "autobot-backend/models/atomic_fact.py::AtomicFact.to_dict::valid_from::READ" in found
 
 
 def test_no_module_re_implements_the_serving_decision() -> None:
@@ -214,3 +256,51 @@ def test_every_allowlist_entry_still_matches() -> None:
 def test_the_allowlist_only_shrinks_and_every_entry_has_a_reason() -> None:
     assert len(ALLOWLIST) <= FROZEN_TOTAL, f"{len(ALLOWLIST)} entries exceeds the frozen {FROZEN_TOTAL}"
     assert all(reason.strip() for reason in ALLOWLIST.values())
+
+
+BASELINE_PATH = "repo_tests/one_serving_predicate_baseline_18820.py"
+_MAIN_REF = "origin/main"
+
+
+def _main_frozen(source: str) -> tuple[int, int]:
+    """`(len(ALLOWLIST), FROZEN_TOTAL)` as written in a baseline file's source."""
+    sizes: dict[str, int] = {}
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            continue
+        name = node.targets[0].id
+        if name == "ALLOWLIST" and isinstance(node.value, ast.Dict):
+            sizes[name] = len(node.value.keys)
+        elif name == "FROZEN_TOTAL" and isinstance(node.value, ast.Constant):
+            sizes[name] = int(node.value.value)
+    return sizes["ALLOWLIST"], sizes["FROZEN_TOTAL"]
+
+
+def _baseline_on_main() -> str | None:
+    """The baseline's source on `origin/main`, or None when main has no such file (or no such ref)."""
+    result = subprocess.run(  # nosec B603 B607  # fixed argv, no shell
+        ["git", "show", f"{_MAIN_REF}:{BASELINE_PATH}"],
+        cwd=repo_root(),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_git_env(),
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def test_one_pr_cannot_raise_both_the_frozen_total_and_the_list() -> None:
+    """`FROZEN_TOTAL` and `ALLOWLIST` live in one file, so a PR can grow both together; main's copy cannot move."""
+    on_main = _baseline_on_main()
+    if on_main is None:
+        pytest.skip(f"{BASELINE_PATH} is not on {_MAIN_REF} yet (this PR introduces it) or the ref is absent")
+    main_entries, main_total = _main_frozen(on_main)
+    assert len(ALLOWLIST) <= main_entries, f"{len(ALLOWLIST)} entries; {_MAIN_REF} has {main_entries}"
+    assert FROZEN_TOTAL <= main_total, f"FROZEN_TOTAL {FROZEN_TOTAL}; {_MAIN_REF} has {main_total}"
+
+
+def test_the_main_baseline_reader_reads_both_sizes() -> None:
+    """Control for the skip above: the parser finds the numbers in a file shaped like the real one."""
+    source = 'ALLOWLIST: dict[str, str] = {\n    "a::b::c::d": "x",\n    "e::f::g::h": "y",\n}\n\nFROZEN_TOTAL = 2\n'
+    assert _main_frozen(source) == (2, 2)
+    assert _main_frozen(Path(repo_root() / BASELINE_PATH).read_text(encoding="utf-8")) == (len(ALLOWLIST), FROZEN_TOTAL)
