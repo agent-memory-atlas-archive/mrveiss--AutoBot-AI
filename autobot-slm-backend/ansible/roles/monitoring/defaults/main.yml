@@ -42,6 +42,12 @@ alertmanager_group: "alertmanager"
 # autobot.base_dir, so the path on a default host is unchanged. /etc and /var
 # below are FHS service locations (docs/developer/ARCHITECTURE_EXCEPTIONS.md).
 alertmanager_install_dir: "{{ autobot.base_dir | dirname }}/alertmanager"
+# Downloaded into the install dir (created before the fetch), removed after extract.
+alertmanager_archive: "{{ alertmanager_install_dir }}/alertmanager-{{ alertmanager_version }}.tar.gz"
+# Loopback only: the sole consumer is the co-located Prometheus (monitoring_local_host in
+# prometheus.yml.j2). The API can create/delete silences and has no auth, so it is never
+# bound to monitoring_listen_address and has no firewall rule.
+alertmanager_listen_address: "{{ monitoring_local_host }}"
 alertmanager_config_dir: "/etc/alertmanager"
 alertmanager_data_dir: "/var/lib/alertmanager"
 # The routing config and the rule file live once in the repo (the backend's

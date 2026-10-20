@@ -110,7 +110,7 @@ All dashboards are accessible via: **Monitoring → Dashboards** in AutoBot UI
 
 - Installed Prometheus 2.47.0 on the database role
 - Installed Grafana 10.2.0 on the database role
-- Installed AlertManager 0.26.0 on the database role
+- Installed AlertManager 0.26.0 on the database role -- **opt-in**: `monitoring_install_alertmanager` defaults to `false`, so a default updater run does not install it. The role then downloads the release into `alertmanager_install_dir` (`{{ autobot.base_dir | dirname }}/alertmanager`), installs `alertmanager.yml` (validated with `amtool`), a systemd unit, and points Prometheus at it. It listens on loopback only (`alertmanager_listen_address`), with no firewall rule. Enable it on the one node that hosts alert routing by setting `monitoring_install_alertmanager: true` in that node's host_vars (or group_vars for that role).
 - Created systemd services for automatic startup
 - Configured 30-day data retention
 

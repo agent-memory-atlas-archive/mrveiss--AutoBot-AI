@@ -44,13 +44,13 @@
 - name: Download Alertmanager
   ansible.builtin.get_url:
     url: "https://{{ alertmanager_release_host }}/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
-    dest: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
+    dest: "{{ alertmanager_archive }}"
     mode: "0644"
   when: not _alertmanager_binary.stat.exists
 
 - name: Extract Alertmanager
   ansible.builtin.unarchive:
-    src: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
+    src: "{{ alertmanager_archive }}"
     dest: "{{ alertmanager_install_dir }}"
     remote_src: true
     extra_opts:
@@ -61,7 +61,7 @@
 
 - name: Remove the Alertmanager tarball
   ansible.builtin.file:
-    path: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
+    path: "{{ alertmanager_archive }}"
     state: absent
 
 # Validated with the binary's own amtool before it replaces the live file, so a
