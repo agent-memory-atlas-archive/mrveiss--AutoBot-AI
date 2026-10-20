@@ -205,6 +205,8 @@ async def test_expunge_is_synchronous_and_drops_the_tracked_row() -> None:
     obj.id = 3
     s = FakeAsyncSession()
     s.add(obj)
+    await s.flush()
+    assert await s.get(model, 3) is obj  # tracked first, so the test can't pass if expunge is a no-op
     s.expunge(obj)
     assert await s.get(model, 3) is None
 
@@ -384,3 +386,20 @@ async def test_scalar_and_scalars_forward_every_kwarg_to_execute() -> None:
         ({"p": 1}, {"e": 1}, {"b": 1}, {"extra": 1}),
         ({"p": 2}, {"e": 2}, {"b": 2}, {"extra": 2}),
     ]
+
+
+@pytest.mark.asyncio
+async def test_outer_pending_work_survives_a_savepoint_rollback() -> None:
+    """add(a) -> begin_nested -> flush -> raise: a was flushed before the SAVEPOINT, so it stays (#18933)."""
+    model = type("M", (), {})
+    a, b = model(), model()
+    a.id, b.id = 1, 2
+    s = FakeAsyncSession()
+    s.add(a)
+    with pytest.raises(RuntimeError):
+        async with s.begin_nested():
+            s.add(b)
+            await s.flush()
+            raise RuntimeError("savepoint body fails")
+    assert await s.get(model, 1) is a
+    assert await s.get(model, 2) is None

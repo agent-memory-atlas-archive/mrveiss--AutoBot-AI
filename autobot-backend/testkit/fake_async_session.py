@@ -64,6 +64,10 @@ class _FakeTransaction:
         self._marks: tuple = (0, 0, 0, 0)
 
     async def __aenter__(self) -> "_FakeTransaction":
+        if self._nested:
+            # A real Session.begin_nested() flushes pending state before the SAVEPOINT, so outer
+            # work survives a savepoint rollback and the marks can't be undercut by an expunge.
+            await self._session.flush()
         self._marks = self._session._marks()
         return self
 
