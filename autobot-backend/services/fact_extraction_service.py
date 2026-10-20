@@ -17,6 +17,7 @@ from typing import Any, Dict, List
 from agents.knowledge_extraction_agent import KnowledgeExtractionAgent
 from autobot_shared.logging_manager import get_llm_logger
 from config.manager import get_config_manager as _get_config_manager
+from knowledge.serving import is_servable
 from models.atomic_fact import AtomicFact, FactExtractionResult, FactType, TemporalType
 from utils.entity_resolver import entity_resolver
 
@@ -642,12 +643,11 @@ class FactExtractionService:
         """
         if not fact_data:
             return None
-
         try:
             fact_dict = json.loads(fact_data)
             fact = AtomicFact.from_dict(fact_dict)
 
-            if active_only and not fact.is_active:
+            if active_only and not is_servable(fact):  # one serving predicate (#18820)
                 return None
             if min_confidence and fact.confidence < min_confidence:
                 return None

@@ -33,16 +33,11 @@ _ATOMIC = (
 _TEMPORAL = (
     "temporal-invalidation job: ages facts and persists valid_until; it decides what to INVALIDATE, not what to serve"
 )
-_ACTIVE_ONLY = (
-    "MIGRATE: an active_only filter on extracted facts returned to callers is a serving-shaped "
-    "decision; route it through knowledge.serving (follow-up under #18820)"
-)
 
 ALLOWLIST: dict[str, str] = {
     "autobot-backend/agent_loop/belief_state.py::is_active::READ": _AGENT_RUNTIME,
     "autobot-backend/agent_loop/loop.py::is_active::READ": _AGENT_RUNTIME,
     "autobot-backend/agent_loop/types.py::is_active::READ": _AGENT_RUNTIME,
-    "autobot-backend/agents/knowledge_extraction_agent.py::is_active::READ": _ACTIVE_ONLY,
     "autobot-backend/api/agent_config.py::is_active::READ": _CONFIG,
     "autobot-backend/api/chat_shared_links.py::is_active::READ": _CONFIG,
     "autobot-backend/api/coordination_issue_claims_credential.py::is_active::READ": _CREDENTIAL,
@@ -70,7 +65,6 @@ ALLOWLIST: dict[str, str] = {
     "autobot-backend/services/credential_read.py::is_active::READ": _CREDENTIAL,
     "autobot-backend/services/credential_reconcile.py::is_active::READ": _CREDENTIAL,
     "autobot-backend/services/credential_write.py::is_active::READ": _CREDENTIAL,
-    "autobot-backend/services/fact_extraction_service.py::is_active::READ": _ACTIVE_ONLY,
     "autobot-backend/services/json_secrets_read.py::is_active::READ": _CREDENTIAL,
     "autobot-backend/services/llc_secrets_read.py::is_active::READ": _CREDENTIAL,
     "autobot-backend/services/provider_key_vault.py::is_active::READ": _CREDENTIAL,
@@ -86,4 +80,4 @@ ALLOWLIST: dict[str, str] = {
     "autobot_shared/user_management/user_service.py::is_active::READ": _ACCOUNT,
 }
 
-FROZEN_TOTAL = 45
+FROZEN_TOTAL = 43
