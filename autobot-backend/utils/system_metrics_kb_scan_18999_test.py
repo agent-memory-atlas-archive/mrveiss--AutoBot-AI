@@ -66,3 +66,51 @@ async def test_count_refreshes_after_window_and_sees_new_and_expired_keys(monkey
     out = await _cycle(c, r)
     assert out["kb_vector_count"].value == 1568
     assert out["kb_cache_entries"].value == 9
+
+
+class FailingRedis(CountingRedis):
+    async def scan_iter(self, match=None, count=10):
+        self.scan_calls += 1
+        raise ConnectionError("redis busy")
+        yield  # pragma: no cover - makes this an async generator
+
+
+@pytest.mark.asyncio
+async def test_failed_walk_keeps_the_old_count_and_does_not_retry_next_cycle(monkeypatch):
+    c = _collector()
+    c._kb_counts = {}
+    good = CountingRedis(KEYS)
+    await _cycle(c, good)
+    monkeypatch.setattr(sm, "KB_COUNT_REFRESH_SECONDS", 0.0)  # window expired
+    bad = FailingRedis(KEYS)
+    out = await _cycle(c, bad)
+    assert out["kb_vector_count"].value == 1569  # stale value, never 0
+    assert out["kb_cache_entries"].value == 7
+    assert bad.scan_calls == 2  # one failed attempt per pattern
+    monkeypatch.setattr(sm, "KB_COUNT_REFRESH_SECONDS", 300.0)  # the failure stamped the attempt
+    await _cycle(c, bad)
+    assert bad.scan_calls == 2  # waits a full window; no retry
+
+
+@pytest.mark.asyncio
+async def test_failed_walk_with_no_prior_value_omits_the_metric_and_waits_a_window():
+    c = _collector()
+    c._kb_counts = {}
+    bad = FailingRedis(KEYS)
+    out = await _cycle(c, bad)
+    assert "kb_vector_count" not in out and "kb_cache_entries" not in out
+    await _cycle(c, bad)
+    assert bad.scan_calls == 2  # not retried inside the window
+
+
+@pytest.mark.asyncio
+async def test_metric_carries_count_age_seconds(monkeypatch):
+    c = _collector()
+    c._kb_counts = {}
+    r = CountingRedis(KEYS)
+    out = await _cycle(c, r)
+    assert out["kb_vector_count"].metadata["count_age_seconds"] == 0.0
+    t0 = sm.time.monotonic()
+    monkeypatch.setattr(sm.time, "monotonic", lambda: t0 + 120)
+    out = await _cycle(c, r)
+    assert out["kb_vector_count"].metadata["count_age_seconds"] >= 119.9
