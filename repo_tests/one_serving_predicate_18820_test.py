@@ -306,15 +306,19 @@ def _baseline_on_main() -> str | None:
 def _main_baseline_outcome(ref_resolves: bool, source: str | None, in_ci: bool) -> tuple[str, str]:
     """`(action, message)` for the <=-main check: action is `run`, `skip` or `fail`.
 
-    A missing ref under CI is a job that did not fetch main -- the ratchet would silently not
-    run, so it fails. Ref present and file absent means this PR introduces the baseline: skip.
-    Locally a missing ref skips with a reason.
+    CI's test shards check out the merge commit alone (shallow), so no CI job can see main: a
+    missing ref under CI skips with that reason, and the check is enforced where main IS present --
+    pre-push, which runs the baseline's co-located test whenever the baseline changes. Ref present
+    and file absent means this PR introduces the baseline: skip. Locally a missing ref skips too.
     """
     if source is not None:
         return "run", ""
     if not ref_resolves:
         if in_ci:
-            return "fail", f"CI job did not fetch {_MAIN_REF}: cannot check {BASELINE_PATH} against main"
+            return "skip", (
+                f"CI shards are shallow and never fetch {_MAIN_REF}; the <=-main check on {BASELINE_PATH} "
+                "is enforced at pre-push by its co-located test"
+            )
         return "skip", f"{_MAIN_REF} is not fetched in this clone; the <=-main check cannot run locally"
     return "skip", f"{BASELINE_PATH} is not on {_MAIN_REF} yet (this PR introduces it)"
 
@@ -334,9 +338,9 @@ def test_one_pr_cannot_raise_both_the_frozen_total_and_the_list() -> None:
     assert FROZEN_TOTAL <= main_total, f"FROZEN_TOTAL {FROZEN_TOTAL}; {_MAIN_REF} has {main_total}"
 
 
-def test_a_missing_main_ref_under_ci_fails() -> None:
+def test_a_missing_main_ref_under_ci_skips_and_names_where_it_is_enforced() -> None:
     action, message = _main_baseline_outcome(False, None, in_ci=True)
-    assert action == "fail" and "did not fetch origin/main" in message
+    assert action == "skip" and "enforced at pre-push" in message
 
 
 def test_a_present_ref_without_the_baseline_skips_even_under_ci() -> None:
