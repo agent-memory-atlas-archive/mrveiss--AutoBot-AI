@@ -46,8 +46,11 @@ class _SyncStore:
 
 @pytest.mark.parametrize("pipeline_class", [async_client.Pipeline, sync_client.Pipeline])
 def test_every_queued_command_exists_on_the_real_pipeline(pipeline_class):
+    # The commands are generated `*args, **kwargs` methods, so parameter names are NOT compared with
+    # redis-py's signatures: the fake declares none to compare. Arity and names are the target's to enforce.
     assert COMMANDS, "an empty command set would assert nothing"
     assert [name for name in sorted(COMMANDS) if not hasattr(pipeline_class, name)] == []
+    assert not hasattr(pipeline_class, "bogus_cmd"), "contrast: the check can fail on a name redis-py lacks"
 
 
 @pytest.mark.parametrize("fake_class", [FakeAsyncPipeline, FakePipeline])
@@ -229,5 +232,49 @@ def test_the_sync_pipeline_raises_an_injected_watch_error():
     pipe.get("h")
     with pytest.raises(WatchError):
         pipe.execute()
+    pipe.get("h")
+    assert pipe.execute() == [{"f": "v"}]
+
+
+@pytest.mark.asyncio
+async def test_an_empty_queue_returns_an_empty_list_and_injects_nothing():
+    pipe = FakeAsyncPipeline(_Store(), execute_errors=[WatchError()], execute_error=WatchError())
+    assert await pipe.execute() == []
+    assert pipe.executed == []
+    pipe.set("k", "v")
+    with pytest.raises(WatchError):
+        await pipe.execute()  # contrast: with a queued command the same pipeline does inject
+
+
+@pytest.mark.asyncio
+async def test_without_a_transaction_there_is_no_watch_error_or_conflict():
+    store = _Store(k="1")
+    injected = FakeAsyncPipeline(store, transaction=False, execute_error=WatchError())
+    injected.set("a", "v")
+    assert await injected.execute() == [True]
+
+    conflict = FakeAsyncPipeline(store, transaction=False, detect_watch_conflicts=True)
+    await conflict.watch("k")
+    store.strings["k"] = "2"
+    conflict.multi()
+    conflict.set("k", "3")
+    assert await conflict.execute() == [True]
+
+    dead = FakeAsyncPipeline(store, transaction=False, execute_error=ConnectionError("down"))
+    dead.set("a", "v")
+    with pytest.raises(ConnectionError):
+        await dead.execute()  # a non-WATCH failure still fires
+
+
+@pytest.mark.asyncio
+async def test_command_errors_still_apply_without_a_transaction():
+    pipe = FakeAsyncPipeline(_Store(), transaction=False, command_errors={"incrby": TypeError("WRONGTYPE")})
+    pipe.incrby("n", 1)
+    assert isinstance((await pipe.execute(raise_on_error=False))[0], TypeError)
+
+
+def test_the_sync_pipeline_honours_the_empty_queue_and_transaction_rules():
+    assert FakePipeline(_SyncStore(), execute_error=WatchError()).execute() == []
+    pipe = FakePipeline(_SyncStore(), transaction=False, execute_error=WatchError())
     pipe.get("h")
     assert pipe.execute() == [{"f": "v"}]

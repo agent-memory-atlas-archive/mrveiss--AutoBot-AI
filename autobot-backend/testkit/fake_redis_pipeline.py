@@ -16,9 +16,10 @@ Rules (the same shape as ``testkit.fake_async_session``):
    and returns one result per command. After ``watch`` and before ``multi`` a command runs
    immediately (redis-py's ``immediate_execute_command``). ``async with`` / ``with`` resets on exit.
    ``FakeAsyncPipeline`` is also awaitable (``await pipe.hincrby(...)`` works, as on redis.asyncio).
-2. **Recording is always on** (``commands`` for what is queued, ``executed`` for each flushed batch);
+2. **`transaction=False` is not MULTI/EXEC**: no WATCH conflict, no ``WatchError``. An empty queue returns ``[]``.
+3. **Recording is always on** (``commands`` for what is queued, ``executed`` for each flushed batch);
    behaviour is opt-in through the constructor.
-3. **A command that redis-py's pipeline does not have is an ``AttributeError``**, not silently
+4. **A command that redis-py's pipeline does not have is an ``AttributeError``**, not silently
    accepted: ``COMMANDS`` is the closed set tests use, checked against redis-py by
    ``fake_redis_pipeline_test.py``.
 
@@ -46,7 +47,7 @@ from redis.exceptions import WatchError
 
 __all__ = ["COMMANDS", "FakeAsyncPipeline", "FakePipeline", "WatchError"]
 
-#: Every command a pipeline double or `AsyncFullFakeRedis` user queues (#18991); each exists on redis-py's pipeline.
+#: Every command the tests and their fake clients queue through a pipeline (#18991); each exists on redis-py's pipeline.
 COMMANDS = frozenset(
     {
         "delete",
@@ -154,14 +155,29 @@ class _PipelineBase:
         self._explicit_multi = False
 
     def _begin(self) -> list[tuple[str, tuple, dict]]:
-        """Raise an injected EXEC error, else record and return the batch to apply."""
-        error = self._execute_errors.pop(0) if self._execute_errors else self._execute_error
+        """Return the batch to apply, recording it; an empty queue sends nothing, like redis-py.
+
+        Without a transaction there is no MULTI/EXEC, so there is no WATCH conflict and no ``WatchError``;
+        other injected EXEC errors (a dead connection) still fire.
+        """
+        if not self._queue:
+            self._clear()
+            return []
+        if not self._transaction:
+            self._watched.clear()
+        error = self._next_execute_error()
         if error is not None:
             self._clear()
             raise error
         batch = list(self._queue)
         self._executed.append([(name, *args) for name, args, _ in batch])
         return batch
+
+    def _next_execute_error(self) -> Optional[BaseException]:
+        pending = self._execute_errors[0] if self._execute_errors else self._execute_error
+        if isinstance(pending, WatchError) and not self._transaction:
+            return None
+        return self._execute_errors.pop(0) if self._execute_errors else pending
 
     def _conflict(self, key: Any) -> WatchError:
         self._clear()
