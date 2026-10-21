@@ -238,11 +238,37 @@ class TestAnAddedAbsentDependencyIsCouldNotRun:
 
 
 class TestTheDeferralUsesTheExistingCouldNotRunPath:
-    def test_both_vitest_branches_call_could_not_run_before_failing(self) -> None:
-        for fail_marker in ('fail "vitest failures (', 'fail "vitest failures after'):
-            deferral = _SOURCE.find("vitest_failed_on_new_dep_only")
-            assert 0 < deferral < _SOURCE.find(fail_marker, deferral)
-        assert _SOURCE.count("new dependency; CI's npm ci verifies") == 2
+    #: (exit var, output var, could_not_run label): the `vitest run` branch and the kit `vitest related` branch.
+    _BRANCHES = (
+        ("vitest_exit", "vitest_output", "vitest (${project})"),
+        ("kit_exit", "kit_output", "vitest related (${project})"),
+    )
+
+    @staticmethod
+    def _guards_branch(source: str, exit_var: str, out_var: str, label: str) -> bool:
+        """The elif for this branch requires a non-zero exit AND the helper, then calls could_not_run."""
+        pattern = (
+            rf'elif \[ "\${exit_var}" != "0" \] && new_dep_absent=\$\(absent_added_deps [^\n]*\) \\\n'
+            rf'\s*&& vitest_failed_on_new_dep_only "\${out_var}" "\$new_dep_absent"; then\n'
+            rf'\s*could_not_run "{re.escape(label)}" \\\n[^\n]*new dependency; CI\'s npm ci verifies'
+        )
+        return re.search(pattern, source) is not None
+
+    def test_each_vitest_branch_is_guarded_by_the_helper(self) -> None:
+        for exit_var, out_var, label in self._BRANCHES:
+            assert self._guards_branch(_SOURCE, exit_var, out_var, label), f"{label}: helper guard missing"
+            failure = _SOURCE.find('fail "vitest failures', _SOURCE.find(f'"${exit_var}" != "0" ] && new_dep_absent'))
+            assert failure > 0, "the failure branch must still follow the deferral"
+
+    def test_removing_the_helper_from_either_branch_is_caught(self) -> None:
+        for exit_var, out_var, label in self._BRANCHES:
+            helper = f'&& vitest_failed_on_new_dep_only "${out_var}" "$new_dep_absent"; then'
+            assert helper in _SOURCE
+            assert not self._guards_branch(_SOURCE.replace(helper, "; then"), exit_var, out_var, label)
+            assert not self._guards_branch(_SOURCE.replace(helper, "&& true; then"), exit_var, out_var, label)
+
+    def test_the_helper_is_called_from_exactly_the_two_branches(self) -> None:
+        assert _SOURCE.count('vitest_failed_on_new_dep_only "$') == 2
 
     def test_allow_unrunnable_semantics(self, tmp_path: Path) -> None:
         stubs = 'RED=; CLR=; warn() { echo "WARN $*" >&2; }; EXIT_CODE=0\n'
