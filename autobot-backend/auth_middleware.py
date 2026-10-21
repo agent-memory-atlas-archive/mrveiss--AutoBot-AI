@@ -818,9 +818,11 @@ class AuthenticationMiddleware:
             },
         )
 
-    def check_file_permissions(self, request: Request, operation: str) -> Tuple[bool, Dict | None]:
+    async def check_file_permissions(self, request: Request, operation: str) -> Tuple[bool, Dict | None]:
         """
         Enhanced permission checking with comprehensive security measures.
+
+        The caller resolves via ``resolve_human_user``: revoked JWT 401, epoch store down 503 (#18688).
 
         Issue #620: Refactored to use helper methods for audit logging.
 
@@ -828,7 +830,7 @@ class AuthenticationMiddleware:
             Tuple of (permission_granted: bool, user_data: Dict)
         """
         try:
-            user_data = self.get_user_from_request(request)
+            user_data = await resolve_human_user(request)
             if not user_data:
                 return False, None
 
@@ -849,6 +851,8 @@ class AuthenticationMiddleware:
             self._log_file_access_granted(username, operation, user_role, user_data, ip_address)
             return True, user_data
 
+        except HTTPException:
+            raise  # revoked (401), store unavailable (503), device token (403): not a plain denial
         except Exception as e:
             logger.error(f"Error checking file permissions for operation '{operation}': {e}")
             return False, None
@@ -949,18 +953,9 @@ async def get_current_user(request: Request) -> Dict:
 
 async def check_admin_permission(request: Request) -> bool:
     """
-    FastAPI dependency to check if user has admin permission; a revoked JWT is 401 (#18688).
+    FastAPI dependency: True for an admin (``Depends(check_admin_permission)``); a revoked JWT is 401 (#18688).
 
-    Use as: Depends(check_admin_permission)
-
-    Args:
-        request: FastAPI Request object
-
-    Returns:
-        True if user has admin role
-
-    Raises:
-        HTTPException: 401 if not authenticated, 403 if not admin
+    Raises HTTPException: 401 if not authenticated, 403 if not admin.
     """
     # Issue #1145: Allow trusted internal services (e.g. SLM backend) via API key.
     # The key is set via AUTOBOT_INTERNAL_API_KEY env var on both services.

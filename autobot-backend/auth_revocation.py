@@ -53,3 +53,18 @@ async def reject_if_revoked_by_password_change(user_data: Dict) -> None:
             detail="Token is no longer valid — password was changed. Please sign in again.",
             headers=_BEARER_CHALLENGE,
         )
+
+
+async def revoked_by_password_change_for_introspection(claims: Dict) -> bool:
+    """Whether *claims* (a token being inspected, not the caller) predate its subject's password change.
+
+    Introspection reports the verdict instead of refusing the request: revoked and unreadable
+    claims are ``True``; a check that cannot run is the same 503 as every other gate (#18688).
+    """
+    try:
+        return await is_token_revoked_by_password_change(claims)
+    except MalformedTokenClaims:
+        return True
+    except RevocationCheckUnavailable as exc:
+        logger.error("password-epoch introspection reached no verdict (%s); denying", exc)
+        raise revocation_unavailable_error() from exc
