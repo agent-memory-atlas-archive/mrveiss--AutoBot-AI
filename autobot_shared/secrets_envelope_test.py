@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import re
 
 import pytest
 
@@ -48,7 +49,7 @@ class TestRootKeyFailureIsLogged:
     def test_each_failing_check_is_named(self, monkeypatch, value, expected) -> None:
         lines = self._capture(monkeypatch)
         monkeypatch.setenv(env.ROOT_KEY_ENV, value)
-        with pytest.raises(RuntimeError, match=expected):
+        with pytest.raises(RuntimeError, match=re.escape(expected)):
             env.load_root_key()
         assert len(lines) == 1 and expected in lines[0]
 
