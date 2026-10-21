@@ -39,9 +39,11 @@ Use :func:`check_run_status` unless you specifically need the raw runs.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -211,13 +213,13 @@ class CheckRunsIncomplete(RuntimeError):
     """The walk read fewer (or more) runs than the API said exist (#19085)."""
 
 
-def check_runs_for(repository: str, sha: str) -> list[dict]:
-    """Every check run on ``sha``, across all pages. Raw, ungrouped.
+#: Seconds before the one retry of a short read. ``total_count`` can lead the
+#: runs listing while runs are still being created, so a first mismatch is
+#: usually a race, not a fault; a second one is reported, never papered over.
+SHORT_READ_RETRY_DELAY_SECONDS = float(os.environ.get("AUTOBOT_CHECK_RUNS_RETRY_DELAY", "2"))
 
-    Fails closed: when the API's own ``total_count`` is not the number of runs
-    read, raises :class:`CheckRunsIncomplete` rather than returning a short list
-    that a caller would read as the whole population.
-    """
+
+def _read_check_runs_once(repository: str, sha: str) -> list[dict]:
     pages = json.loads(
         subprocess.run(
             ["gh", "api", "--paginate", "--slurp", check_runs_endpoint(repository, sha)],
@@ -234,6 +236,22 @@ def check_runs_for(repository: str, sha: str) -> list[dict]:
             f"but the API reported total_count={sorted(totals, key=str)} -- an incomplete read is not a verdict"
         )
     return runs
+
+
+def check_runs_for(repository: str, sha: str) -> list[dict]:
+    """Every check run on ``sha``, across all pages. Raw, ungrouped.
+
+    Fails closed: when the API's own ``total_count`` is not the number of runs
+    read, the read is retried once after a short backoff, and a second mismatch
+    raises :class:`CheckRunsIncomplete` rather than returning a short list that
+    a caller would read as the whole population (#19085). Callers either catch
+    it and report a distinct could-not-determine state, or let it propagate.
+    """
+    try:
+        return _read_check_runs_once(repository, sha)
+    except CheckRunsIncomplete:
+        time.sleep(SHORT_READ_RETRY_DELAY_SECONDS)
+        return _read_check_runs_once(repository, sha)
 
 
 def count_runs_named(repository: str, sha: str, pattern: str) -> int:
@@ -317,6 +335,10 @@ def check_run_status(repository: str, sha: str) -> dict[str, str]:
     Returns a mapping of context name to conclusion. A name absent from the
     result was **never reported**, which is a different state from reported and
     not green -- see :func:`split_by_state`.
+
+    Propagates :class:`CheckRunsIncomplete`: there is no honest per-name map of
+    a listing known to be short, so the caller must decide (the merge gate
+    reports GATE-ERROR, exit 2).
     """
     return latest_per_name(check_runs_for(repository, sha))
 
@@ -361,7 +383,11 @@ def pending_ages(observations: Iterable[dict]) -> dict[str, float]:
 
 
 def pending_check_ages(repository: str, sha: str) -> dict[str, float]:
-    """Live counterpart to :func:`pending_ages`, fetching ``sha``'s check runs."""
+    """Live counterpart to :func:`pending_ages`, fetching ``sha``'s check runs.
+
+    Propagates :class:`CheckRunsIncomplete` (after the one retry): an age map of
+    a short listing would omit running contexts, which reads as "nothing stuck".
+    """
     return pending_ages(check_runs_for(repository, sha))
 
 

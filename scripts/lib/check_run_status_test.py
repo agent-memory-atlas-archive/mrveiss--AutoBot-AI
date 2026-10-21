@@ -119,6 +119,7 @@ def test_a_listing_short_of_total_count_raises_instead_of_returning_a_partial_li
         stdout = json.dumps([{"total_count": 3, "check_runs": [_run("a", "2026-09-09T08:00:00Z", "success")] * 2}])
 
     monkeypatch.setattr("check_run_status.subprocess.run", lambda *_a, **_k: _Result())
+    monkeypatch.setattr("check_run_status.time.sleep", lambda _s: None)
     with pytest.raises(check_run_status_module.CheckRunsIncomplete):
         check_run_status_module.check_runs_for("owner/repo", "deadbeef")
 
@@ -132,7 +133,10 @@ def test_pagination_reaches_past_the_first_page(monkeypatch: pytest.MonkeyPatch)
 
     Remove `--paginate` from `all_pages` and this fails.
     """
-    page_one = {"total_count": 101, "check_runs": [_run(f"shard {i}", "2026-09-09T08:00:00Z", "success") for i in range(100)]}
+    page_one = {
+        "total_count": 101,
+        "check_runs": [_run(f"shard {i}", "2026-09-09T08:00:00Z", "success") for i in range(100)],
+    }
     page_two = {"total_count": 101, "check_runs": [_run("startup-import-smoke", "2026-09-09T08:00:00Z", "cancelled")]}
 
     captured: dict[str, list[str]] = {}

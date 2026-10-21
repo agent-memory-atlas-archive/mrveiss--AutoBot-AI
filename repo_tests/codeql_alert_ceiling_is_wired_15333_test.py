@@ -223,8 +223,7 @@ def _fake_gh(
     script.write_text(
         "#!/usr/bin/env bash\n"
         # The check-runs call is read by scripts/lib/check_run_status.py with
-        'JQF=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "--jq" ] && JQF="$a"; prev="$a"; done\n'
+        'JQF=""; prev=""\n' 'for a in "$@"; do [ "$prev" = "--jq" ] && JQF="$a"; prev="$a"; done\n'
         # `--paginate --slurp`, so the stub answers with a JSON ARRAY of pages. A `checks`
         # that is already an array is the page list; a single page document is wrapped.
         # The matcher itself stays real (#18105, #19085).
@@ -234,7 +233,7 @@ def _fake_gh(
         f"    *check-runs*) {'exit 1' if checks_fail else 'true'}\n"
         # Like the real CLI: only `--paginate` reaches later pages. Without it the answer is
         # page 1 alone, so a single-page read is genuinely blind to a CodeQL run on page 2.
-        '      case " $* " in *" --paginate "*) cat \'' + str(checks_file) + '\' ;;\n'
+        '      case " $* " in *" --paginate "*) cat \'' + str(checks_file) + "' ;;\n"
         f"        *) jq -c '.[0]' '{checks_file}' | {{ if [ -n \"$JQF\" ]; then jq -r \"$JQF\"; else cat; fi; }} ;; esac\n"
         "      exit 0 ;;\n"
         f"    *code-scanning/alerts*ref=*) printf '%s' '{alerts}'; exit 0 ;;\n"
@@ -268,6 +267,7 @@ def _run_gate(
     )
     env = dict(os.environ)
     env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["AUTOBOT_CHECK_RUNS_RETRY_DELAY"] = "0"
     env["ALERT_REF"] = "refs/pull/1/merge"
     env["GITHUB_SHA"] = sha
     return subprocess.run(
