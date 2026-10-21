@@ -51,7 +51,7 @@
     # hypothetical relocation: services/git_tracker.py:33 reads
     # `SLM_REPO_PATH`, so any deployment setting it moves the Python side while
     # this literal and the sudoers rule below stay put.
-    provision_playbook: "/opt/autobot/code_source/autobot-slm-backend/ansible/playbooks/provision-local-python.yml"
+    provision_playbook: "{{ autobot.base_dir }}/code_source/autobot-slm-backend/ansible/playbooks/provision-local-python.yml"
 
   pre_tasks:
     - name: Display configuration information
