@@ -149,7 +149,9 @@ def test_refresh_does_not_mint_from_a_revoked_token(monkeypatch, auth_client, re
 # -- /auth/logout: idempotent, never fails, never names a void credential ----------------------------
 
 
-@pytest.mark.parametrize(("revoked", "named"), [(True, "unknown"), (False, _JWT_USER["user_id"])])
+@pytest.mark.parametrize(
+    ("revoked", "named"), [(True, "unknown"), (False, _JWT_USER["user_id"])], ids=["revoked", "fresh"]
+)
 def test_logout_succeeds_for_a_revoked_jwt_and_does_not_name_it(monkeypatch, auth_client, revoked, named):
     _epoch_says(monkeypatch, revoked=revoked)
     emitted = MagicMock()
