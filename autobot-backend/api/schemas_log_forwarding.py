@@ -25,19 +25,19 @@ LogFwdSyslogProtocol = Literal["udp", "tcp", "tcp_tls"]
 class LogForwardingDestinationItem(BaseModel):
     """One destination in list/detail responses (#18734).
 
-    Exactly `DestinationConfig.to_dict_sanitized()` (scripts/logging/log_forwarder.py)
-    plus the health fields the routes add. Every field is declared so the OpenAPI
-    contract, and the frontends' generated types, carry the real shape. Credentials
-    arrive masked.
+    `DestinationConfig.to_dict_sanitized()` (scripts/logging/log_forwarder.py) plus the
+    health fields. Every field is declared so the OpenAPI contract, and the frontends'
+    generated types, carry the real shape. Credentials arrive masked and are named
+    `*_masked`: a response model never names a stored credential (#17865).
     """
 
     name: str
     type: LogFwdType
     enabled: bool
     url: str | None = None
-    api_key: str | None = Field(None, description="Masked: '****' + last 4 characters")
+    api_key_masked: str | None = Field(None, description="The stored API key as '****' + its last 4 characters")
     username: str | None = None
-    password: str | None = Field(None, description="Masked: '****'")
+    password_masked: str | None = Field(None, description="'****' when a password is stored")
     index: str | None = None
     file_path: str | None = None
     min_level: str

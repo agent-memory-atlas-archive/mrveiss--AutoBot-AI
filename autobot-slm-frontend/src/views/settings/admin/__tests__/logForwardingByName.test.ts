@@ -32,7 +32,7 @@ const t = (en as { settings: { admin: Record<string, Record<string, string>> } }
 function served(name: string, over: Record<string, unknown> = {}) {
   return {
     name, type: 'webhook', enabled: true, url: `https://${name}.example/logs`,
-    api_key: '****abcd', username: null, password: null, index: null, file_path: null,
+    api_key_masked: '****abcd', username: null, password_masked: null, index: null, file_path: null,
     min_level: 'Information', batch_size: 10, batch_timeout: 5, retry_count: 3, retry_delay: 1,
     scope: 'global', target_hosts: [], syslog_protocol: 'udp', ssl_verify: true,
     ssl_ca_cert: null, ssl_client_cert: null, ssl_client_key: null,
