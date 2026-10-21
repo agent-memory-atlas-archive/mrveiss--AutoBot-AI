@@ -248,6 +248,39 @@ vitest_ran_nothing() {
   ! printf '%s\n' "$1" | grep -qE "Test Files| FAIL "
 }
 
+# #19130: a changeset that ADDS a JS dependency cannot have it in the linked node_modules
+# (#16912), so vitest fails on exactly that import until CI's `npm ci` installs it. The
+# names come from the package.json / lockfile diff (added_js_deps.py: head minus base),
+# checked against the install -- never from vitest's own output.
+# Args: <diff-range base> <head> <project-dir>. Prints the added names absent from both
+# the project's and the declaring manifest's node_modules, one per line.
+absent_added_deps() {
+  local name dir
+  "$PYTEST_PYTHON" -I "$REPO_ROOT/tools/git-hooks/added_js_deps.py" "$1" "$2" 2>/dev/null \
+    | while IFS=$'\t' read -r name dir; do
+        [ -f "$3/node_modules/$name/package.json" ] && continue
+        [ -f "$REPO_ROOT/$dir/node_modules/$name/package.json" ] && continue
+        printf '%s\n' "$name"
+      done
+}
+# Package names vitest could not resolve (subpaths folded to the package), one per line.
+unresolved_packages() {
+  printf '%s\n' "$1" | grep -oE "(Failed to resolve import|Cannot find (package|module)) [\"']([^\"']+)[\"']" \
+    | sed -E "s/^[^\"']*[\"']//; s/[\"']\$//" | grep -vE '^(\.|/)' \
+    | sed -E 's|^(@[^/]+/[^/]+).*|\1|; t; s|^([^/]+).*|\1|' | sort -u
+}
+# 0 only when vitest's output names at least one unresolved package AND every one is an
+# added-and-absent dependency ($2, newline-separated). A broken import of an existing
+# module is in the output too, is not in $2, and so stays a failure.
+vitest_failed_on_new_dep_only() {
+  local unresolved pkg
+  unresolved=$(unresolved_packages "$1")
+  [ -n "$unresolved" ] || return 1
+  for pkg in $unresolved; do
+    printf '%s\n' "$2" | grep -qxF -- "$pkg" || return 1
+  done
+}
+
 # #17961: what a blocked push shows is the failing tests, not the last 25
 # lines. vitest prints failures BEFORE its summary, and the dependency-floor
 # report follows the summary, so a fixed tail showed only "Start at" and
@@ -696,6 +729,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       elif [ "$vitest_exit" != "0" ] && vitest_ran_nothing "$vitest_output"; then
         could_not_run "vitest (${project})" \
           "exited ${vitest_exit} before running a single test: $(printf '%s\n' "$vitest_output" | grep -m1 -E 'Error|error' || printf '%s\n' "$vitest_output" | tail -1)"
+      elif [ "$vitest_exit" != "0" ] && new_dep_absent=$(absent_added_deps "${base:-$remote_sha}" "$local_sha" "$project_dir") \
+           && vitest_failed_on_new_dep_only "$vitest_output" "$new_dep_absent"; then
+        could_not_run "vitest (${project})" \
+          "could not run (new dependency; CI's npm ci verifies): $(echo $new_dep_absent)"
       elif [ "$vitest_exit" != "0" ]; then
         fail "vitest failures (${project}, #5142):"
         failure_excerpt "$vitest_output" >&2
@@ -725,6 +762,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       ) || kit_exit=$?
       if [ "$kit_exit" = "124" ]; then
         did_not_run "vitest related (${project})" "${kit_timeout}"
+      elif [ "$kit_exit" != "0" ] && new_dep_absent=$(absent_added_deps "${base:-$remote_sha}" "$local_sha" "$project_dir") \
+           && vitest_failed_on_new_dep_only "$kit_output" "$new_dep_absent"; then
+        could_not_run "vitest related (${project})" \
+          "could not run (new dependency; CI's npm ci verifies): $(echo $new_dep_absent)"
       elif [ "$kit_exit" != "0" ]; then
         fail "vitest failures after a ${KIT_TREE} change (${project}, #17959):"
         failure_excerpt "$kit_output" >&2
