@@ -62,6 +62,7 @@ export function buildCreateBody(form: LogForwardingForm): LogForwardingDestinati
     retry_count: 3,
     retry_delay: 1,
     scope: 'global',
+    ssl_verify: true, // the contract lists it as required; true is the backend's default
   }
 }
 
