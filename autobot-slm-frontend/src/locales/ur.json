@@ -714,7 +714,7 @@
       "memory": "Memory",
       "modelsCount": "Models ({count})",
       "noModelsDetected": "No models detected",
-      "notAvailable": "دستیاب نہیں",
+      "notAvailable": "N/A",
       "pending": "زیر التوا",
       "priority110": "Priority (1-10)",
       "queueDepthValue0Requests": "Queue Depth: {value0} requests",
