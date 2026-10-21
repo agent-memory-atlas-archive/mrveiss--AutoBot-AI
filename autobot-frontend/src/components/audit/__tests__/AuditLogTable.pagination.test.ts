@@ -25,12 +25,20 @@ describe('AuditLogTable pagination', () => {
     expect(w.find('nav').text()).toContain(L.pageOf.replace('{page}', '3'))
   })
 
-  it('emits next-page and prev-page to the parent', async () => {
+  // Each direction on its own: clicking both and counting one emit of each would also pass with
+  // the prev/next mapping inverted (#19078 review).
+  it('Next emits next-page and never prev-page', async () => {
     const w = render({ currentPage: 2, hasMore: true })
     await button(w, L.next).trigger('click')
-    await button(w, L.previous).trigger('click')
     expect(w.emitted('next-page')).toHaveLength(1)
+    expect(w.emitted('prev-page')).toBeUndefined()
+  })
+
+  it('Previous emits prev-page and never next-page', async () => {
+    const w = render({ currentPage: 2, hasMore: true })
+    await button(w, L.previous).trigger('click')
     expect(w.emitted('prev-page')).toHaveLength(1)
+    expect(w.emitted('next-page')).toBeUndefined()
   })
 
   it('disables Next when there is no further page, and Previous on page 1', () => {

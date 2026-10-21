@@ -50,6 +50,23 @@ describe('BasePagination', () => {
     expect(w.emitted('update:page')).toEqual([[1], [5]])
   })
 
+  it('a page past the end: Next is disabled, and Previous steps back into range, not further out', async () => {
+    const w = render({ page: 9, totalPages: 5, showFirstLast: true })
+    expect(button(w, 'Next')!.attributes('disabled')).toBeDefined()
+    expect(button(w, 'Last')!.attributes('disabled')).toBeDefined()
+    await button(w, 'Prev')!.trigger('click')
+    expect(w.emitted('update:page')).toEqual([[5]])
+  })
+
+  it.each([0, 1])('totalPages %i on page 1: both directions are disabled and nothing is emitted', async (totalPages) => {
+    const w = render({ page: 1, totalPages, showFirstLast: true })
+    for (const name of ['First', 'Prev', 'Next', 'Last']) {
+      expect(button(w, name)!.attributes('disabled')).toBeDefined()
+    }
+    await Promise.all(w.findAll('button').map((b) => b.trigger('click')))
+    expect(w.emitted('update:page')).toBeUndefined()
+  })
+
   it('disabled turns every control off', () => {
     const w = render({ disabled: true, showFirstLast: true, page: 3 })
     expect(w.findAll('button').every((b) => b.attributes('disabled') !== undefined)).toBe(true)

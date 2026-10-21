@@ -48,8 +48,12 @@ const canPrev = computed(() => !props.disabled && props.page > 1)
 const canNext = computed(() => !props.disabled && (props.hasNext ?? (known.value && props.page < (props.totalPages ?? 0))))
 const showEnds = computed(() => props.showFirstLast && known.value && !!props.labels.first && !!props.labels.last)
 
+// Never emits a page outside 1..totalPages (when known): a page past the end steps back into range
+// instead of further out, so the kit does not rely on the caller's own bounds check (#19078 review).
 function go(page: number): void {
-  if (page !== props.page) emit('update:page', page)
+  const last = known.value ? Math.max(1, props.totalPages ?? 1) : Infinity
+  const target = Math.min(last, Math.max(1, page))
+  if (target !== props.page) emit('update:page', target)
 }
 </script>
 
