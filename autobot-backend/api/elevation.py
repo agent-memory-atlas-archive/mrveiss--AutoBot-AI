@@ -9,6 +9,7 @@ Handles privilege escalation requests through GUI dialogs
 """
 
 import asyncio
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict
@@ -43,6 +44,12 @@ _ALLOWED_ELEVATED_COMMANDS = frozenset({"apt", "systemctl", "mount", "umount", "
 # In-memory storage for elevation sessions (in production, use Redis)
 elevation_sessions: Dict[str, dict] = {}
 pending_requests: Dict[str, dict] = {}
+
+
+def _token_fingerprint(session_token: str) -> str:
+    """Non-reversible 8-char identifier for a session token, safe to log (#19082)."""
+    return hashlib.sha256(session_token.encode("utf-8")).hexdigest()[:8]
+
 
 # Locks for thread-safe access
 _elevation_sessions_lock = asyncio.Lock()
@@ -119,7 +126,11 @@ async def authorize_elevation(auth: ElevationAuthorization):
             pending_requests[request_id]["status"] = "authorized"
             pending_requests[request_id]["session_token"] = session_token
 
-        logger.info("Elevation authorized: %s", request_id)
+        logger.info(
+            "Elevation authorized: %s (session %s)",
+            request_id,
+            _token_fingerprint(session_token),
+        )
 
         return {
             "success": True,
@@ -186,7 +197,11 @@ async def execute_elevated_command(session_token: str, command: str):
         # In production, implement proper security controls
         result = await run_elevated_command(command)
 
-        logger.info("Elevated command executed: %s", command)
+        logger.info(
+            "Elevated command executed: %s (session %s)",
+            command,
+            _token_fingerprint(session_token),
+        )
 
         return {
             "success": True,
@@ -305,7 +320,10 @@ async def revoke_elevation_session(session_token: str):
     """Revoke an elevation session"""
     if session_token in elevation_sessions:
         del elevation_sessions[session_token]
-        logger.info("Elevation session revoked: %s", session_token)
+        logger.info(
+            "Elevation session revoked: %s",
+            _token_fingerprint(session_token),
+        )
 
     return {"success": True, "message": "Session revoked"}
 
