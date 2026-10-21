@@ -30,3 +30,21 @@ describe('RestartConfirmDialog dismissal', () => {
     expect(mountDialog(false).findComponent(BaseModal).props('locked')).toBe(false)
   })
 })
+
+describe('RestartConfirmDialog message sanitisation (#19118)', () => {
+  it('keeps formatting but strips executable markup', () => {
+    const w = mount(RestartConfirmDialog, {
+      props: {
+        show: true,
+        message:
+          'restart <strong>host</strong><img src=x onerror="alert(1)"><script>alert(2)</script>',
+      },
+      global: { mocks: { $t: (k: string) => k }, stubs: { teleport: true } },
+    })
+    const box = w.find('.text-gray-600')
+    expect(box.find('strong').exists()).toBe(true)
+    expect(box.find('img').exists()).toBe(false)
+    expect(box.find('script').exists()).toBe(false)
+    expect(box.html()).not.toContain('onerror')
+  })
+})
