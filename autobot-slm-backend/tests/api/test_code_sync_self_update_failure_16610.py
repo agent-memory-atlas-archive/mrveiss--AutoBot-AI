@@ -200,7 +200,9 @@ def test_reconcile_keeps_the_self_update_failure_reason() -> None:
 def test_a_wait_cut_by_the_slm_restart_keeps_the_plan_and_the_stage() -> None:
     """#19139: the waiter's -SIGTERM is this process restarting, not the run failing."""
     job = _new_job()
-    cut = AsyncMock(return_value={"success": False, "output": "", "returncode": -15, "timed_out": False})
+    cut = AsyncMock(
+        return_value={"success": False, "output": "", "returncode": -15, "timed_out": False, "detached": True}
+    )
 
     mocks = _run_self_update(_fire_slm_stage(job), cut)
 
@@ -212,14 +214,21 @@ def test_a_wait_cut_by_the_slm_restart_keeps_the_plan_and_the_stage() -> None:
 
 
 @pytest.mark.parametrize(
-    ("returncode", "timed_out"),
-    [(2, False), (-9, True), (-1, False), (-15, True)],
-    ids=["unit-exit-code", "timeout-kill", "refused", "sigterm-on-timeout"],
+    ("returncode", "timed_out", "detached"),
+    [(2, False, True), (-9, True, True), (-1, False, True), (-15, True, True), (-15, False, False)],
+    ids=["unit-exit-code", "timeout-kill", "refused", "sigterm-on-timeout", "attached-sigterm"],
 )
-def test_a_real_failure_still_clears_the_plan_and_fails_the_stage(returncode, timed_out) -> None:
+def test_a_real_failure_still_clears_the_plan_and_fails_the_stage(returncode, timed_out, detached) -> None:
+    """An ATTACHED run (no detach possible) is ansible itself dying on the SIGTERM -- a real failure."""
     job = _new_job()
     failed = AsyncMock(
-        return_value={"success": False, "output": _REFUSAL_OUTPUT, "returncode": returncode, "timed_out": timed_out}
+        return_value={
+            "success": False,
+            "output": _REFUSAL_OUTPUT,
+            "returncode": returncode,
+            "timed_out": timed_out,
+            "detached": detached,
+        }
     )
 
     mocks = _run_self_update(_fire_slm_stage(job), failed)

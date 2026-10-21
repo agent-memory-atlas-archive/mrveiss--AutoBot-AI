@@ -111,9 +111,10 @@ def restart_cut_the_wait(result: dict, node_id: str) -> bool:
     service's cgroup, so the restart the run itself triggers ends the waiter with
     -SIGTERM. That is not a failure -- the run continues, and the plan persisted for
     the restarted process must survive. A real failure arrives as the unit's own
-    exit code, and a timeout as -SIGKILL with ``timed_out``; both still fail.
+    exit code, and a timeout as -SIGKILL with ``timed_out``; both still fail. An ATTACHED run
+    (no detach possible, "UPDATE-ALL DEGRADED") dies itself on that SIGTERM -- a real failure.
     """
-    cut = result.get("returncode") == -signal.SIGTERM and not result.get("timed_out")
+    cut = bool(result.get("detached")) and result.get("returncode") == -signal.SIGTERM and not result.get("timed_out")
     if cut:
         logger.info(
             "self-update for %s: this SLM is restarting; the detached run continues and the "

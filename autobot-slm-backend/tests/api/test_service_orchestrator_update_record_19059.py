@@ -81,5 +81,7 @@ async def test_refused_name_warns_naming_service_and_node(caplog):
     with caplog.at_level(logging.WARNING, logger=_LOGGER):
         await _orchestrator()._update_service_record(db, _NODE, bad, "running")
     msgs = [r.getMessage() for r in caplog.records if r.name == _LOGGER]
-    assert any(bad in m and _NODE in m for m in msgs)
+    assert any(_NODE in m for m in msgs), "the refusal must be visible on the orchestrator's own logger"
+    # The guard logs the name repr-capped; repeating the raw value here would undo that (#19059 review).
+    assert not any(bad in m for m in msgs)
     db.add.assert_not_called()

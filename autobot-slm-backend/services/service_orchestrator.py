@@ -800,7 +800,7 @@ class ServiceOrchestrator:
 
         outcome = await upsert_service(db, node_id, service_name, update=_update, create=_create)
         if outcome is None:
-            logger.warning("service record not written: refused unit name service=%s node=%s", service_name, node_id)
+            logger.warning("service record not written on node=%s: unit name refused (see unit_names)", node_id)
         await db.commit()
 
     async def _run_ssh_command(self, host: str, command: str, requires_sudo: bool = False) -> Tuple[bool, str]:
