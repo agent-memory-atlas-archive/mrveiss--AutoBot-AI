@@ -188,12 +188,12 @@ async function testDestination(name: string): Promise<void> {
 
   try {
     const result = await api.testLogForwardingDestination(name)
+    await fetchDestinations() // first: it clears `error`, which would hide an unhealthy result (#18797)
     if (result.healthy) {
       success.value = t('settings.admin.logForwardingSettings.testSucceeded')
     } else {
       error.value = result.message
     }
-    await fetchDestinations()
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
     error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.testFailed')
@@ -208,8 +208,8 @@ async function testAllDestinations(): Promise<void> {
 
   try {
     const response = await api.testAllLogForwardingDestinations()
-    success.value = t('settings.admin.logForwardingSettings.testAllSummary', { healthy: response.healthy, total: response.total })
-    await fetchDestinations()
+    await fetchDestinations() // a partial failure is an error, never the green banner (#18797)
+    ;(response.healthy === response.total ? success : error).value = t('settings.admin.logForwardingSettings.testAllSummary', { healthy: response.healthy, total: response.total })
     setTimeout(() => { success.value = null }, 3000)
   } catch (e) {
     error.value = e instanceof Error ? e.message : t('settings.admin.logForwardingSettings.testAllFailed')

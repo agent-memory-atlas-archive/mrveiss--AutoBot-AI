@@ -226,3 +226,34 @@ describe('Log Forwarding auto-start toggle (#18797 review)', () => {
     expect(box(w).element.checked).toBe(true)
   })
 })
+
+describe('Log Forwarding test results are shown truthfully (#18797 review)', () => {
+  const errorAlert = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('.aui-alert--error')
+
+  it("an unhealthy single test keeps its message: the list refresh after it does not clear it", async () => {
+    api.testLogForwardingDestination.mockResolvedValue({ name: 'alpha', healthy: false, last_error: 'refused', message: 'connection refused' })
+    const w = await mountPage()
+    await buttonByTitle(w, t.testConnection, 0).trigger('click')
+    await flushPromises()
+    expect(errorAlert(w).exists()).toBe(true)
+    expect(errorAlert(w).text()).toContain('connection refused')
+  })
+
+  it('test all with a failure is an error, not the success banner', async () => {
+    api.testAllLogForwardingDestinations.mockResolvedValue({ results: { alpha: true, beta: false }, total: 2, healthy: 1, unhealthy: 1 })
+    const w = await mountPage()
+    await w.findAll('button').find((b) => b.text().includes(t.testAll))!.trigger('click')
+    await flushPromises()
+    expect(errorAlert(w).text()).toContain('1/2')
+    expect(w.text()).toContain('1/2 destinations healthy')
+  })
+
+  it('contrast: test all with every destination healthy shows no error', async () => {
+    api.testAllLogForwardingDestinations.mockResolvedValue({ results: { alpha: true, beta: true }, total: 2, healthy: 2, unhealthy: 0 })
+    const w = await mountPage()
+    await w.findAll('button').find((b) => b.text().includes(t.testAll))!.trigger('click')
+    await flushPromises()
+    expect(errorAlert(w).exists()).toBe(false)
+    expect(w.text()).toContain('2/2 destinations healthy')
+  })
+})
