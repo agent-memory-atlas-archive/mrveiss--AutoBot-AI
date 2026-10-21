@@ -146,6 +146,20 @@ def test_refresh_does_not_mint_from_a_revoked_token(monkeypatch, auth_client, re
     assert response.status_code == expected
 
 
+@pytest.mark.parametrize(("session", "expected"), [(None, 401), ({"user_data": {}}, 200)], ids=["logged-out", "active"])
+def test_refresh_does_not_mint_from_a_logged_out_session(monkeypatch, auth_client, session, expected):
+    """A token whose session was invalidated (logout) is not refreshable inside its window."""
+    _epoch_says(monkeypatch, revoked=False)
+    claims = {"username": "alice", "role": "admin", "sub": "alice", "iat": 1, "session_id": "s-1"}
+    monkeypatch.setattr(auth_client.api_auth, "_decode_refresh_token", lambda _token: dict(claims))
+    middleware = auth_client.api_auth.get_auth_middleware()
+    middleware.get_session = lambda _sid: session
+    middleware.create_jwt_token = MagicMock(return_value="new")
+    middleware.jwt_expiry_hours = 1
+    response = auth_client.post("/api/auth/refresh", headers={"Authorization": "Bearer old"})
+    assert response.status_code == expected
+
+
 # -- /auth/logout: idempotent, never fails, never names a void credential ----------------------------
 
 
