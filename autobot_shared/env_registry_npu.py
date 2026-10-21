@@ -78,6 +78,16 @@ _register(
     "slm",
 )
 _register(
+    "SLM_HMAC_API_KEY_SECRET",
+    str,
+    "",
+    (
+        "Pepper for SLM API-key hashing (#16299). No default: unset makes creating a key "
+        "fail closed; existing keys still verify through the legacy path with a WARNING."
+    ),
+    "slm",
+)
+_register(
     "SLM_USERS_DATABASE_URL",
     str,
     None,

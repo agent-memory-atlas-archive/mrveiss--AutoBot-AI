@@ -544,18 +544,3 @@ register_env_var(
         range=(1, 300),
     )
 )
-
-register_env_var(
-    EnvVarSpec(
-        name="SLM_HMAC_API_KEY_SECRET",
-        type=str,
-        default="",
-        description=(
-            "Pepper for SLM API-key hashing (#16299). No default: unset makes "
-            "creating a key fail closed; existing keys still verify through the "
-            "legacy path and a WARNING names this variable. Keys are re-hashed "
-            "with it on use once set."
-        ),
-        component="slm",
-    )
-)
