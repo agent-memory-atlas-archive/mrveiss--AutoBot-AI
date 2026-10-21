@@ -274,9 +274,23 @@ class Settings(RedactedReprMixin, BaseSettings):
     jwks_fetch_timeout_seconds: float = float(os.getenv("SLM_JWKS_FETCH_TIMEOUT", "10"))
 
     # HMAC signing key for API key hashing (#2160).
-    # Default preserves backward compatibility with existing hashed keys.
-    # Override in production via SLM_HMAC_API_KEY_SECRET env var.
-    hmac_api_key_secret: str = os.getenv("SLM_HMAC_API_KEY_SECRET", "autobot-api-key-v1")
+    # No in-repo default (#16299): a secret published in the source signs
+    # nothing worth trusting.  Empty means "not configured"; the first HMAC
+    # use raises (see ``require_hmac_api_key_secret``), it never falls back.
+    hmac_api_key_secret: str = os.getenv("SLM_HMAC_API_KEY_SECRET", "")
+
+    def require_hmac_api_key_secret(self) -> str:
+        """Return the API-key HMAC secret or fail closed (#16299).
+
+        Raises RuntimeError naming the variable (never a value) when unset.
+        """
+        if not self.hmac_api_key_secret:
+            raise RuntimeError(
+                "SLM_HMAC_API_KEY_SECRET is not set: refusing to sign or verify "
+                "API keys with a built-in default. Set it in "
+                "/etc/autobot/slm-secrets.env."
+            )
+        return self.hmac_api_key_secret
 
     # Encryption for sensitive data (credentials, etc.)
     encryption_key: str = os.getenv("SLM_ENCRYPTION_KEY", "")

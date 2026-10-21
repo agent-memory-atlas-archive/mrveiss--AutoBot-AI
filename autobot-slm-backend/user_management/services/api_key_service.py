@@ -142,11 +142,11 @@ class APIKeyService(BaseService):
     def _hash_key(key: str) -> str:
         """Hash an API key using HMAC-SHA256 (#1721, #2083, #2160).
 
-        The signing key is read from SLM_HMAC_API_KEY_SECRET (default:
-        "autobot-api-key-v1" for backward compatibility with existing hashes).
+        The signing key is read from SLM_HMAC_API_KEY_SECRET. There is no
+        default: an unset variable raises RuntimeError (#16299).
         """
         return hmac.new(  # HMAC-SHA256 for API token lookup, not password storage
-            key=settings.hmac_api_key_secret.encode("utf-8"),
+            key=settings.require_hmac_api_key_secret().encode("utf-8"),
             msg=key.encode("utf-8"),
             digestmod=hashlib.sha256,
         ).hexdigest()
