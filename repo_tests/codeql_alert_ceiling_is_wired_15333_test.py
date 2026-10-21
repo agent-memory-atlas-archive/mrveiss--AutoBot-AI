@@ -346,6 +346,16 @@ def test_a_check_runs_listing_that_does_not_add_up_fails_closed(tmp_path):
     assert _run_gate(tmp_path, analyses="[]", alerts=_NO_ALERTS, checks=short) == 1
 
 
+def test_a_complete_two_page_listing_without_codeql_takes_the_did_not_run_branch(tmp_path):
+    """SHOULD NOT trip: the contrast for the two cases above -- same 130 runs, correct total, no CodeQL.
+
+    Proves the multi-page read itself succeeds, so their exit 1 comes from CodeQL being
+    seen and from the miscount respectively, not from the paging.
+    """
+    complete = _paged_checks(2).replace("Analyze (python)", "job-x")
+    assert _run_gate(tmp_path, analyses="[]", alerts=_NO_ALERTS, checks=complete) == 0
+
+
 def test_an_errored_check_runs_api_trips_rather_than_guessing(tmp_path):
     """SHOULD trip: an undetermined answer is the one thing this gate may not call clean."""
     assert _run_gate(tmp_path, analyses="[]", alerts=_NO_ALERTS, checks_fail=True) == 1

@@ -220,6 +220,9 @@ class CheckRunsIncomplete(RuntimeError):
 #: script, without autobot_shared on the path), and a malformed value must fall back
 #: to the default rather than break the import -- the env_utils contract (#19085).
 SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS = 2.0
+#: Ceiling on the env override: ``inf`` would make ``time.sleep`` raise OverflowError
+#: and a huge finite value would stall the gate.
+SHORT_READ_RETRY_DELAY_MAX_SECONDS = 30.0
 
 
 def _short_read_retry_delay() -> float:
@@ -228,7 +231,10 @@ def _short_read_retry_delay() -> float:
         delay = float(raw) if raw is not None else SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
     except ValueError:
         return SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
-    return delay if delay >= 0 else SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
+    # One chained comparison: every comparison with nan is False, and inf exceeds the max.
+    if not (0.0 <= delay <= SHORT_READ_RETRY_DELAY_MAX_SECONDS):
+        return SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
+    return delay
 
 
 def _read_check_runs_once(repository: str, sha: str) -> list[dict]:

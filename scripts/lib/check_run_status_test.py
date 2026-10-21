@@ -502,3 +502,28 @@ def test_walk_check_runs_turns_a_transport_failure_into_an_error_not_an_empty_li
     runs, error = walk_check_runs("owner/repo", "deadbeef", lambda _p: (404, None))
     assert runs == []
     assert "HTTP 404" in error, error
+
+
+_DEFAULT_DELAY = check_run_status_module.SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, _DEFAULT_DELAY),
+        ("inf", _DEFAULT_DELAY),
+        ("nan", _DEFAULT_DELAY),
+        ("-1", _DEFAULT_DELAY),
+        ("1e9", _DEFAULT_DELAY),
+        ("abc", _DEFAULT_DELAY),
+        ("0", 0.0),
+        ("5", 5.0),
+    ],
+)
+def test_short_read_retry_delay_is_bounded(monkeypatch: pytest.MonkeyPatch, raw: str | None, expected: float) -> None:
+    """inf would make time.sleep raise OverflowError; a huge value would stall the gate."""
+    if raw is None:
+        monkeypatch.delenv("AUTOBOT_CHECK_RUNS_RETRY_DELAY", raising=False)
+    else:
+        monkeypatch.setenv("AUTOBOT_CHECK_RUNS_RETRY_DELAY", raw)
+    assert check_run_status_module._short_read_retry_delay() == expected

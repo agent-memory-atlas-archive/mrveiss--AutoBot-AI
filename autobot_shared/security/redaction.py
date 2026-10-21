@@ -26,7 +26,7 @@ import re
 
 from autobot_shared.env_utils import env_int
 from autobot_shared.secret_redaction import LOG_MASK as _MASK
-from autobot_shared.secret_redaction import redact_mapping, redact_text
+from autobot_shared.secret_redaction import redact_content, redact_mapping, redact_text
 
 # ---------------------------------------------------------------------------
 # Cloud-provider identifiers (#15324)
@@ -137,6 +137,13 @@ def sanitize_log_value(value: object, *, max_chars: int | None = None) -> str:
     return escaped
 
 
+def safe_log_text(value: object) -> str:
+    """Free text (a command, an exception) made safe to log: shaped tokens and key=value /
+    Authorization secrets masked, then CR/LF and length neutralised (#19082). Composes the
+    canonical redactors; declares no detector of its own."""
+    return sanitize_log_value(redact_text(redact_content(str(value))))
+
+
 def _escape_char(char: str) -> str:
     """One unsafe character as a readable escape."""
     code = ord(char)
@@ -144,6 +151,7 @@ def _escape_char(char: str) -> str:
 
 
 __all__ = [
+    "safe_log_text",
     "LOG_VALUE_MAX_CHARS",
     "redact_text",
     "redact_mapping",

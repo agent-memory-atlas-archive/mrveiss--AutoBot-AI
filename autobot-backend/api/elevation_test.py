@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Elevation session tokens must never reach logs (#19082)."""
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -97,3 +98,30 @@ async def test_execute_error_secret_not_logged(exc):
     text = _logged_text(mock_logger)
     assert "Failed to execute elevated command" in text
     assert _SECRET not in text
+
+
+class _Capture(logging.Handler):
+    """Collect fully formatted records, traceback (exc_text) included."""
+
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.setFormatter(logging.Formatter("%(message)s"))
+        self.lines = []
+
+    def emit(self, record):
+        self.lines.append(self.format(record))
+
+
+async def test_allowlist_rejection_does_not_log_command_secret():
+    """A rejected first token is echoed in the ValueError; no log line may carry it."""
+    cap = _Capture()
+    elevation.logger.addHandler(cap)
+    try:
+        result = await elevation.run_elevated_command("password=hunter2 apt update")  # pragma: allowlist secret
+    finally:
+        elevation.logger.removeHandler(cap)
+    assert result["return_code"] == 1
+    text = "\n".join(cap.lines)
+    assert "hunter2" not in text
+    assert "Traceback" not in text
+    assert "Command execution failed: ValueError" in text

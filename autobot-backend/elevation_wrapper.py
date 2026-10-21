@@ -14,6 +14,7 @@ import time
 from typing import Dict, Optional, Tuple
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.security.redaction import safe_log_text as _safe_log_text
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.ssot_config import config
 
@@ -88,7 +89,7 @@ class ElevationWrapper:
                 }
 
         except Exception as e:
-            logger.error("Elevation request failed: %s", e)
+            logger.error("Elevation request failed: %s: %s", type(e).__name__, _safe_log_text(e))
             return {
                 "success": False,
                 "error": "Failed to request elevation",
@@ -185,7 +186,7 @@ class ElevationWrapper:
             }
 
         except Exception as e:
-            logger.error("Normal execution failed: %s", e)
+            logger.error("Normal execution failed: %s: %s", type(e).__name__, _safe_log_text(e))
             return {
                 "success": False,
                 "error": "Command execution failed",
@@ -232,7 +233,7 @@ class ElevationWrapper:
                     "Elevation client is not configured and unapproved sudo fallback is blocked "
                     "in production.  Set AUTOBOT_ALLOW_UNAPPROVED_SUDO=true or configure an "
                     "elevation_client.  Command blocked: %s",
-                    command,
+                    _safe_log_text(command),
                 )
                 return {
                     "success": False,
@@ -245,12 +246,12 @@ class ElevationWrapper:
 
             logger.warning(
                 "No elevation client configured; falling back to direct sudo for command: %s",
-                command,
+                _safe_log_text(command),
             )
             return await self._execute_normal(f"sudo {command}")
 
         except Exception as e:
-            logger.error("Elevated execution failed: %s", e)
+            logger.error("Elevated execution failed: %s: %s", type(e).__name__, _safe_log_text(e))
             return {
                 "success": False,
                 "error": "Elevated command execution failed",
