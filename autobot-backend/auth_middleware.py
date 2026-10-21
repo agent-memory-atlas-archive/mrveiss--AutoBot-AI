@@ -17,7 +17,7 @@ from typing import Dict, Tuple
 
 from fastapi import HTTPException, Request, status
 
-from auth_revocation import reject_if_revoked_by_password_change
+from auth_revocation import reject_if_revoked_by_password_change, token_passes_revocation
 from autobot_shared.auth.interactive_principal import LOGIN_TOKEN_TYPE, is_login_token, is_purpose_bound
 from autobot_shared.auth.internal_api_key import verify_internal_api_key
 from autobot_shared.auth.jwt_core import (
@@ -1038,11 +1038,7 @@ async def authenticate_websocket(websocket) -> dict | None:
     Issue #2818: Add auth before websocket.accept() to reject unauthenticated
     connections at the protocol handshake level.
 
-    Args:
-        websocket: FastAPI WebSocket instance.
-
-    Returns:
-        User dict or None if authentication fails.
+    Returns the user dict, or None if authentication fails (websocket: FastAPI WebSocket).
     """
     # #16457: prefer Sec-WebSocket-Protocol (['bearer', '<jwt>']) over the query param so the
     # token never lands in URL access logs/browser history; query stays a fallback during migration.
@@ -1053,7 +1049,8 @@ async def authenticate_websocket(websocket) -> dict | None:
             # NEW ephemeral RS256 keypair, so it can't verify tokens signed by the
             # singleton used at login → every WS handshake 403'd ("Disconnected").
             token_data = get_auth_middleware().verify_jwt_token(token)
-            if token_data and not is_purpose_bound(token_data):  # #17049
+            # #17049: a purpose-bound token is not a login; #18688: nor is one revoked by a password change
+            if token_data and not is_purpose_bound(token_data) and await token_passes_revocation(token_data):
                 result = {
                     "username": token_data["username"],
                     "role": token_data["role"],

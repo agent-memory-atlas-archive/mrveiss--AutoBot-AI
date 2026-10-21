@@ -68,3 +68,12 @@ async def revoked_by_password_change_for_introspection(claims: Dict) -> bool:
     except RevocationCheckUnavailable as exc:
         logger.error("password-epoch introspection reached no verdict (%s); denying", exc)
         raise revocation_unavailable_error() from exc
+
+
+async def token_passes_revocation(token_data: Dict) -> bool:
+    """False when the password-epoch check refuses the token or cannot run (fail closed); for non-HTTP callers."""
+    try:
+        await reject_if_revoked_by_password_change(token_data)
+    except HTTPException:
+        return False
+    return True
