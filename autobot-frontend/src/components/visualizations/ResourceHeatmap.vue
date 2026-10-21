@@ -330,7 +330,7 @@ defineExpose({
 
 .heatmap-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end; /* the title's auto margin keeps it left; embedded, controls stay right (#16744) */
   align-items: center;
   margin-bottom: var(--spacing-5);
   padding-bottom: var(--spacing-4);
@@ -341,7 +341,7 @@ defineExpose({
   font-size: var(--text-lg);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
-  margin: var(--spacing-0);
+  margin: var(--spacing-0) auto var(--spacing-0) var(--spacing-0);
 }
 
 .header-actions {

@@ -5,9 +5,9 @@
   <div class="system-architecture-diagram">
     <!-- Header -->
     <div class="diagram-header">
-      <div v-if="!embedded" class="header-content">
-        <h3><Icon name="sitemap" /> {{ title || t('visualizations.systemArchitecture.defaultTitle') }}</h3>
-        <p class="header-description">{{ t('visualizations.systemArchitecture.headerDescription') }}</p>
+      <div class="header-content">
+        <h3 v-if="!embedded"><Icon name="sitemap" /> {{ title || t('visualizations.systemArchitecture.defaultTitle') }}</h3>
+        <p v-if="!embedded" class="header-description">{{ t('visualizations.systemArchitecture.headerDescription') }}</p>
       </div>
       <div class="header-actions">
         <button @click="refreshArchitecture" :disabled="isLoading" class="action-btn">

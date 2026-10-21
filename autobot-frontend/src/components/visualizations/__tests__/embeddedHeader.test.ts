@@ -16,22 +16,23 @@ import SystemArchitectureDiagram from '../SystemArchitectureDiagram.vue'
 
 const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', missingWarn: false, messages: { en } })
 
-const CASES: [string, Component, string][] = [
-  ['AgentActivityVisualization', AgentActivityVisualization, en.visualizations.agentActivity.defaultTitle],
-  ['ResourceHeatmap', ResourceHeatmap, en.visualizations.resourceHeatmap.defaultTitle],
-  ['WorkflowVisualization', WorkflowVisualization, en.visualizations.workflowViz.defaultTitle],
-  ['SystemArchitectureDiagram', SystemArchitectureDiagram, en.visualizations.systemArchitecture.defaultTitle],
+// [name, component, its standalone title, a toolbar control that must survive embedding]
+const CASES: [string, Component, string, string][] = [
+  ['AgentActivityVisualization', AgentActivityVisualization, en.visualizations.agentActivity.defaultTitle, '.view-toggle'],
+  ['ResourceHeatmap', ResourceHeatmap, en.visualizations.resourceHeatmap.defaultTitle, '.metric-select'],
+  ['WorkflowVisualization', WorkflowVisualization, en.visualizations.workflowViz.defaultTitle, '.layout-btn'],
+  ['SystemArchitectureDiagram', SystemArchitectureDiagram, en.visualizations.systemArchitecture.defaultTitle, '.header-actions .action-btn'],
 ]
 
-async function headings(component: Component, embedded: boolean): Promise<string[]> {
+async function render(component: Component, embedded: boolean, control: string) {
   const w = mount(component, {
     props: { embedded, autoRefresh: false },
     global: { plugins: [i18n], stubs: { apexchart: true, VueApexCharts: true, Icon: true } },
   })
   await flushPromises()
-  const texts = w.findAll('h3').map((h) => h.text().trim())
+  const result = { headings: w.findAll('h3').map((h) => h.text().trim()), hasControl: w.find(control).exists() }
   w.unmount()
-  return texts
+  return result
 }
 
 describe('dashboard registry components: one header (#16744)', () => {
@@ -40,11 +41,15 @@ describe('dashboard registry components: one header (#16744)', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it.each(CASES)('%s hides its own title when embedded', async (_name, component, title) => {
-    expect(await headings(component, true)).not.toContain(title)
+  it.each(CASES)('%s hides its own title when embedded, and keeps its controls', async (_name, component, title, control) => {
+    const { headings, hasControl } = await render(component, true, control)
+    expect(headings).not.toContain(title)
+    expect(hasControl).toBe(true)
   })
 
-  it.each(CASES)('%s keeps its own title standalone', async (_name, component, title) => {
-    expect(await headings(component, false)).toContain(title)
+  it.each(CASES)('%s keeps its own title standalone', async (_name, component, title, control) => {
+    const { headings, hasControl } = await render(component, false, control)
+    expect(headings).toContain(title)
+    expect(hasControl).toBe(true)
   })
 })
