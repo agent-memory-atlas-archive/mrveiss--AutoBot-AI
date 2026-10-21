@@ -8,6 +8,7 @@ AutoBot Authentication Security Test Suite
 Tests the newly implemented authentication and authorization system
 """
 
+import asyncio
 import logging
 import os
 import sys
@@ -163,7 +164,7 @@ class SecurityTester:
         headers = {"Authorization": f"Bearer {token}"}
         request = self.create_mock_request(headers=headers)
 
-        has_permission, user_data = self.auth_middleware.check_file_permissions(request, "delete")
+        has_permission, user_data = asyncio.run(self.auth_middleware.check_file_permissions(request, "delete"))
         if has_permission and user_data.get("role") == "admin":
             logger.info("  ✅ Admin has delete permission")
             self.passed += 1
@@ -181,7 +182,7 @@ class SecurityTester:
         headers = {"Authorization": f"Bearer {token}"}
         request = self.create_mock_request(headers=headers)
 
-        has_permission, user_data = self.auth_middleware.check_file_permissions(request, "delete")
+        has_permission, user_data = asyncio.run(self.auth_middleware.check_file_permissions(request, "delete"))
         if not has_permission and user_data.get("role") == "readonly":
             logger.info("  ✅ Readonly role correctly denied delete permission")
             self.passed += 1

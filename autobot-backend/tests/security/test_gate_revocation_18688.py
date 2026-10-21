@@ -80,6 +80,14 @@ def _module_path(name: str, call):
     return build
 
 
+def _operator_gate(monkeypatch):
+    import security.human_admin as human_admin  # noqa: PLC0415
+
+    real = _sees(monkeypatch, human_admin, {**_JWT_ADMIN, "role": "operator"})
+    monkeypatch.setattr(human_admin, "auth_middleware", real)  # the gate reads the module at call time
+    return lambda request: human_admin.require_human_operator(request)
+
+
 def _envelope_principal(monkeypatch):
     from user_management.middleware.rbac_middleware import rbac_middleware  # noqa: PLC0415
 
@@ -96,9 +104,7 @@ _PATHS = {
     "session_posture.authenticated_user": _module_path(
         "security.session_posture", lambda m, r: m.authenticated_user("session-1", r)
     ),
-    "redis_service.check_operator_permission": _module_path(
-        "api.redis_service", lambda m, r: m.check_operator_permission(r)
-    ),
+    "human_admin.require_human_operator (redis_service /start, /restart)": lambda mp: _operator_gate(mp),
     "chat_shared_links._enforce_require_login": _module_path(
         "api.chat_shared_links", lambda m, r: m._enforce_require_login(SimpleNamespace(require_login=True), r)
     ),
