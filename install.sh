@@ -567,11 +567,11 @@ code_deployment() {
         done
 
         run_ok "Fetching latest code" \
-            sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" fetch origin
+            sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" fetch --tags origin
         run_ok "Checking out ${GIT_BRANCH}" \
             sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" checkout "${GIT_BRANCH}"
         run_ok "Pulling latest changes" \
-            sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" pull origin "${GIT_BRANCH}"
+            sudo -u "${AUTOBOT_USER}" sh -c 'git -C "$1" symbolic-ref -q HEAD >/dev/null || exit 0; git -C "$1" pull origin "$2"' _ "${CODE_SOURCE}" "${GIT_BRANCH}"  # a release tag is already exact (#18666)
     else
         run_ok "Cloning AutoBot repository (branch: ${GIT_BRANCH})" \
             sudo -u "${AUTOBOT_USER}" git clone -b "${GIT_BRANCH}" "${DEFAULT_REPO}" "${CODE_SOURCE}"
