@@ -136,7 +136,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/schemas_chat.py": 702,
     "autobot-backend/api/schemas_code.py": 3265,
     "autobot-backend/api/schemas_knowledge.py": 5127,
-    "autobot-backend/api/schemas_system.py": 4345,  # #13051: SecretModel ownership fields
+    "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
     "autobot-backend/api/schemas_workflows.py": 2907,
     "autobot-backend/api/secrets.py": 1179,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,

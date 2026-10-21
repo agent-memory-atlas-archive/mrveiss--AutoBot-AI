@@ -54,7 +54,7 @@ DestinationScope = _log_forwarder_imports["DestinationScope"]  # type: ignore[as
 DestinationType = _log_forwarder_imports["DestinationType"]  # type: ignore[assignment, misc]
 LogForwarder = _log_forwarder_imports["LogForwarder"]  # type: ignore[assignment, misc]
 SyslogProtocol = _log_forwarder_imports["SyslogProtocol"]  # type: ignore[assignment, misc]
-from api.schemas_system import (
+from api.schemas_log_forwarding import (
     LogForwardingDestinationItem,
     LogFwdAutoStartResponse,
     LogFwdCreateUpdateResponse,

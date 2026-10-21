@@ -155,6 +155,14 @@ describe('Log Forwarding edit mode details', () => {
     expect('password' in body).toBe(false)
   })
 
+  it('remove wins over a value typed before it was ticked: the body carries null (#18797)', async () => {
+    const wrapper = await openEdit()
+    await wrapper.get('[data-test="field-api-key"]').setValue('typed-then-removed')
+    await wrapper.get('[data-test="remove-api-key"]').setValue(true)
+    const body = await save(wrapper)
+    expect(body.api_key).toBeNull()
+  })
+
   it('untouched omits the credential; a typed value sends the value', async () => {
     const wrapper = await openEdit()
     expect('api_key' in (await save(wrapper))).toBe(false)
@@ -197,6 +205,16 @@ describe('Log Forwarding auto-start toggle (#18797 review)', () => {
     finish({ auto_start: false })
     await flushPromises()
     expect(box(w).element.checked).toBe(false)
+  })
+
+  it('Refresh retries a failed auto-start read and enables the toggle (#18797)', async () => {
+    api.getLogForwardingAutoStart.mockRejectedValueOnce(new Error('503'))
+    const w = await mountPage()
+    expect(box(w).element.disabled).toBe(true)
+    await w.get('[data-test="refresh"]').trigger('click')
+    await flushPromises()
+    expect(api.getLogForwardingAutoStart).toHaveBeenCalledTimes(2)
+    expect(box(w).element.disabled).toBe(false)
   })
 
   it('a failed save leaves the checkbox at the stored value', async () => {
