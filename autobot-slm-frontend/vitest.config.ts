@@ -33,8 +33,9 @@ export default mergeConfig(
       // console call is an `onUserConsoleLog` RPC to the main process, and a log made just before a
       // file's environment is torn down fails the run with "Closing rpc while onUserConsoleLog was
       // pending" although every test passed. Off, there is no RPC to race; the cost is the per-test
-      // "stdout | file > test" headers.
-      disableConsoleIntercept: true,
+      // "stdout | file > test" headers. The Vitest UI needs interception for its console-log
+      // previews, so `--ui` runs keep it; the race is a headless-run failure.
+      disableConsoleIntercept: !process.argv.includes('--ui'),
       environment: 'jsdom',
       globals: true,
       include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
