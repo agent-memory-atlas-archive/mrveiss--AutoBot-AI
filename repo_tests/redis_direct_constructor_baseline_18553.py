@@ -93,4 +93,4 @@ BASELINE: dict[str, tuple[int, str, str]] = {
 }
 
 #: Sum of the site counts above. It may only go DOWN.
-FROZEN_TOTAL = 36
+FROZEN_TOTAL = 34
