@@ -41,8 +41,8 @@ name: "AutoBot CodeQL Configuration"
 #   ExternalSkillImporter.import_http_catalog's HTTP catalog fetch — not the
 #   git-clone path (import_git_repo), which is separately guarded by
 #   _validate_git_url(). Since #16595 the fetch goes through
-#   autobot_shared.security.ssrf_guard.fetch_safe_url (external_importer.py:293,
-#   305), which in one call: checks the http(s) scheme, resolves the host and
+#   autobot_shared.security.ssrf_guard.fetch_safe_url (in external_importer.py),
+#   which in one call: checks the http(s) scheme, resolves the host and
 #   rejects non-public targets (loopback, link-local incl. the metadata address,
 #   multicast, reserved, RFC 1918, IPv6 unique-local, IPv4-mapped IPv6), pins the
 #   resolved public IP into the connector's resolver (defeating DNS rebinding),
