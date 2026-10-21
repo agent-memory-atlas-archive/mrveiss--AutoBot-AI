@@ -66,8 +66,32 @@ def _has_core_lookup(fn: ast.AST) -> bool:
     return selects_service and {"node_id", "service_name"} <= _attrs(fn)
 
 
+#: Receivers that are an ORM session; ``set.add`` / ``list``-style ``.add`` on anything else is not a row write.
+_SESSION_NAMES = frozenset({"db", "session"})
+
+
+def _adds_to_session(fn: ast.AST) -> bool:
+    """A ``db.add(...)`` / ``session.add(...)`` / ``self.session.add(...)`` call, not any ``.add``."""
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "add":
+            recv = n.func.value
+            name = recv.id if isinstance(recv, ast.Name) else getattr(recv, "attr", "")
+            if name in _SESSION_NAMES:
+                return True
+    return False
+
+
 def _is_upsert_shaped(fn: ast.AST) -> bool:
-    return _has_core_lookup(fn) and "add" in _calls(fn)
+    return _has_core_lookup(fn) and _adds_to_session(fn)
+
+
+def test_a_set_add_is_not_a_row_write() -> None:
+    """Contrast for the shape: the lookup plus ``seen.add`` is not an upsert; plus ``db.add`` is."""
+    lookup = "select(Service).where(Service.node_id == n, Service.service_name == s)"
+    not_upsert = ast.parse(f"async def f(db, n, s):\n    q = {lookup}\n    seen = set()\n    seen.add(s)\n")
+    upsert = ast.parse(f"async def f(db, n, s):\n    q = {lookup}\n    db.add(object())\n")
+    assert not _is_upsert_shaped(not_upsert.body[0])
+    assert _is_upsert_shaped(upsert.body[0])
 
 
 def _sources() -> dict[str, ast.AST]:
