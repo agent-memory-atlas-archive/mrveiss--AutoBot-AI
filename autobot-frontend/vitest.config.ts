@@ -22,6 +22,12 @@ export default mergeConfig(
   defineConfig({
     test: {
       // Test environment setup
+      // #18254: console output goes straight to the worker's stdout. With interception on, each
+      // console call is an `onUserConsoleLog` RPC to the main process, and a log made just before a
+      // file's environment is torn down fails the run with "Closing rpc while onUserConsoleLog was
+      // pending" although every test passed. Off, there is no RPC to race; the cost is the per-test
+      // "stdout | file > test" headers.
+      disableConsoleIntercept: true,
       environment: 'jsdom',
       environmentOptions: {
         jsdom: {
