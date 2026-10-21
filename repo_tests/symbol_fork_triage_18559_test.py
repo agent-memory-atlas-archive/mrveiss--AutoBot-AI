@@ -25,7 +25,7 @@ from autobot_shared.symbol_forks import fork_find_clusters, fork_tracked_python_
 
 #: The baseline as it stood before #18559 widened the roots; every other name needs a verdict.
 PRE_18559_CLUSTERS = frozenset(
-    {"Base", "Organization", "Permission", "Role", "SLMClient", "ServiceEndpoint", "User", "get_service_url"}
+    {"Base", "Organization", "Permission", "Role", "SLMClient", "User"}
 )
 _VERDICTS = {"real": "issue", "variant": "why", "homonym": "why"}
 
