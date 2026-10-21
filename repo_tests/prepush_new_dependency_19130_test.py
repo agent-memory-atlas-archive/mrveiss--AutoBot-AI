@@ -61,8 +61,12 @@ def _git(cwd: Path, *args: str) -> str:
     return done.stdout.strip()
 
 
-def _repo(tmp_path: Path, *, lock: bool = False) -> tuple[Path, str, str]:
-    """A repo whose second commit adds `dompurify` to app/package.json (and its lockfile)."""
+def _repo(tmp_path: Path, *, mode: str = "manifest") -> tuple[Path, str, str]:
+    """A repo whose second commit adds `dompurify`, per `mode`:
+
+    manifest -- to app/package.json (declared); lock -- only as a TRANSITIVE lockfile key,
+    package.json untouched; other -- to libs/other/package.json, a manifest app does not use.
+    """
     (tmp_path / "app").mkdir()
     _git(tmp_path, "init", "-q")
     manifest, lockfile = tmp_path / "app" / "package.json", tmp_path / "app" / "package-lock.json"
@@ -71,13 +75,17 @@ def _repo(tmp_path: Path, *, lock: bool = False) -> tuple[Path, str, str]:
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
     base = _git(tmp_path, "rev-parse", "HEAD")
-    if lock:
+    if mode == "lock":
         lockfile.write_text(
-            json.dumps({"packages": {"node_modules/vue": {}, "node_modules/@s/p/node_modules/dompurify": {}}})
+            json.dumps({"packages": {"node_modules/vue": {}, "node_modules/vue/node_modules/dompurify": {}}})
         )
+    elif mode == "other":
+        (tmp_path / "libs" / "other").mkdir(parents=True)
+        (tmp_path / "libs" / "other" / "package.json").write_text(json.dumps({"dependencies": {"dompurify": "3"}}))
     else:
         manifest.write_text(json.dumps({"dependencies": {"vue": "1", "dompurify": "3"}}), encoding="utf-8")
-    _git(tmp_path, "commit", "-qam", "add dep")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "add dep")
     return tmp_path, base, _git(tmp_path, "rev-parse", "HEAD")
 
 
@@ -92,7 +100,7 @@ def _install(root: Path, *names: str) -> Path:
 def _verdict(root: Path, base: str, head: str, output: str, project: Path) -> subprocess.CompletedProcess[str]:
     script = "\n".join(
         [
-            f"REPO_ROOT={root}; PYTEST_PYTHON={sys.executable}",
+            f"REPO_ROOT={root}; PYTEST_PYTHON={sys.executable}; KIT_TREE=libs/autobot-ui",
             _fn("absent_added_deps"),
             _fn("vitest_failed_on_new_dep_only"),
             f'absent=$(absent_added_deps {base} {head} {project}); echo "absent=[$absent]"',
@@ -126,11 +134,59 @@ class TestAnAddedAbsentDependencyIsCouldNotRun:
         assert "absent=[dompurify]" in done.stdout
         assert done.returncode == 0, done.stderr
 
-    def test_a_lockfile_only_addition_is_detected(self, tmp_path: Path) -> None:
-        root, base, head = _repo(tmp_path, lock=True)
+    def test_a_transitive_only_lockfile_addition_does_not_defer(self, tmp_path: Path) -> None:
+        # package.json declares nothing new: an undeclared import of a transitive package must block.
+        root, base, head = _repo(tmp_path, mode="lock")
         _stage_tool(root)
         done = _verdict(root, base, head, _UNRESOLVED, _install(root, "vue"))
-        assert "absent=[dompurify]" in done.stdout and done.returncode == 0, done.stderr
+        assert "absent=[]" in done.stdout
+        assert done.returncode != 0
+
+    def test_a_dependency_added_to_another_projects_manifest_does_not_defer(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path, mode="other")
+        _stage_tool(root)
+        done = _verdict(root, base, head, _UNRESOLVED, _install(root, "vue"))
+        assert "absent=[]" in done.stdout
+        assert done.returncode != 0
+
+    def test_the_kit_manifest_counts_for_every_project(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path, mode="other")
+        (root / "libs" / "autobot-ui").mkdir(parents=True)
+        (root / "libs" / "autobot-ui" / "package.json").write_text(json.dumps({"dependencies": {"zod": "3"}}))
+        _git(root, "add", "-A")
+        _git(root, "commit", "-qm", "kit dep")
+        _stage_tool(root)
+        head = _git(root, "rev-parse", "HEAD")
+        done = _verdict(root, base, head, _collect_error("src/a.test.ts", "zod"), _install(root, "vue"))
+        assert "absent=[zod]" in done.stdout and done.returncode == 0, done.stderr
+
+    def test_a_collection_error_with_no_resolve_line_fails(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        output = " FAIL  src/a.test.ts [ src/a.test.ts ]\nTypeError: x is not a function\n"
+        assert _verdict(root, base, head, output, _install(root, "vue")).returncode != 0
+
+    def test_output_with_no_fail_header_fails(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        assert _verdict(root, base, head, "", _install(root, "vue")).returncode != 0
+
+    def test_relative_and_builtin_imports_never_defer(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        install = _install(root, "vue")
+        for spec in ("./x", "node:fs"):
+            output = _collect_error("src/a.test.ts", spec)
+            assert _verdict(root, base, head, output, install).returncode != 0, spec
+
+    def test_a_trailing_error_after_an_accepted_block_fails(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        tail = "⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\nERROR: Coverage for lines (50%) does not meet global threshold (80%)\n"
+        install = _install(root, "vue")
+        assert _verdict(root, base, head, _UNRESOLVED + tail, install).returncode != 0
+        clean = _UNRESOLVED + "⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n"
+        assert _verdict(root, base, head, clean, install).returncode == 0
 
     def test_dependency_present_in_the_install_runs_vitest(self, tmp_path: Path) -> None:
         root, base, head = _repo(tmp_path)

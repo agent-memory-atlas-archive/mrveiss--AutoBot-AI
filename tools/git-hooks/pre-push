@@ -250,14 +250,16 @@ vitest_ran_nothing() {
 
 # #19130: a changeset that ADDS a JS dependency cannot have it in the linked node_modules
 # (#16912), so vitest fails on exactly that import until CI's `npm ci` installs it. The
-# names come from the package.json / lockfile diff (added_js_deps.py: head minus base),
+# names come from the package.json diff (never the lockfile: it lists transitive packages) (added_js_deps.py: head minus base),
 # checked against the install -- never from vitest's own output.
 # Args: <diff-range base> <head> <project-dir>. Prints the added names absent from both
 # the project's and the declaring manifest's node_modules, one per line.
 absent_added_deps() {
-  local name dir
+  local name dir rel="${3#"$REPO_ROOT"/}"
   "$PYTEST_PYTHON" -I "$REPO_ROOT/tools/git-hooks/added_js_deps.py" "$1" "$2" 2>/dev/null \
     | while IFS=$'\t' read -r name dir; do
+        # Only manifests this project resolves through: its own, the workspace root, the kit.
+        case "$dir" in "$rel"|.|"$KIT_TREE") ;; *) continue ;; esac
         [ -f "$3/node_modules/$name/package.json" ] && continue
         [ -f "$REPO_ROOT/$dir/node_modules/$name/package.json" ] && continue
         printf '%s\n' "$name"
@@ -273,11 +275,15 @@ vitest_failed_on_new_dep_only() {
     function close_block() { if (inblock && !ok) bad = 1; inblock = 0; ok = 0 }
     BEGIN { split(absent, names, " "); for (i in names) isabsent[names[i]] = 1 }
     /Unhandled (Errors|Rejection)/ { bad = 1 }
+    # A block ends at the vitest separator or summary; an error line after it is no part of an
+    # accepted collection failure (a coverage-threshold error, a crash) and blocks.
+    /⎯⎯|Test Files/ { close_block(); next }
     /^ *FAIL +/ {
       close_block(); nfail++
       if ($0 ~ / > / || $0 !~ /\[ .* \] *$/) bad = 1; else inblock = 1
       next
     }
+    !inblock && nfail > 0 && /^ *([A-Za-z]*Error|ERROR)[: ]/ { bad = 1 }
     inblock && match($0, /(Failed to resolve import|Cannot find (package|module)) ["\x27][^"\x27]+["\x27]/) {
       pkg = substr($0, RSTART, RLENGTH); sub(/^[^"\x27]*["\x27]/, "", pkg); sub(/["\x27]$/, "", pkg)
       n = split(pkg, part, "/"); name = (pkg ~ /^@/) ? part[1] "/" part[2] : part[1]

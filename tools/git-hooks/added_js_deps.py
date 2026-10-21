@@ -7,8 +7,9 @@
 
 Used by tools/git-hooks/pre-push: a dependency the changeset adds cannot be in the
 linked node_modules (#16912), so a vitest failure on exactly that import is CI's to
-verify. The names come from the package.json / package-lock.json diff itself
-(head minus base), never from vitest's output.
+verify. The names come from the package.json diff itself
+(head minus base). A lockfile is NOT a source: it also lists transitive packages, and
+deferring on one would let an undeclared dependency land unchecked, never from vitest's output.
 
 Usage: added_js_deps.py <base-sha> <head-sha>
 """
@@ -25,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from autobot_shared.paths import scrubbed_git_env  # noqa: E402
 
 _DEP_KEYS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
-_MANIFESTS = ("package.json", "package-lock.json")
+_MANIFEST = "package.json"
 
 
 def _git(*args: str) -> str:
@@ -35,17 +36,15 @@ def _git(*args: str) -> str:
     return done.stdout if done.returncode == 0 else ""
 
 
-def _names(path: str, text: str) -> set[str]:
-    """Dependency names declared by one manifest or lockfile blob ("" -> none)."""
+def _names(text: str) -> set[str]:
+    """Dependency names DECLARED by one package.json blob ("" -> none)."""
     try:
         data = json.loads(text) if text else {}
     except ValueError:
         return set()
     if not isinstance(data, dict):
         return set()
-    if PurePosixPath(path).name == "package.json":
-        return {n for key in _DEP_KEYS for n in (data.get(key) or {})}
-    return {k.rsplit("node_modules/", 1)[1] for k in (data.get("packages") or {}) if "node_modules/" in k}
+    return {n for key in _DEP_KEYS for n in (data.get(key) or {})}
 
 
 def added_deps(base: str, head: str) -> list[tuple[str, str]]:
@@ -53,9 +52,9 @@ def added_deps(base: str, head: str) -> list[tuple[str, str]]:
     touched = _git("diff", "--name-only", "--diff-filter=AM", f"{base}..{head}").split()
     found: set[tuple[str, str]] = set()
     for path in touched:
-        if PurePosixPath(path).name not in _MANIFESTS:
+        if PurePosixPath(path).name != _MANIFEST:
             continue
-        added = _names(path, _git("show", f"{head}:{path}")) - _names(path, _git("show", f"{base}:{path}"))
+        added = _names(_git("show", f"{head}:{path}")) - _names(_git("show", f"{base}:{path}"))
         found.update((name, str(PurePosixPath(path).parent)) for name in added)
     return sorted(found)
 
