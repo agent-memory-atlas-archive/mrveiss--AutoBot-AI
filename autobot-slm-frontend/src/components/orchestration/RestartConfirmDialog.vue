@@ -11,8 +11,7 @@
  */
 
 import { computed } from 'vue'
-import { BaseModal } from '@autobot/ui'
-import { sanitizeHtml } from '@/utils/sanitize'
+import { BaseModal, sanitizeHtml } from '@autobot/ui'
 
 interface Props {
   show: boolean

@@ -43,7 +43,15 @@ UNSANITISED_ALLOWLIST: dict[str, tuple[int, str]] = {
 }
 
 _BINDING = re.compile(r"""(?<![\w-])v-html\s*=""")
-_SANITISER = re.compile(r"""from\s+['"](?:@/utils/sanitize|dompurify)['"]|import\(\s*['"]dompurify['"]""")
+# The canonical module is libs/autobot-ui/src/utils/sanitize.ts, reached through the
+# kit (`@autobot/ui`) or the autobot-frontend re-export (`@/utils/sanitize`).
+CANONICAL = "libs/autobot-ui/src/utils/sanitize.ts"
+_SANITISER = re.compile(
+    r"""from\s+['"](?:@/utils/sanitize|dompurify)['"]"""
+    r"""|import\(\s*['"]dompurify['"]"""
+    r"""|\bsanitize(?:Html|ChatHtml|KnowledgeHtml)\b[^;]*?from\s+['"]@autobot/ui['"]""",
+    re.S,
+)
 _COMMENT_LINE = re.compile(r"^\s*(<!--|//|\*)")
 
 
@@ -89,9 +97,20 @@ def test_allowlist_is_shrink_only() -> None:
     assert not stale, "\n".join(stale)
 
 
+def test_there_is_exactly_one_sanitiser_implementation() -> None:
+    """One class, one implementation: the kit owns it, apps only re-export."""
+    assert (REPO / CANONICAL).is_file()
+    assert "DOMPurify.sanitize" in (REPO / CANONICAL).read_text(encoding="utf-8")
+    assert not (REPO / "autobot-slm-frontend/src/utils/sanitize.ts").exists()
+    shim = (REPO / "autobot-frontend/src/utils/sanitize.ts").read_text(encoding="utf-8")
+    assert "DOMPurify.sanitize" not in shim and "@autobot/ui" in shim
+
+
 def test_guard_detects_an_unsanitised_binding() -> None:
     """Control: the detector must see a bare binding and accept a sanitised one."""
     assert _BINDING.search('<div v-html="x"></div>')
     assert not _BINDING.search('<div :data-v-html="x"></div>')
     assert _SANITISER.search("import { sanitizeHtml } from '@/utils/sanitize'")
     assert not _SANITISER.search("import { escapeHtml } from '@/utils/format'")
+    assert _SANITISER.search("import { BaseModal, sanitizeHtml } from '@autobot/ui'")
+    assert not _SANITISER.search("import { BaseModal } from '@autobot/ui'\nconst a = 1; // sanitizeHtml")
