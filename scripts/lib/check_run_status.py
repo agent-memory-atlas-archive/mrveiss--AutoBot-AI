@@ -216,7 +216,19 @@ class CheckRunsIncomplete(RuntimeError):
 #: Seconds before the one retry of a short read. ``total_count`` can lead the
 #: runs listing while runs are still being created, so a first mismatch is
 #: usually a race, not a fault; a second one is reported, never papered over.
-SHORT_READ_RETRY_DELAY_SECONDS = float(os.environ.get("AUTOBOT_CHECK_RUNS_RETRY_DELAY", "2"))
+#: Read at call time, not import: this module is stdlib-only (CI runs it as a bare
+#: script, without autobot_shared on the path), and a malformed value must fall back
+#: to the default rather than break the import -- the env_utils contract (#19085).
+SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS = 2.0
+
+
+def _short_read_retry_delay() -> float:
+    raw = os.environ.get("AUTOBOT_CHECK_RUNS_RETRY_DELAY")
+    try:
+        delay = float(raw) if raw is not None else SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
+    except ValueError:
+        return SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
+    return delay if delay >= 0 else SHORT_READ_RETRY_DELAY_DEFAULT_SECONDS
 
 
 def _read_check_runs_once(repository: str, sha: str) -> list[dict]:
@@ -250,7 +262,7 @@ def check_runs_for(repository: str, sha: str) -> list[dict]:
     try:
         return _read_check_runs_once(repository, sha)
     except CheckRunsIncomplete:
-        time.sleep(SHORT_READ_RETRY_DELAY_SECONDS)
+        time.sleep(_short_read_retry_delay())
         return _read_check_runs_once(repository, sha)
 
 
