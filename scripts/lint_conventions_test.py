@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from autobot_shared.isolated_git import git, isolated_git_env, make_repo
+from autobot_shared.isolated_git import IDENTITY_NAME, git, isolated_git_env, make_repo
 
 SCRIPT = Path(__file__).resolve().parent / "lint-conventions.sh"
 LIB_DIR = Path(__file__).resolve().parent / "lib"
@@ -274,7 +274,7 @@ def test_a_rejected_commit_names_the_author_it_parsed(repo: Path) -> None:
 
     result = run(repo, "--range", "HEAD~1..HEAD")
 
-    assert "author='t'" in result.stdout, result.stdout
+    assert f"author='{IDENTITY_NAME}'" in result.stdout, result.stdout
 
 
 def test_a_subject_containing_the_field_separator_cannot_shift_the_parse(repo: Path) -> None:
