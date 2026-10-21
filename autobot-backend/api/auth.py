@@ -539,6 +539,8 @@ async def refresh_token(request: Request):
     token = auth_header.split(" ")[1]
     payload = _decode_refresh_token(token)
     await reject_if_revoked_by_password_change(payload)  # a pre-password-change token cannot be refreshed (#18688)
+    if _is_session_revoked(payload):  # a logged-out session cannot be refreshed; an unreadable store reads as gone
+        raise HTTPException(status_code=401, detail=ERR_INVALID_TOKEN)
 
     user_data = {
         "username": payload["username"],
@@ -546,10 +548,7 @@ async def refresh_token(request: Request):
         "email": payload.get("email", ""),
     }
     # Issue #684: Preserve org hierarchy across token refresh
-    if payload.get("user_id"):
-        user_data["user_id"] = payload["user_id"]
-    if payload.get("org_id"):
-        user_data["org_id"] = payload["org_id"]
+    user_data.update({k: payload[k] for k in ("user_id", "org_id") if payload.get(k)})
     new_token = get_auth_middleware().create_jwt_token(user_data)
     expiry_seconds = get_auth_middleware().jwt_expiry_hours * 3600
 
