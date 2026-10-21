@@ -119,7 +119,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/mcp_registry.py": 1173,
     "autobot-backend/api/memory.py": 1514,
     "autobot-backend/api/monitoring.py": 1316,
-    "autobot-backend/api/multimodal.py": 833,
+    "autobot-backend/api/multimodal.py": 832,
     "autobot-backend/api/natural_language_search.py": 1256,
     "autobot-backend/api/npu_workers.py": 1481,
     "autobot-backend/api/orchestration.py": 610,
@@ -425,7 +425,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/workers/audit_tasks_test.py": 1197,
     "autobot-backend/workflow_scheduler.py": 1070,
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
-    "autobot-slm-backend/api/code_source.py": 710,
+    "autobot-slm-backend/api/code_source.py": 708,
     "autobot-slm-backend/api/code_sync.py": 5819,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 724,
