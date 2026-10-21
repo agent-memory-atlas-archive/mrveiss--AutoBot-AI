@@ -13,24 +13,22 @@ Only the credential seams are patched; the gates are the real code.
 
 from __future__ import annotations
 
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import auth_middleware
 import auth_rbac
 from api import advanced_control, vnc_mcp, ws_security
+from autobot_shared.auth.mcp_tool_permissions import required_permission
 from autobot_shared.auth.permissions import Permission, is_admin_role, role_has_permission
 
-CONTROL_PATHS = [
-    "/mcp/desktop_mouse_click",
-    "/mcp/desktop_keyboard_type",
-    "/mcp/desktop_special_key",
-    "/mcp/desktop_screenshot",
-    "/mcp/desktop_observe_state",
-]
+CONTROL_TOOLS = ["desktop_mouse_click", "desktop_keyboard_type", "desktop_special_key"]
+READ_TOOLS = ["desktop_screenshot", "desktop_observe_state"]
+ALL_TOOLS = CONTROL_TOOLS + READ_TOOLS
 
 
 def _user(role: str) -> dict:
@@ -41,46 +39,75 @@ def test_premise_superadmin_is_admin_but_lacks_the_permission() -> None:
     assert is_admin_role("superadmin")
     assert not role_has_permission("superadmin", Permission.MCP_DESKTOP_CONTROL)
     assert role_has_permission("admin", Permission.MCP_DESKTOP_CONTROL)
+    # `user` reads the desktop but never drives it: the READ/CONTROL split the map declares.
+    assert role_has_permission("user", Permission.MCP_DESKTOP_READ)
+    assert not role_has_permission("user", Permission.MCP_DESKTOP_CONTROL)
 
 
-def _rest_client(role: str) -> TestClient:
-    app = FastAPI()
-    app.include_router(vnc_mcp.router)
-    return TestClient(app, raise_server_exceptions=False)
-
-
-def _rest_patches(role: str):
-    user = _user(role)
-    return (
-        patch.object(auth_middleware, "resolve_human_user", AsyncMock(return_value=user)),
-        patch.object(auth_rbac, "resolve_human_user", AsyncMock(return_value=user)),
-        patch.object(auth_rbac._permission_gate, "_wire_rbac", lambda: None),
-        patch.object(auth_rbac._permission_gate, "_load_db_names", AsyncMock(return_value=())),
-        patch.object(auth_rbac._permission_gate, "deny", AsyncMock(side_effect=_raise_403)),
+def test_routes_follow_the_canonical_map() -> None:
+    assert {t: required_permission(t) for t in CONTROL_TOOLS} == dict.fromkeys(
+        CONTROL_TOOLS, Permission.MCP_DESKTOP_CONTROL
     )
+    assert {t: required_permission(t) for t in READ_TOOLS} == dict.fromkeys(READ_TOOLS, Permission.MCP_DESKTOP_READ)
 
 
 def _raise_403(*_a, **_k):
-    from fastapi import HTTPException
-
     raise HTTPException(status_code=403, detail="denied")
 
 
-def _post(role: str, path: str) -> int:
-    p = _rest_patches(role)
-    with p[0], p[1], p[2], p[3], p[4]:
-        return _rest_client(role).post(path, json={}).status_code
+def _post(role: str, path: str, *, admin_gate: bool = True) -> int:
+    """POST through the real router and gates; only credential resolution (and optionally the role gate) is patched."""
+    user = _user(role)
+    app = FastAPI()
+    app.include_router(vnc_mcp.router)
+    gate = auth_rbac._permission_gate
+    patches = [
+        patch.object(auth_middleware, "resolve_human_user", AsyncMock(return_value=user)),
+        patch.object(auth_rbac, "resolve_human_user", AsyncMock(return_value=user)),
+        patch.object(gate, "_wire_rbac", lambda: None),
+        patch.object(gate, "_load_db_names", AsyncMock(return_value=())),
+        patch.object(gate, "deny", AsyncMock(side_effect=_raise_403)),
+    ]
+    if not admin_gate:  # isolate the permission layer from the router's admin-role layer
+        app.dependency_overrides[auth_middleware.check_admin_permission] = lambda: True
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        return TestClient(app, raise_server_exceptions=False).post(path, json={}).status_code
 
 
-@pytest.mark.parametrize("path", CONTROL_PATHS)
-def test_rest_admin_without_permission_is_refused(path: str) -> None:
-    assert _post("superadmin", path) == 403
+@pytest.mark.parametrize("tool", ALL_TOOLS)
+def test_rest_admin_without_permission_is_refused(tool: str) -> None:
+    assert _post("superadmin", f"/mcp/{tool}") == 403
 
 
-@pytest.mark.parametrize("path", CONTROL_PATHS)
-def test_rest_permission_holder_passes_the_gate(path: str) -> None:
+@pytest.mark.parametrize("tool", ALL_TOOLS)
+def test_rest_permission_holder_passes_the_gate(tool: str) -> None:
     # The gate admits; the handler may then fail validation/capture, but never 401/403.
-    assert _post("admin", path) not in (401, 403)
+    assert _post("admin", f"/mcp/{tool}") not in (401, 403)
+
+
+@pytest.mark.parametrize("tool", CONTROL_TOOLS)
+def test_rest_read_only_role_is_refused_control_tools(tool: str) -> None:
+    assert _post("user", f"/mcp/{tool}", admin_gate=False) == 403
+
+
+@pytest.mark.parametrize("tool", READ_TOOLS)
+def test_rest_read_only_role_passes_read_tools(tool: str) -> None:
+    assert _post("user", f"/mcp/{tool}", admin_gate=False) not in (401, 403)
+
+
+def test_non_tool_routes_pass_the_permission_layer() -> None:
+    assert _post("user", "/observations/desktop", admin_gate=False) not in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_an_undeclared_mcp_tool_is_refused() -> None:
+    request = MagicMock()
+    request.scope = {"route": MagicMock(path="/mcp/not_a_declared_tool")}
+    with pytest.raises(HTTPException) as err:
+        await auth_rbac.check_mcp_tool_permission(request)
+    assert err.value.status_code == 403
 
 
 class _FakeWS:
