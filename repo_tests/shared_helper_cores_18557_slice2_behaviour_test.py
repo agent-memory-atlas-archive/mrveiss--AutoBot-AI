@@ -20,8 +20,9 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from repo_tests._paths import repo_root  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = repo_root()
 BACKEND = ROOT / "autobot-backend"
 AUTO_TOOLS = BACKEND / "code_analysis" / "auto-tools"
 for _p in (str(ROOT), str(BACKEND)):
