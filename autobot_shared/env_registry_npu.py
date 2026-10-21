@@ -78,13 +78,6 @@ _register(
     "slm",
 )
 _register(
-    "SLM_HMAC_API_KEY_SECRET",
-    str,
-    "",
-    "HMAC key for SLM API-key hashing. No default (#16299): unset makes API-key hashing raise RuntimeError.",
-    "slm",
-)
-_register(
     "SLM_USERS_DATABASE_URL",
     str,
     None,

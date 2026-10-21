@@ -82,6 +82,26 @@ def _scan() -> set[tuple[str, str]]:
     return found
 
 
+_LEGACY_LITERAL = "autobot-api-key-v1"
+# The ONE sanctioned home of the old public pepper: a read-only verifier for rows
+# hashed before the default was removed (#16299). Sunset: when every install has
+# set SLM_HMAC_API_KEY_SECRET.
+_LEGACY_LITERAL_FILE = "autobot-slm-backend/user_management/services/api_key_service.py"
+
+
+def test_legacy_public_pepper_only_in_its_one_declared_place():
+    root = repo_root()
+    homes = set()
+    for top in _ROOTS:
+        for path in (root / top).rglob("*.py"):
+            rel = path.relative_to(root).as_posix()
+            if "/tests/" in rel or path.name.startswith("test_") or path.name.endswith("_test.py"):
+                continue
+            if _LEGACY_LITERAL in path.read_text(encoding="utf-8", errors="ignore"):
+                homes.add(rel)
+    assert homes == {_LEGACY_LITERAL_FILE}, sorted(homes)
+
+
 def test_detector_sees_the_pattern():
     """Control: the detector must flag the shapes it claims to."""
     assert find_hits('import os\nos.getenv("A_SECRET", "x")') == ["A_SECRET"]
