@@ -42,3 +42,14 @@ from knowledge.serving import SERVING_TRUST_WHERE
 RESEARCH_QUARANTINE_FILTER: dict = {
     "$and": [{"collection": {"$ne": config.research_quarantine_collection}}, SERVING_TRUST_WHERE]
 }
+
+
+def with_quarantine(caller_where: dict | None = None) -> dict:
+    """The quarantine filter, with the caller's own ``where`` AND-ed in (#18946).
+
+    A caller filter can only narrow what is served; it never replaces the quarantine
+    (and serving-trust) predicate. ``None`` or ``{}`` yields the bare quarantine filter.
+    """
+    if not caller_where:
+        return RESEARCH_QUARANTINE_FILTER
+    return {"$and": [RESEARCH_QUARANTINE_FILTER, caller_where]}
