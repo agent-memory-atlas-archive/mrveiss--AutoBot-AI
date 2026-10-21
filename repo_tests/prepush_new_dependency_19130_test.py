@@ -24,8 +24,19 @@ from autobot_shared.paths import scrubbed_git_env
 
 _HOOK_DIR = repo_root() / "tools" / "git-hooks"
 _SOURCE = (_HOOK_DIR / "pre-push").read_text(encoding="utf-8")
-_UNRESOLVED = 'Error: Failed to resolve import "dompurify" from "src/a.ts". Does the file exist?\n FAIL  a.test.ts\n'
-_PASS_PLUS_BROKEN = 'Error: Failed to resolve import "vue" from "src/a.ts". Does the file exist?\n FAIL  a.test.ts\n'
+
+
+def _collect_error(test_file: str, package: str) -> str:
+    """vitest's own shape for a file that never loaded: `FAIL <file> [ <file> ]`."""
+    return (
+        f" FAIL  {test_file} [ {test_file} ]\n"
+        f'Error: Failed to resolve import "{package}" from "src/x.ts". Does the file exist?\n'
+    )
+
+
+_ASSERTION = " FAIL  src/b.test.ts > suite > adds\nAssertionError: expected 2 to be 3\n"
+_UNRESOLVED = _collect_error("src/a.test.ts", "dompurify")
+_PASS_PLUS_BROKEN = _collect_error("src/a.test.ts", "vue")
 
 
 def _fn(name: str) -> str:
@@ -83,7 +94,6 @@ def _verdict(root: Path, base: str, head: str, output: str, project: Path) -> su
         [
             f"REPO_ROOT={root}; PYTEST_PYTHON={sys.executable}",
             _fn("absent_added_deps"),
-            _fn("unresolved_packages"),
             _fn("vitest_failed_on_new_dep_only"),
             f'absent=$(absent_added_deps {base} {head} {project}); echo "absent=[$absent]"',
             'vitest_failed_on_new_dep_only "$1" "$absent"',
@@ -141,6 +151,26 @@ class TestAnAddedAbsentDependencyIsCouldNotRun:
         _stage_tool(root)
         done = _verdict(root, base, head, _UNRESOLVED + _PASS_PLUS_BROKEN, _install(root, "vue"))
         assert done.returncode != 0
+
+    def test_new_dep_failure_in_one_file_and_an_assertion_failure_in_another_fails(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        output = _UNRESOLVED + _ASSERTION
+        done = _verdict(root, base, head, output, _install(root, "vue"))
+        assert "absent=[dompurify]" in done.stdout
+        assert done.returncode != 0, "a real test failure must not ride along with a deferred new dependency"
+
+    def test_every_failed_file_a_new_dep_import_failure_defers(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        output = _UNRESOLVED + _collect_error("src/c.test.ts", "dompurify/dist/purify")
+        assert _verdict(root, base, head, output, _install(root, "vue")).returncode == 0
+
+    def test_an_unhandled_error_beside_the_new_dep_failure_fails(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        output = _UNRESOLVED + "Unhandled Errors\nError: boom\n"
+        assert _verdict(root, base, head, output, _install(root, "vue")).returncode != 0
 
     def test_a_failure_naming_no_unresolved_import_still_fails(self, tmp_path: Path) -> None:
         root, base, head = _repo(tmp_path)

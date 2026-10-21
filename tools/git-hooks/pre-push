@@ -263,22 +263,27 @@ absent_added_deps() {
         printf '%s\n' "$name"
       done
 }
-# Package names vitest could not resolve (subpaths folded to the package), one per line.
-unresolved_packages() {
-  printf '%s\n' "$1" | grep -oE "(Failed to resolve import|Cannot find (package|module)) [\"']([^\"']+)[\"']" \
-    | sed -E "s/^[^\"']*[\"']//; s/[\"']\$//" | grep -vE '^(\.|/)' \
-    | sed -E 's|^(@[^/]+/[^/]+).*|\1|; t; s|^([^/]+).*|\1|' | sort -u
-}
-# 0 only when vitest's output names at least one unresolved package AND every one is an
-# added-and-absent dependency ($2, newline-separated). A broken import of an existing
-# module is in the output too, is not in $2, and so stays a failure.
+# Per FAILED TEST FILE, not per run (#19130): 0 only when every failed file in vitest's
+# output ($1) is a collection error -- vitest's `FAIL <file> [ <file> ]` header, a file that
+# never loaded -- whose only unresolved import is an added-and-absent dependency ($2,
+# newline-separated). A `FAIL <file> > <test>` header (a file that loaded and failed), an
+# unhandled error, or a collection error naming anything else blocks as before.
 vitest_failed_on_new_dep_only() {
-  local unresolved pkg
-  unresolved=$(unresolved_packages "$1")
-  [ -n "$unresolved" ] || return 1
-  for pkg in $unresolved; do
-    printf '%s\n' "$2" | grep -qxF -- "$pkg" || return 1
-  done
+  printf '%s\n' "$1" | sed 's/\x1b\[[0-9;]*m//g' | awk -v absent="$(echo $2)" '
+    function close_block() { if (inblock && !ok) bad = 1; inblock = 0; ok = 0 }
+    BEGIN { split(absent, names, " "); for (i in names) isabsent[names[i]] = 1 }
+    /Unhandled (Errors|Rejection)/ { bad = 1 }
+    /^ *FAIL +/ {
+      close_block(); nfail++
+      if ($0 ~ / > / || $0 !~ /\[ .* \] *$/) bad = 1; else inblock = 1
+      next
+    }
+    inblock && match($0, /(Failed to resolve import|Cannot find (package|module)) ["\x27][^"\x27]+["\x27]/) {
+      pkg = substr($0, RSTART, RLENGTH); sub(/^[^"\x27]*["\x27]/, "", pkg); sub(/["\x27]$/, "", pkg)
+      n = split(pkg, part, "/"); name = (pkg ~ /^@/) ? part[1] "/" part[2] : part[1]
+      if (pkg ~ /^[.\/]/ || !(name in isabsent)) bad = 1; else ok = 1
+    }
+    END { close_block(); exit (nfail > 0 && !bad) ? 0 : 1 }'
 }
 
 # #17961: what a blocked push shows is the failing tests, not the last 25
