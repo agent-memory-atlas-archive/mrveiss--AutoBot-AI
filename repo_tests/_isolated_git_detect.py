@@ -6,8 +6,9 @@
 
 A file-level rule, because the call-level shape varies too much to follow: a literal
 ``["git", "init"]`` argv, a ``_git(repo, "commit")`` helper, a ``bash -c "git init"`` string.
-A file BUILDS a repo when it imports ``subprocess``, names ``init`` or ``commit`` as an
-argument or argv element, and names ``git``. It is COMPLIANT when it imports from ``autobot_shared.isolated_git``.
+A file BUILDS a repo when it imports ``subprocess``, names ``init`` or ``commit`` in the same
+argv/call as ``git`` (an argv led by ``git``, a ``*git*`` helper call, or ``git`` among the
+call's arguments). It is COMPLIANT when it imports from ``autobot_shared.isolated_git``.
 
 A file that imports the helper is checked at call level by ``tools/lint/check_git_write_env_scrubbed.py``
 (#15246): a literal ``["git", "commit"]`` argv or a ``["git", "-C", p, *args]`` helper with no scrubbed
@@ -46,17 +47,30 @@ def _strings(elements: list[ast.expr]) -> set[str]:
     return {e.value for e in elements if isinstance(e, ast.Constant) and isinstance(e.value, str)}
 
 
+def _is_git_word(node: ast.expr) -> bool:
+    """A string constant that is the ``git`` executable: ``"git"`` or a path ending in ``/git``."""
+    return isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.rsplit("/", 1)[-1] == "git"
+
+
+def _callee_name(call: ast.Call) -> str:
+    func = call.func
+    return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else ""
+
+
 def _names_verb(tree: ast.Module) -> bool:
+    """A verb tied to a git invocation in the SAME expression.
+
+    Either an argv list led by ``git`` (element 0 or 1), or a call that names git itself: a
+    ``*git*`` callee (``_git(repo, "commit")``) or ``git`` among its own string arguments.
+    ``session.add("commit")`` in a file that mentions git elsewhere is neither.
+    """
     for node in ast.walk(tree):
+        if isinstance(node, ast.List) and any(_is_git_word(e) for e in node.elts[:2]) and _VERBS & _strings(node.elts):
+            return True
         if isinstance(node, ast.Call) and _VERBS & _strings(node.args):
-            return True
-        if isinstance(node, ast.List) and _VERBS & _strings(node.elts):
-            return True
+            if "git" in _callee_name(node).lower() or any(_is_git_word(a) for a in node.args):
+                return True
     return False
-
-
-def _mentions_git(tree: ast.Module) -> bool:
-    return any(isinstance(n, ast.Constant) and isinstance(n.value, str) and "git" in n.value for n in ast.walk(tree))
 
 
 def _shell_builds_repo(tree: ast.Module) -> bool:
@@ -88,7 +102,7 @@ def builds_git_repo(tree: ast.Module) -> bool:
     """True when *tree* spawns processes and names ``init``/``commit`` as a git argument."""
     if not _imports_subprocess(tree):
         return False
-    return (_names_verb(tree) and _mentions_git(tree)) or _shell_builds_repo(tree)
+    return _names_verb(tree) or _shell_builds_repo(tree)
 
 
 def imports_helper(tree: ast.Module) -> bool:

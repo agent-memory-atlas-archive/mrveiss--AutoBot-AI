@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autobot_shared.api_routing.router_prefixes import resolve_registry_targets
+from autobot_shared.api_routing.router_prefixes import resolve_registry_target_prefixes, resolve_registry_targets
 
 _CHILD = "from fastapi import APIRouter\nrouter = APIRouter(prefix='/sessions')\n"
 
@@ -65,3 +65,18 @@ def test_a_registry_prefix_wins_over_an_included_one(tmp_path):
     x = _write(tmp_path, "api/x.py", _CHILD)
     for entries in ([("api.x", "/x"), ("api.chat", "/chat")], [("api.chat", "/chat"), ("api.x", "/x")]):
         assert resolve_registry_targets(tmp_path, entries)[x] == "/x", entries
+
+
+def test_one_alias_included_at_two_prefixes_is_served_at_both(tmp_path):
+    _write(
+        tmp_path,
+        "api/chat.py",
+        "from fastapi import APIRouter\nrouter = APIRouter(prefix='/v1')\n"
+        "from api.chat_sessions import router as sessions_router\n"
+        "router.include_router(sessions_router, prefix='/a')\n"
+        "router.include_router(sessions_router, prefix='/b')\n",
+    )
+    child = _write(tmp_path, "api/chat_sessions.py", _CHILD)
+    prefixes = resolve_registry_target_prefixes(tmp_path, [("api.chat", "/chat")])[child]
+    assert prefixes == ["/chat/v1/a", "/chat/v1/b"]
+    assert resolve_registry_targets(tmp_path, [("api.chat", "/chat")])[child] == "/chat/v1/a"

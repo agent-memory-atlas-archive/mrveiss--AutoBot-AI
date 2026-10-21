@@ -59,9 +59,14 @@ def test_contrast_unisolated_git_is_changed_by_the_same_config(tmp_path: Path, h
         ["git", "-C", str(repo), *a], capture_output=True, text=True, env=scrubbed_git_env()
     )
     repo.mkdir()
-    run("init", "-q")
+    assert run("init", "-q").returncode == 0
+    # The hostile layers act: the init.defaultBranch layer renames the branch ...
+    assert run("symbolic-ref", "--short", "HEAD").stdout.strip() == "trunk"
     (repo / "fixture.txt").write_text("x\n", encoding="utf-8")
-    assert run("add", "fixture.txt").returncode != 0 or run("ls-files").stdout.split() != ["fixture.txt"]
+    # ... and the global excludesFile makes `git add` refuse the fixture, so nothing is tracked.
+    added = run("add", "fixture.txt")
+    assert added.returncode != 0 and "ignored" in added.stderr
+    assert run("ls-files").stdout.split() == []
 
 
 def test_env_drops_ambient_and_inherited_names() -> None:

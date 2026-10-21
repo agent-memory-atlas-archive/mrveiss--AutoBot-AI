@@ -225,3 +225,10 @@ def test_api_route_with_non_literal_methods_is_unresolved_not_dropped(tmp_path: 
     order = _api_route_app(tmp_path, '@router.api_route("/x", methods=METHODS)\ndef a(): ...\n')
     assert slm_routes(order) == []
     assert any("non-literal route path or methods" in u for u in order.unresolved)
+
+
+def test_api_route_without_methods_is_a_get_route(tmp_path: Path) -> None:
+    """FastAPI defaults ``api_route`` to GET when ``methods=`` is omitted: readable, not unresolved."""
+    order = _api_route_app(tmp_path, '@router.api_route("/x")\ndef a(): ...\n')
+    assert [(r.method, r.path) for r in slm_routes(order)] == [("GET", "/api/p/x")]
+    assert not order.unresolved

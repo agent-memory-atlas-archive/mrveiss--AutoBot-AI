@@ -244,6 +244,8 @@ def _route_methods(dec: ast.Call, verb: str) -> Optional[List[str]]:
     if verb != "api_route":
         return [verb.upper()]
     methods = _kwarg(dec, "methods")
+    if methods is None:
+        return ["GET"]  # FastAPI's APIRouter.api_route default when ``methods=`` is omitted
     names = [_const_str(e) for e in methods.elts] if isinstance(methods, (ast.List, ast.Tuple, ast.Set)) else []
     literal = [n.upper() for n in names if n is not None]
     return literal if literal and len(literal) == len(names) else None

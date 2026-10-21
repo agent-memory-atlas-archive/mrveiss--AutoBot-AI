@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 __all__ = [
     "INCLUDE_ROUTER_NAME_RE",
@@ -51,6 +51,7 @@ __all__ = [
     "file_router_prefix",
     "package_router_files",
     "registry_entries",
+    "resolve_registry_target_prefixes",
     "resolve_registry_targets",
 ]
 
@@ -272,33 +273,44 @@ def resolve_registry_targets(backend_dir: Path, entries: Iterable[Tuple[str, str
 
     A **module** entry maps to one file. A **package** entry (#12945) maps to its
     mounted submodules, each carrying ``registry prefix + the package's own
-    router prefix`` — the package ``__init__.py``'s ``APIRouter(prefix=...)``
+    router prefix`` -- the package ``__init__.py``'s ``APIRouter(prefix=...)``
     sits between the two, and applying the registry prefix alone yields paths
     that do not exist.
 
     A module entry also contributes every router it mounts with
-    ``include_router`` (:func:`module_included_router_files`, #17325).
+    ``include_router`` (:func:`module_included_router_files`, #17325). A router
+    included at several prefixes yields its first here; every mount is in
+    :func:`resolve_registry_target_prefixes`.
 
     The returned prefix deliberately excludes each submodule's *own* prefix:
     callers apply that from the file they are scanning.
     """
-    targets: Dict[Path, str] = {}
-    nested: Dict[Path, str] = {}
+    return {path: prefixes[0] for path, prefixes in resolve_registry_target_prefixes(backend_dir, entries).items()}
+
+
+def resolve_registry_target_prefixes(backend_dir: Path, entries: Iterable[Tuple[str, str]]) -> Dict[Path, List[str]]:
+    """Like :func:`resolve_registry_targets`, but every mount prefix per file.
+
+    One router included twice with different prefixes is served at both; the
+    single-prefix map collapsed them to one.
+    """
+    targets: Dict[Path, List[str]] = {}
+    nested: Dict[Path, List[str]] = {}
     for module_path, prefix in entries:
         target = backend_dir.joinpath(*module_path.split("."))
         module_file = target.with_suffix(".py")
         if module_file.is_file():
-            targets[module_file] = prefix
+            targets[module_file] = [prefix]
             nested.update(module_included_router_files(backend_dir, module_file, prefix))
         elif (target / "__init__.py").is_file():
-            targets.update(package_router_files(target, prefix))
+            targets.update({f: [p] for f, p in package_router_files(target, prefix).items()})
     # A registry entry's own prefix wins over one reached through an include.
     return {**nested, **targets}
 
 
 def module_included_router_files(
     backend_dir: Path, module_file: Path, mount_prefix: str, _seen: frozenset[Path] = frozenset()
-) -> Dict[Path, str]:
+) -> Dict[Path, List[str]]:
     """Modules whose router a registry-mounted *module* includes into its own.
 
     ``api/chat.py`` serves ``api/chat_sessions.py`` through
@@ -316,17 +328,24 @@ def module_included_router_files(
     source = module_file.read_text(encoding="utf-8", errors="ignore")
     mounted = set(INCLUDE_ROUTER_NAME_RE.findall(source))
     served_prefix = f"{mount_prefix}{file_router_prefix(source)}"
-    mount_prefixes = dict(include_router_prefixes(source))
+    mount_prefixes: Dict[str, List[str]] = {}
+    for name, inc_prefix in include_router_prefixes(source):
+        mount_prefixes.setdefault(name, []).append(inc_prefix)
     seen = _seen | {module_file}
 
-    files: Dict[Path, str] = {}
+    files: Dict[Path, List[str]] = {}
     for module_path, alias in ROUTER_IMPORT_ALIAS_RE.findall(source):
         child = backend_dir.joinpath(*module_path.split(".")).with_suffix(".py")
         if alias not in mounted or child in seen or not child.is_file():
             continue
-        child_prefix = f"{served_prefix}{mount_prefixes.get(alias, '')}"
-        files[child] = child_prefix
-        files.update(module_included_router_files(backend_dir, child, child_prefix, seen))
+        for inc_prefix in mount_prefixes.get(alias, [""]):
+            child_prefix = f"{served_prefix}{inc_prefix}"
+            found = files.setdefault(child, [])
+            if child_prefix not in found:
+                found.append(child_prefix)
+            for grand, grand_prefixes in module_included_router_files(backend_dir, child, child_prefix, seen).items():
+                known = files.setdefault(grand, [])
+                known.extend(p for p in grand_prefixes if p not in known)
     return files
 
 

@@ -16,8 +16,10 @@ A helper-importing file's raw `git` calls are the call-level gate's job; the tes
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 
 from repo_tests._isolated_git_detect import is_skipped, is_test_file, offends
 from repo_tests._paths import repo_root
@@ -67,6 +69,8 @@ def _offenders(root: Path) -> set[str]:
         read += 1
         if offends(source):
             found.add(rel)
+    # Recorded before the caller asserts anything about ``found``: the reach is a property of the
+    # sweep, so it is declared complete whether or not offenders turned up.
     REACH.completed(read, root)
     return found
 
@@ -96,15 +100,27 @@ _READ_ONLY = "import subprocess\nsubprocess.run(['git', 'status'])\n"
 _NOT_GIT = "import subprocess\nsubprocess.run(['terraform', 'init'])\n"
 _DOCSTRING_ONLY = 'import subprocess\n"""Runs `git init`."""\nsubprocess.run(["ls"])\n'
 _SESSION_COMMIT = "def test_x(session):\n    session.execute('git')\n    session.add('commit')\n"
+_SUBPROCESS_PLUS_SESSION = (
+    "import subprocess\nsubprocess.run(['git', 'status'])\ndef test_x(session):\n    session.add('commit')\n"
+)
+_ARGV_C_COMMIT = "import subprocess\nsubprocess.run(['git', '-C', '.', 'commit', '-m', 'x'])\n"
 
 
 def test_detector_flags_each_raw_shape() -> None:
-    for source in (_RAW_ARGV, _RAW_HELPER, _RAW_SHELL):
+    for source in (_RAW_ARGV, _RAW_HELPER, _RAW_SHELL, _ARGV_C_COMMIT):
         assert offends(source), source
 
 
 def test_detector_leaves_alone_what_is_not_a_hand_rolled_repo() -> None:
-    for source in (_USES_HELPER, _READ_ONLY, _NOT_GIT, _DOCSTRING_ONLY, _SESSION_COMMIT, "def (:\n"):
+    for source in (
+        _USES_HELPER,
+        _READ_ONLY,
+        _NOT_GIT,
+        _DOCSTRING_ONLY,
+        _SESSION_COMMIT,
+        _SUBPROCESS_PLUS_SESSION,
+        "def (:\n",
+    ):
         assert not offends(source), source
 
 
@@ -139,12 +155,22 @@ def test_a_shell_string_write_in_a_helper_importing_file_needs_the_env_helper() 
     assert not offends(_HELPER_SHELL_ENV)
 
 
-def _gate_findings(tmp_path: Path, source: str) -> list:
-    sys.path.insert(0, str(repo_root() / "tools" / "lint"))
+def _load_gate() -> ModuleType:
+    """Load the call-level gate by file path: no ``sys.path`` edit, no bare-name ``sys.modules`` entry."""
+    gate_path = repo_root() / "tools" / "lint" / "check_git_write_env_scrubbed.py"
+    spec = importlib.util.spec_from_file_location("_gate_check_git_write_env_scrubbed_18940", gate_path)
+    assert spec is not None and spec.loader is not None, gate_path
+    module = importlib.util.module_from_spec(spec)
+    before = list(sys.path)  # the gate inserts its own directory at import; restore exactly what was there
     try:
-        import check_git_write_env_scrubbed as gate
+        spec.loader.exec_module(module)
     finally:
-        sys.path.pop(0)
+        sys.path[:] = before
+    return module
+
+
+def _gate_findings(tmp_path: Path, source: str) -> list:
+    gate = _load_gate()
     path = tmp_path / "fixture_test.py"
     path.write_text(source, encoding="utf-8")
     return gate.scan(path, tmp_path)

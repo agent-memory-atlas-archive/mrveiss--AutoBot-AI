@@ -47,10 +47,17 @@ _ROOT = repo_root()
 #: Resolving them is a judgement (they differ in declared auth and capability), owned by #18721 -- decision
 #: pending. SHRINK-ONLY: entries leave when #18721 lands, and none may be added; a new duplicate is what
 #: this guard is for.
+#: Measured 2026-10-21: 364 backend and 53 SLM source files parsed; floors leave ~20% headroom.
+BACKEND_PARSED_FLOOR = 290
+SLM_PARSED_FLOOR = 42
 KNOWN_DUPLICATES = {
     ("POST", "/api/voice/realtime/tools/call"): "#18721",
     ("GET", "/api/llc/agent/context/{item_id}"): "#18721",
 }
+
+
+#: app name -> source files the read parsed (the reach of the sweep), filled by ``_read``.
+_PARSED: dict[str, int] = {}
 
 
 @functools.lru_cache(maxsize=4)
@@ -59,6 +66,7 @@ def _read(root: Path) -> dict[str, tuple[list[OrderedRoute], list[str]]]:
     for name, reader in ((_BACKEND, backend_routes), (_SLM, slm_routes)):
         order = RouteOrder(root / name)
         out[name] = (reader(order), list(order.unresolved))
+        _PARSED[name] = len(order.parsed)
     return out
 
 
@@ -94,6 +102,9 @@ def test_the_allowlist_names_its_owning_issue() -> None:
 
 def test_the_reader_reached_both_apps() -> None:
     apps = _read(_ROOT)
+    # Reach is the source files parsed, not the routes found: a route count can stay high while whole
+    # modules silently stop being read. The route floors stay as a second, independent instrument.
+    assert _PARSED[_BACKEND] > BACKEND_PARSED_FLOOR and _PARSED[_SLM] > SLM_PARSED_FLOOR, dict(_PARSED)
     assert len(apps[_BACKEND][0]) > 1500 and len(apps[_SLM][0]) > 200, "the route read has drifted and is blind"
 
 
