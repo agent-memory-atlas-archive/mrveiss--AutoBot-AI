@@ -184,3 +184,38 @@ async def test_a_real_wav_clears_the_voice_gate_and_reaches_the_audio_read(monke
     monkeypatch.setattr(limits, "read_capped_audio", stop)
     with pytest.raises(Reached):
         await _unwrap(voice.voice_transcribe_api)(_security_request(), FakeUpload("speech.wav"), "")
+
+
+# What the frontend producers really name their audio (#19088 follow-up):
+#   useVoiceConversation.ts:648/668   -> "speech.wav" (also for the webm/opus fallback recorder's blob)
+#   VoiceSettingsPanel.vue:221        -> "recording.webm" (MediaRecorder blob, every browser), or the picked file's own name
+#   UploadModal.vue:20 ACCEPT         -> wav mp3 mp4 m4a ogg flac webm
+_FRONTEND_AUDIO_NAMES = [
+    "speech.wav",
+    "recording.webm",
+    "SPEECH.WAV",
+    "Voice Memo 12.m4a",
+    "talk.ogg",
+    "talk.mp4",
+    "talk.mp3",
+    "talk.flac",
+]
+
+
+@pytest.mark.parametrize("name", _FRONTEND_AUDIO_NAMES)
+def test_every_audio_name_the_frontend_produces_passes(name):
+    assert policy.require_safe_upload(name, policy.AUDIO_EXTENSIONS) == name
+
+
+@pytest.mark.parametrize("name", ["blob", "audio", "speech", "recording", ""])
+def test_a_name_with_no_extension_is_refused_and_the_frontend_never_sends_one(name):
+    # Every producer above sets an explicit name with an extension; a nameless Blob would 400, by design.
+    assert policy.is_safe_file(name, policy.AUDIO_EXTENSIONS) is False
+
+
+def test_aac_and_opus_were_never_accepted_by_voice_create_so_no_regression():
+    from media.audio.reference_wav import ALLOWED_EXTENSIONS as reference_allowed
+
+    # reference_wav.py (#18477) already answers 415 for any suffix outside the one SSOT set; the gate shares it.
+    assert reference_allowed == policy.AUDIO_EXTENSIONS
+    assert not {".aac", ".opus"} & policy.AUDIO_EXTENSIONS
