@@ -30,6 +30,8 @@ from api.system_health import ComponentHealth, register_health_probe
 from auth_middleware import check_admin_permission
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.secret_redaction import redact_content, redact_text
+from autobot_shared.security.redaction import sanitize_log_value
 
 logger = get_logger(__name__)
 
@@ -49,6 +51,11 @@ pending_requests: Dict[str, dict] = {}
 def _token_fingerprint(session_token: str) -> str:
     """Non-reversible 8-char identifier for a session token, safe to log (#19082)."""
     return hashlib.sha256(session_token.encode("utf-8")).hexdigest()[:8]
+
+
+def _safe_log_text(value: object) -> str:
+    """Command text / exception text rendered safe to log: secrets masked, structure neutralised (#19082)."""
+    return sanitize_log_value(redact_text(redact_content(str(value))))
 
 
 # Locks for thread-safe access
@@ -199,7 +206,7 @@ async def execute_elevated_command(session_token: str, command: str):
 
         logger.info(
             "Elevated command executed: %s (session %s)",
-            command,
+            _safe_log_text(command),
             _token_fingerprint(session_token),
         )
 
@@ -211,13 +218,13 @@ async def execute_elevated_command(session_token: str, command: str):
         }
 
     except (OSError, IOError) as e:
-        logger.error("Failed to execute elevated command due to system error: %s", e)
+        logger.error("Failed to execute elevated command due to system error: %s", _safe_log_text(e))
         raise HTTPException(status_code=500, detail="System error during command execution")
     except asyncio.TimeoutError as e:
-        logger.error("Failed to execute elevated command due to timeout: %s", e)
+        logger.error("Failed to execute elevated command due to timeout: %s", _safe_log_text(e))
         raise HTTPException(status_code=408, detail="Command execution timed out")
     except Exception as e:
-        logger.error("Failed to execute elevated command: %s", e)
+        logger.error("Failed to execute elevated command: %s", _safe_log_text(e))
         raise HTTPException(status_code=500, detail="Command execution failed")
 
 
@@ -260,13 +267,13 @@ async def verify_sudo_password(password: str) -> bool:
         return process.returncode == 0
 
     except (OSError, IOError) as e:
-        logger.error("Password verification failed due to system error: %s", e)
+        logger.error("Password verification failed due to system error: %s", _safe_log_text(e))
         return False
     except asyncio.TimeoutError as e:
-        logger.error("Password verification failed due to timeout: %s", e)
+        logger.error("Password verification failed due to timeout: %s", _safe_log_text(e))
         return False
     except Exception as e:
-        logger.error("Password verification failed: %s", e)
+        logger.error("Password verification failed: %s", _safe_log_text(e))
         return False
 
 
@@ -300,10 +307,10 @@ async def run_elevated_command(command: str) -> dict:
         }
 
     except (OSError, IOError) as e:
-        logger.error("Command execution failed due to system error: %s", e)
+        logger.error("Command execution failed due to system error: %s", _safe_log_text(e))
         return {"stdout": "", "stderr": "System error", "return_code": 1}
     except asyncio.TimeoutError as e:
-        logger.error("Command execution failed due to timeout: %s", e)
+        logger.error("Command execution failed due to timeout: %s", _safe_log_text(e))
         return {"stdout": "", "stderr": "Command timed out", "return_code": 124}
     except Exception:
         logger.exception("Command execution failed")

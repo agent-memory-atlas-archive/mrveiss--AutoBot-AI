@@ -72,3 +72,28 @@ async def test_revoke_does_not_log_token():
 def test_fingerprint_is_short_and_deterministic():
     fp = elevation._token_fingerprint("abc")
     assert len(fp) == 8 and fp == elevation._token_fingerprint("abc")
+
+
+_SECRET = "sk-ABCDEF1234567890ABCDEF12"  # pragma: allowlist secret
+
+
+async def test_executed_command_secret_not_logged():
+    token = await _create_token()
+    run = AsyncMock(return_value={"stdout": "", "stderr": "", "return_code": 0})
+    with patch.object(elevation, "logger") as mock_logger, patch.object(elevation, "run_elevated_command", run):
+        await elevation.execute_elevated_command(token, f"apt install --api-key={_SECRET}")
+    text = _logged_text(mock_logger)
+    assert "Elevated command executed" in text
+    assert _SECRET not in text
+
+
+@pytest.mark.parametrize("exc", [OSError, RuntimeError])
+async def test_execute_error_secret_not_logged(exc):
+    token = await _create_token()
+    run = AsyncMock(side_effect=exc(f"argv: tool --api-key={_SECRET}"))
+    with patch.object(elevation, "logger") as mock_logger, patch.object(elevation, "run_elevated_command", run):
+        with pytest.raises(elevation.HTTPException):
+            await elevation.execute_elevated_command(token, "apt update")
+    text = _logged_text(mock_logger)
+    assert "Failed to execute elevated command" in text
+    assert _SECRET not in text
