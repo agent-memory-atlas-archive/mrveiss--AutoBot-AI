@@ -30,6 +30,7 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 _CANONICAL = "autobot-slm-backend/slm/agent/"
+_CANONICAL_FILE = f"{_CANONICAL}agent.py"
 _CLASS = "SLMAgent"
 _TEXT_DEFINITION = re.compile(r"^\s*class\s+SLMAgent\b", re.MULTILINE)
 _SUFFIXES = (".py", ".yml", ".yaml", ".j2")
@@ -91,8 +92,8 @@ def defines_slm_agent(rel: str, text: str) -> bool:
 
 
 def offenders(files: dict[str, str]) -> list[str]:
-    """Paths outside the canonical directory that define the class."""
-    return sorted(rel for rel, text in files.items() if not rel.startswith(_CANONICAL) and defines_slm_agent(rel, text))
+    """Every path except the canonical ``agent.py`` that defines the class -- a sibling in the same dir too."""
+    return sorted(rel for rel, text in files.items() if rel != _CANONICAL_FILE and defines_slm_agent(rel, text))
 
 
 def test_no_file_outside_the_canonical_tree_defines_slm_agent() -> None:
@@ -106,9 +107,9 @@ def test_no_file_outside_the_canonical_tree_defines_slm_agent() -> None:
 
 
 def test_the_canonical_definition_is_found_and_not_flagged() -> None:
-    canonical = (_ROOT / _CANONICAL / "agent.py").read_text(encoding="utf-8")
-    assert defines_slm_agent(f"{_CANONICAL}agent.py", canonical), "the detector no longer sees the real class"
-    assert offenders({f"{_CANONICAL}agent.py": canonical}) == []
+    canonical = (_ROOT / _CANONICAL_FILE).read_text(encoding="utf-8")
+    assert defines_slm_agent(_CANONICAL_FILE, canonical), "the detector no longer sees the real class"
+    assert offenders({_CANONICAL_FILE: canonical}) == []
 
 
 def test_a_planted_copy_is_caught_in_every_form() -> None:
@@ -129,6 +130,12 @@ def test_a_planted_copy_is_caught_in_every_form() -> None:
         "ansible/j.yaml": quoted.replace("class SLMAgent:", "  class SLMAgent:"),
     }
     assert offenders(planted) == sorted(planted)
+
+
+def test_a_sibling_in_the_canonical_directory_is_caught() -> None:
+    """Only the canonical agent.py is exempt; another module beside it is still a fork."""
+    sibling = f"{_CANONICAL}legacy.py"
+    assert offenders({_CANONICAL_FILE: "class SLMAgent:\n    pass\n", sibling: "class SLMAgent:\n    pass\n"}) == [sibling]
 
 
 def test_a_mention_is_not_a_definition() -> None:

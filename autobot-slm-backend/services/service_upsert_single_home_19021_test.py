@@ -22,7 +22,8 @@ from pathlib import Path
 
 _SLM_ROOT = Path(__file__).resolve().parent.parent
 _CORE = "services/service_upsert.py"
-# Known third copy, tracked in #19059; delete this entry when it moves onto the core.
+# Known third copy, tracked in #19059; delete this entry when it moves onto the core -- the
+# stale-entry check below fails until it is deleted.
 _KNOWN_FORKS = {"services/service_orchestrator.py:_update_service_record"}
 _FORK_FIXTURE = """
 async def _upsert_service(db, node_id, name):
@@ -117,10 +118,12 @@ def test_detector_sees_a_fork_and_ignores_a_lookup_only_update():
 
 
 def test_exactly_one_function_in_the_backend_is_upsert_shaped_and_it_is_the_core():
-    homes = sorted(
+    all_homes = sorted(
         f"{rel}:{fn.name}" for rel, tree in _sources().items() for fn in _functions(tree) if _is_upsert_shaped(fn)
     )
-    homes = [h for h in homes if h not in _KNOWN_FORKS]
+    stale = sorted(_KNOWN_FORKS - set(all_homes))
+    assert not stale, f"_KNOWN_FORKS entries are gone or no longer upsert-shaped; remove them (#19059): {stale}"
+    homes = [h for h in all_homes if h not in _KNOWN_FORKS]
     assert homes == [f"{_CORE}:upsert_service"], f"a second Service upsert is a fork of the core (#19021): {homes}"
 
 

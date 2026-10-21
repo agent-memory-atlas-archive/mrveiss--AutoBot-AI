@@ -16,6 +16,7 @@
               for content that pads its own sections)
     slots   : title, subtitle, default (body), actions (footer)
     emits   : update:modelValue, close
+    attrs   : non-prop attributes land on the role="dialog" element, not the Teleport
 
   Accessibility: role="dialog" + aria-modal, labelled by the title; Tab wraps inside the
   panel; focus moves in on open and back to the trigger on close; Escape and a backdrop
@@ -48,6 +49,10 @@ interface Props {
   /** Body without padding, for content that lays out its own padded sections */
   flush?: boolean
 }
+
+// The root is a Teleport, which cannot take fallthrough attributes: a consumer's
+// data-testid / aria-describedby / class land on the dialog element instead.
+defineOptions({ inheritAttrs: false })
 
 const props = withDefaults(defineProps<Props>(), {
   width: '32rem',
@@ -99,6 +104,7 @@ function handleOverlayClick(): void {
       >
         <aside
           ref="panelRef"
+          v-bind="$attrs"
           role="dialog"
           aria-modal="true"
           :aria-labelledby="titleId"

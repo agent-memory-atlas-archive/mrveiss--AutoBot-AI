@@ -97,6 +97,20 @@ describe('BaseDrawer', () => {
     expect(wrapper.find('.aui-drawer-close').attributes('aria-label')).toBe('Schließen')
   })
 
+  it('forwards consumer attributes to the dialog element, not the Teleport root', () => {
+    wrapper = mount(BaseDrawer, {
+      props: { modelValue: true, title: 'Node details' },
+      attrs: { 'data-testid': 'node-drawer', 'aria-describedby': 'node-help', class: 'consumer' },
+      global: { stubs: { Teleport: true } },
+      attachTo: document.body,
+    })
+    const panel = wrapper.find('[role="dialog"]')
+    expect(panel.attributes('data-testid')).toBe('node-drawer')
+    expect(panel.attributes('aria-describedby')).toBe('node-help')
+    expect(panel.classes()).toEqual(expect.arrayContaining(['aui-drawer', 'consumer']))
+    expect(wrapper.findAll('[data-testid="node-drawer"]')).toHaveLength(1)
+  })
+
   it('locks body scroll while open and releases it when unmounted open', () => {
     wrapper = mountDrawer()
     expect(document.body.style.overflow).toBe('hidden')

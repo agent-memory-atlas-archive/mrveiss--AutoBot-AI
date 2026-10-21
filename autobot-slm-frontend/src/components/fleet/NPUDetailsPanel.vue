@@ -41,14 +41,29 @@ const showConfigSection = ref(false)
 // #13138: `assigned_models` is `default_factory=list` server-side and therefore
 // OPTIONAL in the contract, but this form always keeps a concrete array so the
 // checkbox list and `toggleModel` have something to index.
-const workerConfig = reactive<NPUWorkerConfig & { assigned_models: string[] }>({
+const CONFIG_DEFAULTS: Pick<NPUWorkerConfig, 'priority' | 'weight' | 'max_concurrent' | 'failure_action' | 'max_retries'> = {
   priority: 1,
   weight: 1,
   max_concurrent: 1,
   failure_action: 'retry',
   max_retries: 3,
+}
+const workerConfig = reactive<NPUWorkerConfig & { assigned_models: string[] }>({
+  ...CONFIG_DEFAULTS,
   assigned_models: [],
 })
+
+// The panel stays mounted between nodes: each (re)load bumps the token, and a response
+// carrying an older token belongs to a node no longer shown, so it is dropped.
+let loadToken = 0
+const isCurrent = (token: number): boolean => token === loadToken
+
+function resetNodeState(): void {
+  Object.assign(workerConfig, CONFIG_DEFAULTS, { assigned_models: [] })
+  liveMetrics.value = null
+  error.value = null
+  success.value = null
+}
 
 const deviceTypeLabel = computed(() => {
   if (!props.npuStatus?.capabilities?.deviceType) return 'Unknown Device'
@@ -81,16 +96,16 @@ const tempColor = computed(() => {
   return 'text-green-600'
 })
 
-async function loadWorkerConfig(): Promise<void> {
+async function loadWorkerConfig(token: number): Promise<void> {
   const cfg = await fleetStore.fetchNpuWorkerConfig(props.node.node_id)
-  if (cfg) {
-    // The response may omit `assigned_models` entirely — keep the array.
-    Object.assign(workerConfig, cfg, { assigned_models: cfg.assigned_models ?? [] })
-  }
+  if (!isCurrent(token)) return
+  // No config means defaults, never the previous node's form; `assigned_models` may be omitted.
+  Object.assign(workerConfig, CONFIG_DEFAULTS, cfg ?? {}, { assigned_models: cfg?.assigned_models ?? [] })
 }
 
-async function loadLiveMetrics(): Promise<void> {
-  liveMetrics.value = await fleetStore.fetchNpuNodeMetrics(props.node.node_id)
+async function loadLiveMetrics(token: number): Promise<void> {
+  const metrics = await fleetStore.fetchNpuNodeMetrics(props.node.node_id)
+  if (isCurrent(token)) liveMetrics.value = metrics
 }
 
 async function saveConfig(): Promise<void> {
@@ -130,7 +145,7 @@ async function refreshStatus(): Promise<void> {
   try {
     await Promise.all([
       fleetStore.fetchNpuStatus(props.node.node_id),
-      loadLiveMetrics(),
+      loadLiveMetrics(loadToken),
     ])
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to refresh NPU status'
@@ -152,7 +167,12 @@ function toggleModel(model: string): void {
 watch(
   () => [props.open, props.node.node_id] as const,
   ([open]) => {
-    if (open) void Promise.all([loadLiveMetrics(), loadWorkerConfig()])
+    if (!open) return
+    const token = ++loadToken
+    resetNodeState()
+    Promise.all([loadLiveMetrics(token), loadWorkerConfig(token)]).catch((e: unknown) => {
+      if (isCurrent(token)) error.value = e instanceof Error ? e.message : String(e)
+    })
   },
   { immediate: true },
 )
@@ -186,13 +206,13 @@ watch(
           <div class="flex justify-between">
             <dt class="text-sm text-gray-500">{{ $t('fleet.nPUDetailsPanel.memory') }}</dt>
             <dd class="text-sm font-medium text-gray-900">
-              {{ npuStatus?.capabilities?.memoryGB ?? 'N/A' }} GB
+              {{ npuStatus?.capabilities?.memoryGB ?? $t('fleet.nPUDetailsPanel.notAvailable') }} GB
             </dd>
           </div>
           <div class="flex justify-between">
             <dt class="text-sm text-gray-500">{{ $t('fleet.nPUDetailsPanel.maxConcurrent') }}</dt>
             <dd class="text-sm font-medium text-gray-900">
-              {{ npuStatus?.capabilities?.maxConcurrent ?? 'N/A' }}
+              {{ npuStatus?.capabilities?.maxConcurrent ?? $t('fleet.nPUDetailsPanel.notAvailable') }}
             </dd>
           </div>
           <div class="flex justify-between">
@@ -229,7 +249,7 @@ watch(
           </div>
           <div class="text-center p-2 bg-white rounded-sm border border-gray-100">
             <p class="text-lg font-semibold" :class="tempColor">
-              {{ liveMetrics.temperature_celsius != null ? `${liveMetrics.temperature_celsius}°C` : 'N/A' }}
+              {{ liveMetrics.temperature_celsius != null ? `${liveMetrics.temperature_celsius}°C` : $t('fleet.nPUDetailsPanel.notAvailable') }}
             </p>
             <p class="text-xs text-gray-500">{{ $t('fleet.nPUDetailsPanel.temperature') }}</p>
           </div>
