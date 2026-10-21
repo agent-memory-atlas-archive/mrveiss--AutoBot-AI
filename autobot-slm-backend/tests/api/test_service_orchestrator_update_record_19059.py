@@ -7,12 +7,30 @@
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from services.service_categorizer import categorize_service
-from services.service_orchestrator import ServiceOrchestrator
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _real_orm_import import import_modules_with_real_orm  # noqa: E402
+
+# `services` is a stub tree in this suite, so a plain import yields MagicMocks; load the real
+# chain by file -- the categorizer and the unit-name guard decide what the core writes.
+_SERVICES = Path(__file__).resolve().parents[2] / "services"
+_categorizer, _unit_names, _upsert, _orch = import_modules_with_real_orm(
+    import_names=(),
+    path_loaded={
+        "services.service_categorizer": _SERVICES / "service_categorizer.py",
+        "services.unit_names": _SERVICES / "unit_names.py",
+        "services.service_upsert": _SERVICES / "service_upsert.py",
+        "services.service_orchestrator": _SERVICES / "service_orchestrator.py",
+    },
+)
+categorize_service = _categorizer.categorize_service
+ServiceOrchestrator = _orch.ServiceOrchestrator
+_LOGGER = _orch.logger.name
 
 _NODE = "node-1"
 
@@ -26,7 +44,12 @@ def _db(existing=None) -> MagicMock:
     return db
 
 
-def _orchestrator() -> ServiceOrchestrator:
+def test_the_real_chain_was_loaded_not_a_stub():
+    assert not isinstance(ServiceOrchestrator, MagicMock)
+    assert not isinstance(categorize_service, MagicMock)
+
+
+def _orchestrator():
     return ServiceOrchestrator.__new__(ServiceOrchestrator)
 
 
@@ -55,8 +78,8 @@ async def test_existing_row_is_updated_not_added():
 async def test_refused_name_warns_naming_service_and_node(caplog):
     db = _db()
     bad = "bad name; rm -rf /"
-    with caplog.at_level(logging.WARNING, logger="services.service_orchestrator"):
+    with caplog.at_level(logging.WARNING, logger=_LOGGER):
         await _orchestrator()._update_service_record(db, _NODE, bad, "running")
-    msgs = [r.getMessage() for r in caplog.records if r.name == "services.service_orchestrator"]
+    msgs = [r.getMessage() for r in caplog.records if r.name == _LOGGER]
     assert any(bad in m and _NODE in m for m in msgs)
     db.add.assert_not_called()
