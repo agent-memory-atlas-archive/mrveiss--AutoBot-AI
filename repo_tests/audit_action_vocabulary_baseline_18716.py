@@ -54,7 +54,6 @@ _COMMAND_REASON = (
     "expansion"
 )
 _COMMAND = (
-    "account_locked",  # auth_middleware literal: renamed to auth.lockout after #19061 (same file)
     "command_approval",
     "command_approval_decision",
     "command_approval_request",
