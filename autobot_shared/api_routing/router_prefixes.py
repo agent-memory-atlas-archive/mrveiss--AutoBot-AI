@@ -44,6 +44,7 @@ __all__ = [
     "INCLUDE_ROUTER_NAME_RE",
     "apirouter_prefix",
     "include_router_prefixes",
+    "module_included_router_files",
     "RELATIVE_ROUTER_IMPORT_RE",
     "ROUTER_CONFIG_ENTRY_RE",
     "ROUTER_IMPORT_ALIAS_RE",
@@ -275,18 +276,58 @@ def resolve_registry_targets(backend_dir: Path, entries: Iterable[Tuple[str, str
     sits between the two, and applying the registry prefix alone yields paths
     that do not exist.
 
+    A module entry also contributes every router it mounts with
+    ``include_router`` (:func:`module_included_router_files`, #17325).
+
     The returned prefix deliberately excludes each submodule's *own* prefix:
     callers apply that from the file they are scanning.
     """
     targets: Dict[Path, str] = {}
+    nested: Dict[Path, str] = {}
     for module_path, prefix in entries:
         target = backend_dir.joinpath(*module_path.split("."))
         module_file = target.with_suffix(".py")
         if module_file.is_file():
             targets[module_file] = prefix
+            nested.update(module_included_router_files(backend_dir, module_file, prefix))
         elif (target / "__init__.py").is_file():
             targets.update(package_router_files(target, prefix))
-    return targets
+    # A registry entry's own prefix wins over one reached through an include.
+    return {**nested, **targets}
+
+
+def module_included_router_files(
+    backend_dir: Path, module_file: Path, mount_prefix: str, _seen: frozenset[Path] = frozenset()
+) -> Dict[Path, str]:
+    """Modules whose router a registry-mounted *module* includes into its own.
+
+    ``api/chat.py`` serves ``api/chat_sessions.py`` through
+    ``router.include_router(sessions_router)`` and the registry mounts only
+    ``api.chat`` (#17325) -- reading the registry alone drops every route the
+    nested router declares, although the app serves them. A module counts only
+    when it is imported as ``from <dotted> import router as <alias>`` **and**
+    that alias is mounted, the same rule ``package_router_files`` applies.
+
+    The returned prefix is the parent's mount prefix + the parent's own
+    ``APIRouter(prefix=...)`` + any ``include_router(prefix=...)``; callers
+    apply the child's own prefix from the child's file. Recurses, guarding
+    against an include cycle.
+    """
+    source = module_file.read_text(encoding="utf-8", errors="ignore")
+    mounted = set(INCLUDE_ROUTER_NAME_RE.findall(source))
+    served_prefix = f"{mount_prefix}{file_router_prefix(source)}"
+    mount_prefixes = dict(include_router_prefixes(source))
+    seen = _seen | {module_file}
+
+    files: Dict[Path, str] = {}
+    for module_path, alias in ROUTER_IMPORT_ALIAS_RE.findall(source):
+        child = backend_dir.joinpath(*module_path.split(".")).with_suffix(".py")
+        if alias not in mounted or child in seen or not child.is_file():
+            continue
+        child_prefix = f"{served_prefix}{mount_prefixes.get(alias, '')}"
+        files[child] = child_prefix
+        files.update(module_included_router_files(backend_dir, child, child_prefix, seen))
+    return files
 
 
 def package_router_files(package: Path, registry_prefix: str) -> Dict[Path, str]:
