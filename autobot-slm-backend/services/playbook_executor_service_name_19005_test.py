@@ -148,7 +148,7 @@ def test_caller_vars_are_written_unsafe_and_a_merged_secret_round_trips(tmp_path
     assert "service_name: !unsafe 'redis-stack.service'" in text
     assert "service_action: !unsafe 'restarted'" in text
     assert "!unsafe" not in text.split("hf_token:")[1].splitlines()[0], "merged secrets must stay plain"
-    assert yaml.load(text, Loader=_AnsibleLikeLoader)["hf_token"] == _SECRET  # noqa: S506  # SafeLoader subclass
+    assert _AnsibleLikeLoader(text).get_single_data()["hf_token"] == _SECRET
 
 
 def test_an_unsafe_tag_is_written_for_template_syntax_instead_of_the_raw_string(tmp_path):
@@ -174,4 +174,4 @@ def test_secrets_the_executor_merges_are_written_plain_when_the_caller_passes_no
     run.run_playbook(None)
 
     assert "!unsafe" not in run.written["text"]
-    assert yaml.load(run.written["text"], Loader=_AnsibleLikeLoader) == {"hf_token": _SECRET}
+    assert _AnsibleLikeLoader(run.written["text"]).get_single_data() == {"hf_token": _SECRET}

@@ -11,6 +11,10 @@ like a test (#18972).
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from tools.lint._scan_helpers import tracked_paths
+
 ROOTS = ("autobot-backend", "autobot_shared", "autobot-slm-backend")
 
 
@@ -20,3 +24,8 @@ def source_python(rel: str) -> bool:
     name = parts[-1]
     is_test = name.endswith("_test.py") or name.startswith("test_") or "tests" in parts[:-1]
     return rel.endswith(".py") and parts[0] in ROOTS and not is_test
+
+
+def scoped_sources(root: Path) -> list[str]:
+    """The tracked non-test Python the guard reads, repo-relative; one enumeration for every caller."""
+    return [rel for rel in tracked_paths(root, *ROOTS) if source_python(rel)]

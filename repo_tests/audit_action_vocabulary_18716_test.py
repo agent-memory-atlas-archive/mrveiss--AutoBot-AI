@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 from repo_tests._audit_action_scan import BOUNDARY_WRITERS, Written, read_enums, scan_source
-from repo_tests._audit_action_vocabulary_scope import ROOTS, source_python
+from repo_tests._audit_action_vocabulary_scope import ROOTS, scoped_sources, source_python
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 from repo_tests.audit_action_vocabulary_baseline_18716 import LEGACY_SPELLINGS, OPEN_ENDED_PREFIXES
@@ -40,7 +40,7 @@ _ENUMS = {"AuditAction": {"LOGIN": "auth.login"}, "IdentityAuditAction": {"LOGIN
 
 def _population(root: Path) -> list[str]:
     try:
-        return [rel for rel in tracked_paths(root, *ROOTS) if source_python(rel)]
+        return scoped_sources(root)
     except EmptyEnumeration:
         return []
 

@@ -149,15 +149,13 @@ def test_every_login_literal_a_writer_passes_is_an_authentication_event() -> Non
     A future unaliased ``login_failure`` fails here instead of silently becoming ``api_request``.
     """
     from repo_tests._audit_action_scan import read_enums, scan_source
-    from repo_tests._audit_action_vocabulary_scope import ROOTS, source_python
+    from repo_tests._audit_action_vocabulary_scope import scoped_sources
     from repo_tests._paths import repo_root
-
-    from tools.lint._scan_helpers import tracked_paths
 
     root = repo_root()
     enums = read_enums(root)
     seen = set()
-    for rel in (r for r in tracked_paths(root, *ROOTS) if source_python(r)):
+    for rel in scoped_sources(root):
         found = scan_source(rel, (root / rel).read_text(encoding="utf-8"), enums)
         seen.update(w.value for w in found if w.kind == "literal" and w.value.startswith("login"))
     assert {"login_success", "login_failed"} <= seen, f"control: the scan did not find the login writers: {seen}"
