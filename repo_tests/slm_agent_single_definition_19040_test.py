@@ -135,7 +135,9 @@ def test_a_planted_copy_is_caught_in_every_form() -> None:
 def test_a_sibling_in_the_canonical_directory_is_caught() -> None:
     """Only the canonical agent.py is exempt; another module beside it is still a fork."""
     sibling = f"{_CANONICAL}legacy.py"
-    assert offenders({_CANONICAL_FILE: "class SLMAgent:\n    pass\n", sibling: "class SLMAgent:\n    pass\n"}) == [sibling]
+    assert offenders({_CANONICAL_FILE: "class SLMAgent:\n    pass\n", sibling: "class SLMAgent:\n    pass\n"}) == [
+        sibling
+    ]
 
 
 def test_a_mention_is_not_a_definition() -> None:
