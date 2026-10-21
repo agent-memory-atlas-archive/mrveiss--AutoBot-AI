@@ -39,7 +39,9 @@ Use :func:`check_run_status` unless you specifically need the raw runs.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -205,9 +207,52 @@ def check_runs_endpoint(repository: str, sha: str, *, page: int | None = None) -
     return endpoint if page is None else f"{endpoint}&page={page}"
 
 
+class CheckRunsIncomplete(RuntimeError):
+    """The walk read fewer (or more) runs than the API said exist (#19085)."""
+
+
 def check_runs_for(repository: str, sha: str) -> list[dict]:
-    """Every check run on ``sha``, across all pages. Raw, ungrouped."""
-    return all_pages(check_runs_endpoint(repository, sha), key="check_runs")
+    """Every check run on ``sha``, across all pages. Raw, ungrouped.
+
+    Fails closed: when the API's own ``total_count`` is not the number of runs
+    read, raises :class:`CheckRunsIncomplete` rather than returning a short list
+    that a caller would read as the whole population.
+    """
+    pages = json.loads(
+        subprocess.run(
+            ["gh", "api", "--paginate", "--slurp", check_runs_endpoint(repository, sha)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    runs = [run for page in pages for run in page.get("check_runs", [])]
+    totals = {page.get("total_count") for page in pages}
+    if not pages or len(totals) != 1 or not all(isinstance(t, int) for t in totals) or totals != {len(runs)}:
+        raise CheckRunsIncomplete(
+            f"check-run listing for {sha} read {len(runs)} run(s) across {len(pages)} page(s) "
+            f"but the API reported total_count={sorted(totals, key=str)} -- an incomplete read is not a verdict"
+        )
+    return runs
+
+
+def count_runs_named(repository: str, sha: str, pattern: str) -> int:
+    """How many check runs on ``sha`` have a name matching ``pattern`` (case-insensitive)."""
+    rx = re.compile(pattern, re.IGNORECASE)
+    return sum(1 for run in check_runs_for(repository, sha) if rx.search(run.get("name", "")))
+
+
+def main(argv: list[str]) -> int:
+    """``count-named REPO SHA REGEX`` -- prints the count; nonzero exit on any failed read."""
+    if len(argv) != 4 or argv[0] != "count-named":
+        print("usage: check_run_status.py count-named REPO SHA REGEX", file=sys.stderr)
+        return 2
+    try:
+        print(count_runs_named(argv[1], argv[2], argv[3]))
+    except (CheckRunsIncomplete, subprocess.CalledProcessError, ValueError, re.error) as exc:
+        print(f"check_run_status: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def walk_check_runs(
@@ -344,3 +389,7 @@ def split_by_state(observed: dict[str, str], expected: Iterable[str]) -> dict[st
         else:
             buckets["failing"].append(name)
     return buckets
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
