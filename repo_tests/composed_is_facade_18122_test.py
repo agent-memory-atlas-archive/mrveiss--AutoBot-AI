@@ -168,13 +168,22 @@ async def test_reset_with_an_app_clears_the_projection_and_rebuilds_one_instance
     assert await composed.get_knowledge_base() is second
 
 
-async def test_reset_without_an_app_leaves_the_projection_alone(composed) -> None:
-    """Contrast: the app-free reset clears the singleton only, as before."""
+async def test_reset_without_an_app_is_not_served_stale_by_the_app_path(composed) -> None:
+    """Contrast: the app-free reset leaves the projection stale, but the read side refuses it.
+
+    Reverting the `kb is not singleton` gates in `_ready_app_state_kb` -> the app path
+    returns `first` while the app-free path builds a second instance.
+    """
     app = types.SimpleNamespace(state=types.SimpleNamespace())
     first = await kf.get_or_create_knowledge_base(app)
     composed.reset_knowledge_base()
     assert kf.peek_knowledge_base() is None
-    assert app.state.knowledge_base is first
+    assert app.state.knowledge_base is first  # app-free reset does not touch the projection
+    second = await kf.get_or_create_knowledge_base(app)
+    assert second is not first
+    assert second is kf.peek_knowledge_base() is app.state.knowledge_base
+    assert await composed.get_knowledge_base() is second
+    assert _Stub.constructed == 2
 
 
 def test_the_facade_keeps_its_module_level_names(composed) -> None:
