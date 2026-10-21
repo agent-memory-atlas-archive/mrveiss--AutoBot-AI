@@ -21,6 +21,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import check_run_status as check_run_status_module  # noqa: E402
 from check_run_status import (  # noqa: E402
     CHECK_RUNS_PER_PAGE,
     all_pages,
@@ -109,6 +110,20 @@ def test_a_failure_in_one_source_is_not_masked_by_a_pass_in_another() -> None:
     assert latest_per_name(check_runs, statuses) == {"ci": "failure"}
 
 
+def test_a_listing_short_of_total_count_raises_instead_of_returning_a_partial_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#19085: the API said 3 runs exist, 2 were read -- fail closed, never a short list."""
+
+    class _Result:
+        stdout = json.dumps([{"total_count": 3, "check_runs": [_run("a", "2026-09-09T08:00:00Z", "success")] * 2}])
+
+    monkeypatch.setattr("check_run_status.subprocess.run", lambda *_a, **_k: _Result())
+    monkeypatch.setattr("check_run_status.time.sleep", lambda _s: None)
+    with pytest.raises(check_run_status_module.CheckRunsIncomplete):
+        check_run_status_module.check_runs_for("owner/repo", "deadbeef")
+
+
 def test_pagination_reaches_past_the_first_page(monkeypatch: pytest.MonkeyPatch) -> None:
     """#16120 defect 2: `per_page=100` without `--paginate` truncates silently.
 
@@ -118,8 +133,11 @@ def test_pagination_reaches_past_the_first_page(monkeypatch: pytest.MonkeyPatch)
 
     Remove `--paginate` from `all_pages` and this fails.
     """
-    page_one = {"check_runs": [_run(f"shard {i}", "2026-09-09T08:00:00Z", "success") for i in range(100)]}
-    page_two = {"check_runs": [_run("startup-import-smoke", "2026-09-09T08:00:00Z", "cancelled")]}
+    page_one = {
+        "total_count": 101,
+        "check_runs": [_run(f"shard {i}", "2026-09-09T08:00:00Z", "success") for i in range(100)],
+    }
+    page_two = {"total_count": 101, "check_runs": [_run("startup-import-smoke", "2026-09-09T08:00:00Z", "cancelled")]}
 
     captured: dict[str, list[str]] = {}
 
