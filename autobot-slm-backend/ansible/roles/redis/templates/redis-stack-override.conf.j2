@@ -12,8 +12,8 @@ LimitNPROC=4096
 
 # Memory
 # #19124: systemd takes K/M/G/T, never redis's own "6gb" -- the old
-# `MemoryLimit={{ redis_memory_limit | upper }}` rendered "6GB", which systemd
-# rejects and ignores, so no cap ever applied. Derived from maxmemory by redis's
+# deprecated cgroup-v1 key, upper-cased to "6GB", was rejected and ignored by
+# systemd, so no cap ever applied. Derived from maxmemory by redis's
 # unit rules, with headroom so redis evicts before the kernel throttles or kills.
 {% set _mem = redis_memory_limit | string | lower | trim %}
 {% set _num = _mem.rstrip('kmgb') %}
