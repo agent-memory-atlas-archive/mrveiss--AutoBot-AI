@@ -49,6 +49,14 @@ describe('SourcePreviewPanel on BaseDrawer', () => {
     w.unmount()
   })
 
+  it('Escape and a backdrop click close it, as the drawer does', async () => {
+    const w = render()
+    await w.find('.aui-drawer-overlay').trigger('keydown', { key: 'Escape' })
+    await w.find('.aui-drawer-overlay').trigger('click')
+    expect(w.emitted('update:modelValue')).toEqual([[false], [false]])
+    w.unmount()
+  })
+
   it('the left-edge handle resizes the drawer, clamped to 300..800 px', async () => {
     const w = render()
     const width = () => (w.find('.aui-drawer').element as HTMLElement).style.width
@@ -61,7 +69,23 @@ describe('SourcePreviewPanel on BaseDrawer', () => {
     await flushPromises()
     expect(width()).toBe('800px')
     window.document.dispatchEvent(new MouseEvent('mouseup'))
+    // mouseup ends the drag: a later move no longer resizes
+    window.document.dispatchEvent(new MouseEvent('mousemove', { clientX: window.innerWidth - 500 }))
+    await flushPromises()
+    expect(width()).toBe('800px')
     w.unmount()
+  })
+
+  it('the Copied feedback timer is cleared on unmount, so it never fires afterwards', async () => {
+    vi.useFakeTimers()
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    const w = render()
+    await w.findAll('.aui-drawer-actions button')[0].trigger('click')
+    await flushPromises()
+    expect(vi.getTimerCount()).toBe(1)
+    w.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    vi.useRealTimers()
   })
 
   it('without a document it shows the empty state and disables the actions', () => {

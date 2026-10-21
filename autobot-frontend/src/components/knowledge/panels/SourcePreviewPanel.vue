@@ -66,6 +66,9 @@ const router = useRouter()
 const panelWidth = ref(400)
 const isResizing = ref(false)
 const copySuccess = ref(false)
+// The "Copied" feedback timer; cleared on unmount and when the document changes (#19145 review).
+let copyTimer: ReturnType<typeof setTimeout> | null = null
+const clearCopyTimer = (): void => { if (copyTimer) clearTimeout(copyTimer); copyTimer = null }
 
 // =============================================================================
 // Computed
@@ -102,8 +105,10 @@ async function copyContent(): Promise<void> {
   try {
     await navigator.clipboard.writeText(props.document.content)
     copySuccess.value = true
-    setTimeout(() => {
+    clearCopyTimer()
+    copyTimer = setTimeout(() => {
       copySuccess.value = false
+      copyTimer = null
     }, 2000)
   } catch (err) {
     logger.error('Failed to copy content:', err)
@@ -159,6 +164,9 @@ function getTypeIcon(type?: string): IconName {
   return icons[type || 'document'] || 'file'
 }
 
+// Another document resets the copy feedback instead of inheriting it.
+watch(() => props.document?.id, () => { clearCopyTimer(); copySuccess.value = false })
+
 // Cleanup on close
 watch(() => props.modelValue, (isOpen) => {
   if (!isOpen) {
@@ -169,6 +177,7 @@ watch(() => props.modelValue, (isOpen) => {
 
 // #2849: Ensure resize listeners are removed if component unmounts mid-resize
 onUnmounted(() => {
+  clearCopyTimer()
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
 })
