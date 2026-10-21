@@ -5,9 +5,9 @@
 """Desktop control is gated on `mcp.desktop.control`, not the admin role (#19087).
 
 THREAT_MODEL section 5 names `enforce_ws_desktop_auth` the one gate. `/ws/desktop`
-and the vnc_mcp REST control tools checked `is_admin_role` instead. `superadmin`
-is an admin role that holds no granular permissions (ROLE_PERMISSIONS), so it is
-the real-world "admin without mcp.desktop.control"; `admin` holds the permission.
+and the vnc_mcp REST control tools checked `is_admin_role` instead. "an admin
+without mcp.desktop.control" is built by patching ROLE_PERMISSIONS["admin"], so it does not depend on
+superadmin's grants; superadmin is asserted against whatever the real table says.
 Only the credential seams are patched; the gates are the real code.
 """
 
@@ -23,8 +23,9 @@ from fastapi.testclient import TestClient
 import auth_middleware
 import auth_rbac
 from api import advanced_control, vnc_mcp, ws_security
+from autobot_shared.auth import permissions
 from autobot_shared.auth.mcp_tool_permissions import required_permission
-from autobot_shared.auth.permissions import Permission, is_admin_role, role_has_permission
+from autobot_shared.auth.permissions import ROLE_PERMISSIONS, Permission, Role, is_admin_role, role_has_permission
 
 CONTROL_TOOLS = ["desktop_mouse_click", "desktop_keyboard_type", "desktop_special_key"]
 READ_TOOLS = ["desktop_screenshot", "desktop_observe_state"]
@@ -35,9 +36,25 @@ def _user(role: str) -> dict:
     return {"username": f"{role}-u", "user_id": f"id-{role}", "role": role}
 
 
-def test_premise_superadmin_is_admin_but_lacks_the_permission() -> None:
-    assert is_admin_role("superadmin")
-    assert not role_has_permission("superadmin", Permission.MCP_DESKTOP_CONTROL)
+_DESKTOP = {Permission.MCP_DESKTOP_READ, Permission.MCP_DESKTOP_CONTROL}
+
+
+@pytest.fixture
+def admin_without_desktop(monkeypatch):
+    """An admin-role caller that lacks the desktop permissions, by patching the table.
+
+    Independent of what any other role holds (superadmin's grants are a separate decision), so the
+    refusal tests hold whether or not superadmin is ever given admin's set.
+    """
+    stripped = [p for p in ROLE_PERMISSIONS[Role.ADMIN] if p not in _DESKTOP]
+    monkeypatch.setitem(ROLE_PERMISSIONS, Role.ADMIN, stripped)
+    # role_has_permission answers from this derived cache, built once from the table.
+    monkeypatch.setitem(permissions._ROLE_PERMISSION_VALUES, Role.ADMIN, frozenset(p.value for p in stripped))
+    assert is_admin_role("admin")
+    assert not role_has_permission("admin", Permission.MCP_DESKTOP_CONTROL)
+
+
+def test_premise_admin_holds_the_permission_and_user_only_reads() -> None:
     assert role_has_permission("admin", Permission.MCP_DESKTOP_CONTROL)
     # `user` reads the desktop but never drives it: the READ/CONTROL split the map declares.
     assert role_has_permission("user", Permission.MCP_DESKTOP_READ)
@@ -77,8 +94,15 @@ def _post(role: str, path: str, *, admin_gate: bool = True) -> int:
 
 
 @pytest.mark.parametrize("tool", ALL_TOOLS)
-def test_rest_admin_without_permission_is_refused(tool: str) -> None:
-    assert _post("superadmin", f"/mcp/{tool}") == 403
+def test_rest_admin_without_permission_is_refused(tool: str, admin_without_desktop) -> None:
+    assert _post("admin", f"/mcp/{tool}") == 403
+
+
+@pytest.mark.parametrize("tool", ALL_TOOLS)
+def test_rest_superadmin_follows_the_real_table(tool: str) -> None:
+    """Superadmin is judged by the table alone, no route special-case: admitted iff the table grants it."""
+    granted = role_has_permission("superadmin", required_permission(tool))
+    assert (_post("superadmin", f"/mcp/{tool}") not in (401, 403)) is granted
 
 
 @pytest.mark.parametrize("tool", ALL_TOOLS)
@@ -144,8 +168,8 @@ async def _ws_connect(role: str) -> _FakeWS:
 
 
 @pytest.mark.asyncio
-async def test_ws_admin_without_permission_is_refused() -> None:
-    ws = await _ws_connect("superadmin")
+async def test_ws_admin_without_permission_is_refused(admin_without_desktop) -> None:
+    ws = await _ws_connect("admin")
     assert ws.closed_with is not None and ws.closed_with[0] == 1008
     assert not ws.accepted and ws.handled == 0
 
@@ -155,3 +179,9 @@ async def test_ws_permission_holder_is_admitted() -> None:
     ws = await _ws_connect("admin")
     assert ws.closed_with is None, ws.closed_with
     assert ws.accepted and ws.handled == 1
+
+
+@pytest.mark.asyncio
+async def test_ws_superadmin_follows_the_real_table() -> None:
+    ws = await _ws_connect("superadmin")
+    assert ws.accepted is role_has_permission("superadmin", Permission.MCP_DESKTOP_CONTROL)
