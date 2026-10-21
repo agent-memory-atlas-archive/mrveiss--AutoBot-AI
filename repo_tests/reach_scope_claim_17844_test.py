@@ -71,6 +71,7 @@ import repo_tests.one_paths_filter_job_15360_test as _paths_filter_guard  # noqa
 import repo_tests.one_permission_gate_18263_test as _permission_gate_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_playwright_server_18549_test as _playwright_server_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_semantic_chunker_14485_test as _semantic_chunker_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_serving_predicate_18820_test as _serving_predicate_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_ssh_restart_executor_18186_test as _ssh_restart_guard
@@ -218,6 +219,8 @@ _DECLARED_SCOPES = {
     "container-hardening-inline": ("autobot-backend", "autobot_shared"),
     "brand-mark-announcer-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
     "one-content-digest-scan": ("autobot-backend", "autobot_shared"),
+    "audit-action-vocabulary": ("autobot-backend", "autobot_shared", "autobot-slm-backend"),
+    "hand-rolled-redis-pipeline-scan": ("autobot-backend", "autobot-slm-backend"),
     "one-internal-api-key-reader-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "provider-key-env-read-scan": ("autobot-backend", "autobot_shared", "plugins"),
     "semantic-chunker-fork-scan": ("autobot-backend", "autobot_shared"),
@@ -317,6 +320,10 @@ _DECLARED_SCOPES = {
         "autobot-infrastructure",
         "autobot-monitoring",
     ),
+    "hand-rolled-async-session-scan": (
+        "autobot-backend",
+        "autobot-slm-backend",
+    ),
     "hand-rolled-circuit-breaker-scan": (
         "autobot-backend",
         "autobot-slm-backend",
@@ -327,6 +334,7 @@ _DECLARED_SCOPES = {
         "plugins",
         "libs",
     ),
+    "serving-predicate-scan": ("autobot-backend", "autobot_shared", "plugins", "libs"),
     "anthropic-message-split-scan": ("autobot-backend/llm_shared/providers",),
     "backoff-formula-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
     "doubled-api-prefix-scan": ("autobot-backend/api", "autobot-slm-backend/api"),
@@ -381,6 +389,21 @@ _DECLARED_SCOPES = {
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),
     "kb-admin-read-bypass": ("autobot-backend/", "autobot_shared/"),
+    "kb-construction-18122-scan": (
+        "autobot-backend/",
+        "autobot-infrastructure/",
+        "autobot-slm-backend/",
+        "autobot_shared/",
+        "autobot-npu-worker/",
+        "autobot-tts-worker/",
+        "autobot-browser-worker/",
+        "tools/",
+        "scripts/",
+        "pipeline-scripts/",
+        "plugins/",
+        "libs/",
+        "debug/",
+    ),
     "kb-read-visibility-production-sweep": (
         "autobot-backend/",
         "autobot_shared/",

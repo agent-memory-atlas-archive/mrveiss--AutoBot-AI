@@ -276,10 +276,20 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test .py/.sh under the scan roots is a subset of tracked files; the test-file share drifts.",
     ),
+    "hand-rolled-async-session-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Test-file .py under the two backend roots is a subset of tracked files; the non-test share drifts.",
+    ),
     "hand-rolled-circuit-breaker-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under eight roots; the test-file share drifts.",
+    ),
+    "serving-predicate-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test source is a subset of tracked .py under four roots; the test-file share drifts.",
     ),
     "backoff-formula-scan": (
         ABSOLUTE,
@@ -557,5 +567,16 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Every tracked file under the ansible tree; grows with roles and playbooks.",
+    ),
+    "redis-keys-runtime-18999-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Runtime Python outside test, tooling and top-level docs/data/logs trees, a subset of tracked "
+        "Python; the excluded share drifts independently.",
+    ),
+    "kb-construction-18122-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test Python under thirteen source roots, a subset of tracked Python; the test-file share drifts.",
     ),
 }

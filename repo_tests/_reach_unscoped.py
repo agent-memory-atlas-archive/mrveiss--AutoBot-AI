@@ -22,6 +22,9 @@ from __future__ import annotations
 UNSCOPED = frozenset(
     {
         "ansible-apt-repo-budget-override-sweep",
+        # Whole tree (#18940): every tracked test file, wherever a test lives; the population is
+        # the test suite itself, so a roots= list would only go stale as tests move.
+        "isolated-git-env",
         "ansible-inventory-shell-sweep",
         "audio-extension-allowlist",
         "blanket-skip-test-module-sweep",
@@ -57,6 +60,9 @@ UNSCOPED = frozenset(
         "prompt-injection-detector-strict-mode",
         "redaction-concept-census",
         "redis-config-path-census",
+        # Whole tree (#18999): walks the repo root and excludes by rule, so a new top-level
+        # directory is swept with no edit; a roots= list would turn that into a red.
+        "redis-keys-runtime-18999-scan",
         "reduced-motion-animate-call",
         "reduced-motion-animate-option",
         "reduced-motion-apex-animations",
