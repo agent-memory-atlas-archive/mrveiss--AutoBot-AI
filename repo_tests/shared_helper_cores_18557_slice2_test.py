@@ -212,7 +212,23 @@ def test_deploy_wrappers_source_the_lib_and_define_none_of_it():
 
 
 # --- Row 5: the reason the worker entries stay separate ----------------------------------------
+def imports_autobot_shared(source: str) -> bool:
+    """True when *source* imports ``autobot_shared``; a comment or string naming it does not count."""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import) and any(a.name.split(".")[0] == "autobot_shared" for a in node.names):
+            return True
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "autobot_shared":
+            return True
+    return False
+
+
+def test_worker_import_detector_flags_an_import_and_passes_a_mention():
+    assert imports_autobot_shared("from autobot_shared.worker_entry import run\n")
+    assert imports_autobot_shared("import autobot_shared.logging_manager\n")
+    assert not imports_autobot_shared("# cannot use autobot_shared here\nX = 'autobot_shared'\n")
+
+
 def test_isolated_workers_cannot_import_autobot_shared():
     for rel in ("autobot-browser-worker/main.py", "autobot-tts-worker/main.py"):
-        assert "autobot_shared" not in _read(rel), rel
+        assert not imports_autobot_shared(_read(rel)), rel
     assert not (ROOT / "autobot_shared" / "worker_entry.py").exists()
