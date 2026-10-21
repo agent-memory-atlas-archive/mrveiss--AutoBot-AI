@@ -92,13 +92,19 @@ def test_terminal_handlers_should_block_command(level, risk, blocked):
 
 
 def _sanitizer(module: str, cls: str):
+    # The script imports ``tool_base`` by bare name; whatever held those keys before is put back
+    # afterwards, so no test file after this one sees this load's copy (sys.modules leak guard).
+    saved = {key: sys.modules.pop(key, None) for key in ("tool_base", module)}
     sys.path.insert(0, str(AUTO_TOOLS))
     try:
-        for stale in ("tool_base", module):
-            sys.modules.pop(stale, None)
         return getattr(_load_by_path(module + "_slice2", AUTO_TOOLS / f"{module}.py"), cls)()
     finally:
         sys.path.remove(str(AUTO_TOOLS))
+        for key, previous in saved.items():
+            if previous is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = previous
 
 
 TOOLS = [
