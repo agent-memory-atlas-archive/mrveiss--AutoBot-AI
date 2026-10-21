@@ -114,7 +114,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/knowledge_vectorization_test.py": 601,
     "autobot-backend/api/llm.py": 1078,
     "autobot-backend/api/llm_optimization.py": 725,
-    "autobot-backend/api/log_forwarding.py": 777,
+    "autobot-backend/api/log_forwarding.py": 761,  # #18734: one served-destination helper (777 -> 761)
     "autobot-backend/api/logs.py": 1027,
     "autobot-backend/api/mcp_registry.py": 1173,
     "autobot-backend/api/memory.py": 1514,
