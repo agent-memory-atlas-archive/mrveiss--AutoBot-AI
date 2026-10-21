@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import shutil
+import subprocess
+from pathlib import Path
 
+import pytest
 from repo_tests.uninstall_covers_role_components_18653_test import _INSTALL, _ROOT, _array, _docs, _resolve
 
 _APT_MODULES = ("apt", "ansible.builtin.apt", "package", "ansible.builtin.package")
@@ -113,6 +117,8 @@ def _recorded_packages() -> list[str]:
     names = re.findall(r'record_install package "?([a-z0-9][a-z0-9.+-]*)"?', text)
     for loop in re.findall(r"for \w+ in ([^;]+); do record_install package", text):
         names += loop.split()
+    for call in re.findall(r'^\s*apt_install_recorded "[^"]*" ([^;\n]+)', text, re.M):  # #18727
+        names += call.split()
     return names
 
 
@@ -187,3 +193,50 @@ def test_the_overlap_check_sees_exact_and_glob_matches() -> None:
         "redis-tools",
     ]
     assert recorded_but_kept(["python3.14"], ["nginx", "lib*-dev"]) == []
+
+
+# --- the record holds only what install.sh itself installed (#18727) --------------------------
+
+
+def _helpers() -> str:
+    """install.sh's record helpers, as written there."""
+    text = _INSTALL.read_text(encoding="utf-8")
+    parts = [
+        re.search(rf"^{name}\(\) \{{.*?^\}}$|^{name}\(\) \{{.*\}}$", text, re.M | re.S)
+        for name in ("record_install", "pkg_installed", "apt_install_recorded")
+    ]
+    assert all(parts), "install.sh no longer defines the record helpers"
+    return "\n".join(m.group(0) for m in parts)
+
+
+def _install_with(tmp_path: Path, preinstalled: list[str], packages: list[str]) -> list[str]:
+    """Run apt_install_recorded with dpkg-query/apt stubbed: *preinstalled* report `ok installed`."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash unavailable")
+    record = tmp_path / "install-record"
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f'INSTALL_RECORD="{record}"',
+            f'PRE=" {" ".join(preinstalled)} "',
+            'dpkg-query() { case "$PRE" in *" ${@: -1} "*) printf "install ok installed";; *) return 1;; esac; }',
+            'run_ok() { shift; "$@"; }',
+            "env() { :; }  # apt-get install, stubbed",
+            _helpers(),
+            f'apt_install_recorded "Installing" {" ".join(packages)}',
+        ]
+    )
+    out = subprocess.run([bash, "-c", script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return record.read_text(encoding="utf-8").split() if record.exists() else []
+
+
+def test_a_package_installed_before_is_never_recorded(tmp_path: Path) -> None:
+    """27's review: nodejs installed without `node` on PATH was recorded, so --uninstall purged it."""
+    assert _install_with(tmp_path, ["nodejs"], ["nodejs"]) == []
+
+
+def test_only_the_packages_install_sh_added_are_recorded(tmp_path: Path) -> None:
+    assert _install_with(tmp_path, ["python3.14"], ["python3.14", "python3.14-venv"]) == ["package=python3.14-venv"]
+    assert _install_with(tmp_path / "fresh", [], ["ansible"]) == ["package=ansible"]
