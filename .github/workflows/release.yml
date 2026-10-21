@@ -217,7 +217,7 @@ jobs:
       # integrity check. Each release publishes a copy whose DEFAULT_BRANCH is this release's tag
       # (so it installs exactly that release) and its SHA256, plus a cosign signature made with the
       # key image-sign.yml uses -- once that key exists. Until the owner replaces the placeholder
-      # cosign.pub (#8093) the installer ships checksummed but UNSIGNED, with a warning; a missing
+      # cosign.pub (#19126) the installer ships checksummed but UNSIGNED, with a warning; a missing
       # key never fails the release (its tag is already pushed above) and never yields a fake signature.
       - name: Build the release's pinned installer (#18666)
         if: steps.check.outputs.release_needed == 'true'
@@ -240,7 +240,7 @@ jobs:
           set -euo pipefail
           if grep -q PLACEHOLDER cosign.pub; then
             echo "real=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::cosign.pub is still the placeholder (#8093): install.sh is published UNSIGNED (checksum only) until the owner generates the signing key"
+            echo "::warning::cosign.pub is still the placeholder (#19126): install.sh is published UNSIGNED (checksum only) until the owner generates the signing key"
           else
             echo "real=true" >> "$GITHUB_OUTPUT"
           fi

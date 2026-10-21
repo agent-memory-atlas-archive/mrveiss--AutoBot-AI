@@ -4,7 +4,7 @@
 
 The documented one-liner ran an unpinned `main` install.sh as root with no integrity check. The
 release job now builds a copy whose DEFAULT_BRANCH is the release tag and its SHA256, and signs it
-with the key image-sign.yml uses. cosign.pub is still a placeholder (#8093), so signing is gated on
+with the key image-sign.yml uses. cosign.pub is still a placeholder (#19126), so signing is gated on
 a real key: a placeholder ships the installer checksum-only with a warning, never a fake signature.
 
 The workflow steps' own `run:` scripts are executed here (with a stub `cosign`), not just grepped.
@@ -23,6 +23,7 @@ import pytest
 import yaml
 from repo_tests._paths import repo_root
 
+from autobot_shared.isolated_git import git, isolated_git_env, make_repo
 from autobot_shared.paths import scrubbed_git_env
 
 _ROOT = repo_root()
@@ -62,7 +63,7 @@ def test_a_placeholder_key_skips_signing_with_a_warning(tmp_path: Path) -> None:
     out = _run(_step("Check the signing key is real")["run"], tmp_path)
     assert out.returncode == 0, out.stderr
     assert (tmp_path / "out.txt").read_text(encoding="utf-8").strip() == "real=false"
-    assert "::warning::" in out.stdout and "UNSIGNED" in out.stdout and "#8093" in out.stdout
+    assert "::warning::" in out.stdout and "UNSIGNED" in out.stdout and "#19126" in out.stdout
 
 
 def test_a_real_key_takes_the_signing_path(tmp_path: Path) -> None:
@@ -196,23 +197,16 @@ def _pull_guard() -> str:
 def test_a_tag_reinstall_skips_the_pull_and_a_branch_reinstall_pulls(tmp_path: Path) -> None:
     if shutil.which("git") is None:
         pytest.skip("git unavailable")
-    repo = tmp_path / "repo"
-    subprocess.run(["git", "init", "-q", str(repo)], check=True, env=scrubbed_git_env())
-    for args in (
-        ("config", "user.email", "t@t"),
-        ("config", "user.name", "t"),
-        ("commit", "-q", "--allow-empty", "-m", "c"),
-        ("tag", "v1.2.3"),
-        ("checkout", "-q", "v1.2.3"),
-    ):
-        subprocess.run(["git", "-C", str(repo), *args], check=True, env=scrubbed_git_env())
+    repo = make_repo(tmp_path / "repo")
+    for args in (("commit", "-q", "--allow-empty", "-m", "c"), ("tag", "v1.2.3"), ("checkout", "-q", "v1.2.3")):
+        git(repo, *args)
     guard = _pull_guard()
     detached = subprocess.run(
-        ["sh", "-c", guard, "_", str(repo), "v1.2.3"], capture_output=True, env=scrubbed_git_env()
+        ["sh", "-c", guard, "_", str(repo), "v1.2.3"], capture_output=True, env=isolated_git_env()
     )
     assert detached.returncode == 0, "a detached tag checkout still tried to pull"
-    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "work"], check=True, env=scrubbed_git_env())
-    on_branch = subprocess.run(["sh", "-c", guard, "_", str(repo), "work"], capture_output=True, env=scrubbed_git_env())
+    git(repo, "checkout", "-q", "-b", "work")
+    on_branch = subprocess.run(["sh", "-c", guard, "_", str(repo), "work"], capture_output=True, env=isolated_git_env())
     assert on_branch.returncode != 0, "on a branch the guard must pull (here: no remote, so it fails)"
 
 
