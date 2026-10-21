@@ -287,7 +287,7 @@ class AuthenticationMiddleware:
 
             # Audit log the lockout
             self.security_layer.audit_log(
-                action="account_locked",
+                action="auth.lockout",
                 user=username,
                 outcome="security_action",
                 details={
