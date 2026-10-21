@@ -56,7 +56,7 @@ readonly REPO_HOST="github.com"
 readonly REPO_SLUG="mrveiss/AutoBot-AI"
 readonly DEFAULT_REPO="https://${REPO_HOST}/${REPO_SLUG}.git"
 readonly NODESOURCE_HOST="deb.nodesource.com"
-readonly DEFAULT_BRANCH="main"
+readonly DEFAULT_BRANCH="main" PINNED_COMMIT=""  # a release build pins both: tag and its commit (#18666)
 # #18586: where this script was started from, resolved before any cd; empty under `curl | bash`
 SCRIPT_DIR=""
 [[ -f "${BASH_SOURCE[0]:-}" ]] && SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -578,7 +578,7 @@ code_deployment() {
     fi
 
     local installed_sha  # #18586: record exactly what was installed
-    installed_sha="$(sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" rev-parse HEAD)"
+    installed_sha="$(sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" rev-parse HEAD)"; [[ -z "${PINNED_COMMIT}" || "${GIT_BRANCH}" != "${DEFAULT_BRANCH}" || "${installed_sha}" == "${PINNED_COMMIT}" ]] || fatal "${GIT_BRANCH} checked out ${installed_sha}, but this signed installer was built for ${PINNED_COMMIT}; the tag moved -- refusing (#18666)"
     success "Installing ${DEFAULT_REPO} branch ${GIT_BRANCH} @ ${installed_sha}"
 
     # Copy code from code_source to service directories where Ansible expects them

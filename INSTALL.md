@@ -86,7 +86,9 @@ key's SHA256 (`sha256sum cosign.pub`) to compare against.
 
 Until the signing key is set up, a release carries `install.sh` and `install.sh.sha256` but no
 `install.sh.sig`; its release job says so in a warning. For such a release, verify the checksum and
-drop the `cosign` step from the chain: `sha256sum -c install.sh.sha256 && sudo bash install.sh`.
+drop the `cosign` step from the chain: `sha256sum -c install.sh.sha256 && sudo bash install.sh`. A checksum downloaded from
+the same release proves the file arrived intact, not who made it: authenticity needs the signing key
+(#19126).
 
 Pinned but unverified, as a one-liner next to the `main` one:
 
