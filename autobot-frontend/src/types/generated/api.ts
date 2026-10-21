@@ -1481,9 +1481,9 @@ export interface paths {
          * Chat Health Check
          * @description Health check for chat service.
          *
-         *     Note: llm_service is lazily initialized on first chat request, so we report
-         *     it as 'available' (can be initialized) rather than requiring it to exist.
-         *     Only chat_history_manager is critical for the health check.
+         *     llm_service: 'healthy' once startup wired the singleton, 'degraded' when that
+         *     wiring failed (#18689), 'available' before startup ran. Only
+         *     chat_history_manager is critical for the health check.
          *
          *     Issue #744: Requires authenticated user.
          */
@@ -2149,7 +2149,9 @@ export interface paths {
          *
          *     Security: Verifies the X-Telegram-Bot-Api-Secret-Token header matches the
          *     stored secret, enforced by the ``verify_telegram_secret`` route dependency
-         *     so authentication runs before the request body is parsed.
+         *     so authentication runs before the request body is parsed. While the ingest
+         *     mode is polling the route answers 409 (``reject_webhook_in_polling_mode``),
+         *     so the webhook and the poller are never both live.
          *
          *     Args:
          *         request: FastAPI request (for header access)
@@ -2185,7 +2187,7 @@ export interface paths {
         put?: never;
         /**
          * Configure Telegram Bot
-         * @description Configure Telegram bot token and webhook.
+         * @description Configure Telegram bot token and ingest mode (webhook or polling, #19010).
          *
          *     Requires admin permission.
          *
@@ -2196,6 +2198,83 @@ export interface paths {
          *         Configuration status and bot info
          */
         post: operations["configure_telegram_bot_api_telegram_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/cache/coordinator/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cache Coordinator Stats
+         * @description Get unified cache statistics from the cache coordinator.
+         *
+         *     Returns stats for all registered caches including:
+         *     - Individual cache metrics (size, hits, misses, hit_rate)
+         *     - Total items across all caches
+         *     - System memory percentage
+         *     - Pressure trigger count
+         *
+         *     Issue #744: Requires admin authentication.
+         */
+        get: operations["get_cache_coordinator_stats_api_system_cache_coordinator_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/cache/evict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Cache Eviction
+         * @description Manually trigger coordinated cache eviction.
+         *
+         *     Evicts items from all registered caches according to eviction_ratio.
+         *
+         *     Issue #744: Requires admin authentication.
+         */
+        post: operations["trigger_cache_eviction_api_system_cache_evict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/cache/clear/{cache_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear Cache
+         * @description Clear a specific cache by name.
+         *
+         *     Args:
+         *         cache_name: Name of the cache to clear (e.g., 'lru_memory', 'embedding')
+         *
+         *     Issue #744: Requires admin authentication.
+         */
+        post: operations["clear_cache_api_system_cache_clear__cache_name__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2555,83 +2634,6 @@ export interface paths {
         get: operations["get_system_metrics_api_system_metrics_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/system/api/cache/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Cache Coordinator Stats
-         * @description Get unified cache statistics from the cache coordinator.
-         *
-         *     Returns stats for all registered caches including:
-         *     - Individual cache metrics (size, hits, misses, hit_rate)
-         *     - Total items across all caches
-         *     - System memory percentage
-         *     - Pressure trigger count
-         *
-         *     Issue #744: Requires admin authentication.
-         */
-        get: operations["get_cache_coordinator_stats_api_system_api_cache_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/system/api/cache/evict": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Trigger Cache Eviction
-         * @description Manually trigger coordinated cache eviction.
-         *
-         *     Evicts items from all registered caches according to eviction_ratio.
-         *
-         *     Issue #744: Requires admin authentication.
-         */
-        post: operations["trigger_cache_eviction_api_system_api_cache_evict_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/system/api/cache/clear/{cache_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Clear Cache
-         * @description Clear a specific cache by name.
-         *
-         *     Args:
-         *         cache_name: Name of the cache to clear (e.g., 'lru_memory', 'embedding')
-         *
-         *     Issue #744: Requires admin authentication.
-         */
-        post: operations["clear_cache_api_system_api_cache_clear__cache_name__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3798,6 +3800,34 @@ export interface paths {
          *         HTTPException: 500 if Redis operation fails
          */
         patch: operations["update_user_preferences_api_users_me_preferences_patch"];
+        trace?: never;
+    };
+    "/api/users/me/dashboard-layouts/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Dashboard Layout
+         * @description Return the caller's stored layout for ``page``; no dashboards when none is stored.
+         */
+        get: operations["get_dashboard_layout_api_users_me_dashboard_layouts__page__get"];
+        /**
+         * Put Dashboard Layout
+         * @description Replace the caller's layout for ``page``.
+         */
+        put: operations["put_dashboard_layout_api_users_me_dashboard_layouts__page__put"];
+        post?: never;
+        /**
+         * Reset Dashboard Layout
+         * @description Drop the caller's stored layout for ``page`` so the defaults apply again.
+         */
+        delete: operations["reset_dashboard_layout_api_users_me_dashboard_layouts__page__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/devices/pair-qr": {
@@ -9262,65 +9292,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/knowledge/facts/{fact_id}/share": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Share Fact
-         * @description Share a fact with additional users (Issue #688).
-         *
-         *     Args:
-         *         fact_id: Fact ID to share
-         *         request_body: Share request with user_ids
-         *         request: FastAPI request
-         *         _: Admin permission check (required)
-         *
-         *     Returns:
-         *         Success response with updated sharing info
-         */
-        post: operations["share_fact_api_knowledge_base_api_knowledge_facts__fact_id__share_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge_base/api/knowledge/facts/{fact_id}/share/{user_id_to_remove}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Unshare Fact
-         * @description Remove user from fact sharing list (Issue #688).
-         *
-         *     Args:
-         *         fact_id: Fact ID to unshare
-         *         user_id_to_remove: User ID to remove from sharing
-         *         request: FastAPI request
-         *         _: Admin permission check (required)
-         *
-         *     Returns:
-         *         Success response with updated sharing info
-         */
-        delete: operations["unshare_fact_api_knowledge_base_api_knowledge_facts__fact_id__share__user_id_to_remove__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/knowledge_base/api/knowledge/facts/{fact_id}/visibility": {
+    "/api/knowledge_base/facts/{fact_id}/visibility": {
         parameters: {
             query?: never;
             header?: never;
@@ -9341,7 +9313,7 @@ export interface paths {
          *     Returns:
          *         Success response with new visibility
          */
-        put: operations["update_fact_visibility_api_knowledge_base_api_knowledge_facts__fact_id__visibility_put"];
+        put: operations["update_fact_visibility_api_knowledge_base_facts__fact_id__visibility_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -9349,7 +9321,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/knowledge/facts/mine": {
+    "/api/knowledge_base/facts/mine": {
         parameters: {
             query?: never;
             header?: never;
@@ -9370,7 +9342,7 @@ export interface paths {
          *     Returns:
          *         List of facts owned by (and optionally shared with) the user
          */
-        get: operations["get_my_facts_api_knowledge_base_api_knowledge_facts_mine_get"];
+        get: operations["get_my_facts_api_knowledge_base_facts_mine_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9379,7 +9351,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/knowledge/facts/shared-with-me": {
+    "/api/knowledge_base/facts/shared-with-me": {
         parameters: {
             query?: never;
             header?: never;
@@ -9399,7 +9371,7 @@ export interface paths {
          *     Returns:
          *         List of facts shared with the user
          */
-        get: operations["get_shared_facts_api_knowledge_base_api_knowledge_facts_shared_with_me_get"];
+        get: operations["get_shared_facts_api_knowledge_base_facts_shared_with_me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9524,8 +9496,8 @@ export interface paths {
          *         Updated fact metadata
          *
          *     Raises:
-         *         403: If user is not the owner
-         *         404: If fact not found
+         *         403: If the caller can read the fact but is neither its owner nor an admin
+         *         404: If the fact is absent or the caller cannot read it
          */
         post: operations["share_knowledge_api_knowledge_collaboration_facts__fact_id__share_post"];
         delete?: never;
@@ -9559,8 +9531,8 @@ export interface paths {
          *         Updated fact metadata
          *
          *     Raises:
-         *         403: If user is not the owner
-         *         404: If fact not found
+         *         403: If the caller can read the fact but is neither its owner nor an admin
+         *         404: If the fact is absent or the caller cannot read it
          */
         delete: operations["unshare_knowledge_api_knowledge_collaboration_facts__fact_id__share__entity_id__delete"];
         options?: never;
@@ -10087,7 +10059,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/ground-response": {
+    "/api/knowledge_base/ground-response": {
         parameters: {
             query?: never;
             header?: never;
@@ -10139,14 +10111,14 @@ export interface paths {
          *     Returns:
          *         GroundedResponse serialized to dict
          */
-        post: operations["ground_response_api_knowledge_base_api_ground_response_post"];
+        post: operations["ground_response_api_knowledge_base_ground_response_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/verify-claim": {
+    "/api/knowledge_base/verify-claim": {
         parameters: {
             query?: never;
             header?: never;
@@ -10191,14 +10163,14 @@ export interface paths {
          *     Returns:
          *         Verified claim with status and evidence
          */
-        post: operations["verify_claim_api_knowledge_base_api_verify_claim_post"];
+        post: operations["verify_claim_api_knowledge_base_verify_claim_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/kb-conflicts": {
+    "/api/knowledge_base/kb-conflicts": {
         parameters: {
             query?: never;
             header?: never;
@@ -10247,7 +10219,7 @@ export interface paths {
          *     Returns:
          *         List of conflicts with pagination info
          */
-        get: operations["list_conflicts_api_knowledge_base_api_kb_conflicts_get"];
+        get: operations["list_conflicts_api_knowledge_base_kb_conflicts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10256,7 +10228,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/kb-conflicts/{conflict_id}/resolve": {
+    "/api/knowledge_base/kb-conflicts/{conflict_id}/resolve": {
         parameters: {
             query?: never;
             header?: never;
@@ -10299,14 +10271,14 @@ export interface paths {
          *     Returns:
          *         Resolution result
          */
-        post: operations["resolve_conflict_api_knowledge_base_api_kb_conflicts__conflict_id__resolve_post"];
+        post: operations["resolve_conflict_api_knowledge_base_kb_conflicts__conflict_id__resolve_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/knowledge_base/api/kb-stats": {
+    "/api/knowledge_base/kb-stats": {
         parameters: {
             query?: never;
             header?: never;
@@ -10359,7 +10331,7 @@ export interface paths {
          *     Returns:
          *         Statistics dictionary
          */
-        get: operations["get_stats_api_knowledge_base_api_kb_stats_get"];
+        get: operations["get_stats_api_knowledge_base_kb_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -17756,6 +17728,78 @@ export interface paths {
          *     was not understood".
          */
         get: operations["get_claims_api_coordination_claims_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/issue-claims/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint Credential
+         * @description Mint the caller's own issue-claims credential; the value is returned this once.
+         */
+        post: operations["mint_credential_api_coordination_issue_claims_credentials_post"];
+        /**
+         * Revoke Credential
+         * @description Revoke the presented credential in the secrets manager: every session holding it is cut off.
+         */
+        delete: operations["revoke_credential_api_coordination_issue_claims_credentials_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/issue-claims/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who Holds
+         * @description Who holds issue *number*; ``held: false`` only after the registry was actually read.
+         */
+        get: operations["who_holds_api_coordination_issue_claims__number__get"];
+        put?: never;
+        /**
+         * Claim
+         * @description Claim or renew issue *number*; another holder is 409 naming them.
+         */
+        post: operations["claim_api_coordination_issue_claims__number__post"];
+        /**
+         * Release
+         * @description Release the caller's own claim; anyone else's is refused and stays held.
+         */
+        delete: operations["release_api_coordination_issue_claims__number__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coordination/issue-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List All
+         * @description Every live issue claim, install-wide.
+         */
+        get: operations["list_all_api_coordination_issue_claims_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -31693,7 +31737,10 @@ export interface paths {
         put?: never;
         /**
          * Batch Load
-         * @description Execute multiple API calls in parallel and return combined results.
+         * @description Run several allow-listed GETs in one call, each dispatched through the ASGI app (#18765).
+         *
+         *     Every sub-request carries the caller's own credentials, so the target route's dependencies
+         *     (including admin gates) run and its own status lands in its result slot.
          */
         post: operations["batch_load_api_batch_jobs_load_post"];
         delete?: never;
@@ -45425,7 +45472,7 @@ export interface paths {
          * Get Redis Status
          * @description Get current Redis service status
          *
-         *     No authentication required (public endpoint)
+         *     Requires an authenticated user; no caller depended on it being public (#18718).
          */
         get: operations["get_redis_status_api_redis_service_status_get"];
         put?: never;
@@ -60279,12 +60326,8 @@ export interface components {
          * @description Response for POST /load — multi-endpoint batch execution.
          */
         BatchLoadResponse: {
-            /** Responses */
-            responses: unknown;
-            /** Errors */
-            errors: unknown;
-            /** Timing */
-            timing: unknown;
+            /** Results */
+            results: unknown[];
         } & {
             [key: string]: unknown;
         };
@@ -63830,6 +63873,35 @@ export interface components {
              * @description Stamped at write time; null = install-wide or legacy
              */
             company_id?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ClaimsCredentialResponse
+         * @description Body of ``POST /coordination/issue-claims/credentials``: the credential, returned this once.
+         */
+        ClaimsCredentialResponse: {
+            /**
+             * Credential
+             * @description <secret_id>.<verifier>; keep it in the kernel keyring, never on disk
+             */
+            credential: string;
+            /** Secret Id */
+            secret_id: string;
+            /** Username */
+            username: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ClaimsCredentialRevokedResponse
+         * @description Body of ``DELETE /coordination/issue-claims/credentials``.
+         */
+        ClaimsCredentialRevokedResponse: {
+            /** Revoked */
+            revoked: boolean;
+            /** Secret Id */
+            secret_id: string;
         } & {
             [key: string]: unknown;
         };
@@ -67410,6 +67482,11 @@ export interface components {
              */
             render: "auto" | "fast" | "playwright";
             /**
+             * @description What to keep from each page (#18826): only 'document' is implemented
+             * @default document
+             */
+            profile: components["schemas"]["IngestProfile"];
+            /**
              * Scrape Template Id
              * @description UUID of a ScrapeTemplate to apply to every crawled page
              */
@@ -68080,6 +68157,30 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * Dashboard
+         * @description A named dashboard; widget list order is the visual order.
+         */
+        Dashboard: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Widgets */
+            widgets?: components["schemas"]["DashboardWidget"][];
+            /**
+             * Createdat
+             * @default 0
+             */
+            createdAt: number;
+            /**
+             * Updatedat
+             * @default 0
+             */
+            updatedAt: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * DashboardGenerateRequest
          * @description Request body for validation dashboard generation.
          */
@@ -68099,6 +68200,64 @@ export interface components {
              * @default 30
              */
             refresh_interval: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DashboardLayout
+         * @description Every dashboard the user keeps on one page; no dashboards means 'use defaults'.
+         */
+        DashboardLayout: {
+            /** Dashboards */
+            dashboards?: components["schemas"]["Dashboard"][];
+            /** Activeid */
+            activeId?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DashboardLayoutData
+         * @description Data payload for the dashboard layout endpoints.
+         */
+        DashboardLayoutData: {
+            /** Page */
+            page: string;
+            layout: components["schemas"]["DashboardLayout"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DashboardWidget
+         * @description One widget: its kind, label, config and place on the 12-column grid.
+         */
+        DashboardWidget: {
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Span
+             * @default 6
+             * @enum {integer}
+             */
+            span: 4 | 6 | 8 | 12;
+            /**
+             * Height
+             * @description Widget height in px
+             * @default 320
+             */
+            height: number;
+            /** Props */
+            props?: {
+                [key: string]: unknown;
+            };
+            /** Refreshinterval */
+            refreshInterval?: number | null;
         } & {
             [key: string]: unknown;
         };
@@ -69764,6 +69923,21 @@ export interface components {
              */
             success: boolean;
             data?: components["schemas"]["ConvFileSearchData"] | null;
+            /** Message */
+            message?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DataResponse[DashboardLayoutData] */
+        DataResponse_DashboardLayoutData_: {
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+            data?: components["schemas"]["DashboardLayoutData"] | null;
             /** Message */
             message?: string | null;
             /** Timestamp */
@@ -78946,6 +79120,12 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * IngestProfile
+         * @description What an HTML ingest keeps from a page.
+         * @enum {string}
+         */
+        IngestProfile: "document" | "media" | "page_copy";
         /** IngestRequest */
         IngestRequest: {
             /** Tokens In */
@@ -79170,6 +79350,58 @@ export interface components {
             accepted: boolean;
             /** Permission */
             permission?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * IssueClaimListResponse
+         * @description Body of ``GET /coordination/issue-claims``.
+         */
+        IssueClaimListResponse: {
+            /** Claims */
+            claims: {
+                [key: string]: unknown;
+            }[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * IssueClaimRequest
+         * @description Body of ``POST /coordination/issue-claims/{number}``.
+         */
+        IssueClaimRequest: {
+            /**
+             * Owner
+             * @description Session name; bound to the caller
+             */
+            owner: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Ttl S */
+            ttl_s?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * IssueClaimResponse
+         * @description One answer shape for claim, release and who; the CLI prints it as JSON.
+         */
+        IssueClaimResponse: {
+            /** Held */
+            held: boolean;
+            /** Granted */
+            granted?: boolean | null;
+            /** Released */
+            released?: boolean | null;
+            /** Holder */
+            holder?: {
+                [key: string]: unknown;
+            } | null;
+            /** Message */
+            message?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -80131,7 +80363,7 @@ export interface components {
         };
         /**
          * KnowledgeConflictsListResponse
-         * @description Response for GET /api/kb-conflicts.
+         * @description Response for GET /api/knowledge_base/kb-conflicts.
          */
         KnowledgeConflictsListResponse: {
             /** Status */
@@ -80576,7 +80808,7 @@ export interface components {
         };
         /**
          * KnowledgeGroundResponseResponse
-         * @description Response for POST /api/ground-response.
+         * @description Response for POST /api/knowledge_base/ground-response.
          */
         KnowledgeGroundResponseResponse: {
             /** Status */
@@ -80590,7 +80822,7 @@ export interface components {
         };
         /**
          * KnowledgeGroundingStatsResponse
-         * @description Response for GET /api/kb-stats.
+         * @description Response for GET /api/knowledge_base/kb-stats.
          *
          *     Stats shape is dynamic — extra fields allowed.
          */
@@ -80847,7 +81079,7 @@ export interface components {
         };
         /**
          * KnowledgeMyFactsResponse
-         * @description Response for GET /api/knowledge/facts/mine.
+         * @description Response for GET /api/knowledge_base/facts/mine.
          */
         KnowledgeMyFactsResponse: {
             /** Success */
@@ -81029,7 +81261,7 @@ export interface components {
         };
         /**
          * KnowledgeResolveConflictResponse
-         * @description Response for POST /api/kb-conflicts/{conflict_id}/resolve.
+         * @description Response for POST /api/knowledge_base/kb-conflicts/{conflict_id}/resolve.
          */
         KnowledgeResolveConflictResponse: {
             /** Status */
@@ -81167,22 +81399,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * KnowledgeShareFactResponse
-         * @description Response for POST /api/knowledge/facts/{fact_id}/share.
-         */
-        KnowledgeShareFactResponse: {
-            /** Success */
-            success: boolean;
-            /** Fact Id */
-            fact_id: string;
-            /** Shared With */
-            shared_with: unknown[];
-            /** Visibility */
-            visibility?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * KnowledgeShareResponse
          * @description Response for POST /knowledge/collaboration/facts/{id}/share.
          */
@@ -81202,7 +81418,7 @@ export interface components {
         };
         /**
          * KnowledgeSharedWithMeResponse
-         * @description Response for GET /api/knowledge/facts/shared-with-me.
+         * @description Response for GET /api/knowledge_base/facts/shared-with-me.
          */
         KnowledgeSharedWithMeResponse: {
             /** Success */
@@ -81623,22 +81839,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * KnowledgeUnshareFactResponse
-         * @description Response for DELETE /api/knowledge/facts/{fact_id}/share/{user_id_to_remove}.
-         */
-        KnowledgeUnshareFactResponse: {
-            /** Success */
-            success: boolean;
-            /** Fact Id */
-            fact_id: string;
-            /** Shared With */
-            shared_with: unknown[];
-            /** Visibility */
-            visibility?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * KnowledgeUnshareResponse
          * @description Response for DELETE /knowledge/collaboration/facts/{id}/share/{entity_id}.
          */
@@ -81658,7 +81858,7 @@ export interface components {
         };
         /**
          * KnowledgeUpdateVisibilityResponse
-         * @description Response for PUT /api/knowledge/facts/{fact_id}/visibility.
+         * @description Response for PUT /api/knowledge_base/facts/{fact_id}/visibility.
          */
         KnowledgeUpdateVisibilityResponse: {
             /** Success */
@@ -81742,7 +81942,7 @@ export interface components {
         };
         /**
          * KnowledgeVerifyClaimResponse
-         * @description Response for POST /api/verify-claim.
+         * @description Response for POST /api/knowledge_base/verify-claim.
          */
         KnowledgeVerifyClaimResponse: {
             /** Status */
@@ -94830,6 +95030,11 @@ export interface components {
              * @enum {string}
              */
             format: "markdown" | "html" | "json";
+            /**
+             * @description What to keep from each page (#18826): only 'document' is implemented
+             * @default document
+             */
+            profile: components["schemas"]["IngestProfile"];
         } & {
             [key: string]: unknown;
         };
@@ -97065,19 +97270,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * ShareFactRequest
-         * @description Request model for sharing a fact with users (Issue #688).
-         */
-        ShareFactRequest: {
-            /**
-             * User Ids
-             * @description List of user IDs to share with
-             */
-            user_ids: string[];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * ShareKnowledgeRequest
          * @description Request to share knowledge with users or groups.
          */
@@ -99216,7 +99408,7 @@ export interface components {
         };
         /**
          * SystemCacheClearResponse
-         * @description Response for POST /api/cache/clear/{cache_name}.
+         * @description Response for POST /api/system/cache/clear/{cache_name}.
          */
         SystemCacheClearResponse: {
             /** Status */
@@ -99230,7 +99422,7 @@ export interface components {
         };
         /**
          * SystemCacheCoordinatorStatsResponse
-         * @description Response for GET /api/cache/stats.
+         * @description Response for GET /api/system/cache/coordinator/stats.
          *
          *     Shape is defined by CacheCoordinator.get_cache_stats() — opaque.
          */
@@ -99239,7 +99431,7 @@ export interface components {
         };
         /**
          * SystemCacheEvictResponse
-         * @description Response for POST /api/cache/evict.
+         * @description Response for POST /api/system/cache/evict.
          */
         SystemCacheEvictResponse: {
             /** Status */
@@ -100095,6 +100287,13 @@ export interface components {
              * @description Webhook URL (optional)
              */
             webhook_url?: string | null;
+            /**
+             * Ingest Mode
+             * @description How updates arrive: a public webhook, or outbound getUpdates polling (#19010)
+             * @default webhook
+             * @enum {string}
+             */
+            ingest_mode: "webhook" | "polling";
         } & {
             [key: string]: unknown;
         };
@@ -100109,6 +100308,8 @@ export interface components {
             message: string;
             /** Webhook Url */
             webhook_url?: string | null;
+            /** Ingest Mode */
+            ingest_mode?: ("webhook" | "polling") | null;
         } & {
             [key: string]: unknown;
         };
@@ -109226,6 +109427,77 @@ export interface operations {
             };
         };
     };
+    get_cache_coordinator_stats_api_system_cache_coordinator_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemCacheCoordinatorStatsResponse"];
+                };
+            };
+        };
+    };
+    trigger_cache_eviction_api_system_cache_evict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemCacheEvictResponse"];
+                };
+            };
+        };
+    };
+    clear_cache_api_system_cache_clear__cache_name__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cache_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemCacheClearResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_frontend_config_api_system_frontend_config_get: {
         parameters: {
             query?: never;
@@ -109535,77 +109807,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemMetricsResponse"];
-                };
-            };
-        };
-    };
-    get_cache_coordinator_stats_api_system_api_cache_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemCacheCoordinatorStatsResponse"];
-                };
-            };
-        };
-    };
-    trigger_cache_eviction_api_system_api_cache_evict_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemCacheEvictResponse"];
-                };
-            };
-        };
-    };
-    clear_cache_api_system_api_cache_clear__cache_name__post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cache_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemCacheClearResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -111536,6 +111737,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_UserPreferencesData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dashboard_layout_api_users_me_dashboard_layouts__page__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DashboardLayoutData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_dashboard_layout_api_users_me_dashboard_layouts__page__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardLayout"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DashboardLayoutData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_dashboard_layout_api_users_me_dashboard_layouts__page__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DashboardLayoutData_"];
                 };
             };
             /** @description Validation Error */
@@ -118099,74 +118397,7 @@ export interface operations {
             };
         };
     };
-    share_fact_api_knowledge_base_api_knowledge_facts__fact_id__share_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fact_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShareFactRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeShareFactResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    unshare_fact_api_knowledge_base_api_knowledge_facts__fact_id__share__user_id_to_remove__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fact_id: string;
-                user_id_to_remove: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeUnshareFactResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_fact_visibility_api_knowledge_base_api_knowledge_facts__fact_id__visibility_put: {
+    update_fact_visibility_api_knowledge_base_facts__fact_id__visibility_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -118201,7 +118432,7 @@ export interface operations {
             };
         };
     };
-    get_my_facts_api_knowledge_base_api_knowledge_facts_mine_get: {
+    get_my_facts_api_knowledge_base_facts_mine_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -118234,7 +118465,7 @@ export interface operations {
             };
         };
     };
-    get_shared_facts_api_knowledge_base_api_knowledge_facts_shared_with_me_get: {
+    get_shared_facts_api_knowledge_base_facts_shared_with_me_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -119028,7 +119259,7 @@ export interface operations {
             };
         };
     };
-    ground_response_api_knowledge_base_api_ground_response_post: {
+    ground_response_api_knowledge_base_ground_response_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -119061,7 +119292,7 @@ export interface operations {
             };
         };
     };
-    verify_claim_api_knowledge_base_api_verify_claim_post: {
+    verify_claim_api_knowledge_base_verify_claim_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -119094,7 +119325,7 @@ export interface operations {
             };
         };
     };
-    list_conflicts_api_knowledge_base_api_kb_conflicts_get: {
+    list_conflicts_api_knowledge_base_kb_conflicts_get: {
         parameters: {
             query?: {
                 /** @description Filter by resolution status */
@@ -119132,7 +119363,7 @@ export interface operations {
             };
         };
     };
-    resolve_conflict_api_knowledge_base_api_kb_conflicts__conflict_id__resolve_post: {
+    resolve_conflict_api_knowledge_base_kb_conflicts__conflict_id__resolve_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -119168,7 +119399,7 @@ export interface operations {
             };
         };
     };
-    get_stats_api_knowledge_base_api_kb_stats_get: {
+    get_stats_api_knowledge_base_kb_stats_get: {
         parameters: {
             query?: {
                 /** @description Time period for stats */
@@ -129073,6 +129304,165 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mint_credential_api_coordination_issue_claims_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimsCredentialResponse"];
+                };
+            };
+        };
+    };
+    revoke_credential_api_coordination_issue_claims_credentials_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimsCredentialRevokedResponse"];
+                };
+            };
+        };
+    };
+    who_holds_api_coordination_issue_claims__number__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueClaimResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_api_coordination_issue_claims__number__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueClaimResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_api_coordination_issue_claims__number__delete: {
+        parameters: {
+            query: {
+                owner: string;
+            };
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueClaimResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_all_api_coordination_issue_claims_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueClaimListResponse"];
                 };
             };
         };
@@ -141758,6 +142148,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -141916,6 +142307,7 @@ export interface operations {
                 conversation_id?: string | null;
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -141948,6 +142340,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -141984,6 +142377,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142018,6 +142412,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142053,6 +142448,7 @@ export interface operations {
                 session_id: string;
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -142089,6 +142485,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142236,6 +142633,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142274,6 +142672,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {
@@ -142308,6 +142707,7 @@ export interface operations {
             query?: {
                 async_client?: boolean;
                 database?: components["schemas"]["RedisDatabase"] | string;
+                decode_responses?: boolean | null;
             };
             header?: never;
             path: {

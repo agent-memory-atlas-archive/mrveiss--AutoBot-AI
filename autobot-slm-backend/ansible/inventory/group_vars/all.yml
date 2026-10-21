@@ -66,6 +66,9 @@ autobot:
   version: "2.0.0"
   environment: "production"
   domain: "autobot.internal"
+  # THE install root (#15632): the folder AutoBot deploys to. Every path under it derives
+  # from `autobot.base_dir`; install.sh's AUTOBOT_BASE must equal it (#18880). Plain string:
+  # controller plays read this mapping, so it may hold no template (#15731).
   base_dir: "/opt/autobot"
   user: "autobot"
   group: "autobot"
@@ -156,11 +159,11 @@ system:
 
   # System directories
   directories:
-    - "/opt/autobot"
+    - "{{ autobot.base_dir }}"
     - "/var/log/autobot"
     - "/var/lib/autobot"
     - "/etc/autobot"
-    - "/opt/autobot/backups"
+    - "{{ autobot.base_dir }}/backups"
 
 # ==========================================
 # SECURITY CONFIGURATION
@@ -214,6 +217,17 @@ logging:
 # MONITORING CONFIGURATION
 # ==========================================
 
+# The backend's systemd EnvironmentFile (#16375 scrape token lives here). One declaration,
+# shared by the backend role and the updater's monitoring play (#18994); override per host
+# if the backend env file lives elsewhere.
+autobot_backend_env_file: "/etc/autobot/autobot-backend.env"
+
+# Addresses the monitoring services bind to / are reached at (#18556). Declared here,
+# not in roles/monitoring/defaults, because the slm_agent role renders the monitoring
+# role's node_exporter.service.j2 as well and role defaults are not shared across roles.
+monitoring_listen_address: "0.0.0.0"
+monitoring_local_host: "localhost"
+
 monitoring:
   enabled: true
 
@@ -257,7 +271,7 @@ backup:
 
   # Backup storage
   storage:
-    local_path: "/opt/autobot/backups"
+    local_path: "{{ autobot.base_dir }}/backups"
     compress: true
     encryption: true
 

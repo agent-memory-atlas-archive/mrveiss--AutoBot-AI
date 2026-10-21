@@ -38,12 +38,12 @@ from models.database import (
     Deployment,
     DeploymentStatus,
     EventSeverity,
-    EventType,
     Node,
     NodeCodeVersion,
     NodeConfig,
     NodeCredential,
     NodeEvent,
+    NodeEventType,
     NodeRole,
     NodeStatus,
     Role,
@@ -145,7 +145,7 @@ async def _handle_enrollment_started(db: AsyncSession, node_id: str, ssh_passwor
     await create_node_event(
         db,
         node_id,
-        EventType.DEPLOYMENT_STARTED,
+        NodeEventType.DEPLOYMENT_STARTED,
         EventSeverity.INFO,
         f"Enrollment started for node {node_id}",
         auth_method_details,
@@ -170,7 +170,7 @@ async def _handle_enrollment_failed(db: AsyncSession, node_id: str, message: str
     await create_node_event(
         db,
         node_id,
-        EventType.DEPLOYMENT_FAILED,
+        NodeEventType.DEPLOYMENT_FAILED,
         EventSeverity.ERROR,
         f"Enrollment failed for node {node_id}: {message}",
         error_details,
@@ -221,7 +221,7 @@ async def _handle_enrollment_completed(db: AsyncSession, node_id: str) -> dict:
     await create_node_event(
         db,
         node_id,
-        EventType.DEPLOYMENT_COMPLETED,
+        NodeEventType.DEPLOYMENT_COMPLETED,
         EventSeverity.INFO,
         f"Enrollment completed for node {node_id}",
         completion_details,
@@ -324,7 +324,7 @@ async def _create_registration_event(
     await create_node_event(
         db,
         node_id,
-        EventType.STATE_CHANGE,
+        NodeEventType.STATE_CHANGE,
         EventSeverity.INFO,
         event_msg,
         {
@@ -1261,14 +1261,12 @@ async def _run_role_removal(
         "backup_before_removal": str(backup).lower(),
     }
     if target_path:
-        # Extract directory name from full path
-        # e.g. /opt/autobot/autobot-npu-worker -> autobot-npu-worker
-        extra_vars["role_target_dir"] = os.path.basename(target_path.rstrip("/"))
-    result = await executor.execute_playbook(
-        playbook_name="playbooks/remove-role.yml",
-        limit=[node_id],
-        extra_vars=extra_vars,
-    )
+        extra_vars["role_target_dir"] = os.path.basename(target_path.rstrip("/"))  # /opt/x/y -> y
+    try:
+        result = await executor.execute_playbook("playbooks/remove-role.yml", limit=[node_id], extra_vars=extra_vars)
+    except ValueError:  # #19005: Role.systemd_service is not a unit name; the sink refused before spawning
+        logger.warning("Role removal refused: role=%s systemd_service=%s", role_name, repr(service_name)[:80])
+        return {"success": False, "output": "Role systemd_service is not a valid unit name"}
     # Extract backup path from output if backup was requested
     if backup and result["success"]:
         result["backup_path"] = _parse_backup_path(result.get("output", ""))
@@ -1649,7 +1647,7 @@ async def reenroll_node(
     await create_node_event(
         db,
         node_id,
-        EventType.STATE_CHANGE,
+        NodeEventType.STATE_CHANGE,
         EventSeverity.INFO,
         f"Node reset to pending for re-enrollment by {current_user.get('username', 'unknown')}",
     )
@@ -2171,7 +2169,7 @@ async def _emit_reboot_event(db: AsyncSession, node_id: str, node) -> None:
     await create_node_event(
         db,
         node_id,
-        EventType.MANUAL_ACTION,
+        NodeEventType.MANUAL_ACTION,
         EventSeverity.WARNING,
         f"Reboot initiated for {node.hostname}",
         {"action": "reboot", "initiated_by": "api"},
@@ -2273,7 +2271,7 @@ async def acknowledge_remediation(
     await create_node_event(
         db,
         node_id,
-        EventType.MANUAL_ACTION,
+        NodeEventType.MANUAL_ACTION,
         EventSeverity.INFO,
         f"Remediation tracker reset for {node.hostname}",
         {"action": "acknowledge_remediation"},

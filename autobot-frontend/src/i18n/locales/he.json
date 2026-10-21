@@ -4949,18 +4949,6 @@
       "cancel": "Cancel",
       "commandToExecute": "Command to Execute"
     },
-    "dataTable": {
-      "noDataAvailable": "No data available",
-      "noItemsToDisplay": "No items to display",
-      "actions": "Actions",
-      "pageOf": "Page {current} of {total}",
-      "sortBy": "Sort by {column}",
-      "pagination": "Table pagination",
-      "previousPage": "Previous page",
-      "nextPage": "Next page",
-      "dataTable": "Data table",
-      "loading": "Loading data..."
-    },
     "systemStatus": {
       "lastCheck": "Last Check:",
       "errorDetails": "Error Details:",
@@ -6456,7 +6444,6 @@
       "template": "Template",
       "defaultTitle": "Custom Dashboard",
       "widgetArchitectureDesc": "Interactive system architecture diagram",
-      "shrink": "Shrink",
       "save": "Save",
       "subtitle": "Customizable dashboard with drag-and-drop widgets",
       "widgetWorkflowDesc": "Interactive workflow execution flowcharts",
@@ -6478,7 +6465,6 @@
       "addWidgetTitle": "Add Widget",
       "widgetHeatmap": "Resource Heatmap",
       "saveChanges": "Save Changes",
-      "expand": "Expand",
       "refreshInterval": "Refresh Interval (seconds)",
       "configureWidget": "Configure Widget",
       "metric": "Metric",
@@ -7569,10 +7555,6 @@
     },
     "input": {
       "clearInput": "Clear input"
-    },
-    "panel": {
-      "collapse": "Collapse panel",
-      "expand": "Expand panel"
     }
   },
   "voice": {

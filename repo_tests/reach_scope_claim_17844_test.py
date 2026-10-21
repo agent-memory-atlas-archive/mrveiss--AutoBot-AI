@@ -42,6 +42,7 @@ import repo_tests.container_hardening_single_source_17267_test as _hardening_gua
 import repo_tests.conversation_turn_single_store_18293_test as _conversation_turn_guard  # noqa: F401 -- registers its scope
 import repo_tests.credential_field_name_only_17336_test as _credential_field_guard  # noqa: F401 -- registers its scope
 import repo_tests.data_db_path_single_source_test as _data_db_guard  # noqa: F401 -- registers its scope
+import repo_tests.docker_admin_seed_18729_test as _user_mode_guard  # noqa: F401 -- registers its scope
 import repo_tests.egress_default_guard_17576_test as _egress_default_guard  # noqa: F401 -- registers its scope
 import repo_tests.embedding_model_preserved_15502_test as _embedding_render_guard  # noqa: F401 -- registers its scope
 import repo_tests.env_file_family_18555_test as _env_family_guard  # noqa: F401 -- registers its scope
@@ -51,6 +52,7 @@ import repo_tests.kb_read_visibility_guard_test as kb
 import repo_tests.knowledge_metadata_parse_canonical_18220_test as _metadata_parse_guard  # noqa: F401 -- registers its scope
 import repo_tests.migration_gate_filter_covers_what_its_tests_import_test as _migration_gate_guard  # noqa: F401 -- registers its scope
 import repo_tests.model_tier_single_definition_15502_test as _model_tier_guard  # noqa: F401 -- registers its scope
+import repo_tests.no_doubled_api_prefix_18722_test as _doubled_api_prefix_guard  # noqa: F401 -- registers its scope
 import repo_tests.oauth_bundle_no_app_secret_13630_test as _oauth_bundle_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_actor_id_15754_test as _actor_id_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_anthropic_message_split_16815_test as _anthropic_split_guard  # noqa: F401 -- registers its scope
@@ -69,11 +71,13 @@ import repo_tests.one_paths_filter_job_15360_test as _paths_filter_guard  # noqa
 import repo_tests.one_permission_gate_18263_test as _permission_gate_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_playwright_server_18549_test as _playwright_server_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_semantic_chunker_14485_test as _semantic_chunker_guard  # noqa: F401 -- registers its scope
+import repo_tests.one_serving_predicate_18820_test as _serving_predicate_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_ownership_validator_14016_test as _ownership_validator_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_session_scope_15068_test as _session_scope_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_ssh_restart_executor_18186_test as _ssh_restart_guard
 import repo_tests.one_static_data_copy_18556_test as _static_data_guard  # noqa: F401 -- registers its scope
 import repo_tests.one_sync_command_runner_18180_test as _sync_runner_guard  # noqa: F401 -- registers its scope
+import repo_tests.opt_autobot_literal_ratchet_18880_test as _opt_autobot_guard  # noqa: F401 -- registers its scope
 import repo_tests.optimization_taxonomies_13049_test as _taxonomy_guard  # noqa: F401 -- registers its scope
 import repo_tests.pr_comment_upsert_12984_test as _pr_comment_guard  # noqa: F401 -- registers its scope
 import repo_tests.provider_key_env_reads_route_through_vault_18094_test as _provider_key_env_guard  # noqa: F401 -- registers its scope
@@ -215,6 +219,8 @@ _DECLARED_SCOPES = {
     "container-hardening-inline": ("autobot-backend", "autobot_shared"),
     "brand-mark-announcer-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
     "one-content-digest-scan": ("autobot-backend", "autobot_shared"),
+    "audit-action-vocabulary": ("autobot-backend", "autobot_shared", "autobot-slm-backend"),
+    "hand-rolled-redis-pipeline-scan": ("autobot-backend", "autobot-slm-backend"),
     "one-internal-api-key-reader-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "provider-key-env-read-scan": ("autobot-backend", "autobot_shared", "plugins"),
     "semantic-chunker-fork-scan": ("autobot-backend", "autobot_shared"),
@@ -225,6 +231,7 @@ _DECLARED_SCOPES = {
     "chat-history-async-calls-awaited": ("autobot-backend/api",),
     "chat-single-delete-implementation": ("autobot-backend/api",),
     "ai-line-single-policy": ("autobot-backend", "autobot_shared"),
+    "hardcoded-ui-literal-scan": ("autobot-frontend/src/", "autobot-slm-frontend/src/"),
     "shadowed-literal-routes": ("autobot-backend", "autobot-slm-backend"),
     "conversation-turn-single-store": ("autobot-backend", "autobot_shared", "autobot-infrastructure"),
     "credential-field-name-only-callers": (
@@ -271,6 +278,15 @@ _DECLARED_SCOPES = {
     ),
     "ansible-concept-forks-17856-scan": ("autobot-slm-backend/ansible",),
     "env-file-family-18555-scan": (".env", "autobot-frontend/", "autobot-slm-backend/", "docker/"),
+    "user-mode-default-carriers-18729": (
+        ".env",
+        "autobot-frontend/",
+        "autobot-slm-backend/",
+        "docker-compose",
+        "docker/",
+    ),
+    "backend-migrations-resume-safe-18729": ("autobot-backend/migrations/versions",),
+    "opt-autobot-literal-ratchet-18880": ("autobot-slm-backend/ansible",),
     "concept-forks-17856-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "gateway-adapter-package-scan": ("autobot-backend/services/gateway",),
     "architecture-family-definition-scan": (
@@ -304,6 +320,10 @@ _DECLARED_SCOPES = {
         "autobot-infrastructure",
         "autobot-monitoring",
     ),
+    "hand-rolled-async-session-scan": (
+        "autobot-backend",
+        "autobot-slm-backend",
+    ),
     "hand-rolled-circuit-breaker-scan": (
         "autobot-backend",
         "autobot-slm-backend",
@@ -314,8 +334,10 @@ _DECLARED_SCOPES = {
         "plugins",
         "libs",
     ),
+    "serving-predicate-scan": ("autobot-backend", "autobot_shared", "plugins", "libs"),
     "anthropic-message-split-scan": ("autobot-backend/llm_shared/providers",),
     "backoff-formula-scan": ("libs/autobot-ui", "autobot-frontend/src", "autobot-slm-frontend/src"),
+    "doubled-api-prefix-scan": ("autobot-backend/api", "autobot-slm-backend/api"),
     "post-commit-seed-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "redis-direct-constructor-scan": (
         "autobot-backend",
@@ -367,6 +389,21 @@ _DECLARED_SCOPES = {
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),
     "kb-admin-read-bypass": ("autobot-backend/", "autobot_shared/"),
+    "kb-construction-18122-scan": (
+        "autobot-backend/",
+        "autobot-infrastructure/",
+        "autobot-slm-backend/",
+        "autobot_shared/",
+        "autobot-npu-worker/",
+        "autobot-tts-worker/",
+        "autobot-browser-worker/",
+        "tools/",
+        "scripts/",
+        "pipeline-scripts/",
+        "plugins/",
+        "libs/",
+        "debug/",
+    ),
     "kb-read-visibility-production-sweep": (
         "autobot-backend/",
         "autobot_shared/",

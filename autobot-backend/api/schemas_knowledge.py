@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
+from api.schemas_knowledge_share import ShareKnowledgeRequest  # noqa: F401 -- re-export (#18795)
 from autobot_memory_graph.core import (
     ENTITY_TYPES,
     RELATION_TYPE_ALIASES,
@@ -643,7 +644,7 @@ class KnowledgeAutoApplySuggestionsResponse(BaseModel):
 
 
 class KnowledgeShareFactResponse(BaseModel):
-    """Response for POST /api/knowledge/facts/{fact_id}/share."""
+    """Response for the deprecated POST /api/knowledge_base/facts/{fact_id}/share (308 shim, #18795; removal #18793)."""
 
     success: bool
     fact_id: str
@@ -652,7 +653,7 @@ class KnowledgeShareFactResponse(BaseModel):
 
 
 class KnowledgeUnshareFactResponse(BaseModel):
-    """Response for DELETE /api/knowledge/facts/{fact_id}/share/{user_id_to_remove}."""
+    """Response for the deprecated DELETE .../facts/{fact_id}/share/{user_id_to_remove} (308 shim, #18795; #18793)."""
 
     success: bool
     fact_id: str
@@ -661,7 +662,7 @@ class KnowledgeUnshareFactResponse(BaseModel):
 
 
 class KnowledgeUpdateVisibilityResponse(BaseModel):
-    """Response for PUT /api/knowledge/facts/{fact_id}/visibility."""
+    """Response for PUT /api/knowledge_base/facts/{fact_id}/visibility."""
 
     success: bool
     fact_id: str
@@ -669,7 +670,7 @@ class KnowledgeUpdateVisibilityResponse(BaseModel):
 
 
 class KnowledgeMyFactsResponse(BaseModel):
-    """Response for GET /api/knowledge/facts/mine."""
+    """Response for GET /api/knowledge_base/facts/mine."""
 
     success: bool
     user_id: str
@@ -680,7 +681,7 @@ class KnowledgeMyFactsResponse(BaseModel):
 
 
 class KnowledgeSharedWithMeResponse(BaseModel):
-    """Response for GET /api/knowledge/facts/shared-with-me."""
+    """Response for GET /api/knowledge_base/facts/shared-with-me."""
 
     success: bool
     user_id: str
@@ -694,14 +695,14 @@ class KnowledgeSharedWithMeResponse(BaseModel):
 
 
 class KnowledgeGroundResponseResponse(BaseModel):
-    """Response for POST /api/ground-response."""
+    """Response for POST /api/knowledge_base/ground-response."""
 
     status: str
     data: Dict[str, Any]
 
 
 class KnowledgeVerifyClaimResponse(BaseModel):
-    """Response for POST /api/verify-claim."""
+    """Response for POST /api/knowledge_base/verify-claim."""
 
     status: str
     claim_text: str
@@ -713,7 +714,7 @@ class KnowledgeVerifyClaimResponse(BaseModel):
 
 
 class KnowledgeConflictsListResponse(BaseModel):
-    """Response for GET /api/kb-conflicts."""
+    """Response for GET /api/knowledge_base/kb-conflicts."""
 
     status: str
     conflicts: List[Any]
@@ -724,14 +725,14 @@ class KnowledgeConflictsListResponse(BaseModel):
 
 
 class KnowledgeResolveConflictResponse(BaseModel):
-    """Response for POST /api/kb-conflicts/{conflict_id}/resolve."""
+    """Response for POST /api/knowledge_base/kb-conflicts/{conflict_id}/resolve."""
 
     status: str
     data: Dict[str, Any]
 
 
 class KnowledgeGroundingStatsResponse(BaseModel):
-    """Response for GET /api/kb-stats.
+    """Response for GET /api/knowledge_base/kb-stats.
 
     Stats shape is dynamic — extra fields allowed.
     """
@@ -3020,7 +3021,7 @@ class UpdateFactRequest(BaseModel):
 
 
 class ShareFactRequest(BaseModel):
-    """Request model for sharing a fact with users (Issue #688)."""
+    """Deprecated (#688): the limits moved to ``ShareKnowledgeRequest`` (#18795); removal tracked in #18793."""
 
     user_ids: List[str] = Field(
         ...,
@@ -3042,7 +3043,7 @@ class ShareFactRequest(BaseModel):
 
 
 class UnshareFactRequest(BaseModel):
-    """Request model for removing users from fact sharing (Issue #688)."""
+    """Deprecated (#688): unshare is a path param on the collaboration route (#18795); removal in #18793."""
 
     user_ids: List[str] = Field(
         ...,
@@ -4445,13 +4446,6 @@ class KnowledgeScopeFilter(BaseModel):
     group_ids: List[str] | None = Field(default=None, description="Group IDs to filter by")
 
 
-class ShareKnowledgeRequest(BaseModel):
-    """Request to share knowledge with users or groups."""
-
-    user_ids: List[str] | None = Field(default=None, description="User IDs to share with")
-    group_ids: List[str] | None = Field(default=None, description="Group IDs to share with")
-
-
 class UpdatePermissionsRequest(BaseModel):
     """Request to update knowledge permissions."""
 
@@ -5029,7 +5023,7 @@ from datetime import datetime as _datetime
 from services.audit.audit import AuditEventType as _AuditEventType  # GH#8290 Phase 2
 
 
-class AuditEvent(BaseModel):
+class KnowledgeAuditEventRecord(BaseModel):
     """Audit event model."""
 
     id: str

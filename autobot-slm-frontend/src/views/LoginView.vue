@@ -11,13 +11,15 @@
  */
 
 import { ref, onMounted } from 'vue'
-import { BrandMark } from '@autobot/ui'
+import { BaseAlert, BrandMark } from '@autobot/ui'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { safeRedirectTarget } from '@/utils/loginRedirect'
 import type { ActiveProviderResponse, useSsoApi } from '@/composables/useSsoApi'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { t } = useI18n()
 
@@ -32,17 +34,22 @@ const ssoLoading = ref(false)
 const ssoError = ref<string | null>(null)
 const mfaCode = ref('')
 
+// #18892: return to the page that sent the operator here (same-app paths only).
+function goAfterLogin(): void {
+  router.push(safeRedirectTarget(route.query.redirect))
+}
+
 async function handleLogin(): Promise<void> {
   const success = await authStore.login(username.value, password.value)
   if (success) {
-    router.push('/')
+    goAfterLogin()
   }
 }
 
 async function handleMFAVerify(): Promise<void> {
   const success = await authStore.completeMFALogin(mfaCode.value)
   if (success) {
-    router.push('/')
+    goAfterLogin()
   }
 }
 
@@ -60,7 +67,7 @@ async function handleSSOLogin(provider: ActiveProviderResponse): Promise<void> {
       const response = await ssoApi.loginWithLDAP(provider.id, username.value, password.value)
       authStore.adoptToken(response.access_token)
       await authStore.checkAuth()
-      router.push('/')
+      goAfterLogin()
     } else {
       const response = await ssoApi.initiateSSOLogin(provider.id)
       window.location.href = response.redirect_url
@@ -171,14 +178,7 @@ onMounted(async () => {
           </div>
 
           <!-- Error Message -->
-          <div v-if="authStore.error" class="bg-red-50 border border-red-200 rounded-lg p-3" role="alert">
-            <div class="flex items-center gap-2 text-red-700">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span class="text-sm">{{ authStore.error }}</span>
-            </div>
-          </div>
+          <BaseAlert v-if="authStore.error" variant="error" :message="authStore.error" />
 
           <!-- Submit Button -->
           <button
@@ -220,9 +220,7 @@ onMounted(async () => {
             />
           </div>
 
-          <div v-if="authStore.error" class="bg-red-50 border border-red-200 rounded-lg p-3" role="alert">
-            <span class="text-sm text-red-700">{{ authStore.error }}</span>
-          </div>
+          <BaseAlert v-if="authStore.error" variant="error" :message="authStore.error" />
 
           <button
             @click="handleMFAVerify"

@@ -41,7 +41,8 @@ function served(name: string, over: Record<string, unknown> = {}) {
 }
 
 async function mountPage() {
-  const wrapper = mount(LogForwardingSettings, { global: { plugins: [i18n] } })
+  // The dialogs are the kit BaseModal, which teleports to body: render it in place (#14777).
+  const wrapper = mount(LogForwardingSettings, { global: { plugins: [i18n], stubs: { Teleport: true } } })
   await flushPromises()
   return wrapper
 }
@@ -161,5 +162,49 @@ describe('Log Forwarding edit mode details', () => {
     await buttonByTitle(wrapper, t.edit).trigger('click')
     await wrapper.get('[data-test="field-api-key"]').setValue('typed')
     expect((await save(wrapper)).api_key).toBe('typed')
+  })
+})
+
+describe('Log Forwarding auto-start toggle (#18797 review)', () => {
+  const box = (w: Awaited<ReturnType<typeof mountPage>>) => w.find<HTMLInputElement>('input[data-test="auto-start"]')
+
+  it('stays disabled when the auto-start read failed, instead of showing "off"', async () => {
+    api.getLogForwardingAutoStart.mockRejectedValue(new Error('503'))
+    const w = await mountPage()
+    expect(box(w).element.disabled).toBe(true)
+    await box(w).trigger('change')
+    expect(api.setLogForwardingAutoStart).not.toHaveBeenCalled()
+  })
+
+  it('contrast: after a successful read it is enabled and sends the opposite value', async () => {
+    api.setLogForwardingAutoStart.mockResolvedValue({ auto_start: false })
+    const w = await mountPage()
+    expect(box(w).element.disabled).toBe(false)
+    await box(w).trigger('change')
+    await flushPromises()
+    expect(api.setLogForwardingAutoStart).toHaveBeenCalledWith(false)
+    expect(box(w).element.checked).toBe(false)
+  })
+
+  it('ignores a second change while the first is pending, and shows the confirmed value', async () => {
+    let finish: (v: { auto_start: boolean }) => void = () => {}
+    api.setLogForwardingAutoStart.mockReturnValue(new Promise((r) => { finish = r }))
+    const w = await mountPage()
+    await box(w).trigger('change')
+    await box(w).trigger('change')
+    expect(api.setLogForwardingAutoStart).toHaveBeenCalledTimes(1)
+    expect(box(w).element.checked).toBe(true) // unconfirmed: still the stored value
+    finish({ auto_start: false })
+    await flushPromises()
+    expect(box(w).element.checked).toBe(false)
+  })
+
+  it('a failed save leaves the checkbox at the stored value', async () => {
+    api.setLogForwardingAutoStart.mockRejectedValue(new Error('500'))
+    const w = await mountPage()
+    box(w).element.checked = false
+    await box(w).trigger('change')
+    await flushPromises()
+    expect(box(w).element.checked).toBe(true)
   })
 })

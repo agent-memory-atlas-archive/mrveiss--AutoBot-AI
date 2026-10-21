@@ -972,6 +972,28 @@
       "empty": "No additional themes are deployed.",
       "info": "Administrators install and deploy themes in the SLM console.",
       "slmLink": "SLM › Settings › Themes ↗"
+    },
+    "telegramPanel": {
+      "title": "Telegram Bot",
+      "statusConfigured": "Bot configured and active",
+      "statusNotConfigured": "Bot not configured",
+      "tokenLabel": "Bot Token",
+      "tokenHint": "Create a bot via @BotFather on Telegram and paste the token here.",
+      "tokenAria": "Telegram bot token",
+      "showToken": "Show token",
+      "hideToken": "Hide token",
+      "modeLabel": "How messages arrive",
+      "modeWebhook": "Webhook — Telegram calls a public HTTPS URL",
+      "modePolling": "Polling — AutoBot fetches messages; no public URL needed",
+      "modePollingHint": "Use polling on local or LAN-only installs. Any registered webhook is removed.",
+      "webhookLabel": "Webhook URL",
+      "webhookHint": "Public HTTPS URL where Telegram will deliver updates. AutoBot registers /api/telegram/webhook at this base URL.",
+      "webhookAria": "Webhook base URL",
+      "activeWebhook": "Active webhook: {url}",
+      "activePolling": "Polling for messages",
+      "saveFailed": "Failed to save configuration",
+      "saving": "Saving…",
+      "save": "Save & Verify"
     }
   },
   "voice": {
@@ -5794,18 +5816,6 @@
       "postExecutionFailed": "The command ran, but a follow-up step failed. Its output is shown; some updates may be missing.",
       "enterComment": "Please enter a comment before submitting"
     },
-    "dataTable": {
-      "sortBy": "Sort by {column}",
-      "actions": "Actions",
-      "noDataAvailable": "No data available",
-      "noItemsToDisplay": "No items to display",
-      "pageOf": "Page {current} of {total}",
-      "pagination": "Table pagination",
-      "previousPage": "Previous page",
-      "nextPage": "Next page",
-      "dataTable": "Data table",
-      "loading": "Loading data..."
-    },
     "hostSelection": {
       "title": "Select Host",
       "defaultPurpose": "Select a host for this operation",
@@ -5952,10 +5962,6 @@
       "actions": "Actions",
       "noDataAvailable": "No data available",
       "selectRow": "Select row {row}"
-    },
-    "panel": {
-      "collapse": "Collapse panel",
-      "expand": "Expand panel"
     }
   },
   "views": {
@@ -6173,8 +6179,6 @@
       "createNewDashboard": "Create new dashboard",
       "availableWidgets": "Available Widgets",
       "configure": "Configure",
-      "expand": "Expand",
-      "shrink": "Shrink",
       "remove": "Remove",
       "noWidgets": "No Widgets Added",
       "noWidgetsHint": "Click \"Edit Layout\" to add widgets to your dashboard",
@@ -6211,7 +6215,19 @@
       "widgetAgents": "Agent Activity",
       "widgetAgentsDesc": "Real-time agent activity monitoring",
       "widgetArchitecture": "System Architecture",
-      "widgetArchitectureDesc": "Interactive system architecture diagram"
+      "widgetArchitectureDesc": "Interactive system architecture diagram",
+      "saveFailed": "Could not save the dashboard layout. Your changes are kept on this page.",
+      "dashboardLimit": "A page holds at most {max} dashboards.",
+      "widgetLimit": "A dashboard holds at most {max} widgets. Remove one before adding another.",
+      "resetLayout": "Reset layout",
+      "resetLayoutConfirm": "Reset this page to the default layout? Your saved layout is removed.",
+      "widgetSystemMonitor": "System Monitor",
+      "widgetCpuHeatmap": "CPU Heatmap",
+      "mainDashboard": "Main Dashboard",
+      "loadFailed": "Could not load your saved dashboard layout. Editing is off so it cannot be overwritten.",
+      "retryLoad": "Retry loading",
+      "newDashboard": "New Dashboard",
+      "resetFailed": "Could not reset the layout. Your saved layout is unchanged."
     },
     "devSpeedup": {
       "title": "Developer Speedup",
@@ -8250,7 +8266,13 @@
       "noRuns": "No runs yet",
       "liveActivity": "Live Activity",
       "system": "system",
-      "waitingActivity": "Waiting for activity…"
+      "waitingActivity": "Waiting for activity…",
+      "noApprovals": "No pending approvals",
+      "runStatus": {
+        "done": "Done",
+        "running": "Running",
+        "failed": "Failed"
+      }
     },
     "cost": {
       "title": "Cost Dashboard",
@@ -9900,5 +9922,21 @@
     "invalid_generic": "This schedule is not valid.",
     "conflicting_fields": "A schedule is saved either as cron or as a calendar rule or one-off run, never both.",
     "gatedNote": "Last day, weekday of the month, days 29 to 31 and one-off runs become available once the scheduler is updated."
+  },
+  "dashboardGrid": {
+    "movableWidget": "movable widget",
+    "widgetLabel": "{name} widget",
+    "keyboardHelp": "Press Space or Enter to pick up a widget. Arrow keys move it, Shift with Left or Right changes its width, Shift with Up or Down changes its height. Space or Enter drops it, Escape cancels.",
+    "narrower": "Make narrower",
+    "wider": "Make wider",
+    "shorter": "Make shorter",
+    "taller": "Make taller",
+    "announce": {
+      "grabbed": "Picked up {name}. Position {position} of {total}.",
+      "dropped": "Dropped {name} at position {position} of {total}.",
+      "cancelled": "Move cancelled. {name} is back at position {position} of {total}.",
+      "moved": "{name} moved to position {position} of {total}.",
+      "resized": "{name} is now {span} of 12 columns wide and {height} pixels tall."
+    }
   }
 }

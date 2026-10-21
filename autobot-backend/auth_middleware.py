@@ -325,7 +325,7 @@ class AuthenticationMiddleware:
         Handle locked account login attempt - logs and raises auth error.
         """
         self.security_layer.audit_log(
-            action="login_attempt_locked_account",
+            action="auth.login",
             user=username,
             outcome="denied",
             details={"ip": ip_address, "reason": "account_locked"},
@@ -342,7 +342,7 @@ class AuthenticationMiddleware:
         """
         self.record_failed_attempt(username, ip_address)
         self.security_layer.audit_log(
-            action="login_attempt",
+            action="auth.login",
             user=username,
             outcome="denied",
             details={"ip": ip_address, "reason": reason},
@@ -357,7 +357,7 @@ class AuthenticationMiddleware:
         user_config["last_login"] = datetime.datetime.now(tz=timezone.utc).isoformat()
 
         self.security_layer.audit_log(
-            action="login_successful",
+            action="auth.login",
             user=username,
             outcome="success",
             details={"ip": ip_address, "role": user_config.get("role", "user")},
@@ -551,7 +551,7 @@ class AuthenticationMiddleware:
             del self.active_sessions[session_id]
 
         self.security_layer.audit_log(
-            action="logout",
+            action="auth.logout",
             user=user_data.get("username", "unknown"),
             outcome="success",
             details={"session_id": session_id[:16] + "..."},  # Partial ID for audit
@@ -857,6 +857,22 @@ class AuthenticationMiddleware:
 get_auth_middleware = lazy_singleton(AuthenticationMiddleware)
 
 
+async def resolve_human_user(request: Request) -> Dict | None:
+    """The human a request's JWT / session / dev header names, or None; reads no internal key (#18688)."""
+    user_data = get_auth_middleware().get_user_from_request(request)
+    if not user_data:
+        return None
+    if user_data.get("auth_method") == "device_jwt":  # device JWTs: see get_current_user (GH#9493)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Device tokens not permitted on this endpoint. Use mobile-specific API.",
+        )
+    # #12924, #16411: a token minted before a password change is void; a check that cannot run denies.
+    if user_data.get("auth_method") == "jwt":
+        await reject_if_revoked_by_password_change(user_data)
+    return user_data
+
+
 async def get_current_user(request: Request) -> Dict:
     """
     Dependency for FastAPI endpoints to get current authenticated user.
@@ -883,24 +899,8 @@ async def get_current_user(request: Request) -> Dict:
 
     middleware = get_auth_middleware()
 
-    # Primary: user JWT / session / dev-header auth (sync, no Redis needed)
-    user_data = middleware.get_user_from_request(request)
+    user_data = await resolve_human_user(request)  # primary: user JWT / session / dev header
     if user_data:
-        # Defensive: get_user_from_request never yields device-JWT users; the
-        # GH#9493 device-JWT path (allow-list + scope checks) is below.
-        if user_data.get("auth_method") == "device_jwt":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Device tokens not permitted on this endpoint. Use mobile-specific API.",
-            )
-
-        # #12924: a token minted before its subject's password changed is no
-        # longer valid. This is the first point on the request path that can
-        # await, which is why the check lives here rather than in the
-        # synchronous extraction above. A check that cannot run denies (#16411).
-        if user_data.get("auth_method") == "jwt":
-            await reject_if_revoked_by_password_change(user_data)
-
         return user_data
 
     # Fallback: run-scoped JWT — async because it hits the Redis denylist.
@@ -947,9 +947,9 @@ async def get_current_user(request: Request) -> Dict:
     raise_auth_error("AUTH_0002")
 
 
-def check_admin_permission(request: Request) -> bool:
+async def check_admin_permission(request: Request) -> bool:
     """
-    FastAPI dependency to check if user has admin permission.
+    FastAPI dependency to check if user has admin permission; a revoked JWT is 401 (#18688).
 
     Use as: Depends(check_admin_permission)
 
@@ -968,8 +968,7 @@ def check_admin_permission(request: Request) -> bool:
         logger.debug("Internal API key auth: granting admin access")
         return True
 
-    user_data = get_auth_middleware().get_user_from_request(request)
-
+    user_data = await resolve_human_user(request)  # #12924, #16411: a pre-password-change JWT is 401
     if not user_data:
         raise_auth_error("AUTH_0002")
 

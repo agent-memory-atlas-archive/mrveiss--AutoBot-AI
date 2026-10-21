@@ -23,10 +23,21 @@ export type { GetPath, JsonOf, GetResponse } from './src/types/contract'
 export { default as BaseButton } from './src/components/BaseButton.vue'
 export type { ButtonVariant, ButtonSize } from './src/components/BaseButton.vue'
 
+export { default as BaseInput } from './src/components/BaseInput.vue'
+export type { InputSize, InputType } from './src/components/BaseInput.vue'
+
 export { default as BaseBadge } from './src/components/BaseBadge.vue'
 export type { BadgeVariant, BadgeSize } from './src/components/BaseBadge.vue'
 
+// The one inline alert/banner for both apps (#18819).
+export { default as BaseAlert } from './src/components/BaseAlert.vue'
+export type { AlertVariant, AlertSize, BaseAlertProps } from './src/components/BaseAlert.vue'
+
 export { default as BaseCard } from './src/components/BaseCard.vue'
+
+// The one data table (#14778) -- retires the main app's BaseTable and DataTable forks.
+export { default as BaseTable } from './src/components/BaseTable.vue'
+export type { BaseTableColumn, TableRow, TableRowKey, TableSize, SortOrder } from './src/components/BaseTable.vue'
 
 export { default as EmptyState } from './src/components/EmptyState.vue'
 
@@ -38,6 +49,8 @@ export type { LocaleOption } from './src/utils/locales'
 
 export { default as BaseModal } from './src/components/BaseModal.vue'
 export type { ModalSize } from './src/components/BaseModal.vue'
+
+export { default as BaseDrawer } from './src/components/BaseDrawer.vue'
 
 export { default as BrandMark } from './src/components/BrandMark.vue'
 

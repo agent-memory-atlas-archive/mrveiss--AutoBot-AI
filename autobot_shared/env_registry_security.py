@@ -354,3 +354,64 @@ register_env_var(
         component="security",
     )
 )
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_JWT_CLOCK_SKEW_LEEWAY_SECONDS",
+        type=int,
+        default=5,
+        description=(
+            "Clock-skew tolerance in seconds for JWT verification (#18792). A backward "
+            "wall-clock step (WSL2) or skew between issuing and verifying hosts otherwise "
+            "rejects a fresh token whose iat is ahead of the verifier's clock. Applies to the iat "
+            "and nbf claims only; exp stays strict. Clamped to 0-60."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_THREAT_INTEL_CACHE_TTL",
+        type=int,
+        default=7200,
+        description=(
+            "Seconds a threat-intelligence verdict (VirusTotal/URLVoid) stays cached in-process "
+            "(#18888). Measured on a monotonic clock, so a wall-clock step cannot extend it. Clamped to 1-604800."
+        ),
+        component="security",
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_FEATURE_FLAG_CACHE_TTL_SECONDS",
+        type=float,
+        default=5.0,
+        description=(
+            "Seconds this process serves the access-control enforcement mode and per-endpoint "
+            "overrides from memory (#18998). A write in the same process invalidates at once; "
+            "a write from another process is seen within this window. 0 disables the cache. "
+            "Clamped to 0-60."
+        ),
+        component="security",
+        range=(0, 60),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
+        name="AUTOBOT_CONFIG_REGISTRY_CACHE_TTL_SECONDS",
+        type=float,
+        default=60.0,
+        description=(
+            "Seconds the config registry serves a resolved value, and the fact that "
+            "Redis holds nothing for a key, from process memory before asking Redis "
+            "again. A change written by another process is visible within this window. "
+            "Clamped to 0-3600: an hour is the longest a stale config value is tolerable "
+            "without a restart; 0 disables the cache."
+        ),
+        component="redis",
+        range=(0, 3600),
+    )
+)

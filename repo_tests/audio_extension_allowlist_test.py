@@ -216,7 +216,11 @@ REACH = declare(
     # stays under what completes; mid-window (6211) would fail every honest run.
     # train-26: population 6972 -> window [6272, 6672], completed() ~6377 (594 repo_tests/ files skipped);
     # 6344 is the middle of the legal overlap [6312, 6377].
-    floor=6344,
+    # train-33: population 7017 -> window [6317, 6717], completed() 6408; 6382 is the middle of [6357, 6408].
+    # train-36: population 7045 -> window [6345, 6745], completed() 6434; 6409 is the middle of [6385, 6434].
+    # security train (#18904): population 7093 -> window [6393, 6793], completed() 6472; 6452 is the middle of [6433, 6472].
+    # train-51: population 7163 -> 6517, the middle of [6503, 6532].
+    floor=6565,  # re-pinned (train 58): mid of [window bottom 6521 + 40, completed() 6570]; population 7221
     growth=400,
     skips=300,
     what="tracked python files",

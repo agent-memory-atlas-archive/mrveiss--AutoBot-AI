@@ -125,7 +125,7 @@ class SystemMetricsResponse(BaseModel):
 
 
 class SystemCacheCoordinatorStatsResponse(BaseModel):
-    """Response for GET /api/cache/stats.
+    """Response for GET /api/system/cache/coordinator/stats.
 
     Shape is defined by CacheCoordinator.get_cache_stats() — opaque.
     """
@@ -134,7 +134,7 @@ class SystemCacheCoordinatorStatsResponse(BaseModel):
 
 
 class SystemCacheEvictResponse(BaseModel):
-    """Response for POST /api/cache/evict."""
+    """Response for POST /api/system/cache/evict."""
 
     status: str
     evicted: int
@@ -142,7 +142,7 @@ class SystemCacheEvictResponse(BaseModel):
 
 
 class SystemCacheClearResponse(BaseModel):
-    """Response for POST /api/cache/clear/{cache_name}."""
+    """Response for POST /api/system/cache/clear/{cache_name}."""
 
     status: str
     cache: str
@@ -3788,10 +3788,8 @@ class GPUConfigUpdateRequest(BaseModel):
 # startup.py schemas
 # ---------------------------------------------------------------------------
 
-from enum import Enum as _StartupEnum
 
-
-class StartupPhase(str, _StartupEnum):
+class StartupPhase(str, Enum):
     """Lifecycle phase the backend reports during boot."""
 
     INITIALIZING = "initializing"
@@ -4244,21 +4242,6 @@ class TelegramWebhookUpdate(BaseModel):
     channel_post: Optional[Dict[str, Any]] = None
     edited_channel_post: Optional[Dict[str, Any]] = None
     callback_query: Optional[Dict[str, Any]] = None
-
-
-class TelegramBotConfigRequest(BaseModel):
-    """Request to configure Telegram bot."""
-
-    bot_token: str = Field(..., description="Telegram Bot API token")
-    webhook_url: Optional[str] = Field(None, description="Webhook URL (optional)")
-
-
-class TelegramBotConfigResponse(BaseModel):
-    """Response for Telegram bot configuration."""
-
-    status: str
-    message: str
-    webhook_url: Optional[str] = None
 
 
 class WhatsAppConfigRequest(BaseModel):

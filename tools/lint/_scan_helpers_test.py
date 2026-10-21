@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from autobot_shared.paths import scrubbed_git_env  # noqa: E402
+from autobot_shared.isolated_git import isolated_git_env  # noqa: E402
 
 # Load the module-under-test directly (tools/lint is not a package).
 _HELPER_PATH = Path(__file__).parent / "_scan_helpers.py"
@@ -40,7 +40,7 @@ def _make_tree(root: Path, rel_paths: list[str]) -> None:
 def _run_git(root: Path, *argv: str) -> None:
     """Run one git command in *root*, refusing to continue if it failed.
 
-    ``env=scrubbed_git_env()`` is not optional here (#15490): pytest inherits
+    ``env=isolated_git_env()`` is not optional here (#15490): pytest inherits
     the ambient hook environment, and an inherited ``GIT_DIR`` makes ``git
     init``/``git add`` operate on the real repository instead of ``tmp_path``.
     """
@@ -51,7 +51,7 @@ def _run_git(root: Path, *argv: str) -> None:
         text=True,
         encoding="utf-8",
         check=False,
-        env=scrubbed_git_env(),
+        env=isolated_git_env(),
     )
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(argv)} failed in {root}: {result.stderr.strip()}")
@@ -263,3 +263,28 @@ def test_logical_lines_reports_the_first_physical_line_of_each_fold() -> None:
     assert joined[0] == (1, "one")
     assert joined[1][0] == 2
     assert joined[2] == (4, "four")
+
+
+# ---------------------------------------------------------------------------
+# iter_ansible_files — skip dirs are matched below root only (#18972)
+# ---------------------------------------------------------------------------
+
+
+def _touch(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("- hosts: all\n", encoding="utf-8")
+    return path
+
+
+def test_iter_ansible_files_scans_a_root_that_itself_lives_under_a_skip_dir(tmp_path: Path) -> None:
+    root = tmp_path / ".worktrees" / "repo"
+    play = _touch(root / "ansible" / "x.yml")
+    assert list(helpers.iter_ansible_files(root, {".yml"})) == [play]
+
+
+def test_iter_ansible_files_skips_a_skip_dir_inside_root(tmp_path: Path) -> None:
+    root = tmp_path / ".worktrees" / "repo"
+    play = _touch(root / "ansible" / "x.yml")
+    for skipped in (".worktrees/other/ansible/y.yml", "node_modules/pkg/z.yml", ".venv/lib/w.yml"):
+        _touch(root / skipped)
+    assert list(helpers.iter_ansible_files(root, {".yml"})) == [play]
