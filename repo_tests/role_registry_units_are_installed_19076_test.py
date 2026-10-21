@@ -49,7 +49,6 @@ REACH = declare(
     discover=_registry_units,
     floor=19,
     what="(role, systemd unit) pairs declared in services/role_registry.py",
-    roots=(_SLM,),
 )
 
 
