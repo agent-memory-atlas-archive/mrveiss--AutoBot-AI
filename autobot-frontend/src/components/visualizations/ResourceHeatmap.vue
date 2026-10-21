@@ -10,7 +10,7 @@
 <template>
   <div class="resource-heatmap">
     <div class="heatmap-header">
-      <h3>{{ title || t('visualizations.resourceHeatmap.defaultTitle') }}</h3>
+      <h3 v-if="!embedded">{{ title || t('visualizations.resourceHeatmap.defaultTitle') }}</h3>
       <div class="header-actions">
         <select v-model="selectedMetric" @change="updateData" class="metric-select">
           <option value="cpu">{{ t('visualizations.resourceHeatmap.cpuUsage') }}</option>
@@ -105,6 +105,7 @@ interface Props {
   height?: number
   refreshInterval?: number
   machine?: string
+  embedded?: boolean // in a dashboard frame that shows the title: hide this one's own (#16744)
 }
 
 const props = withDefaults(defineProps<Props>(), {

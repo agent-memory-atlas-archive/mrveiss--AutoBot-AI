@@ -5,7 +5,7 @@
   <div class="system-architecture-diagram">
     <!-- Header -->
     <div class="diagram-header">
-      <div class="header-content">
+      <div v-if="!embedded" class="header-content">
         <h3><Icon name="sitemap" /> {{ title || t('visualizations.systemArchitecture.defaultTitle') }}</h3>
         <p class="header-description">{{ t('visualizations.systemArchitecture.headerDescription') }}</p>
       </div>
@@ -587,10 +587,10 @@ interface Props {
   height?: number
   autoRefresh?: boolean
   refreshInterval?: number
+  embedded?: boolean // in a dashboard frame that shows the title: hide this one's own (#16744)
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  title: undefined,
   height: 600,
   autoRefresh: true,
   refreshInterval: 30000

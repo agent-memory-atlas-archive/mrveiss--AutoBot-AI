@@ -10,7 +10,7 @@
 <template>
   <div class="agent-activity-viz">
     <div class="viz-header">
-      <h3>{{ title || t('visualizations.agentActivity.defaultTitle') }}</h3>
+      <h3 v-if="!embedded">{{ title || t('visualizations.agentActivity.defaultTitle') }}</h3>
       <div class="header-controls">
         <div class="view-toggle">
           <button
@@ -214,10 +214,10 @@ const router = useRouter()
 interface Props {
   title?: string
   refreshInterval?: number
+  embedded?: boolean // in a dashboard frame that shows the title: hide this one's own (#16744)
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  title: undefined,
   // #10502/#7: poll the live feed every 20s (was 5s) — frequent enough to stay
   // current without hammering the analytics endpoint.
   refreshInterval: 20000
