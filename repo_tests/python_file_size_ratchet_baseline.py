@@ -143,7 +143,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/settings.py": 881,
     "autobot-backend/api/system.py": 1011,
     "autobot-backend/api/terminal.py": 1294,
-    "autobot-backend/api/terminal_handlers.py": 1497,
+    "autobot-backend/api/terminal_handlers.py": 1472,
     "autobot-backend/api/validation_dashboard.py": 670,
     "autobot-backend/api/vnc_manager.py": 1651,
     "autobot-backend/api/vnc_mcp.py": 763,
