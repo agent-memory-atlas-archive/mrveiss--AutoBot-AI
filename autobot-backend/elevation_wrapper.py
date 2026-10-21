@@ -14,6 +14,7 @@ import time
 from typing import Dict, Optional, Tuple
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.security.redaction import command_log_label
 from autobot_shared.security.redaction import safe_log_text as _safe_log_text
 from autobot_shared.singleton_factory import lazy_singleton
 from autobot_shared.ssot_config import config
@@ -233,7 +234,7 @@ class ElevationWrapper:
                     "Elevation client is not configured and unapproved sudo fallback is blocked "
                     "in production.  Set AUTOBOT_ALLOW_UNAPPROVED_SUDO=true or configure an "
                     "elevation_client.  Command blocked: %s",
-                    _safe_log_text(command),
+                    command_log_label(command),
                 )
                 return {
                     "success": False,
@@ -246,7 +247,7 @@ class ElevationWrapper:
 
             logger.warning(
                 "No elevation client configured; falling back to direct sudo for command: %s",
-                _safe_log_text(command),
+                command_log_label(command),
             )
             return await self._execute_normal(f"sudo {command}")
 

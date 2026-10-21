@@ -88,6 +88,19 @@ async def test_executed_command_secret_not_logged():
     assert _SECRET not in text
 
 
+async def test_executed_command_quoted_multiword_secret_not_logged():
+    """A quoted multi-word value is a shape no redactor recognises; the log names the program only."""
+    token = await _create_token()
+    run = AsyncMock(return_value={"stdout": "", "stderr": "", "return_code": 0})
+    with patch.object(elevation, "logger") as mock_logger, patch.object(elevation, "run_elevated_command", run):
+        await elevation.execute_elevated_command(
+            token, 'apt install --password="two words"'  # pragma: allowlist secret
+        )  # pragma: allowlist secret
+    text = _logged_text(mock_logger)
+    assert "apt (+3 args)" in text
+    assert "two words" not in text and "words" not in text
+
+
 @pytest.mark.parametrize("exc", [OSError, RuntimeError])
 async def test_execute_error_secret_not_logged(exc):
     token = await _create_token()

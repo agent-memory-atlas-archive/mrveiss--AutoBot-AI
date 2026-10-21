@@ -30,6 +30,7 @@ from api.system_health import ComponentHealth, register_health_probe
 from auth_middleware import check_admin_permission
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.security.redaction import command_log_label
 from autobot_shared.security.redaction import safe_log_text as _safe_log_text
 
 logger = get_logger(__name__)
@@ -200,7 +201,7 @@ async def execute_elevated_command(session_token: str, command: str):
 
         logger.info(
             "Elevated command executed: %s (session %s)",
-            _safe_log_text(command),
+            command_log_label(command),
             _token_fingerprint(session_token),
         )
 
