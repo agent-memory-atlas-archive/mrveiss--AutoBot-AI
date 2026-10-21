@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import ast
 import functools
-import subprocess
 from collections import Counter
 from pathlib import Path
 
@@ -43,7 +42,7 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 from repo_tests.hand_rolled_redis_pipeline_baseline_18991 import ALLOWLIST, FROZEN_TOTAL
 
-from autobot_shared.paths import scrubbed_git_env
+from autobot_shared.isolated_git import git, make_repo
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 CANONICAL = "autobot-backend/testkit/fake_redis_pipeline.py"
@@ -288,9 +287,8 @@ def test_a_checkout_under_a_directory_named_tests_does_not_widen_the_scan(tmp_pa
     (checkout / "autobot-backend" / "foo").mkdir(parents=True)
     (checkout / "autobot-backend" / "foo" / "service.py").write_text("X = 1\n", encoding="utf-8")
     (checkout / "autobot-backend" / "foo" / "x_test.py").write_text("X = 1\n", encoding="utf-8")
-    env = scrubbed_git_env()
-    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True, env=env)
-    subprocess.run(["git", "add", "-A"], cwd=checkout, check=True, env=env)
+    make_repo(checkout)
+    git(checkout, "add", "-A")
     assert _population(checkout) == ["autobot-backend/foo/x_test.py"]
 
 
