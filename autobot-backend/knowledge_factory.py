@@ -258,11 +258,13 @@ async def get_knowledge_base_async() -> "KnowledgeBase" | None:  # noqa: F821
         return None
 
 
-def reset_knowledge_base() -> None:
+def reset_knowledge_base(app: "FastAPI | None" = None) -> None:
     """Clear the singleton through the publisher; the next access creates anew (#18122).
 
     Synchronous and lock-free like the old ``_composed`` reset (Issue #613): it only
-    rebinds the global. The retry cooldown is left as it was.
+    rebinds the global. Given an ``app`` it clears the ``app.state`` projection too, so
+    ``get_or_create_knowledge_base(app)`` cannot keep serving the instance the app-free
+    path just dropped. The retry cooldown is left as it was.
     """
-    _publish_knowledge_base(None)
+    _publish_knowledge_base(None, app)
     logger.info("KnowledgeBase singleton instance reset")

@@ -85,8 +85,8 @@ async def get_knowledge_base(
     return kb
 
 
-def reset_knowledge_base() -> None:
-    """Clear the shared singleton through ``knowledge_factory`` (Issue #613, #18122)."""
+def reset_knowledge_base(app=None) -> None:
+    """Clear the shared singleton, and ``app``'s projection if given (Issue #613, #18122)."""
     from knowledge_factory import reset_knowledge_base as _reset
 
-    _reset()
+    _reset(app)

@@ -154,6 +154,29 @@ async def test_reset_clears_the_factorys_store_and_the_next_call_rebuilds(compos
     assert _Stub.constructed == 2
 
 
+async def test_reset_with_an_app_clears_the_projection_and_rebuilds_one_instance(composed) -> None:
+    """Reverting `app` in the reset -> app.state keeps the old KB and the two paths diverge."""
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    first = await kf.get_or_create_knowledge_base(app)
+    assert app.state.knowledge_base is first is kf.peek_knowledge_base()
+    composed.reset_knowledge_base(app)
+    assert kf.peek_knowledge_base() is None
+    assert app.state.knowledge_base is None
+    second = await kf.get_or_create_knowledge_base(app)
+    assert second is not first
+    assert second is kf.peek_knowledge_base() is app.state.knowledge_base
+    assert await composed.get_knowledge_base() is second
+
+
+async def test_reset_without_an_app_leaves_the_projection_alone(composed) -> None:
+    """Contrast: the app-free reset clears the singleton only, as before."""
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    first = await kf.get_or_create_knowledge_base(app)
+    composed.reset_knowledge_base()
+    assert kf.peek_knowledge_base() is None
+    assert app.state.knowledge_base is first
+
+
 def test_the_facade_keeps_its_module_level_names(composed) -> None:
     """12 test files patch `knowledge.get_knowledge_base` by name; the names must stay exported."""
     for name in ("get_knowledge_base", "reset_knowledge_base", "KnowledgeBase"):
