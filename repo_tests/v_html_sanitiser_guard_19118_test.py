@@ -17,7 +17,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+from repo_tests._paths import repo_root
+
+REPO = repo_root()
 ROOTS = ("autobot-frontend/src", "autobot-slm-frontend/src")
 
 # file -> (v-html binding count, reason). Shrink-only.
