@@ -97,6 +97,33 @@ describe('BaseDrawer', () => {
     expect(wrapper.find('.aui-drawer-close').attributes('aria-label')).toBe('Schließen')
   })
 
+  it('locks body scroll while open and releases it when unmounted open', () => {
+    wrapper = mountDrawer()
+    expect(document.body.style.overflow).toBe('hidden')
+    wrapper.unmount()
+    wrapper = null
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('returns focus to the trigger when a parent unmounts it while open', async () => {
+    // the NPUDetailsPanel shape: a v-if removes the drawer whose modelValue is still true
+    const Host = defineComponent({
+      components: { BaseDrawer },
+      setup: () => ({ shown: ref(false) }),
+      template: `<button class="trigger" @click="shown = true">Open</button>
+        <BaseDrawer v-if="shown" :model-value="true" title="T" close-label="Close"><button class="b">B</button></BaseDrawer>`,
+    })
+    wrapper = mount(Host, { global: { stubs: { Teleport: true } }, attachTo: document.body })
+    const trigger = wrapper.find('.trigger').element as HTMLElement
+    trigger.focus()
+    await wrapper.find('.trigger').trigger('click')
+    await flushPromises()
+    ;(wrapper.find('.b').element as HTMLElement).focus()
+    ;(wrapper.vm as unknown as { shown: boolean }).shown = false
+    await nextTick()
+    expect(document.activeElement).toBe(trigger)
+  })
+
   describe('keyboard', () => {
     it('Tab from the last focusable wraps to the first, Shift+Tab from the first wraps to the last', async () => {
       wrapper = mountDrawer()

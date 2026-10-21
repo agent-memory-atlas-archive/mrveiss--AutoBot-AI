@@ -13,7 +13,7 @@ import { BaseAlert, BaseDrawer } from '@autobot/ui'
  * Related to Issue #255 (NPU Fleet Integration), enhanced in Issue #590.
  */
 
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useFleetStore } from '@/stores/fleet'
 import type { SLMNode, NPUNodeStatus, NPUWorkerMetrics, NPUWorkerConfig } from '@/types/slm'
 import { formatDateTime } from '@/composables/useTimezone'
@@ -21,6 +21,8 @@ import { formatDateTime } from '@/composables/useTimezone'
 const props = defineProps<{
   node: SLMNode
   npuStatus?: NPUNodeStatus
+  /** Drives the drawer, so it slides out and hands focus back when closed (#14780). */
+  open: boolean
 }>()
 
 const emit = defineEmits<{
@@ -146,14 +148,19 @@ function toggleModel(model: string): void {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([loadLiveMetrics(), loadWorkerConfig()])
-})
+// Load each time the panel opens, or shows another node while open: it stays mounted between uses.
+watch(
+  () => [props.open, props.node.node_id] as const,
+  ([open]) => {
+    if (open) void Promise.all([loadLiveMetrics(), loadWorkerConfig()])
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <BaseDrawer
-    :model-value="true"
+    :model-value="open"
     :title="node.hostname"
     width="32rem"
     :close-label="$t('fleet.nPUDetailsPanel.close')"
