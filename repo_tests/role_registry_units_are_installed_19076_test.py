@@ -28,6 +28,8 @@ PACKAGE_UNITS = frozenset({"postgresql"})
 
 
 def _registry_units(root: Path) -> list[tuple[str, str]]:
+    if not (root / _REGISTRY).is_file():
+        return []  # an empty tree is an empty result; the floor below refuses it
     tree = ast.parse((root / _REGISTRY).read_text(encoding="utf-8"))
     pairs: list[tuple[str, str]] = []
     for node in ast.walk(tree):
@@ -45,7 +47,7 @@ def _registry_units(root: Path) -> list[tuple[str, str]]:
 REACH = declare(
     "role-registry-installed-units",
     discover=_registry_units,
-    floor=18,
+    floor=19,
     what="(role, systemd unit) pairs declared in services/role_registry.py",
     roots=(_SLM,),
 )
