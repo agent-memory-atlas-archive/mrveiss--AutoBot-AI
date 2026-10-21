@@ -8,21 +8,20 @@ from __future__ import annotations
 
 from unittest.mock import create_autospec, patch
 
-import chromadb
 import pytest
 
 from api.knowledge_mcp import KnowledgeSearchRequest, mcp_search_knowledge_base
 from autobot_shared.ssot_config import config
+from knowledge.backends import InMemoryClient
 from knowledge.quarantine import RESEARCH_QUARANTINE_FILTER, with_quarantine
 from knowledge_base import KnowledgeBase
 
 
 def _collection():
-    c = chromadb.EphemeralClient().get_or_create_collection(f"t18946_{id(object())}")
+    c = InMemoryClient().get_or_create_collection("mcp_quarantine_18946_test")
     quarantine = config.research_quarantine_collection
     c.add(
         ids=["ok", "bad"],
-        documents=["a", "b"],
         metadatas=[
             {"category": "docs", "collection": "main"},
             {"category": "docs", "collection": quarantine},
