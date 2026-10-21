@@ -18,6 +18,7 @@ default.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from typing import Any, AsyncIterator, Dict, List, Tuple
 from uuid import uuid4
@@ -55,8 +56,6 @@ from services.llm_usage_recording import (
     record_response_usage,
     record_token_usage,
 )
-
-from .openai_compat_routing import prepare_completion
 
 logger = get_logger(__name__)
 
@@ -463,11 +462,10 @@ async def chat_completions(
     registry = get_provider_registry()
     llm_request = _build_llm_request(body, resolved_model=resolved_model)
 
-    llm_response, provider = await prepare_completion(active_router, llm_request, registry, _select_provider_or_503)
-    if llm_response is not None:
-        if not llm_response.model:
-            raise HTTPException(status_code=502, detail="Unable to resolve response model")
-        resolved_model = llm_response.model
+    provider = await _select_provider_or_503(registry, llm_request)
+    if not inspect.isasyncgenfunction(provider.stream_completion):
+        raise ValueError(f"Provider {provider.provider_name!r} stream_completion must be an async generator function")
+
     completion_id = _make_completion_id()
 
     # Echo the concrete model name; fall back to provider name for autobot-default.
@@ -507,8 +505,7 @@ async def chat_completions(
         )
 
     # Non-streaming path — use fallback coordinator for quota-triggered model switch
-    if llm_response is None:
-        llm_response = await get_fallback_coordinator().execute_with_fallback(llm_request, registry)
+    llm_response = await get_fallback_coordinator().execute_with_fallback(llm_request, registry)
     if llm_response.error:
         raise HTTPException(status_code=502, detail=llm_response.error)
 
