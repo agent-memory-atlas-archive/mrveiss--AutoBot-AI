@@ -58,13 +58,13 @@ Two postures, one validator (#14016): the contract is the docstring of [`securit
 `Depends` on [`auth_middleware.py`](../../autobot-backend/auth_middleware.py)
 `check_admin_permission` (:950).
 Archive safety lives in [`autobot-backend/archive_safety.py`](../../autobot-backend/archive_safety.py)
-— `validate_zip_metadata` (:27), `safe_extract` (:58), `MAX_UPLOAD_BYTES` (:19).
+— `validate_zip_metadata` (:29), `safe_extract` (:60), `MAX_UPLOAD_BYTES` (:21).
 
 **Invariants**
 - A plugin route without `Depends(check_admin_permission)` is remote code execution. This is the single highest-severity shape in this subsystem — check it first.
 - Extraction goes through `archive_safety`; [`plugin_install.py`](../../autobot-backend/plugin_install.py) only re-exports `_validate_zip_metadata` and `_safe_extract`. A local `zf.extractall` reintroduces zip-slip and symlink escape.
-- Names match `_NAME_PATTERN` (:36) before any filesystem touch; the target is claimed by `_claim_install_target` (:126) via `mkdir(exist_ok=False)`, which — with the per-name `_install_locks` — is what makes the collision check TOCTOU-free.
-- Git installs: scheme restricted to http(s), `--` before the URL, `protocol.file.allow=never`, no submodule recursion, ref matched against `_GIT_REF_PATTERN` (:39), rejecting a leading `-` or `..`. Dropping any one is a finding on its own.
+- Names match `_NAME_PATTERN` (:37) before any filesystem touch; the target is claimed by `_claim_install_target` (:127) via `mkdir(exist_ok=False)`, which — with the per-name `_install_locks` — is what makes the collision check TOCTOU-free.
+- Git installs: scheme restricted to http(s), `--` before the URL, `protocol.file.allow=never`, no submodule recursion, ref matched against `_GIT_REF_PATTERN` (:40), rejecting a leading `-` or `..`. Dropping any one is a finding on its own.
 - `PluginRegistry._plugins` and `HookRegistry` are process-wide singletons that do not dedupe — a load path re-initialising a live plugin double-registers its callbacks (#14000).
 - A credential resolver is injected only into a plugin whose resolved directory lies under a trusted built-in root ([`credential_binding.py`](../../autobot_shared/plugin_sdk/credential_binding.py) `bound_resolver`), never by `manifest.name` alone, since a self-declared name lets any installed plugin claim it (#18094); `plugin_install.py` refuses a community install that takes a built-in name. Both plugin hosts (startup `PluginManager`, API `PluginLoader`) take their search and trust lists from [`plugin_paths.py`](../../autobot-backend/plugin_paths.py); the CWD-relative dev fallback is searched but never trusted. The resolver narrows the sanctioned path and is not isolation: an in-process plugin can still read `os.environ` and module state.
 
