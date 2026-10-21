@@ -37,6 +37,7 @@ from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.principal import resolve_principal_id
 from media.audio.upload_limits import read_capped_audio
+from media.image_upload import require_image_upload
 from multimodal_processor import (
     ModalityType,
     MultiModalInput,
@@ -47,7 +48,6 @@ from multimodal_processor import (
 
 # Import AutoBot multi-modal components
 from npu_semantic_search import get_npu_search_engine
-from security.upload_filename_policy import IMAGE_EXTENSIONS, require_safe_upload
 
 logger = get_logger(__name__)
 
@@ -150,9 +150,7 @@ async def process_image(
     start_time = time.time()
 
     try:
-        require_safe_upload(file.filename, IMAGE_EXTENSIONS)  # #19088: type gate
-        if not file.content_type or not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="File must be an image")
+        require_image_upload(file)
 
         # Read image data
         image_data = await file.read()
@@ -521,11 +519,12 @@ def _create_text_input(text: str, intent: str, user_id: str | None) -> MultiModa
 
 async def _create_image_input(image_file: UploadFile, intent: str, user_id: str | None) -> MultiModalInput:
     """Create MultiModalInput for image file (Issue #398: extracted)."""
+    require_image_upload(image_file)  # #19088: gate before the read; the combine route reaches here too
     return MultiModalInput(
         input_id=f"image_{int(time.time() * 1000)}",
         modality_type=ModalityType.IMAGE,
         intent=_get_processing_intent(intent),
-        metadata={"filename": require_safe_upload(image_file.filename, IMAGE_EXTENSIONS)},  # #19088: gate, then read
+        metadata={"filename": image_file.filename},
         data=await image_file.read(),
         user_id=user_id,
     )

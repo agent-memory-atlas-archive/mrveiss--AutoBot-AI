@@ -219,3 +219,81 @@ def test_aac_and_opus_were_never_accepted_by_voice_create_so_no_regression():
     # reference_wav.py (#18477) already answers 415 for any suffix outside the one SSOT set; the gate shares it.
     assert reference_allowed == policy.AUDIO_EXTENSIONS
     assert not {".aac", ".opus"} & policy.AUDIO_EXTENSIONS
+
+
+# --- request.form() routes (knowledge /upload and /audio/upload), the combine content type, files.py ----------
+
+
+class BodyForbidden:
+    """An upload whose body must never be read: a bad name has to be refused first."""
+
+    def __init__(self, filename, content_type="application/octet-stream"):
+        self.filename = filename
+        self.content_type = content_type
+
+    async def read(self, size=-1):
+        raise AssertionError("the body was read before the name/type gate")
+
+
+def _form_request(upload):
+    async def form():
+        return {"file": upload}
+
+    return SimpleNamespace(form=form, app=SimpleNamespace(), client=None)
+
+
+@pytest.fixture
+def kb_present(monkeypatch):
+    from api import knowledge
+
+    async def fake_kb(app, force_refresh=False):
+        return object()
+
+    monkeypatch.setattr(knowledge, "get_or_create_knowledge_base", fake_kb)
+    return knowledge
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "name",
+    ["payload.exe", "a/b.txt", "..\\x.txt", "noextension", "notes.txt‮gpj.exe", "x∕y.txt", ".env", "", None],
+)
+async def test_knowledge_upload_refuses_a_bad_name_before_reading_the_body(name, kb_present):
+    err = await _refused(_unwrap(kb_present.upload_file_to_knowledge)(True, _form_request(BodyForbidden(name))))
+    assert getattr(err, "detail_code", "").startswith("upload.")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["payload.exe", "a/b.mp3", "notes.txt", "x.mp3‮exe", "song", "", None])
+async def test_knowledge_audio_upload_refuses_a_bad_name_before_reading_the_body(name, kb_present):
+    await _refused(_unwrap(kb_present.upload_audio_file)(True, _form_request(BodyForbidden(name))))
+
+
+def test_the_kb_name_gate_keeps_its_stable_codes_and_serves_the_folder_watcher_too():
+    from api.knowledge import _validate_file_upload, require_safe_kb_name
+
+    with pytest.raises(HTTPException) as unsupported:
+        _validate_file_upload("a.exe", 1)  # the kb_folder_watcher caller
+    assert unsupported.value.detail_code == "upload.unsupported_type"
+    with pytest.raises(HTTPException) as invalid:
+        require_safe_kb_name("a/b.txt")
+    assert invalid.value.detail_code == "upload.invalid_filename"
+    require_safe_kb_name("report.pdf")
+
+
+@pytest.mark.asyncio
+async def test_combine_refuses_a_non_image_content_type_like_process_image():
+    upload = BodyForbidden("shot.png", "text/html")
+    await _refused(multimodal._collect_modal_inputs(None, upload, None, "x", "u"))
+    await _refused(_unwrap(multimodal.process_image)(upload, "analysis", None, {"user_id": "u"}))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["payload.exe", "a/b.txt", "noextension", ""])
+async def test_general_file_upload_refuses_a_bad_name_before_reading_the_body(name, monkeypatch):
+    from api import files
+
+    auth = SimpleNamespace(check_file_permissions=lambda request, action: (True, {"user_id": "u"}))
+    monkeypatch.setattr(files, "get_auth_middleware", lambda: auth)
+    request = SimpleNamespace(state=SimpleNamespace())
+    await _refused(_unwrap(files.upload_file)(request, BodyForbidden(name), "", False))

@@ -25,10 +25,11 @@ _VERBS = {"get", "post", "put", "patch", "delete", "head", "options"}
 _GATES = {"is_safe_file", "require_safe_upload"}
 _DOCUMENTED_EXCEPTIONS: frozenset[str] = frozenset()  # "path:function", each with an ARCHITECTURE_EXCEPTIONS.md entry
 
-# Measured when the guard landed: 15 route handlers take an UploadFile.
+# Measured when the guard landed: 15 route handlers take an UploadFile annotation, 2 more (knowledge /upload and
+# /audio) read ``request.form()``.
 # Lower only when the tree genuinely holds fewer -- an extractor that stops
 # matching reports zero violations and reads clean.
-_UPLOAD_ROUTE_FLOOR = 15
+_UPLOAD_ROUTE_FLOOR = 17
 
 
 def _is_test(path: str) -> bool:
@@ -44,7 +45,17 @@ def _is_route(node: ast.AST) -> bool:
     return False
 
 
+def _reads_form(node: ast.AST) -> bool:
+    """True when the handler calls ``<request>.form()``: the other way a route receives an upload (#19088)."""
+    return any(
+        isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) and sub.func.attr == "form"
+        for sub in ast.walk(node)
+    )
+
+
 def _takes_upload(node: ast.AST) -> bool:
+    if _reads_form(node):
+        return True
     args = node.args.args + node.args.kwonlyargs + node.args.posonlyargs
     for arg in args:
         for sub in ast.walk(arg.annotation) if arg.annotation is not None else ():
@@ -100,8 +111,31 @@ def _callees(fn: ast.AST, stem: str, imports: dict[str, tuple[str, str | None]])
     return frozenset(out)
 
 
+def _call_key(call: ast.Call, stem: str, imports: dict[str, tuple[str, str | None]]) -> frozenset:
+    """The ``_callees`` entries of one call expression."""
+    wrapper = ast.FunctionDef(
+        name="_", args=ast.arguments([], [], None, [], [], None, []), body=[ast.Expr(call)], decorator_list=[]
+    )
+    return _callees(wrapper, stem, imports)
+
+
+def _gate_precedes_body_read(fn: ast.AST, stem: str, imports: dict, by_key: dict) -> bool:
+    """True unless the handler reads the upload body (``.read(``) on a line before its first gate-reaching call.
+
+    A gate that runs after ``await file.read()`` still lets an unbounded, unchecked body into memory (#19088).
+    """
+    reads = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "read"]
+    gates = [
+        n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call) and _reaches_gate(_call_key(n, stem, imports), by_key)
+    ]
+    return not reads or (bool(gates) and min(gates) <= min(reads))
+
+
 def _functions(source: str) -> list[ast.AST]:
     return [n for n in ast.walk(ast.parse(source)) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+
+
+_CONTEXT: dict[tuple[str, str], tuple[ast.AST, str, dict]] = {}
 
 
 @lru_cache(maxsize=None)
@@ -124,6 +158,7 @@ def _index() -> tuple[dict[tuple[str, str], list[frozenset]], list[tuple[str, st
                 by_key.setdefault((module.stem, fn.name), []).append(callees)
                 if _is_route(fn) and _takes_upload(fn):
                     routes.append((rel, fn.name, fn.lineno, callees))
+                    _CONTEXT[(rel, fn.name)] = (fn, module.stem, imports)
     return by_key, routes
 
 
@@ -144,11 +179,16 @@ def _reaches_gate(callees: frozenset, by_key: dict[tuple[str, str], list[frozens
 
 def ungated_upload_routes() -> list[str]:
     by_key, routes = _index()
-    return [
-        f"{rel}:{line} {name}"
-        for rel, name, line, called in routes
-        if f"{rel}:{name}" not in _DOCUMENTED_EXCEPTIONS and not _reaches_gate(called, by_key)
-    ]
+    out = []
+    for rel, name, line, called in routes:
+        if f"{rel}:{name}" in _DOCUMENTED_EXCEPTIONS:
+            continue
+        fn, stem, imports = _CONTEXT[(rel, name)]
+        if not _reaches_gate(called, by_key):
+            out.append(f"{rel}:{line} {name} (no gate)")
+        elif not _gate_precedes_body_read(fn, stem, imports, by_key):
+            out.append(f"{rel}:{line} {name} (reads the body before the gate)")
+    return out
 
 
 def test_the_sweep_finds_the_upload_routes():
@@ -184,3 +224,24 @@ def test_control_an_ungated_route_is_detected_and_a_gated_one_is_not():
     assert _reaches_gate(callees(delegated), {("helpers", "helper"): [frozenset({"is_safe_file"})]})
     module_call = "import theme_install\n" + head + "    return await theme_install.go(file)\n"
     assert _reaches_gate(callees(module_call), {("theme_install", "go"): [frozenset({"require_safe_upload"})]})
+
+
+def test_control_a_form_reading_route_is_an_upload_route_and_needs_the_gate():
+    src = '@router.post("/u")\nasync def up(req: Request):\n    form = await req.form()\n    return await form.get("file").read()\n'
+    fn = _functions(src)[0]
+    assert _is_route(fn) and _takes_upload(fn)
+    assert not _reaches_gate(_callees(fn, "mod", _import_map(ast.parse(src))), {})
+    gated = src.replace("    return", "    require_safe_upload(form.get('file').filename)\n    return")
+    fn = _functions(gated)[0]
+    assert _reaches_gate(_callees(fn, "mod", _import_map(ast.parse(gated))), {})
+    plain = '@router.post("/u")\nasync def up(req: Request):\n    return await req.json()\n'
+    assert not _takes_upload(_functions(plain)[0])
+
+
+def test_control_a_gate_after_the_body_read_is_flagged():
+    head = '@router.post("/u")\nasync def up(file: UploadFile):\n'
+    late = head + "    data = await file.read()\n    require_safe_upload(file.filename)\n"
+    early = head + "    require_safe_upload(file.filename)\n    data = await file.read()\n"
+    for src, expected in ((late, False), (early, True)):
+        fn = _functions(src)[0]
+        assert _gate_precedes_body_read(fn, "mod", _import_map(ast.parse(src)), {}) is expected
