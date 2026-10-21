@@ -147,3 +147,19 @@ def test_seed_chunk_joins_stored_or_legacy(seeded: bool) -> None:
     if seeded:
         meta = stamp_chunk_id(meta, cid)
     assert resolve_chunk_id({"metadata": meta, "source_path": "a.md"}) == cid
+
+
+# Literal pins (#18142 review): every other test compares the helper with itself, so an edit to
+# the key format or the prefix length would pass while orphaning every stored KB id. These
+# values were computed from main's pre-#18142 formulas (doc_index_orphans.chunk_base_id,
+# cognition_seeder._chunk_id) with hashlib alone, not through this module.
+@pytest.mark.parametrize(
+    ("chunk_id", "expected"),
+    [
+        (lambda: doc_chunk_id("docs/x.md", "Setup", 2), "72446a68c458"),
+        (lambda: seed_chunk_id("cognition", "docs/y.md", 3), "11e94f5e85d881bd"),
+    ],
+    ids=["doc", "seed"],
+)
+def test_stored_ids_keep_their_pre_18142_values(chunk_id, expected: str) -> None:
+    assert chunk_id() == expected
