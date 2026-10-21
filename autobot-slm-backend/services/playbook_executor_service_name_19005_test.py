@@ -96,7 +96,7 @@ class _Run:
         monkeypatch.setattr(self.executor, "_build_ansible_env", dict)
         monkeypatch.setattr(playbook_executor, "fetch_deploy_secrets", AsyncMock(return_value={"hf_token": _SECRET}))
 
-    def execute(self, extra_vars):
+    def run_playbook(self, extra_vars):
         with patch.object(asyncio, "create_subprocess_exec", new=AsyncMock()) as spawn:
             self.spawn = spawn
             return asyncio.run(self.executor.execute_playbook("manage-service.yml", extra_vars=extra_vars))
@@ -108,7 +108,7 @@ def test_a_hostile_unit_extra_var_raises_and_nothing_is_synced_or_spawned(tmp_pa
     run = _Run(tmp_path, monkeypatch)
 
     with pytest.raises(ValueError, match="invalid systemd unit name"):
-        run.execute({key: name, "service_action": "restarted"})
+        run.run_playbook({key: name, "service_action": "restarted"})
 
     run.sync.assert_not_awaited()
     run.run_subprocess.assert_not_awaited()
@@ -118,7 +118,7 @@ def test_a_hostile_unit_extra_var_raises_and_nothing_is_synced_or_spawned(tmp_pa
 def test_a_valid_service_name_proceeds_to_the_spawn(tmp_path, monkeypatch):
     run = _Run(tmp_path, monkeypatch)
 
-    result = run.execute({"service_name": "redis-stack.service", "service_action": "restarted"})
+    result = run.run_playbook({"service_name": "redis-stack.service", "service_action": "restarted"})
 
     assert result["success"] is True
     run.run_subprocess.assert_awaited_once()
@@ -128,21 +128,21 @@ def test_a_valid_service_name_proceeds_to_the_spawn(tmp_path, monkeypatch):
 def test_a_valid_unit_extra_var_proceeds_for_every_unit_bearing_key(tmp_path, monkeypatch, key):
     run = _Run(tmp_path, monkeypatch)
 
-    assert run.execute({key: "redis-stack-server"})["success"] is True
+    assert run.run_playbook({key: "redis-stack-server"})["success"] is True
     run.run_subprocess.assert_awaited_once()
 
 
 def test_extra_vars_without_a_service_name_are_not_validated(tmp_path, monkeypatch):
     run = _Run(tmp_path, monkeypatch)
 
-    assert run.execute({"role_name": "{{ anything }}"})["success"] is True
-    assert run.execute(None)["success"] is True
+    assert run.run_playbook({"role_name": "{{ anything }}"})["success"] is True
+    assert run.run_playbook(None)["success"] is True
 
 
 def test_caller_vars_are_written_unsafe_and_a_merged_secret_round_trips(tmp_path, monkeypatch):
     run = _Run(tmp_path, monkeypatch)
 
-    run.execute({"service_name": "redis-stack.service", "service_action": "restarted"})
+    run.run_playbook({"service_name": "redis-stack.service", "service_action": "restarted"})
 
     text = run.written["text"]
     assert "service_name: !unsafe 'redis-stack.service'" in text
@@ -171,7 +171,7 @@ def test_secrets_the_executor_merges_are_written_plain_when_the_caller_passes_no
     """The wizard passes no extra vars: its secrets arrive only through the executor's own merge (#19005)."""
     run = _Run(tmp_path, monkeypatch)
 
-    run.execute(None)
+    run.run_playbook(None)
 
     assert "!unsafe" not in run.written["text"]
     assert yaml.load(run.written["text"], Loader=_AnsibleLikeLoader) == {"hf_token": _SECRET}

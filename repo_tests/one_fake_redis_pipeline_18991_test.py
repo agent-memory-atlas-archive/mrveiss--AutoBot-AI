@@ -171,6 +171,7 @@ REACH = declare(
     reference=_all_python,
     min_fraction=0.40,
     what="test python source",
+    roots=SCAN_ROOTS,
 )
 
 
