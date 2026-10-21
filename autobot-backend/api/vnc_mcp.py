@@ -47,6 +47,7 @@ from api.schemas_system import (
     VNCStatusRequest,
 )
 from auth_middleware import check_admin_permission
+from auth_rbac import Permission, require_permission
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.http_client import get_http_client
 from autobot_shared.http_egress_guard import EGRESS_POLICY
@@ -58,11 +59,10 @@ from constants.network_constants import NetworkConstants
 from type_defs.common import Metadata
 
 logger = get_logger(__name__)
-router = APIRouter(
-    tags=["vnc_mcp", "mcp", "vnc"],
-    dependencies=[Depends(check_admin_permission)],
-)
+router = APIRouter(tags=["vnc_mcp", "mcp", "vnc"], dependencies=[Depends(check_admin_permission)])
 
+# #19087: control tools gate on the permission (as /ws/desktop does), on top of the admin role.
+_desktop_control = [Depends(require_permission(Permission.MCP_DESKTOP_CONTROL))]
 # Lock for thread-safe access to vnc_observations
 _vnc_observations_lock = asyncio.Lock()
 
@@ -469,7 +469,7 @@ async def record_vnc_observation(vnc_type: str, observation: Metadata):
 # These endpoints allow AI agents to interact with the desktop via MCP tools
 
 
-@router.post("/mcp/desktop_mouse_click", response_model=DesktopClickMcpResponse)
+@router.post("/mcp/desktop_mouse_click", response_model=DesktopClickMcpResponse, dependencies=_desktop_control)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="desktop_mouse_click_mcp",
@@ -509,7 +509,7 @@ async def desktop_mouse_click_mcp(request: DesktopMouseClickRequest) -> Metadata
     }
 
 
-@router.post("/mcp/desktop_keyboard_type", response_model=DesktopKeyboardTypeMcpResponse)
+@router.post("/mcp/desktop_keyboard_type", response_model=DesktopKeyboardTypeMcpResponse, dependencies=_desktop_control)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="desktop_keyboard_type_mcp",
@@ -544,7 +544,7 @@ async def desktop_keyboard_type_mcp(request: DesktopKeyboardTypeRequest) -> Meta
     }
 
 
-@router.post("/mcp/desktop_special_key", response_model=DesktopSpecialKeyMcpResponse)
+@router.post("/mcp/desktop_special_key", response_model=DesktopSpecialKeyMcpResponse, dependencies=_desktop_control)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="desktop_special_key_mcp",
@@ -605,7 +605,7 @@ async def _capture_desktop_png(tmp_path: str) -> bool:
     return False
 
 
-@router.post("/mcp/desktop_screenshot", response_model=DesktopScreenshotMcpResponse)
+@router.post("/mcp/desktop_screenshot", response_model=DesktopScreenshotMcpResponse, dependencies=_desktop_control)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="desktop_screenshot_mcp",
@@ -652,7 +652,7 @@ async def desktop_screenshot_mcp() -> Metadata:
         }
 
 
-@router.post("/mcp/desktop_observe_state", response_model=DesktopObserveStateMcpResponse)
+@router.post("/mcp/desktop_observe_state", response_model=DesktopObserveStateMcpResponse, dependencies=_desktop_control)
 @with_error_handling(
     category=ErrorCategory.SERVER_ERROR,
     operation="desktop_observe_state_mcp",
