@@ -20,12 +20,47 @@ The baseline is shrink-only: the entries are name-matched false positives
 
 import ast
 import re
+from pathlib import Path
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
+
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOTS = ("autobot-slm-backend", "autobot-backend", "autobot_shared")
 _NAME = re.compile(r"SECRET|TOKEN|KEY|PASSWORD")
 _FUNCS = {"getenv", "get"}
+
+
+def _is_source(rel: str) -> bool:
+    name = rel.rsplit("/", 1)[-1]
+    return rel.endswith(".py") and not (name.endswith("_test.py") or name.startswith("test_") or "/tests/" in rel)
+
+
+def _population(root: Path) -> list[str]:
+    try:
+        return [rel for rel in tracked_paths(root, *_ROOTS) if _is_source(rel)]
+    except EmptyEnumeration:
+        return []
+
+
+def _all_python(root: Path) -> int:
+    try:
+        return sum(1 for rel in tracked_paths(root, *_ROOTS) if rel.endswith(".py"))
+    except EmptyEnumeration:
+        return 0
+
+
+#: Measured 2026-10-21: roughly 60% of tracked ``.py`` under the three roots is non-test source;
+#: 0.45 leaves room for source shifting into tests without the sweep silently narrowing.
+REACH = declare(
+    "no-literal-secret-default",
+    discover=_population,
+    reference=_all_python,
+    min_fraction=0.45,
+    what="non-test python source",
+    roots=_ROOTS,
+)
 
 # (file, env var name) -- not credentials: a Redis key prefix, a temp dir and a date
 # cutoff (matched on KEY / SECRETS in the name). Shrink-only (docs/developer/RATCHET_BASELINES.md).
@@ -65,20 +100,25 @@ def find_hits(source: str) -> list[str]:
     return hits
 
 
-def _scan() -> set[tuple[str, str]]:
+def _texts() -> dict[str, str]:
     root = repo_root()
+    texts = {}
+    for rel in REACH.examined(root):
+        try:
+            texts[rel] = (root / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+    REACH.completed(len(texts), root)
+    return texts
+
+
+def _scan() -> set[tuple[str, str]]:
     found = set()
-    for top in _ROOTS:
-        for path in sorted((root / top).rglob("*.py")):
-            rel = path.relative_to(root).as_posix()
-            if "/tests/" in rel or path.name.startswith("test_") or path.name.endswith("_test.py"):
-                continue
-            try:
-                src = path.read_text(encoding="utf-8")
-                names = find_hits(src)
-            except (SyntaxError, UnicodeDecodeError):
-                continue
-            found.update((rel, n) for n in names)
+    for rel, src in _texts().items():
+        try:
+            found.update((rel, n) for n in find_hits(src))
+        except SyntaxError:
+            continue
     return found
 
 
@@ -90,15 +130,7 @@ _LEGACY_LITERAL_FILE = "autobot-slm-backend/user_management/services/api_key_ser
 
 
 def test_legacy_public_pepper_only_in_its_one_declared_place():
-    root = repo_root()
-    homes = set()
-    for top in _ROOTS:
-        for path in (root / top).rglob("*.py"):
-            rel = path.relative_to(root).as_posix()
-            if "/tests/" in rel or path.name.startswith("test_") or path.name.endswith("_test.py"):
-                continue
-            if _LEGACY_LITERAL in path.read_text(encoding="utf-8", errors="ignore"):
-                homes.add(rel)
+    homes = {rel for rel, src in _texts().items() if _LEGACY_LITERAL in src}
     assert homes == {_LEGACY_LITERAL_FILE}, sorted(homes)
 
 

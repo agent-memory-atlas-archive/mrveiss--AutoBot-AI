@@ -163,26 +163,27 @@ class APIKeyService(BaseService):
         return "abot_" + secrets.token_hex(20)
 
     @staticmethod
+    def _hmac_hex(pepper: str, key: str) -> str:
+        """HMAC-SHA256 of an API token under *pepper* (lookup digest, not password storage)."""
+        return hmac.new(  # HMAC-SHA256 for API token lookup, not password storage
+            key=pepper.encode("utf-8"),
+            msg=key.encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+
+    @staticmethod
     def _hash_key(key: str) -> str:
         """Hash an API key with the configured secret (#1721, #2083, #16299).
 
         Used for every NEW hash. SLM_HMAC_API_KEY_SECRET unset raises
         RuntimeError; the legacy pepper is never used here.
         """
-        return hmac.new(  # HMAC-SHA256 pepper for API token lookup, not password storage
-            key=settings.require_hmac_api_key_secret().encode("utf-8"),
-            msg=key.encode("utf-8"),
-            digestmod=hashlib.sha256,
-        ).hexdigest()
+        return APIKeyService._hmac_hex(settings.require_hmac_api_key_secret(), key)
 
     @staticmethod
     def _hash_key_public_pepper(key: str) -> str:
         """READ-ONLY verifier for rows hashed under the old public pepper (#16299)."""
-        return hmac.new(
-            key=_LEGACY_PUBLIC_PEPPER.encode("utf-8"),
-            msg=key.encode("utf-8"),
-            digestmod=hashlib.sha256,
-        ).hexdigest()
+        return APIKeyService._hmac_hex(_LEGACY_PUBLIC_PEPPER, key)
 
     @staticmethod
     def _hash_key_legacy(key: str) -> str:
