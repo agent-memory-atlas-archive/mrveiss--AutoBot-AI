@@ -45,6 +45,8 @@ from llm_shared import get_provider_registry
 from llm_shared.model_fallback_coordinator import get_fallback_coordinator
 from llm_shared.models import LLMRequest
 from llm_shared.provider_degradation import AllCredentialsNeedReauthError
+from llm_shared.tiered_routing.base_strategy import RoutingStrategy
+from llm_shared.tiered_routing.registry import get_active_router
 from llm_shared.tiered_routing.tier_router import get_tiered_router
 from services.llm_api_key_service import LLMApiKeyRecord, get_llm_api_key_service
 from services.llm_cost_tracker import get_cost_tracker
@@ -63,8 +65,8 @@ router = APIRouter(tags=["openai-compat"])
 # Reserved model names for server-side tiered routing (#6592)
 # ---------------------------------------------------------------------------
 # Callers may pass these instead of a concrete model name to opt into
-# AutoBot's tiered routing.  "auto" uses TieredModelRouter complexity scoring;
-# "auto-fast" forces the simple tier; "auto-quality" forces the complex tier.
+# AutoBot's tiered routing. "auto" uses the configured strategy; "auto-fast"
+# forces the simple tier; "auto-quality" forces the complex tier.
 _AUTO_MODEL_NAMES = frozenset({"auto", "auto-fast", "auto-quality"})
 
 # ---------------------------------------------------------------------------
@@ -183,14 +185,18 @@ async def _select_provider_or_503(registry, llm_request: LLMRequest):
     return provider
 
 
-async def _resolve_auto_model(model: str, messages: list) -> str:
-    """Resolve an auto-* model alias to a concrete model name via TieredModelRouter."""
-    router = get_tiered_router()
+async def _resolve_auto_model(
+    model: str,
+    messages: list,
+    active_router: RoutingStrategy | None = None,
+) -> str:
+    """Resolve an auto-* alias using the configured strategy or forced tier."""
     if model == "auto-fast":
-        return router.get_model_for_tier("simple")
+        return get_tiered_router().get_model_for_tier("simple")
     if model == "auto-quality":
-        return router.get_model_for_tier("complex")
-    # "auto" — complexity-scored routing
+        return get_tiered_router().get_model_for_tier("complex")
+    # "auto" — use the strategy selected from backend.llm.routing_strategy.
+    router = active_router or get_active_router()
     selected, _ = router.route(messages, requested_model=model)
     return selected
 
@@ -442,9 +448,12 @@ async def chat_completions(
     await _enforce_virtual_key(api_key_record, body.model)  # model whitelist + budget (#6590)
 
     # Resolve auto-* model aliases to concrete model names via tiered routing (#6592)
+    active_router: RoutingStrategy | None = None
     if body.model in _AUTO_MODEL_NAMES:
         messages_raw = [{"role": m.role, "content": m.content} for m in body.messages]
-        resolved_model = await _resolve_auto_model(body.model, messages_raw)
+        if body.model == "auto":
+            active_router = get_active_router()
+        resolved_model = await _resolve_auto_model(body.model, messages_raw, active_router=active_router)
     elif body.model == "autobot-default":
         resolved_model = None  # will be set from provider name below
     else:
@@ -454,15 +463,19 @@ async def chat_completions(
     llm_request = _build_llm_request(body, resolved_model=resolved_model)
 
     provider = await _select_provider_or_503(registry, llm_request)
-
-    # Fix 3: validate stream_completion is an async generator function (#5132)
     if not inspect.isasyncgenfunction(provider.stream_completion):
         raise ValueError(f"Provider {provider.provider_name!r} stream_completion must be an async generator function")
 
     completion_id = _make_completion_id()
-    # Echo the concrete model name; fall back to provider name for autobot-default
+
+    # Echo the concrete model name; fall back to provider name for autobot-default.
+    # A routed response with no model identity is malformed and cannot be priced
+    # or represented accurately in the OpenAI response.
     if resolved_model is None:
-        resolved_model = provider.provider_name
+        provider_name = getattr(provider, "provider_name", None)
+        if not provider_name:
+            raise HTTPException(status_code=502, detail="Unable to resolve response model")
+        resolved_model = provider_name
 
     if body.stream:
         include_usage = bool(body.stream_options and body.stream_options.include_usage)
