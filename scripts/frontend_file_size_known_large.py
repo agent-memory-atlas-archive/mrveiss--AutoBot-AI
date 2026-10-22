@@ -198,7 +198,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
     "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 773,  # #18819 + #14777: 807 -> 773
     "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 662,  # #18819 + #14777: 669 -> 662
-    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 664,  # #18734: 720 -> 664
+    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 655,  # #14780: 664 -> 655 (BaseSwitch)
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 721,  # #18819 + #14777: 733 -> 721
     "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 824,  # #18819 + #14777: 869 -> 824
     "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1088,  # #18819 + #14777: 1099 -> 1088
