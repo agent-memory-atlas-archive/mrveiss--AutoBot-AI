@@ -8,6 +8,7 @@ The librarian's document bodies embed a timestamp, so the KB's content-hash dedu
 re-import. One id per (kind, name) makes a repeat import update the fact instead of adding a copy.
 """
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -138,17 +139,28 @@ async def store_or_update_fact(
 
 
 async def _adopt_duplicate(knowledge_base: Any, result: Dict[str, Any], metadata: Dict[str, Any], ref: Any):
-    """The KB matched the new body to an existing fact (exact hash or semantic): that fact IS the item.
+    """The KB matched the new body to an existing fact (exact hash or semantic): link it as the item.
 
-    Its text is left alone. It gains the link id plus the item's type and name, so the next run's
-    ``load()`` finds it as an adopted fact and writes nothing.
+    The fact's text, type and name are never rewritten. If it is already of the item's kind (same
+    ``type``, same or absent name) the link id (and the name, when absent) is merged in, so the next
+    run's ``load()`` finds it and writes nothing. If it is a fact of another kind (a semantic match
+    can be) or cannot be read back, ONLY the link id is merged: it stays invisible to ``load()``, so a
+    later template-changed import re-checks that item once more -- imports run only when the file-state
+    hash changes, so that cost is accepted.
     """
     dup_id = result.get("fact_id")
     if not dup_id or dup_id == "?":
         raise SystemFactStoreError(f"storing {ref.fact_id} reported a duplicate without its id: {result}")
     name_field = next(f for t, f in _KIND_METADATA.values() if t == metadata["type"])
-    identity = {"type": metadata["type"], name_field: metadata[name_field], LINK_FIELD: ref.stable_id}
-    return _checked(await knowledge_base.update_fact(dup_id, metadata=identity), f"linking duplicate {dup_id}")
+    found = await asyncio.to_thread(knowledge_base.get_fact, dup_id)
+    held = (found or {}).get("metadata") or {}
+    same_kind = held.get("type") == metadata["type"] and held.get(name_field) in (None, metadata[name_field])
+    merge: Dict[str, Any] = {LINK_FIELD: ref.stable_id}
+    if same_kind and held.get(name_field) is None:
+        merge[name_field] = metadata[name_field]
+    if not same_kind:
+        logger.info("Item %s matched fact %s of another kind; linked only", ref.stable_id, dup_id)
+    return _checked(await knowledge_base.update_fact(dup_id, metadata=merge), f"linking duplicate {dup_id}")
 
 
 async def _durable_batches() -> AsyncIterator[List[Dict[str, Any]]]:

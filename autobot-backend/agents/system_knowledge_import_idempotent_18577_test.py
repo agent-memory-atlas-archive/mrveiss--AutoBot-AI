@@ -30,6 +30,7 @@ class _FakeKB:
         self.stored = 0
         self.updated = 0
         self.fail = False  # every write reports an error
+        self.dup_type = None  # type of the fact a duplicate answer points at (default: the item's own)
         self.duplicate = False  # store_fact answers "duplicate" of a pre-existing fact (semantic match)
 
     @property
@@ -37,7 +38,7 @@ class _FakeKB:
         return self.stored + self.updated
 
     def get_fact(self, fact_id):
-        return {"id": fact_id} if fact_id in self.facts else None
+        return {"id": fact_id, "metadata": self.meta.get(fact_id, {})} if fact_id in self.facts else None
 
     async def store_fact(self, content, metadata=None, fact_id=None):
         if self.fail:
@@ -45,7 +46,7 @@ class _FakeKB:
         if self.duplicate:
             dup_id = f"dup-{len(self.facts)}"
             self.facts[dup_id] = content + " (near copy)"
-            self.meta[dup_id] = {"source": "web_research"}
+            self.meta[dup_id] = {"source": "web_research", "type": self.dup_type or metadata["type"]}
             return {"status": "duplicate", "fact_id": dup_id, "message": "Near-duplicate fact already exists"}
         self.stored += 1
         # Mirrors the real store: no stable id means a fresh random one every call.
@@ -271,3 +272,16 @@ async def test_the_second_run_over_an_adopted_legacy_fact_makes_zero_writes(tmp_
     writes = node.writes
     assert await _import(node, tmp_path) == 0
     assert node.writes == writes
+
+
+@pytest.mark.asyncio
+async def test_a_duplicate_of_another_kind_keeps_its_type_and_name_and_gains_only_the_link(tmp_path) -> None:
+    kb = _FakeKB()
+    kb.duplicate = True
+    kb.dup_type = "user_note"
+    with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
+        await _manager(kb, tmp_path)._import_system_knowledge()
+    dups = {f: m for f, m in kb.meta.items() if f.startswith("dup-")}
+    assert dups and all(m["type"] == "user_note" for m in dups.values()), "a foreign fact was re-typed"
+    assert all(m["system_fact_id"] for m in dups.values())
+    assert not any(k.endswith("_name") or k == "title" for m in dups.values() for k in m), "a name was written"
