@@ -16,6 +16,7 @@ This script ensures ZERO knowledge retrieval inconsistencies by:
 Usage: python scripts/verify_knowledge_consistency.py --enforce-locks
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -54,14 +55,34 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def _canonical_kb():
-    """The canonical initialized KB for this one-shot process (#18122)."""
-    import asyncio
+# One event loop and one KB for the whole one-shot process (#18122). The KB's async clients
+# bind to the loop that created them, so every coroutine -- KB creation and chunker embedding
+# alike -- must run on this same loop; a per-call asyncio.run() would leave them on a dead one.
+_STATE: Dict[str, Any] = {"loop": None, "kb": None}
 
-    kb = asyncio.run(get_knowledge_base_async())
-    if kb is None:
-        raise RuntimeError("Knowledge base unavailable: initialization failed or retry cooldown active")
-    return kb
+
+def _run_async(coro):
+    """Run a coroutine on the process-wide loop, creating it on first use."""
+    if _STATE["loop"] is None:
+        _STATE["loop"] = asyncio.new_event_loop()
+    return _STATE["loop"].run_until_complete(coro)
+
+
+def _close_loop() -> None:
+    """Close the process-wide loop and drop the KB bound to it."""
+    loop, _STATE["loop"], _STATE["kb"] = _STATE["loop"], None, None
+    if loop is not None:
+        loop.close()
+
+
+def _canonical_kb():
+    """The canonical initialized KB for this one-shot process (#18122), built once."""
+    if _STATE["kb"] is None:
+        kb = _run_async(get_knowledge_base_async())
+        if kb is None:
+            raise RuntimeError("Knowledge base unavailable: initialization failed or retry cooldown active")
+        _STATE["kb"] = kb
+    return _STATE["kb"]
 
 
 # Issue #338: Helper functions extracted to reduce nesting depth
@@ -163,12 +184,10 @@ class KnowledgeConsistencyVerifier:
     def _verify_chunker_vector_shape(self, chunker) -> bool:
         """--deep: the chunker's vector width must equal the KB's. False on a critical mismatch."""
         try:
-            import asyncio
-
             test_text = "test chunker-kb model consistency"
             kb_obj = _canonical_kb()
             kb_vec = kb_obj.embed_model.get_text_embedding(test_text)
-            chunker_vecs = asyncio.run(chunker.embed_sentences([test_text]))
+            chunker_vecs = _run_async(chunker.embed_sentences([test_text]))
             if chunker_vecs is None or len(chunker_vecs[0]) != len(kb_vec):
                 chunker_dim = len(chunker_vecs[0]) if chunker_vecs else "None"
                 self.critical_errors.append(
@@ -425,8 +444,11 @@ def main():
     )
     args = parser.parse_args()
 
-    verifier = KnowledgeConsistencyVerifier()
-    success = verifier.run_full_verification(enforce_locks=args.enforce_locks, deep=args.deep)
+    try:
+        verifier = KnowledgeConsistencyVerifier()
+        success = verifier.run_full_verification(enforce_locks=args.enforce_locks, deep=args.deep)
+    finally:
+        _close_loop()
 
     if not success:
         sys.exit(1)

@@ -8,6 +8,7 @@ It used to build ``KnowledgeBase(config_manager=config)`` and never await
 ``initialize()``, handing MCP callers an instance with ``initialized is False``.
 """
 
+import asyncio
 import importlib.util
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -44,3 +45,25 @@ async def test_a_none_accessor_raises_instead_of_a_private_fallback():
         with pytest.raises(RuntimeError, match="Knowledge base unavailable"):
             await client._ensure_initialized()
     assert client._kb is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_calls_both_get_the_same_kb():
+    """The client has no lock, so concurrent first calls may each await the accessor.
+
+    What is guaranteed is that both callers receive the one canonical KB (the factory owns
+    the singleton and its own lock); the accessor is awaited at most once per caller.
+    """
+    kb = MagicMock(initialized=True)
+
+    async def _accessor():
+        await asyncio.sleep(0)  # yield so the second caller enters before the first stores
+        return kb
+
+    accessor = AsyncMock(side_effect=_accessor)
+    with patch("knowledge_factory.get_knowledge_base_async", accessor):
+        client = _client()
+        first, second = await asyncio.gather(client._ensure_initialized(), client._ensure_initialized())
+    assert first is kb and second is kb
+    assert client._kb is kb
+    assert 1 <= accessor.await_count <= 2

@@ -11,10 +11,11 @@ copies fixed alongside it, this one failed *silently*: a consistency verifier
 that always reports consistent.
 """
 
+import asyncio
 import importlib.util
 import pathlib
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -95,3 +96,31 @@ def test_matching_dimension_passes(mod):
     client.execute_command.return_value = _DECODED_FT_INFO
 
     assert mod._verify_redis_vector_dimension(client, expected_dimension=768) == (True, None)
+
+
+def test_kb_and_chunker_calls_share_one_loop_and_one_kb(mod):
+    """Two KB-using operations in one run share one loop and one KB (#18122)."""
+    kb = MagicMock()
+    loops = []
+
+    async def _accessor():
+        loops.append(asyncio.get_running_loop())
+        return kb
+
+    async def _embed():
+        loops.append(asyncio.get_running_loop())
+
+    accessor = AsyncMock(side_effect=_accessor)
+    mod._close_loop()
+    try:
+        with (
+            patch.object(mod, "get_knowledge_base_async", accessor),
+            patch.object(asyncio, "run", side_effect=AssertionError("asyncio.run must not be used")),
+        ):
+            assert mod._canonical_kb() is kb
+            mod._run_async(_embed())
+            assert mod._canonical_kb() is kb
+        accessor.assert_awaited_once()
+        assert len(loops) == 2 and loops[0] is loops[1]
+    finally:
+        mod._close_loop()
