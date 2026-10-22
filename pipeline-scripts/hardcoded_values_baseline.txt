@@ -47,7 +47,7 @@
 # exploitable, not merely untidy: a crafted filename containing `|` lets a
 # reader resolve the FILE field to an unrelated, untouched decoy. The
 # no-growth guard refuses an ambiguous key outright rather than guessing.
-# All 1408 entries below carry exactly three.
+# All 1407 entries below carry exactly three.
 1|other|autobot-backend/a2a/__init__.py|https://a2a-protocol.org/latest/
 1|other|autobot-backend/a2a/agent_card.py|https://backend-host:8443
 1|other|autobot-backend/a2a/agent_card.py|https://github.com/mrveiss/AutoBot-AI
@@ -854,7 +854,6 @@
 1|ssot|autobot-infrastructure/shared/scripts/utilities/prevent-local-frontend.sh|:5173
 1|other|autobot-infrastructure/shared/scripts/utilities/run_unit_tests.py|60
 1|ssot|autobot-infrastructure/shared/scripts/utilities/settings_diagnostic_utility.py|qwen3.5:9b
-9|other|autobot-infrastructure/shared/scripts/utilities/sync-all-vms.sh|/home/autobot
 4|other|autobot-infrastructure/shared/scripts/utilities/sync-frontend.sh|/home/autobot
 2|ssot|autobot-infrastructure/shared/scripts/utilities/sync-npu-worker-to-windows.sh|:8082
 1|other|autobot-infrastructure/shared/scripts/utilities/sync-to-slm.sh|"/opt/autobot
