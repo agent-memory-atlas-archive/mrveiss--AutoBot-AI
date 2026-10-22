@@ -70,7 +70,8 @@ def get_autobot_db_config() -> DatabaseConfig:
 
 def _build_url(host: str, port: str, database: str, user: str, password: str) -> str:
     """Build async PostgreSQL connection URL from components."""
-    return f"postgresql+asyncpg://{user}:{password}" f"@{host}:{port}/{database}"
+    credentials = f"{user}:{password}" if password else user
+    return f"postgresql+asyncpg://{credentials}@{host}:{port}/{database}"
 
 
 @dataclass

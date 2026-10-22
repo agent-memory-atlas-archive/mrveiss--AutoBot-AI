@@ -128,6 +128,7 @@ commit's pre-image), not carried over from the issue table unchecked; see
 from __future__ import annotations
 
 import ast
+import logging
 import pathlib
 import sys
 from pathlib import Path
@@ -176,6 +177,10 @@ FIELD_DEFAULT_FLOOR = 300
 #: An empty offender list from a sweep that matched zero pairs asserts
 #: nothing.
 GETENV_CALL_FLOOR = 8
+
+#: Floor for the literal-fallback env reads the #18094 fork sweep collects (259 when it landed). A
+#: sweep that collected a handful has lost its roots and would report "none found" over nothing.
+FORK_READ_FLOOR = 200
 
 #: SSOT settings modules split out of ``ssot_config.py`` for its size ceiling; their
 #: ``Field`` aliases are SSOT config exactly like ``ssot_config.py``'s (#17312: ``TLSConfig``
@@ -376,7 +381,23 @@ def _collect(argv: list[str], repo_root: Path) -> tuple[int, list[str]]:
         if not (repo_root / "autobot_shared" / name).is_file():
             raise VacuousScan(f"autobot_shared/{name} is not in {repo_root} -- there are no defaults to compare")
     offenders, calls_examined = find_drift(repo_root)
-    return calls_examined, [f"[{HOOK_ID}] {offender}" for offender in offenders]
+    findings = [f"[{HOOK_ID}] {offender}" for offender in offenders]
+    return calls_examined, findings + _fork_findings(repo_root)
+
+
+def _fork_findings(repo_root: Path) -> list[str]:
+    """#18094: env vars read with differing fallbacks, and module constants shadowing the SSOT.
+
+    Imported here, not at the top: ``_env_fork_scan`` reuses this module's extractors.
+    """
+    from _env_fork_scan import SCAN_ROOTS, ScanResult, registry_defaults, scan
+
+    files, _ = scan_python_files([], repo_root)
+    result: ScanResult = scan(repo_root, sorted(files), registry_defaults())
+    if result.env_reads < FORK_READ_FLOOR:
+        raise VacuousScan(f"{HOOK_ID}: env-fork sweep read only {result.env_reads} fallbacks over {SCAN_ROOTS}")
+    logging.getLogger(HOOK_ID).info("[%s] %s", HOOK_ID, result.summary())
+    return [f"[{HOOK_ID}] {line}" for line in result.findings()]
 
 
 def main(argv: list[str] | None = None) -> int:
