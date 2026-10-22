@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { defineComponent, h, nextTick, ref } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { BaseDrawer } from '@autobot/ui'
 import en from '@/i18n/locales/en.json'
 
