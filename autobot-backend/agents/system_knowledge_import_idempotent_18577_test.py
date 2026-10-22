@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from agents.kb_librarian.librarian import KBLibrarian
-from agents.kb_librarian.stable_ids import system_fact_id
+from agents.kb_librarian.stable_ids import SystemFactIds, system_fact_id
 from agents.system_knowledge_manager import SystemKnowledgeManager
 from autobot_shared.paths import project_root
 from autobot_shared.system_knowledge_paths import system_knowledge_templates_dir
@@ -25,6 +25,7 @@ from autobot_shared.system_knowledge_paths import system_knowledge_templates_dir
 class _FakeKB:
     def __init__(self) -> None:
         self.facts: dict[str, str] = {}
+        self.meta: dict[str, dict] = {}
         self.stored = 0
         self.updated = 0
 
@@ -34,13 +35,27 @@ class _FakeKB:
     async def store_fact(self, content, metadata=None, fact_id=None):
         self.stored += 1
         # Mirrors the real store: no stable id means a fresh random one every call.
-        self.facts[fact_id or f"random-{self.stored}"] = content
+        fid = fact_id or f"random-{self.stored}"
+        self.facts[fid] = content
+        self.meta[fid] = dict(metadata or {})
         return {"status": "success"}
 
     async def update_fact(self, fact_id, content=None, metadata=None):
         self.updated += 1
         self.facts[fact_id] = content
+        self.meta[fact_id] = dict(metadata or {})
         return {"status": "success"}
+
+
+def _batches_of(kb: _FakeKB):
+    """The durable-store view of the fake KB: what ``fact_store.iter_facts`` would yield."""
+
+    async def _gen():
+        yield [
+            {"fact_id": fid, "content": c, "metadata": kb.meta[fid]} for fid, c in kb.facts.items() if fid in kb.meta
+        ]
+
+    return _gen
 
 
 def _manager(kb: _FakeKB, tmp_path) -> SystemKnowledgeManager:
@@ -49,6 +64,7 @@ def _manager(kb: _FakeKB, tmp_path) -> SystemKnowledgeManager:
     manager.librarian = KBLibrarian.__new__(KBLibrarian)
     manager.librarian.knowledge_base = kb
     manager.system_knowledge_dir = system_knowledge_templates_dir()
+    manager.fact_ids = SystemFactIds(_batches_of(kb))
     manager.runtime_knowledge_dir = tmp_path / "runtime"
     manager.backup_dir = tmp_path / "backup"
     return manager
@@ -81,3 +97,34 @@ def test_every_template_loads_as_a_mapping() -> None:
 def test_system_fact_id_is_stable_and_kind_scoped() -> None:
     assert system_fact_id("tool", "nmap") == system_fact_id("tool", "nmap")
     assert system_fact_id("tool", "nmap") != system_fact_id("workflow", "nmap")
+
+
+async def _import(kb: _FakeKB, tmp_path) -> None:
+    with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
+        await _manager(kb, tmp_path)._import_system_knowledge()
+
+
+@pytest.mark.asyncio
+async def test_an_existing_node_with_random_id_facts_gets_no_duplicate(tmp_path) -> None:
+    """A fact stored before stable ids (random id, no unique_key) is adopted in place, id kept."""
+    clean = _FakeKB()
+    await _import(clean, tmp_path)
+    metas = list(clean.meta.values())
+    tool = next(m["tool_name"] for m in metas if m["type"] == "tool_documentation")
+    workflow = next(m["workflow_name"] for m in metas if m["type"] == "workflow_documentation")
+
+    node = _FakeKB()  # an existing node: the item is already held under a random id
+    node.facts = {"legacy-tool": "old", "legacy-wf": "old"}
+    node.meta = {
+        "legacy-tool": {"type": "tool_documentation", "tool_name": tool},
+        "legacy-wf": {"type": "workflow_documentation", "workflow_name": workflow},
+    }
+    await _import(node, tmp_path)
+
+    holders = lambda key, name: [f for f, m in node.meta.items() if m.get(key) == name]  # noqa: E731
+    assert holders("tool_name", tool) == ["legacy-tool"], "the tool was stored a second time"
+    assert holders("workflow_name", workflow) == ["legacy-wf"], "the workflow was stored a second time"
+    assert node.facts["legacy-tool"] != "old", "the legacy fact was not updated in place"
+    assert len(node.facts) == len(clean.facts), "an existing-node import changed the fact count"
+    await _import(node, tmp_path)  # and it stays one on the next run
+    assert len(node.facts) == len(clean.facts)

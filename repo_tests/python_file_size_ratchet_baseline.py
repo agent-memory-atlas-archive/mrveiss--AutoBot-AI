@@ -47,7 +47,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/agents/rag_agent.py": 602,
     "autobot-backend/agents/security_scanner_agent.py": 663,
     "autobot-backend/agents/system_command_agent.py": 903,
-    "autobot-backend/agents/system_knowledge_manager.py": 843,
+    "autobot-backend/agents/system_knowledge_manager.py": 628,
     "autobot-backend/agents/web_researcher.py": 1435,
     "autobot-backend/ai_hardware_accelerator.py": 1040,
     "autobot-backend/api/advanced_control.py": 615,
