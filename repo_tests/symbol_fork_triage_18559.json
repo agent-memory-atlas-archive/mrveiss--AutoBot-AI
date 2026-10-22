@@ -349,10 +349,6 @@
       "verdict": "homonym",
       "why": "performance profiling vs endpoint definition test"
     },
-    "tracked_python_files": {
-      "verdict": "real",
-      "issue": 18954
-    },
     "violations": {
       "verdict": "homonym",
       "why": "three unrelated lint rules"

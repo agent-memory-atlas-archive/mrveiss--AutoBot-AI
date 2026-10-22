@@ -95,7 +95,6 @@
     "scan_file",
     "setup_logging",
     "test_api_endpoints",
-    "tracked_python_files",
     "violations"
   ]
 }
