@@ -43,6 +43,11 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         "Workflow files are a subset of tracked YAML; compose, ansible and filter files grow at "
         "their own rate, so a share of all YAML would sink with nothing wrong.",
     ),
+    "env-fallback-read-sites-18094": (
+        ABSOLUTE,
+        "NOT_PATHS",
+        "Call sites, not paths: one id per literal-fallback env read in the sweep roots, a subset of tracked Python.",
+    ),
     "deployment-mode-detector-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
