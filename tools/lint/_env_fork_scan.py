@@ -55,7 +55,7 @@ SCAN_ROOTS = (
 )
 
 #: Floor for the literal-fallback env reads the sweep collects (249 live; window [209, 249], pin 229): the ONE
-#: floor, read by the drift hook and
+#: floor, enforced by ``check_env_forks`` (the sweep's own entrypoint) and
 #: passed to the reach declaration in ``repo_tests/env_fork_guard_18094_test.py`` (whose ``verify_floor``
 #: proves it against the live population). A sweep that collected a handful has lost its roots and would
 #: report "none found" over nothing.

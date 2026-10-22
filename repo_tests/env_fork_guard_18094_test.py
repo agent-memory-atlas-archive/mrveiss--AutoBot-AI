@@ -38,8 +38,8 @@ def _read_sites(root: Path) -> list[str]:
         return []
 
 
-#: ONE population (``scan_mod.sweep`` over tracked Python) and ONE floor (``scan_mod.FORK_READ_FLOOR``, which the
-#: drift hook also enforces); ``verify_floor`` proves that number against the live population, so the hook cannot
+#: ONE population (``scan_mod.sweep`` over tracked Python) and ONE floor (``scan_mod.FORK_READ_FLOOR``, which
+#: ``check_env_forks`` enforces); ``verify_floor`` proves that number against the live population, so the hook cannot
 #: drift to a second one.
 READS = declare(
     "env-fallback-read-sites-18094",
