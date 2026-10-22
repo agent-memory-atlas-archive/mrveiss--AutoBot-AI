@@ -71,7 +71,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/analytics_quality.py": 1729,
     "autobot-backend/api/analytics_root_cause_test.py": 628,
     "autobot-backend/api/api_endpoint_migrations_test.py": 31020,
-    "autobot-backend/api/auth.py": 698,
+    "autobot-backend/api/auth.py": 684,
     "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
     "autobot-backend/api/cache_management.py": 779,
@@ -143,7 +143,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/vnc_mcp.py": 760,
     "autobot-backend/api/websockets.py": 1120,  # #16457: accepts routed through websocket_subprotocol.accept_websocket
     "autobot-backend/api/workflow.py": 1027,
-    "autobot-backend/auth_middleware.py": 1075,  # #16457: bearer parsing moved to websocket_subprotocol.py
+    "autobot-backend/auth_middleware.py": 1056,  # #16457: bearer parsing moved to websocket_subprotocol.py; #19061
     "autobot-backend/autobot_memory_graph/property_graph.py": 629,
     "autobot-backend/autobot_memory_graph/semantic_search.py": 706,
     "autobot-backend/benchmarks/benchmark_belief_state.py": 725,
@@ -401,7 +401,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/tools/tool_registry.py": 959,
     "autobot-backend/utils/advanced_cache_manager.py": 1213,
     "autobot-backend/utils/claude_api_integration.py": 917,
-    "autobot-backend/utils/distributed_service_discovery.py": 684,
     "autobot-backend/utils/error_catalog.py": 775,
     "autobot-backend/utils/file_categorization.py": 724,
     "autobot-backend/utils/gpu_vector_search.py": 1231,
@@ -411,7 +410,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/utils/operation_timeout_integration.py": 730,
     "autobot-backend/utils/performance_monitoring/monitor.py": 714,
     "autobot-backend/utils/request_batcher.py": 752,
-    "autobot-backend/utils/service_discovery.py": 677,
     "autobot-backend/utils/system_validator.py": 1347,
     "autobot-backend/utils/task_queue.py": 890,
     "autobot-backend/utils/timeout_migration_examples.py": 1024,
@@ -453,14 +451,14 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/services/drift_checker.py": 839,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,
-    "autobot-slm-backend/services/playbook_executor.py": 1401,  # #17150: ansible_dir self-heal, re-detect before sync
+    "autobot-slm-backend/services/playbook_executor.py": 1399,  # #17150: ansible_dir self-heal, re-detect before sync
     "autobot-slm-backend/services/reconciler.py": 2216,
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
     "autobot-slm-backend/services/replication.py": 826,
     "autobot-slm-backend/services/role_registry.py": 713,
-    "autobot-slm-backend/services/service_orchestrator.py": 915,
+    "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
     "autobot-slm-backend/tests/api/test_drift_resolve.py": 606,
