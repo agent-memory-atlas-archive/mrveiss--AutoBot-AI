@@ -45406,7 +45406,7 @@ export interface paths {
          * Start Redis Service
          * @description Start Redis service on Redis VM
          *
-         *     Requires: Admin or operator role
+         *     Requires: Admin or operator role; the internal service key is refused (403, #18688)
          */
         post: operations["start_redis_service_api_redis_service_start_post"];
         delete?: never;
@@ -45452,7 +45452,7 @@ export interface paths {
          * Restart Redis Service
          * @description Restart Redis service on Redis VM
          *
-         *     Requires: Admin or operator role
+         *     Requires: Admin or operator role; the internal service key is refused (403, #18688)
          */
         post: operations["restart_redis_service_api_redis_service_restart_post"];
         delete?: never;
