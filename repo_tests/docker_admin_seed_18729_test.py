@@ -63,7 +63,8 @@ def test_generate_secrets_writes_an_admin_password_the_user_policy_accepts() -> 
 
 def test_the_admin_password_reaches_the_backend_container() -> None:
     env = _backend_env()
-    assert re.fullmatch(r"\$\{AUTOBOT_ADMIN_PASSWORD(:-)?\}", env.get("AUTOBOT_ADMIN_PASSWORD", "")), env.get(
+    # #17793: required, not empty-when-unset -- compose refuses to start without it.
+    assert re.fullmatch(r"\$\{AUTOBOT_ADMIN_PASSWORD:\?[^}]+\}", env.get("AUTOBOT_ADMIN_PASSWORD", "")), env.get(
         "AUTOBOT_ADMIN_PASSWORD"
     )
 

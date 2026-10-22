@@ -7,11 +7,11 @@
 # Generate per-deployment secrets and the management network range (#16833) for
 # the docker-compose stack (GH#9775, #16275).
 #
-# PASSWORDS (#16275): this also writes AUTOBOT_DB_PASSWORD and
-# GRAFANA_ADMIN_PASSWORD. The tracked docker/.env.docker and .env.docker, and
-# the compose fallbacks, still default both to the application's own name,
-# which anyone can guess. Pass docker/.env.secrets AFTER docker/.env.docker, as
-# shown below, so the generated values win.
+# PASSWORDS (#16275, #17793): this writes every credential compose requires --
+# AUTOBOT_DB_PASSWORD, GRAFANA_ADMIN_PASSWORD, AUTOBOT_ADMIN_PASSWORD and
+# SLM_ADMIN_PASSWORD. Compose has no fallback for any of them and refuses to
+# start, naming the variable, when one is missing. Pass docker/.env.secrets AFTER
+# docker/.env.docker, as shown below, so the generated values win.
 #
 # EXISTING deployment? Do not hand it a newly generated AUTOBOT_DB_PASSWORD.
 # Postgres keeps the password its volume was created with and ignores a new one,
@@ -87,6 +87,8 @@ ensure_secret GRAFANA_ADMIN_PASSWORD
 # #18729: the main app seeds its first admin from this on first start; without it a
 # fresh Docker install has no account to log in with. Read it back from this file.
 ensure_secret AUTOBOT_ADMIN_PASSWORD password
+# #17793: the SLM's first admin; compose no longer falls back to 'admin' and refuses to start without it.
+ensure_secret SLM_ADMIN_PASSWORD password
 
 # #16833: the compose management network has no default range -- a fixed one took
 # over the host's route on a LAN using the same /24. Pick a free private /24 once
