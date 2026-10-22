@@ -31,6 +31,8 @@ def _load(name: str, relative: str):
 
 ib = _load("inventory_builder_19197_under_test", "services/inventory_builder.py")
 
+from autobot_shared.role_group_ownership import warn_stale_detected_roles  # noqa: E402
+
 
 def _node(declared, detected, node_id="n1"):
     return SimpleNamespace(node_id=node_id, roles=list(declared), detected_roles=list(detected))
@@ -67,7 +69,7 @@ def test_declared_postgres_keeps_database():
 def test_stale_detected_roles_are_surfaced_not_removed(caplog):
     node = _node(["vnc", "slm-agent"], ["postgres", "slm-database", "slm-agent"], node_id="vnc-node")
     with caplog.at_level("WARNING"):
-        stale = ib.warn_stale_detected_roles(node)
+        stale = warn_stale_detected_roles(node)
     assert stale == ["postgres", "slm-database"]
     assert node.detected_roles == ["postgres", "slm-database", "slm-agent"]
     assert "vnc-node" in caplog.text and "slm-database" in caplog.text
