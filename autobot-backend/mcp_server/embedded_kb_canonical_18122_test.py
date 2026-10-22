@@ -66,4 +66,4 @@ async def test_concurrent_first_calls_both_get_the_same_kb():
         first, second = await asyncio.gather(client._ensure_initialized(), client._ensure_initialized())
     assert first is kb and second is kb
     assert client._kb is kb
-    assert 1 <= accessor.await_count <= 2
+    accessor.assert_awaited_once()  # the client's init lock serialises the first lookup
