@@ -467,7 +467,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
     "autobot-slm-backend/services/replication.py": 826,
     "autobot-slm-backend/services/role_registry.py": 713,
-    "autobot-slm-backend/services/service_orchestrator.py": 914,
+    "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
     "autobot-slm-backend/tests/api/test_drift_resolve.py": 606,

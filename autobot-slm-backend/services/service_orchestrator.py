@@ -29,6 +29,7 @@ from models.database import Node, Service, SystemdState
 from services.orchestrator_ssh import report_ssh, spawn_ssh, ssh_base_cmd, systemctl_sudo_call, systemctl_user_cmd
 from services.service_upsert import upsert_service
 from services.ssh_utils import ssh_destination_args, ssh_options
+from services.unit_names import loggable_unit_name
 
 logger = logging.getLogger(__name__)
 
@@ -791,16 +792,14 @@ class ServiceOrchestrator:
 
         def _create(category: str) -> Service:
             return Service(
-                node_id=node_id,
-                service_name=service_name,
-                status=status,
-                last_checked=now,
-                category=category,
+                node_id=node_id, service_name=service_name, status=status, last_checked=now, category=category
             )
 
         outcome = await upsert_service(db, node_id, service_name, update=_update, create=_create)
         if outcome is None:
-            logger.warning("service record not written on node=%s: unit name refused (see unit_names)", node_id)
+            logger.warning(
+                "record not written, unit name refused: node=%s name=%s", node_id, loggable_unit_name(service_name)
+            )
         await db.commit()
 
     async def _run_ssh_command(self, host: str, command: str, requires_sudo: bool = False) -> Tuple[bool, str]:

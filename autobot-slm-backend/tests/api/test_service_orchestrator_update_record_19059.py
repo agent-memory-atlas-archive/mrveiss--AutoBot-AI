@@ -77,11 +77,11 @@ async def test_existing_row_is_updated_not_added():
 @pytest.mark.asyncio
 async def test_refused_name_warns_naming_service_and_node(caplog):
     db = _db()
-    bad = "bad name; rm -rf /"
+    bad = "evil\nFORGED level=CRITICAL"
     with caplog.at_level(logging.WARNING, logger=_LOGGER):
         await _orchestrator()._update_service_record(db, _NODE, bad, "running")
     msgs = [r.getMessage() for r in caplog.records if r.name == _LOGGER]
-    assert any(_NODE in m for m in msgs), "the refusal must be visible on the orchestrator's own logger"
-    # The guard logs the name repr-capped; repeating the raw value here would undo that (#19059 review).
-    assert not any(bad in m for m in msgs)
+    # #19123 review: the refused service is named with the node, in one line, escaped and bounded.
+    assert any(_NODE in m and "evil\\nFORGED" in m for m in msgs), msgs
+    assert not any("\n" in m for m in msgs), "a raw newline would let node input forge a log line"
     db.add.assert_not_called()
