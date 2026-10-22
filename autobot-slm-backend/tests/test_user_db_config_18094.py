@@ -13,11 +13,23 @@ source, not imported), and that ``repr`` never shows the password.
 """
 
 import ast
+import importlib.util  # noqa: E402
 from pathlib import Path
 
 import pytest
 
-from user_management.config import DatabaseConfig, get_autobot_db_config, get_slm_db_config
+# tests/ stubs the `user_management` package, so load the real module by file (the pattern
+# other SLM tests use for stubbed packages).
+_SPEC = importlib.util.spec_from_file_location(
+    "user_management_config_under_test_18094", Path(__file__).resolve().parents[1] / "user_management" / "config.py"
+)
+_mod = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_mod)
+DatabaseConfig, get_autobot_db_config, get_slm_db_config = (
+    _mod.DatabaseConfig,
+    _mod.get_autobot_db_config,
+    _mod.get_slm_db_config,
+)
 
 _CONFIG_PY = Path(__file__).resolve().parent.parent / "config.py"
 
