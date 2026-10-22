@@ -781,16 +781,18 @@ service_verification() {
         sleep 5
     done
 
-    if [[ ${attempt} -ge ${max_attempts} ]]; then
-        warn "SLM backend did not respond within 7 minutes"
-        warn "Check: journalctl -u autobot-slm-backend -n 50"
-    fi
+    # #19234: a failed required step stops the install -- no marker, so a plain rerun retries it.
+    [[ ${attempt} -lt ${max_attempts} ]] || fatal "Step 'SLM backend health' failed: no answer within 7 minutes. Check: journalctl -u autobot-slm-backend -n 50, then rerun this installer."
+    wait_for_https || fatal "Step 'HTTPS endpoint' failed: https://127.0.0.1/api/health did not answer within 60s. Check: nginx -t; journalctl -u nginx -n 50, then rerun this installer."
+    success "HTTPS endpoint accessible"
+}
 
-    if curl -sfk --max-time 3 https://127.0.0.1/api/health > /dev/null 2>&1; then
-        success "HTTPS endpoint accessible"
-    else
-        warn "HTTPS endpoint not responding (nginx may need time)"
-    fi
+wait_for_https() {  # 0 once https://127.0.0.1/api/health answers, 1 after 60s (#2830, #19234)
+    local waited=0
+    until curl -sk --max-time 3 https://127.0.0.1/api/health >/dev/null 2>&1; do
+        [[ ${waited} -ge 60 ]] && return 1
+        sleep 2; waited=$((waited + 2))
+    done
 }
 
 # =============================================================================
@@ -802,22 +804,9 @@ register_local_node() {
 
     local api_url="https://127.0.0.1"
 
-    # Wait for HTTPS to be ready before registering (#2830)
-    # After Ansible deployment, nginx may still be loading TLS certificates
-    # or the reverse-proxy upstream may not be connected yet.
+    # nginx may still be loading TLS certificates after the Ansible deploy (#2830).
     info "Waiting for HTTPS endpoint to be ready..."
-    local max_wait=60
-    local waited=0
-    while ! curl -sk --max-time 3 "${api_url}/api/health" >/dev/null 2>&1; do
-        sleep 2
-        waited=$((waited + 2))
-        if [[ ${waited} -ge ${max_wait} ]]; then
-            warn "HTTPS not ready after ${max_wait}s — skipping node registration"
-            warn "Register manually once services are up: SLM UI > Fleet > Add Node"
-            return
-        fi
-        log "  Waiting for HTTPS (${waited}s / ${max_wait}s)..."
-    done
+    wait_for_https || fatal "Step 'node registration' failed: HTTPS is not answering. Check: journalctl -u nginx -n 50, then rerun this installer."
     success "HTTPS endpoint is ready"
 
     local local_ip
@@ -839,11 +828,7 @@ register_local_node() {
         -d "{\"username\":\"admin\",\"password\":\"${ADMIN_PASSWORD}\"}" \
         2>/dev/null | jq -r '.access_token // empty') || true
 
-    if [[ -z "${token}" ]]; then
-        warn "Could not authenticate with SLM API — skipping node registration"
-        warn "Register manually: SLM UI > Fleet > Add Node"
-        return
-    fi
+    [[ -n "${token}" ]] || fatal "Step 'admin login' failed: the SLM API refused the admin credentials. Check /etc/autobot/slm-secrets.env and journalctl -u autobot-slm-backend -n 50, then rerun this installer."
     success "Authenticated with SLM API"
 
     # Register this node with all single-host roles
@@ -884,8 +869,7 @@ register_local_node() {
     case "${http_code:-000}" in
         201) success "Local node registered (${hostname_val} / ${local_ip})" ;;
         400) success "Local node already registered" ;;
-        *)   warn "Node registration returned HTTP ${http_code:-000} — register manually via SLM UI"
-             return ;;
+        *)   fatal "Step 'node registration' failed: the SLM API returned HTTP ${http_code:-000}. Check journalctl -u autobot-slm-backend -n 50, then rerun this installer." ;;
     esac
 
     # Auto-assign SLM Manager as code source (#2755)
@@ -905,7 +889,7 @@ register_local_node() {
 
     case "${cs_code:-000}" in
         200) success "Code source assigned: ${CODE_SOURCE} (branch: ${GIT_BRANCH})" ;;
-        *)   warn "Code source assignment returned HTTP ${cs_code:-000} — assign manually via SLM UI > Code Sync" ;;
+        *)   warn "Optional step 'code source' returned HTTP ${cs_code:-000} — assign it in SLM UI > Code Sync" ;;
     esac
 }
 
