@@ -112,17 +112,13 @@ from autobot_shared.redis_management.statistics import (
     PoolStatistics,
     RedisStats,
 )
-from autobot_shared.redis_management.types import (
-    DATABASE_MAPPING,
-    ConnectionState,
-    RedisDatabase,
-)
+from autobot_shared.redis_management.types import DATABASE_MAPPING, ConnectionState, RedisDatabase
+from autobot_shared.redis_require import require_redis_client
 
 logger = logging.getLogger(__name__)
 
 # Re-export for backward compatibility
 __all__ = [
-    "require_redis_client",
     # Enums
     "RedisDatabase",
     "ConnectionState",
@@ -142,6 +138,7 @@ __all__ = [
     # Convenience functions
     "get_redis_client",
     "get_async_redis_client",
+    "require_redis_client",
     "get_knowledge_base_redis",
     "get_prompts_redis",
     "get_agents_redis",
@@ -236,25 +233,29 @@ def get_redis_client(
             >>> redis = get_redis_client(database="main")
             >>> redis.set("key", "value")
 
-        Async: ``await get_redis_client(async_client=True)`` (or ``get_async_redis_client``); the async
-        client is a coroutine, so initialise it in ``initialize()``, never at class definition time.
+        Async usage - Direct call in async functions:
+            >>> async def store_data():
+            ...     redis = await get_redis_client(async_client=True, database="main")
+            ...     await redis.set("key", "value")
+
+        AsyncInitializable pattern for service classes:
+            >>> from autobot_shared.async_initializable import AsyncInitializable
+            >>> class MyService(AsyncInitializable):
+            ...     async def initialize(self):
+            ...         self.redis = await get_redis_client(async_client=True)
+            ...     async def cleanup(self):
+            ...         if self.redis:
+            ...             await self.redis.close()
+
+    NOTE on Async Initialization:
+        The async client is returned as a coroutine that must be awaited. Always use
+        `await get_redis_client(async_client=True)` in async contexts. For services
+        using AsyncInitializable, initialize the client in the initialize() method,
+        not at class definition time.
     """
     if async_client:
         return _get_connection_manager().get_async_client(database, decode_responses)
     return _get_connection_manager().get_sync_client(database, decode_responses)
-
-
-def require_redis_client(database: str = "main", **kwargs) -> redis.Redis:
-    """Return a sync client for *database*, or raise ``ConnectionError`` if there is none.
-
-    For callers that cannot run without Redis (scripts, health checks): ``get_redis_client``
-    returns ``None`` when Redis is disabled or the circuit is open, which would otherwise surface
-    as an ``AttributeError`` at the first command. ``kwargs`` pass through (e.g. ``decode_responses``).
-    """
-    client = get_redis_client(database=database, **kwargs)
-    if client is None:
-        raise ConnectionError(f"Redis '{database}' unavailable (disabled, unreachable or circuit open)")
-    return client
 
 
 # =============================================================================

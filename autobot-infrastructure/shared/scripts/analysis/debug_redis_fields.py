@@ -8,8 +8,12 @@ Debug Redis vector store fields to understand the data structure
 """
 
 import logging
+import sys
 
-from autobot_shared.redis_client import require_redis_client
+from autobot_shared.paths import project_root
+
+sys.path.insert(0, str(project_root()))
+from autobot_shared.redis_client import require_redis_client  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
