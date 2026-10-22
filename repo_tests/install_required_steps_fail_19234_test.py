@@ -62,7 +62,7 @@ def _run(tmp_path: Path, **answers: str) -> tuple[subprocess.CompletedProcess, P
             "set -euo pipefail",
             'RED="" GREEN="" YELLOW="" BLUE="" CYAN="" NC=""',
             f'LOG_FILE="{tmp_path}/install.log" INSTALL_MARKER="{marker}" IP_CACHE_FILE="{tmp_path}/ip-cache"',
-            "SCRIPT_VERSION=t GIT_BRANCH=main AUTOBOT_USER=autobot ADMIN_PASSWORD=x SECRETS_FILE=s CODE_SOURCE=c",
+            "SCRIPT_VERSION=t GIT_BRANCH=main AUTOBOT_USER=autobot ADMIN_PASSWORD=x ADMIN_PASSWORD_GENERATED=false SECRETS_FILE=s CODE_SOURCE=c",
             "SLM_NODE_ID=00-SLM-Manager SLM_BACKEND_PORT=8000",
             helpers,
             'phase() { echo "== $*"; }',

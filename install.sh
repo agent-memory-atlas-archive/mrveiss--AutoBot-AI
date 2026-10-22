@@ -76,6 +76,7 @@ UNINSTALL=false
 VALIDATE=false
 CONFIRM_YES=false
 ROTATE_SECRETS=false  # #7075: --rotate-secrets opts in to replacing existing SLM_ADMIN_PASSWORD
+INSTALL_TMP="" ADMIN_PASSWORD_GENERATED=false  # #19236: private temp dir; print the password only if generated
 GIT_BRANCH="${DEFAULT_BRANCH}"
 ADMIN_PASSWORD=""
 OVERRIDE_IP=""  # --ip= override for multi-interface hosts (#2832)
@@ -649,7 +650,7 @@ INVENTORY
     success "  Localhost inventory generated"
 
     if [[ -z "${ADMIN_PASSWORD}" ]]; then
-        ADMIN_PASSWORD=$(generate_admin_password)
+        ADMIN_PASSWORD=$(generate_admin_password); ADMIN_PASSWORD_GENERATED=true
     fi
 
     if [[ ! -f "${SECRETS_FILE}" ]] || [[ "${REINSTALL}" == true ]]; then
@@ -719,8 +720,8 @@ EOF
     echo
 
     cd "${ansible_dir}"
-    local vars_file; vars_file="$(umask 077 && mktemp)"; trap 'rm -f "${vars_file:-}"; trap - RETURN' RETURN  # #19236: never argv
-    PW="${ADMIN_PASSWORD}" jq -n '{slm_admin_password: env.PW}' > "${vars_file}"; set +o pipefail
+    local vars_file="${INSTALL_TMP}/ansible-vars.json"  # #19236: never argv; the EXIT trap removes INSTALL_TMP
+    (umask 077 && PW="${ADMIN_PASSWORD}" jq -n '{slm_admin_password: env.PW}' > "${vars_file}"); set +o pipefail
     ansible-playbook \
         -i "${inventory}" \
         playbooks/deploy-slm-manager.yml \
@@ -794,7 +795,7 @@ service_verification() {
 
 wait_for_https() {  # 0 once https://127.0.0.1/api/health answers, 1 after 60s (#2830, #19234)
     local waited=0
-    until curl -sk --max-time 3 https://127.0.0.1/api/health >/dev/null 2>&1; do
+    until curl -sfk --max-time 3 https://127.0.0.1/api/health >/dev/null 2>&1; do
         [[ ${waited} -ge 60 ]] && return 1
         sleep 2; waited=$((waited + 2))
     done
@@ -934,7 +935,7 @@ EOF
     echo
     echo -e "  ${BLUE}SLM URL:${NC}         https://${server_ip}/slm/"
     echo -e "  ${BLUE}Admin Username:${NC}  admin"
-    echo -e "  ${BLUE}Admin Password:${NC}  ${ADMIN_PASSWORD}"
+    if ${ADMIN_PASSWORD_GENERATED}; then echo -e "  ${BLUE}Admin Password:${NC}  ${ADMIN_PASSWORD}"; else echo -e "  ${BLUE}Admin Password:${NC}  the one you supplied"; fi
     echo
     echo -e "  ${YELLOW}Note:${NC} Using self-signed certificate — browser will show a warning."
     echo
@@ -1025,7 +1026,7 @@ prompt_config() {
     if ${UNATTENDED}; then
         GIT_BRANCH="${GIT_BRANCH:-${DEFAULT_BRANCH}}"
         if [[ -z "${ADMIN_PASSWORD}" ]]; then
-            ADMIN_PASSWORD=$(generate_admin_password)
+            ADMIN_PASSWORD=$(generate_admin_password); ADMIN_PASSWORD_GENERATED=true
         fi
         return
     fi
@@ -1052,7 +1053,7 @@ prompt_config() {
         if [[ -n "${input}" ]]; then
             ADMIN_PASSWORD="${input}"
         else
-            ADMIN_PASSWORD=$(generate_admin_password)
+            ADMIN_PASSWORD=$(generate_admin_password); ADMIN_PASSWORD_GENERATED=true
             info "  Password auto-generated; it is printed at the end of this run."
         fi
     fi
@@ -1087,6 +1088,12 @@ validate_distributions() {
 # Argument Parsing
 # =============================================================================
 
+read_admin_pass_file() {  # owner-only and non-empty, or refuse (#19236)
+    [[ -r "$1" ]] || arg_error "Cannot read $1"
+    [[ "$(stat -c %a "$1")" =~ ^[0-7]00$ ]] || arg_error "$1 is readable by group or others; chmod 600 it first"
+    ADMIN_PASSWORD="$(head -n1 "$1")"; [[ -n "${ADMIN_PASSWORD}" ]] || arg_error "$1 is empty"
+}
+arg_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 2; }  # parse_args runs before _log_init: no log yet
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -1096,12 +1103,12 @@ parse_args() {
             --validate)       VALIDATE=true;           shift ;;
             --yes|-y)         CONFIRM_YES=true;        shift ;;
             --branch=*)       GIT_BRANCH="${1#*=}";    shift ;;
-            --admin-pass-file=*) [[ -r "${1#*=}" ]] || fatal "Cannot read ${1#*=}"; ADMIN_PASSWORD="$(head -n1 "${1#*=}")"; shift ;;
-            --admin-pass=*)   fatal "--admin-pass= puts the password on the command line, readable by every local user (#19236). Use --admin-pass-file=PATH, AUTOBOT_SLM_ADMIN_PASSWORD, or the prompt." ;;
+            --admin-pass-file=*) read_admin_pass_file "${1#*=}"; shift ;;
+            --admin-pass=*)   arg_error "--admin-pass= puts the password on the command line, readable by every local user (#19236). Use --admin-pass-file=PATH, AUTOBOT_SLM_ADMIN_PASSWORD, or the prompt." ;;
             --ip=*)           OVERRIDE_IP="${1#*=}";    shift ;;
             --rotate-secrets) ROTATE_SECRETS=true;     shift ;;
             --help|-h)        print_usage; exit 0 ;;
-            *)                fatal "Unknown option: $1 (use --help for usage)" ;;
+            *)                arg_error "Unknown option: $1 (use --help for usage)" ;;
         esac
     done
 }
@@ -1143,6 +1150,8 @@ main() {
     fi
 
     _log_init
+    # #19236: one owner-only temp dir for the run, removed however it ends -- exit, fatal, Ctrl-C.
+    INSTALL_TMP="$(umask 077 && mktemp -d)"; trap 'rm -rf "${INSTALL_TMP:-}"' EXIT; trap 'exit 130' INT TERM
     print_banner
     log "AutoBot Installer v${SCRIPT_VERSION}"
     log "Log file: ${LOG_FILE}"
