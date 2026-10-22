@@ -58,6 +58,8 @@ _REPLACEMENT = (
 )
 
 _CODE_BLOCK_PATTERN = re.compile(r"```[a-zA-Z]*\n.*?\n```", re.DOTALL)
+# The body our own placeholder carries: a block holding exactly this is already stripped.
+_PLACEHOLDER_BODY = re.compile(r"\[Code example removed for token optimization(?: \([^)\n]*\))?\]")
 _VERBOSE_SECTION_PATTERN = re.compile(r"## Examples\n.*?(?=\n##|\Z)", re.DOTALL)
 _VERBOSE_REPLACEMENT = "## Examples\n[Examples removed for token optimization]\n\n"
 
@@ -98,16 +100,40 @@ def _counts(**values: int) -> dict[str, int]:
     return {**dict.fromkeys(_COUNT_KEYS, 0), **values}
 
 
+def _is_placeholder_block(block: str) -> bool:
+    """True when ``block`` is a placeholder this tool already wrote."""
+    lines = block.split("\n")
+    return len(lines) == 3 and _PLACEHOLDER_BODY.fullmatch(lines[1]) is not None
+
+
 def _replace_code_block(match: re.Match) -> str:
-    """Placeholder for one fenced block, keeping its language hint."""
-    lang = match.group(0).split("\n")[0].replace("```", "").strip()
+    """Placeholder for one fenced block, keeping its language hint.
+
+    A block that already is a placeholder is returned as is, so a second run is a no-op
+    and the language hint the first run recorded is not dropped.
+    """
+    block = match.group(0)
+    if _is_placeholder_block(block):
+        return block
+    lang = block.split("\n")[0].replace("```", "").strip()
     lang_hint = f" ({lang})" if lang else ""
     return f"```\n[Code example removed for token optimization{lang_hint}]\n```"
 
 
 def strip_code_blocks(content: str) -> tuple[str, int]:
-    """Replace fenced code blocks with a placeholder; return (content, blocks_removed)."""
-    return _CODE_BLOCK_PATTERN.subn(_replace_code_block, content)
+    """Replace fenced code blocks with a placeholder; return (content, blocks_removed).
+
+    Idempotent: existing placeholders are neither rewritten nor counted.
+    """
+    removed = 0
+
+    def _replace(match: re.Match) -> str:
+        nonlocal removed
+        if not _is_placeholder_block(match.group(0)):
+            removed += 1
+        return _replace_code_block(match)
+
+    return _CODE_BLOCK_PATTERN.sub(_replace, content), removed
 
 
 def strip_verbose_sections(content: str) -> str:
@@ -263,10 +289,18 @@ def _handle_agent_file(
         )
 
     lines_before, lines_after = report_change(agent_file, original, optimized, apply_changes)
-    errors = _write_change(agent_file, optimized, cache) if apply_changes else 0
+    if apply_changes and _write_change(agent_file, optimized, cache):
+        # Nothing was written: an error, not a modification, and no savings to count.
+        return _counts(
+            errors=1,
+            lines_before=lines,
+            lines_after=lines,
+            bytes_before=len(original),
+            bytes_after=len(original),
+            cache_misses=misses,
+        )
     return _counts(
         modified=1,
-        errors=errors,
         lines_before=lines_before,
         lines_after=lines_after,
         bytes_before=len(original),
@@ -359,12 +393,22 @@ def _git_failure(step: str, exc: subprocess.CalledProcessError) -> None:
     logger.error("git %s failed (exit %s): %s", step, exc.returncode, (exc.stderr or "").strip())
 
 
+class DirtyAgentDirError(RuntimeError):
+    """The agent directory has uncommitted changes, so a backup tag could not hold them."""
+
+
 def create_backup_tag(root: Path, agent_dir: Path) -> str:
-    """Create an annotated git tag recording the agents as they are before writing."""
+    """Create an annotated git tag recording the agents as they are before writing.
+
+    ``git tag`` records ``HEAD``, so uncommitted edits in the agent directory would be
+    optimised, committed, and then erased by ``--restore`` with their original form in
+    git nowhere. Refuse (``DirtyAgentDirError``) rather than tag a state that is not the
+    one about to be rewritten. A failing ``git status`` raises ``CalledProcessError``.
+    """
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     tag_name = f"agents-pre-optimization-{timestamp}"
-    if _git(root, "status", "--porcelain", *_agent_pathspec(agent_dir), check=False).stdout.strip():
-        logger.warning("Uncommitted changes detected in %s; creating the backup tag anyway", agent_dir)
+    if _git(root, "status", "--porcelain", *_agent_pathspec(agent_dir)).stdout.strip():
+        raise DirtyAgentDirError(f"Uncommitted changes in {agent_dir}; commit or stash them before --git-backup")
     _git(root, "tag", "-a", tag_name, "-m", f"Backup before agent optimization {timestamp}")
     logger.info("Created backup tag: %s", tag_name)
     return tag_name
@@ -478,6 +522,9 @@ def _run(args: argparse.Namespace, root: Path, agents_dir: Path, agent_files: li
     except subprocess.CalledProcessError as exc:
         _git_failure("backup tag", exc)
         return 1  # nothing written yet: no backup, no rewrite
+    except DirtyAgentDirError as exc:
+        logger.error("%s", exc)
+        return 1  # nothing written yet: the backup would not hold the files being rewritten
     summary = process_agent_files(agent_files, apply_changes, options, cache, args.force)
     if apply_changes and cache is not None:
         save_cache(cache_file, cache, options)

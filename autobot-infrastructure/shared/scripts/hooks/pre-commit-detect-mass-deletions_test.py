@@ -159,17 +159,43 @@ class TestMergeAware:
         _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "finish merge")
         _git(repo, "checkout", "-q", "main")
         _git(repo, "merge", "-q", "old-branch")
+        # advance main independently, else main is an ancestor and the merge is a no-op
+        (repo / "main-late.txt").write_text("m\n", encoding="utf-8")
+        self._commit(repo, "main moves on")
         self._publish_main(repo)
         _git(repo, "checkout", "-q", "old-branch")
         (repo / "late.txt").write_text("l\n", encoding="utf-8")
         self._commit(repo, "diverge")
         _git(repo, "merge", "--no-commit", "--no-ff", "main")
+        assert _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0  # really mid-merge
         for i in range(DELETION_THRESHOLD + 10):
             (repo / f"extra{i}.txt").unlink()
         _git(repo, "add", "-A")
         result = self._run(repo)
         assert result.returncode != 0, result.stdout + result.stderr
         assert "extra0.txt" in result.stdout
+
+    def test_contrast_deleting_files_the_branch_added_during_a_catch_up_merge_is_blocked(self, tmp_path: Path) -> None:
+        # Branch-only files are absent from origin/main but never existed at the merge base.
+        count = DELETION_THRESHOLD + 10
+        repo = self._repo_with_main(tmp_path, 3)
+        _git(repo, "checkout", "-q", "-b", "old-branch")
+        for i in range(count):
+            (repo / f"branch-only{i}.txt").write_text("b\n", encoding="utf-8")
+        self._commit(repo, "branch adds files")
+        _git(repo, "checkout", "-q", "main")
+        (repo / "main-work.txt").write_text("m\n", encoding="utf-8")
+        self._commit(repo, "main moves on")
+        self._publish_main(repo)
+        _git(repo, "checkout", "-q", "old-branch")
+        _git(repo, "merge", "--no-commit", "--no-ff", "main")
+        assert _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+        for i in range(count):
+            (repo / f"branch-only{i}.txt").unlink()
+        _git(repo, "add", "-A")
+        result = self._run(repo)
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "branch-only0.txt" in result.stdout
 
     def test_fails_closed_without_origin_main_every_deletion_counts(self, tmp_path: Path) -> None:
         repo = self._catch_up(tmp_path, DELETION_THRESHOLD + 10, publish=False)

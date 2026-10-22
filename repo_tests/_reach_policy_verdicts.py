@@ -309,7 +309,8 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     "script-module-name-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
-        "Tracked .py under one scripts root, a subset of all tracked files; the count drifts as scripts are added.",
+        "Tracked scripts (.py, .sh, .bash, .js) under one scripts root, a subset of all tracked files; "
+        "the count drifts as scripts are added.",
     ),
     "post-commit-seed-scan": (
         ABSOLUTE,

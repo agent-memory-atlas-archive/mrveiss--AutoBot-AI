@@ -52,10 +52,10 @@ programme is tracked in umbrella
 
 | Target | Source | Basis | What we use it for | Tracking |
 |---|---|---|---|---|
-| OWASP Top 10 for LLM Applications (2025) | OWASP Foundation, GenAI Security Project; [genai.owasp.org](https://genai.owasp.org/llm-top-10/) | Engineering baseline: agent-platform risks | Prompt injection, excessive agency, output handling | [#19118](https://github.com/mrveiss/AutoBot-AI/issues/19118) |
+| OWASP Top 10 for LLM Applications (2025 edition, the newest the project page lists as of 2026-10-22) | OWASP Foundation, GenAI Security Project; [genai.owasp.org](https://genai.owasp.org/llm-top-10/) | Engineering baseline: agent-platform risks | Prompt injection, excessive agency, output handling | [#19118](https://github.com/mrveiss/AutoBot-AI/issues/19118) |
 | OWASP ASVS 5.0 (Application Security Verification Standard) | OWASP Foundation; [owasp.org](https://owasp.org/www-project-application-security-verification-standard/) | Engineering baseline | Web/API security verification checklist | — |
 | NIST SP 800-218, Secure Software Development Framework (SSDF) | NIST; [csrc.nist.gov](https://csrc.nist.gov/pubs/sp/800/218/final) | Engineering baseline; supports the CRA and 18974 tracks | Secure development practices | [#19098](https://github.com/mrveiss/AutoBot-AI/issues/19098), [#19099](https://github.com/mrveiss/AutoBot-AI/issues/19099) |
-| SLSA v1.0 (Supply-chain Levels for Software Artifacts) | OpenSSF; [slsa.dev](https://slsa.dev/spec/v1.0/) | Engineering baseline | Build provenance; reproducible, digest-pinned images | [#19098](https://github.com/mrveiss/AutoBot-AI/issues/19098), [#19099](https://github.com/mrveiss/AutoBot-AI/issues/19099) |
+| SLSA v1.2 (Supply-chain Levels for Software Artifacts) | OpenSSF; [slsa.dev](https://slsa.dev/spec/v1.2/) | Engineering baseline | Build provenance; reproducible, digest-pinned images | [#19098](https://github.com/mrveiss/AutoBot-AI/issues/19098), [#19099](https://github.com/mrveiss/AutoBot-AI/issues/19099) |
 | CSAF 2.0 (Common Security Advisory Framework) | OASIS; [docs.oasis-open.org](https://docs.oasis-open.org/csaf/csaf/v2.0/csaf-v2.0.html) | Engineering baseline; supports 18974 | Vulnerability advisories per release | [#19101](https://github.com/mrveiss/AutoBot-AI/issues/19101) |
 | OpenVEX | OpenVEX project; [github.com/openvex/spec](https://github.com/openvex/spec) | Engineering baseline; supports 18974 | Exploitability statements next to the SBOM | [#19101](https://github.com/mrveiss/AutoBot-AI/issues/19101) |
 | OpenSSF Scorecard; OpenSSF Best Practices badge | OpenSSF; [scorecard.dev](https://scorecard.dev/), [bestpractices.dev](https://www.bestpractices.dev/) | Engineering baseline | Repository security posture | — |
@@ -74,8 +74,8 @@ being built for these until a row moves up to **Adopting** by owner decision.
 | ISO/IEC 27001:2022, information security management systems | ISO/IEC JTC 1/SC 27, published by ISO | Readiness review, 2026-10-21 |
 | ISO/IEC 27701:2025, privacy information management | ISO/IEC JTC 1/SC 27, published by ISO | Readiness review, 2026-10-21 |
 | ISO/IEC 42001:2023, AI management systems | ISO/IEC JTC 1/SC 42, published by ISO | Readiness review, 2026-10-21 |
-| ISO 22301, business continuity management systems | ISO/TC 292, published by ISO | Readiness review, 2026-10-21 |
-| ISO/IEC 27035, information security incident management | ISO/IEC JTC 1/SC 27, published by ISO | Readiness review, 2026-10-21 |
+| ISO 22301:2019, business continuity management systems | ISO/TC 292, published by ISO | Readiness review, 2026-10-21 |
+| ISO/IEC 27035 (multi-part series; the parts and editions each review covers are recorded in that review), information security incident management | ISO/IEC JTC 1/SC 27, published by ISO | Readiness review, 2026-10-21 |
 | SOC 2 (Trust Services Criteria) | AICPA | Readiness review, 2026-10-21 |
 | NIST AI RMF 1.0 (AI 100-1), with the Generative AI profile (NIST AI 600-1) | NIST; [nist.gov](https://www.nist.gov/itl/ai-risk-management-framework), [AI 600-1](https://doi.org/10.6028/NIST.AI.600-1) | Readiness review, 2026-10-21 |
 | Data Act, Regulation (EU) 2023/2854 | European Parliament and Council; [EUR-Lex](https://eur-lex.europa.eu/eli/reg/2023/2854/oj) | Readiness review, 2026-10-21 |

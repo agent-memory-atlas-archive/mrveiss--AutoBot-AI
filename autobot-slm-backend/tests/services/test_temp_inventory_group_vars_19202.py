@@ -60,6 +60,33 @@ def test_the_helper_links_group_vars_outside_the_code_tree(scratch) -> None:
     assert _base_dir_seen_from(inv) == "/opt/autobot"
 
 
+def test_a_missing_group_vars_source_raises_and_leaves_no_inventory(scratch, tmp_path) -> None:
+    empty = tmp_path / "ansible_without_group_vars"
+    empty.mkdir()
+    with pytest.raises(RuntimeError, match="group_vars"):
+        temp_inventory.write_linked_inventory("all:\n  hosts: {}\n", "t_inv_", empty)
+    assert list(scratch.glob("t_inv_*")) == []
+
+
+def test_a_failed_link_raises_and_leaves_no_inventory(scratch, monkeypatch) -> None:
+    monkeypatch.setattr(temp_inventory, "link_group_vars", lambda *_a: None)  # best-effort link that did nothing
+    with pytest.raises(RuntimeError, match="group_vars"):
+        temp_inventory.write_linked_inventory("all:\n  hosts: {}\n", "t_inv_", _ANSIBLE)
+    assert list(scratch.glob("t_inv_*")) == []
+
+
+def test_a_group_vars_dir_pointing_elsewhere_is_refused(scratch, monkeypatch, tmp_path) -> None:
+    other = tmp_path / "other_group_vars"
+    other.mkdir()
+
+    def _link_wrong(inventory, _ansible_dir) -> None:
+        (inventory.parent / "group_vars").symlink_to(other)
+
+    monkeypatch.setattr(temp_inventory, "link_group_vars", _link_wrong)
+    with pytest.raises(RuntimeError, match="group_vars"):
+        temp_inventory.write_linked_inventory("all:\n  hosts: {}\n", "t_inv_", _ANSIBLE)
+
+
 class _Executor:
     """Records what each playbook run would have seen, then succeeds."""
 

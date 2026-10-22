@@ -468,3 +468,65 @@ def test_a_failed_backup_tag_returns_1_before_writing(tmp_path: pathlib.Path, mo
     assert optimize_agents.main() == 1
     assert "def example()" in (agents / "a.md").read_text(encoding="utf-8")
     assert "tag already exists" in caplog.text
+
+
+def test_strip_code_blocks_is_idempotent_and_keeps_the_language_hint():
+    once, removed_once = optimize_agents.strip_code_blocks(_CODE_DOC)
+    twice, removed_twice = optimize_agents.strip_code_blocks(once)
+    assert removed_once == 2
+    assert (twice, removed_twice) == (once, 0)
+    assert "[Code example removed for token optimization (python)]" in twice
+
+
+def test_contrast_a_real_block_next_to_a_placeholder_is_still_stripped():
+    doc = "```\n[Code example removed for token optimization (python)]\n```\n\n```bash\necho hi\n```\n"
+    out, removed = optimize_agents.strip_code_blocks(doc)
+    assert removed == 1
+    assert "echo hi" not in out
+    assert out.startswith("```\n[Code example removed for token optimization (python)]\n```")
+    # a user block that merely mentions the placeholder text is real content
+    mention, count = optimize_agents.strip_code_blocks("```\n[Code example removed for token optimization] and more\n```")
+    assert count == 1
+    assert "and more" not in mention
+
+
+def test_a_failed_write_is_an_error_not_a_modification(agent_dir: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+    def _boom(*_args, **_kwargs):
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(optimize_agents, "write_atomically", _boom)
+    files = sorted(agent_dir.glob("*.md"))
+    summary = optimize_agents.process_agent_files(files, apply_changes=True)
+    assert (summary["modified"], summary["errors"]) == (0, 1)
+    assert summary["bytes_after"] == summary["bytes_before"]
+    assert summary["lines_after"] == summary["lines_before"]
+    assert summary["processed"] - summary["modified"] - summary["errors"] == 1  # the untouched file only
+
+
+def test_contrast_a_successful_write_is_a_modification(agent_dir: pathlib.Path):
+    summary = optimize_agents.process_agent_files(sorted(agent_dir.glob("*.md")), apply_changes=True)
+    assert (summary["modified"], summary["errors"]) == (1, 0)
+    assert summary["bytes_after"] != summary["bytes_before"]
+
+
+def test_git_backup_refuses_when_the_agent_dir_has_uncommitted_changes(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog
+):
+    root, agents = _git_repo(tmp_path)
+    dirty = _CODE_DOC + "\nuncommitted edit\n"
+    (agents / "a.md").write_text(dirty, encoding="utf-8")
+    monkeypatch.setattr(optimize_agents, "project_root", lambda: root)
+    monkeypatch.setattr(sys, "argv", ["optimize_agents.py", "--apply", "--git-backup", "--strip-code-blocks"])
+    assert optimize_agents.main() == 1
+    assert optimize_agents._backup_tags(root) == []
+    assert (agents / "a.md").read_text(encoding="utf-8") == dirty  # nothing rewritten
+    assert "Uncommitted changes" in caplog.text
+
+
+def test_contrast_an_untracked_run_cache_does_not_block_the_backup(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+    root, agents = _git_repo(tmp_path)
+    (agents / optimize_agents._CACHE_FILENAME).write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(optimize_agents, "project_root", lambda: root)
+    monkeypatch.setattr(sys, "argv", ["optimize_agents.py", "--apply", "--git-backup", "--strip-code-blocks"])
+    assert optimize_agents.main() == 0
+    assert len(optimize_agents._backup_tags(root)) == 1
