@@ -56,6 +56,10 @@ readonly REPO_HOST="github.com"
 readonly REPO_SLUG="mrveiss/AutoBot-AI"
 readonly DEFAULT_REPO="https://${REPO_HOST}/${REPO_SLUG}.git"
 readonly NODESOURCE_HOST="deb.nodesource.com"
+# #19239: each pinned to its source of truth by a repo test -- autobot-frontend/package.json
+# engines.node, the slm_manager role's slm_backend_port -- since the installer runs before the code exists.
+readonly NODE_MIN_VERSION="20.19.0" SLM_BACKEND_PORT="8000"
+readonly IP_CACHE_FILE="/run/autobot-install-ip"  # root-only, unlike /tmp, which any user can plant a file in
 readonly DEFAULT_BRANCH="main" PINNED_COMMIT=""  # a release build pins both: tag and its commit (#18666)
 # #18586: where this script was started from, resolved before any cd; empty under `curl | bash`
 SCRIPT_DIR=""
@@ -218,13 +222,12 @@ detect_local_ip() {
     # garble any curl command that interpolates the result.
     # On reinstall, always clear the cache so the interface prompt re-runs
     # and the user can select the correct interface (#3194).
-    local cache_file="/tmp/.autobot_detected_ip"
-    if [[ "${REINSTALL}" == true ]]; then
-        rm -f "${cache_file}"
-    fi
-    if [[ -f "${cache_file}" ]]; then
-        cat "${cache_file}"
-        return
+    local cache_file="${IP_CACHE_FILE}" cached=""
+    [[ "${REINSTALL}" == true ]] && rm -f "${cache_file}"
+    [[ -f "${cache_file}" ]] && cached="$(head -n1 "${cache_file}")"
+    # #19239: reuse a cached address only while it is still assigned to an interface here.
+    if [[ -n "${cached}" ]] && ip -4 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qxF "${cached}"; then
+        echo "${cached}"; return
     fi
 
     # Gather all interfaces with IPv4 addresses (exclude loopback)
@@ -263,10 +266,9 @@ detect_local_ip() {
         for i in "${!ifaces[@]}"; do
             echo -e "    ${CYAN}[$((i+1))]${NC} ${ifaces[$i]}: ${ips[$i]}" >&2
         done
-        echo -ne "\n  ${YELLOW}Select interface for AutoBot [1-${#ips[@]}]:${NC} " >&2
-        local choice
-        read -r choice
-        choice=$((choice - 1))
+        local choice=""  # /dev/tty, never stdin: under curl | bash stdin is the script itself (#17929)
+        prompt_from_tty choice "  Select interface for AutoBot [1-${#ips[@]}]: " || fatal "No terminal to choose an interface: rerun with AUTOBOT_INSTALL_INTERFACE=<name> (one of: ${ifaces[*]})."
+        [[ "${choice}" =~ ^[0-9]+$ ]] || fatal "Invalid selection"; choice=$((choice - 1))
         if [[ $choice -lt 0 || $choice -ge ${#ips[@]} ]]; then
             fatal "Invalid selection"
         fi
@@ -481,6 +483,8 @@ system_setup() {
         run_ok "Adding NodeSource repository" \
             bash -c "curl -fsSL https://${NODESOURCE_HOST}/setup_20.x | bash -"
         apt_install_recorded "Installing Node.js" nodejs; record_install apt_source nodesource
+    elif [[ "$(printf '%s\n' "${NODE_MIN_VERSION}" "$(node --version | tr -d v)" | sort -V | head -1)" != "${NODE_MIN_VERSION}" ]]; then
+        fatal "Node.js $(node --version) is installed, but AutoBot needs ${NODE_MIN_VERSION} or newer. Upgrade or remove it, then rerun this installer."
     else
         success "  Node.js already installed ($(node --version))"
     fi
@@ -773,7 +777,7 @@ service_verification() {
     local max_attempts=80
     local attempt=0
     while [[ ${attempt} -lt ${max_attempts} ]]; do
-        if curl -sf --max-time 3 http://127.0.0.1:8000/api/health > /dev/null 2>&1; then
+        if curl -sf --max-time 3 http://127.0.0.1:${SLM_BACKEND_PORT}/api/health > /dev/null 2>&1; then
             success "SLM backend health check passed"
             break
         fi
@@ -952,7 +956,7 @@ EOF
     echo
 
     # Clean up IP detection cache file (#3010)
-    rm -f /tmp/.autobot_detected_ip 2>/dev/null || true
+    rm -f "${IP_CACHE_FILE}" 2>/dev/null || true
 }
 
 # =============================================================================
