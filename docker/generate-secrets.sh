@@ -47,20 +47,33 @@ chmod 600 "$SECRETS_FILE"
 
 # #17793: an existing Postgres volume keeps the password it was created with and ignores a new
 # one. Generating AUTOBOT_DB_PASSWORD for it would lock the stack out of its own database, so
-# refuse, before anything is written, and say what to do instead.
-postgres_volume() {  # the stack's postgres_data volume name, if docker can list it and it exists
-    local project="${COMPOSE_PROJECT_NAME:-$(basename "$(cd "$(dirname "$0")/.." && pwd)")}"
+# when the key is missing, refuse -- before anything is written -- if that volume exists, AND if
+# docker cannot be asked: not knowing is treated as "it may exist" (fail closed).
+# The project name is COMPOSE_PROJECT_NAME or this checkout's directory name, the compose
+# defaults. A stack started with `docker compose -p NAME` (or a project name set elsewhere)
+# needs COMPOSE_PROJECT_NAME=NAME exported for this check to find its volume.
+postgres_volume_state() {  # prints the volume name; 0 = exists, 1 = absent, 2 = cannot tell
+    local project="${COMPOSE_PROJECT_NAME:-$(basename "$(cd "$(dirname "$0")/.." && pwd)")}" names
     project="$(printf '%s' "$project" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
-    command -v docker >/dev/null 2>&1 || return 1
-    docker volume ls --format '{{.Name}}' 2>/dev/null | grep -qx "${project}_postgres_data" || return 1
     printf '%s_postgres_data' "$project"
+    names="$(docker volume ls --format '{{.Name}}' 2>/dev/null)" || return 2
+    grep -qx "${project}_postgres_data" <<<"${names}" || return 1
 }
-if ! grep -q '^AUTOBOT_DB_PASSWORD=' "$SECRETS_FILE" && volume="$(postgres_volume)"; then
-    echo "ERROR: ${SECRETS_FILE} has no AUTOBOT_DB_PASSWORD, but the Postgres volume ${volume} exists." >&2
-    echo "  Postgres keeps the password that volume was created with; a new one would lock the stack out." >&2
-    echo "  Add the password this deployment already uses (a stack started from the old tracked" >&2
-    echo "  default used 'autobot') as AUTOBOT_DB_PASSWORD=... to ${SECRETS_FILE}, then rerun." >&2
-    exit 1
+if ! grep -q '^AUTOBOT_DB_PASSWORD=' "$SECRETS_FILE"; then
+    state=0; volume="$(postgres_volume_state)" || state=$?
+    if [[ ${state} -ne 1 ]]; then
+        if [[ ${state} -eq 0 ]]; then
+            echo "ERROR: ${SECRETS_FILE} has no AUTOBOT_DB_PASSWORD, but the Postgres volume ${volume} exists." >&2
+        else
+            echo "ERROR: ${SECRETS_FILE} has no AUTOBOT_DB_PASSWORD, and docker cannot be asked whether the" >&2
+            echo "  Postgres volume ${volume} exists (is docker installed and running, and may this user use it?)." >&2
+        fi
+        echo "  Postgres keeps the password a volume was created with; a new one would lock the stack out." >&2
+        echo "  Add the password this deployment already uses (a stack started from the old tracked" >&2
+        echo "  default used 'autobot') as AUTOBOT_DB_PASSWORD=... to ${SECRETS_FILE}, then rerun." >&2
+        echo "  On a new host, start docker first so this check can see there is no volume yet." >&2
+        exit 1
+    fi
 fi
 
 gen_password() {  # 32 URL-safe chars meeting the user schema's policy: upper, lower and a digit

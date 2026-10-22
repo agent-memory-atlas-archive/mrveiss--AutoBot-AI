@@ -222,7 +222,7 @@ def test_the_tracked_docker_env_file_sets_no_credential() -> None:
     ]
 
 
-def _generator_in(stack: Path, volumes: str, secrets: str = "") -> subprocess.CompletedProcess:
+def _generator_in(stack: Path, volumes: str | None, secrets: str = "") -> subprocess.CompletedProcess:
     """Run the real generate-secrets.sh as if checked out at *stack*, with a stub `docker`."""
     bash = shutil.which("bash")
     if bash is None or shutil.which("openssl") is None:
@@ -232,7 +232,8 @@ def _generator_in(stack: Path, volumes: str, secrets: str = "") -> subprocess.Co
     (stack / "docker" / ".env.secrets").write_text(secrets, encoding="utf-8")
     bin_dir = stack / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text(f"#!/bin/sh\nprintf '%s\\n' {volumes}\n", encoding="utf-8")
+    body = "exit 1" if volumes is None else f"printf '%s\\n' {volumes}"  # None: docker cannot answer
+    (bin_dir / "docker").write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
     (bin_dir / "docker").chmod(0o755)
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "AUTOBOT_DOCKER_MGMT_PREFIX": "10.77.3"}
     return subprocess.run(
@@ -285,3 +286,32 @@ def test_every_documented_compose_command_passes_the_secrets_file() -> None:
     }
     assert not any(hits.values()), hits
     assert usage_lines_missing_secrets("#   docker compose -f a.yml \\\n#     --env-file docker/.env.docker up -d\n")
+
+
+def test_when_docker_cannot_be_asked_no_db_password_is_generated(tmp_path: Path) -> None:
+    """27's review: not knowing whether a volume exists must refuse, not assume a fresh host."""
+    out = _generator_in(tmp_path / "stack", None)
+    assert out.returncode != 0 and "docker cannot be asked" in out.stderr, out.stderr
+    assert "AUTOBOT_DB_PASSWORD" not in (tmp_path / "stack" / "docker" / ".env.secrets").read_text(encoding="utf-8")
+
+
+_SMOKE_WORKFLOWS = (".github/workflows/docker-smoke-test.yml", ".github/workflows/co-located-smoke.yml")
+
+
+def smoke_exported_credentials(workflow_text: str) -> set[str]:
+    """The keys a smoke workflow's 'Required credentials' step exports."""
+    m = re.search(r"for key in ([A-Z0-9_ ]+); do", workflow_text)
+    return set(m.group(1).split()) if m else set()
+
+
+def test_each_smoke_job_exports_exactly_the_credentials_compose_requires() -> None:
+    """The workflows' own comment says this guard exists; without it a newly required credential
+    would abort the smoke jobs at compose up (27's review)."""
+    required = set().union(
+        *(required_credentials(f.read_text(encoding="utf-8")) for f in [_ROOT / "docker-compose.yml"])
+    )
+    assert required, "no required credential found in docker-compose.yml"
+    for rel in _SMOKE_WORKFLOWS:
+        exported = smoke_exported_credentials((_ROOT / rel).read_text(encoding="utf-8"))
+        assert exported == required, f"{rel} exports {sorted(exported)}, compose requires {sorted(required)}"
+    assert smoke_exported_credentials("          for key in A_PASSWORD B_SECRET; do\n") == {"A_PASSWORD", "B_SECRET"}
