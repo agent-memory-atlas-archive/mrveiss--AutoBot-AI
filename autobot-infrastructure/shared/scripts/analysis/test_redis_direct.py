@@ -8,21 +8,17 @@ Test direct Redis access to understand the field issue
 """
 
 import logging
-import os
 
-import redis
+from autobot_shared.redis_client import get_redis_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# DB number from redis-databases.yaml SSOT (#2806): knowledge = 1
-_DB_KNOWLEDGE = int(os.getenv("AUTOBOT_REDIS_DB_KNOWLEDGE", "1"))
 
 
 def test_redis_direct_access():
     """Test Redis direct access"""
     try:
-        client = redis.Redis(host="localhost", port=6379, db=_DB_KNOWLEDGE, decode_responses=True)
+        client = get_redis_client(database="knowledge", decode_responses=True)
 
         # Test FT.SEARCH with explicit RETURN
         logger.info("Testing FT.SEARCH with explicit RETURN...")
