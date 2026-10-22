@@ -178,10 +178,6 @@ FIELD_DEFAULT_FLOOR = 300
 #: nothing.
 GETENV_CALL_FLOOR = 8
 
-#: Floor for the literal-fallback env reads the #18094 fork sweep collects (259 when it landed). A
-#: sweep that collected a handful has lost its roots and would report "none found" over nothing.
-FORK_READ_FLOOR = 200
-
 #: SSOT settings modules split out of ``ssot_config.py`` for its size ceiling; their
 #: ``Field`` aliases are SSOT config exactly like ``ssot_config.py``'s (#17312: ``TLSConfig``
 #: moved to ``ssot_tls.py``, which took the TLS getenv-pair sites out of the sweep).
@@ -390,10 +386,9 @@ def _fork_findings(repo_root: Path) -> list[str]:
 
     Imported here, not at the top: ``_env_fork_scan`` reuses this module's extractors.
     """
-    from _env_fork_scan import SCAN_ROOTS, ScanResult, registry_defaults, scan
+    from _env_fork_scan import FORK_READ_FLOOR, SCAN_ROOTS, ScanResult, registry_defaults, sweep
 
-    files, _ = scan_python_files([], repo_root)
-    result: ScanResult = scan(repo_root, sorted(files), registry_defaults())
+    result: ScanResult = sweep(repo_root, registry_defaults())
     if result.env_reads < FORK_READ_FLOOR:
         raise VacuousScan(f"{HOOK_ID}: env-fork sweep read only {result.env_reads} fallbacks over {SCAN_ROOTS}")
     logging.getLogger(HOOK_ID).info("[%s] %s", HOOK_ID, result.summary())

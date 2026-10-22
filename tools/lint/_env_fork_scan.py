@@ -34,7 +34,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from check_getenv_ssot_drift import extract_getenv_defaults, values_disagree
+from _scan_helpers import tracked_paths
+from check_getenv_ssot_drift import EXEMPT_MARKER, _is_getenv_call, _literal, values_disagree
 
 #: Trees whose env reads are swept. Named, not inferred: a tree outside this list is not covered, and
 #: the reach declaration in ``repo_tests/env_fork_guard_18094_test.py`` fails if one of these is empty.
@@ -46,6 +47,13 @@ SCAN_ROOTS = (
     "autobot-npu-worker",
     "scripts",
 )
+
+#: Floor for the literal-fallback env reads the sweep collects (249 live; window [209, 249], pin 229): the ONE
+#: floor, read by the drift hook and
+#: passed to the reach declaration in ``repo_tests/env_fork_guard_18094_test.py`` (whose ``verify_floor``
+#: proves it against the live population). A sweep that collected a handful has lost its roots and would
+#: report "none found" over nothing.
+FORK_READ_FLOOR = 229
 
 #: Modules whose module-level literal constants are the SSOT a feature module must not restate.
 SSOT_CONSTANT_SOURCES = (
@@ -73,6 +81,7 @@ class ScanResult:
     env_vars: int = 0
     registered_vars: int = 0
     constants: int = 0
+    unresolved: int = 0
     sites: list[str] = field(default_factory=list)
     forks: dict[str, list[str]] = field(default_factory=dict)
     shadows: list[str] = field(default_factory=list)
@@ -94,7 +103,7 @@ class ScanResult:
         found = len(self.findings())
         return (
             f"checked {self.env_reads} env fallback reads over {self.env_vars} vars "
-            f"({self.registered_vars} registered) "
+            f"({self.registered_vars} registered; {self.unresolved} non-literal defaults skipped) "
             f"and {self.constants} module constants against {len(SSOT_CONSTANT_SOURCES)} SSOT modules: "
             + (f"{found} finding(s)" if found else "none found")
         )
@@ -130,15 +139,98 @@ def module_constants(source: str) -> dict[str, tuple[Any, int]]:
     return out
 
 
+def _module_literals(tree: ast.Module) -> dict[str, Any]:
+    """Every module-level ``NAME = <literal>`` (any case), for resolving a Name used as a default."""
+    out: dict[str, Any] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target, value = node.target, node.value
+        else:
+            continue
+        if isinstance(target, ast.Name) and isinstance(value, ast.Constant):
+            out[target.id] = value.value
+    return out
+
+
+def _os_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """Local names bound by ``from os import getenv [as g]`` and ``from os import environ [as e]``."""
+    getenvs: set[str] = set()
+    environs: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "os" and node.level == 0:
+            for alias in node.names:
+                if alias.name == "getenv":
+                    getenvs.add(alias.asname or "getenv")
+                elif alias.name == "environ":
+                    environs.add(alias.asname or "environ")
+    return getenvs, environs
+
+
+def _is_env_read(node: ast.Call, getenvs: set[str], environs: set[str]) -> bool:
+    """``os.getenv``/``os.environ.get`` (via the sibling matcher) or their ``from os import`` spellings."""
+    if _is_getenv_call(node):
+        return True
+    fn = node.func
+    if isinstance(fn, ast.Name):
+        return fn.id in getenvs
+    return (
+        isinstance(fn, ast.Attribute)
+        and fn.attr == "get"
+        and isinstance(fn.value, ast.Name)
+        and fn.value.id in environs
+    )
+
+
+def extract_env_reads(source: str) -> tuple[list[tuple[str, Any, int]], int]:
+    """``([(NAME, default, lineno)], unresolved)`` for every 2-argument env read in *source*.
+
+    Covers ``os.getenv``, ``os.environ.get`` and the ``from os import getenv/environ`` spellings. A
+    default that is a Name resolves only to a module-level literal in the SAME file; any other
+    non-literal default is skipped and counted in ``unresolved`` rather than guessed at. A call
+    carrying the ``ssot-config-exempt`` marker is skipped entirely.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return [], 0
+    lines = source.splitlines()
+    literals = _module_literals(tree)
+    getenvs, environs = _os_imports(tree)
+    out: list[tuple[str, Any, int]] = []
+    unresolved = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or len(node.args) != 2 or not _is_env_read(node, getenvs, environs):
+            continue
+        name = _literal(node.args[0])
+        if not isinstance(name, str):
+            continue
+        end = getattr(node, "end_lineno", node.lineno) or node.lineno
+        if EXEMPT_MARKER in "\n".join(lines[node.lineno - 1 : end]):
+            continue
+        arg = node.args[1]
+        default = _literal(arg)
+        if default is None and isinstance(arg, ast.Name):
+            default = literals.get(arg.id)
+        if default is None:
+            unresolved += 0 if (isinstance(arg, ast.Constant) and arg.value is None) else 1
+            continue
+        out.append((name, default, node.lineno))
+    return out, unresolved
+
+
 def fork_sites(reads: list[tuple[Any, str]], registry_default: Any, registered: bool) -> list[str]:
     """Describe the disagreement among ``(fallback, "path:line")`` reads of one name; ``[]`` if they agree."""
+    # A registry default of None declares no default: readers are compared only with each other.
+    declared = registered and registry_default is not None
     first = reads[0][0]
     differs_among = any(values_disagree(value, first) for value, _ in reads[1:])
-    differs_registry = registered and any(values_disagree(value, registry_default) for value, _ in reads)
+    differs_registry = declared and any(values_disagree(value, registry_default) for value, _ in reads)
     if not (differs_among or differs_registry):
         return []
     sites = [f"{value!r} at {where}" for value, where in reads]
-    return sites + ([f"registry declares {registry_default!r}"] if registered else [])
+    return sites + ([f"registry declares {registry_default!r}"] if declared else [])
 
 
 def scan(repo_root: Path, files: list[Path], registry: dict[str, Any]) -> ScanResult:
@@ -157,7 +249,9 @@ def scan(repo_root: Path, files: list[Path], registry: dict[str, Any]) -> ScanRe
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        for name, default, lineno in extract_getenv_defaults(text):
+        file_reads, unresolved = extract_env_reads(text)
+        result.unresolved += unresolved
+        for name, default, lineno in file_reads:
             reads.setdefault(name, []).append((default, f"{rel_path}:{lineno}"))
             result.sites.append(f"{rel_path}:{lineno}")
             result.env_reads += 1
@@ -173,3 +267,12 @@ def scan(repo_root: Path, files: list[Path], registry: dict[str, Any]) -> ScanRe
         if sites:
             result.forks[name] = sites
     return result
+
+
+def sweep(repo_root: Path, registry: dict[str, Any]) -> ScanResult:
+    """The ONE population: every git-tracked ``.py`` under *repo_root*, scanned against *registry*.
+
+    The drift hook and the reach declaration both call this, so the hook's floor check and the
+    declaration's ``verify_floor`` count the same set of reads.
+    """
+    return scan(repo_root, [repo_root / rel for rel in tracked_paths(repo_root, "*.py")], registry)

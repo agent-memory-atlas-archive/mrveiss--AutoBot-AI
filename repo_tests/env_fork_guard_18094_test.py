@@ -20,7 +20,6 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
 from tools.lint import check_getenv_ssot_drift  # noqa: F401 -- puts tools/lint on sys.path for the sibling import
-from tools.lint._scan_helpers import tracked_paths
 
 from tools.lint import _env_fork_scan as scan_mod  # isort: skip
 
@@ -28,8 +27,7 @@ _ROOT = repo_root()
 
 
 def _live_scan(root: Path, registry: dict | None = None) -> scan_mod.ScanResult:
-    files = [root / p for p in tracked_paths(root, "*.py")]
-    return scan_mod.scan(root, files, registry or {})
+    return scan_mod.sweep(root, registry or {})
 
 
 def _read_sites(root: Path) -> list[str]:
@@ -40,11 +38,13 @@ def _read_sites(root: Path) -> list[str]:
         return []
 
 
-#: Measured on origin/main at 9325c25a78: 245 literal-fallback reads in the scanned roots; window [205, 245].
+#: ONE population (``scan_mod.sweep`` over tracked Python) and ONE floor (``scan_mod.FORK_READ_FLOOR``, which the
+#: drift hook also enforces); ``verify_floor`` proves that number against the live population, so the hook cannot
+#: drift to a second one.
 READS = declare(
     "env-fallback-read-sites-18094",
     discover=_read_sites,
-    floor=225,
+    floor=scan_mod.FORK_READ_FLOOR,
     growth=40,
     what="literal-fallback env read call sites",
     roots=scan_mod.SCAN_ROOTS,
@@ -148,3 +148,65 @@ def test_the_summary_distinguishes_checked_from_found() -> None:
     assert "checked 3" in quiet.summary() and "none found" in quiet.summary()
     quiet.shadows.append("a.py:1: X shadows the SSOT constant in b.py")
     assert "1 finding(s)" in quiet.summary()
+
+
+# --- contrast: constant defaults, `from os import getenv`, and a None registry default ---------------
+
+
+def test_a_module_constant_default_is_resolved_and_forks(tmp_path: Path) -> None:
+    result = _scan(
+        tmp_path,
+        {
+            "autobot-backend/a.py": 'import os\nDEFAULT_PORT = "8080"\nP = os.getenv("NPU_WORKER_PORT", DEFAULT_PORT)\n',
+            "autobot-backend/b.py": 'import os\nP = os.getenv("NPU_WORKER_PORT", 8081)\n',
+        },
+    )
+    assert "NPU_WORKER_PORT" in result.forks and result.unresolved == 0
+
+
+def test_a_constant_default_equal_to_the_other_reader_is_no_fork(tmp_path: Path) -> None:
+    files = {
+        "autobot-backend/a.py": 'import os\nDEFAULT_PORT = 8081\nP = os.getenv("NPU_WORKER_PORT", DEFAULT_PORT)\n',
+        "autobot-backend/b.py": 'import os\nP = os.getenv("NPU_WORKER_PORT", "8081")\n',
+    }
+    assert _scan(tmp_path, files).forks == {}
+
+
+def test_an_unresolvable_default_is_skipped_and_counted(tmp_path: Path) -> None:
+    files = {
+        "autobot-backend/a.py": (
+            "import os\nfrom elsewhere import OTHER\n"
+            'A = os.getenv("X_A", OTHER)\nB = os.getenv("X_B", compute())\nC = os.getenv("X_C", None)\n'
+        ),
+        "autobot-backend/b.py": 'import os\nA = os.getenv("X_A", "1")\n',
+    }
+    result = _scan(tmp_path, files)
+    assert result.unresolved == 2 and result.forks == {} and result.env_reads == 1
+    assert "2 non-literal defaults skipped" in result.summary()
+
+
+def test_from_os_import_getenv_and_environ_are_read(tmp_path: Path) -> None:
+    result = _scan(
+        tmp_path,
+        {
+            "autobot-backend/a.py": 'from os import getenv\nP = getenv("NPU_WORKER_PORT", "8080")\n',
+            "autobot-backend/b.py": 'from os import environ as env\nP = env.get("NPU_WORKER_PORT", "8081")\n',
+        },
+    )
+    assert result.env_reads == 2 and "NPU_WORKER_PORT" in result.forks
+
+
+def test_a_bare_getenv_without_the_os_import_is_not_an_env_read(tmp_path: Path) -> None:
+    files = {"autobot-backend/a.py": 'def getenv(a, b):\n    return b\n\nP = getenv("X_LOCAL", "a")\n'}
+    assert _scan(tmp_path, files).env_reads == 0
+
+
+def test_a_none_registry_default_compares_readers_only(tmp_path: Path) -> None:
+    agree = {
+        "autobot-backend/a.py": 'import os\nP = os.getenv("X_OPT", "8080")\n',
+        "autobot-backend/b.py": 'import os\nP = os.getenv("X_OPT", 8080)\n',
+    }
+    assert _scan(tmp_path / "agree", agree, {"X_OPT": None}).forks == {}
+    disagree = {**agree, "autobot-backend/b.py": 'import os\nP = os.getenv("X_OPT", 9090)\n'}
+    forks = _scan(tmp_path / "disagree", disagree, {"X_OPT": None}).forks
+    assert "X_OPT" in forks and not any("registry declares" in line for line in forks["X_OPT"])

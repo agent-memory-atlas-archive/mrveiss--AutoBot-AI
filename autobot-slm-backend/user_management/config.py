@@ -15,12 +15,18 @@ Credentials are injected via /etc/autobot/db-credentials.env (Ansible-managed).
 import os
 from dataclasses import dataclass
 
+from autobot_shared.secret_redaction import redact_value
 
-@dataclass
+
+@dataclass(repr=False)
 class DatabaseConfig:
     """Database connection configuration."""
 
     url: str
+
+    def __repr__(self) -> str:
+        """Mask the DSN password via the shared redactor (``RedactedReprMixin`` is pydantic-only)."""
+        return f"{type(self).__name__}(url={redact_value('url', self.url)!r})"
 
     @property
     def sync_url(self) -> str:
