@@ -65,7 +65,6 @@ from deployment_registry import (  # noqa: E402
     get_deployment_registry,
 )
 
-
 # Port env aliases + defaults mirror autobot_shared/ssot_config.py;
 # health paths mirror autobot_shared/ssot_constants.py.
 
@@ -334,13 +333,16 @@ class MetricsCollector:
 
     async def _collect_redis_metrics(self) -> List[Metric]:
         """Collect Redis-specific metrics."""
+        # deployment_registry (imported above) put the repo root on sys.path (#18553). Imported before
+        # the try so the except clause below can always name RedisConnectionError.
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        from autobot_shared.redis_client import require_redis_client
+
         metrics = []
         timestamp = time.time()
 
         try:
-            # deployment_registry (imported above) put the repo root on sys.path (#18553).
-            from autobot_shared.redis_client import require_redis_client
-
             r = require_redis_client(database="main", decode_responses=False)
 
             # Get Redis info
@@ -379,6 +381,9 @@ class MetricsCollector:
                 )
             )
 
+        except (RedisConnectionError, ConnectionError) as e:
+            # Builtin ConnectionError: the canonical client is disabled, unreachable or its circuit is open.
+            logger.warning("Redis metrics skipped, Redis unavailable: %s", e)
         except Exception:
             logger.debug("Suppressed exception in try block", exc_info=True)
 

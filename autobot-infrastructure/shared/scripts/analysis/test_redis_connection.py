@@ -12,6 +12,7 @@ import logging
 import sys
 import traceback
 from pathlib import Path
+from urllib.parse import urlparse
 
 import redis
 
@@ -47,8 +48,22 @@ def _check_set_get(redis_client) -> bool:
     return True
 
 
+def _registry_matches_client(redis_url: str, client) -> bool:
+    """True when the registry URL names the host and port the canonical client actually dials."""
+    dialled = client.connection_pool.connection_kwargs
+    registry = urlparse(redis_url)
+    if (registry.hostname, str(registry.port)) != (dialled.get("host"), str(dialled.get("port"))):
+        logger.error(
+            f"❌ Service registry says {registry.hostname}:{registry.port}, but the canonical client "
+            f"(SSOT config) dials {dialled.get('host')}:{dialled.get('port')}"
+        )
+        return False
+    logger.info("✅ Service registry and SSOT config agree on the Redis host and port")
+    return True
+
+
 def _check_registry_connection() -> bool:
-    """Resolve the Redis URL through the service registry, then exercise the canonical client."""
+    """Resolve the Redis URL through the service registry, check it against the canonical client, use it."""
     try:
         from utils.service_registry import get_service_url
 
@@ -57,16 +72,17 @@ def _check_registry_connection() -> bool:
         logger.info("✅ Service registry imported successfully")
         redis_url = get_service_url("redis")
         logger.info(f"✅ Redis URL resolved: {redis_url}")
-
-        # The registry URL is checked for shape; the connection itself goes through the canonical
-        # client (#18553), which reads host, port and credentials from SSOT config.
         if not redis_url.startswith("redis://"):
             logger.error("❌ Invalid Redis URL format")
             return False
-        return _check_set_get(require_redis_client(database="main", decode_responses=False))
+        # The connection goes through the canonical client (#18553), whose host and port come from
+        # SSOT config; the registry is checked by agreeing with what that client dials.
+        client = require_redis_client(database="main", decode_responses=False)
+        return _registry_matches_client(redis_url, client) and _check_set_get(client)
     except ImportError as e:
         logger.error(f"❌ Import error: {e}")
-    except redis.ConnectionError as e:
+    except (redis.ConnectionError, ConnectionError) as e:
+        # ConnectionError (builtin): the canonical client is disabled, unreachable or its circuit is open.
         logger.error(f"❌ Redis connection error: {e}")
     except Exception as e:
         logger.error(f"❌ Unexpected error: {e}")
