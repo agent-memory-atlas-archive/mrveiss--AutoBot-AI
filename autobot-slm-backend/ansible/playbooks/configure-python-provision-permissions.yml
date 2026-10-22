@@ -54,15 +54,18 @@
     # The process environment, not the unit file: SLM_REPO_PATH can arrive through
     # Environment= or any EnvironmentFile=, and /proc/<pid>/environ holds what the
     # backend's os.environ started with. No running backend leaves the fallback.
+    # Only SLM_REPO_PATH leaves the process: the backend environment carries its
+    # secrets, and registered stdout reaches job logs and -v output (no_log too).
     - name: Read the running SLM backend's environment
       ansible.builtin.shell: |
         set -o pipefail
         pid=$(systemctl show {{ slm_backend_service }}.service --property=MainPID --value)
-        if [ "${pid:-0}" -gt 0 ]; then tr '\0' '\n' < "/proc/${pid}/environ"; fi
+        if [ "${pid:-0}" -gt 0 ]; then tr '\0' '\n' < "/proc/${pid}/environ" | grep -E '^SLM_REPO_PATH=' || true; fi
       args:
         executable: /bin/bash
       register: slm_backend_environ
       changed_when: false
+      no_log: true
 
     - name: Root the provision playbook at the backend's SLM_REPO_PATH override
       ansible.builtin.set_fact:
