@@ -17,7 +17,7 @@ from typing import Dict, Tuple
 
 from fastapi import HTTPException, Request, status
 
-from auth_revocation import reject_if_revoked_by_password_change, token_passes_revocation
+from auth_revocation import resolve_human_user_via, token_passes_revocation
 from autobot_shared.auth.interactive_principal import LOGIN_TOKEN_TYPE, is_login_token, is_purpose_bound
 from autobot_shared.auth.internal_api_key import verify_internal_api_key
 from autobot_shared.auth.jwt_core import (
@@ -830,7 +830,7 @@ class AuthenticationMiddleware:
             Tuple of (permission_granted: bool, user_data: Dict)
         """
         try:
-            user_data = await resolve_human_user(request)
+            user_data = await resolve_human_user_via(self, request)  # this instance's key, not the singleton's
             if not user_data:
                 return False, None
 
@@ -863,18 +863,7 @@ get_auth_middleware = lazy_singleton(AuthenticationMiddleware)
 
 async def resolve_human_user(request: Request) -> Dict | None:
     """The human a request's JWT / session / dev header names, or None; reads no internal key (#18688)."""
-    user_data = get_auth_middleware().get_user_from_request(request)
-    if not user_data:
-        return None
-    if user_data.get("auth_method") == "device_jwt":  # device JWTs: see get_current_user (GH#9493)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Device tokens not permitted on this endpoint. Use mobile-specific API.",
-        )
-    # #12924, #16411: a token minted before a password change is void; a check that cannot run denies.
-    if user_data.get("auth_method") == "jwt":
-        await reject_if_revoked_by_password_change(user_data)
-    return user_data
+    return await resolve_human_user_via(get_auth_middleware(), request)
 
 
 async def get_current_user(request: Request) -> Dict:

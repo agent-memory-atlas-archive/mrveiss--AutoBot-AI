@@ -56,6 +56,7 @@ def gate(monkeypatch):
     """The real ``resolve_human_user`` / ``check_file_permissions`` over a stand-in identity."""
     real = load_real_auth_middleware()
     fake_self = SimpleNamespace(
+        get_user_from_request=lambda _request: dict(_JWT_USER),  # the instance resolves, not the singleton (#19061)
         security_layer=SimpleNamespace(check_permission=lambda **_kw: True),
         _log_file_access_granted=MagicMock(),
         _log_file_access_denied=MagicMock(),
@@ -138,10 +139,25 @@ def test_change_password_gate_refuses_only_a_revoked_jwt(monkeypatch, auth_clien
 @pytest.mark.parametrize(("revoked", "expected"), [(True, 401), (False, 200)])
 def test_refresh_does_not_mint_from_a_revoked_token(monkeypatch, auth_client, revoked, expected):
     _epoch_says(monkeypatch, revoked=revoked)
-    claims = {"username": "alice", "role": "admin", "sub": "alice", "iat": 1}
+    claims = {"username": "alice", "role": "admin", "iat": 1}
     monkeypatch.setattr(auth_client.api_auth, "_decode_refresh_token", lambda _token: dict(claims))
     auth_client.api_auth.get_auth_middleware().create_jwt_token = MagicMock(return_value="new")
     auth_client.api_auth.get_auth_middleware().jwt_expiry_hours = 1
+    response = auth_client.post("/api/auth/refresh", headers={"Authorization": "Bearer old"})
+    assert response.status_code == expected
+
+
+@pytest.mark.parametrize(("iat", "expected"), [(999, 401), (1001, 200)], ids=["before-change", "after-change"])
+def test_refresh_judges_a_real_login_token_shape_by_its_username(monkeypatch, auth_client, iat, expected):
+    """Login tokens carry ``username`` and no ``sub``: the REAL epoch helper still revokes them (#19061)."""
+    from autobot_shared.user_management import password_epoch  # noqa: PLC0415
+
+    monkeypatch.setattr(password_epoch, "get_password_epoch", AsyncMock(return_value=1000))
+    claims = {"username": "alice", "role": "admin", "iat": iat, "token_type": "login"}
+    monkeypatch.setattr(auth_client.api_auth, "_decode_refresh_token", lambda _token: dict(claims))
+    middleware = auth_client.api_auth.get_auth_middleware()
+    middleware.create_jwt_token = MagicMock(return_value="new")
+    middleware.jwt_expiry_hours = 1
     response = auth_client.post("/api/auth/refresh", headers={"Authorization": "Bearer old"})
     assert response.status_code == expected
 
@@ -150,7 +166,7 @@ def test_refresh_does_not_mint_from_a_revoked_token(monkeypatch, auth_client, re
 def test_refresh_does_not_mint_from_a_logged_out_session(monkeypatch, auth_client, session, expected):
     """A token whose session was invalidated (logout) is not refreshable inside its window."""
     _epoch_says(monkeypatch, revoked=False)
-    claims = {"username": "alice", "role": "admin", "sub": "alice", "iat": 1, "session_id": "s-1"}
+    claims = {"username": "alice", "role": "admin", "iat": 1, "session_id": "s-1"}
     monkeypatch.setattr(auth_client.api_auth, "_decode_refresh_token", lambda _token: dict(claims))
     middleware = auth_client.api_auth.get_auth_middleware()
     middleware.get_session = lambda _sid: session
@@ -192,7 +208,7 @@ def test_validate_reports_a_password_change_revoked_token_as_revoked(monkeypatch
     """Caller is a fresh admin; the INSPECTED token's verdict comes from the epoch."""
     import auth_revocation  # noqa: PLC0415
 
-    inspected = {"username": "bob", "role": "user", "sub": "bob", "iat": 1, "exp": 9999999999}
+    inspected = {"username": "bob", "role": "user", "iat": 1, "exp": 9999999999}
     monkeypatch.setattr(
         auth_client.api_auth.get_auth_middleware(), "verify_jwt_token", lambda _t: inspected, raising=False
     )
@@ -200,8 +216,9 @@ def test_validate_reports_a_password_change_revoked_token_as_revoked(monkeypatch
     calls = []
 
     async def epoch(claims):
-        calls.append(claims["sub"])
-        return claims["sub"] == "bob" and revoked
+        subject = claims.get("sub") or claims["username"]  # login tokens carry no ``sub`` (#19061)
+        calls.append(subject)
+        return subject == "bob" and revoked
 
     monkeypatch.setattr(auth_revocation, "is_token_revoked_by_password_change", epoch)
     response = auth_client.post("/api/auth/validate", json={"token": "some.token.value"})
@@ -278,3 +295,16 @@ def test_check_file_permissions_fails_closed_when_the_epoch_store_is_down(monkey
         asyncio.run(gate.middleware.check_file_permissions(_request(), "view"))
     assert exc.value.status_code == 503
     assert "Retry-After" in exc.value.headers
+
+
+def test_check_file_permissions_resolves_through_its_own_instance_not_the_singleton(monkeypatch, gate):
+    """An instance with its own (ephemeral) signing key must verify the tokens it signed (#19061).
+
+    The singleton here knows no one; the instance (``fake_self``) knows alice. Resolving through the
+    singleton would answer (False, None).
+    """
+    _epoch_says(monkeypatch, revoked=False)
+    gate.middleware.get_user_from_request = lambda _request: None
+    granted, user = asyncio.run(gate.middleware.check_file_permissions(_request(), "view"))
+    assert granted is True
+    assert user["username"] == "alice"

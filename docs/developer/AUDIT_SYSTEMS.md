@@ -173,7 +173,8 @@ row with a non-`success` `outcome`, so no consumer may filter failures by action
 **Identity vocabulary (#19035).** `IdentityAuditAction` (`autobot_shared/user_management/models/audit.py`) stays
 a public constant set of the shared package; `audit_row` canonicalises every value on write, so the stored
 row is dotted with no call-site change. `auth.mfa`, `auth.lockout` and `auth.unlock` fall under the threat
-ingest's `auth.` prefix and reach the authentication analyzers. `access.denied` deliberately stays
+ingest's `auth.` prefix, so an event carrying one that reaches ingest is classified for the authentication
+analyzers; identity-service `audit_row` rows do not reach ingest yet (see the end of this section). `access.denied` deliberately stays
 `api_request`: an RBAC denial is an authorization verdict by an authenticated caller, not a credential guess
 the brute-force analyzer should count. Rows already stored under the old spellings are matched through
 `spellings_of`; rewriting them waits for the approval queue (#17038).

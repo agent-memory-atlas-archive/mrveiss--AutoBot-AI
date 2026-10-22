@@ -138,7 +138,8 @@ def test_the_admin_family_and_operator_pass_the_redis_gate(monkeypatch, role):
     call = _operator_gate(monkeypatch, role)
     _epoch_says(monkeypatch, revoked=False)
 
-    _resolve(call(_request()))  # no refusal
+    principal = _resolve(call(_request()))
+    assert principal["username"] == "alice"  # the audit trail attributes the action to this identity
 
 
 @pytest.mark.parametrize("role", ["analyst", "user"])
