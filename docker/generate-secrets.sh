@@ -9,7 +9,7 @@
 #
 # PASSWORDS (#16275, #17793): this writes every credential compose requires --
 # AUTOBOT_DB_PASSWORD, GRAFANA_ADMIN_PASSWORD, AUTOBOT_ADMIN_PASSWORD and
-# SLM_ADMIN_PASSWORD. Compose has no fallback for any of them and refuses to
+# SLM_ADMIN_PASSWORD (and VNC_PASSWORD for the playwright-vnc stack). Compose has no fallback for any of them and refuses to
 # start, naming the variable, when one is missing. Pass docker/.env.secrets AFTER
 # docker/.env.docker, as shown below, so the generated values win.
 #
@@ -41,8 +41,27 @@ if ! command -v openssl >/dev/null 2>&1; then
     exit 1
 fi
 
-touch "$SECRETS_FILE"
+# Created owner-only from the first byte, not chmod-ed after a world-readable moment.
+(umask 077 && touch "$SECRETS_FILE")
 chmod 600 "$SECRETS_FILE"
+
+# #17793: an existing Postgres volume keeps the password it was created with and ignores a new
+# one. Generating AUTOBOT_DB_PASSWORD for it would lock the stack out of its own database, so
+# refuse, before anything is written, and say what to do instead.
+postgres_volume() {  # the stack's postgres_data volume name, if docker can list it and it exists
+    local project="${COMPOSE_PROJECT_NAME:-$(basename "$(cd "$(dirname "$0")/.." && pwd)")}"
+    project="$(printf '%s' "$project" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
+    command -v docker >/dev/null 2>&1 || return 1
+    docker volume ls --format '{{.Name}}' 2>/dev/null | grep -qx "${project}_postgres_data" || return 1
+    printf '%s_postgres_data' "$project"
+}
+if ! grep -q '^AUTOBOT_DB_PASSWORD=' "$SECRETS_FILE" && volume="$(postgres_volume)"; then
+    echo "ERROR: ${SECRETS_FILE} has no AUTOBOT_DB_PASSWORD, but the Postgres volume ${volume} exists." >&2
+    echo "  Postgres keeps the password that volume was created with; a new one would lock the stack out." >&2
+    echo "  Add the password this deployment already uses (a stack started from the old tracked" >&2
+    echo "  default used 'autobot') as AUTOBOT_DB_PASSWORD=... to ${SECRETS_FILE}, then rerun." >&2
+    exit 1
+fi
 
 gen_password() {  # 32 URL-safe chars meeting the user schema's policy: upper, lower and a digit
     local value=""
@@ -89,6 +108,8 @@ ensure_secret GRAFANA_ADMIN_PASSWORD
 ensure_secret AUTOBOT_ADMIN_PASSWORD password
 # #17793: the SLM's first admin; compose no longer falls back to 'admin' and refuses to start without it.
 ensure_secret SLM_ADMIN_PASSWORD password
+# #17500: the playwright-vnc dev stack's VNC password; it no longer falls back to a fixed one.
+ensure_secret VNC_PASSWORD
 
 # #16833: the compose management network has no default range -- a fixed one took
 # over the host's route on a LAN using the same /24. Pick a free private /24 once

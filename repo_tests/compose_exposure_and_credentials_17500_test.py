@@ -16,9 +16,13 @@ variable is one docker/generate-secrets.sh writes, so the documented first run s
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
+from repo_tests._compose_files import COMPOSE_FILES, load_yaml_mapping
 from repo_tests._paths import repo_root
 
 _ROOT = repo_root()
@@ -32,6 +36,8 @@ _ALL_INTERFACES = {
     ("docker-compose.yml", "autobot-slm-gui", "443"): "the SLM-only profile's web entry point over TLS",
 }
 _LOOPBACK = {"127.0.0.1", "::1", "[::1]", "localhost"}
+#: A bind address variable that defaults to loopback: closed unless an operator opens it on purpose.
+_LOOPBACK_DEFAULT = re.compile(r"\$\{[A-Z0-9_]+:-127\.0\.0\.1\}")
 #: Credentials passed through EMPTY when unset (``${VAR:-}``): never a guessable value, and each
 #: is generated, optional or fails closed where it is used. A new one needs a reason here.
 _EMPTY_WHEN_UNSET = {
@@ -46,9 +52,24 @@ _EMPTY_WHEN_UNSET = {
 _CREDENTIAL = re.compile(r"PASSWORD|SECRET|TOKEN|_KEY\b|PASSPHRASE", re.I)
 
 
+#: Named so a discovery that silently lost one fails here, not only below the floor.
+_KNOWN_COMPOSE_FILES = {
+    "docker-compose.yml",
+    "docker-compose.hardened.yml",
+    "docker-compose.override.example.yml",
+    "docker/mcp-bridges.yml",
+    "autobot-infrastructure/shared/config/logging/loki/docker-compose-loki.yml",
+    "autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml",
+    "autobot-infrastructure/shared/docker/compose/docker-compose.playwright.yml",
+    "autobot-infrastructure/shared/docker/compose/docker-compose.secure-sandbox.yml",
+}
+
+
 def _compose_files() -> list[Path]:
-    files = sorted({*_ROOT.glob("docker-compose*.yml"), *(_ROOT / "docker").glob("*.yml")})
-    assert any(f.name == "docker-compose.yml" for f in files), "the compose files were not found"
+    """Every tracked compose file at any depth, through the shared declaration (27's review)."""
+    files = [_ROOT / rel for rel in COMPOSE_FILES.examined(_ROOT)]
+    missing = _KNOWN_COMPOSE_FILES - {str(f.relative_to(_ROOT)) for f in files}
+    assert not missing, f"compose files the enumeration no longer reaches: {sorted(missing)}"
     return files
 
 
@@ -77,7 +98,7 @@ def exposed_ports(compose: dict, name: str) -> list[tuple[str, str, str]]:
     for service, spec in (compose.get("services") or {}).items():
         for entry in (spec or {}).get("ports") or []:
             host_ip, target = _host_ip_and_target(entry)
-            if host_ip not in _LOOPBACK:
+            if host_ip not in _LOOPBACK and not _LOOPBACK_DEFAULT.fullmatch(host_ip or ""):
                 found.append((name, service, target))
     return found
 
@@ -85,6 +106,21 @@ def exposed_ports(compose: dict, name: str) -> list[tuple[str, str, str]]:
 def credential_defaults(text: str) -> list[str]:
     """Every ${VAR:-x} / ${VAR-x} with a NON-empty x whose VAR names a credential."""
     return [m.group(0) for m in re.finditer(r"\$\{([A-Z0-9_]+):?-([^}]+)\}", text) if _CREDENTIAL.search(m.group(1))]
+
+
+def credential_literals(compose: dict) -> list[str]:
+    """service/KEY for each credential set to a literal value in a service's environment."""
+    found = []
+    for service, spec in (compose.get("services") or {}).items():
+        env = (spec or {}).get("environment") or {}
+        pairs = env.items() if isinstance(env, dict) else (str(e).split("=", 1) for e in env if "=" in str(e))
+        for key, value in pairs:
+            value = "" if value is None else str(value)
+            if key.endswith("_FILE"):  # a path to a secret file (compose secrets), not a secret
+                continue
+            if _CREDENTIAL.search(key) and value.strip() and not value.strip().startswith("${"):
+                found.append(f"{service}/{key}")
+    return found
 
 
 def empty_passthroughs(text: str) -> set[str]:
@@ -119,6 +155,11 @@ def test_no_compose_credential_has_a_default() -> None:
     assert not any(hits.values()), f"a credential falls back to a default instead of refusing to start: {hits}"
 
 
+def test_no_compose_credential_is_a_literal() -> None:
+    hits = {str(f.relative_to(_ROOT)): credential_literals(load_yaml_mapping(f)) for f in _compose_files()}
+    assert not any(hits.values()), f"a credential is written into a compose file: {hits}"
+
+
 def test_every_empty_credential_passthrough_has_a_reason() -> None:
     found = set().union(*(empty_passthroughs(f.read_text(encoding="utf-8")) for f in _compose_files()))
     assert not found - set(
@@ -143,9 +184,16 @@ def test_contrast_the_detectors_fire_on_the_old_shapes() -> None:
     assert exposed_ports(old, "x.yml") == [("x.yml", "autobot-redis", "6379")]
     new = {"services": {"autobot-redis": {"ports": ["127.0.0.1:${AUTOBOT_REDIS_PORT:-6379}:6379"]}}}
     assert exposed_ports(new, "x.yml") == []
+    opt_in = {"services": {"s": {"ports": ["${BIND:-127.0.0.1}:3100:3100", "${BIND:-0.0.0.0}:1:1"]}}}
+    assert exposed_ports(opt_in, "x.yml") == [("x.yml", "s", "1")]
     long_form = {"services": {"s": {"ports": [{"target": 80, "published": 80}, {"target": 1, "host_ip": "127.0.0.1"}]}}}
     assert exposed_ports(long_form, "x.yml") == [("x.yml", "s", "80")]
     assert empty_passthroughs("J=${AUTOBOT_JWT_SECRET:-} K=${AUTOBOT_DB_PASSWORD:-autobot}") == {"AUTOBOT_JWT_SECRET"}
+    planted = "=".join(("GF_SECURITY_ADMIN_PASSWORD", "fixture"))  # built here: no credential-shaped literal
+    literal = {"services": {"grafana": {"environment": [planted, "GF_X=1"]}}}
+    assert credential_literals(literal) == ["grafana/GF_SECURITY_ADMIN_PASSWORD"]
+    as_map = {"services": {"s": {"environment": {"VNC_PASSWORD": "x", "OK_PASSWORD": "${OK_PASSWORD:?set}"}}}}
+    assert credential_literals(as_map) == ["s/VNC_PASSWORD"]
     assert credential_defaults(
         "A=${AUTOBOT_DB_PASSWORD:-autobot} B=${SLM_ADMIN_PASSWORD-admin} C=${LOG_LEVEL:-INFO} D=${GH_TOKEN:-}"
     ) == [
@@ -172,3 +220,68 @@ def test_the_tracked_docker_env_file_sets_no_credential() -> None:
     assert credential_values("AUTOBOT_DB_USER=autobot\nAUTOBOT_DB_PASSWORD=autobot\nGH_TOKEN=\n") == [
         "AUTOBOT_DB_PASSWORD"
     ]
+
+
+def _generator_in(stack: Path, volumes: str, secrets: str = "") -> subprocess.CompletedProcess:
+    """Run the real generate-secrets.sh as if checked out at *stack*, with a stub `docker`."""
+    bash = shutil.which("bash")
+    if bash is None or shutil.which("openssl") is None:
+        pytest.skip("bash and openssl are needed to run generate-secrets.sh")
+    (stack / "docker").mkdir(parents=True)
+    shutil.copy(_GENERATOR, stack / "docker" / "generate-secrets.sh")
+    (stack / "docker" / ".env.secrets").write_text(secrets, encoding="utf-8")
+    bin_dir = stack / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text(f"#!/bin/sh\nprintf '%s\\n' {volumes}\n", encoding="utf-8")
+    (bin_dir / "docker").chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "AUTOBOT_DOCKER_MGMT_PREFIX": "10.77.3"}
+    return subprocess.run(
+        [bash, str(stack / "docker" / "generate-secrets.sh")], capture_output=True, text=True, timeout=60, env=env
+    )
+
+
+def test_no_db_password_is_generated_over_an_existing_postgres_volume(tmp_path: Path) -> None:
+    """27's review: Postgres keeps the password its volume was created with; a new one locks it out."""
+    out = _generator_in(tmp_path / "stack", "stack_postgres_data")
+    assert out.returncode != 0 and "the Postgres volume stack_postgres_data exists" in out.stderr, out.stderr
+    assert "AUTOBOT_DB_PASSWORD" not in (tmp_path / "stack" / "docker" / ".env.secrets").read_text(encoding="utf-8")
+
+
+def test_a_db_password_already_recorded_or_a_fresh_host_proceeds(tmp_path: Path) -> None:
+    kept = _generator_in(tmp_path / "a" / "stack", "stack_postgres_data", "AUTOBOT_DB_PASSWORD=existing\n")
+    assert kept.returncode == 0, kept.stderr
+    assert "AUTOBOT_DB_PASSWORD=existing" in (tmp_path / "a" / "stack" / "docker" / ".env.secrets").read_text(
+        encoding="utf-8"
+    )
+    fresh = _generator_in(tmp_path / "b" / "stack", "other_postgres_data")
+    assert fresh.returncode == 0, fresh.stderr
+    assert (
+        tmp_path / "b" / "stack" / "docker" / ".env.secrets"
+    ).stat().st_mode & 0o077 == 0, "secrets file not owner-only"
+
+
+def usage_lines_missing_secrets(text: str) -> list[str]:
+    """Commented `docker compose` usage lines that pass .env.docker but not .env.secrets."""
+    lines = text.splitlines()
+    joined = [
+        (line + " " + lines[i + 1]) if line.rstrip().endswith("\\") and i + 1 < len(lines) else line
+        for i, line in enumerate(lines)
+    ]
+    return [
+        line.strip()
+        for line in joined
+        if line.lstrip().startswith("#")
+        and "docker compose" in line
+        and "--env-file docker/.env.docker" in line
+        and ".env.secrets" not in line
+    ]
+
+
+def test_every_documented_compose_command_passes_the_secrets_file() -> None:
+    """27's review: the base file's ${VAR:?} is interpolated before an overlay merges, so a usage
+    line without docker/.env.secrets aborts -- the hardened overlay's header did."""
+    hits = {
+        str(f.relative_to(_ROOT)): usage_lines_missing_secrets(f.read_text(encoding="utf-8")) for f in _compose_files()
+    }
+    assert not any(hits.values()), hits
+    assert usage_lines_missing_secrets("#   docker compose -f a.yml \\\n#     --env-file docker/.env.docker up -d\n")
