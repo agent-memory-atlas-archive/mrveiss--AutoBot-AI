@@ -124,3 +124,47 @@ def test_kb_and_chunker_calls_share_one_loop_and_one_kb(mod):
         assert len(loops) == 2 and loops[0] is loops[1]
     finally:
         mod._close_loop()
+
+
+def _bare_verifier(mod):
+    """A verifier with no real Redis client (the checks under test never need one)."""
+    verifier = mod.KnowledgeConsistencyVerifier.__new__(mod.KnowledgeConsistencyVerifier)
+    verifier.redis_client = None
+    verifier.critical_errors = []
+    verifier.warnings = []
+    return verifier
+
+
+def test_unreachable_kb_fails_the_run_and_the_exit_code(mod, monkeypatch, tmp_path):
+    """The accessor returning None must not read as VERIFIED_CONSISTENT; main() exits 1 (#19205)."""
+    monkeypatch.chdir(tmp_path)
+    mod._close_loop()
+    try:
+        with (
+            patch.object(mod, "get_knowledge_base_async", AsyncMock(return_value=None)),
+            patch.object(mod, "SemanticChunker", None),
+            patch.object(mod, "config", MagicMock(get_llm_config=MagicMock(return_value={}))),
+        ):
+            verifier = _bare_verifier(mod)
+            assert verifier.run_full_verification() is False
+            report = verifier.generate_consistency_report()
+            assert report["status"] != "VERIFIED_CONSISTENT"
+            assert any("unreachable" in e for e in verifier.critical_errors)
+
+            with (
+                patch.object(mod, "KnowledgeConsistencyVerifier", return_value=_bare_verifier(mod)),
+                patch.object(sys, "argv", ["verify_knowledge_consistency"]),
+                pytest.raises(SystemExit) as exit_info,
+            ):
+                mod.main()
+            assert exit_info.value.code == 1
+    finally:
+        mod._close_loop()
+
+
+def test_optional_check_failure_without_kb_outage_still_only_warns(mod):
+    """Contrast: a non-init failure inside the optional embedding probe keeps its old behaviour."""
+    kb = MagicMock()
+    kb.embed_model.get_text_embedding.side_effect = ValueError("embed backend hiccup")
+    with patch.object(mod, "_canonical_kb", return_value=kb):
+        assert mod._verify_embedding_dimension(768) == (True, None)
