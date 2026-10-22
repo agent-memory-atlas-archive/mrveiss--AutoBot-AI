@@ -32,10 +32,10 @@ for _root in (_REPO_ROOT / "autobot-backend", _REPO_ROOT):
     if str(_root) not in sys.path:
         sys.path.insert(0, str(_root))
 
+from autobot_shared.redis_client import get_redis_client
 from autobot_shared.redis_utils import decode_redis_list
 from config import ConfigManager
-from knowledge_base import KnowledgeBase
-from autobot_shared.redis_client import get_redis_client
+from knowledge_factory import get_knowledge_base_async
 
 # Wire in the canonical chunker so the embedding-model consistency check
 # at `verify_embedding_model_consistency()` can actually verify the
@@ -52,6 +52,16 @@ config = ConfigManager()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _canonical_kb():
+    """The canonical initialized KB for this one-shot process (#18122)."""
+    import asyncio
+
+    kb = asyncio.run(get_knowledge_base_async())
+    if kb is None:
+        raise RuntimeError("Knowledge base unavailable: initialization failed or retry cooldown active")
+    return kb
 
 
 # Issue #338: Helper functions extracted to reduce nesting depth
@@ -120,7 +130,7 @@ def _verify_redis_vector_dimension(redis_client: Any, expected_dimension: int) -
 def _verify_embedding_dimension(expected_dimension: int) -> Tuple[bool, Optional[str]]:
     """Verify actual embedding dimension (Issue #338 - extracted helper)."""
     try:
-        kb = KnowledgeBase()
+        kb = _canonical_kb()
         if not hasattr(kb, "embed_model"):
             return True, None
 
@@ -156,7 +166,7 @@ class KnowledgeConsistencyVerifier:
             import asyncio
 
             test_text = "test chunker-kb model consistency"
-            kb_obj = KnowledgeBase()
+            kb_obj = _canonical_kb()
             kb_vec = kb_obj.embed_model.get_text_embedding(test_text)
             chunker_vecs = asyncio.run(chunker.embed_sentences([test_text]))
             if chunker_vecs is None or len(chunker_vecs[0]) != len(kb_vec):
@@ -238,7 +248,7 @@ class KnowledgeConsistencyVerifier:
 
             # 4. Check Redis vector schema consistency
             try:
-                kb = KnowledgeBase()
+                kb = _canonical_kb()
                 if hasattr(kb, "embedding_model_name"):
                     if not kb.embedding_model_name.startswith("nomic-embed-text"):
                         self.critical_errors.append(
