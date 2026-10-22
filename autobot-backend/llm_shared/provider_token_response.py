@@ -107,7 +107,8 @@ def _validate_issuer(iss: str, provider_name: str) -> None:
     from urllib.parse import urlparse  # noqa: PLC0415
 
     from autobot_shared.url_safety import get_oauth_allowed_hosts  # noqa: PLC0415
-    from llm_shared.provider_auth import _EXPECTED_ISSUER_PREFIXES  # noqa: PLC0415  # provider data stays there
+
+    from .provider_auth import _EXPECTED_ISSUER_PREFIXES  # noqa: PLC0415  # provider data stays there
 
     parsed = urlparse(iss)
     if parsed.scheme != "https" or not parsed.hostname:

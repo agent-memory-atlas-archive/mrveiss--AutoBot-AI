@@ -48,7 +48,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from autobot_shared.logging_manager import get_logger
-from llm_shared.provider_token_response import (  # noqa: F401  # re-exported (#19241 split)
+
+from .provider_token_response import (  # noqa: F401  # re-exported (#19241 split)
     ProviderAuthError,
     TokenExpiredError,
     _decode_jwt_claims,

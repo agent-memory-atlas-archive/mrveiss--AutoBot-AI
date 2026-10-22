@@ -418,7 +418,7 @@ class BaseProvider(ABC):
         ``llm_shared.provider_oauth_credentials``. Always None for a provider
         without sign-in, so callers can ask unconditionally.
         """
-        from llm_shared.provider_oauth_credentials import resolve_signed_in_token  # noqa: PLC0415  # lazy: DB stack
+        from .provider_oauth_credentials import resolve_signed_in_token  # noqa: PLC0415  # lazy: DB stack
 
         return await resolve_signed_in_token(self.provider_name)
 

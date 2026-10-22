@@ -24,20 +24,21 @@ from __future__ import annotations
 from typing import Any
 
 from autobot_shared.logging_manager import get_logger
-from llm_shared.llm_oauth_registry import (
+
+from .llm_oauth_registry import (
     LLM_OAUTH_PROVIDER_LABELS,
     build_provider,
     missing_settings,
     resolve_client,
 )
-from llm_shared.provider_auth import (
+from .provider_auth import (
     OAuthAuth,
     ProviderAuthError,
     _vault_read_dual,
     org_vault_subject,
     user_vault_subject,
 )
-from llm_shared.run_credentials import get_llm_principal
+from .run_credentials import get_llm_principal
 
 logger = get_logger(__name__)
 
