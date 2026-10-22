@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import logging
 import pkgutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +37,11 @@ from typing import Any
 
 from _scan_helpers import tracked_paths
 from check_getenv_ssot_drift import EXEMPT_MARKER, _is_getenv_call, _literal, values_disagree
+
+from _check_harness import VacuousScan  # isort: skip -- check_getenv_ssot_drift puts tools/lint on sys.path
+
+#: Name this guard reports under, in messages and in its floor failures.
+HOOK_ID = "env-forks"
 
 #: Trees whose env reads are swept. Named, not inferred: a tree outside this list is not covered, and
 #: the reach declaration in ``repo_tests/env_fork_guard_18094_test.py`` fails if one of these is empty.
@@ -238,7 +244,10 @@ def scan(repo_root: Path, files: list[Path], registry: dict[str, Any]) -> ScanRe
     result = ScanResult(registered_vars=0)
     ssot: dict[str, str] = {}
     for rel in SSOT_CONSTANT_SOURCES:
-        text = (repo_root / rel).read_text(encoding="utf-8")
+        source = repo_root / rel
+        if not source.is_file():
+            raise VacuousScan(f"{rel} is not in {repo_root} -- there are no SSOT constants to compare against")
+        text = source.read_text(encoding="utf-8")
         ssot.update({name: rel for name in module_constants(text)})
     reads: dict[str, list[tuple[Any, str]]] = {}
     for path in files:
@@ -272,7 +281,28 @@ def scan(repo_root: Path, files: list[Path], registry: dict[str, Any]) -> ScanRe
 def sweep(repo_root: Path, registry: dict[str, Any]) -> ScanResult:
     """The ONE population: every git-tracked ``.py`` under *repo_root*, scanned against *registry*.
 
-    The drift hook and the reach declaration both call this, so the hook's floor check and the
+    ``check_env_forks`` and the reach declaration both call this, so the entrypoint's floor check and the
     declaration's ``verify_floor`` count the same set of reads.
     """
     return scan(repo_root, [repo_root / rel for rel in tracked_paths(repo_root, "*.py")], registry)
+
+
+def collect(argv: list[str], repo_root: Path) -> tuple[int, list[str]]:
+    """``(env fallback reads examined, finding lines)`` for ``check_env_forks``; *argv* is unused.
+
+    The reads examined are the population :data:`FORK_READ_FLOOR` is a floor over, so the harness
+    refuses (exit 2) a sweep that lost its roots instead of reporting "none found" over nothing.
+    """
+    del argv  # full-repo only: a fork is two files disagreeing, so a changed-files run would miss it
+    result = sweep(repo_root, registry_defaults())
+    logging.getLogger(HOOK_ID).info("[%s] %s", HOOK_ID, result.summary())
+    return result.env_reads, [f"[{HOOK_ID}] {line}" for line in result.findings()]
+
+
+def summary(n: int) -> str:
+    """The closing line, naming every kind of finding :meth:`ScanResult.findings` can carry."""
+    return (
+        f"[{HOOK_ID}] {n} finding(s): an env var read with differing fallbacks, a fallback that "
+        "disagrees with the env registry default, or a module constant shadowing an SSOT constant. "
+        "Read the value from one place (the registry / ssot_config) instead of re-stating it (#18094)."
+    )

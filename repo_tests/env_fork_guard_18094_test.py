@@ -210,3 +210,35 @@ def test_a_none_registry_default_compares_readers_only(tmp_path: Path) -> None:
     disagree = {**agree, "autobot-backend/b.py": 'import os\nP = os.getenv("X_OPT", 9090)\n'}
     forks = _scan(tmp_path / "disagree", disagree, {"X_OPT": None}).forks
     assert "X_OPT" in forks and not any("registry declares" in line for line in forks["X_OPT"])
+
+
+# --- the sweep's own entrypoint (#19215): refusals are exit 2, never a traceback ---------------------
+
+
+def test_a_missing_ssot_source_is_a_vacuous_refusal_not_a_traceback(tmp_path: Path) -> None:
+    root, paths = _tree(tmp_path, {"autobot-backend/a.py": 'import os\nP = os.getenv("X_A", "1")\n'})
+    (root / "autobot_shared" / "ssot_constants.py").unlink()
+    with pytest.raises(scan_mod.VacuousScan, match="ssot_constants.py is not in"):
+        scan_mod.scan(root, paths, {})
+
+
+def test_the_summary_names_all_three_finding_kinds() -> None:
+    text = scan_mod.summary(3)
+    assert "differing fallbacks" in text and "registry default" in text and "shadowing an SSOT constant" in text
+
+
+def test_the_entrypoint_exits_two_on_a_tree_without_the_ssot_sources(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    import subprocess
+
+    from _check_harness import run_check
+
+    from autobot_shared.paths import scrubbed_git_env
+
+    root, _ = _tree(tmp_path, {"autobot-backend/a.py": 'import os\nP = os.getenv("X_A", "1")\n'})
+    (root / "autobot_shared" / "ssot_tls.py").unlink()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True, env=scrubbed_git_env())
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=scrubbed_git_env())
+    code = run_check(scan_mod.HOOK_ID, scan_mod.collect, [], root=root, summary=scan_mod.summary)
+    assert code == 2 and "ssot_tls.py is not in" in caplog.text
