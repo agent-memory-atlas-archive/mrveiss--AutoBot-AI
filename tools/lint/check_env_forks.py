@@ -28,7 +28,9 @@ from _env_fork_scan import FORK_READ_FLOOR, HOOK_ID, collect, summary  # noqa: E
 def main(argv: list[str] | None = None) -> int:
     """Full-repo sweep; always the whole tree, since a fork spans files."""
     del argv
-    return run_anchored(HOOK_ID, collect, [], anchor=Path(__file__), floor=FORK_READ_FLOOR, summary=summary)
+    return run_anchored(
+        HOOK_ID, collect, [], anchor=Path(__file__), floor=FORK_READ_FLOOR, summary=summary, unit="env fallback read(s)"
+    )
 
 
 if __name__ == "__main__":

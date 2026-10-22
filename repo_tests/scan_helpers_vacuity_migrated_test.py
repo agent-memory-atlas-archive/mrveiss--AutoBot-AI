@@ -157,7 +157,7 @@ def test_a_repository_without_ssot_config_exits_two(tmp_path: Path, checker: str
         # pairs against GETENV_CALL_FLOOR (8) is what is left to refuse.
         ("check_getenv_ssot_drift.py", _FIELD_CALLS, PY_FLOOR, "floor is 8"),
         # env-forks: no literal-fallback reads against FORK_READ_FLOOR.
-        ("check_env_forks.py", 5, 0, f"floor is {FORK_READ_FLOOR}"),
+        ("check_env_forks.py", 5, 0, f"env fallback read(s); floor is {FORK_READ_FLOOR}"),
     ],
 )
 def test_a_population_below_the_checkers_own_floor_exits_two(
