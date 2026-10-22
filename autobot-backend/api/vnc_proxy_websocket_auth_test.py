@@ -100,7 +100,7 @@ class TestVncWebsocketProxyAuthentication:
         assert connect_call.args[2]["user"] == "alice"
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("role", ["user", "editor", "analyst", "readonly", "superadmin"])
+    @pytest.mark.parametrize("role", ["user", "editor", "analyst", "readonly"])
     async def test_an_authenticated_but_unpermitted_caller_is_refused_before_accept(self, role):
         """#17054: authenticated is not enough, and nothing else covered this.
 
@@ -109,10 +109,9 @@ class TestVncWebsocketProxyAuthentication:
         had none: it was being exercised only by accident, by the test above
         using `role: "user"`, and that accident failed rather than asserted.
 
-        `superadmin` is in the list deliberately. `ROLE_PERMISSIONS[SUPERADMIN]`
-        is empty by #13854, so the role that sounds highest is refused; if that
-        is ever ruled wrong, the fix is that table and this parameter moves to
-        the permitted test -- one place, both asserted.
+        `superadmin` is NOT in the list: since #19125 (owner decision
+        2026-10-21) its `ROLE_PERMISSIONS` entry is derived from admin's, so it
+        holds `mcp.desktop.control` and is admitted by the gate.
         """
         ws = _fake_websocket()
 

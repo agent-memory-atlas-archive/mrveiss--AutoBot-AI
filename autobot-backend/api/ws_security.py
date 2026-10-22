@@ -333,11 +333,10 @@ async def enforce_ws_desktop_auth(websocket: WebSocket) -> "dict | None":
     through ``is_admin_role``. #13854 deliberately removed the administrative
     short-circuit from that function because it made a predicate the most
     permissive permission source in the system; re-adding it here would reverse
-    that ruling one call site at a time. The consequence is explicit and worth
-    reading before changing this: ``ROLE_PERMISSIONS[Role.SUPERADMIN]`` is empty,
-    so **a superadmin is refused the desktop** while ``admin`` and ``operator``
-    are admitted. If that is wrong, the fix is to give superadmin its
-    ROLE_PERMISSIONS entries -- one place -- not a bypass here.
+    that ruling one call site at a time. Superadmin is admitted because
+    ``ROLE_PERMISSIONS[Role.SUPERADMIN]`` is derived from admin's set (#19125,
+    owner decision 2026-10-21), so it holds ``mcp.desktop.control`` like admin
+    and ``operator`` -- never through a bypass here.
     """
     user = await enforce_ws_remote_control_auth(
         websocket,
