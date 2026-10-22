@@ -77,12 +77,12 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/analytics_quality.py": 1729,
     "autobot-backend/api/analytics_root_cause_test.py": 628,
     "autobot-backend/api/api_endpoint_migrations_test.py": 31020,
-    "autobot-backend/api/auth.py": 698,
+    "autobot-backend/api/auth.py": 684,
     "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
     "autobot-backend/api/cache_management.py": 779,
     "autobot-backend/api/chat.py": 2690,  # #18316: delete delegates to the canonical path
-    "autobot-backend/api/chat_sessions.py": 1860,  # #18293: legacy transcripts only ever proposed
+    "autobot-backend/api/chat_sessions.py": 1859,  # #18293: legacy transcripts only ever proposed
     "autobot-backend/api/code_intelligence.py": 2151,
     "autobot-backend/api/code_search.py": 828,
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,
@@ -104,7 +104,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/git_mcp.py": 1336,
     "autobot-backend/api/http_client_mcp.py": 941,
     "autobot-backend/api/ide_integration.py": 928,
-    "autobot-backend/api/knowledge.py": 3316,
+    "autobot-backend/api/knowledge.py": 3311,
     "autobot-backend/api/knowledge_api_integration_test.py": 623,
     "autobot-backend/api/knowledge_categories.py": 674,
     "autobot-backend/api/knowledge_collections.py": 726,
@@ -119,12 +119,12 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/knowledge_vectorization_test.py": 601,
     "autobot-backend/api/llm.py": 1078,
     "autobot-backend/api/llm_optimization.py": 725,
-    "autobot-backend/api/log_forwarding.py": 777,
+    "autobot-backend/api/log_forwarding.py": 761,  # #18734: one served-destination helper (777 -> 761)
     "autobot-backend/api/logs.py": 1027,
     "autobot-backend/api/mcp_registry.py": 1173,
     "autobot-backend/api/memory.py": 1514,
     "autobot-backend/api/monitoring.py": 1316,
-    "autobot-backend/api/multimodal.py": 833,
+    "autobot-backend/api/multimodal.py": 831,
     "autobot-backend/api/natural_language_search.py": 1256,
     "autobot-backend/api/npu_workers.py": 1481,
     "autobot-backend/api/orchestration.py": 610,
@@ -136,7 +136,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/schemas_chat.py": 702,
     "autobot-backend/api/schemas_code.py": 3265,
     "autobot-backend/api/schemas_knowledge.py": 5127,
-    "autobot-backend/api/schemas_system.py": 4345,  # #13051: SecretModel ownership fields
+    "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
     "autobot-backend/api/schemas_workflows.py": 2907,
     "autobot-backend/api/secrets.py": 1179,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
@@ -146,10 +146,10 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/terminal_handlers.py": 1472,
     "autobot-backend/api/validation_dashboard.py": 670,
     "autobot-backend/api/vnc_manager.py": 1651,
-    "autobot-backend/api/vnc_mcp.py": 763,
+    "autobot-backend/api/vnc_mcp.py": 760,
     "autobot-backend/api/websockets.py": 1120,  # #16457: accepts routed through websocket_subprotocol.accept_websocket
     "autobot-backend/api/workflow.py": 1027,
-    "autobot-backend/auth_middleware.py": 1075,  # #16457: bearer parsing moved to websocket_subprotocol.py
+    "autobot-backend/auth_middleware.py": 1056,  # #16457: bearer parsing moved to websocket_subprotocol.py; #19061
     "autobot-backend/autobot_memory_graph/property_graph.py": 629,
     "autobot-backend/autobot_memory_graph/semantic_search.py": 706,
     "autobot-backend/benchmarks/benchmark_belief_state.py": 725,
@@ -312,10 +312,10 @@ RATCHET_BASELINE: dict[str, int] = {
     # #16354: invisible-char table moved to security/unicode_normalization.py
     "autobot-backend/security/prompt_injection_detector.py": 703,
     "autobot-backend/security/security_edge_cases_test.py": 613,
-    "autobot-backend/security/session_ownership.py": 817,
+    "autobot-backend/security/session_ownership.py": 815,
     "autobot-backend/security/threat_detection_refactor_test.py": 880,
     "autobot-backend/security/threat_intelligence.py": 762,
-    "autobot-backend/security_layer.py": 717,
+    "autobot-backend/security_layer.py": 715,
     "autobot-backend/services/agent_analytics.py": 686,
     "autobot-backend/services/agent_terminal/service.py": 945,
     "autobot-backend/services/ai_stack_client.py": 764,
@@ -408,7 +408,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/tools/tool_registry.py": 959,
     "autobot-backend/utils/advanced_cache_manager.py": 1213,
     "autobot-backend/utils/claude_api_integration.py": 917,
-    "autobot-backend/utils/distributed_service_discovery.py": 684,
     "autobot-backend/utils/error_catalog.py": 775,
     "autobot-backend/utils/file_categorization.py": 724,
     "autobot-backend/utils/gpu_vector_search.py": 1231,
@@ -418,7 +417,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/utils/operation_timeout_integration.py": 731,
     "autobot-backend/utils/performance_monitoring/monitor.py": 714,
     "autobot-backend/utils/request_batcher.py": 752,
-    "autobot-backend/utils/service_discovery.py": 677,
     "autobot-backend/utils/system_validator.py": 1349,
     "autobot-backend/utils/task_queue.py": 890,
     "autobot-backend/utils/timeout_migration_examples.py": 1024,
@@ -430,7 +428,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/workers/audit_tasks_test.py": 1197,
     "autobot-backend/workflow_scheduler.py": 1070,
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
-    "autobot-slm-backend/api/code_source.py": 710,
+    "autobot-slm-backend/api/code_source.py": 708,
     "autobot-slm-backend/api/code_sync.py": 5819,  # #18052: six path/rsync helpers moved to api/_rsync_paths.py
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 724,
@@ -460,14 +458,14 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/services/drift_checker.py": 839,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,
-    "autobot-slm-backend/services/playbook_executor.py": 1401,  # #17150: ansible_dir self-heal, re-detect before sync
+    "autobot-slm-backend/services/playbook_executor.py": 1399,  # #17150: ansible_dir self-heal, re-detect before sync
     "autobot-slm-backend/services/reconciler.py": 2216,
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
     "autobot-slm-backend/services/replication.py": 826,
     "autobot-slm-backend/services/role_registry.py": 713,
-    "autobot-slm-backend/services/service_orchestrator.py": 915,
+    "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
     "autobot-slm-backend/tests/api/test_drift_resolve.py": 606,
