@@ -189,10 +189,6 @@
       "verdict": "homonym",
       "why": "per-linter file checks with different violation types"
     },
-    "check_paths": {
-      "verdict": "real",
-      "issue": 18954
-    },
     "classify": {
       "verdict": "homonym",
       "why": "session backfill, npm audit and umbrella label drift classifiers"
@@ -325,10 +321,6 @@
       "verdict": "homonym",
       "why": "unrelated runners (A/B script, CI retry sweep, lint runner)"
     },
-    "run_audit": {
-      "verdict": "real",
-      "issue": 18954
-    },
     "run_duplicate_analysis": {
       "verdict": "homonym",
       "why": "script runner wrapper vs Celery task"
@@ -352,10 +344,6 @@
     "test_api_endpoints": {
       "verdict": "homonym",
       "why": "performance profiling vs endpoint definition test"
-    },
-    "tracked_python_files": {
-      "verdict": "real",
-      "issue": 18954
     },
     "violations": {
       "verdict": "homonym",
