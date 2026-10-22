@@ -4552,6 +4552,7 @@ from api._resume_plan import (  # noqa: E402,F401 - re-exported; module-level im
     restart_cut_the_wait,
     restored_stage,
 )
+from api._resume_wait import wait_for_detached_self_update  # noqa: E402
 
 
 async def _get_slm_deployed_commit() -> Optional[str]:
@@ -5319,14 +5320,8 @@ async def _await_self_update_completion(job: "UpdateAllJob", since: Optional[str
         if job.status == "failed":  # #16610: the fired run failed before the restart; nothing will complete
             return None
         activity = await read_deploy_activity()
-        # #14703 interaction: waiting IS progress. This loop runs up to
-        # _SELF_UPDATE_WATCH_TIMEOUT_SECONDS (3600s default) and the staleness
-        # rule retires a job after _UPDATE_ALL_STALE_SECONDS (1800s default) of
-        # silence -- exactly half. Without a stamp per poll, a healthy
-        # self-update that takes longer than 1800s is retired as stale at the
-        # halfway point of its own permitted wait. The reconcile path is the
-        # no-restart case, so it deliberately persists no resume plan, and the
-        # resume plan is the only other thing that stays the staleness rule.
+        # #14703: waiting IS progress. The wait (3600s) outlives the staleness rule
+        # (1800s), so stamp every poll or a healthy long self-update is retired as stale.
         _mark_progress(job)
         # in_progress is None means the unit could not be queried — unknown is
         # not "finished", so keep waiting rather than resolving on a guess.
@@ -5554,6 +5549,10 @@ async def _execute_resume(
     """
     global _resume_task
     try:
+        if not await wait_for_detached_self_update(
+            job, _mark_progress, _SELF_UPDATE_WATCH_TIMEOUT_SECONDS, _SELF_UPDATE_WATCH_POLL_SECONDS
+        ):
+            return
         if not await _resume_verify_slm_stage(job, target_commit):
             return
 
