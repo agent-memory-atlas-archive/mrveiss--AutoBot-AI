@@ -9,7 +9,7 @@ Debug Redis vector store fields to understand the data structure
 
 import logging
 
-from autobot_shared.redis_client import get_redis_client
+from autobot_shared.redis_client import require_redis_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ def debug_redis_vector_fields():
     """Debug what fields are available in Redis vector store"""
     try:
         # Connect to Redis (knowledge DB — llama_index vectors live in DB 1)
-        client = get_redis_client(database="knowledge", decode_responses=True)
+        client = require_redis_client(database="knowledge", decode_responses=True)
 
         # Get index info
         logger.info("Getting Redis FT.INFO for llama_index...")

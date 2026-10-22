@@ -15,7 +15,7 @@ from pathlib import Path
 
 import requests
 
-from autobot_shared.redis_client import get_redis_client
+from autobot_shared.redis_client import require_redis_client
 from autobot_shared.slm_rest_url import rest_url
 from autobot_shared.ssot_config import config as ssot_config
 
@@ -224,9 +224,7 @@ class HealthCheck:
         """Check 7: Redis connectivity"""
         logger.info("Checking Redis connectivity...")
         try:
-            r = get_redis_client(database="main", decode_responses=False)
-            if r is None:
-                raise ConnectionError("canonical Redis client unavailable")
+            r = require_redis_client(database="main", decode_responses=False)
             r.ping()
             self.results["redis"] = {"status": "OK", "timestamp": datetime.now().isoformat()}
             return True

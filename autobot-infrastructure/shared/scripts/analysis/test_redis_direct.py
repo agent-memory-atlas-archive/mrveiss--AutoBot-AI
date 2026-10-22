@@ -9,7 +9,7 @@ Test direct Redis access to understand the field issue
 
 import logging
 
-from autobot_shared.redis_client import get_redis_client
+from autobot_shared.redis_client import require_redis_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def test_redis_direct_access():
     """Test Redis direct access"""
     try:
-        client = get_redis_client(database="knowledge", decode_responses=True)
+        client = require_redis_client(database="knowledge", decode_responses=True)
 
         # Test FT.SEARCH with explicit RETURN
         logger.info("Testing FT.SEARCH with explicit RETURN...")

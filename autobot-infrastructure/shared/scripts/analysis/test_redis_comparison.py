@@ -16,7 +16,7 @@ from pathlib import Path
 
 from autobot_shared.network_constants import ServiceURLs
 from autobot_shared.paths import project_root
-from autobot_shared.redis_client import get_redis_client
+from autobot_shared.redis_client import require_redis_client
 
 # The sibling helper module lives beside this script; put its directory on the path so the import
 # resolves when the file is imported (pytest, tooling) as well as when it is run.
@@ -35,7 +35,7 @@ async def test_redis_connection():
     """Test basic Redis connectivity"""
     logger.info("=== Testing Redis Connection ===")
     try:
-        client = get_redis_client(database="knowledge", decode_responses=True)
+        client = require_redis_client(database="knowledge", decode_responses=True)
         client.ping()
         logger.info("✅ Redis connection successful")
 
@@ -304,7 +304,7 @@ async def analyze_existing_data():
     """Analyze the structure of existing Redis vector data"""
     logger.info("\n=== Analyzing Existing Redis Data ===")
     try:
-        client = get_redis_client(database="knowledge", decode_responses=True)
+        client = require_redis_client(database="knowledge", decode_responses=True)
 
         # Get sample documents
         sample_keys = list(client.scan_iter(match="llama_index/vector*", count=5))

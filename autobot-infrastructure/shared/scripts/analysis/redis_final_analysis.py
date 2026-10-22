@@ -18,7 +18,7 @@ from autobot_shared.paths import project_root
 
 sys.path.insert(0, str(project_root()))
 from autobot_shared.network_constants import ServiceURLs
-from autobot_shared.redis_client import get_redis_client
+from autobot_shared.redis_client import require_redis_client
 
 # The sibling helper module lives beside this script; put its directory on the path so the import
 # resolves when the file is imported (pytest, tooling) as well as when it is run.
@@ -285,7 +285,7 @@ class AutoBotVectorStoreAnalysis:
         logger.info("Deep analysis of existing Redis vector data...")
 
         try:
-            client = get_redis_client(database="knowledge", decode_responses=True)
+            client = require_redis_client(database="knowledge", decode_responses=True)
 
             index_info_raw = client.execute_command("FT.INFO", "llama_index")
             index_info = {}
