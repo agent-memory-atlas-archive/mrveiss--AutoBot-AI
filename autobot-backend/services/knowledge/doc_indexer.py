@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 from autobot_shared.ssot_config import get_ollama_url
 from constants.path_constants import PATH
 from constants.threshold_constants import CategoryDefaults
-from knowledge.chunk_identity import stamp_chunk_id
+from knowledge.chunk_identity import carry_store_id, stamp_chunk_id
 from knowledge.platform_docs import PLATFORM_DOCS_GRANT, PLATFORM_DOCS_GRANT_VERSION
 from knowledge.query_sanitizer import sanitize_document as _sanitize_document
 from services.knowledge.doc_index_orphans import chunk_base_id, reindex_file
@@ -1206,15 +1206,15 @@ class DocIndexerService:
         documents = raw.get("documents", [[]])[0]
         metadatas = raw.get("metadatas", [[]])[0]
         distances = raw.get("distances", [[]])[0]
+        row_ids = (raw.get("ids") or [[""] * len(documents)])[0]
 
         results = []
         for i, (doc, meta, dist) in enumerate(zip(documents, metadatas, distances)):
-            # ChromaDB cosine distance → similarity score
-            score = max(0.0, 1.0 - dist)
+            score = max(0.0, 1.0 - dist)  # ChromaDB cosine distance → similarity score
             results.append(
                 RankedResult(
                     content=doc or "",
-                    metadata={**meta, "source": "autobot_docs"},
+                    metadata={**carry_store_id(meta, row_ids[i] if i < len(row_ids) else ""), "source": "autobot_docs"},
                     semantic_score=score,
                     keyword_score=0.0,
                     hybrid_score=score,

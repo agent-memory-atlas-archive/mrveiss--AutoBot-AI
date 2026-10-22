@@ -114,13 +114,25 @@ def measure(files: dict[str, str]) -> dict[str, int]:
     return {rel: n for rel, n in counts.items() if n}
 
 
+def _parses(source: str) -> bool:
+    try:
+        ast.parse(source)
+    except (SyntaxError, ValueError):
+        return False
+    return True
+
+
 def _read_all() -> dict[str, str]:
+    """Files read AND parsed; the reach floor binds to these, not to the candidates listed (#19149)."""
     files = {}
     for rel in REACH.examined(_ROOT):
         try:
-            files[rel] = (_ROOT / rel).read_text(encoding="utf-8")
+            text = (_ROOT / rel).read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
+        if _parses(text):
+            files[rel] = text
+    REACH.completed(len(files), _ROOT)
     return files
 
 
@@ -169,8 +181,10 @@ def test_calling_the_helper_is_clean_and_the_home_module_is_exempt() -> None:
     assert measure({_HOME: _READ, "autobot-backend/x.py": _READ}) == {"autobot-backend/x.py": 2}
 
 
-def test_an_unparsable_file_is_not_a_crash() -> None:
+def test_an_unparsable_file_is_not_a_crash_and_is_not_a_parse() -> None:
     assert inline_sites("def (:\n") == 0
+    assert not _parses("def (:\n")
+    assert _parses(_HELPER)
 
 
 def test_skip_dirs_use_repo_relative_parts() -> None:
