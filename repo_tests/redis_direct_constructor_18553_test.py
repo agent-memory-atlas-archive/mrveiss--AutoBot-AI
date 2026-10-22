@@ -249,8 +249,10 @@ def test_the_same_construction_in_the_exempt_path_is_not_scanned_or_counted() ->
 
 def test_the_scan_is_not_vacuous() -> None:
     live = _live()
-    # 18, not 20: #18553 slice 1 drained 5 files onto require_redis_client (measured 23 -> 18 live).
-    assert len(live) >= 18, f"only {len(live)} files with sites found; the scan is blind"
+    # 6, not 18: #18553 slice 2 drained every MIGRATE row (measured 18 -> 8 live, all EXCEPTION rows).
+    # Pinned mid-window [4, 8] rather than at 8, so retiring one more EXCEPTION is not a re-pin;
+    # a blind scan reads 0-2 and still fails, as do the two named files below.
+    assert len(live) >= 6, f"only {len(live)} files with sites found; the scan is blind"
     assert "autobot-npu-worker/resources/windows-npu-worker/app/utils/redis_client.py" in live
     assert "autobot-slm-backend/ansible/deploy-native.sh" in live, "shell-embedded python must be reached"
 
