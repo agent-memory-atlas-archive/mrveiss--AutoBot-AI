@@ -34,7 +34,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/agents/knowledge_manager.py": 1131,
     "autobot-backend/agents/knowledge_manager_test.py": 807,
     "autobot-backend/agents/knowledge_retrieval_agent.py": 602,
-    "autobot-backend/agents/librarian_assistant.py": 601,
     "autobot-backend/agents/llm_failsafe_agent.py": 815,
     "autobot-backend/agents/machine_aware_system_knowledge_manager.py": 848,
     "autobot-backend/agents/man_page_knowledge_integrator.py": 696,
