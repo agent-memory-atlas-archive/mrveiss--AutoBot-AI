@@ -153,6 +153,8 @@ jobs:
       AUTOBOT_REQUIRE_REAL_TORCH: "1"
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false  # the job runs PR code and needs no authenticated git
       - uses: actions/setup-python@v7
         with:
           python-version-file: '.python-version'
