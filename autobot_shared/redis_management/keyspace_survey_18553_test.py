@@ -78,7 +78,25 @@ def test_connection_params_are_the_canonical_clients(monkeypatch, decode):
     for number, _, client in _survey(manager, decode_responses=decode):
         surveyed = dict(client.connection_pool.connection_kwargs)
         assert surveyed.pop("db") == number
-        assert surveyed == {key: value for key, value in canonical.items() if key != "db"}
+        assert _config_view(surveyed) == _config_view({key: value for key, value in canonical.items() if key != "db"})
+
+
+_CONFIG_SCALARS = (str, bytes, int, float, bool, type(None), tuple, list, dict)
+
+
+def _config_view(kwargs):
+    """Connection kwargs with per-pool runtime objects reduced to their type.
+
+    redis builds some kwargs fresh for every pool (``himport_registry``, the
+    maint-notifications handler) and they define no equality, so two pools
+    built from identical configuration never compare equal on them. Settings
+    (host, port, auth, TLS, timeouts) compare by value; ``Retry`` defines
+    equality and compares by value too.
+    """
+    return {
+        key: value if isinstance(value, _CONFIG_SCALARS) or type(value).__eq__ is not object.__eq__ else type(value)
+        for key, value in kwargs.items()
+    }
 
 
 @pytest.mark.parametrize("refusal", [redis.ResponseError("NOPERM"), redis.ConnectionError("refused")])
