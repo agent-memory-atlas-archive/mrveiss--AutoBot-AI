@@ -132,3 +132,33 @@ async def test_unavailable_canonical_kb_surfaces_as_error_not_a_private_instance
         agent = KBLibrarianAgent()
     with mock.patch.object(kb_agent_module, "get_knowledge_base_async", mock.AsyncMock(return_value=None)):
         assert await agent.get_knowledge_stats() == {"error": "Failed to retrieve knowledge base stats"}
+
+
+def _answering_agent(accessor_kb=None):
+    agent = object.__new__(KBLibrarianAgent)
+    agent.knowledge_base = accessor_kb
+    agent.auto_learning_enabled = True
+    agent.llm = mock.Mock(chat=mock.AsyncMock(return_value=mock.Mock(content="ok")))
+    agent._trigger_auto_learning = mock.AsyncMock()
+    return agent
+
+
+@pytest.mark.asyncio
+async def test_answer_question_skips_auto_learning_when_kb_unavailable():
+    """#19156 review: an unavailable KB is not 'no results' -- auto-learning would fail per file."""
+    agent = _answering_agent()
+    with mock.patch.object(kb_agent_module, "get_knowledge_base_async", mock.AsyncMock(return_value=None)):
+        result = await agent.answer_question("what is redis?")
+
+    agent._trigger_auto_learning.assert_not_awaited()
+    assert result["knowledge_base_results"] == []
+    assert result["answer"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_answer_question_auto_learns_when_kb_up_but_empty():
+    """#19156 review: a reachable-but-empty KB keeps the 'no results -> auto-learn' behaviour."""
+    agent = _answering_agent(accessor_kb=_agent_with_mock_kb([]).knowledge_base)
+    await agent.answer_question("what is redis?")
+
+    agent._trigger_auto_learning.assert_awaited_once_with("what is redis?")

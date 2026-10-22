@@ -37,6 +37,10 @@ from .standardized_agent import ActionHandler, StandardizedAgent
 logger = get_logger(__name__)
 
 
+class KnowledgeBaseUnavailable(RuntimeError):
+    """The canonical KnowledgeBase is not available (init failed or cooling down) -- distinct from "no results"."""
+
+
 class KBLibrarianAgent(StandardizedAgent):
     """A librarian agent that searches knowledge base for relevant information."""
 
@@ -159,40 +163,43 @@ class KBLibrarianAgent(StandardizedAgent):
         """Return the canonical KnowledgeBase (an injected one wins); raise while it is unavailable."""
         kb = self.knowledge_base or await get_knowledge_base_async()
         if kb is None:
-            raise RuntimeError("Knowledge base unavailable (init failed or cooling down)")
+            raise KnowledgeBaseUnavailable("Knowledge base unavailable (init failed or cooling down)")
         return kb
 
     async def search_knowledge(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """Search the knowledge base for relevant information."""
+        """Search the knowledge base for relevant information ([] on any error)."""
         try:
-            logger.debug("KB-LIBRARIAN: Searching for '%s'", query)
-            # Issue #13025: limit= routes search() to the "Enhanced" path which
-            # returns a Dict, not the List this method iterates -- use top_k to
-            # stay on the Basic (List[Dict]) path.
-            # Issue #13009: exclude quarantined research facts (#12622).
-            kb = await self._resolve_kb()
-            results = await kb.search(query, top_k=limit, filters=RESEARCH_QUARANTINE_FILTER)
-
-            if results:
-                logger.info("KB-LIBRARIAN: Found %s results for '%s'", len(results), query)
-                # Return formatted results with sources
-                formatted_results = []
-                for result in results:
-                    formatted_results.append(
-                        {
-                            "content": result.get("content", ""),
-                            "source": (result.get("metadata", {}).get("source", "Unknown")),
-                            "score": result.get("score", 0.0),
-                            "metadata": result.get("metadata", {}),
-                        }
-                    )
-                return formatted_results
-            else:
-                logger.info("KB-LIBRARIAN: No results found for '%s'", query)
-                return []
-
+            return await self._search_formatted(query, limit)
         except Exception as e:
             logger.error("KB-LIBRARIAN: Search error for '%s': %s", query, e)
+            return []
+
+    async def _search_formatted(self, query: str, limit: int) -> List[Dict[str, Any]]:
+        """Search and format results; raises KnowledgeBaseUnavailable while the KB is down."""
+        logger.debug("KB-LIBRARIAN: Searching for '%s'", query)
+        # Issue #13025: limit= routes search() to the "Enhanced" path which
+        # returns a Dict, not the List this method iterates -- use top_k to
+        # stay on the Basic (List[Dict]) path.
+        # Issue #13009: exclude quarantined research facts (#12622).
+        kb = await self._resolve_kb()
+        results = await kb.search(query, top_k=limit, filters=RESEARCH_QUARANTINE_FILTER)
+
+        if results:
+            logger.info("KB-LIBRARIAN: Found %s results for '%s'", len(results), query)
+            # Return formatted results with sources
+            formatted_results = []
+            for result in results:
+                formatted_results.append(
+                    {
+                        "content": result.get("content", ""),
+                        "source": (result.get("metadata", {}).get("source", "Unknown")),
+                        "score": result.get("score", 0.0),
+                        "metadata": result.get("metadata", {}),
+                    }
+                )
+            return formatted_results
+        else:
+            logger.info("KB-LIBRARIAN: No results found for '%s'", query)
             return []
 
     async def get_context_for_question(self, question: str) -> str:
@@ -252,7 +259,15 @@ class KBLibrarianAgent(StandardizedAgent):
     async def answer_question(self, question: str, context_limit: int = 3) -> Dict[str, Any]:
         """Answer a question using knowledge base context."""
         # Search for relevant knowledge
-        kb_results = await self.search_knowledge(question, limit=context_limit)
+        kb_unavailable = False
+        try:
+            kb_results = await self._search_formatted(question, context_limit)
+        except KnowledgeBaseUnavailable as e:
+            logger.warning("KB-LIBRARIAN: %s -- skipping auto-learning", e)
+            kb_results, kb_unavailable = [], True
+        except Exception as e:
+            logger.error("KB-LIBRARIAN: Search error for '%s': %s", question, e)
+            kb_results = []
 
         # Build context using list + join (O(n)) instead of += (O(n²))
         if kb_results:
@@ -261,7 +276,7 @@ class KBLibrarianAgent(StandardizedAgent):
             prompt = f"{context}\n\nQuestion: {question}\n\nAnswer:"
         else:
             # No knowledge base results - trigger auto-learning if enabled
-            if self.auto_learning_enabled:
+            if self.auto_learning_enabled and not kb_unavailable:
                 await self._trigger_auto_learning(question)
 
             prompt = (
