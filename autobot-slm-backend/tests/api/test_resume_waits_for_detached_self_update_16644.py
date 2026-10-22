@@ -31,11 +31,19 @@ def _run(coro):
 
 def _job():
     names = ("github_fetch", "code_source_pull", "slm_self_update", "fleet_nodes")
-    return UpdateAllJob(job_id="j", status="running", created_at="t", stages=[_make_stage(n) for n in names])
+    return UpdateAllJob(
+        job_id="j", status="running", created_at="2026-01-01T00:00:00+00:00", stages=[_make_stage(n) for n in names]
+    )
 
 
-def _activity(state):
-    return SimpleNamespace(in_progress=state, reason="r", last_completed_play_at=None)
+_NEWER = "2999-01-01T00:00:00+00:00"
+_OLDER = "2000-01-01T00:00:00+00:00"
+
+
+def _activity(state, completed=None):
+    if state is False and completed is None:
+        completed = _NEWER  # an ended unit with a fresh completion unless a test says otherwise
+    return SimpleNamespace(in_progress=state, reason="r", last_completed_play_at=completed)
 
 
 def _wait(job, readings, timeout=60.0):
@@ -43,6 +51,7 @@ def _wait(job, readings, timeout=60.0):
     with (
         patch.object(_resume_wait, "read_deploy_activity", AsyncMock(side_effect=readings)) as read,
         patch.object(_resume_wait, "_clear_resume_plan", AsyncMock()) as clear,
+        patch("api.code_sync._rotated_completion_time", return_value=None),
     ):
         ok = _run(_resume_wait.wait_for_detached_self_update(job, marks.append, timeout, 0.001))
     return ok, read.await_count, len(marks), clear.await_count
@@ -61,9 +70,34 @@ def test_no_unit_proceeds_immediately():
     assert ok is True and polls == 1
 
 
-def test_unqueryable_unit_degrades_to_proceeding():
-    ok, polls, _, _ = _wait(_job(), [_activity(None)])
-    assert ok is True and polls == 1
+def test_unqueryable_unit_keeps_waiting_and_fails_at_the_deadline():
+    job = _job()
+    ok, polls, _, clear = _wait(job, [_activity(None)] * 50, timeout=0.0)
+    assert ok is False and polls == 1
+    assert job.status == "failed"
+    assert [s.status for s in job.stages if s.name == "slm_self_update"] == ["failed"]
+    assert clear == 1
+
+
+def test_unknown_then_ended_with_completion_proceeds():
+    ok, polls, marks, clear = _wait(_job(), [_activity(None), _activity(None), _activity(False)])
+    assert ok is True and polls == 3 and marks == 2 and clear == 0
+
+
+def test_ended_with_newer_completion_proceeds():
+    ok, polls, _, clear = _wait(_job(), [_activity(False, _NEWER)])
+    assert ok is True and polls == 1 and clear == 0
+
+
+def test_ended_without_newer_completion_fails_the_stage():
+    for completed in (None, _OLDER):
+        job = _job()
+        ok, _, _, clear = _wait(job, [SimpleNamespace(in_progress=False, reason="r", last_completed_play_at=completed)])
+        assert ok is False
+        assert job.status == "failed"
+        assert "without a completion" in job.failure_reason
+        assert [s.status for s in job.stages if s.name == "slm_self_update"] == ["failed"]
+        assert clear == 1
 
 
 def test_timeout_fails_the_job_and_clears_the_plan():
