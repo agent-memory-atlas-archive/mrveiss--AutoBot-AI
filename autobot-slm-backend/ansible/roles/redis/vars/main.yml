@@ -7,9 +7,10 @@ redis_port: 6379
 redis_insight_port: 8002
 redis_memory_limit: "6gb"
 # #19124: the systemd cap derives from redis_memory_limit -- MemoryHigh throttles,
-# MemoryMax kills, both above maxmemory so allkeys-lru eviction acts first.
-redis_systemd_memory_high_factor: 1.25
-redis_systemd_memory_max_factor: 1.5
+# MemoryMax kills, both above maxmemory so allkeys-lru eviction acts first. Owner
+# decision 2026-10-22: 1.5x / 2.0x, so a full copy-on-write fork (BGSAVE, AOF rewrite) fits.
+redis_systemd_memory_high_factor: 1.5
+redis_systemd_memory_max_factor: 2.0
 # Redis's own size units (redis.conf header): k/m/g are powers of 1000, kb/mb/gb of 1024.
 redis_memory_unit_bytes:
   "": 1

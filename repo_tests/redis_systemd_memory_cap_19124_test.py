@@ -35,12 +35,17 @@ def test_the_shipped_limit_renders_with_headroom() -> None:
     directives = _render(
         yaml.safe_load((_ROLE / "vars" / "main.yml").read_text(encoding="utf-8"))["redis_memory_limit"]
     )
-    assert directives == {"MemoryHigh": "7680M", "MemoryMax": "9216M"}
+    assert directives == {"MemoryHigh": "9216M", "MemoryMax": "12288M"}
 
 
 @pytest.mark.parametrize(
     ("limit", "high", "max_"),
-    [("6gb", "7680M", "9216M"), ("512mb", "640M", "768M"), ("2g", "2385M", "2862M"), ("1073741824", "1280M", "1536M")],
+    [
+        ("6gb", "9216M", "12288M"),
+        ("512mb", "768M", "1024M"),
+        ("2g", "2862M", "3815M"),
+        ("1073741824", "1536M", "2048M"),
+    ],
     ids=["gb", "mb", "g-decimal", "bare-bytes"],
 )
 def test_every_redis_unit_becomes_a_size_systemd_accepts(limit: str, high: str, max_: str) -> None:
