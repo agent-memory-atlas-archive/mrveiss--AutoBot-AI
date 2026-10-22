@@ -183,7 +183,7 @@ def _ansible_groups_for_nodes(
         inv_name = node_id_to_inv_name.get(node.node_id)
         if inv_name:
             declared_roles_by_inv[inv_name] = _declared_roles(node)
-            warn_stale_detected_roles(node)
+            warn_stale_detected_roles(node, _groups_for_role_tokens_both_vocabularies)
 
     for inv_name, rows in rows_by_node.items():
         split = split_node_role_rows(rows, declared_roles_by_inv.get(inv_name, []))

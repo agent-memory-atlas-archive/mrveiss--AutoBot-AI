@@ -31,7 +31,7 @@ def _load(name: str, relative: str):
 
 ib = _load("inventory_builder_19197_under_test", "services/inventory_builder.py")
 
-from autobot_shared.role_group_ownership import warn_stale_detected_roles  # noqa: E402
+from autobot_shared.role_group_ownership import merge_declared_roles, warn_stale_detected_roles  # noqa: E402
 
 
 def _node(declared, detected, node_id="n1"):
@@ -73,3 +73,20 @@ def test_stale_detected_roles_are_surfaced_not_removed(caplog):
     assert stale == ["postgres", "slm-database"]
     assert node.detected_roles == ["postgres", "slm-database", "slm-agent"]
     assert "vnc-node" in caplog.text and "slm-database" in caplog.text
+
+
+def test_stale_warning_names_withheld_groups_and_logs_once(caplog):
+    node = _node(["vnc"], ["slm-database"], node_id="warn-once-node")
+    with caplog.at_level("WARNING"):
+        warn_stale_detected_roles(node, ib._role_tokens_to_groups)
+        warn_stale_detected_roles(node, ib._role_tokens_to_groups)
+    assert len(caplog.records) == 1
+    assert "withheld" in caplog.text and "redis" in caplog.text and "no longer grants" not in caplog.text
+
+
+def test_slm_self_registration_declares_its_own_roles_without_removing_any():
+    slm_roles = ["slm-backend", "slm-frontend", "slm-database", "slm-monitoring"]
+    merged = merge_declared_roles(["slm-backend", "custom"], slm_roles)
+    assert merged == ["slm-backend", "custom", "slm-frontend", "slm-database", "slm-monitoring"]
+    assert {"redis", "database"} <= _groups(_node(merged, ["slm-database"]))
+    assert merge_declared_roles(None, slm_roles) == slm_roles

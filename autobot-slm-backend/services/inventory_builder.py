@@ -552,10 +552,10 @@ def build_registry_inventory(nodes: list[Any], local_ip_check: Any) -> dict:
 
     for node in nodes:
         host_name: str = node.node_id  # host name IS the node_id (#10109)
-        hostvars = _build_hostvars(node, local_ip_check)
-        host_section[host_name] = hostvars
-
-        node_groups = _strip_undeclared_privileged_groups(node, groups_for_role_tokens(*declared_and_detected(node)))
+        host_section[host_name] = _build_hostvars(node, local_ip_check)
+        node_groups = _strip_undeclared_privileged_groups(
+            node, groups_for_role_tokens(*declared_and_detected(node, _role_tokens_to_groups))
+        )
 
         for g in node_groups:
             if g not in groups:

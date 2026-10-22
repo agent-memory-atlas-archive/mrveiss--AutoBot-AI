@@ -73,6 +73,7 @@ from api.roles import router as roles_router
 from api.voice_proxy import router as voice_proxy_router
 from autobot_shared.fastapi_validation_handlers import register_validation_error_handlers
 from autobot_shared.integrity_manifest import verify_integrity_at_startup
+from autobot_shared.role_group_ownership import merge_declared_roles
 from autobot_shared.stream_logging import (
     build_stderr_handler,
     build_stdout_handler,
@@ -435,17 +436,15 @@ async def _ensure_local_node() -> None:
             # Heal stale IP — happens when slm-secrets.env has a wrong IP from
             # a previous install (e.g. wrong interface selected) and was corrected.
             if existing.ip_address != local_ip:
-                logger.info(
-                    "Updating SLM manager IP: %s -> %s (slm-secrets.env changed)",
-                    existing.ip_address,
-                    local_ip,
-                )
+                logger.info("Updating SLM manager IP: %s -> %s", existing.ip_address, local_ip)
                 existing.ip_address = local_ip
             # Heal detected_roles so the fleet role view shows the SLM roles as
             # running (older rows predate this).
             if list(existing.detected_roles or []) != _SLM_ROLES:
                 existing.detected_roles = _SLM_ROLES
-            await sync_slm_node_roles(session, _SLM_NODE_ID, list(existing.roles or []), _SLM_ROLES)
+            # Declare the roles the SLM runs (merge, never remove) so detection alone can't drop redis (#19197).
+            existing.roles = merge_declared_roles(existing.roles, _SLM_ROLES)
+            await sync_slm_node_roles(session, _SLM_NODE_ID, list(existing.roles), _SLM_ROLES)
             await session.commit()
             return
 
