@@ -165,10 +165,12 @@ async def _owned_seed(tmp_path, recorded_for: str) -> tuple[_FakeKB, str]:
 
 @pytest.mark.asyncio
 async def test_an_owned_unedited_fact_is_refreshed_through_update_not_store(tmp_path) -> None:
-    node, _ = await _owned_seed(tmp_path, recorded_for="RESEARCHED TEXT")
+    node, tool = await _owned_seed(tmp_path, recorded_for="RESEARCHED TEXT")
     assert node.facts["legacy-tool"] != "RESEARCHED TEXT", "an unedited owned fact kept a stale body"
     assert node.meta["legacy-tool"][IMPORT_HASH_FIELD] == text_digest(node.facts["legacy-tool"])
-    assert node.stored == 0, "update_fact must be used when the id was found (store_fact replaces every column)"
+    # The other template items are new on this node (stored); the found one must go through update_fact.
+    assert node.updated == 1, "update_fact must be used when the id was found (store_fact replaces every column)"
+    assert [f for f, m in node.meta.items() if m.get("tool_name") == tool] == ["legacy-tool"]
 
 
 @pytest.mark.asyncio
