@@ -149,3 +149,11 @@ async def test_an_invalid_unit_is_recorded_as_a_failure_and_nothing_is_spawned_1
 def test_an_invalid_unit_is_never_deferred_as_an_issued_self_restart_18359():
     action = SimpleNamespace(category="restart", systemd_service="slm-backend; reboot")
     assert plan_runner._is_deferred(action, ["slm-backend;", "reboot"]) is False
+
+
+async def test_a_secret_line_in_post_sync_output_is_redacted_before_it_is_recorded_18522(monkeypatch, recorded):
+    """#18522: the command's own output reaches the recorder already masked, end to end through the runner."""
+    _fake_ssh(monkeypatch, rc=0, out=b"ok\napi_key=hunter2-s3cr3t-value\n")
+    outcome = await runner.run_post_sync_command(_base(), "run-it", 5, _REC, "Run", "post_sync")
+    row = recorder.build_row(_REC, "post_sync", "Run", "run-it", None, outcome)
+    assert "hunter2-s3cr3t-value" not in row.output_tail and "ok" in row.output_tail
