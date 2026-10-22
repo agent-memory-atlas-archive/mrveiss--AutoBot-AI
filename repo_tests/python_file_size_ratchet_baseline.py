@@ -439,11 +439,11 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/api/roles.py": 685,
     "autobot-slm-backend/api/security.py": 962,
     "autobot-slm-backend/api/services.py": 1016,
-    "autobot-slm-backend/api/setup_wizard.py": 1338,
+    "autobot-slm-backend/api/setup_wizard.py": 1336,
     "autobot-slm-backend/api/stateful.py": 685,
     "autobot-slm-backend/api/tls.py": 994,
     "autobot-slm-backend/api/updates.py": 1107,
-    "autobot-slm-backend/main.py": 778,  # #18672: admin password sync moved into services/admin_password_sync.py
+    "autobot-slm-backend/main.py": 774,  # #18672: admin password sync moved into services/admin_password_sync.py
     "autobot-slm-backend/models/database.py": 1140,
     "autobot-slm-backend/models/schemas.py": 2145,
     "autobot-slm-backend/monitoring/business_intelligence_dashboard.py": 1159,
