@@ -10,13 +10,14 @@ updates the existing fact. This runs the REAL template tree through the REAL man
 against an in-memory KB.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 import yaml
 
 from agents.kb_librarian.librarian import KBLibrarian
-from agents.kb_librarian.stable_ids import SystemFactIds, system_fact_id
+from agents.kb_librarian.stable_ids import IMPORT_HASH_FIELD, SystemFactIds, system_fact_id, text_digest
 from agents.system_knowledge_manager import SystemKnowledgeManager
 from autobot_shared.paths import project_root
 from autobot_shared.system_knowledge_paths import system_knowledge_templates_dir
@@ -28,11 +29,18 @@ class _FakeKB:
         self.meta: dict[str, dict] = {}
         self.stored = 0
         self.updated = 0
+        self.fail = False  # every write reports an error
+
+    @property
+    def writes(self) -> int:
+        return self.stored + self.updated
 
     def get_fact(self, fact_id):
         return {"id": fact_id} if fact_id in self.facts else None
 
     async def store_fact(self, content, metadata=None, fact_id=None):
+        if self.fail:
+            return {"status": "error", "message": "Knowledge operation failed"}
         self.stored += 1
         # Mirrors the real store: no stable id means a fresh random one every call.
         fid = fact_id or f"random-{self.stored}"
@@ -41,6 +49,8 @@ class _FakeKB:
         return {"status": "success"}
 
     async def update_fact(self, fact_id, content=None, metadata=None):
+        if self.fail or fact_id not in self.meta:
+            return {"status": "error", "message": "Fact not found"}
         self.updated += 1
         if content is not None:
             self.facts[fact_id] = content
@@ -68,6 +78,7 @@ def _manager(kb: _FakeKB, tmp_path) -> SystemKnowledgeManager:
     manager.fact_ids = SystemFactIds(_batches_of(kb))
     manager.runtime_knowledge_dir = tmp_path / "runtime"
     manager.backup_dir = tmp_path / "backup"
+    manager._import_failures = []
     return manager
 
 
@@ -76,12 +87,13 @@ async def test_second_import_of_the_real_templates_adds_no_fact(tmp_path) -> Non
     kb = _FakeKB()
     manager = _manager(kb, tmp_path)
     with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
-        await manager._import_system_knowledge()
+        assert await manager._import_system_knowledge() == 0
         first = dict.fromkeys(kb.facts)
         assert first, "the template tree imported nothing"
-        await manager._import_system_knowledge()
+        writes = kb.writes
+        assert await manager._import_system_knowledge() == 0
     assert set(kb.facts) == set(first), "a re-import created new facts"
-    assert kb.updated == len(first)
+    assert kb.writes == writes, "an unchanged second run wrote (store/update) again"
 
 
 def test_the_template_tree_is_the_tracked_resources_dir() -> None:
@@ -100,9 +112,9 @@ def test_system_fact_id_is_stable_and_kind_scoped() -> None:
     assert system_fact_id("tool", "nmap") != system_fact_id("workflow", "nmap")
 
 
-async def _import(kb: _FakeKB, tmp_path) -> None:
+async def _import(kb: _FakeKB, tmp_path) -> int:
     with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
-        await _manager(kb, tmp_path)._import_system_knowledge()
+        return await _manager(kb, tmp_path)._import_system_knowledge()
 
 
 @pytest.mark.asyncio
@@ -142,10 +154,79 @@ async def test_an_adopted_legacy_fact_keeps_its_text_and_gains_the_link(tmp_path
     assert node.facts["legacy-tool"] == "RESEARCHED TEXT"
 
 
+async def _owned_seed(tmp_path, recorded_for: str) -> tuple[_FakeKB, str]:
+    """An owned fact (``source=system_knowledge``) holding "RESEARCHED TEXT", whose recorded import hash is that of ``recorded_for``."""
+    node, tool, _ = await _seeded(
+        tmp_path,
+        {"source": "system_knowledge", IMPORT_HASH_FIELD: text_digest(recorded_for), "system_template_hash": "old"},
+    )
+    return node, tool
+
+
 @pytest.mark.asyncio
-async def test_a_fact_the_import_owns_is_updated_body_included(tmp_path) -> None:
-    node, tool, clean_count = await _seeded(tmp_path, {"source": "system_knowledge"})
-    assert [f for f, m in node.meta.items() if m.get("tool_name") == tool] == ["legacy-tool"]
-    assert node.facts["legacy-tool"] != "RESEARCHED TEXT", "an owned fact kept a stale body"
-    assert node.meta["legacy-tool"]["source"] == "system_knowledge"
-    assert len(node.facts) == clean_count
+async def test_an_owned_unedited_fact_is_refreshed_through_update_not_store(tmp_path) -> None:
+    node, _ = await _owned_seed(tmp_path, recorded_for="RESEARCHED TEXT")
+    assert node.facts["legacy-tool"] != "RESEARCHED TEXT", "an unedited owned fact kept a stale body"
+    assert node.meta["legacy-tool"][IMPORT_HASH_FIELD] == text_digest(node.facts["legacy-tool"])
+    assert node.stored == 0, "update_fact must be used when the id was found (store_fact replaces every column)"
+
+
+@pytest.mark.asyncio
+async def test_a_user_edited_owned_fact_keeps_the_edit_and_gains_the_link(tmp_path) -> None:
+    node, tool = await _owned_seed(tmp_path, recorded_for="WHAT THE IMPORT WROTE")
+    assert node.facts["legacy-tool"] == "RESEARCHED TEXT", "the import overwrote a user edit"
+    assert node.meta["legacy-tool"]["system_fact_id"] == system_fact_id("tool", tool)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_store_is_counted_and_retried(tmp_path) -> None:
+    kb = _FakeKB()
+    kb.fail = True
+    assert await _import(kb, tmp_path) > 0, "failed writes were reported as imported"
+    assert not kb.facts
+    kb.fail = False
+    assert await _import(kb, tmp_path) == 0 and kb.facts, "the failed items were not retried"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_import_does_not_refresh_the_file_state_cache(tmp_path) -> None:
+    kb = _FakeKB()
+    kb.fail = True
+    manager = _manager(kb, tmp_path)
+    manager._check_system_knowledge_changes = AsyncMock(return_value=(True, ["x"]))
+    manager._update_system_knowledge_cache = AsyncMock()
+    with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
+        await manager.initialize_system_knowledge()
+    manager._update_system_knowledge_cache.assert_not_awaited()
+
+
+def _tree_state(root) -> dict:
+    return {str(p): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+@pytest.mark.asyncio
+async def test_the_import_writes_nothing_under_the_templates_dir(tmp_path) -> None:
+    before = _tree_state(system_knowledge_templates_dir())
+    await _import(_FakeKB(), tmp_path)
+    assert _tree_state(system_knowledge_templates_dir()) == before
+    assert (tmp_path / "runtime" / "tools").is_dir(), "the runtime copies were not written"
+
+
+@pytest.mark.asyncio
+async def test_missing_templates_generate_defaults_into_the_runtime_dir_only(tmp_path) -> None:
+    manager = _manager(_FakeKB(), tmp_path)
+    manager.system_knowledge_dir = tmp_path / "no-templates"
+    with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
+        await manager._import_system_knowledge()
+    assert not manager.system_knowledge_dir.exists(), "defaults were generated into the template location"
+    assert (tmp_path / "runtime" / "tools" / "steganography.yaml").is_file()
+
+
+@pytest.mark.asyncio
+async def test_an_operator_edited_runtime_copy_is_kept(tmp_path) -> None:
+    await _import(_FakeKB(), tmp_path)
+    edited = sorted((tmp_path / "runtime" / "tools").glob("*.yaml"))[0]
+    await asyncio.to_thread(edited.write_text, "# operator edit\n", encoding="utf-8")
+    await _import(_FakeKB(), tmp_path)
+    kept = await asyncio.to_thread(edited.read_text, encoding="utf-8")
+    assert kept == "# operator edit\n", "an edited runtime copy was replaced"

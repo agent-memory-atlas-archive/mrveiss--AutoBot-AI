@@ -19,10 +19,11 @@ import aiofiles
 import yaml
 
 from agents.kb_librarian import KBLibrarian
-from agents.kb_librarian.stable_ids import SystemFactIds
+from agents.kb_librarian.stable_ids import SystemFactIds, SystemFactStoreError
 from agents.system_knowledge_defaults import DefaultKnowledgeMixin
+from agents.system_knowledge_runtime import sync_runtime_copy
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.system_knowledge_paths import system_knowledge_templates_dir
+from autobot_shared.system_knowledge_paths import system_knowledge_dirs
 from constants.threshold_constants import CategoryDefaults
 from knowledge_base import KnowledgeBase
 
@@ -37,12 +38,13 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         self.knowledge_base = knowledge_base
         self.librarian = KBLibrarian(knowledge_base)
 
-        # Paths - use absolute paths to avoid working directory issues
-        project_root = Path(__file__).parent.parent.parent  # agents/ -> autobot-backend/ -> repo root
-        self.system_knowledge_dir = system_knowledge_templates_dir()  # the one tracked template tree
-        self.runtime_knowledge_dir = project_root / "data/system_knowledge"
-        self.backup_dir = project_root / "data/system_knowledge_backups"
+        # Template, runtime and backup dirs all come from ONE root; the template tree is read-only here.
+        dirs = system_knowledge_dirs()
+        self.system_knowledge_dir = dirs.templates
+        self.runtime_knowledge_dir = dirs.runtime
+        self.backup_dir = dirs.backup
         self.fact_ids = SystemFactIds()
+        self._import_failures: List[str] = []
 
         # Ensure directories exist
         self.runtime_knowledge_dir.mkdir(parents=True, exist_ok=True)
@@ -68,7 +70,11 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             logger.info(f"Detected changes in {len(changed_files)} files: " f"{changed_files[:3]}{ellipsis}")
 
         # Import all system knowledge
-        await self._import_system_knowledge()
+        failed = await self._import_system_knowledge()
+        if failed:
+            # No cache write: the next start sees the files as changed and retries the failed items.
+            logger.error("System knowledge import incomplete: %d item(s) failed, will retry", failed)
+            return
 
         # Update the change tracking cache
         await self._update_system_knowledge_cache()
@@ -248,22 +254,26 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         # This would need to be implemented based on your KB's delete functionality
         logger.info("Clearing system knowledge from knowledge base")
 
-    async def _import_system_knowledge(self):
-        """Import all system knowledge from templates"""
+    async def _import_system_knowledge(self) -> int:
+        """Import all system knowledge from templates. Returns how many items failed to store."""
+        self._import_failures = []
         await self.fact_ids.load()
         dir_exists = await asyncio.to_thread(self.system_knowledge_dir.exists)
         if not dir_exists:
+            # Never generate into the tracked template tree: defaults go to the runtime dir.
             logger.warning(f"System knowledge directory not found: {self.system_knowledge_dir}")
             await self._create_default_system_knowledge()
+            await self._import_from_runtime_files()
+            return len(self._import_failures)
 
-        # Import tools knowledge
         await self._import_tools_knowledge()
-
-        # Import workflows
         await self._import_workflows_knowledge()
-
-        # Import procedures
         await self._import_procedures_knowledge()
+        return len(self._import_failures)
+
+    async def _copy_to_runtime(self, template: Path, kind: str) -> None:
+        """Mirror a template into the runtime dir, keeping an operator-edited copy (#18556)."""
+        await asyncio.to_thread(sync_runtime_copy, template, self.runtime_knowledge_dir, f"{kind}/{template.name}")
 
     async def _save_yaml_file(self, file_path: Path, data: Dict[str, Any]) -> bool:
         """Save data to a YAML file."""
@@ -279,10 +289,10 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         """Create default system knowledge templates."""
         logger.info("Creating default system knowledge templates...")
 
-        # Create directory structure
-        tools_dir = self.system_knowledge_dir / "tools"
-        workflows_dir = self.system_knowledge_dir / "workflows"
-        procedures_dir = self.system_knowledge_dir / "procedures"
+        # Create directory structure (runtime dir: the tracked template tree is never written)
+        tools_dir = self.runtime_knowledge_dir / "tools"
+        workflows_dir = self.runtime_knowledge_dir / "workflows"
+        procedures_dir = self.runtime_knowledge_dir / "procedures"
         await asyncio.gather(
             asyncio.to_thread(tools_dir.mkdir, parents=True, exist_ok=True),
             asyncio.to_thread(workflows_dir.mkdir, parents=True, exist_ok=True),
@@ -320,10 +330,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
                 logger.error("Failed to read tools file %s: %s", yaml_file, e)
                 continue
 
-            # Copy to runtime directory
-            runtime_file = self.runtime_knowledge_dir / "tools" / yaml_file.name
-            await asyncio.to_thread(runtime_file.parent.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(shutil.copy2, yaml_file, runtime_file)
+            await self._copy_to_runtime(yaml_file, "tools")
 
             # Import tools into knowledge base
             for tool_data in tools_data.get("tools", []):
@@ -351,45 +358,16 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             "verified": "system_knowledge",
         }
 
-        await self.librarian.store_tool_knowledge(tool_info, ref=self.fact_ids.of("tool", tool_name))
+        try:
+            await self.librarian.store_tool_knowledge(tool_info, ref=self.fact_ids.of("tool", tool_name))
+        except SystemFactStoreError as e:
+            return self._record_import_failure("tool", tool_name, e)
         logger.info("Imported tool: %s", tool_name)
 
-    def _format_installation(self, install_data: Dict[str, str]) -> str:
-        """Format installation commands from YAML"""
-        if not install_data:
-            return "Installation information not available"
-
-        formatted = []
-        for package_manager, command in install_data.items():
-            formatted.append(f"{package_manager}: {command}")
-
-        return "\n".join(formatted)
-
-    def _format_usage(self, usage_data: Dict[str, str]) -> str:
-        """Format usage information from YAML"""
-        if not usage_data:
-            return "Usage information not available"
-
-        formatted = []
-        for action, command in usage_data.items():
-            formatted.append(f"{action}: {command}")
-
-        return "\n".join(formatted)
-
-    def _format_troubleshooting(self, trouble_data: List[Dict[str, str]]) -> str:
-        """Format troubleshooting information from YAML"""
-        if not trouble_data:
-            return "No troubleshooting information available"
-
-        formatted = []
-        for item in trouble_data:
-            problem = item.get("problem", "Unknown problem")
-            solution = item.get("solution", "No solution provided")
-            formatted.append(f"Problem: {problem}")
-            formatted.append(f"Solution: {solution}")
-            formatted.append("")
-
-        return "\n".join(formatted)
+    def _record_import_failure(self, kind: str, name: str, error: Exception) -> None:
+        """Count a failed item; it is retried on the next import because nothing marks it done."""
+        logger.error("Failed to import %s %s: %s", kind, name, error)
+        self._import_failures.append(f"{kind}:{name}")
 
     async def _import_workflows_knowledge(self):
         """Import workflow knowledge from YAML templates"""
@@ -411,10 +389,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
                 logger.error("Failed to read workflow file %s: %s", yaml_file, e)
                 continue
 
-            # Copy to runtime directory
-            runtime_file = self.runtime_knowledge_dir / "workflows" / yaml_file.name
-            await asyncio.to_thread(runtime_file.parent.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(shutil.copy2, yaml_file, runtime_file)
+            await self._copy_to_runtime(yaml_file, "workflows")
 
             # Import workflow into knowledge base
             await self._import_single_workflow(workflow_data)
@@ -440,20 +415,13 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             "category": "workflows",
         }
 
-        await self.librarian.store_workflow_knowledge(workflow_info, ref=self.fact_ids.of("workflow", workflow_name))
-        logger.info("Imported workflow: %s", workflow_name)
-
-    def _format_pitfalls(self, pitfalls_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """Format pitfalls data for librarian"""
-        formatted = []
-        for pitfall in pitfalls_data:
-            formatted.append(
-                {
-                    "issue": pitfall.get("issue", "Unknown issue"),
-                    "prevention": pitfall.get("prevention", "No prevention method"),
-                }
+        try:
+            await self.librarian.store_workflow_knowledge(
+                workflow_info, ref=self.fact_ids.of("workflow", workflow_name)
             )
-        return formatted
+        except SystemFactStoreError as e:
+            return self._record_import_failure("workflow", workflow_name, e)
+        logger.info("Imported workflow: %s", workflow_name)
 
     async def _import_procedures_knowledge(self):
         """Import procedures knowledge from YAML templates"""
@@ -475,10 +443,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
                 logger.error("Failed to read procedure file %s: %s", yaml_file, e)
                 continue
 
-            # Copy to runtime directory
-            runtime_file = self.runtime_knowledge_dir / "procedures" / yaml_file.name
-            await asyncio.to_thread(runtime_file.parent.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(shutil.copy2, yaml_file, runtime_file)
+            await self._copy_to_runtime(yaml_file, "procedures")
 
             # Import procedure into knowledge base
             await self._import_single_procedure(procedure_data)
@@ -501,20 +466,11 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             "verification": procedure_data.get("verification", []),
         }
 
-        await self.librarian.store_system_documentation(doc_info, ref=self.fact_ids.of("procedure", title))
+        try:
+            await self.librarian.store_system_documentation(doc_info, ref=self.fact_ids.of("procedure", title))
+        except SystemFactStoreError as e:
+            return self._record_import_failure("procedure", title, e)
         logger.info("Imported procedure: %s", title)
-
-    def _format_procedure_issues(self, issues_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """Format procedure issues for librarian"""
-        formatted = []
-        for issue in issues_data:
-            formatted.append(
-                {
-                    "problem": issue.get("problem", "Unknown problem"),
-                    "solution": issue.get("solution", "No solution provided"),
-                }
-            )
-        return formatted
 
     async def reload_system_knowledge(self):
         """Reload system knowledge from runtime files"""

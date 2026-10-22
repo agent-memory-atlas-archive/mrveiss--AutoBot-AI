@@ -8,7 +8,8 @@ The librarian's document bodies embed a timestamp, so the KB's content-hash dedu
 re-import. One id per (kind, name) makes a repeat import update the fact instead of adding a copy.
 """
 
-import asyncio
+import hashlib
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Dict, List, Tuple
@@ -27,52 +28,121 @@ _KIND_METADATA = {
 
 _FACT_ID_NAMESPACE = uuid.UUID("5f0c1d6e-0b7a-5c1e-9a55-18577a1b2c3d")
 
+SYSTEM_SOURCE = "system_knowledge"
+LINK_FIELD = "system_fact_id"
+#: sha256 of the body the import last wrote. A body that no longer hashes to it was edited by a user.
+IMPORT_HASH_FIELD = "system_import_hash"
+#: sha256 of the template item the import last wrote from. Unchanged template -> nothing to write.
+TEMPLATE_HASH_FIELD = "system_template_hash"
+
 
 def system_fact_id(kind: str, name: str) -> str:
     """Stable fact id for a system-knowledge item (same kind+name -> same id, every run)."""
     return str(uuid.uuid5(_FACT_ID_NAMESPACE, f"{kind}:{name}"))
 
 
-SYSTEM_SOURCE = "system_knowledge"
-LINK_FIELD = "system_fact_id"
+def text_digest(text: str) -> str:
+    """sha256 of a fact body."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def template_digest(item: Dict[str, Any]) -> str:
+    """sha256 of one template item as the manager hands it to the librarian (timestamp-free)."""
+    return text_digest(json.dumps(item, sort_keys=True, default=str))
+
+
+class SystemFactStoreError(RuntimeError):
+    """A store or update of a system-knowledge fact did not succeed; the item is retried next run."""
 
 
 @dataclass(frozen=True)
 class SystemFactRef:
-    """Which fact a system-knowledge item is stored in, and whether the import owns it.
+    """Which fact a system-knowledge item is stored in, and what the import may do to it.
 
-    ``legacy`` is a fact found by (kind, name) that the import did not create (typically stored by
-    web research under a random id): it is linked, never rewritten.
+    - ``exists`` False: nothing stored yet, the item is created under ``stable_id``;
+    - ``refreshable``: the import owns the fact AND its body still hashes to what the import last
+      wrote, so a changed template may rewrite it;
+    - otherwise (a legacy fact, a user-edited one, or one that carries no import hash to compare
+      against): the text is never touched, the fact only gains the link id.
     """
 
     fact_id: str
     stable_id: str
-    legacy: bool = False
+    exists: bool = False
+    refreshable: bool = False
+    linked: bool = False
+    template_hash: str = ""
+
+    def action(self, template_hash: str) -> str:
+        """``store`` | ``refresh`` | ``link`` | ``skip`` -- the one write this item needs, if any."""
+        if not self.exists:
+            return "store"
+        if not self.refreshable:
+            return "skip" if self.linked else "link"
+        return "skip" if self.linked and self.template_hash == template_hash else "refresh"
 
 
-async def store_or_update_fact(knowledge_base: Any, content: str, metadata: Dict[str, Any], ref: Any = None):
+def _stored_body(content: str, metadata: Dict[str, Any]) -> str:
+    """The text the KB will actually persist for ``content`` (the write chokepoint redacts it)."""
+    from knowledge.ingest_sanitize import sanitize_fact_content  # lazy: pulls the redaction stack
+
+    return sanitize_fact_content(content, dict(metadata))[0]
+
+
+def _checked(result: Any, what: str) -> Dict[str, Any]:
+    if not isinstance(result, dict) or result.get("status") != "success":
+        raise SystemFactStoreError(f"{what} failed: {result}")
+    return result
+
+
+async def store_or_update_fact(
+    knowledge_base: Any, content: str, metadata: Dict[str, Any], ref: Any = None, template_hash: str = ""
+):
     """Store a fact. With a :class:`SystemFactRef` an existing fact is updated, never duplicated.
 
     - no ``ref``: behaviour unchanged (web research keeps its random ids and its source);
-    - owned fact (stable id, or tagged ``source=system_knowledge``): body and metadata update, and
-      the fact is tagged ``source=system_knowledge``;
-    - legacy fact: only the link to the stable id is added. Its text and its ``source`` stay.
+    - new item: stored under the stable id, tagged ``source=system_knowledge`` with the import hashes;
+    - owned and unedited fact whose template changed: ``update_fact`` rewrites body and metadata;
+    - any other existing fact (legacy, user-edited, unverifiable): only the link id is merged in;
+    - nothing to change: no write at all.
+
+    Raises :class:`SystemFactStoreError` when the KB reports anything but success.
     """
     if ref is None:
         return await knowledge_base.store_fact(content, metadata=metadata)
-    if ref.legacy:
-        return await knowledge_base.update_fact(ref.fact_id, metadata={LINK_FIELD: ref.stable_id})
-    metadata = {**metadata, "source": SYSTEM_SOURCE, LINK_FIELD: ref.stable_id}
-    if await asyncio.to_thread(knowledge_base.get_fact, ref.fact_id):
-        return await knowledge_base.update_fact(ref.fact_id, content=content, metadata=metadata)
-    return await knowledge_base.store_fact(content, metadata=metadata, fact_id=ref.fact_id)
+    action = ref.action(template_hash)
+    if action == "skip":
+        return {"status": "success", "action": "skipped", "fact_id": ref.fact_id}
+    if action == "link":
+        return _checked(
+            await knowledge_base.update_fact(ref.fact_id, metadata={LINK_FIELD: ref.stable_id}),
+            f"linking {ref.fact_id}",
+        )
+    body = _stored_body(content, metadata)
+    metadata = {
+        **metadata,
+        "source": SYSTEM_SOURCE,
+        LINK_FIELD: ref.stable_id,
+        IMPORT_HASH_FIELD: text_digest(body),
+        TEMPLATE_HASH_FIELD: template_hash,
+    }
+    if action == "refresh":
+        return _checked(
+            await knowledge_base.update_fact(ref.fact_id, content=body, metadata=metadata),
+            f"refreshing {ref.fact_id}",
+        )
+    return _checked(
+        await knowledge_base.store_fact(body, metadata=metadata, fact_id=ref.fact_id), f"storing {ref.fact_id}"
+    )
 
 
 async def _durable_batches() -> AsyncIterator[List[Dict[str, Any]]]:
     """Batches of the durable facts whose metadata ``type`` is one the system import writes.
 
-    One SQL query, filtered in Postgres (``metadata_json->>'type'``): there is no index on that
-    JSON, so it is a table scan inside the database, but only matching rows cross the wire.
+    ``fact_store.iter_facts`` pages 500 rows per query (keyset on created_at, id) until a page
+    comes back empty: ``ceil(N/500) + 1`` SQL queries for N matching facts (1 when N is 0). Each is
+    filtered in Postgres on ``metadata_json->>'type'``; there is no index on that JSON, so each is
+    a table scan inside the database, but only matching rows cross the wire.
     """
     from knowledge import fact_store  # lazy: pulls in the DB layer
     from models.knowledge_fact import KnowledgeFact
@@ -84,36 +154,59 @@ async def _durable_batches() -> AsyncIterator[List[Dict[str, Any]]]:
 
 
 class SystemFactIds:
-    """Resolves the fact id a system-knowledge item is stored under (#18577).
+    """Resolves the fact an item is stored in and what the import may do to it (#18577).
 
-    ``load()`` reads the existing system facts ONCE per import run and indexes them by
-    (kind, name); ``of()`` then returns the existing fact's id (adopt it in place, whatever its
-    id) or, when none exists, the stable uuid5 id. With several legacy facts for one item the
-    oldest wins and the rest are left untouched.
+    ``load()`` reads the existing system facts once per import run (paged, see
+    :func:`_durable_batches`) and indexes them by (kind, name); ``of()`` then returns the existing
+    fact's id (adopt it in place, whatever its id) or, when none exists, the stable uuid5 id.
+    With several legacy facts for one item the oldest wins and the rest are left untouched.
+
+    Only durable (Postgres) rows are seen. Every write since #15663 is durable-first, so a
+    Redis-only fact can exist only on a node whose startup adoption (``adopt_legacy_facts``,
+    fire-and-forget at KB creation) has not finished; an import racing that adoption can store a
+    second copy of such a fact.
     """
 
     def __init__(self, batches: Callable[[], AsyncIterator[List[Dict[str, Any]]]] = _durable_batches) -> None:
         self._batches = batches
-        self._existing: Dict[Tuple[str, str], Tuple[str, bool]] = {}
+        self._existing: Dict[Tuple[str, str], Tuple[SystemFactRef, bool]] = {}
+
+    @staticmethod
+    def _ref_of(fact: Dict[str, Any], kind: str, name: str) -> Tuple[SystemFactRef, bool]:
+        metadata = fact["metadata"]
+        stable = system_fact_id(kind, name)
+        owned = fact["fact_id"] == stable or metadata.get("source") == SYSTEM_SOURCE
+        recorded = metadata.get(IMPORT_HASH_FIELD)
+        pristine = owned and bool(recorded) and text_digest(fact["content"] or "") == recorded
+        ref = SystemFactRef(
+            fact_id=fact["fact_id"],
+            stable_id=stable,
+            exists=True,
+            refreshable=pristine,
+            linked=metadata.get(LINK_FIELD) == stable,
+            template_hash=metadata.get(TEMPLATE_HASH_FIELD) or "",
+        )
+        return ref, owned
 
     async def load(self) -> None:
         by_type = {kind_type: (kind, field) for kind, (kind_type, field) in _KIND_METADATA.items()}
-        existing: Dict[Tuple[str, str], Tuple[str, bool]] = {}
+        existing: Dict[Tuple[str, str], Tuple[SystemFactRef, bool]] = {}
         async for batch in self._batches():
             for fact in batch:
-                metadata = fact["metadata"]
-                kind, field = by_type[metadata["type"]]
-                name = metadata.get(field)
+                kind, field = by_type[fact["metadata"]["type"]]
+                name = fact["metadata"].get(field)
                 if not name:
                     continue
-                owned = fact["fact_id"] == system_fact_id(kind, name) or metadata.get("source") == SYSTEM_SOURCE
+                candidate = self._ref_of(fact, kind, name)
                 held = existing.get((kind, name))
-                if held is None or (owned and not held[1]):  # oldest wins; an owned fact beats a legacy one
-                    existing[(kind, name)] = (fact["fact_id"], owned)
+                if held is None or (candidate[1] and not held[1]):  # oldest wins; an owned fact beats a legacy one
+                    existing[(kind, name)] = candidate
         self._existing = existing
         logger.info("Indexed %d existing system-knowledge facts", len(existing))
 
     def of(self, kind: str, name: str) -> SystemFactRef:
+        held = self._existing.get((kind, name))
+        if held is not None:
+            return held[0]
         stable = system_fact_id(kind, name)
-        fact_id, owned = self._existing.get((kind, name), (stable, True))
-        return SystemFactRef(fact_id=fact_id, stable_id=stable, legacy=not owned)
+        return SystemFactRef(fact_id=stable, stable_id=stable)

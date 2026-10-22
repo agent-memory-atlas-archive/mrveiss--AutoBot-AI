@@ -235,3 +235,64 @@ class DefaultKnowledgeMixin:
             "quality_checks": quality_and_pitfalls["quality_checks"],
             "common_pitfalls": quality_and_pitfalls["common_pitfalls"],
         }
+
+    def _format_installation(self, install_data: Dict[str, str]) -> str:
+        """Format installation commands from YAML"""
+        if not install_data:
+            return "Installation information not available"
+
+        formatted = []
+        for package_manager, command in install_data.items():
+            formatted.append(f"{package_manager}: {command}")
+
+        return "\n".join(formatted)
+
+    def _format_usage(self, usage_data: Dict[str, str]) -> str:
+        """Format usage information from YAML"""
+        if not usage_data:
+            return "Usage information not available"
+
+        formatted = []
+        for action, command in usage_data.items():
+            formatted.append(f"{action}: {command}")
+
+        return "\n".join(formatted)
+
+    def _format_troubleshooting(self, trouble_data: List[Dict[str, str]]) -> str:
+        """Format troubleshooting information from YAML"""
+        if not trouble_data:
+            return "No troubleshooting information available"
+
+        formatted = []
+        for item in trouble_data:
+            problem = item.get("problem", "Unknown problem")
+            solution = item.get("solution", "No solution provided")
+            formatted.append(f"Problem: {problem}")
+            formatted.append(f"Solution: {solution}")
+            formatted.append("")
+
+        return "\n".join(formatted)
+
+    def _format_pitfalls(self, pitfalls_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Format pitfalls data for librarian"""
+        formatted = []
+        for pitfall in pitfalls_data:
+            formatted.append(
+                {
+                    "issue": pitfall.get("issue", "Unknown issue"),
+                    "prevention": pitfall.get("prevention", "No prevention method"),
+                }
+            )
+        return formatted
+
+    def _format_procedure_issues(self, issues_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Format procedure issues for librarian"""
+        formatted = []
+        for issue in issues_data:
+            formatted.append(
+                {
+                    "problem": issue.get("problem", "Unknown problem"),
+                    "solution": issue.get("solution", "No solution provided"),
+                }
+            )
+        return formatted
