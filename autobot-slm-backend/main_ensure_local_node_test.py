@@ -153,7 +153,8 @@ def _patched_seams(mod, mock_db):
     - ``settings.slm_node_id``: env-driven since #9956 — pin the sentinel.
     - ``_compose_nodes_enabled``: the stubbed compose_fleet returns a truthy
       MagicMock, which would route every test into the compose static-IP branch.
-    - ``sync_slm_node_roles``: the stub module attribute is not awaitable.
+    - ``heal_existing_slm_node_roles``: the stub module attribute is not awaitable (#19197 moved
+      the existing-node role heal, including ``sync_slm_node_roles``, into services.node_seeder).
     """
     stack = contextlib.ExitStack()
     stack.enter_context(patch.object(mod, "db_service", mock_db))
@@ -161,7 +162,7 @@ def _patched_seams(mod, mock_db):
     _settings.slm_node_id = _NODE_ID
     stack.enter_context(patch.object(mod, "settings", _settings))
     stack.enter_context(patch.object(mod, "_compose_nodes_enabled", MagicMock(return_value=False)))
-    stack.enter_context(patch.object(mod, "sync_slm_node_roles", AsyncMock()))
+    stack.enter_context(patch.object(mod, "heal_existing_slm_node_roles", AsyncMock()))
     return stack
 
 
