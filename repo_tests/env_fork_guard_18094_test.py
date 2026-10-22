@@ -27,7 +27,7 @@ _ROOT = repo_root()
 
 
 def _live_scan(root: Path, registry: dict | None = None) -> scan_mod.ScanResult:
-    return scan_mod.sweep(root, registry or {})
+    return scan_mod.sweep_env_forks(root, registry or {})
 
 
 def _read_sites(root: Path) -> list[str]:
@@ -38,7 +38,7 @@ def _read_sites(root: Path) -> list[str]:
         return []
 
 
-#: ONE population (``scan_mod.sweep`` over tracked Python) and ONE floor (``scan_mod.FORK_READ_FLOOR``, which
+#: ONE population (``scan_mod.sweep_env_forks`` over tracked Python) and ONE floor (``scan_mod.FORK_READ_FLOOR``, which
 #: ``check_env_forks`` enforces); ``verify_floor`` proves that number against the live population, so the hook cannot
 #: drift to a second one.
 READS = declare(
@@ -230,15 +230,13 @@ def test_the_summary_names_all_three_finding_kinds() -> None:
 def test_the_entrypoint_exits_two_on_a_tree_without_the_ssot_sources(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    import subprocess
-
     from _check_harness import run_check
 
-    from autobot_shared.paths import scrubbed_git_env
+    from autobot_shared.isolated_git import git, make_repo
 
     root, _ = _tree(tmp_path, {"autobot-backend/a.py": 'import os\nP = os.getenv("X_A", "1")\n'})
     (root / "autobot_shared" / "ssot_tls.py").unlink()
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True, env=scrubbed_git_env())
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=scrubbed_git_env())
-    code = run_check(scan_mod.HOOK_ID, scan_mod.collect, [], root=root, summary=scan_mod.summary)
+    make_repo(root)
+    git(root, "add", "-A")
+    code = run_check(scan_mod.HOOK_ID, scan_mod.collect_env_forks, [], root=root, summary=scan_mod.summary)
     assert code == 2 and "ssot_tls.py is not in" in caplog.text

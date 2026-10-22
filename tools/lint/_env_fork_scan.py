@@ -278,7 +278,7 @@ def scan(repo_root: Path, files: list[Path], registry: dict[str, Any]) -> ScanRe
     return result
 
 
-def sweep(repo_root: Path, registry: dict[str, Any]) -> ScanResult:
+def sweep_env_forks(repo_root: Path, registry: dict[str, Any]) -> ScanResult:
     """The ONE population: every git-tracked ``.py`` under *repo_root*, scanned against *registry*.
 
     ``check_env_forks`` and the reach declaration both call this, so the entrypoint's floor check and the
@@ -287,14 +287,14 @@ def sweep(repo_root: Path, registry: dict[str, Any]) -> ScanResult:
     return scan(repo_root, [repo_root / rel for rel in tracked_paths(repo_root, "*.py")], registry)
 
 
-def collect(argv: list[str], repo_root: Path) -> tuple[int, list[str]]:
+def collect_env_forks(argv: list[str], repo_root: Path) -> tuple[int, list[str]]:
     """``(env fallback reads examined, finding lines)`` for ``check_env_forks``; *argv* is unused.
 
     The reads examined are the population :data:`FORK_READ_FLOOR` is a floor over, so the harness
     refuses (exit 2) a sweep that lost its roots instead of reporting "none found" over nothing.
     """
     del argv  # full-repo only: a fork is two files disagreeing, so a changed-files run would miss it
-    result = sweep(repo_root, registry_defaults())
+    result = sweep_env_forks(repo_root, registry_defaults())
     logging.getLogger(HOOK_ID).info("[%s] %s", HOOK_ID, result.summary())
     return result.env_reads, [f"[{HOOK_ID}] {line}" for line in result.findings()]
 
