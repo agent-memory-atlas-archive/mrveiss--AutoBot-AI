@@ -530,3 +530,23 @@ def test_contrast_an_untracked_run_cache_does_not_block_the_backup(tmp_path: pat
     monkeypatch.setattr(sys, "argv", ["optimize_agents.py", "--apply", "--git-backup", "--strip-code-blocks"])
     assert optimize_agents.main() == 0
     assert len(optimize_agents._backup_tags(root)) == 1
+
+
+_PROSE_BETWEEN = "```{tag}\nx = 1\n```\n\nKeep this prose.\n\n```bash\necho hi\n```\n"
+
+
+@pytest.mark.parametrize("tag", ["python3", "c++", "c#", "objective-c", "shell-session"])
+def test_a_non_letter_language_tag_does_not_swallow_the_prose_after_it(tag: str):
+    out, removed = optimize_agents.strip_code_blocks(_PROSE_BETWEEN.format(tag=tag))
+    assert removed == 2
+    assert "Keep this prose." in out
+    assert f"[Code example removed for token optimization ({tag})]" in out
+    assert "[Code example removed for token optimization (bash)]" in out
+    assert "x = 1" not in out and "echo hi" not in out
+    assert optimize_agents.strip_code_blocks(out) == (out, 0)  # still idempotent
+
+
+def test_contrast_a_letters_only_tag_behaves_as_before():
+    out, removed = optimize_agents.strip_code_blocks(_PROSE_BETWEEN.format(tag="python"))
+    assert removed == 2
+    assert "Keep this prose." in out

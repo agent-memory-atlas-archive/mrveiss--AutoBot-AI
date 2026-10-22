@@ -57,7 +57,8 @@ _REPLACEMENT = (
     "- VM sync procedures and SSH requirements\n"
 )
 
-_CODE_BLOCK_PATTERN = re.compile(r"```[a-zA-Z]*\n.*?\n```", re.DOTALL)
+# The info string is any run of non-space, non-backtick characters (python3, c++, c#, objective-c).
+_CODE_BLOCK_PATTERN = re.compile(r"```[^\s`]*\n.*?\n```", re.DOTALL)
 # The body our own placeholder carries: a block holding exactly this is already stripped.
 _PLACEHOLDER_BODY = re.compile(r"\[Code example removed for token optimization(?: \([^)\n]*\))?\]")
 _VERBOSE_SECTION_PATTERN = re.compile(r"## Examples\n.*?(?=\n##|\Z)", re.DOTALL)
