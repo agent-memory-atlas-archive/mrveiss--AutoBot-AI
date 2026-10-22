@@ -117,8 +117,9 @@ refused `1008` before any RFB byte. Full reasoning is in that function's docstri
 - **`control`, never `read`.** RFB carries framebuffer and input on one stream, so the socket
   cannot grant view without input — `mcp.desktop.read` would be a view-only grant that is not.
 - **The permission table decides, not `is_admin_role`** (#13854). A bypass here reverses that
-  ruling one call site at a time. Consequence: `superadmin`'s entry is empty, so it is refused —
-  fix that in `ROLE_PERMISSIONS`, not in the gate. `desktop_ws_role_gate_17054_test.py` asserts
+  ruling one call site at a time. Consequence: `superadmin` is admitted because its entry is derived from
+  admin's set (#19125, owner decision 2026-10-21: "Super admin is the highest form of admin") —
+  grant or change it in `ROLE_PERMISSIONS`, not in the gate. `desktop_ws_role_gate_17054_test.py` asserts
   both the table's answer and the socket's.
 
 ## 6. Memory graph / Graph-RAG ownership
