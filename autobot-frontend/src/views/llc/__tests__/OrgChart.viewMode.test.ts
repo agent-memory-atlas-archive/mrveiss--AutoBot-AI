@@ -94,7 +94,8 @@ async function mountChart() {
   const wrapper = mount(OrgChart, {
     global: {
       plugins: [i18n],
-      stubs: { HireAgentModal: true },
+      // The node drawer is the kit BaseDrawer, which teleports to body (#14780).
+      stubs: { HireAgentModal: true, Teleport: true },
     },
   })
   await flushPromises()
