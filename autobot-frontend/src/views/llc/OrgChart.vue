@@ -73,6 +73,8 @@ const isLoading = ref(false)
 const error = ref<string | null>(null)
 const selectedNode = ref<OrgNode | null>(null)
 const drawerOpen = ref(false)
+// The last node shown: the drawer's title holds through its leave transition (#19198).
+const drawerNode = ref<OrgNode | null>(null)
 const showHire = ref(false) // GH#10219
 const terminating = ref(false) // in-flight guard — terminate is irreversible
 
@@ -902,14 +904,11 @@ async function terminateAgent(node: OrgNode) {
 }
 
 function openDrawer(node: OrgNode) {
-  selectedNode.value = node
+  selectedNode.value = drawerNode.value = node
   drawerOpen.value = true
 }
 
-function closeDrawer() {
-  drawerOpen.value = false
-  selectedNode.value = null
-}
+function closeDrawer() { drawerOpen.value = false; selectedNode.value = null }
 
 function onCanvasNodeMoved(nodeId: string, position: { x: number; y: number }) {
   // Containers stay anchored to the subtree they enclose.
@@ -1499,12 +1498,11 @@ onMounted(() => {
       {{ t('llc.orgChart.canvasHint') }}
     </p>
 
-    <!-- Node sidebar (#13940): fixed slot order + icon rail, extracted to
-         CanvasNodeSidebar.vue so it is one component for tree/canvas/People
-         selections rather than a template block duplicated per surface. -->
+    <!-- Node sidebar (#13940) in the kit drawer, keyed by node: switching nodes never carries the
+         previous node's items, costs, activity or in-flight reads (#19198). -->
     <BaseDrawer
       :model-value="drawerOpen && !!selectedNode"
-      :title="selectedNode?.is_human ? t('llc.orgChart.personDetail') : t('llc.orgChart.agentDetail')"
+      :title="drawerNode?.is_human ? t('llc.orgChart.personDetail') : t('llc.orgChart.agentDetail')"
       width="24rem"
       flush
       :close-label="t('common.close')"
@@ -1512,6 +1510,7 @@ onMounted(() => {
     >
       <CanvasNodeSidebar
         v-if="selectedNode"
+        :key="selectedNode.id"
         :node="selectedNode"
         :company-id="companyId ?? ''"
         :terminating="terminating"
