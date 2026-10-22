@@ -147,6 +147,9 @@ async def _adopt_duplicate(knowledge_base: Any, result: Dict[str, Any], metadata
     can be) or cannot be read back, ONLY the link id is merged: it stays invisible to ``load()``, so a
     later template-changed import re-checks that item once more -- imports run only when the file-state
     hash changes, so that cost is accepted.
+
+    A duplicate already linked to a DIFFERENT item is not written to: the item is reported ``unresolved``
+    (a warning, not a failure, so nothing retries it).
     """
     dup_id = result.get("fact_id")
     if not dup_id or dup_id == "?":
@@ -155,6 +158,11 @@ async def _adopt_duplicate(knowledge_base: Any, result: Dict[str, Any], metadata
     found = await asyncio.to_thread(knowledge_base.get_fact, dup_id)
     held = (found or {}).get("metadata") or {}
     same_kind = held.get("type") == metadata["type"] and held.get(name_field) in (None, metadata[name_field])
+    linked_to = held.get(LINK_FIELD)
+    if linked_to and linked_to != ref.stable_id:
+        # Already another item's fact: writing would steal the link and the two items would flip-flop forever.
+        logger.warning("Item %s matched fact %s linked to %s; left unlinked", ref.stable_id, dup_id, linked_to)
+        return {"status": "success", "action": "unresolved", "fact_id": dup_id}
     merge: Dict[str, Any] = {LINK_FIELD: ref.stable_id}
     if same_kind and held.get(name_field) is None:
         merge[name_field] = metadata[name_field]

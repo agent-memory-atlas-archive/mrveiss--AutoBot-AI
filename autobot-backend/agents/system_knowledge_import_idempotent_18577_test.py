@@ -31,6 +31,7 @@ class _FakeKB:
         self.updated = 0
         self.fail = False  # every write reports an error
         self.dup_type = None  # type of the fact a duplicate answer points at (default: the item's own)
+        self.dup_link = None  # system_fact_id the duplicate target already carries
         self.duplicate = False  # store_fact answers "duplicate" of a pre-existing fact (semantic match)
 
     @property
@@ -47,6 +48,8 @@ class _FakeKB:
             dup_id = f"dup-{len(self.facts)}"
             self.facts[dup_id] = content + " (near copy)"
             self.meta[dup_id] = {"source": "web_research", "type": self.dup_type or metadata["type"]}
+            if self.dup_link:
+                self.meta[dup_id]["system_fact_id"] = self.dup_link
             return {"status": "duplicate", "fact_id": dup_id, "message": "Near-duplicate fact already exists"}
         self.stored += 1
         # Mirrors the real store: no stable id means a fresh random one every call.
@@ -86,6 +89,7 @@ def _manager(kb: _FakeKB, tmp_path) -> SystemKnowledgeManager:
     manager.runtime_knowledge_dir = tmp_path / "runtime"
     manager.backup_dir = tmp_path / "backup"
     manager._import_failures = []
+    manager._import_unresolved = []
     return manager
 
 
@@ -253,6 +257,10 @@ async def test_a_duplicate_answer_is_an_existing_fact_linked_not_an_error(tmp_pa
         manager._update_system_knowledge_cache.assert_awaited_once()  # no failure: the cache is written
         assert manager._import_failures == []
         assert all(m.get("system_fact_id") for f, m in kb.meta.items() if f.startswith("dup-")), "duplicate not linked"
+        names = [m for f, m in kb.meta.items() if f.startswith("dup-")]
+        assert all(
+            ("tool_name" in m) or ("workflow_name" in m) or ("title" in m) for m in names
+        ), "absent name not filled"
         writes = kb.writes
         assert await manager._import_system_knowledge() == 0
     assert kb.writes == writes, "the second run wrote again"
@@ -285,3 +293,18 @@ async def test_a_duplicate_of_another_kind_keeps_its_type_and_name_and_gains_onl
     assert dups and all(m["type"] == "user_note" for m in dups.values()), "a foreign fact was re-typed"
     assert all(m["system_fact_id"] for m in dups.values())
     assert not any(k.endswith("_name") or k == "title" for m in dups.values() for k in m), "a name was written"
+
+
+@pytest.mark.asyncio
+async def test_a_duplicate_linked_to_another_item_is_reported_unresolved_and_never_written(tmp_path) -> None:
+    kb = _FakeKB()
+    kb.duplicate = True
+    kb.dup_link = "someone-elses-stable-id"
+    manager = _manager(kb, tmp_path)
+    with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
+        assert await manager._import_system_knowledge() == 0, "unresolved must not be a retry-causing failure"
+        assert manager._import_unresolved, "the unresolved items were not reported"
+        assert kb.writes == 0
+        assert all(m["system_fact_id"] == "someone-elses-stable-id" for f, m in kb.meta.items() if f.startswith("dup-"))
+        assert await manager._import_system_knowledge() == 0
+    assert kb.writes == 0, "a second run flip-flopped the link"

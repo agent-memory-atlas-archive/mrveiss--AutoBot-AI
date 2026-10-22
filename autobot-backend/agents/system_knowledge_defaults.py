@@ -11,6 +11,10 @@ ceiling; ``SystemKnowledgeManager`` inherits them, so every ``self._get_*`` call
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from autobot_shared.logging_manager import get_logger
+
+logger = get_logger(__name__)
+
 
 class DefaultKnowledgeMixin:
     """Pure-data default definitions used when no template tree is present."""
@@ -296,3 +300,27 @@ class DefaultKnowledgeMixin:
                 }
             )
         return formatted
+
+    def _log_imported(self, kind: str, name: str, result: Any) -> None:
+        """Log what the import actually did: nothing (already current), an unresolved match, or a write."""
+        action = result.get("action") if isinstance(result, dict) else None
+        if action == "skipped":
+            logger.info("Unchanged %s (skipped): %s", kind, name)
+        elif action == "unresolved":
+            self._import_unresolved.append(f"{kind}:{name}")
+        else:
+            logger.info("Imported %s: %s", kind, name)
+
+    def _record_import_failure(self, kind: str, name: str, error: Exception) -> None:
+        """Count a failed item; it is retried on the next import because nothing marks it done."""
+        logger.error("Failed to import %s %s: %s", kind, name, error)
+        self._import_failures.append(f"{kind}:{name}")
+
+    def _report_unresolved(self) -> None:
+        """Items whose near-duplicate is already linked to another item: reported, never retried."""
+        if self._import_unresolved:
+            logger.warning(
+                "%d item(s) matched a fact linked to another item and were left unlinked: %s",
+                len(self._import_unresolved),
+                ", ".join(self._import_unresolved),
+            )

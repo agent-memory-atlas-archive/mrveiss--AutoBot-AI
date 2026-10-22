@@ -45,6 +45,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         self.backup_dir = dirs.backup
         self.fact_ids = SystemFactIds()
         self._import_failures: List[str] = []
+        self._import_unresolved: List[str] = []
 
         # Ensure directories exist
         self.runtime_knowledge_dir.mkdir(parents=True, exist_ok=True)
@@ -256,7 +257,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
 
     async def _import_system_knowledge(self) -> int:
         """Import all system knowledge from templates. Returns how many items failed to store."""
-        self._import_failures = []
+        self._import_failures, self._import_unresolved = [], []
         await self.fact_ids.load()
         dir_exists = await asyncio.to_thread(self.system_knowledge_dir.exists)
         if not dir_exists:
@@ -264,11 +265,11 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             logger.warning(f"System knowledge directory not found: {self.system_knowledge_dir}")
             await self._create_default_system_knowledge()
             await self._import_from_runtime_files()
-            return len(self._import_failures)
-
-        await self._import_tools_knowledge()
-        await self._import_workflows_knowledge()
-        await self._import_procedures_knowledge()
+        else:
+            await self._import_tools_knowledge()
+            await self._import_workflows_knowledge()
+            await self._import_procedures_knowledge()
+        self._report_unresolved()
         return len(self._import_failures)
 
     async def _copy_to_runtime(self, template: Path, kind: str) -> None:
@@ -364,19 +365,6 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         except SystemFactStoreError as e:
             return self._record_import_failure("tool", tool_name, e)
         self._log_imported("tool", tool_name, result)
-
-    @staticmethod
-    def _log_imported(kind: str, name: str, result: Any) -> None:
-        """Log what the import actually did: nothing (already current) or a write."""
-        if isinstance(result, dict) and result.get("action") == "skipped":
-            logger.info("Unchanged %s (skipped): %s", kind, name)
-        else:
-            logger.info("Imported %s: %s", kind, name)
-
-    def _record_import_failure(self, kind: str, name: str, error: Exception) -> None:
-        """Count a failed item; it is retried on the next import because nothing marks it done."""
-        logger.error("Failed to import %s %s: %s", kind, name, error)
-        self._import_failures.append(f"{kind}:{name}")
 
     async def _import_workflows_knowledge(self):
         """Import workflow knowledge from YAML templates"""
