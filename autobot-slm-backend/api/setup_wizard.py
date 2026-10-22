@@ -145,7 +145,7 @@ def _ansible_groups_for_nodes(
     dropping either would trade one set of silent no-ops for another.
 
     #14638: the result is gated the same way the dynamic-inventory builder
-    gates its own groups (``declared-only group mapping``,
+    gates its own groups (``_strip_undeclared_privileged_groups``,
     #14513/#14552) -- a node whose only route into a privileged group
     (``slm_server``, ``backend``, ``main``, ``frontend``, ``aiml``, ``npu``,
     ``browser``) is a ``NodeRole`` row it never declared must not join it.
@@ -155,7 +155,7 @@ def _ansible_groups_for_nodes(
     gate survives a future writer that stops keeping that table declared-only
     instead of depending on it staying that way (#14594).
 
-    ``declared-only group mapping`` itself is not reused here: it
+    ``_strip_undeclared_privileged_groups`` itself is not reused here: it
     computes "declared" through ``groups_for_role_tokens`` alone, and this
     path's raw side unions in ``ROLE_ANSIBLE_GROUPS`` too -- reusing it as-is
     would strip a role (``vnc`` -> ``backend``) that is declared but only
@@ -397,8 +397,14 @@ def _apply_role_host_vars(
         if node.node_id in node_id_to_roles:
             hosts[inv_name]["node_roles"] = node_id_to_roles[node.node_id]
         hosts[inv_name]["node_roles_declared"] = _declared_roles(node)
-        # #14859/#19197: dependencies resolve from DECLARED roles only;
-        # detection never provisions anything.
+        # #14859: dependencies resolve from DECLARED roles, not from the
+        # declared-plus-detected union `node_roles` carries.
+        #
+        # Detection legitimately drives plays -- a node running redis that
+        # nobody declared still needs the redis plays to reach it, which is what
+        # `_union_roles` documents. Installing OS packages and enabling services
+        # is a different act: that is provisioning a role, not reconciling one
+        # that is already there.
         #
         # A node contaminated by #14513 detects `backend`, `celery`, `frontend`,
         # `scheduler`, `slm-backend` and `slm-frontend` (the residue tracked in

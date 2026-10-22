@@ -6,7 +6,7 @@
 
 "Assign Role Manually" wrote a `NodeRole` row and nothing else. `Node.roles`
 was left untouched, which did not matter until deploy groups became
-declaration-gated (#14513): `declared-only group mapping` reads
+declaration-gated (#14513): `_strip_undeclared_privileged_groups` reads
 `Node.roles` as the sole record of operator intent.
 
 After that, a role assigned through the supported UI counted as UNDECLARED. The

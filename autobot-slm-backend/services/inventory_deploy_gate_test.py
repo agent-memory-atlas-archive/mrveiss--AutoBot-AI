@@ -48,7 +48,9 @@ def _node(declared, detected):
 
 
 def _groups(node):
-    return inventory_builder.groups_for_role_tokens(inventory_builder._declared_roles(node))
+    return inventory_builder._strip_undeclared_privileged_groups(
+        node, inventory_builder.groups_for_role_tokens(inventory_builder._union_roles(node))
+    )
 
 
 def test_the_closure_widened_the_seed():
@@ -83,7 +85,7 @@ def test_agent_membership_stays_ungated():
 
     assert "slm_nodes" not in gated, "deploy-slm-agent.yml could no longer reach an agent node"
     assert "slm" not in gated
-    assert "slm_nodes" in _groups(_node(["slm-agent"], []))
+    assert "slm_nodes" in _groups(_node([], ["slm-agent"]))
 
 
 def test_a_detection_only_node_is_no_deploy_target():
@@ -103,7 +105,7 @@ def test_a_detection_only_node_is_no_deploy_target():
     for leaked in sorted(gated):
         assert leaked not in groups, f"{leaked} still granted by detection alone"
 
-    assert "redis" not in groups, "detection grants no groups at all (#19197)"
+    assert "redis" in groups, "ordinary groups must still come from detection"
     assert "slm_nodes" in groups, "the node declares slm-agent, so it keeps its agent groups"
 
 

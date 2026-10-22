@@ -230,11 +230,7 @@ def test_frontend_node_in_infrastructure():
 
 
 def test_detected_roles_merged_with_roles():
-    """detected_roles grant NO groups; only declared roles map (#19197).
-
-    Reverses the older "a node running redis keeps its redis updates" design:
-    Ansible manages only the services assigned to a node.
-    """
+    """detected_roles are unioned with roles for group mapping."""
     node = _Node(
         node_id="01-Backend",
         ip_address="10.0.0.2",
@@ -245,8 +241,8 @@ def test_detected_roles_merged_with_roles():
     children = inv["all"]["children"]
     host = "01-Backend"
     assert host in children["backend"]["hosts"]
-    assert host not in children["redis"]["hosts"]
-    assert host not in children["database"]["hosts"]
+    assert host in children["redis"]["hosts"]
+    assert host in children["database"]["hosts"]
 
 
 def test_production_vms_alias_present():

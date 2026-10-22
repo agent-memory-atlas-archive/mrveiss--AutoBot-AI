@@ -8,8 +8,8 @@
 OR-chains: a node that only *detected* ``frontend`` no longer joins the
 ``frontend`` ansible group. ``provision-fleet-roles.yml`` does not read the
 group alone -- every gate is ``when: role_X_active``, and that fact also has
-a ``node_roles`` branch. ``node_roles`` was then the UNION of declared and
-detected roles (declared-only since #19197), and the union was never filtered,
+a ``node_roles`` branch. ``node_roles`` is the UNION of declared and detected
+roles (``inventory_builder._union_roles``), and the union was never filtered,
 so a detected-only node still evaluated the privileged facts (backend,
 frontend, ai_stack, npu_worker, browser) true and got the tree unpacked --
 the same failure #14552 fixed, reached through provisioning instead of the
@@ -118,7 +118,7 @@ def _privileged_facts(facts: dict[str, str]) -> set[str]:
     Both conditions matter: ``role_slm_active`` also gates on a privileged
     group (``slm_server``), but it has no node_roles branch at all -- it is
     pure group membership, already correctly gated by
-    the declared-only group mapping (#19197) on the group side, with nothing
+    ``_strip_undeclared_privileged_groups`` on the group side, with nothing
     for this fix to touch. Requiring a node_roles branch too is what narrows
     the derived set to exactly the five #14560 names (backend, frontend,
     ai_stack, npu_worker, browser) without hand-listing them.

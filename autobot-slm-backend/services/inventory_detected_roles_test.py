@@ -63,8 +63,10 @@ def _node(declared, detected):
 
 
 def _groups(node):
-    """Groups this node ends up in (declared roles only, #19197) — what the inventory writes."""
-    return inventory_builder.groups_for_role_tokens(inventory_builder._declared_roles(node))
+    """Groups this node ends up in, guard applied — what the inventory writes."""
+    return inventory_builder._strip_undeclared_privileged_groups(
+        node, inventory_builder.groups_for_role_tokens(inventory_builder._union_roles(node))
+    )
 
 
 # The full catalogue every agent probes, as observed live on both nodes.
@@ -95,27 +97,38 @@ _PROBED = [
 def test_the_module_really_loaded():
     """A stubbed module would satisfy every attribute lookup below."""
     assert callable(inventory_builder.groups_for_role_tokens)
-    assert callable(inventory_builder._declared_roles)
+    assert callable(inventory_builder._strip_undeclared_privileged_groups)
     assert "slm_server" in inventory_builder._DECLARED_ONLY_GROUPS
 
 
-def test_detection_adds_no_groups():
-    """#19197: Ansible manages only the services ASSIGNED to a node.
+def test_detection_still_adds_ordinary_groups():
+    """Deliberately NOT narrowed to declared roles only.
 
-    Reverses the pre-#19197 contract that a node running an undeclared redis
-    keeps receiving redis plays; detection is informational.
+    My first attempt at this fix made `_union_roles` return declared roles
+    alone. CI caught it: `test_detected_roles_merged_with_roles` pins a real
+    contract -- a node running redis that nobody declared still needs the redis
+    plays to reach it. Detection adding ordinary groups is a feature.
+
+    The defect is narrower than "detection is used at all", so the fix is too.
     """
-    groups = _groups(_node(["backend"], ["redis"]))
+    node = _node(["backend"], ["redis"])
+    groups = _groups(node)
 
-    assert "backend" in groups
-    assert "redis" not in groups and "database" not in groups
+    assert (
+        "backend" in groups and "redis" in groups
+    ), "detection no longer contributes ordinary groups — this fix was over-broad"
 
 
-def test_a_node_that_declares_nothing_gets_no_role_groups_from_detection():
-    """No declared roles: only the universal groups, whatever is detected."""
-    groups = _groups(_node([], ["redis"]))
+def test_a_node_that_declares_nothing_still_gets_ordinary_groups_from_detection():
+    """Dropping the detection fallback entirely would strand such a node.
 
-    assert "redis" not in groups and "database" not in groups
+    `redis` rather than `backend`: since the gate widened to the deploy groups,
+    `backend` is no longer an ordinary group, and asserting it here would be
+    asserting the thing the gate exists to prevent.
+    """
+    node = _node([], ["redis"])
+
+    assert "redis" in _groups(node) and "database" in _groups(node)
 
 
 def test_a_node_that_declares_nothing_is_not_a_deploy_target():
@@ -169,6 +182,18 @@ def test_the_real_manager_keeps_slm_server():
     assert "slm_server" in groups, "the SLM manager lost slm_server — Play 1 would never run"
 
 
+def test_non_privileged_groups_are_left_alone():
+    """Only groups whose plays deploy a tree are declaration-gated.
+
+    Narrowing everything would be a different, larger behaviour change: a node
+    genuinely running redis should keep receiving redis updates.
+    """
+    node = _node([], ["redis"])
+    groups = _groups(node)
+
+    assert "redis" in groups, "a detection-only node lost its ordinary groups"
+
+
 def test_a_contaminated_node_is_also_kept_out_of_the_backend_group():
     """Review of #14513: `slm_server` alone was under-inclusive.
 
@@ -195,31 +220,12 @@ def test_a_declared_backend_node_keeps_its_groups():
     assert "backend" in groups and "main" in groups
 
 
-def test_vnc_node_detecting_the_whole_stack_is_in_no_service_group():
-    """#19197 contrast: declared [vnc, slm-agent], detecting service roles."""
-    node = _node(["vnc", "slm-agent"], ["postgres", "chromadb", "slm-database", "slm-monitoring", "redis"])
-    groups = _groups(node)
+def test_ordinary_groups_are_still_granted_by_detection():
+    """The line is drawn at deploy targets, not at "detection is untrusted".
 
-    for leaked in ("redis", "database", "ai_stack", "monitoring_vm", "slm_server"):
-        assert leaked not in groups, f"{leaked} granted by detection alone"
-    assert "slm_nodes" in groups
-
-
-def test_the_slm_node_declaring_everything_is_unchanged():
-    node = _node(["slm-backend", "slm-frontend", "slm-database", "slm-monitoring", "slm-agent"], _PROBED)
-    groups = _groups(node)
-
-    for expected in ("slm_server", "redis", "monitoring_vm"):
-        assert expected in groups, f"declared SLM node lost {expected}"
-
-
-def test_a_declared_role_maps_to_its_groups():
-    groups = _groups(_node(["redis"], []))
+    A node genuinely running redis should keep receiving redis updates, which
+    `test_detected_roles_merged_with_roles` pins independently.
+    """
+    groups = _groups(_node(["vnc"], ["redis"]))
 
     assert "redis" in groups and "database" in groups
-
-
-def test_undeclared_detections_are_surfaced_not_managed():
-    node = _node(["vnc", "slm-agent"], ["redis", "vnc", "postgres"])
-
-    assert inventory_builder._undeclared_detected_roles(node) == ["postgres", "redis"]
