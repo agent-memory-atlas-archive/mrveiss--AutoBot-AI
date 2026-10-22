@@ -1505,10 +1505,10 @@ async def get_npu_search_engine() -> NPUSemanticSearch:
     global _npu_search_engine
     if _npu_search_engine is None:
         async with _npu_search_engine_lock:
-            # Double-check after acquiring lock
-            if _npu_search_engine is None:
-                _npu_search_engine = NPUSemanticSearch()
-                await _npu_search_engine.initialize()
+            if _npu_search_engine is None:  # double-check under the lock
+                engine = NPUSemanticSearch()
+                await engine.initialize()  # a failure leaves nothing cached: next call retries (#19156)
+                _npu_search_engine = engine
     return _npu_search_engine
 
 
