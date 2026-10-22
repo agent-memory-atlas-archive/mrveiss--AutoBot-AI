@@ -422,3 +422,49 @@ def test_the_shell_wrapper_runs_the_surviving_module_with_its_old_behaviour():
     assert "--apply --git-backup --cache --strip-code-blocks --no-collapse-policy" in text
     assert (pathlib.Path(__file__).parent / "optimize_agents.py").is_file()
     assert not (pathlib.Path(__file__).parent / "utilities" / "optimize_agents.py").exists()
+
+
+def _git_out(root: pathlib.Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True, env=scrubbed_git_env()).stdout
+
+
+def test_git_backup_commit_is_scoped_to_the_agent_files(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+    root, _ = _git_repo(tmp_path)
+    (root / "unrelated.txt").write_text("staged elsewhere\n", encoding="utf-8")
+    _git_out(root, "add", "unrelated.txt")
+    monkeypatch.setattr(optimize_agents, "project_root", lambda: root)
+    monkeypatch.setattr(sys, "argv", ["optimize_agents.py", "--apply", "--git-backup", "--cache", "--strip-code-blocks"])
+    assert optimize_agents.main() == 0
+    committed = _git_out(root, "show", "--name-only", "--format=", "HEAD").split()
+    assert committed == [".claude/agents/a.md"]
+    assert "A  unrelated.txt" in _git_out(root, "status", "--porcelain")  # still staged, not swept in
+
+
+def test_a_rejected_commit_returns_1_and_names_the_backup_tag(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    root, _ = _git_repo(tmp_path)
+    hook = root / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho rejected-by-hook >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    monkeypatch.setattr(optimize_agents, "project_root", lambda: root)
+    monkeypatch.setattr(sys, "argv", ["optimize_agents.py", "--apply", "--git-backup", "--strip-code-blocks"])
+    assert optimize_agents.main() == 1
+    tag = optimize_agents._backup_tags(root)[0]
+    assert "rejected-by-hook" in caplog.text
+    assert f"--restore {tag}" in caplog.text
+
+
+def test_a_failed_backup_tag_returns_1_before_writing(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog):
+    root, agents = _git_repo(tmp_path)
+    monkeypatch.setattr(optimize_agents, "project_root", lambda: root)
+    real_git = optimize_agents._git
+
+    def failing_tag(r, *args, check=True):
+        if args[:1] == ("tag",) and "-a" in args:
+            raise subprocess.CalledProcessError(128, ["git", *args], stderr="fatal: tag already exists")
+        return real_git(r, *args, check=check)
+
+    monkeypatch.setattr(optimize_agents, "_git", failing_tag)
+    monkeypatch.setattr(sys, "argv", ["optimize_agents.py", "--apply", "--git-backup", "--strip-code-blocks"])
+    assert optimize_agents.main() == 1
+    assert "def example()" in (agents / "a.md").read_text(encoding="utf-8")
+    assert "tag already exists" in caplog.text

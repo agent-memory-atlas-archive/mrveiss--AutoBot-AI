@@ -175,3 +175,98 @@ class TestMergeAware:
         repo = self._catch_up(tmp_path, DELETION_THRESHOLD + 10, publish=False)
         result = self._run(repo)
         assert result.returncode != 0, result.stdout + result.stderr
+
+
+class TestPathnamesSurviveIntact:
+    """Paths git would C-quote in line output (tab, newline, quote, non-ASCII) are
+    read NUL-delimited, so the origin/main membership check sees the real path
+    (#19191 review)."""
+
+    @staticmethod
+    def _awkward(i: int) -> str:
+        return f'q"\t\u00e9\n{i}.txt'
+
+    def _seed(self, tmp_path: Path, count: int) -> Path:
+        repo = _init_repo(tmp_path)
+        _git(repo, "checkout", "-q", "-b", "main")
+        for i in range(count):
+            (repo / self._awkward(i)).write_text("x\n", encoding="utf-8")
+        (repo / "keep.txt").write_text("k\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed")
+        return repo
+
+    def _commit(self, repo: Path, msg: str) -> None:
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", msg)
+
+    def _run(self, repo: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(["bash", str(HOOK_PATH)], cwd=repo, capture_output=True, text=True, env=isolated_git_env())
+
+    def test_a_catch_up_merge_of_quoted_paths_main_already_removed_is_allowed(self, tmp_path: Path) -> None:
+        count = DELETION_THRESHOLD + 10
+        repo = self._seed(tmp_path, count)
+        _git(repo, "checkout", "-q", "-b", "old-branch")
+        (repo / "branch-work.txt").write_text("b\n", encoding="utf-8")
+        self._commit(repo, "branch work")
+        _git(repo, "checkout", "-q", "main")
+        for i in range(count):
+            (repo / self._awkward(i)).unlink()
+        self._commit(repo, "main removes files")
+        _git(repo, "update-ref", "refs/remotes/origin/main", "main")
+        _git(repo, "checkout", "-q", "old-branch")
+        _git(repo, "merge", "--no-commit", "--no-ff", "main")
+        quoted = _git(repo, "diff", "--cached", "--name-only", "--diff-filter=D").stdout.splitlines()
+        assert all(line.startswith('"') for line in quoted)  # git really quotes these paths
+        result = self._run(repo)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_contrast_merging_a_branch_deleting_quoted_paths_still_on_main_is_blocked(self, tmp_path: Path) -> None:
+        count = DELETION_THRESHOLD + 10
+        repo = self._seed(tmp_path, count)
+        _git(repo, "update-ref", "refs/remotes/origin/main", "main")
+        _git(repo, "checkout", "-q", "-b", "deleter")
+        for i in range(count):
+            (repo / self._awkward(i)).unlink()
+        self._commit(repo, "branch deletes files")
+        _git(repo, "checkout", "-q", "main")
+        (repo / "main-work.txt").write_text("m\n", encoding="utf-8")
+        self._commit(repo, "main moves on")
+        _git(repo, "update-ref", "refs/remotes/origin/main", "main")
+        _git(repo, "merge", "--no-commit", "--no-ff", "deleter")
+        result = self._run(repo)
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert f"Staged deletions: \x1b[1m{count}\x1b[0m files" in result.stdout
+
+
+class TestGitlinkMembership:
+    """Membership on origin/main is read from its tree listing, never from object
+    availability: a gitlink whose commit is absent locally is still an entry on main,
+    so deleting it still counts (#19191 review)."""
+
+    def test_deleting_gitlinks_still_on_main_whose_commits_are_absent_is_blocked(self, tmp_path: Path) -> None:
+        count = DELETION_THRESHOLD + 10
+        repo = _init_repo(tmp_path)
+        _git(repo, "checkout", "-q", "-b", "main")
+        (repo / "keep.txt").write_text("k\n", encoding="utf-8")
+        _git(repo, "add", "keep.txt")
+        for i in range(count):
+            _git(repo, "update-index", "--add", "--cacheinfo", f"160000,{i + 1:040x},sub/m{i}")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed gitlinks")
+        _git(repo, "update-ref", "refs/remotes/origin/main", "main")
+        absent = subprocess.run(["git", "cat-file", "-e", "main:sub/m0"], cwd=repo, env=isolated_git_env(), check=False)
+        assert absent.returncode != 0  # the gitlink's commit object is not in this repo
+        _git(repo, "checkout", "-q", "-b", "deleter")
+        for i in range(count):
+            _git(repo, "rm", "-q", "--cached", f"sub/m{i}")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "branch deletes gitlinks")
+        _git(repo, "checkout", "-q", "main")
+        (repo / "main-work.txt").write_text("m\n", encoding="utf-8")
+        _git(repo, "add", "main-work.txt")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "main moves on")
+        _git(repo, "update-ref", "refs/remotes/origin/main", "main")
+        _git(repo, "merge", "--no-commit", "--no-ff", "deleter")
+        _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD")  # raises unless mid-merge
+        result = subprocess.run(["bash", str(HOOK_PATH)], cwd=repo, capture_output=True, text=True, env=isolated_git_env())
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert f"Staged deletions: \x1b[1m{count}\x1b[0m files" in result.stdout

@@ -7,9 +7,13 @@
 > work is tracked. A reader can check progress against the code instead of trusting a
 > label.
 
-This register is the one place AutoBot names its compliance targets. Other documents
-(README, architecture notes, sales material) link here; they never restate a target's
-status in their own words. The programme is tracked in umbrella
+This register is the one place AutoBot names its compliance targets. New or revised
+documents (README, architecture notes, sales material) link here rather than restate a
+target's status in their own words. Older documents still carry such wording (for
+example "WCAG 2.1 AA compliant" in `docs/implementation/ISSUE_753_FINAL_REPORT.md` and
+"WCAG 2.1 compliant" in `docs/features/file_upload_improvements.md`); where they disagree
+with this register, this register wins and their wording is not a compliance claim. The
+programme is tracked in umbrella
 [#19113](https://github.com/mrveiss/AutoBot-AI/issues/19113).
 
 ## How to read this

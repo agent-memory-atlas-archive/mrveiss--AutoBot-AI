@@ -40,30 +40,42 @@ source "$SCRIPT_DIR/lib/_common.sh" || {
 # (anything >50 is almost certainly a stash bug, not intended cleanup)
 DELETION_THRESHOLD=50
 
-# During a merge, drop the deletions origin/main has already made (the path is absent
-# there). Outside a merge, or when origin/main cannot be resolved, keep every deletion.
+# During a merge, drop the deletions origin/main has already made (the path is not an
+# entry of its tree). Outside a merge, or when origin/main or its tree cannot be read,
+# keep every deletion. Membership is read from the tree listing, never from object
+# availability: a gitlink whose commit is absent locally is still an entry on main.
+# Reads DELETED, writes DELETIONS; $1 is a scratch file for the NUL-delimited listing.
 drop_deletions_main_already_made() {
-    local deleted="$1" base f
-    if ! git rev-parse -q --verify MERGE_HEAD >/dev/null \
-        || ! base=$(git rev-parse -q --verify refs/remotes/origin/main); then
-        printf '%s' "$deleted"
-        return
-    fi
-    while IFS= read -r f; do
-        [ -n "$f" ] || continue
-        if git cat-file -e "$base:$f" 2>/dev/null; then
-            printf '%s\n' "$f"
+    local listing="$1" base f
+    local -A on_main=()
+    DELETIONS=("${DELETED[@]}")
+    git rev-parse -q --verify MERGE_HEAD >/dev/null || return 0
+    base=$(git rev-parse -q --verify refs/remotes/origin/main) || return 0
+    git ls-tree -r -z --full-tree --name-only "$base" >"$listing" 2>/dev/null || return 0
+    while IFS= read -r -d '' f; do
+        on_main["$f"]=1
+    done <"$listing"
+    DELETIONS=()
+    for f in "${DELETED[@]}"; do
+        if [ -n "${on_main[$f]+present}" ]; then
+            DELETIONS+=("$f")
         fi
-    done <<< "$deleted"
+    done
 }
 
 main() {
-    local deleted deletions
-    # A plain assignment, not inside a function's command substitution: there set -e is not
-    # inherited, so a git failure would read as "0 deletions" (#14151). Here it aborts.
-    deleted=$(git diff --cached --name-only --diff-filter=D)
-    deletions=$(drop_deletions_main_already_made "$deleted")
-    deletion_count=$(printf '%s' "$deletions" | grep -c . || true)
+    local listing deletion_count
+    listing=$(mktemp)
+    trap 'rm -f "$listing"' EXIT
+    # NUL-delimited, so a path holding a tab, newline, quote or non-ASCII byte arrives
+    # intact rather than in git's C-quoted form. A redirect at top level, not a command
+    # substitution inside a function: a git failure aborts under set -e instead of
+    # reading as "0 deletions" (#14151).
+    git diff --cached --name-only -z --diff-filter=D >"$listing"
+    DELETED=()
+    mapfile -d '' -t DELETED <"$listing"
+    drop_deletions_main_already_made "$listing"
+    deletion_count=${#DELETIONS[@]}
 
     if [ "$deletion_count" -le "$DELETION_THRESHOLD" ]; then
         # Normal deletion count — allow the commit
@@ -85,7 +97,7 @@ main() {
     echo "    3. Did a branch switch occur silently during stash?"
     echo ""
     echo -e "  ${YELLOW}First 20 files staged for deletion:${NC}"
-    printf '%s\n' "$deletions" | head -20 | sed 's/^/    /'
+    printf '    %q\n' "${DELETIONS[@]:0:20}"
     if [ "$deletion_count" -gt 20 ]; then
         echo "    ... and $((deletion_count - 20)) more"
     fi

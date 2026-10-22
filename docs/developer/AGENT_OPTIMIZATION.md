@@ -291,7 +291,7 @@ unset CLAUDE_AGENT_DIR
 ./scripts/utilities/agent-optimize.sh --force
 
 # Or manually clear cache
-rm .claude/agents-optimized/.optimization_cache.json
+rm .claude/agents/.optimization_cache.json
 ```
 
 ## Advanced Usage
@@ -299,12 +299,18 @@ rm .claude/agents-optimized/.optimization_cache.json
 ### Python API
 
 `autobot-infrastructure/shared/scripts/optimize_agents.py` is the only optimizer module
-(#14873; the former class-based `AgentOptimizer` was merged into it). Import it with
-`scripts/` on the path:
+(#14873; the former class-based `AgentOptimizer` was merged into it). It imports
+`autobot_shared.*` at module level, so **both** the repository root and
+`autobot-infrastructure/shared/scripts` must be on the path (the wrapper exports the
+root as `PYTHONPATH` for the same reason):
+
+```bash
+PYTHONPATH="$PWD:$PWD/autobot-infrastructure/shared/scripts" python3 your_script.py
+```
 
 ```python
 from pathlib import Path
-from optimize_agents import OptimizeOptions, load_cache, process_agent_files
+from optimize_agents import OptimizeOptions, process_agent_files
 
 options = OptimizeOptions(collapse_policy=False, strip_code_blocks=True)
 files = sorted(Path('.claude/agents').glob('*.md'))

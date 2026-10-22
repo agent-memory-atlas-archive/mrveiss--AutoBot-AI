@@ -152,8 +152,14 @@ def test_an_invalid_unit_is_never_deferred_as_an_issued_self_restart_18359():
 
 
 async def test_a_secret_line_in_post_sync_output_is_redacted_before_it_is_recorded_18522(monkeypatch, recorded):
-    """#18522: the command's own output reaches the recorder already masked, end to end through the runner."""
+    """#18522: the runner hands the command's output to the recorder, and the row built from
+    exactly what it handed over is masked (``build_row`` masks; the runner does not)."""
     _fake_ssh(monkeypatch, rc=0, out=b"ok\napi_key=hunter2-s3cr3t-value\n")
-    outcome = await runner.run_post_sync_command(_base(), "run-it", 5, _REC, "Run", "post_sync")
-    row = recorder.build_row(_REC, "post_sync", "Run", "run-it", None, outcome)
-    assert "hunter2-s3cr3t-value" not in row.output_tail and "ok" in row.output_tail
+    await runner.run_post_sync_command(_base(), "run-it", 5, _REC, "Run", "post_sync")
+    recorded.assert_awaited_once()
+    args = recorded.await_args.args
+    assert args[:5] == (_REC, "post_sync", "Run", "run-it", None)
+    assert "hunter2-s3cr3t-value" in args[5].output_tail  # the raw output really reached the recorder
+    row = recorder.build_row(*args)
+    assert "hunter2-s3cr3t-value" not in row.output_tail
+    assert "ok" in row.output_tail
