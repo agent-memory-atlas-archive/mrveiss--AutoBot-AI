@@ -75,7 +75,7 @@ def _close_loop() -> None:
         loop.close()
 
 
-class KnowledgeBaseUnavailable(Exception):
+class CanonicalKBUnavailable(Exception):
     """The canonical KB could not be obtained (factory returned None or init failed).
 
     Deliberately NOT a RuntimeError/OSError subclass: the per-check handlers that tolerate
@@ -89,7 +89,7 @@ def _canonical_kb():
     if _STATE["kb"] is None:
         kb = _run_async(get_knowledge_base_async())
         if kb is None:
-            raise KnowledgeBaseUnavailable("Knowledge base unavailable: initialization failed or retry cooldown active")
+            raise CanonicalKBUnavailable("Knowledge base unavailable: initialization failed or retry cooldown active")
         _STATE["kb"] = kb
     return _STATE["kb"]
 
@@ -176,7 +176,7 @@ def _verify_embedding_dimension(expected_dimension: int) -> Tuple[bool, Optional
         logger.info("✅ Actual embedding dimension correct: %s", actual_dim)
         return True, None
 
-    except KnowledgeBaseUnavailable:
+    except CanonicalKBUnavailable:
         raise  # not optional: the caller must fail the check, never pass it
     except Exception as e:
         logger.warning("Could not test actual embedding dimensions: %s", e)
@@ -212,7 +212,7 @@ class KnowledgeConsistencyVerifier:
                 )
                 return False
             logger.info("✅ --deep: chunker vector shape verified (dim=%s)", len(kb_vec))
-        except KnowledgeBaseUnavailable:
+        except CanonicalKBUnavailable:
             raise  # not optional: surfaces as a failure of the embedding-consistency check
         except Exception as exc:
             self.warnings.append(f"--deep chunker vector check failed: {exc}")
@@ -287,7 +287,7 @@ class KnowledgeConsistencyVerifier:
                             f"CRITICAL: KnowledgeBase embedding model inconsistency: {kb.embedding_model_name}"
                         )
                         return False
-            except KnowledgeBaseUnavailable:
+            except CanonicalKBUnavailable:
                 raise  # not optional: the outer handler records a critical failure
             except Exception as e:
                 logger.warning("Could not instantiate KnowledgeBase for verification: %s", e)
@@ -295,7 +295,7 @@ class KnowledgeConsistencyVerifier:
             logger.info("✅ EMBEDDING MODEL CONSISTENCY: VERIFIED")
             return True
 
-        except KnowledgeBaseUnavailable as e:
+        except CanonicalKBUnavailable as e:
             self.critical_errors.append(
                 f"CRITICAL FAILURE: Knowledge base unreachable, embedding consistency unverified: {e}"
             )
@@ -327,7 +327,7 @@ class KnowledgeConsistencyVerifier:
             logger.info("✅ VECTOR DIMENSION CONSISTENCY: VERIFIED")
             return True
 
-        except KnowledgeBaseUnavailable as e:
+        except CanonicalKBUnavailable as e:
             self.critical_errors.append(
                 f"CRITICAL FAILURE: Knowledge base unreachable, vector dimensions unverified: {e}"
             )
