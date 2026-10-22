@@ -139,7 +139,7 @@ logged.
 | `--yes`, `-y` | Skip confirmation prompts (use with `--uninstall`) |
 | `--validate` | Verify installation integrity (required service directories present) |
 | `--branch=BRANCH` | Git branch to install (default: `main`) |
-| `--admin-pass=PASS` | SLM admin password (auto-generated if not set) |
+| `--admin-pass-file=PATH` | Read the SLM admin password from the first line of PATH (auto-generated if not set). `--admin-pass=` is refused: a command-line argument is readable by every local user (#19236). |
 | `--ip=IP` | Override the auto-detected IP address (multi-interface hosts) |
 | `--rotate-secrets` | On reinstall, replace the existing SLM admin password. By default a reinstall keeps the password set in the wizard and ignores `--admin-pass=` |
 | `--help`, `-h` | Show help |
@@ -149,7 +149,7 @@ Environment variables skip the matching interactive prompt:
 | Variable | Effect |
 |----------|--------|
 | `AUTOBOT_INSTALL_BRANCH=<branch>` | Same as `--branch=` |
-| `AUTOBOT_SLM_ADMIN_PASSWORD=<pass>` | Same as `--admin-pass=` |
+| `AUTOBOT_SLM_ADMIN_PASSWORD=<pass>` | Same as `--admin-pass-file=` |
 | `AUTOBOT_INSTALL_INTERFACE=<iface>` | Pick the network interface by name instead of the menu |
 | `OVERRIDE_IP=<ip>` | Skip IP detection and use this address |
 | `NETWORK_SUBNET=<cidr>` / `NETWORK_GATEWAY=<ip>` | Use this network instead of detecting it. The subnet is the source the firewall rules allow, so if it cannot be detected the installer stops and asks for these instead of guessing |

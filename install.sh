@@ -324,16 +324,16 @@ Options:
   --validate            Verify installation integrity (check required service distributions)
   --yes                 Skip confirmation prompts (use with --uninstall)
   --branch=BRANCH       Git branch to install (default: ${DEFAULT_BRANCH})
-  --admin-pass=PASS     SLM admin password (auto-generated if not set)
+  --admin-pass-file=F   read the SLM admin password from file F (auto-generated if not set)
   --ip=IP               Override auto-detected IP address (#2832)
   --rotate-secrets      Replace existing SLM_ADMIN_PASSWORD on reinstall (#7075).
                         By default reinstall PRESERVES the wizard-set password
-                        and ignores --admin-pass= / AUTOBOT_SLM_ADMIN_PASSWORD.
+                        and ignores --admin-pass-file= / AUTOBOT_SLM_ADMIN_PASSWORD.
   --help                Show this help message
 
 Environment overrides (skip the corresponding interactive prompt; #7057):
   AUTOBOT_INSTALL_BRANCH=<branch>     same as --branch=
-  AUTOBOT_SLM_ADMIN_PASSWORD=<pass>   same as --admin-pass=
+  AUTOBOT_SLM_ADMIN_PASSWORD=<pass>   same as --admin-pass-file=
   AUTOBOT_INSTALL_INTERFACE=<iface>   pick an interface by name (eth2, eth0, ...)
                                       instead of the menu prompt
   OVERRIDE_IP=<ip>                    skip detection entirely and use this IP
@@ -341,7 +341,7 @@ Environment overrides (skip the corresponding interactive prompt; #7057):
 Examples:
   sudo $0                                    # Interactive install
   sudo $0 --unattended                       # Default unattended install
-  sudo $0 --unattended --admin-pass=MyPass   # Unattended with custom password
+  sudo $0 --unattended --admin-pass-file=/root/pw   # Unattended with custom password
   sudo $0 --reinstall                        # Reinstall over existing
   sudo $0 --uninstall                        # Full uninstall (with confirmation)
   sudo $0 --uninstall --yes                  # Full uninstall (no prompt)
@@ -715,12 +715,13 @@ EOF
     echo
 
     cd "${ansible_dir}"
-    set +o pipefail
+    local vars_file; vars_file="$(umask 077 && mktemp)"; trap 'rm -f "${vars_file:-}"; trap - RETURN' RETURN  # #19236: never argv
+    PW="${ADMIN_PASSWORD}" jq -n '{slm_admin_password: env.PW}' > "${vars_file}"; set +o pipefail
     ansible-playbook \
         -i "${inventory}" \
         playbooks/deploy-slm-manager.yml \
         --skip-tags "seed" \
-        -e "slm_admin_password=${ADMIN_PASSWORD}" \
+        -e "@${vars_file}" \
         -e "target_host=localhost" \
         2>&1 | tee -a "${LOG_FILE}" | \
         grep --line-buffered -E \
@@ -822,11 +823,9 @@ register_local_node() {
     # failure the installer died here and the two warn lines -- which read as
     # careful handling -- could never run. `-f` is kept deliberately: on a 401
     # we want no body to parse, not an error page fed to jq.
-    token=$(curl -sfk --max-time 10 \
-        -X POST "${api_url}/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"username\":\"admin\",\"password\":\"${ADMIN_PASSWORD}\"}" \
-        2>/dev/null | jq -r '.access_token // empty') || true
+    token=$(PW="${ADMIN_PASSWORD}" jq -n '{username: "admin", password: env.PW}' | curl -sfk --max-time 10 \
+        -X POST "${api_url}/api/auth/login" -H "Content-Type: application/json" --data @- \
+        2>/dev/null | jq -r '.access_token // empty') || true  # #19236: the body goes on stdin, never argv
 
     [[ -n "${token}" ]] || fatal "Step 'admin login' failed: the SLM API refused the admin credentials. Check /etc/autobot/slm-secrets.env and journalctl -u autobot-slm-backend -n 50, then rerun this installer."
     success "Authenticated with SLM API"
@@ -1093,7 +1092,8 @@ parse_args() {
             --validate)       VALIDATE=true;           shift ;;
             --yes|-y)         CONFIRM_YES=true;        shift ;;
             --branch=*)       GIT_BRANCH="${1#*=}";    shift ;;
-            --admin-pass=*)   ADMIN_PASSWORD="${1#*=}"; shift ;;
+            --admin-pass-file=*) [[ -r "${1#*=}" ]] || fatal "Cannot read ${1#*=}"; ADMIN_PASSWORD="$(head -n1 "${1#*=}")"; shift ;;
+            --admin-pass=*)   fatal "--admin-pass= puts the password on the command line, readable by every local user (#19236). Use --admin-pass-file=PATH, AUTOBOT_SLM_ADMIN_PASSWORD, or the prompt." ;;
             --ip=*)           OVERRIDE_IP="${1#*=}";    shift ;;
             --rotate-secrets) ROTATE_SECRETS=true;     shift ;;
             --help|-h)        print_usage; exit 0 ;;
