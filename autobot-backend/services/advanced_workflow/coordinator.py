@@ -12,7 +12,6 @@ import uuid
 from typing import Dict, List
 
 from autobot_shared.logging_manager import get_logger
-from knowledge_factory import get_knowledge_base_async
 from orchestrator import get_orchestrator_sync as get_orchestrator
 from services.llm_service import get_llm_service
 from services.workflow_automation import (
@@ -42,8 +41,6 @@ class WorkflowCoordinator:
         self.base_manager = WorkflowAutomationManager()
         self.enhanced_orchestrator = get_orchestrator()
         self.llm_interface = get_llm_service()
-        # #18122: resolved lazily from the canonical instance (see resolve_knowledge_base)
-        self.knowledge_base = None
 
         # Specialized components (composition pattern)
         self.template_manager = TemplateManager()
@@ -72,13 +69,6 @@ class WorkflowCoordinator:
     def workflow_templates(self):
         """Access templates through template manager"""
         return self.template_manager.templates
-
-    async def resolve_knowledge_base(self):
-        """Return the canonical KnowledgeBase (an injected one wins); raise while it is unavailable."""
-        kb = self.knowledge_base or await get_knowledge_base_async()
-        if kb is None:
-            raise RuntimeError("Knowledge base unavailable (init failed or cooling down)")
-        return kb
 
     async def _build_workflow_intelligence(
         self, workflow_id: str, optimized_steps: List[SmartWorkflowStep]

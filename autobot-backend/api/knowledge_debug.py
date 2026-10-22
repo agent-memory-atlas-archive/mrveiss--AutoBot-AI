@@ -35,9 +35,9 @@ logger = get_logger(__name__)
     error_code_prefix="KNOWLEDGE_DEBUG",
 )
 async def get_fresh_knowledge_stats(request: Request = None):
-    """Get knowledge base stats using a completely fresh instance (bypasses all cache)"""
+    """Get knowledge base stats from the canonical shared instance (uncached read)"""
     try:
-        logger.info("=== Creating completely fresh knowledge base instance ===")
+        logger.info("=== Reading fresh stats from the canonical shared knowledge base instance ===")
 
         # D5 (#18122): the canonical instance, already initialised -- no private KB
         kb = await get_knowledge_base_async()
