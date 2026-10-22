@@ -1,0 +1,62 @@
+name: llm-optimization-real-torch
+
+# The llm_shared/optimization oracle tests skip when torch is a stub (the default
+# dev/CI shape). This lane installs CPU torch and runs them for real, with
+# AUTOBOT_REQUIRE_REAL_TORCH=1 so a broken install FAILS instead of skipping (#13049).
+# Path set is intentionally narrow and is not a backend-python canonical consumer
+# (#12986); it is not a required context, so path-filtering it cannot deadlock a PR.
+
+on:
+  push:
+    branches: [release, main]
+    paths:
+      - "autobot-backend/llm_shared/optimization/**"
+      - "autobot_shared/model_taxonomy.py"
+      - ".github/workflows/llm-optimization-real-torch.yml"
+  pull_request:
+    # ready_for_review is REQUIRED: the job is gated on draft == false, and
+    # marking a PR ready fires ONLY this event (see actionlint.yml).
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "autobot-backend/llm_shared/optimization/**"
+      - "autobot_shared/model_taxonomy.py"
+      - ".github/workflows/llm-optimization-real-torch.yml"
+
+# Least privilege (#15331). Runs tests only; no token writes.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  real-torch:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AUTOBOT_REQUIRE_REAL_TORCH: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: '.python-version'
+      - name: Install CPU torch at the repo's declared pin
+        run: |
+          # One version, declared once: autobot-backend/requirements.txt.
+          pin="$(grep -m1 -E '^torch==[0-9][^ #]*' autobot-backend/requirements.txt | sed -E 's/^(torch==[^ #]+).*/\1/')"
+          test -n "$pin" || { echo "no torch== pin in autobot-backend/requirements.txt"; exit 1; }
+          python -m pip install --upgrade pip
+          python -m pip install "$pin" --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python -m pip install pytest pytest-asyncio pyyaml pydantic
+          python -c "import torch; print('torch', torch.__version__)"
+      - name: Install backend test dependencies
+        run: python -m pip install -r requirements-ci/framework.txt --prefer-binary
+      - name: Run the real-torch optimization tests
+        run: >
+          python -m pytest
+          autobot-backend/llm_shared/optimization/meta_eviction_equivalence_test.py
+          autobot-backend/llm_shared/optimization/meta_eviction_test.py
+          autobot-backend/llm_shared/optimization/taxonomy_test.py
+          -q
