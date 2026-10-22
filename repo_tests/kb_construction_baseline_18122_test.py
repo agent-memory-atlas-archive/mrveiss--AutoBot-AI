@@ -81,10 +81,6 @@ BASELINE: dict[str, tuple[int, str]] = {
     ),
     # autobot-infrastructure: one-shot operator scripts are separate processes that cannot share
     # the backend's published singleton; they drain by calling `get_knowledge_base_async()`.
-    "autobot-infrastructure/shared/mcp/tools/knowledge-base-mcp/autobot_knowledge_mcp/embedded.py": (
-        1,
-        f"{_DRAIN} (S4+): the embedded MCP server lazily builds its own KB; use knowledge_factory",
-    ),
     "autobot-infrastructure/shared/scripts/direct_kb_populate.py": (1, _SCRIPT),
     "autobot-infrastructure/shared/scripts/identity_config_utility.py": (1, _SCRIPT),
     "autobot-infrastructure/shared/scripts/kb_dimension_utility.py": (1, _SCRIPT),
