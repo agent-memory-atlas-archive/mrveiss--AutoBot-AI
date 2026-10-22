@@ -146,7 +146,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/terminal_handlers.py": 1472,
     "autobot-backend/api/validation_dashboard.py": 670,
     "autobot-backend/api/vnc_manager.py": 1651,
-    "autobot-backend/api/vnc_mcp.py": 763,
+    "autobot-backend/api/vnc_mcp.py": 760,
     "autobot-backend/api/websockets.py": 1120,  # #16457: accepts routed through websocket_subprotocol.accept_websocket
     "autobot-backend/api/workflow.py": 1027,
     "autobot-backend/auth_middleware.py": 1075,  # #16457: bearer parsing moved to websocket_subprotocol.py
