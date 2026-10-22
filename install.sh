@@ -314,7 +314,7 @@ print_usage() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
-Installs AutoBot SLM (Service Lifecycle Manager) on a blank Debian/Ubuntu host.
+Installs AutoBot SLM (Service Lifecycle Manager) on a blank Ubuntu 22.04+ host.
 After installation, use the SLM web UI setup wizard to add fleet nodes.
 
 Options:
@@ -360,7 +360,7 @@ EOF
 
 # #18583: name the requirement and the way out for this host — not a WSL2-only hint for all
 systemd_missing_hint() {
-    local fix="Use a Debian/Ubuntu VM or bare-metal host booted with systemd; in a container or a host without systemd, use the Docker path in INSTALL.md instead."
+    local fix="Use an Ubuntu 22.04+ VM or bare-metal host booted with systemd; in a container or a host without systemd, use the Docker path in INSTALL.md instead."
     grep -qi microsoft "${PROC_VERSION_FILE}" 2>/dev/null && fix="On WSL2 (WSL1 cannot run systemd): add [boot] systemd=true to /etc/wsl.conf and restart WSL."
     echo "systemd must be running as PID 1 (see Requirements in INSTALL.md). ${fix}"
 }
@@ -383,11 +383,11 @@ preflight_checks() {
     fi
     success "systemd is running"
 
-    if [[ ! -f /etc/debian_version ]]; then
-        fatal "This script requires Debian or Ubuntu"
-    fi
-    local os_name
-    os_name=$(. /etc/os-release 2>/dev/null && echo "${NAME} ${VERSION_ID}" || cat /etc/debian_version)
+    # #19235: Ubuntu 22.04+ only -- Python 3.14 and Ansible come from Launchpad PPAs, which Debian lacks.
+    local os_id="" os_version="" os_name
+    os_id=$(. /etc/os-release 2>/dev/null && echo "${ID:-}") || true; os_version=$(. /etc/os-release 2>/dev/null && echo "${VERSION_ID:-}") || true
+    [[ "${os_id}" == ubuntu && "$(printf '%s\n' 22.04 "${os_version}" | sort -V | head -1)" == 22.04 ]] || fatal "This installer supports Ubuntu 22.04 or newer (found: ${os_id:-unknown} ${os_version}). On other systems use the Docker path in INSTALL.md."
+    os_name=$(. /etc/os-release 2>/dev/null && echo "${NAME} ${VERSION_ID}")
     success "OS: ${os_name}"
 
     if [[ -f "${INSTALL_MARKER}" ]] && [[ "${REINSTALL}" != true ]]; then

@@ -11,7 +11,7 @@ full picture, see [The AutoBot Platform Model](docs/architecture/PLATFORM_MODEL.
 Installation uses a two-phase deployment model:
 
 1. **`install.sh`** — a shell script that deploys the **Service Lifecycle Manager (SLM)**
-   and all dependencies onto a blank Debian/Ubuntu host. The SLM is the management layer
+   and all dependencies onto a blank Ubuntu 22.04+ host. The SLM is the management layer
    that then deploys, operates, and scales the rest of the infrastructure.
 2. **Setup Wizard** — a guided web UI that walks you through adding fleet nodes, testing
    connections, enrolling agents, assigning roles, and provisioning.
@@ -25,14 +25,14 @@ ready to run the core and install modules.
 
 | Requirement | Minimum |
 |-------------|---------|
-| OS | Debian 11+ / Ubuntu 22.04+ |
+| OS | Ubuntu 22.04+ (the installer gets Python 3.14 and Ansible from Ubuntu PPAs; on Debian and other systems, use [Docker](#docker-deployment)) |
 | Init system | **systemd running as PID 1** — the installer manages every service as a systemd unit |
 | RAM | 1.5 GB (the installer refuses to run below this; SLM control plane only) |
 | Disk | 5 GB free (the installer refuses to run below this); 20 GB recommended |
 | Access | Root (or sudo) |
 | Network | Internet access for package downloads |
 
-**Supported hosts:** a Debian/Ubuntu VM or bare-metal machine booted with systemd, or
+**Supported hosts:** an Ubuntu 22.04+ VM or bare-metal machine booted with systemd, or
 WSL2 with systemd enabled (`[boot] systemd=true` in `/etc/wsl.conf`). **Not supported by
 `install.sh`:** containers and other hosts where systemd is not PID 1 — use the
 [Docker deployment](#docker-deployment) there instead.
