@@ -253,10 +253,6 @@
       "verdict": "variant",
       "why": "Windows NPU worker copy under the same PyInstaller packaging constraint as the documented exception (#5438, ARCHITECTURE_EXCEPTIONS); the other definition is the backend config accessor, so the copy is per-deploy-target, not listed in the doc itself"
     },
-    "get_service_registry": {
-      "verdict": "real",
-      "issue": 12771
-    },
     "in_scope": {
       "verdict": "homonym",
       "why": "blocking-IO test-path split vs SPDX target filter"
