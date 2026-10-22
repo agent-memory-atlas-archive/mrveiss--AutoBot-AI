@@ -20,7 +20,7 @@ from pathlib import Path
 
 from repo_tests._paths import repo_root
 
-from autobot_shared.paths import scrubbed_git_env
+from autobot_shared.isolated_git import git, isolated_git_env, make_repo
 
 _HOOK_DIR = repo_root() / "tools" / "git-hooks"
 _SOURCE = (_HOOK_DIR / "pre-push").read_text(encoding="utf-8")
@@ -50,15 +50,7 @@ def _bash(script: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _git(cwd: Path, *args: str) -> str:
-    done = subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-        env=scrubbed_git_env(),
-    )
-    return done.stdout.strip()
+    return git(cwd, *args).stdout.strip()
 
 
 def _repo(tmp_path: Path, *, mode: str = "manifest") -> tuple[Path, str, str]:
@@ -67,8 +59,8 @@ def _repo(tmp_path: Path, *, mode: str = "manifest") -> tuple[Path, str, str]:
     manifest -- to app/package.json (declared); lock -- only as a TRANSITIVE lockfile key,
     package.json untouched; other -- to libs/other/package.json, a manifest app does not use.
     """
+    make_repo(tmp_path)
     (tmp_path / "app").mkdir()
-    _git(tmp_path, "init", "-q")
     manifest, lockfile = tmp_path / "app" / "package.json", tmp_path / "app" / "package-lock.json"
     manifest.write_text(json.dumps({"dependencies": {"vue": "1"}}), encoding="utf-8")
     lockfile.write_text(json.dumps({"packages": {"": {}, "node_modules/vue": {}}}), encoding="utf-8")
@@ -113,7 +105,7 @@ def _verdict(root: Path, base: str, head: str, output: str, project: Path) -> su
         capture_output=True,
         text=True,
         check=False,
-        env=scrubbed_git_env(),
+        env=isolated_git_env(),
     )
 
 
