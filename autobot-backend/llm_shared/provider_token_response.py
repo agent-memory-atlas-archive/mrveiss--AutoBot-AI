@@ -25,6 +25,15 @@ class TokenExpiredError(ProviderAuthError):
     """Access token expired and no refresh token is available."""
 
 
+class TokenRevokedError(TokenExpiredError):
+    """The provider rejected the refresh token (``invalid_grant``): only a new sign-in helps (#19241)."""
+
+
+#: Stored-token flag set when the provider answered ``invalid_grant`` (#19241). The
+#: token is skipped until a new sign-in overwrites it, and /status reports it.
+NEEDS_REAUTH_KEY = "needs_reauth"  # pragma: allowlist secret  # a dict key name, not a credential
+
+
 # ---------------------------------------------------------------------------
 # Token dict helpers
 # ---------------------------------------------------------------------------

@@ -69,11 +69,8 @@ def ctx(monkeypatch, single_use_fake_redis):
     return TestClient(app), single_use_fake_redis, who, write
 
 
-def _initiate(tc, scope=None):
-    body = {"provider_name": "acme", "redirect_uri": _REDIRECT}
-    if scope:
-        body["scope"] = scope
-    return tc.post(_INITIATE, json=body)
+def _initiate(tc, scope="user"):
+    return tc.post(_INITIATE, json={"provider_name": "acme", "redirect_uri": _REDIRECT, "scope": scope})
 
 
 def _callback(tc, state):
@@ -87,7 +84,15 @@ def test_non_admin_cannot_initiate_system_scope(ctx):
     assert not fake_redis.store
 
 
-def test_non_admin_defaults_to_user_scope_and_writes_own_subject(ctx):
+def test_scope_is_required_on_both_initiates(ctx):
+    """#19241 review: the caller always says whose connection it is; no server-side default."""
+    tc, fake_redis, _, _ = ctx
+    assert tc.post(_INITIATE, json={"provider_name": "acme", "redirect_uri": _REDIRECT}).status_code == 422
+    assert tc.post("/api/llm-auth/device/initiate", json={"provider_name": "acme"}).status_code == 422
+    assert not fake_redis.store
+
+
+def test_non_admin_user_scope_writes_own_subject(ctx):
     tc, fake_redis, _, write = ctx
     resp = _initiate(tc)
     assert resp.status_code == 200, resp.text
@@ -110,7 +115,7 @@ def test_admin_user_scope_writes_user_subject_not_org(ctx):
 def test_admin_system_scope_writes_org_subject(ctx):
     tc, _, who, write = ctx
     who.admin = True
-    state = _initiate(tc).json()["state"]  # admin default: system
+    state = _initiate(tc, "system").json()["state"]
     assert _callback(tc, state).status_code == 200
     assert write.await_args.kwargs["subject"] == "org:org-1"
 
@@ -182,7 +187,7 @@ def test_device_poll_bound_to_initiating_user(ctx, monkeypatch):
         "_post_provider",
         AsyncMock(return_value={"device_code": "dc-1", "user_code": "UC", "verification_uri": "https://x"}),
     )
-    resp = tc.post("/api/llm-auth/device/initiate", json={"provider_name": "acme"})
+    resp = tc.post("/api/llm-auth/device/initiate", json={"provider_name": "acme", "scope": "user"})
     assert resp.status_code == 200, resp.text
     ctx_saved = json.loads(fake_redis.store[flow_state.device_context_key("dc-1")])
     assert ctx_saved["scope"] == "user" and ctx_saved["subject"] == "user:u-7"

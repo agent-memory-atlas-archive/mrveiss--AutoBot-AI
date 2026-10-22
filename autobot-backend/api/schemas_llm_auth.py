@@ -11,7 +11,7 @@ that still sends them fail loudly (422) instead of having them silently ignored.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,11 +25,14 @@ class _Strict(BaseModel):
 
 
 class OAuthInitiateRequest(_Strict):
-    """Body for POST /oauth/initiate — starts a server-driven PKCE auth-code flow."""
+    """Body for POST /oauth/initiate — starts a server-driven PKCE auth-code flow.
+
+    ``scope`` is required: the caller always says whose connection this is (#19241).
+    """
 
     provider_name: str
     redirect_uri: str
-    scope: Optional[AuthScope] = None
+    scope: AuthScope
 
 
 class OAuthAuthorizeResponse(BaseModel):
@@ -60,7 +63,7 @@ class OAuthInitiateResponse(BaseModel):
 
 class DeviceInitiateRequest(_Strict):
     provider_name: str
-    scope: Optional[AuthScope] = None
+    scope: AuthScope
 
 
 class DeviceInitiateResponse(BaseModel):
@@ -82,6 +85,19 @@ class ProviderAuthStatus(BaseModel):
     expires_at: float | None = None
     auth_kind: str | None = None
     scope: AuthScope | None = None
+    #: The provider answered ``invalid_grant``: only a new sign-in restores it (#19241).
+    needs_reauth: bool = False
+
+
+class ProviderRevokeResult(BaseModel):
+    """Return of DELETE /{provider}: the local delete always happens; the provider-side
+    RFC 7009 revoke is reported separately (None when no revoke URL is configured)."""
+
+    provider_name: str
+    scope: AuthScope
+    deleted: int
+    provider_revoked: bool | None = None
+    provider_error: str | None = None
 
 
 class ProviderListing(BaseModel):

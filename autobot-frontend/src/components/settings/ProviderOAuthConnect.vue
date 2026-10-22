@@ -31,9 +31,13 @@
             {{ t('settings.providerAuth.expiresAt', { date: formatExpiry(status.expires_at) }) }}
           </span>
         </span>
+        <span v-else-if="status.needs_reauth" class="status-text needs-reauth-text" data-testid="needs-reauth">
+          {{ t('settings.providerAuth.needsReauth', { provider: providerLabel }) }}
+        </span>
         <span v-else class="status-text">{{ t('settings.providerAuth.notConnected') }}</span>
-        <button v-if="status.connected" class="btn-danger-sm" @click="revoke">{{ t('settings.providerAuth.disconnect') }}</button>
+        <button v-if="status.connected || status.needs_reauth" class="btn-danger-sm" @click="revoke">{{ t('settings.providerAuth.disconnect') }}</button>
       </div>
+      <p v-if="revokeWarning" class="error-msg" data-testid="revoke-warning">{{ revokeWarning }}</p>
 
       <!-- ToS / capability notice -->
       <p v-if="tosText" class="tos-notice">{{ tosText }}</p>
@@ -110,6 +114,12 @@ interface AuthStatus {
   expires_at?: number | null
   auth_kind?: string | null
   scope?: ProviderAuthScope
+  needs_reauth?: boolean
+}
+
+interface RevokeResult {
+  provider_revoked?: boolean | null
+  provider_error?: string | null
 }
 
 // #19241: provider endpoints, client ids and flow availability are server-side;
@@ -133,6 +143,7 @@ const authMode = ref<'apikey' | 'oauth'>(slots.apikey ? 'apikey' : 'oauth')
 const status = ref<AuthStatus | null>(null)
 const busy = ref(false)
 const errorMsg = ref('')
+const revokeWarning = ref('')
 const deviceInstruction = ref<DeviceInstruction | null>(null)
 const deviceStep = ref<'idle' | 'initiating' | 'polling'>('idle')
 
@@ -165,8 +176,13 @@ async function loadStatus(): Promise<void> {
 async function revoke(): Promise<void> {
   busy.value = true
   errorMsg.value = ''
+  revokeWarning.value = ''
   try {
-    await ApiClient.delete(`/api/llm-auth/${props.providerName}?scope=${props.scope}`)
+    const result = await ApiClient.delete<RevokeResult>(`/api/llm-auth/${props.providerName}?scope=${props.scope}`)
+    // #19241: the local delete always happens; a provider-side revoke failure is surfaced, not hidden.
+    revokeWarning.value = result?.provider_revoked === false
+      ? t('settings.providerAuth.providerRevokeFailed', { reason: result.provider_error ?? '' })
+      : ''
     await loadStatus()
     if (slots.apikey) authMode.value = 'apikey'
   } catch (err: unknown) {
@@ -283,5 +299,6 @@ function formatExpiry(ts: number): string {
 .not-configured { font-size: 0.85rem; color: var(--text-secondary); }
 .missing-settings { margin: 0.25rem 0 0 1rem; font-size: 0.8rem; }
 
+.needs-reauth-text { color: var(--color-warning); }
 .error-msg { color: var(--color-error); font-size: 0.8rem; }
 </style>

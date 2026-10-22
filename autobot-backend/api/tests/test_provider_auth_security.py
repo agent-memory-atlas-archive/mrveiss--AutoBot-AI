@@ -48,9 +48,9 @@ _CLIENT = LlmOAuthClient(
 #: Every route on the router, as (method, path, json body).
 _ALL_ROUTES = [
     ("get", "/api/llm-auth/providers", None),
-    ("post", "/api/llm-auth/oauth/initiate", {"provider_name": "openai", "redirect_uri": _REDIRECT}),
+    ("post", "/api/llm-auth/oauth/initiate", {"provider_name": "openai", "redirect_uri": _REDIRECT, "scope": "user"}),
     ("post", "/api/llm-auth/oauth/callback", {"state": "s", "code": "c", "redirect_uri": _REDIRECT}),
-    ("post", "/api/llm-auth/device/initiate", {"provider_name": "openai"}),
+    ("post", "/api/llm-auth/device/initiate", {"provider_name": "openai", "scope": "user"}),
     ("post", "/api/llm-auth/device/poll", {"provider_name": "openai", "device_code": "dc"}),
     ("get", "/api/llm-auth/status/openai?scope=user", None),
     ("delete", "/api/llm-auth/openai?scope=user", None),
@@ -70,6 +70,7 @@ def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "get_oauth_allowed_hosts", lambda: {"auth.example.com", "token.example.com"})
     monkeypatch.setattr(mod, "resolve_client", lambda name, flow=None: _CLIENT)
     monkeypatch.setattr(mod, "_vault_write", write)
+    monkeypatch.setattr(mod, "_vault_read", AsyncMock(return_value=None))  # DELETE reads the grant it may revoke
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "_post_provider", AsyncMock(return_value={"device_code": "dc", "user_code": "UC"}))
     app = FastAPI()
@@ -140,7 +141,8 @@ def test_system_poll_completion_needs_admin(ctx):
 
 def test_user_scope_works_for_a_non_admin_on_their_own_subject(ctx, monkeypatch):
     tc, fake_redis, _, session, _ = ctx
-    initiate = tc.post("/api/llm-auth/oauth/initiate", json={"provider_name": "openai", "redirect_uri": _REDIRECT})
+    body = {"provider_name": "openai", "redirect_uri": _REDIRECT, "scope": "user"}
+    initiate = tc.post("/api/llm-auth/oauth/initiate", json=body)
     assert initiate.status_code == 200, initiate.text
     (stored,) = [json.loads(v) for v in fake_redis.store.values()]
     assert (stored["scope"], stored["subject"]) == ("user", "user:u-7")
@@ -150,6 +152,6 @@ def test_user_scope_works_for_a_non_admin_on_their_own_subject(ctx, monkeypatch)
     assert tc.get("/api/llm-auth/status/openai?scope=user").status_code == 200
     assert read.await_args.kwargs["subject"] == "user:u-7"
 
-    assert tc.delete("/api/llm-auth/openai?scope=user").status_code == 204
+    assert tc.delete("/api/llm-auth/openai?scope=user").status_code == 200
     statement = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "provider_auth:openai:user:u-7" in statement

@@ -567,13 +567,13 @@ if "llm_shared" not in sys.modules:
     # / events.event_types are unstubbed lightweight modules, safe to import here.
     _real_load_and_bind("llm_shared.fallback_events", _llm_root / "fallback_events.py")
     _real_load_and_bind("llm_shared.model_fallback_coordinator", _llm_root / "model_fallback_coordinator.py")
-    # #9017: reasoning_effort utility is imported by chat_workflow.manager at module level;
-    # load the real file so tests that import manager don't hit the providers MagicMock stub.
+    # #9017: chat_workflow.manager imports reasoning_effort at module level -- real, not the providers stub.
     _real_load_and_bind("llm_shared.providers.reasoning_effort", _llm_root / "providers" / "reasoning_effort.py")
     # #9037: per-run credential primitives (ContextVar + RunCredentialContext); #19241: the LLM sign-in
     # registry + token resolution, which base_provider imports lazily (empty stub __path__, see #10917 below).
     _real_load_and_bind("llm_shared.run_credentials", _llm_root / "run_credentials.py")
     _real_load_and_bind("llm_shared.llm_oauth_registry", _llm_root / "llm_oauth_registry.py")
+    _real_load_and_bind("llm_shared.provider_token_refresh", _llm_root / "provider_token_refresh.py")
     _real_load_and_bind("llm_shared.provider_oauth_credentials", _llm_root / "provider_oauth_credentials.py")
     # #11762: credential redaction — was never real-loaded, so its co-located
     # tests silently failed collection and a redaction bug went unnoticed.

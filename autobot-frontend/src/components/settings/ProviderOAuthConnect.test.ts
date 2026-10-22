@@ -8,8 +8,13 @@ import en from '@/i18n/locales/en.json'
 
 const post = vi.fn()
 const get = vi.fn()
+const del = vi.fn()
 vi.mock('@/utils/ApiClient', () => ({
-  default: { post: (...a: unknown[]) => post(...a), get: (...a: unknown[]) => get(...a), delete: vi.fn() },
+  default: {
+    post: (...a: unknown[]) => post(...a),
+    get: (...a: unknown[]) => get(...a),
+    delete: (...a: unknown[]) => del(...a),
+  },
 }))
 vi.mock('@/config/ssot-config', () => ({
   getConfig: () => ({ frontendUrl: 'https://app.example.test' }),
@@ -28,6 +33,7 @@ const mountIt = (props: Record<string, unknown>) =>
 beforeEach(() => {
   post.mockReset()
   get.mockReset()
+  del.mockReset()
   get.mockResolvedValue({ provider_name: 'openai', connected: false })
 })
 
@@ -59,5 +65,27 @@ describe('ProviderOAuthConnect', () => {
     const box = wrapper.get('[data-testid="provider-not-configured"]')
     expect(box.text()).toContain('AUTOBOT_LLM_OAUTH_OPENAI_CLIENT_ID')
     expect(wrapper.find('[data-testid="provider-signin"]').exists()).toBe(false)
+  })
+
+  it('a provider-rejected sign-in shows the needs-re-sign-in state and offers sign-in again', async () => {
+    get.mockResolvedValue({ provider_name: 'openai', connected: false, needs_reauth: true, scope: 'user' })
+    const wrapper = mountIt({ flows: ['redirect'], configured: true })
+    await flushPromises()
+    await wrapper.findAll('.auth-tab').at(-1)?.trigger('click')
+    expect(wrapper.get('[data-testid="needs-reauth"]').text()).toContain(
+      en.settings.providerAuth.needsReauth.replace('{provider}', 'OpenAI'),
+    )
+    expect(wrapper.find('[data-testid="provider-signin"]').exists()).toBe(true)
+  })
+
+  it('disconnect sends the scope and surfaces a provider-side revoke failure', async () => {
+    get.mockResolvedValue({ provider_name: 'openai', connected: true, scope: 'user' })
+    del.mockResolvedValue({ provider_revoked: false, provider_error: 'HTTP 500' })
+    const wrapper = mountIt({ flows: ['redirect'], configured: true })
+    await flushPromises()
+    await wrapper.get('.btn-danger-sm').trigger('click')
+    await flushPromises()
+    expect(del).toHaveBeenCalledWith('/api/llm-auth/openai?scope=user')
+    expect(wrapper.get('[data-testid="revoke-warning"]').text()).toContain('HTTP 500')
   })
 })

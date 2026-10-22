@@ -118,6 +118,7 @@ def test_initiate_rejects_client_supplied_urls_and_client_id(ctx, hf_configured)
     body = {
         "provider_name": "huggingface",
         "redirect_uri": _REDIRECT,
+        "scope": "user",
         "authorize_url": "https://evil.example.net/authorize",
         "token_url": "https://evil.example.net/token",
         "client_id": "attacker-client",
@@ -129,13 +130,20 @@ def test_initiate_rejects_client_supplied_urls_and_client_id(ctx, hf_configured)
 
 def test_device_initiate_rejects_client_supplied_url(ctx, hf_configured):
     tc, _ = ctx
-    body = {"provider_name": "huggingface", "device_authorization_url": "https://evil.example.net/device"}
+    body = {
+        "provider_name": "huggingface",
+        "scope": "user",
+        "device_authorization_url": "https://evil.example.net/device",
+    }
     assert tc.post("/api/llm-auth/device/initiate", json=body).status_code == 422
 
 
 def test_initiate_uses_the_registry_endpoint_and_client(ctx, hf_configured):
     tc, _ = ctx
-    resp = tc.post("/api/llm-auth/oauth/initiate", json={"provider_name": "huggingface", "redirect_uri": _REDIRECT})
+    resp = tc.post(
+        "/api/llm-auth/oauth/initiate",
+        json={"provider_name": "huggingface", "redirect_uri": _REDIRECT, "scope": "user"},
+    )
     assert resp.status_code == 200, resp.text
     url = resp.json()["authorize_url"]
     assert url.startswith("https://huggingface.co/oauth/authorize?")
@@ -145,18 +153,22 @@ def test_initiate_uses_the_registry_endpoint_and_client(ctx, hf_configured):
 
 def test_unknown_provider_is_404(ctx):
     tc, _ = ctx
-    resp = tc.post("/api/llm-auth/oauth/initiate", json={"provider_name": "acme", "redirect_uri": _REDIRECT})
+    resp = tc.post(
+        "/api/llm-auth/oauth/initiate", json={"provider_name": "acme", "redirect_uri": _REDIRECT, "scope": "user"}
+    )
     assert resp.status_code == 404
 
 
 def test_unconfigured_provider_is_400_naming_the_setting(ctx, monkeypatch):
     tc, fake_redis = ctx
     monkeypatch.setattr(config.llm_oauth, "openai_client_id", "")
-    resp = tc.post("/api/llm-auth/oauth/initiate", json={"provider_name": "openai", "redirect_uri": _REDIRECT})
+    resp = tc.post(
+        "/api/llm-auth/oauth/initiate", json={"provider_name": "openai", "redirect_uri": _REDIRECT, "scope": "user"}
+    )
     assert resp.status_code == 400
     assert "AUTOBOT_LLM_OAUTH_OPENAI_CLIENT_ID" in resp.json()["detail"]
     assert not fake_redis.store
-    device = tc.post("/api/llm-auth/device/initiate", json={"provider_name": "openai"})
+    device = tc.post("/api/llm-auth/device/initiate", json={"provider_name": "openai", "scope": "user"})
     assert device.status_code == 400
 
 
@@ -172,6 +184,7 @@ def test_unconfigured_provider_is_400_naming_the_setting(ctx, monkeypatch):
 )
 def test_redirect_uri_other_than_the_exact_callback_is_400(ctx, hf_configured, redirect_uri):
     tc, fake_redis = ctx
-    resp = tc.post("/api/llm-auth/oauth/initiate", json={"provider_name": "huggingface", "redirect_uri": redirect_uri})
+    body = {"provider_name": "huggingface", "redirect_uri": redirect_uri, "scope": "user"}
+    resp = tc.post("/api/llm-auth/oauth/initiate", json=body)
     assert resp.status_code == 400
     assert not fake_redis.store

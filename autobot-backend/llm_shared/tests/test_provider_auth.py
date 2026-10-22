@@ -1100,7 +1100,7 @@ class TestRedirectsAreNotFollowedOnTheDeviceFlow:
 
         with pytest.raises(HTTPException) as exc_info:
             await device_initiate(
-                req=DeviceInitiateRequest(provider_name="huggingface"), user=self._USER, is_admin=False
+                req=DeviceInitiateRequest(provider_name="huggingface", scope="user"), user=self._USER, is_admin=False
             )
 
         assert exc_info.value.status_code == 502, "a followed redirect would have returned 200 and leaked a device code"

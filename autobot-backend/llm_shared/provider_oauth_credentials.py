@@ -16,7 +16,9 @@ trusted server code (chat turn, compat APIs). A call with no
 principal (background jobs, schedulers, CLI) starts at step 2. An expired token
 or a failed refresh falls through to the next source with a warning; a user
 subject is only ever the requesting user's own, so no step can reach another
-user's token. Refresh goes through ``OAuthAuth`` (the existing strategy).
+user's token. Refresh goes through ``OAuthAuth`` (the existing strategy),
+single-flight and backed off on failure (``provider_token_refresh``); an
+``invalid_grant`` flags the stored token as needing a new sign-in.
 """
 
 from __future__ import annotations
@@ -32,12 +34,17 @@ from .llm_oauth_registry import (
     resolve_client,
 )
 from .provider_auth import (
+    NEEDS_REAUTH_KEY,
     OAuthAuth,
     ProviderAuthError,
+    TokenExpiredError,
+    TokenRevokedError,
     _vault_read_dual,
+    _vault_write,
     org_vault_subject,
     user_vault_subject,
 )
+from .provider_token_refresh import RefreshWaitTimeout, is_backed_off, mark_unusable, single_flight_refresh
 from .run_credentials import get_llm_principal
 
 logger = get_logger(__name__)
@@ -79,18 +86,71 @@ def _refresh_strategy(provider_name: str, subject: str) -> OAuthAuth:
     )
 
 
-async def _token_for_subject(session: Any, provider_name: str, source: str, subject: str) -> str | None:
-    """A fresh access token stored under *subject*, or None (absent, expired, refresh failed)."""
-    token_data = await _vault_read_dual(
-        session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT
-    )
+async def _read(session: Any, provider_name: str, subject: str) -> dict | None:
+    return await _vault_read_dual(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
+
+
+def _usable(token_data: dict | None) -> bool:
+    return bool(token_data) and not token_data.get(NEEDS_REAUTH_KEY)
+
+
+async def _mark_needs_reauth(session: Any, provider_name: str, subject: str) -> None:
+    """Record ``invalid_grant`` on the stored token so every worker and /status see it (#19241)."""
+    token_data = await _read(session, provider_name, subject)
     if token_data is None:
+        return
+    created_by = token_data.get("created_by", "00000000-0000-0000-0000-000000000000")
+    await _vault_write(
+        session,
+        provider_name=provider_name,
+        subject=subject,
+        owner_vault_str=_SYSTEM_VAULT,
+        token_data={**token_data, NEEDS_REAUTH_KEY: True},
+        created_by_id=created_by,
+    )
+    await session.commit()
+
+
+def _refresher(session: Any, auth: OAuthAuth, provider_name: str, subject: str):
+    """The (read_fresh, refresh) pair :func:`single_flight_refresh` runs for one subject."""
+
+    async def read_fresh() -> str | None:
+        data = await _read(session, provider_name, subject)
+        return data["access_token"] if _usable(data) and not auth.needs_refresh(data) else None
+
+    async def refresh() -> str:
+        data = await _read(session, provider_name, subject)  # the latest pair: it may have rotated
+        if not _usable(data) or not data.get("refresh_token"):
+            raise TokenExpiredError(f"OAuth token for {provider_name!r} expired and cannot be refreshed")
+        token = await auth._refresh(session, data, data["refresh_token"])
+        await session.commit()  # visible to other workers before the lease is released
+        return token
+
+    return read_fresh, refresh
+
+
+async def _token_for_subject(session: Any, provider_name: str, source: str, subject: str) -> str | None:
+    """A fresh access token stored under *subject*, or None (absent, flagged, backed off, refresh failed)."""
+    if is_backed_off(provider_name, subject):
         return None
+    token_data = await _read(session, provider_name, subject)
+    if not _usable(token_data):
+        return None
+    auth = _refresh_strategy(provider_name, subject)
+    if not auth.needs_refresh(token_data):
+        return token_data["access_token"]
     try:
-        return await _refresh_strategy(provider_name, subject)._ensure_fresh(session, token_data)
+        return await single_flight_refresh(provider_name, subject, *_refresher(session, auth, provider_name, subject))
+    except RefreshWaitTimeout as exc:
+        logger.warning("%s %s sign-in token: %s; trying the next source", provider_name, source, exc)
+        return None
+    except TokenRevokedError:
+        logger.warning("%s %s sign-in was revoked by the provider; it needs a new sign-in", provider_name, source)
+        await _mark_needs_reauth(session, provider_name, subject)
     except ProviderAuthError as exc:
         logger.warning("%s %s sign-in token unusable (%s); trying the next source", provider_name, source, exc)
-        return None
+    mark_unusable(provider_name, subject)
+    return None
 
 
 async def first_usable_token(session: Any, provider_name: str, user_id: str, org_id: str) -> str | None:

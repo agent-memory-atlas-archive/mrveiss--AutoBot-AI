@@ -76,6 +76,7 @@ def build_provider(provider_name: str) -> OAuthProvider:
         client_secret_setting=client_secret_vault_name(provider_name),
         default_scopes=tuple(_setting(provider_name, "scopes").split()),
         device_authorization_url=_setting(provider_name, "device_url"),
+        revocation_url=_setting(provider_name, "revoke_url"),
     )
 
 

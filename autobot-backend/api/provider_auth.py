@@ -29,7 +29,7 @@ DELETE /api/llm-auth/{provider_name}       — revoke / delete stored tokens
 from __future__ import annotations
 
 import time
-from typing import Any, List
+from typing import Any, Awaitable, Callable, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api import provider_auth_flow_state as flow_state
 from api.provider_auth_poll_limit import device_poll_key, load_and_check_poll_state, record_poll
 from api.provider_auth_scope import (
+    SCOPE_SYSTEM,
     caller_is_admin,
     current_user_id,
     resolve_scope,
@@ -54,6 +55,7 @@ from api.schemas_llm_auth import (
     OAuthInitiateResponse,
     ProviderAuthStatus,
     ProviderListing,
+    ProviderRevokeResult,
 )
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
@@ -69,10 +71,20 @@ from llm_shared.llm_oauth_registry import (
     LlmOAuthClient,
     ProviderNotConfiguredError,
     UnknownProviderError,
+    build_provider,
     describe_providers,
     resolve_client,
 )
-from llm_shared.provider_auth import _vault_read_dual, _vault_write, build_token_data, validate_token_response
+from llm_shared.provider_auth import (
+    LEGACY_SUBJECT,
+    NEEDS_REAUTH_KEY,
+    _vault_read,
+    _vault_read_dual,
+    _vault_secret_name,
+    _vault_write,
+    build_token_data,
+    validate_token_response,
+)
 
 logger = get_logger(__name__)
 
@@ -151,7 +163,7 @@ _SYSTEM_VAULT = "system"
 # ---------------------------------------------------------------------------
 
 
-def _resolve_client(provider_name: str, flow: str) -> LlmOAuthClient:
+def _resolve_client(provider_name: str, flow: str | None) -> LlmOAuthClient:
     """Registry lookup → 404 unknown / 400 unconfigured / 503 unreadable secret; SSRF-checks its URLs."""
     from services.provider_key_vault import VaultKeyUnavailableError  # noqa: PLC0415  # heavy import
 
@@ -164,7 +176,7 @@ def _resolve_client(provider_name: str, flow: str) -> LlmOAuthClient:
     except VaultKeyUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     provider = client.provider
-    for url in (provider.authorize_url, provider.token_url, provider.device_authorization_url):
+    for url in (provider.authorize_url, provider.token_url, provider.device_authorization_url, provider.revocation_url):
         if url:
             _validate_outbound_url(url)
     return client
@@ -190,8 +202,11 @@ def _client_auth(client: LlmOAuthClient) -> dict:
     return fields
 
 
-async def _post_provider(url: str, payload: dict, what: str, *, reject_errors: bool) -> dict:
-    """POST *payload* to a registry endpoint (SSRF-pinned, no redirects); return the JSON body."""
+async def _post_form(url: str, payload: dict, what: str, handle: Callable[[Any], Awaitable[Any]]) -> Any:
+    """POST *payload* to a registry endpoint (SSRF-pinned, no redirects) and return ``handle(response)``.
+
+    A transport error, an egress refusal or an unparseable body is a 502 with a redacted detail.
+    """
     import aiohttp  # noqa: PLC0415
 
     try:
@@ -203,12 +218,29 @@ async def _post_provider(url: str, payload: dict, what: str, *, reject_errors: b
             # the connector pins the pre-resolved public IP; redirects disabled. (#12278, #17576)
             async with http.post(url, data=payload, headers={"Accept": "application/json"}, allow_redirects=False) as r:
                 await _reject_redirect(r, what)
-                if reject_errors and r.status >= 400:
-                    body = redact_text((await r.text())[:200])
-                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{what} failed: {body}")
-                return await r.json(content_type=None)
-    except aiohttp.ClientError as exc:
+                return await handle(r)
+    except (aiohttp.ClientError, ValueError) as exc:  # ValueError: a non-JSON body (#19241)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=redact_text(str(exc))) from exc
+
+
+async def _error_detail(r, what: str) -> HTTPException:
+    body = redact_text((await r.text())[:200])
+    logger.warning("%s answered HTTP %s: %s", what, r.status, body)
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{what} failed: {body}")
+
+
+async def _post_provider(url: str, payload: dict, what: str, *, reject_errors: bool) -> dict:
+    """POST to a registry endpoint and return its JSON body; with *reject_errors*, a 4xx/5xx is a 502."""
+
+    async def _json(r) -> dict:
+        if reject_errors and r.status >= 400:
+            raise await _error_detail(r, what)
+        body = await r.json(content_type=None)
+        if not isinstance(body, dict):
+            raise ValueError(f"{what} answered with a non-object JSON body")
+        return body
+
+    return await _post_form(url, payload, what, _json)
 
 
 async def _persist(session, user: Any, ctx: dict, resp: dict, client_id: str) -> OAuthInitiateResponse:
@@ -298,6 +330,10 @@ async def _exchange(client: LlmOAuthClient, code: str, redirect_uri: str, verifi
     """Exchange *code* at the registry token endpoint (SSRF-pinned; secret sent only if configured)."""
     from knowledge.connectors.oauth_flow import exchange_code  # noqa: PLC0415
 
+    try:
+        await assert_public_egress(client.provider.token_url)  # public-only, like the device flow (#17576)
+    except ValueError as exc:  # EgressBlockedError
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=redact_text(str(exc))) from exc
     connector = await _pinned_connector(client.provider.token_url)  # finding #2: resolve-once + IP pin
     try:
         # SSRF mitigated: token_url passed _validate_outbound_url() in _resolve_client and
@@ -340,6 +376,29 @@ async def oauth_callback(
 # ---------------------------------------------------------------------------
 
 
+def _device_instructions(data: dict) -> DeviceInitiateResponse:
+    """The provider's device-authorization answer, or 502 when it is unusable.
+
+    ``verification_uri`` is shown to the user as a link, so only an https URL is accepted (#19241).
+    """
+    uri = str(data.get("verification_uri") or data.get("verification_url") or "")
+    if not data.get("device_code") or not data.get("user_code") or not uri.lower().startswith("https://"):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="device authorization answer is unusable")
+    try:
+        expires_in, interval = int(data.get("expires_in", 1800)), int(data.get("interval", 5))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="device authorization answer is unusable"
+        ) from exc
+    return DeviceInitiateResponse(
+        device_code=data["device_code"],
+        user_code=data["user_code"],
+        verification_uri=uri,
+        expires_in=expires_in,
+        interval=interval,
+    )
+
+
 @router.post("/device/initiate", response_model=DeviceInitiateResponse)
 async def device_initiate(
     req: DeviceInitiateRequest,
@@ -357,15 +416,7 @@ async def device_initiate(
     payload = {**_client_auth(client), "scope": " ".join(client.provider.default_scopes)}
     url = client.provider.device_authorization_url
     data = await _post_provider(url, payload, "Device authorization endpoint", reject_errors=True)
-    if not data.get("device_code") or not data.get("user_code"):
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="device authorization returned no code")
-    resp = DeviceInitiateResponse(
-        device_code=data["device_code"],
-        user_code=data["user_code"],
-        verification_uri=data.get("verification_uri") or data.get("verification_url", ""),
-        expires_in=int(data.get("expires_in", 1800)),
-        interval=int(data.get("interval", 5)),
-    )
+    resp = _device_instructions(data)
     await flow_state.save(redis, flow_state.device_context_key(resp.device_code), resp.expires_in, ctx)
     return resp
 
@@ -400,7 +451,9 @@ async def device_poll(
     if error in ("authorization_pending", "slow_down"):
         return OAuthInitiateResponse(provider_name=req.provider_name, stored=False, scope=ctx["scope"])
     if error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=data.get("error_description", error))
+        detail = redact_text(str(data.get("error_description") or error))
+        logger.warning("Device-code token endpoint refused %s: %s", req.provider_name, detail)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
     result = await _persist(session, user, ctx, data, client.client_id)
     await flow_state.drop_device_context(redis, req.device_code)
     return result
@@ -432,42 +485,96 @@ async def provider_auth_status(
     if token_data is None:
         return ProviderAuthStatus(provider_name=provider_name, connected=False, scope=effective)
     expires_at = token_data.get("expires_at")
+    needs_reauth = bool(token_data.get(NEEDS_REAUTH_KEY))
     return ProviderAuthStatus(
         provider_name=provider_name,
-        connected=expires_at is None or time.time() < expires_at,
+        connected=not needs_reauth and (expires_at is None or time.time() < expires_at),
         expires_at=expires_at,
         auth_kind=token_data.get("auth_kind", "oauth"),
         scope=effective,
+        needs_reauth=needs_reauth,
     )
 
 
-@router.delete("/{provider_name}", status_code=status.HTTP_204_NO_CONTENT)
+def _revoke_subjects(scope: str, user: Any) -> list[str]:
+    """Subjects a revoke deletes: the caller's own, or for system the org subject AND the legacy one.
+
+    The legacy ``"global"`` token stays readable through the system dual-read
+    (#11497), so a system disconnect that left it would not disconnect anything.
+    """
+    subject = subject_for(scope, user)
+    return [subject, LEGACY_SUBJECT] if scope == SCOPE_SYSTEM and subject != LEGACY_SUBJECT else [subject]
+
+
+async def _revoke_one(url: str, client: LlmOAuthClient, token_data: dict) -> None:
+    """RFC 7009 revoke of one stored grant (the refresh token when there is one)."""
+    hint = "refresh_token" if token_data.get("refresh_token") else "access_token"
+    payload = {**_client_auth(client), "token": token_data.get(hint, ""), "token_type_hint": hint}
+
+    async def _check(r) -> None:
+        if r.status >= 400:
+            raise await _error_detail(r, "Revocation endpoint")
+
+    await _post_form(url, payload, "Revocation endpoint", _check)
+
+
+async def _revoke_at_provider(provider_name: str, grants: list[dict]) -> tuple[bool | None, str | None]:
+    """``(revoked, error)`` for the provider-side revoke; ``(None, None)`` when no revoke URL is set."""
+    url = build_provider(provider_name).revocation_url
+    if not url or not grants:
+        return None, None
+    try:
+        _validate_outbound_url(url)
+        client = _resolve_client(provider_name, None)
+        for token_data in grants:
+            await _revoke_one(url, client, token_data)
+    except HTTPException as exc:
+        logger.warning("Provider-side revoke failed for %s: %s", provider_name, exc.detail)
+        return False, str(exc.detail)
+    return True, None
+
+
+@router.delete("/{provider_name}", response_model=ProviderRevokeResult)
 async def revoke_provider_auth(
     provider_name: str,
     scope: AuthScope = Query(...),
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
     is_admin: bool = Depends(caller_is_admin),
-) -> None:
-    """Revoke the caller's stored token for a provider at *scope* (system needs admin).
+) -> ProviderRevokeResult:
+    """Disconnect the caller's provider sign-in at *scope* (system needs admin).
 
     *scope* is required (422 without it): a scope-less "disconnect" from an
-    admin must never default to deleting the org-shared credential.
-
-    System scope deletes only the caller's org subject, keeping other orgs' legacy
-    credential intact (#11497); user scope deletes only the caller's own (#19241).
+    admin must never default to deleting the org-shared credential. When the
+    provider has an RFC 7009 endpoint the grant is revoked there first; a
+    failure there is logged and reported, and the local delete still happens.
     """
     from sqlalchemy import delete  # noqa: PLC0415
 
-    from llm_shared.provider_auth import _vault_secret_name  # noqa: PLC0415
     from models.secret import Secret  # noqa: PLC0415
 
     _require_known_provider(provider_name)
     effective = resolve_scope(scope, is_admin)
-    name = _vault_secret_name(provider_name, subject_for(effective, user))
-    await session.execute(delete(Secret).where(Secret.name == name, Secret.owner_vault == _SYSTEM_VAULT))
+    subjects = _revoke_subjects(effective, user)
+    grants = []
+    for subject in subjects:
+        grant = await _vault_read(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
+        if grant:
+            grants.append(grant)
+    revoked, error = await _revoke_at_provider(provider_name, grants)
+    names = [_vault_secret_name(provider_name, s) for s in subjects]
+    await session.execute(delete(Secret).where(Secret.name.in_(names), Secret.owner_vault == _SYSTEM_VAULT))
     await session.commit()
-    logger.info("Revoked provider auth tokens for %s (scope=%s)", provider_name, effective)
+    logger.info(
+        "Revoked provider auth tokens for %s (scope=%s, provider_revoked=%s)", provider_name, effective, revoked
+    )
+    return ProviderRevokeResult(
+        provider_name=provider_name,
+        scope=effective,
+        deleted=len(grants),
+        provider_revoked=revoked,
+        provider_error=error,
+    )
 
 
 __all__ = ["router"]

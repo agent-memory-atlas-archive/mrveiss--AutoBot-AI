@@ -32,7 +32,8 @@ class LlmOAuthConfig(RedactedReprMixin, BaseSettings):
     """Per-provider OAuth endpoints, scopes and client id for LLM sign-in (#19241).
 
     Empty URL → that flow is unavailable. Empty client id → the provider is
-    shown as "not configured". Scopes are space-separated.
+    shown as "not configured". Scopes are space-separated. An empty revoke URL
+    makes a disconnect local-only (the vault copy is deleted, the grant is not).
     """
 
     model_config = SettingsConfigDict(
@@ -47,15 +48,19 @@ class LlmOAuthConfig(RedactedReprMixin, BaseSettings):
     openai_token_url: str = Field(default="", description="OpenAI token endpoint")
     openai_device_url: str = Field(default="", description="OpenAI device-authorization endpoint")
     openai_scopes: str = Field(default="openid", description="OpenAI scopes, space-separated")
+    openai_revoke_url: str = Field(default="", description="OpenAI RFC 7009 revocation endpoint (optional)")
 
     anthropic_client_id: str = Field(default="", description="OAuth client id registered with Anthropic")
     anthropic_authorize_url: str = Field(default="", description="Anthropic authorization endpoint")
     anthropic_token_url: str = Field(default="", description="Anthropic token endpoint")
     anthropic_device_url: str = Field(default="", description="Anthropic device-authorization endpoint")
     anthropic_scopes: str = Field(default="openid", description="Anthropic scopes, space-separated")
+    anthropic_revoke_url: str = Field(default="", description="Anthropic RFC 7009 revocation endpoint (optional)")
 
     huggingface_client_id: str = Field(default="", description="OAuth client id registered with HuggingFace")
     huggingface_authorize_url: str = Field(default=f"{_HF}/authorize", description="HuggingFace authorization endpoint")
     huggingface_token_url: str = Field(default=f"{_HF}/token", description="HuggingFace token endpoint")
     huggingface_device_url: str = Field(default=f"{_HF}/device", description="HuggingFace device endpoint")
     huggingface_scopes: str = Field(default="openid inference-api", description="HuggingFace scopes, space-separated")
+    # No default: HuggingFace's discovery document publishes no revocation_endpoint.
+    huggingface_revoke_url: str = Field(default="", description="HuggingFace RFC 7009 revocation endpoint")

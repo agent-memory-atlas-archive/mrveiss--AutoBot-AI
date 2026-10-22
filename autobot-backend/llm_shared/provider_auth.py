@@ -50,8 +50,10 @@ from typing import Any
 from autobot_shared.logging_manager import get_logger
 
 from .provider_token_response import (  # noqa: F401  # re-exported (#19241 split)
+    NEEDS_REAUTH_KEY,
     ProviderAuthError,
     TokenExpiredError,
+    TokenRevokedError,
     _decode_jwt_claims,
     _merge_token_response,
     build_token_data,
@@ -344,11 +346,18 @@ class OAuthAuth(ProviderAuthStrategy):
             )
         return await self._ensure_fresh(session, token_data)
 
-    async def _ensure_fresh(self, session: Any, token_data: dict) -> str:
+    @staticmethod
+    def needs_refresh(token_data: dict) -> bool:
+        """True when the access token is inside the refresh grace window.
+
+        No recorded expiry (the provider sent no expires_in) means valid until revoked,
+        as /status reports it -- not "expired", which would force a refresh every call (#19241).
+        """
         expires_at = token_data.get("expires_at")
-        # No recorded expiry (the provider sent no expires_in) means valid until revoked,
-        # as /status reports it -- not "expired", which would force a refresh every call (#19241).
-        if expires_at is None or time.time() < expires_at - _REFRESH_GRACE_SECONDS:
+        return expires_at is not None and time.time() >= expires_at - _REFRESH_GRACE_SECONDS
+
+    async def _ensure_fresh(self, session: Any, token_data: dict) -> str:
+        if not self.needs_refresh(token_data):
             return token_data["access_token"]
         refresh_token = token_data.get("refresh_token")
         if not refresh_token:
@@ -356,6 +365,7 @@ class OAuthAuth(ProviderAuthStrategy):
         return await self._refresh(session, token_data, refresh_token)
 
     async def _refresh(self, session: Any, old_data: dict, refresh_token: str) -> str:
+        from autobot_shared.http_egress_guard import assert_public_egress  # noqa: PLC0415
         from autobot_shared.security.ssrf_guard import SSRFError, pinned_connector  # noqa: PLC0415
         from autobot_shared.url_safety import get_oauth_allowed_hosts, require_allowlisted_https  # noqa: PLC0415
         from knowledge.connectors.oauth_flow import refresh_access_token  # noqa: PLC0415
@@ -371,8 +381,9 @@ class OAuthAuth(ProviderAuthStrategy):
         # and pin the outbound POST to that IP so DNS cannot be rebound to a
         # private address between validation and connect (TOCTOU rebinding).
         try:
+            await assert_public_egress(self._token_url)  # public-only, as the sign-in endpoints do (#17576)
             connector = await pinned_connector(self._token_url)
-        except SSRFError as exc:
+        except (SSRFError, ValueError) as exc:
             raise ProviderAuthError(
                 f"OAuth refresh blocked: token_url for {self._provider_name!r} is not publicly routable: {exc}"
             ) from exc
@@ -387,6 +398,8 @@ class OAuthAuth(ProviderAuthStrategy):
                 connector=connector,
             )
         except RuntimeError as exc:
+            if getattr(exc, "error", "") == "invalid_grant":
+                raise TokenRevokedError(f"OAuth refresh token for {self._provider_name!r} was rejected") from exc
             raise ProviderAuthError(f"OAuth refresh failed for {self._provider_name!r}: {exc}") from exc
 
         # Finding #3 (#11497): reject a mismatched token_type / issuer / audience
@@ -560,6 +573,8 @@ __all__ = [
     "LEGACY_SUBJECT",
     "org_vault_subject",
     "user_vault_subject",
+    "NEEDS_REAUTH_KEY",
+    "TokenRevokedError",
     "USER_SUBJECT_PREFIX",
     "validate_token_response",
     "build_token_data",

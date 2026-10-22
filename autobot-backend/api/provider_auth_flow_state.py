@@ -11,6 +11,21 @@ completing request may supply:
 - redirect flow: a single-use ``state`` (GETDEL) minted by /oauth/initiate;
 - device flow: a context keyed by a hash of the ``device_code``, written by
   /device/initiate and consumed when the token is stored.
+
+The PKCE verifier is held in Redis in plaintext, deliberately. The canonical
+field cipher (``autobot_shared.field_encryption``) needs
+``AUTOBOT_FIELD_ENCRYPTION_KEY``, which is optional; making sign-in depend on it
+would break every install that has not set it. Plaintext is acceptable here
+because the verifier is useless on its own:
+
+- exchanging it needs the authorization code, which the provider sends only to
+  the registered redirect URI in the initiator's browser;
+- the state is single-use and expires after ``OAUTH_STATE_TTL_SECONDS``
+  (default 600 s);
+- the completion is bound to the initiating principal.
+
+The connector OAuth flow stores its verifier the same way
+(``api/knowledge_connector_oauth.py``).
 """
 
 from __future__ import annotations

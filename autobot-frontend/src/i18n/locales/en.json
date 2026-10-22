@@ -941,6 +941,8 @@
       "noApiKeyRequired": "No API key required.",
       "redirecting": "Redirecting...",
       "disconnectFailed": "Disconnect failed",
+      "needsReauth": "{provider} rejected the saved sign-in. Sign in again to reconnect.",
+      "providerRevokeFailed": "Disconnected here, but the provider did not confirm revoking access: {reason}",
       "deviceInitFailed": "Device flow initiation failed",
       "initiateFailed": "Could not start sign-in",
       "notConfigured": "{provider} sign-in is not configured on this server. Ask an administrator to set:",
