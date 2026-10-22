@@ -30,10 +30,6 @@ EXCEPTION = "EXCEPTION"
 MIGRATE = "MIGRATE"
 VERDICTS = (EXCEPTION, MIGRATE)
 
-_RAW_DB_LOOP = (
-    "#18553 owner decision pending: loops over raw db numbers 0..15, and DB 12 has no name in "
-    "redis-databases.yaml / RedisDatabase, so the canonical client cannot address it"
-)
 _SHELL = "shell-embedded python in a pre-install/deploy script; cannot import app code (#1086)"
 _ANSIBLE_ROOT = "autobot-slm-backend/ansible"
 _SCRIPTS = "autobot-infrastructure/shared/scripts"
@@ -55,8 +51,6 @@ BASELINE: dict[str, tuple[int, str, str]] = {
     f"{_ANSIBLE_ROOT}/deploy-native.sh": (1, EXCEPTION, _SHELL),
     "autobot-backend/code_analysis/install.sh": (1, EXCEPTION, _SHELL),
     # --- autobot-infrastructure/shared/scripts ------------------------------------------------
-    f"{_SCRIPTS}/analysis/test_data_layer_debug.py": (1, MIGRATE, _RAW_DB_LOOP),
-    f"{_SCRIPTS}/analysis/check_all_redis_dbs.py": (1, MIGRATE, _RAW_DB_LOOP),
     f"{_SCRIPTS}/migrations/migrate_category_indexes.py": (
         1,
         EXCEPTION,
@@ -75,4 +69,4 @@ BASELINE: dict[str, tuple[int, str, str]] = {
 }
 
 #: Sum of the site counts above. It may only go DOWN.
-FROZEN_TOTAL = 15
+FROZEN_TOTAL = 13

@@ -16,8 +16,6 @@ import sys
 import traceback
 from pathlib import Path
 
-import redis
-
 # Runs from any directory with no PYTHONPATH: put the repository root on the path for
 # `autobot_shared` (#18289).
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -28,6 +26,7 @@ from autobot_shared.redis_client import (  # noqa: E402
     RedisDatabase,
     get_async_redis_client,
     require_redis_client,
+    survey_databases,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,16 +45,9 @@ def test_redis_basic():
         response = client.ping()
         logger.info("✅ Basic Redis connection: %s", response)
 
-        # Check all 16 databases
-        for db_num in range(16):
+        # Check every database the server has, named or not, via the canonical survey (#18553)
+        for db_num, _name, db_client in survey_databases(decode_responses=True):
             try:
-                db_client = redis.Redis(
-                    host="localhost",
-                    port=6379,
-                    db=db_num,
-                    decode_responses=True,
-                    socket_timeout=2,
-                )
                 key_count = db_client.dbsize()
                 if key_count > 0:
                     logger.info("✅ DB %s: %s keys", db_num, key_count)
