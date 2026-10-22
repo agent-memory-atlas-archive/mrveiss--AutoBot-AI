@@ -368,6 +368,31 @@ sudo systemctl status nginx
 sudo systemctl status postgresql
 ```
 
+### The `autobot` account's root access
+
+The installer creates the `autobot` service account and gives it **unrestricted passwordless
+root**: it writes `autobot ALL=(ALL) NOPASSWD:ALL` to `/etc/sudoers.d/autobot`.
+
+Why it is that broad today:
+- the SLM deploys and updates hosts with Ansible using `become`, and that runs arbitrary
+  module code as root through `sudo /bin/sh -c ...`, which a sudoers command list cannot
+  usefully restrict;
+- the builtin updater and the agent's privileged tasks run commands as root through `sudo -n`.
+
+Treat the `autobot` account as root-equivalent: anyone who can act as it can act as root on
+this host. Narrowing the grant without breaking deploys is designed in #19245.
+
+To audit it:
+
+```bash
+sudo cat /etc/sudoers.d/autobot   # exactly the one line above, mode 0440
+sudo -l -U autobot                # what the account may run
+```
+
+To remove it, run `sudo rm /etc/sudoers.d/autobot`. Fleet deploys, the builtin updater and
+privileged agent tasks then stop working on this host until it is restored. The uninstaller
+removes it along with the account it created (see below).
+
 ---
 
 ## Uninstalling
