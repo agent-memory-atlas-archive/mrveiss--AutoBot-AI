@@ -346,10 +346,10 @@ class MetricsCollector:
         timestamp = time.time()
 
         try:
-            import redis
+            # deployment_registry (imported above) put the repo root on sys.path (#18553).
+            from autobot_shared.redis_client import require_redis_client
 
-            redis_url = self.service_registry.get_service_url("redis")
-            r = redis.from_url(redis_url)
+            r = require_redis_client(database="main", decode_responses=False)
 
             # Get Redis info
             info = r.info()

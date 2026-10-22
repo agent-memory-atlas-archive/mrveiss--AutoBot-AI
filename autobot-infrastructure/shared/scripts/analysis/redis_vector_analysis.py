@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Tuple
 
 from autobot_shared.paths import project_root
 from autobot_shared.network_constants import ServiceURLs
+from autobot_shared.redis_client import RedisDatabase, require_redis_client
 # The sibling helper module lives beside this script; put its directory on the path so the import
 # resolves when the file is imported (pytest, tooling) as well as when it is run.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -194,14 +195,7 @@ class RedisVectorStoreAnalyzer:
         logger.info("Analyzing existing Redis data structure...")
 
         try:
-            import redis
-
-            client = redis.Redis(
-                host=self.redis_host,
-                port=self.redis_port,
-                db=self.redis_db,
-                decode_responses=True,
-            )
+            client = require_redis_client(database=RedisDatabase(self.redis_db), decode_responses=True)
 
             index_info = client.execute_command("FT.INFO", "llama_index")
             info_dict = _parse_index_info(index_info)
@@ -349,14 +343,7 @@ class RedisVectorStoreAnalyzer:
         logger.info("\nTesting direct Redis FT.SEARCH capabilities...")
 
         try:
-            import redis
-
-            client = redis.Redis(
-                host=self.redis_host,
-                port=self.redis_port,
-                db=self.redis_db,
-                decode_responses=True,
-            )
+            client = require_redis_client(database=RedisDatabase(self.redis_db), decode_responses=True)
 
             queries = [
                 "deployment configuration",
