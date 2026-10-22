@@ -45,6 +45,7 @@ from llm_shared import get_provider_registry
 from llm_shared.model_fallback_coordinator import get_fallback_coordinator
 from llm_shared.models import LLMRequest
 from llm_shared.provider_degradation import AllCredentialsNeedReauthError
+from llm_shared.run_credentials import set_llm_principal
 from llm_shared.tiered_routing.registry import get_active_router
 from llm_shared.tiered_routing.tier_router import get_tiered_router
 from services.llm_api_key_service import LLMApiKeyRecord, get_llm_api_key_service
@@ -136,9 +137,12 @@ async def _resolve_auth(request: Request) -> Tuple[Dict[str, Any] | None, LLMApi
         record = await svc.authenticate_key(bearer)
         if record is None:
             raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+        set_llm_principal(None)  # #19241: a team key names no user -> system token, then API key
         return None, record
     # Fall back to platform JWT
     user = await _get_user(request)
+    # #19241: the authenticated user picks their own signed-in provider token first.
+    set_llm_principal((user or {}).get("user_id"), (user or {}).get("org_id"))
     return user, None
 
 

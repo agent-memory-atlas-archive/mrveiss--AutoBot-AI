@@ -67,8 +67,28 @@ def get_run_credentials() -> RunCredentialContext | None:
     return _run_credentials.get()
 
 
+# The principal an LLM call is made for (#19241): ``(user_id, org_id)``. Same task
+# scoping as the run credentials above, so concurrent requests never see each
+# other's principal. Read by ``llm_shared.provider_oauth_credentials`` to pick a
+# signed-in provider token; None means "no user" (system token, then API key).
+_llm_principal: ContextVar[Optional[tuple]] = ContextVar("llm_principal", default=None)
+
+
+def set_llm_principal(user_id: Any, org_id: Any = None) -> None:
+    """Record who the current task's LLM calls are for; empty ids clear it."""
+    uid, org = str(user_id or "").strip(), str(org_id or "").strip()
+    _llm_principal.set((uid, org) if uid or org else None)
+
+
+def get_llm_principal() -> tuple | None:
+    """Return ``(user_id, org_id)`` for the current task, or None when no principal is set."""
+    return _llm_principal.get()
+
+
 __all__ = [
     "RunCredentialContext",
     "set_run_credentials",
     "get_run_credentials",
+    "set_llm_principal",
+    "get_llm_principal",
 ]
