@@ -7,7 +7,11 @@
  */
 import { getConfig } from '@/config/ssot-config'
 
-/** SPA route the provider redirects back to with `?code=..&state=..`. */
+/**
+ * SPA route the provider redirects back to with `?code=..&state=..`. The backend
+ * accepts only this exact path: PROVIDER_OAUTH_CALLBACK_PATH in
+ * autobot-backend/api/provider_auth_scope.py -- change both together.
+ */
 export const PROVIDER_OAUTH_CALLBACK_PATH = '/preferences/oauth/callback'
 
 /** SPA route hosting Settings (the page that owns the API Keys tab). */

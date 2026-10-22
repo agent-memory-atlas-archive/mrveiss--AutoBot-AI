@@ -125,23 +125,54 @@ def test_callback_writes_the_initiated_scope_even_if_admin_status_changes(ctx):
     write.assert_not_awaited()
 
 
-def test_another_user_cannot_complete_my_flow(ctx):
-    tc, _, who, write = ctx
+def test_another_user_cannot_complete_or_burn_my_flow(ctx):
+    """L3: a wrong initiator gets 403 and the state survives; its owner completes it once."""
+    tc, fake_redis, who, write = ctx
     state = _initiate(tc).json()["state"]
     who.user = {"user_id": "u-8", "org_id": "org-1"}
     assert _callback(tc, state).status_code == 403
     write.assert_not_awaited()
+    assert flow_state.state_key(state) in fake_redis.store
+    who.user = {"user_id": "u-7", "org_id": "org-1"}
+    assert _callback(tc, state).status_code == 200
+    assert _callback(tc, state).status_code == 400  # still single-use
 
 
 def test_status_reads_only_the_callers_own_subject(ctx, monkeypatch):
     tc, _, _, _ = ctx
     read = AsyncMock(return_value=None)
     monkeypatch.setattr(mod, "_vault_read_dual", read)
-    resp = tc.get("/api/llm-auth/status/acme?scope=user")
+    resp = tc.get("/api/llm-auth/status/openai?scope=user")
     assert resp.status_code == 200
     assert resp.json()["scope"] == "user"
     assert read.await_args.kwargs["subject"] == "user:u-7"
-    assert tc.get("/api/llm-auth/status/acme?scope=system").status_code == 403
+    assert tc.get("/api/llm-auth/status/openai?scope=system").status_code == 403
+
+
+def test_status_defaults_to_the_callers_own_even_for_an_admin(ctx, monkeypatch):
+    """M2: no scope means "mine", never the org credential."""
+    tc, _, who, _ = ctx
+    who.admin = True
+    read = AsyncMock(return_value=None)
+    monkeypatch.setattr(mod, "_vault_read_dual", read)
+    resp = tc.get("/api/llm-auth/status/openai")
+    assert resp.status_code == 200 and resp.json()["scope"] == "user"
+    assert read.await_args.kwargs["subject"] == "user:u-7"
+
+
+def test_delete_requires_an_explicit_scope(ctx):
+    """M2: an admin's scope-less disconnect must not delete the org credential."""
+    tc, _, who, _ = ctx
+    who.admin = True
+    assert tc.delete("/api/llm-auth/openai").status_code == 422
+
+
+@pytest.mark.parametrize("name", ["acme", "openai:org:other", "user:u-8"])
+def test_status_and_delete_reject_unknown_providers(ctx, name):
+    """L1: only registry providers; a ``:`` can never reach the vault secret name."""
+    tc, _, _, _ = ctx
+    assert tc.get(f"/api/llm-auth/status/{name}?scope=user").status_code == 404
+    assert tc.delete(f"/api/llm-auth/{name}?scope=user").status_code == 404
 
 
 def test_device_poll_bound_to_initiating_user(ctx, monkeypatch):

@@ -166,9 +166,11 @@ def test_unconfigured_provider_is_400_naming_the_setting(ctx, monkeypatch):
         "https://evil.example.net/preferences/oauth/callback",
         "not-a-url",
         config.frontend_url.replace("://", "://x") + "/preferences/oauth/callback",
+        config.frontend_url + "/somewhere/else",  # L2: right origin, wrong path
+        config.frontend_url + "/preferences/oauth/callback?next=/admin",  # L2: exact path only
     ],
 )
-def test_redirect_uri_off_the_frontend_origin_is_400(ctx, hf_configured, redirect_uri):
+def test_redirect_uri_other_than_the_exact_callback_is_400(ctx, hf_configured, redirect_uri):
     tc, fake_redis = ctx
     resp = tc.post("/api/llm-auth/oauth/initiate", json={"provider_name": "huggingface", "redirect_uri": redirect_uri})
     assert resp.status_code == 400

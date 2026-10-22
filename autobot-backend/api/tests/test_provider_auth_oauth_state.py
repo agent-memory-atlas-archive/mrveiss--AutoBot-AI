@@ -6,7 +6,8 @@
 
 Proves the callback is authorized by a server-minted, single-use ``state`` (not a
 client-supplied verifier): missing/replayed/expired state → 400, admin mismatch →
-403, and the happy path exchanges with the SERVER-STORED verifier.
+403 without consuming the state (#19241 L3), and the happy path exchanges with
+the SERVER-STORED verifier.
 """
 
 import json
@@ -211,8 +212,8 @@ def test_callback_admin_mismatch_403(ctx):
     state = _prestore_state(fake_redis, admin_id="admin-999")
     resp = tc.post(_CALLBACK, json={"state": state, "code": "c", "redirect_uri": _REDIRECT})
     assert resp.status_code == 403
-    # A rejected mismatch still consumed the single-use state (no reuse window).
-    assert mod._state_key(state) not in fake_redis.store
+    # #19241 L3: a non-initiator cannot burn the state -- it stays for its owner, still single-use.
+    assert mod._state_key(state) in fake_redis.store
 
 
 def test_callback_dict_admin_mismatch_rejected(ctx):
@@ -234,8 +235,8 @@ def test_callback_dict_admin_mismatch_rejected(ctx):
     state = _prestore_state(fake_redis, admin_id="00000000-0000-0000-0000-000000000000")
     resp = tc.post(_CALLBACK, json={"state": state, "code": "c", "redirect_uri": _REDIRECT})
     assert resp.status_code == 403, resp.text
-    # The rejected single-use state is still consumed (no reuse window).
-    assert mod._state_key(state) not in fake_redis.store
+    # #19241 L3: the rejected caller did not consume the state.
+    assert mod._state_key(state) in fake_redis.store
 
 
 def test_callback_persists_real_created_by(ctx, monkeypatch):

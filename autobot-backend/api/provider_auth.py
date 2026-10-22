@@ -29,7 +29,7 @@ DELETE /api/llm-auth/{provider_name}       — revoke / delete stored tokens
 from __future__ import annotations
 
 import time
-from typing import Any, List, Optional
+from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +65,7 @@ from autobot_shared.url_safety import get_oauth_allowed_hosts, require_allowlist
 from llm_shared.llm_oauth_registry import (
     FLOW_DEVICE,
     FLOW_REDIRECT,
+    LLM_OAUTH_PROVIDER_LABELS,
     LlmOAuthClient,
     ProviderNotConfiguredError,
     UnknownProviderError,
@@ -167,6 +168,12 @@ def _resolve_client(provider_name: str, flow: str) -> LlmOAuthClient:
         if url:
             _validate_outbound_url(url)
     return client
+
+
+def _require_known_provider(provider_name: str) -> None:
+    """404 unless *provider_name* is a registry provider -- which also keeps ``:`` out of the vault name."""
+    if provider_name not in LLM_OAUTH_PROVIDER_LABELS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown sign-in provider")
 
 
 def _main_redis():
@@ -319,7 +326,7 @@ async def oauth_callback(
     written to the scope the flow started with (#19241).
     """
     redis = _main_redis()
-    stored = await flow_state.consume_oauth_state(redis, req.state)
+    stored = await flow_state.consume_oauth_state(redis, req.state, _current_user_id(user))
     _require_completion_allowed(stored, user, is_admin)
     if req.redirect_uri != stored.get("redirect_uri"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="redirect_uri does not match the flow")
@@ -407,16 +414,17 @@ async def device_poll(
 @router.get("/status/{provider_name}", response_model=ProviderAuthStatus)
 async def provider_auth_status(
     provider_name: str,
-    scope: Optional[AuthScope] = Query(default=None),
+    scope: AuthScope = Query(default="user"),
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
     is_admin: bool = Depends(caller_is_admin),
 ) -> ProviderAuthStatus:
-    """Return the caller's connection status for a provider at *scope*.
+    """Return the caller's connection status for a provider at *scope* (default: the caller's own).
 
-    System scope dual-reads (finding #1, #11497): the org-scoped token, else the
+    System scope (admin only) dual-reads (finding #1, #11497): the org-scoped token, else the
     legacy ``"global"`` one. User scope reads only the caller's own token.
     """
+    _require_known_provider(provider_name)
     effective = resolve_scope(scope, is_admin)
     token_data = await _vault_read_dual(
         session, provider_name=provider_name, subject=subject_for(effective, user), owner_vault_str=_SYSTEM_VAULT
@@ -436,12 +444,15 @@ async def provider_auth_status(
 @router.delete("/{provider_name}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_provider_auth(
     provider_name: str,
-    scope: Optional[AuthScope] = Query(default=None),
+    scope: AuthScope = Query(...),
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
     is_admin: bool = Depends(caller_is_admin),
 ) -> None:
     """Revoke the caller's stored token for a provider at *scope* (system needs admin).
+
+    *scope* is required (422 without it): a scope-less "disconnect" from an
+    admin must never default to deleting the org-shared credential.
 
     System scope deletes only the caller's org subject, keeping other orgs' legacy
     credential intact (#11497); user scope deletes only the caller's own (#19241).
@@ -451,6 +462,7 @@ async def revoke_provider_auth(
     from llm_shared.provider_auth import _vault_secret_name  # noqa: PLC0415
     from models.secret import Secret  # noqa: PLC0415
 
+    _require_known_provider(provider_name)
     effective = resolve_scope(scope, is_admin)
     name = _vault_secret_name(provider_name, subject_for(effective, user))
     await session.execute(delete(Secret).where(Secret.name == name, Secret.owner_vault == _SYSTEM_VAULT))

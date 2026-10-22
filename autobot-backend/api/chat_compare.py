@@ -186,10 +186,9 @@ async def compare_models(
       {"model": "provider/model", "done": true}
       {"model": "provider/model", "error": "message", "done": true}
     """
-    from llm_shared.run_credentials import set_llm_principal
+    from autobot_shared.principal import resolve_principal_id
+    from llm_shared.run_credentials import stream_with_llm_principal
 
-    # #19241: each fanned-out call prefers this user's own signed-in provider token.
-    set_llm_principal(current_user.get("user_id"), current_user.get("org_id"))
     # Ensure LLMInterface singleton is initialized (used for future non-registry paths).
     await _get_compare_interface()
 
@@ -200,7 +199,11 @@ async def compare_models(
     messages = [{"role": "user", "content": user_content}]
 
     return StreamingResponse(
-        _fan_out_stream(body.models, messages),
+        # #19241: each fanned-out call prefers this user's own signed-in provider token, for this response only.
+        stream_with_llm_principal(
+            (resolve_principal_id(current_user) or "", str(current_user.get("org_id") or "")),
+            _fan_out_stream(body.models, messages),
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

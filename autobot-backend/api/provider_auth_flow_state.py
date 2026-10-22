@@ -52,12 +52,24 @@ async def save(redis, key: str, ttl: int, payload: dict) -> None:
     await client_setex(redis, key, ttl, json.dumps(payload, ensure_ascii=False))
 
 
-async def consume_oauth_state(redis, state: str) -> dict:
-    """Atomically fetch-and-delete the state; missing/expired/replayed → 400."""
-    raw = await client_getdel(redis, state_key(state))
+async def consume_oauth_state(redis, state: str, caller_id: str) -> dict:
+    """Check the state belongs to *caller_id*, then consume it atomically (single use).
+
+    Missing/expired/replayed → 400. A caller who is not the initiator gets 403
+    and the state is left in place, so a leaked state cannot be burnt by someone
+    else (#19241 L3). The GETDEL that consumes it is the single-use guarantee;
+    its payload is re-checked in case the key was replaced in between.
+    """
+    raw = await client_get(redis, state_key(state))
     if raw is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid or expired OAuth state")
-    return _decode(raw)
+    require_initiator(_decode(raw), caller_id)
+    raw = await client_getdel(redis, state_key(state))
+    if raw is None:  # its owner completed it concurrently
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid or expired OAuth state")
+    stored = _decode(raw)
+    require_initiator(stored, caller_id)
+    return stored
 
 
 async def load_device_context(redis, device_code: str, provider_name: str) -> dict:

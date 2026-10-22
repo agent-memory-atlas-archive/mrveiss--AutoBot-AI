@@ -9,13 +9,21 @@ Order: the requesting user's own token, then the org/system token, then None
 unusable token falls through to the next source.
 """
 
+import asyncio
+import contextvars
 import time
 
 import pytest
 
 from llm_shared import provider_auth
 from llm_shared import provider_oauth_credentials as creds
-from llm_shared.run_credentials import get_llm_principal, set_llm_principal
+from llm_shared.run_credentials import (
+    get_llm_principal,
+    llm_principal_scope,
+    reset_llm_principal,
+    set_llm_principal,
+    stream_with_llm_principal,
+)
 
 _FRESH = time.time() + 3600
 
@@ -113,18 +121,48 @@ async def test_unconfigured_provider_skips_the_lookup(monkeypatch):
 
 
 def test_principal_comes_from_the_task_context_only():
-    set_llm_principal("u-1", "org-9")
-    try:
+    with llm_principal_scope("u-1", "org-9"):
         assert creds.request_principal() == ("u-1", "org-9")
-    finally:
-        set_llm_principal(None)
     assert get_llm_principal() is None
     assert creds.request_principal() == ("", "")
 
 
+@pytest.mark.asyncio
+async def test_principal_does_not_outlive_its_scope():
+    """M1: a task spawned after the scope ends, or a fresh context, sees no principal."""
+
+    async def _seen():
+        return get_llm_principal()
+
+    with llm_principal_scope("u-1", "org-9"):
+        inside = asyncio.create_task(_seen())
+    after = asyncio.create_task(_seen())
+    assert await inside == ("u-1", "org-9")
+    assert await after is None
+    assert contextvars.Context().run(get_llm_principal) is None
+
+
+@pytest.mark.asyncio
+async def test_stream_scope_ends_with_the_stream():
+    async def _body():
+        yield get_llm_principal()
+
+    seen = [item async for item in stream_with_llm_principal(("u-1", ""), _body())]
+    assert seen == [("u-1", "")]
+    assert get_llm_principal() is None
+
+
+def test_reset_from_another_context_does_not_raise():
+    """An async generator finalised by the loop resets in a different Context."""
+    token = set_llm_principal("u-1")
+    try:
+        contextvars.Context().run(reset_llm_principal, token)
+    finally:
+        reset_llm_principal(token)
+    assert get_llm_principal() is None
+
+
 def test_missing_expiry_is_not_treated_as_expired():
     """A token stored without expires_at (no expires_in sent) stays usable, matching /status."""
-    import asyncio
-
     auth = provider_auth.OAuthAuth(provider_name="openai", token_url="", client_id="", client_secret="")
     assert asyncio.run(auth._ensure_fresh(None, {"access_token": "at"})) == "at"

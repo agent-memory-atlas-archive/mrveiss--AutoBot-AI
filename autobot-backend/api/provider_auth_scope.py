@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException, Request, status
 
 from auth_middleware import check_admin_permission
+from autobot_shared.principal import resolve_principal_id
 from autobot_shared.ssot_config import config
 from llm_shared.provider_auth import org_vault_subject, user_vault_subject
 
@@ -26,26 +27,33 @@ SCOPE_SYSTEM = "system"
 SCOPE_USER = "user"
 _ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 _DEFAULT_PORTS = {"http": 80, "https": 443}  # URL-scheme defaults, not service ports
+#: The SPA route a provider redirects back to. Mirrored by ``PROVIDER_OAUTH_CALLBACK_PATH``
+#: in autobot-frontend/src/utils/providerOAuth.ts -- change both together.
+PROVIDER_OAUTH_CALLBACK_PATH = "/preferences/oauth/callback"
 
 
-def _principal_id(user: Any) -> str | None:
+def principal_id(user: Any) -> str | None:
+    """The caller's id via the canonical claim order (``resolve_principal_id``: id → user_id → sub).
+
+    Object principals (tests / non-dict callers) are read in the same order.
+    """
     if isinstance(user, dict):
-        uid = user.get("user_id") or user.get("id")
-    else:
-        uid = getattr(user, "user_id", None) or getattr(user, "id", None)
-    return None if uid is None else str(uid)
+        return resolve_principal_id(user)
+    for claim in ("id", "user_id", "sub"):
+        value = getattr(user, claim, None)
+        if value:
+            return str(value)
+    return None
 
 
 def current_user_id(user: Any) -> str:
     """Return the calling principal's id as a string, or the zero-UUID when absent.
 
-    ``get_current_user`` yields a **dict** principal in every production branch
-    (``user_id`` is the canonical claim key, #11849), so read dict keys first;
-    an object principal (tests / other callers) still resolves via ``getattr``.
-    The zero-UUID is returned only for a genuinely id-less principal — otherwise
-    the #11297 binding would collapse every real caller to the same id.
+    Uses :func:`principal_id` (the canonical claim order, #13688/#19241). The
+    zero-UUID is returned only for a genuinely id-less principal — otherwise the
+    #11297 binding would collapse every real caller to the same id.
     """
-    return _principal_id(user) or _ZERO_UUID
+    return principal_id(user) or _ZERO_UUID
 
 
 def current_org_id(user: Any) -> str | None:
@@ -83,7 +91,7 @@ def subject_for(scope: str, user: Any) -> str:
     """Vault subject for *scope*. A user scope needs a real user id (401 otherwise)."""
     if scope == SCOPE_SYSTEM:
         return org_vault_subject(current_org_id(user))
-    uid = _principal_id(user)
+    uid = principal_id(user)
     if not uid or uid == _ZERO_UUID:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="caller has no user id")
     return user_vault_subject(uid)
@@ -96,9 +104,11 @@ def _origin(url: str) -> tuple[str, str, int | None]:
 
 
 def validate_redirect_uri(redirect_uri: str) -> None:
-    """Require *redirect_uri* to sit on the SSOT frontend origin (#19241); 400 otherwise."""
-    if not urlparse(redirect_uri).hostname or _origin(redirect_uri) != _origin(config.frontend_url):
+    """Require *redirect_uri* to be exactly the SPA callback on the SSOT frontend origin (#19241); 400 otherwise."""
+    parsed = urlparse(redirect_uri)
+    exact = parsed.path == PROVIDER_OAUTH_CALLBACK_PATH and not (parsed.query or parsed.fragment or parsed.params)
+    if not parsed.hostname or not exact or _origin(redirect_uri) != _origin(config.frontend_url):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="redirect_uri must be on the configured frontend origin",
+            detail="redirect_uri must be the frontend's provider sign-in callback",
         )

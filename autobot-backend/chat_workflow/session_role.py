@@ -103,10 +103,6 @@ def stamp_verified_identity(metadata: dict, context: "dict | None") -> None:
     """
     metadata["user_id"] = (context or {}).get(VERIFIED_USER_KEY) or ""
     metadata["org_id"] = (context or {}).get(VERIFIED_COMPANY_KEY) or ""
-    # #19241: the same verified principal picks the signed-in provider token for this turn's LLM calls.
-    from llm_shared.run_credentials import set_llm_principal
-
-    set_llm_principal(metadata["user_id"], metadata["org_id"])
 
 
 def resolve_auth_role(context: "dict | None") -> str:
