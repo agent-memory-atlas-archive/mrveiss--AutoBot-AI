@@ -259,7 +259,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/llm_shared/optimization/kv_cache_test.py": 675,
     "autobot-backend/llm_shared/optimization/layer_inference.py": 869,
     "autobot-backend/llm_shared/optimization/layer_inference_test.py": 715,
-    "autobot-backend/llm_shared/tests/test_provider_auth.py": 1187,
+    "autobot-backend/llm_shared/tests/test_provider_auth.py": 1145,
     "autobot-backend/markdown_reference_system.py": 707,
     "autobot-backend/mcp_server/autobot_server.py": 790,
     "autobot-backend/mcp_server/mcp_security_test.py": 812,
