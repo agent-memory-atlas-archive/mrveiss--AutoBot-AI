@@ -79,3 +79,64 @@ class TestFailsClosedOnGitFailure:
             ["bash", str(HOOK_PATH)], cwd=repo, capture_output=True, text=True, env=isolated_git_env()
         )
         assert result.returncode != 0, "a git failure was indistinguishable from '0 deletions'"
+
+
+class TestMergeAware:
+    """A merge that brings in the other side's deletions is not an accident (#18238).
+
+    Catching an old branch up with main stages every file main removed since the
+    branch was cut. Those deletions are absent from MERGE_HEAD, so they are not
+    counted. A deletion of a file the merged-in side still has is counted as before.
+    """
+
+    def _branch_behind_a_main_that_deleted(self, tmp_path: Path, count: int) -> Path:
+        repo = _init_repo(tmp_path)
+        _git(repo, "checkout", "-q", "-b", "main")
+        for i in range(count):
+            (repo / f"f{i}.txt").write_text("x\n", encoding="utf-8")
+        (repo / "keep.txt").write_text("k\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed")
+        _git(repo, "checkout", "-q", "-b", "old-branch")
+        (repo / "branch-work.txt").write_text("b\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "branch work")
+        _git(repo, "checkout", "-q", "main")
+        for i in range(count):
+            (repo / f"f{i}.txt").unlink()
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "main removes files")
+        _git(repo, "checkout", "-q", "old-branch")
+        _git(repo, "merge", "--no-commit", "--no-ff", "main")
+        return repo
+
+    def _run(self, repo: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(["bash", str(HOOK_PATH)], cwd=repo, capture_output=True, text=True, env=isolated_git_env())
+
+    def test_a_catch_up_merge_of_the_other_sides_deletions_is_allowed(self, tmp_path: Path) -> None:
+        repo = self._branch_behind_a_main_that_deleted(tmp_path, DELETION_THRESHOLD + 10)
+        staged = _git(repo, "diff", "--cached", "--name-only", "--diff-filter=D").stdout.split()
+        assert len(staged) == DELETION_THRESHOLD + 10  # the scenario really stages a mass deletion
+        result = self._run(repo)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_contrast_deleting_files_the_merged_side_still_has_is_blocked(self, tmp_path: Path) -> None:
+        repo = self._branch_behind_a_main_that_deleted(tmp_path, 5)
+        # mid-merge, a stash-style accident drops many files that main still has
+        for i in range(DELETION_THRESHOLD + 10):
+            (repo / f"extra{i}.txt").write_text("e\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "finish merge")
+        _git(repo, "checkout", "-q", "main")
+        _git(repo, "merge", "-q", "old-branch")
+        _git(repo, "checkout", "-q", "old-branch")
+        (repo / "late.txt").write_text("l\n", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "diverge")
+        _git(repo, "merge", "--no-commit", "--no-ff", "main")
+        for i in range(DELETION_THRESHOLD + 10):
+            (repo / f"extra{i}.txt").unlink()
+        _git(repo, "add", "-A")
+        result = self._run(repo)
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "extra0.txt" in result.stdout

@@ -14,6 +14,12 @@
 # Related: #1654 - pre-commit stash pop can switch active branch
 # Related: #1503 - pre-commit stash/restore can stage untracked files
 #
+# During a merge (MERGE_HEAD present), a deletion of a file the merged-in side
+# no longer has is that side's history arriving, not an accident: catching an old
+# branch up with main legitimately stages every file main removed since. Only
+# deletions of files the merged-in side still HAS are counted, so a stash bug that
+# drops files during a merge is still caught.
+#
 # This hook catches mass deletions BEFORE they're committed, allowing the
 # developer to either:
 #   1. Verify the deletion is intentional with `--no-verify`
@@ -33,9 +39,29 @@ source "$SCRIPT_DIR/lib/_common.sh" || {
 # (anything >50 is almost certainly a stash bug, not intended cleanup)
 DELETION_THRESHOLD=50
 
+# During a merge, keep only the deletions the merged-in side did not make (the file
+# still exists in MERGE_HEAD). Outside a merge every staged deletion is kept.
+drop_merged_side_deletions() {
+    local deleted="$1" merge_head f
+    if ! merge_head=$(git rev-parse -q --verify MERGE_HEAD); then
+        printf '%s' "$deleted"
+        return
+    fi
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        if git cat-file -e "$merge_head:$f" 2>/dev/null; then
+            printf '%s\n' "$f"
+        fi
+    done <<< "$deleted"
+}
+
 main() {
-    # Count files staged for deletion (git ls-files --deleted)
-    deletion_count=$(git diff --cached --name-only --diff-filter=D | wc -l)
+    local deleted deletions
+    # A plain assignment, not inside a function's command substitution: there set -e is not
+    # inherited, so a git failure would read as "0 deletions" (#14151). Here it aborts.
+    deleted=$(git diff --cached --name-only --diff-filter=D)
+    deletions=$(drop_merged_side_deletions "$deleted")
+    deletion_count=$(printf '%s' "$deletions" | grep -c . || true)
 
     if [ "$deletion_count" -le "$DELETION_THRESHOLD" ]; then
         # Normal deletion count — allow the commit
@@ -57,7 +83,7 @@ main() {
     echo "    3. Did a branch switch occur silently during stash?"
     echo ""
     echo -e "  ${YELLOW}First 20 files staged for deletion:${NC}"
-    git diff --cached --name-only --diff-filter=D | head -20 | sed 's/^/    /'
+    printf '%s\n' "$deletions" | head -20 | sed 's/^/    /'
     if [ "$deletion_count" -gt 20 ]; then
         echo "    ... and $((deletion_count - 20)) more"
     fi
