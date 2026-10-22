@@ -458,14 +458,14 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/services/drift_checker.py": 839,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,
-    "autobot-slm-backend/services/playbook_executor.py": 1401,  # #17150: ansible_dir self-heal, re-detect before sync
+    "autobot-slm-backend/services/playbook_executor.py": 1399,  # #17150: ansible_dir self-heal, re-detect before sync
     "autobot-slm-backend/services/reconciler.py": 2216,
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
     "autobot-slm-backend/services/replication.py": 826,
     "autobot-slm-backend/services/role_registry.py": 713,
-    "autobot-slm-backend/services/service_orchestrator.py": 915,
+    "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
     "autobot-slm-backend/tests/api/test_drift_resolve.py": 606,
