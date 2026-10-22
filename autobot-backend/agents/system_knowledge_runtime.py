@@ -13,6 +13,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from typing import Callable
 
 from autobot_shared.logging_manager import get_logger
 
@@ -43,8 +44,17 @@ def sync_runtime_copy(template: Path, runtime_dir: Path, relative: str) -> str:
     matches neither the new template nor the last copy the import made -- skipped with a warning,
     never overwritten). Blocking: call through ``asyncio.to_thread``.
     """
+    return _sync(runtime_dir, relative, _digest(template), lambda target: shutil.copy2(template, target))
+
+
+def sync_runtime_text(text: str, runtime_dir: Path, relative: str) -> str:
+    """Same keep-if-edited rule for generated content (the fallback default templates)."""
+    data = text.encode("utf-8")
+    return _sync(runtime_dir, relative, hashlib.sha256(data).hexdigest(), lambda target: target.write_bytes(data))
+
+
+def _sync(runtime_dir: Path, relative: str, new: str, write: Callable[[Path], object]) -> str:
     target = runtime_dir / relative
-    new = _digest(template)
     manifest = _load_manifest(runtime_dir)
     if target.exists():
         current = _digest(target)
@@ -60,7 +70,7 @@ def sync_runtime_copy(template: Path, runtime_dir: Path, relative: str) -> str:
             )
             return KEPT_EDITED
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template, target)
+    write(target)
     _save_manifest(runtime_dir, {**manifest, relative: new})
     return COPIED
 

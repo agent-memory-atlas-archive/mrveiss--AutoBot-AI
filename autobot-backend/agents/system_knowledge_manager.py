@@ -21,7 +21,7 @@ import yaml
 from agents.kb_librarian import KBLibrarian
 from agents.kb_librarian.stable_ids import SystemFactIds, SystemFactStoreError
 from agents.system_knowledge_defaults import DefaultKnowledgeMixin
-from agents.system_knowledge_runtime import sync_runtime_copy
+from agents.system_knowledge_runtime import sync_runtime_copy, sync_runtime_text
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.system_knowledge_paths import system_knowledge_dirs
 from constants.threshold_constants import CategoryDefaults
@@ -276,12 +276,13 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         await asyncio.to_thread(sync_runtime_copy, template, self.runtime_knowledge_dir, f"{kind}/{template.name}")
 
     async def _save_yaml_file(self, file_path: Path, data: Dict[str, Any]) -> bool:
-        """Save data to a YAML file."""
+        """Write generated YAML into the runtime dir, keeping an operator-edited file (#18556)."""
         try:
-            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-                await f.write(yaml.dump(data, default_flow_style=False, indent=2))
+            relative = str(file_path.relative_to(self.runtime_knowledge_dir))
+            text = yaml.dump(data, default_flow_style=False, indent=2)
+            await asyncio.to_thread(sync_runtime_text, text, self.runtime_knowledge_dir, relative)
             return True
-        except OSError as e:
+        except (OSError, ValueError) as e:
             logger.error("Failed to save YAML file %s: %s", file_path, e)
             return False
 
@@ -359,10 +360,18 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         }
 
         try:
-            await self.librarian.store_tool_knowledge(tool_info, ref=self.fact_ids.of("tool", tool_name))
+            result = await self.librarian.store_tool_knowledge(tool_info, ref=self.fact_ids.of("tool", tool_name))
         except SystemFactStoreError as e:
             return self._record_import_failure("tool", tool_name, e)
-        logger.info("Imported tool: %s", tool_name)
+        self._log_imported("tool", tool_name, result)
+
+    @staticmethod
+    def _log_imported(kind: str, name: str, result: Any) -> None:
+        """Log what the import actually did: nothing (already current) or a write."""
+        if isinstance(result, dict) and result.get("action") == "skipped":
+            logger.info("Unchanged %s (skipped): %s", kind, name)
+        else:
+            logger.info("Imported %s: %s", kind, name)
 
     def _record_import_failure(self, kind: str, name: str, error: Exception) -> None:
         """Count a failed item; it is retried on the next import because nothing marks it done."""
@@ -416,12 +425,12 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         }
 
         try:
-            await self.librarian.store_workflow_knowledge(
+            result = await self.librarian.store_workflow_knowledge(
                 workflow_info, ref=self.fact_ids.of("workflow", workflow_name)
             )
         except SystemFactStoreError as e:
             return self._record_import_failure("workflow", workflow_name, e)
-        logger.info("Imported workflow: %s", workflow_name)
+        self._log_imported("workflow", workflow_name, result)
 
     async def _import_procedures_knowledge(self):
         """Import procedures knowledge from YAML templates"""
@@ -467,10 +476,10 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         }
 
         try:
-            await self.librarian.store_system_documentation(doc_info, ref=self.fact_ids.of("procedure", title))
+            result = await self.librarian.store_system_documentation(doc_info, ref=self.fact_ids.of("procedure", title))
         except SystemFactStoreError as e:
             return self._record_import_failure("procedure", title, e)
-        logger.info("Imported procedure: %s", title)
+        self._log_imported("procedure", title, result)
 
     async def reload_system_knowledge(self):
         """Reload system knowledge from runtime files"""
@@ -479,10 +488,18 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
         # Clear current system knowledge from KB
         await self._clear_system_knowledge_from_kb()
 
+        self._import_failures = []
         await self.fact_ids.load()
         # Reimport from runtime files
         await self._import_from_runtime_files()
 
+        if self._import_failures:
+            logger.error(
+                "System knowledge reload incomplete: %d item(s) failed: %s",
+                len(self._import_failures),
+                ", ".join(self._import_failures),
+            )
+            return
         logger.info("System knowledge reloaded successfully")
 
     async def _import_runtime_tools(self):

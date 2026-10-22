@@ -30,6 +30,7 @@ class _FakeKB:
         self.stored = 0
         self.updated = 0
         self.fail = False  # every write reports an error
+        self.duplicate = False  # store_fact answers "duplicate" of a pre-existing fact (semantic match)
 
     @property
     def writes(self) -> int:
@@ -41,6 +42,11 @@ class _FakeKB:
     async def store_fact(self, content, metadata=None, fact_id=None):
         if self.fail:
             return {"status": "error", "message": "Knowledge operation failed"}
+        if self.duplicate:
+            dup_id = f"dup-{len(self.facts)}"
+            self.facts[dup_id] = content + " (near copy)"
+            self.meta[dup_id] = {"source": "web_research"}
+            return {"status": "duplicate", "fact_id": dup_id, "message": "Near-duplicate fact already exists"}
         self.stored += 1
         # Mirrors the real store: no stable id means a fresh random one every call.
         fid = fact_id or f"random-{self.stored}"
@@ -232,3 +238,36 @@ async def test_an_operator_edited_runtime_copy_is_kept(tmp_path) -> None:
     await _import(_FakeKB(), tmp_path)
     kept = await asyncio.to_thread(edited.read_text, encoding="utf-8")
     assert kept == "# operator edit\n", "an edited runtime copy was replaced"
+
+
+@pytest.mark.asyncio
+async def test_a_duplicate_answer_is_an_existing_fact_linked_not_an_error(tmp_path) -> None:
+    kb = _FakeKB()
+    kb.duplicate = True
+    manager = _manager(kb, tmp_path)
+    manager._check_system_knowledge_changes = AsyncMock(return_value=(True, ["x"]))
+    manager._update_system_knowledge_cache = AsyncMock()
+    with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
+        await manager.initialize_system_knowledge()
+        manager._update_system_knowledge_cache.assert_awaited_once()  # no failure: the cache is written
+        assert manager._import_failures == []
+        assert all(m.get("system_fact_id") for f, m in kb.meta.items() if f.startswith("dup-")), "duplicate not linked"
+        writes = kb.writes
+        assert await manager._import_system_knowledge() == 0
+    assert kb.writes == writes, "the second run wrote again"
+
+
+@pytest.mark.asyncio
+async def test_an_owned_fact_without_an_import_hash_is_only_linked(tmp_path) -> None:
+    node, tool, _ = await _seeded(tmp_path, {"source": "system_knowledge"})
+    assert node.facts["legacy-tool"] == "RESEARCHED TEXT", "an unverifiable owned fact was rewritten"
+    assert node.meta["legacy-tool"]["system_fact_id"] == system_fact_id("tool", tool)
+    assert IMPORT_HASH_FIELD not in node.meta["legacy-tool"]
+
+
+@pytest.mark.asyncio
+async def test_the_second_run_over_an_adopted_legacy_fact_makes_zero_writes(tmp_path) -> None:
+    node, _, _ = await _seeded(tmp_path, {})
+    writes = node.writes
+    assert await _import(node, tmp_path) == 0
+    assert node.writes == writes

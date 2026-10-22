@@ -131,9 +131,24 @@ async def store_or_update_fact(
             await knowledge_base.update_fact(ref.fact_id, content=body, metadata=metadata),
             f"refreshing {ref.fact_id}",
         )
-    return _checked(
-        await knowledge_base.store_fact(body, metadata=metadata, fact_id=ref.fact_id), f"storing {ref.fact_id}"
-    )
+    result = await knowledge_base.store_fact(body, metadata=metadata, fact_id=ref.fact_id)
+    if isinstance(result, dict) and result.get("status") == "duplicate":
+        return await _adopt_duplicate(knowledge_base, result, metadata, ref)
+    return _checked(result, f"storing {ref.fact_id}")
+
+
+async def _adopt_duplicate(knowledge_base: Any, result: Dict[str, Any], metadata: Dict[str, Any], ref: Any):
+    """The KB matched the new body to an existing fact (exact hash or semantic): that fact IS the item.
+
+    Its text is left alone. It gains the link id plus the item's type and name, so the next run's
+    ``load()`` finds it as an adopted fact and writes nothing.
+    """
+    dup_id = result.get("fact_id")
+    if not dup_id or dup_id == "?":
+        raise SystemFactStoreError(f"storing {ref.fact_id} reported a duplicate without its id: {result}")
+    name_field = next(f for t, f in _KIND_METADATA.values() if t == metadata["type"])
+    identity = {"type": metadata["type"], name_field: metadata[name_field], LINK_FIELD: ref.stable_id}
+    return _checked(await knowledge_base.update_fact(dup_id, metadata=identity), f"linking duplicate {dup_id}")
 
 
 async def _durable_batches() -> AsyncIterator[List[Dict[str, Any]]]:

@@ -181,7 +181,7 @@ class KBLibrarian:
             self.knowledge_base, document_content, metadata, ref, template_digest(tool_info)
         )
         if _was_skipped(result):
-            return  # unchanged import: no write, nothing to announce
+            return result  # unchanged import: no write, nothing to announce
         logger.info("Stored knowledge for tool: %s", tool_name)
 
         await publish_event(
@@ -194,6 +194,7 @@ class KBLibrarian:
             },
             persist=PersistStrategy.NONE,
         )
+        return result
 
     async def get_tool_instructions(self, tool_name: str) -> Dict[str, Any]:
         """Get installation and usage instructions for a specific tool."""
@@ -485,8 +486,9 @@ METADATA:
             self.knowledge_base, document_content, metadata, ref, template_digest(doc_info)
         )
         if _was_skipped(result):
-            return  # unchanged import: no write, nothing to announce
+            return result  # unchanged import: no write, nothing to announce
         logger.info("Stored system documentation: %s", doc_title)
+        return result
 
     def _build_workflow_document_content(self, workflow_name: str, workflow_info: Dict[str, Any]) -> str:
         """
@@ -565,8 +567,9 @@ METADATA:
             self.knowledge_base, document_content, metadata, ref, template_digest(workflow_info)
         )
         if _was_skipped(result):
-            return  # unchanged import: no write, nothing to announce
+            return result  # unchanged import: no write, nothing to announce
         logger.info("Stored workflow documentation: %s", workflow_name)
+        return result
 
 
 __all__ = ["KBLibrarian"]
