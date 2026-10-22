@@ -347,6 +347,15 @@ class TestNvidiaSmiDetails:
         assert self._details(None) == []
 
 
+def _accessor_patched(accessor):
+    """Patch the accessor in the globals ``resolve_knowledge_base`` actually reads.
+
+    ``patch("worker_node...")`` targets whatever ``sys.modules["worker_node"]`` is NOW; a suite
+    that reloads the module leaves ``WorkerNode`` (imported above) bound to the old globals.
+    """
+    return patch.dict(WorkerNode.resolve_knowledge_base.__globals__, {"get_knowledge_base_async": accessor})
+
+
 class TestResolveKnowledgeBase:
     """#18122: the worker holds no private KnowledgeBase; it resolves the canonical one."""
 
@@ -360,7 +369,7 @@ class TestResolveKnowledgeBase:
         injected = MagicMock()
         worker.knowledge_base = injected
         accessor = AsyncMock()
-        with patch("worker_node.get_knowledge_base_async", accessor):
+        with _accessor_patched(accessor):
             assert await worker.resolve_knowledge_base() is injected
         accessor.assert_not_awaited()
 
@@ -369,14 +378,14 @@ class TestResolveKnowledgeBase:
         canonical = MagicMock()
         accessor = AsyncMock(return_value=canonical)
         worker.knowledge_base = None
-        with patch("worker_node.get_knowledge_base_async", accessor):
+        with _accessor_patched(accessor):
             assert await worker.resolve_knowledge_base() is canonical
         accessor.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_unavailable_canonical_instance_raises(self, worker):
         worker.knowledge_base = None
-        with patch("worker_node.get_knowledge_base_async", AsyncMock(return_value=None)):
+        with _accessor_patched(AsyncMock(return_value=None)):
             with pytest.raises(RuntimeError, match="Knowledge base unavailable"):
                 await worker.resolve_knowledge_base()
 

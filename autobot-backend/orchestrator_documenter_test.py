@@ -10,6 +10,10 @@ import pytest
 
 from orchestrator import Orchestrator
 
+#: The globals ``_get_documenter`` actually reads. ``patch("orchestrator.<name>")`` targets
+#: whatever module sits in ``sys.modules`` NOW, which a suite that reloads it can replace.
+_G = Orchestrator._get_documenter.__globals__
+
 
 def _bare_orchestrator(knowledge_base=None) -> Orchestrator:
     orch = Orchestrator.__new__(Orchestrator)
@@ -24,12 +28,9 @@ async def test_cached_documenter_without_kb_adopts_canonical_kb_once_up():
     orch = _bare_orchestrator()
     canonical = MagicMock()
     accessor = AsyncMock(side_effect=[None, canonical])
-    with (
-        patch("orchestrator.get_knowledge_base_async", accessor),
-        patch("orchestrator.KNOWLEDGE_BASE_AVAILABLE", True),
-        patch("orchestrator.WorkflowDocumenter") as documenter_cls,
-    ):
-        documenter_cls.return_value = MagicMock(knowledge_base=None)
+    documenter_cls = MagicMock(return_value=MagicMock(knowledge_base=None))
+    names = {"get_knowledge_base_async": accessor, "KNOWLEDGE_BASE_AVAILABLE": True}
+    with patch.dict(_G, {**names, "WorkflowDocumenter": documenter_cls}):
         first = await orch._get_documenter()
         assert first.knowledge_base is None  # init failed: built without a KB
 
@@ -45,9 +46,7 @@ async def test_cached_documenter_with_kb_is_not_replaced():
     orch = _bare_orchestrator()
     existing = MagicMock()
     orch._documenter = MagicMock(knowledge_base=existing)
-    with (
-        patch("orchestrator.get_knowledge_base_async", AsyncMock(return_value=MagicMock())),
-        patch("orchestrator.KNOWLEDGE_BASE_AVAILABLE", True),
-    ):
+    accessor = AsyncMock(return_value=MagicMock())
+    with patch.dict(_G, {"get_knowledge_base_async": accessor, "KNOWLEDGE_BASE_AVAILABLE": True}):
         documenter = await orch._get_documenter()
     assert documenter.knowledge_base is existing
