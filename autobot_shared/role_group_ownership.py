@@ -18,11 +18,12 @@ Audit of the role->group map for tokens granting a service they do not run:
   backend/main: already withheld from detection by ``_DECLARED_ONLY_GROUPS``.
 """
 
+import logging
 from typing import Any
 
-from autobot_shared.logging_manager import get_logger
-
-logger = get_logger(__name__)
+# stdlib logging, not get_logger: the SLM inventory imports this under a test harness that
+# mocks the config get_logger reads (same constraint as user_management/password_epoch.py).
+logger = logging.getLogger(__name__)
 
 GROUP_OWNERS: dict[str, frozenset] = {
     "redis": frozenset({"redis"}),
