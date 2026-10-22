@@ -853,7 +853,7 @@ async def _declare_role_on_node(db: AsyncSession, node_id: str, role_name: str) 
     ever wrote a NodeRole row, leaving ``Node.roles`` untouched.
 
     That was invisible until deploy groups became declaration-gated (#14513).
-    Now ``_strip_undeclared_privileged_groups`` reads ``Node.roles`` as the sole
+    Now ``declared-only group mapping`` reads ``Node.roles`` as the sole
     record of operator intent, so a role assigned through "Assign Role Manually"
     would be treated as undeclared: the group is stripped, the update playbook's
     tasks for it never fire, and the component silently never installs. The

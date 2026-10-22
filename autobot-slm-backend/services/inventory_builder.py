@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # ROLE → GROUP MAPPING
 # ---------------------------------------------------------------------------
-# DB role tokens (Node.roles / Node.detected_roles union) and the ansible
+# DB role tokens (Node.roles, declared only -- #19197) and the ansible
 # group names they map to.  Matching rules:
 #   1. Exact key match (e.g. "redis" → redis + database)
 #   2. Prefix key match for keys ending with "-" (e.g. "slm-" catches
@@ -294,37 +294,13 @@ def unmatched_role_tokens(role_tokens: list[str]) -> set[str]:
     return unmatched
 
 
-def _union_roles(node: Any) -> list[str]:
-    """Return union of node.roles and node.detected_roles as a deduped list.
-
-    Detection legitimately adds groups: a node running redis that nobody
-    declared still needs the redis plays to reach it, which
-    ``test_detected_roles_merged_with_roles`` pins.
-
-    What detection must NOT do is grant a privileged group -- see
-    ``_strip_undeclared_privileged_groups`` for why (#14513).
-    """
-    seen: set[str] = set()
-    result: list[str] = []
-    for r in list(node.roles or []) + list(node.detected_roles or []):
-        if r not in seen:
-            seen.add(r)
-            result.append(r)
-    return result
-
-
 def _declared_roles(node: Any) -> list[str]:
     """Return node.roles alone, deduped -- the operator's declared intent.
 
-    Unlike ``_union_roles``, detection never contributes here. Stamped as the
-    ``node_roles_declared`` hostvar so role_active_facts.yml's PRIVILEGED
-    facts (backend, frontend, ai_stack, npu_worker, browser -- the ones that
-    unpack a tree, see ``_DECLARED_ONLY_GROUPS``) can gate their node_roles
-    branch the same way ``_strip_undeclared_privileged_groups`` already gates
-    their group branch (#14560). ``node_roles`` itself is left untouched:
-    ``test_node_roles_unions_detected_roles`` pins it as the union, and the
-    deliberately-union facts (role_tts_worker_active and friends, see the
-    #9965 comment on the ``node_roles`` hostvar below) still need it.
+    The ONLY input to group membership and to the ``node_roles`` /
+    ``node_roles_declared`` hostvars (#19197): Ansible manages the services
+    ASSIGNED to a node. ``detected_roles`` reports what is installed and grants
+    nothing -- see ``_undeclared_detected_roles`` for how it is surfaced.
     """
     seen: set[str] = set()
     result: list[str] = []
@@ -335,35 +311,21 @@ def _declared_roles(node: Any) -> list[str]:
     return result
 
 
-# Groups whose plays DEPLOY a component's tree onto the host. Detection must
-# never add a node to one of these: the whole failure mode is a node being
-# handed software it does not run.
-#
-# `slm_server`   - "Play 1 - Update SLM Server First" unpacks the SLM manager's
-#                  backend/frontend/shared tree and reads /opt/autobot/code_source.
-# `backend`/`main` - Play 2 unarchives autobot-backend (`when: 'backend' in
-#                  group_names`) and runs the alembic upgrade sequence against
-#                  that host. Play 2 also sets `any_errors_fatal: true` with
-#                  `serial: 3`, so ONE wrongly-included node aborts the whole
-#                  batch of legitimate hosts -- a wider blast radius than the
-#                  Play 1 failure that surfaced this bug.
-#
-# Deliberately NOT everything: `test_detected_roles_merged_with_roles` pins that
-# a detected `redis` still joins `redis`/`database`, and that is wanted -- a
-# node genuinely running redis should keep receiving redis updates. The line is
-# drawn at groups whose plays were checked and found to deploy a tree or migrate
-# a database, not at "detection is untrusted".
-# #14552: `frontend` was missing, and the omission is instructive. Play 2 gates
-# its deploy tasks on exactly two groups -- `backend` and `frontend` -- and
-# #14513 gated only the first, so a vnc node still ran `npx vite build` and
-# failed for want of Node.js. Hand-picking the members is what let that recur;
-# `inventory_deploy_groups_test.py` now DERIVES this set from the playbook and
-# fails if a component is added there without being listed here. That
-# derivation immediately found three MORE gates I had also missed by reading
-# one range of the file -- `aiml`, `npu` and `browser` -- which is the whole
-# argument against maintaining this list by eye.
-# The groups a deploy play NAMES. `update-all-nodes.yml` gates on these; other
-# playbooks target their siblings, which is what #14567 is about.
+def _undeclared_detected_roles(node: Any) -> list[str]:
+    """Roles the node reports running that nobody assigned (sorted, deduped).
+
+    Informational: an operator assigns the role or removes the service.
+    """
+    return sorted(set(node.detected_roles or []) - set(node.roles or []))
+
+
+# Groups whose plays DEPLOY a component's tree onto the host (slm_server,
+# backend/main, frontend, aiml, npu, browser). Group membership is declared-only
+# since #19197, so the inventory builder needs no stripping; the set remains the
+# gate for the setup-wizard path, whose roles come from the NodeRole table
+# (#14638). History: #14513 (slm_server/backend), #14552 (frontend). The set is
+# DERIVED from the playbook gates by inventory_deploy_groups_test.py rather than
+# maintained by eye.
 _DEPLOY_GATED_SEED = frozenset({"slm_server", "backend", "main", "frontend", "aiml", "npu", "browser"})
 
 
@@ -402,22 +364,6 @@ def _close_over_role_groups(seed: frozenset) -> frozenset:
 _DECLARED_ONLY_GROUPS = _close_over_role_groups(_DEPLOY_GATED_SEED)
 
 
-def _strip_undeclared_privileged_groups(node: Any, node_groups: set[str]) -> set[str]:
-    """Drop privileged groups the node's DECLARED roles do not justify (#14513).
-
-    Belt-and-braces alongside the change above: a node that has already had the
-    SLM tree unpacked onto it by this very bug will legitimately detect
-    ``slm-backend`` afterwards, so filtering the agent's report alone would not
-    stop the loop on an already-contaminated node.
-    """
-    undeclared = node_groups & _DECLARED_ONLY_GROUPS
-    if not undeclared:
-        return node_groups
-
-    declared_groups = groups_for_role_tokens(list(node.roles or []))
-    return node_groups - (undeclared - declared_groups)
-
-
 def _build_hostvars(node: Any, local_ip_check: Any) -> dict:
     """Return the host-variable dict for one Node record.
 
@@ -444,13 +390,10 @@ def _build_hostvars(node: Any, local_ip_check: Any) -> dict:
         # a `browser_automation` group while role_browser_active reads
         # browser/browser_worker. That mismatch is fixed at the source in
         # ROLE_ANSIBLE_GROUPS rather than left for this stamp to paper over.
-        "node_roles": _union_roles(node),
-        # #14560: declared-only counterpart. role_active_facts.yml's five
-        # PRIVILEGED facts (backend, frontend, ai_stack, npu_worker, browser)
-        # read this instead of node_roles, so a role that only DETECTED
-        # (never declared) no longer activates that fact's deploy tasks --
-        # matching the group-side fix already applied by
-        # ``_strip_undeclared_privileged_groups``. See ``_declared_roles``.
+        "node_roles": _declared_roles(node),
+        # #19197: node_roles is declared-only (detection grants no fact);
+        # node_roles_declared is the same value, kept for the privileged facts'
+        # fallback chain and the static inventories (#14560, #14594).
         "node_roles_declared": _declared_roles(node),
     }
     if local_ip_check(node.ip_address):
@@ -468,7 +411,7 @@ def groups_for_role_tokens(role_tokens: list[str]) -> set[str]:
     report success having done nothing.
 
     Args:
-        role_tokens: role / detected_role strings for one node.
+        role_tokens: the node's declared role strings.
 
     Returns:
         Every ansible group the node belongs to.
@@ -515,6 +458,18 @@ def groups_for_role_tokens(role_tokens: list[str]) -> set[str]:
     return node_groups
 
 
+def _log_undeclared_detections(node: Any) -> None:
+    """Surface detected-but-unassigned roles so they are never silently managed (#19197)."""
+    undeclared = _undeclared_detected_roles(node)
+    if undeclared:
+        logger.warning(
+            "Node %s detects roles that are not assigned and receive no plays: %s "
+            "(assign the role or remove the service)",
+            node.node_id,
+            undeclared,
+        )
+
+
 def build_registry_inventory(nodes: list[Any], local_ip_check: Any) -> dict:
     """Build a full Ansible YAML inventory dict from the DB node list.
 
@@ -555,7 +510,8 @@ def build_registry_inventory(nodes: list[Any], local_ip_check: Any) -> dict:
         hostvars = _build_hostvars(node, local_ip_check)
         host_section[host_name] = hostvars
 
-        node_groups = _strip_undeclared_privileged_groups(node, groups_for_role_tokens(_union_roles(node)))
+        node_groups = groups_for_role_tokens(_declared_roles(node))
+        _log_undeclared_detections(node)
 
         for g in node_groups:
             if g not in groups:

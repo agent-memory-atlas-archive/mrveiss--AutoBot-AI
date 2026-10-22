@@ -384,6 +384,9 @@ _role_aliases:
 # (2) and (3). Co-located/single-host installs (where install.sh writes
 # node_roles=['autobot-backend', 'vnc']) hit the gap and got their dirs
 # wiped between deploy and validate.
+# #19197: the dynamic inventory stamps node_roles and node_roles_declared from
+# the DECLARED roles only, so no fact below activates from a detected-only role.
+#
 # #14560: the five facts below (backend, frontend, ai_stack, npu_worker,
 # browser) gate provision-fleet-roles.yml tasks that unpack a tree onto the
 # host (npm/vite, ChromaDB, OpenVINO, Playwright). #14513/#14552 filtered the

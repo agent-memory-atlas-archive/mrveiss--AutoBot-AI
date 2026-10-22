@@ -38,10 +38,12 @@ def test_node_roles_stamped_into_hostvars():
 
 
 def test_node_roles_unions_detected_roles():
+    """#19197: node_roles is declared-only; a detected role activates no fact."""
     node = _node(roles=["backend"], detected=["redis"])
     inv = build_registry_inventory([node], local_ip_check=lambda ip: False)
     roles = inv["all"]["hosts"]["00-SLM-Manager"]["node_roles"]
-    assert "backend" in roles and "redis" in roles
+    assert roles == ["backend"]
+    assert "redis" not in roles
 
 
 def test_node_roles_declared_excludes_detected_only_roles():
@@ -59,8 +61,8 @@ def test_node_roles_declared_excludes_detected_only_roles():
     assert "node_roles_declared" in hostvars, "node_roles_declared must be stamped for the privileged facts"
     assert hostvars["node_roles_declared"] == ["backend"]
     assert "frontend" not in hostvars["node_roles_declared"]
-    # node_roles (the union) is unaffected -- other tests pin this stays the union.
-    assert "frontend" in hostvars["node_roles"]
+    # node_roles is declared-only too (#19197): one definition, two names.
+    assert hostvars["node_roles"] == hostvars["node_roles_declared"]
 
 
 def test_node_roles_declared_matches_roles_only():
