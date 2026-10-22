@@ -31,18 +31,13 @@ import asyncio
 import json
 import logging
 import os
-import socket
 import statistics
 import sys
 import threading
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -67,9 +62,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 from deployment_registry import (  # noqa: E402
-    ServiceStatus,
-    DeploymentMode,
-    ServiceHealth,
     get_deployment_registry,
 )
 
