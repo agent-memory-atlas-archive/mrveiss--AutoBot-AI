@@ -24,6 +24,8 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from testkit.fake_async_session import FakeAsyncSession
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 _orm = importlib.import_module("_real_orm_import")  # sibling helper in tests/api
 SLM_ROOT = _orm.SLM_ROOT
@@ -88,13 +90,9 @@ def test_the_decommission_run_sees_autobot_base_dir_from_group_vars(executor) ->
 
 
 def test_the_provision_run_sees_autobot_base_dir_from_group_vars(executor) -> None:
-    class _Db:
-        async def commit(self) -> None:
-            return None
-
     node = SimpleNamespace(ssh_user="svc", ip_address="node.example.test", hostname="node")
     roles = [SimpleNamespace(status="pending")]
-    result = asyncio.run(nodes._execute_provision_playbook(_Db(), "n1", node, roles, ["backend"]))
+    result = asyncio.run(nodes._execute_provision_playbook(FakeAsyncSession(), "n1", node, roles, ["backend"]))
     assert result["success"], result
     [(playbook, base_dir, inventory)] = executor.seen
     assert (playbook, base_dir) == ("playbooks/provision-fleet-roles.yml", "/opt/autobot")
@@ -111,13 +109,18 @@ def test_contrast_an_inventory_in_the_ansible_root_sees_no_group_vars(tmp_path) 
         _base_dir_seen_from(bare)
 
 
-@pytest.mark.skipif(shutil.which("ansible-inventory") is None, reason="ansible not installed")
+# Resolved on the test's own PATH (a venv bin in CI): the run below passes a minimal PATH,
+# so the bare name would not be found there even when the binary exists.
+_ANSIBLE_INVENTORY = shutil.which("ansible-inventory")
+
+
+@pytest.mark.skipif(_ANSIBLE_INVENTORY is None, reason="ansible not installed")
 def test_ansible_itself_resolves_autobot_base_dir_for_a_linked_inventory(scratch) -> None:
     inv = temp_inventory.write_linked_inventory(
         "all:\n  hosts:\n    decommission_target:\n      ansible_host: node.example.test\n", "t_inv_", _ANSIBLE
     )
     out = subprocess.run(
-        ["ansible-inventory", "-i", str(inv), "--host", "decommission_target"],
+        [_ANSIBLE_INVENTORY, "-i", str(inv), "--host", "decommission_target"],
         capture_output=True,
         text=True,
         timeout=120,
