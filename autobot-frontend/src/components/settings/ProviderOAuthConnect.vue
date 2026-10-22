@@ -1,6 +1,6 @@
 <template>
   <div class="provider-oauth-connect">
-    <div class="auth-mode-toggle">
+    <div v-if="$slots.apikey" class="auth-mode-toggle">
       <button
         :class="['auth-tab', { active: authMode === 'apikey' }]"
         @click="authMode = 'apikey'"
@@ -36,10 +36,20 @@
       </div>
 
       <!-- ToS / capability notice -->
-      <p v-if="tosNote" class="tos-notice">{{ tosNote }}</p>
+      <p v-if="tosText" class="tos-notice">{{ tosText }}</p>
+
+      <!-- Operator has not configured this provider: guidance only -->
+      <div v-if="!configured" class="not-configured" data-testid="provider-not-configured">
+        <p>{{ t('settings.providerAuth.notConfigured', { provider: providerLabel }) }}</p>
+        <ul v-if="missingSettings.length" class="missing-settings">
+          <li v-for="name in missingSettings" :key="name"><code>{{ name }}</code></li>
+        </ul>
+      </div>
+
+      <template v-else>
 
       <!-- Device-code flow (headless / CLI) -->
-      <div v-if="deviceAuth && !status?.connected" class="device-flow">
+      <div v-if="useDevice && !status?.connected" class="device-flow">
         <button class="btn-secondary" :disabled="busy" @click="startDeviceFlow">
           <span v-if="busy && deviceStep === 'initiating'">{{ t('settings.providerAuth.connecting') }}</span>
           <span v-else>{{ t('settings.providerAuth.connectDeviceCode') }}</span>
@@ -60,15 +70,16 @@
       </div>
 
       <!-- Standard OAuth redirect (non-headless) -->
-      <div v-else-if="!deviceAuth && !status?.connected" class="oauth-flow">
+      <div v-else-if="!useDevice && !status?.connected" class="oauth-flow">
         <p class="oauth-description">
           {{ t('settings.providerAuth.oauthDescription', { provider: providerLabel }) }}
           {{ t('settings.providerAuth.noApiKeyRequired') }}
         </p>
-        <button class="btn-primary" :disabled="busy" @click="initiateOAuth">
+        <button class="btn-primary" data-testid="provider-signin" :disabled="busy" @click="initiateOAuth">
           {{ busy ? t('settings.providerAuth.redirecting') : t('settings.providerAuth.signInWith', { provider: providerLabel }) }}
         </button>
       </div>
+      </template>
 
       <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
     </div>
@@ -76,9 +87,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ApiClient from '@/utils/ApiClient'
+import {
+  buildProviderRedirectUri,
+  type ProviderAuthFlow,
+  type ProviderAuthScope,
+} from '@/utils/providerOAuth'
 
 interface DeviceInstruction {
   device_code: string
@@ -93,28 +109,27 @@ interface AuthStatus {
   connected: boolean
   expires_at?: number | null
   auth_kind?: string | null
+  scope?: ProviderAuthScope
 }
 
+// #19241: provider endpoints, client ids and flow availability are server-side;
+// the SPA only receives which flows work and which operator settings are missing.
 const props = withDefaults(defineProps<{
   providerName: string
   providerLabel: string
-  tosNote?: string
-  /** Use device-code flow instead of browser redirect */
-  deviceAuth?: boolean
-  deviceAuthorizationUrl?: string
-  tokenUrl?: string
-  clientId?: string
-  scope?: string
+  scope: ProviderAuthScope
+  flows?: ProviderAuthFlow[]
+  configured?: boolean
+  missingSettings?: string[]
 }>(), {
-  tosNote: '',
-  deviceAuth: false,
-  deviceAuthorizationUrl: '',
-  tokenUrl: '',
-  clientId: '',
-  scope: 'openid',
+  flows: () => [],
+  configured: true,
+  missingSettings: () => [],
 })
 
-const authMode = ref<'apikey' | 'oauth'>('apikey')
+const slots = useSlots()
+// Sections without an API-key slot (per-user accounts) show only sign-in.
+const authMode = ref<'apikey' | 'oauth'>(slots.apikey ? 'apikey' : 'oauth')
 const status = ref<AuthStatus | null>(null)
 const busy = ref(false)
 const errorMsg = ref('')
@@ -123,13 +138,24 @@ const deviceStep = ref<'idle' | 'initiating' | 'polling'>('idle')
 
 // #15031: every user-facing string, the error messages included, goes through
 // i18n; `locale` also formats the token expiry in the reader's language.
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
+
+// Redirect is preferred; device code is used only when it is the sole flow.
+const useDevice = computed(() => !props.flows.includes('redirect') && props.flows.includes('device'))
+const tosKey = computed(() => `settings.providerAuth.tos.${props.providerName}`)
+const tosText = computed(() => (te(tosKey.value) ? t(tosKey.value) : ''))
 
 onMounted(loadStatus)
 
+function errText(err: unknown, fallbackKey: string): string {
+  return (err as Error)?.message || t(fallbackKey)
+}
+
 async function loadStatus(): Promise<void> {
   try {
-    status.value = await ApiClient.get(`/api/llm-auth/status/${props.providerName}`)
+    status.value = await ApiClient.get(
+      `/api/llm-auth/status/${props.providerName}?scope=${props.scope}`,
+    )
     if (status.value?.connected) authMode.value = 'oauth'
   } catch {
     status.value = null
@@ -140,11 +166,11 @@ async function revoke(): Promise<void> {
   busy.value = true
   errorMsg.value = ''
   try {
-    await ApiClient.delete(`/api/llm-auth/${props.providerName}`)
+    await ApiClient.delete(`/api/llm-auth/${props.providerName}?scope=${props.scope}`)
     await loadStatus()
-    authMode.value = 'apikey'
+    if (slots.apikey) authMode.value = 'apikey'
   } catch (err: unknown) {
-    errorMsg.value = (err as Error).message ?? t('settings.providerAuth.disconnectFailed')
+    errorMsg.value = errText(err, 'settings.providerAuth.disconnectFailed')
   } finally {
     busy.value = false
   }
@@ -154,33 +180,33 @@ async function initiateOAuth(): Promise<void> {
   busy.value = true
   errorMsg.value = ''
   try {
-    // The backend manages the PKCE verifier + state via the code-exchange endpoint.
-    // For browser-redirect flows the SPA opens the authorize URL directly.
-    // This stub redirects to a provider-specific authorize URL when configured.
-    errorMsg.value = t('settings.providerAuth.redirectNeedsCallback')
-  } finally {
+    const resp = await ApiClient.post<{ authorize_url: string; state: string }>(
+      '/api/llm-auth/oauth/initiate',
+      {
+        provider_name: props.providerName,
+        redirect_uri: buildProviderRedirectUri(),
+        scope: props.scope,
+      },
+    )
+    window.location.assign(resp.authorize_url)
+  } catch (err: unknown) {
+    errorMsg.value = errText(err, 'settings.providerAuth.initiateFailed')
     busy.value = false
   }
 }
 
 async function startDeviceFlow(): Promise<void> {
-  if (!props.deviceAuthorizationUrl || !props.clientId) {
-    errorMsg.value = t('settings.providerAuth.deviceNotConfigured')
-    return
-  }
   busy.value = true
   deviceStep.value = 'initiating'
   errorMsg.value = ''
   try {
     const resp = await ApiClient.post('/api/llm-auth/device/initiate', {
       provider_name: props.providerName,
-      device_authorization_url: props.deviceAuthorizationUrl,
-      client_id: props.clientId,
       scope: props.scope,
     })
     deviceInstruction.value = resp as DeviceInstruction
   } catch (err: unknown) {
-    errorMsg.value = (err as Error).message ?? t('settings.providerAuth.deviceInitFailed')
+    errorMsg.value = errText(err, 'settings.providerAuth.deviceInitFailed')
   } finally {
     busy.value = false
     deviceStep.value = 'idle'
@@ -188,15 +214,13 @@ async function startDeviceFlow(): Promise<void> {
 }
 
 async function pollDeviceFlow(): Promise<void> {
-  if (!deviceInstruction.value || !props.tokenUrl) return
+  if (!deviceInstruction.value) return
   busy.value = true
   deviceStep.value = 'polling'
   errorMsg.value = ''
   try {
     const resp = await ApiClient.post('/api/llm-auth/device/poll', {
       provider_name: props.providerName,
-      token_url: props.tokenUrl,
-      client_id: props.clientId,
       device_code: deviceInstruction.value.device_code,
     })
     if ((resp as { stored: boolean }).stored) {
@@ -206,7 +230,7 @@ async function pollDeviceFlow(): Promise<void> {
       errorMsg.value = t('settings.providerAuth.stillWaiting')
     }
   } catch (err: unknown) {
-    errorMsg.value = (err as Error).message ?? t('settings.providerAuth.pollFailed')
+    errorMsg.value = errText(err, 'settings.providerAuth.pollFailed')
   } finally {
     busy.value = false
     deviceStep.value = 'idle'
@@ -255,6 +279,9 @@ function formatExpiry(ts: number): string {
 .btn-danger-sm { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; border: 1px solid var(--color-error); color: var(--color-error); background: transparent; cursor: pointer; }
 .btn-danger-sm:hover { background: var(--color-error-bg); }
 .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.75rem; }
+
+.not-configured { font-size: 0.85rem; color: var(--text-secondary); }
+.missing-settings { margin: 0.25rem 0 0 1rem; font-size: 0.8rem; }
 
 .error-msg { color: var(--color-error); font-size: 0.8rem; }
 </style>
