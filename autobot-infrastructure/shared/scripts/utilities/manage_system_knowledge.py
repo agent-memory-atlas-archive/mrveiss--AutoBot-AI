@@ -27,6 +27,7 @@ import yaml  # noqa: E402 - must follow the sys.path setup above
 
 from agents.system_knowledge_manager import SystemKnowledgeManager  # noqa: E402
 from autobot_shared.ssot_constants import CategoryDefaults  # noqa: E402
+from autobot_shared.system_knowledge_paths import system_knowledge_templates_dir  # noqa: E402
 from knowledge import KnowledgeBase  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def list_knowledge():
     logger.info("=" * 50)
 
     # List original templates
-    system_dir = Path("system_knowledge")
+    system_dir = system_knowledge_templates_dir()
     if system_dir.exists():
         logger.info("\n🔒 ORIGINAL TEMPLATES (Immutable):")
         for category_dir in system_dir.iterdir():

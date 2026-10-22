@@ -19,7 +19,9 @@ import aiofiles
 import yaml
 
 from agents.kb_librarian import KBLibrarian
+from agents.kb_librarian.stable_ids import system_fact_id
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.system_knowledge_paths import system_knowledge_templates_dir
 from constants.threshold_constants import CategoryDefaults
 from knowledge_base import KnowledgeBase
 
@@ -35,10 +37,8 @@ class SystemKnowledgeManager:
         self.librarian = KBLibrarian(knowledge_base)
 
         # Paths - use absolute paths to avoid working directory issues
-        project_root = Path(
-            __file__
-        ).parent.parent.parent  # Go up 3 levels: src/agents/system_knowledge_manager.py -> AutoBot/
-        self.system_knowledge_dir = project_root / "system_knowledge"
+        project_root = Path(__file__).parent.parent.parent  # agents/ -> autobot-backend/ -> repo root
+        self.system_knowledge_dir = system_knowledge_templates_dir()  # the one tracked template tree
         self.runtime_knowledge_dir = project_root / "data/system_knowledge"
         self.backup_dir = project_root / "data/system_knowledge_backups"
 
@@ -569,7 +569,7 @@ class SystemKnowledgeManager:
             "verified": "system_knowledge",
         }
 
-        await self.librarian.store_tool_knowledge(tool_info)
+        await self.librarian.store_tool_knowledge(tool_info, fact_id=system_fact_id("tool", tool_name))
         logger.info("Imported tool: %s", tool_name)
 
     def _format_installation(self, install_data: Dict[str, str]) -> str:
@@ -658,7 +658,7 @@ class SystemKnowledgeManager:
             "category": "workflows",
         }
 
-        await self.librarian.store_workflow_knowledge(workflow_info)
+        await self.librarian.store_workflow_knowledge(workflow_info, fact_id=system_fact_id("workflow", workflow_name))
         logger.info("Imported workflow: %s", workflow_name)
 
     def _format_pitfalls(self, pitfalls_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -719,7 +719,7 @@ class SystemKnowledgeManager:
             "verification": procedure_data.get("verification", []),
         }
 
-        await self.librarian.store_system_documentation(doc_info)
+        await self.librarian.store_system_documentation(doc_info, fact_id=system_fact_id("procedure", title))
         logger.info("Imported procedure: %s", title)
 
     def _format_procedure_issues(self, issues_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
