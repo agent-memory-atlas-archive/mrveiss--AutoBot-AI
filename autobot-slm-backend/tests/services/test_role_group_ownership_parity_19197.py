@@ -26,7 +26,6 @@ _ansible_groups_for_nodes = _parity._ansible_groups_for_nodes
 ROLE_ANSIBLE_GROUPS = _parity.ROLE_ANSIBLE_GROUPS
 
 
-
 def _wizard_groups(declared: list, detected: list) -> set:
     rows = [SimpleNamespace(node_id="n", role_name=r, assignment_type="manual") for r in declared] + [
         SimpleNamespace(node_id="n", role_name=r, assignment_type="auto") for r in detected if r not in declared
