@@ -290,12 +290,14 @@ def test_the_sweep_actually_reached_the_tree() -> None:
     # carry any. Decremented by that measured delta and no more, per the note on
     # the distinct-script floor below: this stays AT the current count so it still
     # catches a regressed matcher, and each legitimate retirement comes here and
-    # says which script it removed.
-    assert len(_SITES) >= 76, (
-        f"only found {len(_SITES)} lib source sites — expected >= 76 "
+    # says which script it removed. #14873 retired both sync-all-vms.sh copies (the
+    # `utilities/` one carried exactly one site, measured: 76 -> 75).
+    assert len(_SITES) >= 75, (
+        f"only found {len(_SITES)} lib source sites — expected >= 75 "
         "(#14041 enumerated 56 scripts; #14891 added 17 sites in 16 extensionless "
         "hooks; #15127 retired batch-configure-vms.sh and "
-        "complete-vm-sync-templates.sh, a measured delta of 1); the matcher has regressed"
+        "complete-vm-sync-templates.sh, a measured delta of 1; #14873 retired "
+        "utilities/sync-all-vms.sh, a measured delta of 1); the matcher has regressed"
     )
     rels = {site.rel for site in _SITES}
     # 55, not 56: #14371 retired
@@ -384,8 +386,9 @@ def test_every_lib_source_resolves_to_a_real_file() -> None:
             unresolvable.append(f"{rel}:{lineno} -> " + " | ".join(str(t) for t in known))
 
     # 72, not 73: the one lib source site #15127 retired with
-    # sync-grafana-dashboards.sh. Non-vacuity floor, not a census.
-    assert checked >= 71, (
+    # sync-grafana-dashboards.sh; 70, not 71: the one #14873 retired with
+    # utilities/sync-all-vms.sh. Non-vacuity floor, not a census.
+    assert checked >= 70, (
         f"only resolved {checked} source sites — the expander has regressed and "
         "this test would pass having checked almost nothing"
     )
