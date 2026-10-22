@@ -67,6 +67,8 @@ class OAuthProvider:
     # ssot_config.auth setting names of extra operator-supplied client config
     # (e.g. a tenant or region) that must be set before authorization can start.
     extra_client_config_settings: Tuple[str, ...] = ()
+    # RFC 8628 device-authorization endpoint; empty means no device-code flow (#19241).
+    device_authorization_url: str = ""
 
 
 # ---------------------------------------------------------------------------
