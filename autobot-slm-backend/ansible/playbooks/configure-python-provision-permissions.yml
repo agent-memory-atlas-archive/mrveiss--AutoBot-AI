@@ -38,42 +38,22 @@
     # matches the command literally, so these MUST equal the argv the backend
     # builds in _ensure_target_python_installed.
     ansible_playbook_bin: "/usr/bin/ansible-playbook"
-    # The backend argv is `sudo ansible-playbook <_PROVISION_PYTHON_PLAYBOOK>`
-    # (api/code_sync.py), rooted at `DEFAULT_REPO_PATH` (services/git_tracker.py):
-    # `SLM_REPO_PATH` when the backend's environment sets it, else its fallback.
-    # Sudoers exact-matches that argv, so this value follows the same two steps:
-    # the fallback below is spelled through `autobot.base_dir` (#18881) and
-    # repo_tests/provision_playbook_path_agrees_15707_test.py proves it renders
-    # byte-identical to the Python fallback; the pre_tasks then re-root it at the
-    # running backend's own `SLM_REPO_PATH` when one is set, so an override moves
-    # both sides together instead of leaving sudo refusing the command.
+    # #15705 decision -- this literal STAYS, and #15707 tracks the check it
+    # still lacks. It is not a restatement of
+    # `autobot.base_dir`; it mirrors a value produced on the Python side, and the
+    # two must be byte-identical or sudo stops working. api/code_sync.py builds
+    # `_PROVISION_PYTHON_PLAYBOOK` from `DEFAULT_REPO_PATH` and runs it as
+    # `sudo ansible-playbook <that path>`; the NOPASSWD rule written below
+    # exact-matches that argv. Deriving this from the ansible SSOT would give the
+    # path two independent sources that agree today by coincidence, and a
+    # divergence would not surface as a wrong directory -- it would surface as
+    # sudo refusing the command. And the divergence is one env var away, not a
+    # hypothetical relocation: services/git_tracker.py:33 reads
+    # `SLM_REPO_PATH`, so any deployment setting it moves the Python side while
+    # this literal and the sudoers rule below stay put.
     provision_playbook: "{{ autobot.base_dir }}/code_source/autobot-slm-backend/ansible/playbooks/provision-local-python.yml"
-    slm_backend_service: "autobot-slm-backend"
 
   pre_tasks:
-    # The process environment, not the unit file: SLM_REPO_PATH can arrive through
-    # Environment= or any EnvironmentFile=, and /proc/<pid>/environ holds what the
-    # backend's os.environ started with. No running backend leaves the fallback.
-    # Only SLM_REPO_PATH leaves the process: the backend environment carries its
-    # secrets, and registered stdout reaches job logs and -v output (no_log too).
-    - name: Read the running SLM backend's environment
-      ansible.builtin.shell: |
-        set -o pipefail
-        pid=$(systemctl show {{ slm_backend_service }}.service --property=MainPID --value)
-        if [ "${pid:-0}" -gt 0 ]; then tr '\0' '\n' < "/proc/${pid}/environ" | grep -E '^SLM_REPO_PATH=' || true; fi
-      args:
-        executable: /bin/bash
-      register: slm_backend_environ
-      changed_when: false
-      no_log: true
-
-    - name: Root the provision playbook at the backend's SLM_REPO_PATH override
-      ansible.builtin.set_fact:
-        provision_playbook: "{{ slm_repo_path_override }}/autobot-slm-backend/ansible/playbooks/provision-local-python.yml"
-      vars:
-        slm_repo_path_override: "{{ slm_backend_environ.stdout_lines | select('match', '^SLM_REPO_PATH=') | map('regex_replace', '^SLM_REPO_PATH=', '') | map('regex_replace', '/+$', '') | first | default('') }}"
-      when: slm_repo_path_override | length > 0
-
     - name: Display configuration information
       ansible.builtin.debug:
         msg:

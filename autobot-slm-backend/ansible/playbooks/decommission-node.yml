@@ -28,13 +28,6 @@
   become: true
   gather_facts: true
 
-  # The API (api/nodes.py::_run_decommission_playbook) invokes this play with a
-  # bare temp inventory that links no group_vars, so `autobot.base_dir` comes from
-  # the single definition by name -- the same load enroll-slm-agent.yml and
-  # deploy.yml do for the same reason (#15348).
-  vars_files:
-    - ../inventory/group_vars/all.yml
-
   vars:
     backup_dir: "{{ autobot.base_dir }}/backups"
     backup_timestamp: "{{ ansible_facts['date_time'].epoch }}"
