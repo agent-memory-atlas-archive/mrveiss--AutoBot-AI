@@ -10,6 +10,7 @@ re-import. One id per (kind, name) makes a repeat import update the fact instead
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Dict, List, Tuple
 
 from autobot_shared.logging_manager import get_logger
@@ -32,16 +33,39 @@ def system_fact_id(kind: str, name: str) -> str:
     return str(uuid.uuid5(_FACT_ID_NAMESPACE, f"{kind}:{name}"))
 
 
-async def store_or_update_fact(knowledge_base: Any, content: str, metadata: Dict[str, Any], fact_id: str | None = None):
-    """Store a fact; with a stable ``fact_id`` an existing fact is updated, never duplicated.
+SYSTEM_SOURCE = "system_knowledge"
+LINK_FIELD = "system_fact_id"
 
-    Without ``fact_id`` behaviour is unchanged (web research keeps its random ids).
+
+@dataclass(frozen=True)
+class SystemFactRef:
+    """Which fact a system-knowledge item is stored in, and whether the import owns it.
+
+    ``legacy`` is a fact found by (kind, name) that the import did not create (typically stored by
+    web research under a random id): it is linked, never rewritten.
     """
-    if fact_id is None:
+
+    fact_id: str
+    stable_id: str
+    legacy: bool = False
+
+
+async def store_or_update_fact(knowledge_base: Any, content: str, metadata: Dict[str, Any], ref: Any = None):
+    """Store a fact. With a :class:`SystemFactRef` an existing fact is updated, never duplicated.
+
+    - no ``ref``: behaviour unchanged (web research keeps its random ids and its source);
+    - owned fact (stable id, or tagged ``source=system_knowledge``): body and metadata update, and
+      the fact is tagged ``source=system_knowledge``;
+    - legacy fact: only the link to the stable id is added. Its text and its ``source`` stay.
+    """
+    if ref is None:
         return await knowledge_base.store_fact(content, metadata=metadata)
-    if await asyncio.to_thread(knowledge_base.get_fact, fact_id):
-        return await knowledge_base.update_fact(fact_id, content=content, metadata=metadata)
-    return await knowledge_base.store_fact(content, metadata=metadata, fact_id=fact_id)
+    if ref.legacy:
+        return await knowledge_base.update_fact(ref.fact_id, metadata={LINK_FIELD: ref.stable_id})
+    metadata = {**metadata, "source": SYSTEM_SOURCE, LINK_FIELD: ref.stable_id}
+    if await asyncio.to_thread(knowledge_base.get_fact, ref.fact_id):
+        return await knowledge_base.update_fact(ref.fact_id, content=content, metadata=metadata)
+    return await knowledge_base.store_fact(content, metadata=metadata, fact_id=ref.fact_id)
 
 
 async def _durable_batches() -> AsyncIterator[List[Dict[str, Any]]]:
@@ -70,19 +94,26 @@ class SystemFactIds:
 
     def __init__(self, batches: Callable[[], AsyncIterator[List[Dict[str, Any]]]] = _durable_batches) -> None:
         self._batches = batches
-        self._existing: Dict[Tuple[str, str], str] = {}
+        self._existing: Dict[Tuple[str, str], Tuple[str, bool]] = {}
 
     async def load(self) -> None:
         by_type = {kind_type: (kind, field) for kind, (kind_type, field) in _KIND_METADATA.items()}
-        existing: Dict[Tuple[str, str], str] = {}
+        existing: Dict[Tuple[str, str], Tuple[str, bool]] = {}
         async for batch in self._batches():
             for fact in batch:
                 metadata = fact["metadata"]
                 kind, field = by_type[metadata["type"]]
-                if metadata.get(field):
-                    existing.setdefault((kind, metadata[field]), fact["fact_id"])
+                name = metadata.get(field)
+                if not name:
+                    continue
+                owned = fact["fact_id"] == system_fact_id(kind, name) or metadata.get("source") == SYSTEM_SOURCE
+                held = existing.get((kind, name))
+                if held is None or (owned and not held[1]):  # oldest wins; an owned fact beats a legacy one
+                    existing[(kind, name)] = (fact["fact_id"], owned)
         self._existing = existing
         logger.info("Indexed %d existing system-knowledge facts", len(existing))
 
-    def of(self, kind: str, name: str) -> str:
-        return self._existing.get((kind, name)) or system_fact_id(kind, name)
+    def of(self, kind: str, name: str) -> SystemFactRef:
+        stable = system_fact_id(kind, name)
+        fact_id, owned = self._existing.get((kind, name), (stable, True))
+        return SystemFactRef(fact_id=fact_id, stable_id=stable, legacy=not owned)

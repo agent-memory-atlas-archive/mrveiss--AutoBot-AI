@@ -24,7 +24,7 @@ from knowledge_base import KnowledgeBase
 from .formatters import ToolInfoFormatter
 from .parsers import InstructionParser
 from .processors import ResearchResultsProcessor, ResultProcessor, ToolInfoData
-from .stable_ids import store_or_update_fact
+from .stable_ids import SystemFactRef, store_or_update_fact
 from .text_extraction import TextExtractor
 
 logger = get_logger(__name__)
@@ -327,7 +327,7 @@ class KBLibrarian:
         await self._store_tool_research_results(tool_type, detailed_tools)
         return detailed_tools
 
-    async def store_tool_knowledge(self, tool_info: Dict[str, Any], fact_id: str | None = None):
+    async def store_tool_knowledge(self, tool_info: Dict[str, Any], ref: SystemFactRef | None = None):
         """Store comprehensive tool information and documentation in KB.
 
         Issue #665: Refactored to use _build_tool_document_content helper.
@@ -343,7 +343,7 @@ class KBLibrarian:
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         }
 
-        await store_or_update_fact(self.knowledge_base, document_content, metadata, fact_id)
+        await store_or_update_fact(self.knowledge_base, document_content, metadata, ref)
         logger.info("Stored knowledge for tool: %s", tool_name)
 
         await publish_event(
@@ -628,7 +628,7 @@ METADATA:
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         }
 
-    async def store_system_documentation(self, doc_info: Dict[str, Any], fact_id: str | None = None):
+    async def store_system_documentation(self, doc_info: Dict[str, Any], ref: SystemFactRef | None = None):
         """
         Store general system documentation and procedures.
 
@@ -643,7 +643,7 @@ METADATA:
         document_content = self._build_system_doc_content(doc_title, doc_type, doc_info)
         metadata = self._build_system_doc_metadata(doc_title, doc_type, doc_info)
 
-        await store_or_update_fact(self.knowledge_base, document_content, metadata, fact_id)
+        await store_or_update_fact(self.knowledge_base, document_content, metadata, ref)
         logger.info("Stored system documentation: %s", doc_title)
 
     def _build_workflow_document_content(self, workflow_name: str, workflow_info: Dict[str, Any]) -> str:
@@ -712,14 +712,14 @@ METADATA:
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         }
 
-    async def store_workflow_knowledge(self, workflow_info: Dict[str, Any], fact_id: str | None = None):
+    async def store_workflow_knowledge(self, workflow_info: Dict[str, Any], ref: SystemFactRef | None = None):
         """Store complete workflow documentation for complex procedures."""
         workflow_name = workflow_info.get("name", "Unknown Workflow")
 
         document_content = self._build_workflow_document_content(workflow_name, workflow_info)
         metadata = self._build_workflow_metadata(workflow_name, workflow_info)
 
-        await store_or_update_fact(self.knowledge_base, document_content, metadata, fact_id)
+        await store_or_update_fact(self.knowledge_base, document_content, metadata, ref)
         logger.info("Stored workflow documentation: %s", workflow_name)
 
 

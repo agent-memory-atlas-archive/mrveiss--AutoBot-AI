@@ -42,8 +42,9 @@ class _FakeKB:
 
     async def update_fact(self, fact_id, content=None, metadata=None):
         self.updated += 1
-        self.facts[fact_id] = content
-        self.meta[fact_id] = dict(metadata or {})
+        if content is not None:
+            self.facts[fact_id] = content
+        self.meta[fact_id] = {**self.meta.get(fact_id, {}), **(metadata or {})}  # the real update merges
         return {"status": "success"}
 
 
@@ -105,26 +106,46 @@ async def _import(kb: _FakeKB, tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_existing_node_with_random_id_facts_gets_no_duplicate(tmp_path) -> None:
-    """A fact stored before stable ids (random id, no unique_key) is adopted in place, id kept."""
+async def test_a_fresh_install_tags_every_fact_system_knowledge(tmp_path) -> None:
+    kb = _FakeKB()
+    await _import(kb, tmp_path)
+    assert kb.meta
+    assert {m["source"] for m in kb.meta.values()} == {"system_knowledge"}
+    assert all(fid == m["system_fact_id"] for fid, m in kb.meta.items())
+
+
+async def _seeded(tmp_path, legacy_meta: dict) -> tuple[_FakeKB, str, int]:
+    """A node holding one random-id fact for a real template tool, with ``legacy_meta`` merged in."""
     clean = _FakeKB()
     await _import(clean, tmp_path)
-    metas = list(clean.meta.values())
-    tool = next(m["tool_name"] for m in metas if m["type"] == "tool_documentation")
-    workflow = next(m["workflow_name"] for m in metas if m["type"] == "workflow_documentation")
-
-    node = _FakeKB()  # an existing node: the item is already held under a random id
-    node.facts = {"legacy-tool": "old", "legacy-wf": "old"}
+    tool = next(m["tool_name"] for m in clean.meta.values() if m["type"] == "tool_documentation")
+    node = _FakeKB()
+    node.facts = {"legacy-tool": "RESEARCHED TEXT"}
     node.meta = {
-        "legacy-tool": {"type": "tool_documentation", "tool_name": tool},
-        "legacy-wf": {"type": "workflow_documentation", "workflow_name": workflow},
+        "legacy-tool": {"type": "tool_documentation", "tool_name": tool, "source": "web_research", **legacy_meta}
     }
     await _import(node, tmp_path)
+    return node, tool, len(clean.facts)
 
-    holders = lambda key, name: [f for f, m in node.meta.items() if m.get(key) == name]  # noqa: E731
-    assert holders("tool_name", tool) == ["legacy-tool"], "the tool was stored a second time"
-    assert holders("workflow_name", workflow) == ["legacy-wf"], "the workflow was stored a second time"
-    assert node.facts["legacy-tool"] != "old", "the legacy fact was not updated in place"
-    assert len(node.facts) == len(clean.facts), "an existing-node import changed the fact count"
-    await _import(node, tmp_path)  # and it stays one on the next run
-    assert len(node.facts) == len(clean.facts)
+
+@pytest.mark.asyncio
+async def test_an_adopted_legacy_fact_keeps_its_text_and_gains_the_link(tmp_path) -> None:
+    node, tool, clean_count = await _seeded(tmp_path, {})
+    holders = [f for f, m in node.meta.items() if m.get("tool_name") == tool]
+    assert holders == ["legacy-tool"], "the tool was stored a second time"
+    assert node.facts["legacy-tool"] == "RESEARCHED TEXT", "researched text was overwritten"
+    assert node.meta["legacy-tool"]["source"] == "web_research", "the legacy source was rewritten"
+    assert node.meta["legacy-tool"]["system_fact_id"] == system_fact_id("tool", tool)
+    assert len(node.facts) == clean_count, "an existing-node import changed the fact count"
+    await _import(node, tmp_path)  # and it stays one, unchanged, on the next run
+    assert len(node.facts) == clean_count
+    assert node.facts["legacy-tool"] == "RESEARCHED TEXT"
+
+
+@pytest.mark.asyncio
+async def test_a_fact_the_import_owns_is_updated_body_included(tmp_path) -> None:
+    node, tool, clean_count = await _seeded(tmp_path, {"source": "system_knowledge"})
+    assert [f for f, m in node.meta.items() if m.get("tool_name") == tool] == ["legacy-tool"]
+    assert node.facts["legacy-tool"] != "RESEARCHED TEXT", "an owned fact kept a stale body"
+    assert node.meta["legacy-tool"]["source"] == "system_knowledge"
+    assert len(node.facts) == clean_count

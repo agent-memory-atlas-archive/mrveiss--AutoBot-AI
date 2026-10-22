@@ -351,7 +351,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             "verified": "system_knowledge",
         }
 
-        await self.librarian.store_tool_knowledge(tool_info, fact_id=self.fact_ids.of("tool", tool_name))
+        await self.librarian.store_tool_knowledge(tool_info, ref=self.fact_ids.of("tool", tool_name))
         logger.info("Imported tool: %s", tool_name)
 
     def _format_installation(self, install_data: Dict[str, str]) -> str:
@@ -440,9 +440,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             "category": "workflows",
         }
 
-        await self.librarian.store_workflow_knowledge(
-            workflow_info, fact_id=self.fact_ids.of("workflow", workflow_name)
-        )
+        await self.librarian.store_workflow_knowledge(workflow_info, ref=self.fact_ids.of("workflow", workflow_name))
         logger.info("Imported workflow: %s", workflow_name)
 
     def _format_pitfalls(self, pitfalls_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -503,7 +501,7 @@ class SystemKnowledgeManager(DefaultKnowledgeMixin):
             "verification": procedure_data.get("verification", []),
         }
 
-        await self.librarian.store_system_documentation(doc_info, fact_id=self.fact_ids.of("procedure", title))
+        await self.librarian.store_system_documentation(doc_info, ref=self.fact_ids.of("procedure", title))
         logger.info("Imported procedure: %s", title)
 
     def _format_procedure_issues(self, issues_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
