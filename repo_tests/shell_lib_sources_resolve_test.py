@@ -318,7 +318,8 @@ def test_the_sweep_actually_reached_the_tree() -> None:
     # above predicts — CI reported only the site-count floor, and this one
     # surfaced from the pre-push hook after that was fixed. When lowering one
     # floor here, re-run the whole function rather than the failing line.
-    assert len(rels) >= 69, f"only {len(rels)} distinct scripts"
+    # 68, not 69: #14873 retired utilities/sync-all-vms.sh (one script, one site).
+    assert len(rels) >= 68, f"only {len(rels)} distinct scripts"
     assert (
         "autobot-infrastructure/shared/scripts/vm-management/status-all-vms.sh" in rels
     ), "the walk no longer reaches a known call site"
