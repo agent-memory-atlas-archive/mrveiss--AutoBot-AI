@@ -71,7 +71,6 @@
     "get_npu_client",
     "get_redis_client",
     "get_redis_config",
-    "get_service_registry",
     "in_scope",
     "is_test_path",
     "lifespan",
