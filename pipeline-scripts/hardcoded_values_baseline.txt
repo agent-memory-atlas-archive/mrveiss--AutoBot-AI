@@ -844,7 +844,6 @@
 5|ssot|autobot-infrastructure/shared/scripts/utilities/frontend_api_utility.js|:8001
 1|ssot|autobot-infrastructure/shared/scripts/utilities/frontend_api_utility.js|deepseek-r1:14b
 1|other|autobot-infrastructure/shared/scripts/utilities/index_all_man_pages.py|30
-1|other|autobot-infrastructure/shared/scripts/utilities/migrate_codebase_to_chromadb.py|30
 3|ssot|autobot-infrastructure/shared/scripts/utilities/npu_worker.py|llama3.2:1b
 1|ssot|autobot-infrastructure/shared/scripts/utilities/npu_worker_design.py|:6379
 2|ssot|autobot-infrastructure/shared/scripts/utilities/npu_worker_design.py|llama3.2:1b
