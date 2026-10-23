@@ -28,7 +28,26 @@ def test_api_paths_are_read_from_the_generated_types():
     assert bw.api_paths(types) == ["/api/health", "/api/knowledge/search"]
 
 
-def test_the_api_page_names_only_served_paths():
+def test_reference_links_are_rewritten_and_fenced_code_is_left_alone():
+    md = "See [x][1].\n\n[1]: ../a.md#top\n[2]: https://example.com\n\n```\n[k](./code.md)\n```\n"
+    out = bw.rewrite_links(md, "docs/user/g.md", SHA, URL)
+    assert f"[1]: {URL}/blob/{SHA}/docs/a.md#top" in out
+    assert "[2]: https://example.com" in out
+    assert "[k](./code.md)" in out
+
+
+def test_private_addresses_and_home_paths_are_redacted_and_scanned():
+    private = ".".join(["192", "168", "1", "20"])  # built at runtime: no address literal in source
+    public = ".".join(["8", "8", "8", "8"])
+    text = f"host {private} and {public}; see /home/someone/x and /opt/autobot/y"
+    out = bw.redact(text)
+    assert private not in out and "<private-ip>" in out and public in out
+    assert "/home/someone" not in out and "/opt/autobot/y" in out
+    assert bw.scan_output("P", out) == []
+    assert bw.scan_output("P", text) == [f"P: {private}", "P: /home/someone"]
+
+
+def test_the_api_page_check_is_self_consistent_with_its_path_list():
     paths = ["/api/health", "/api/knowledge/search"]
     page = bw.render_api(paths, SHA, URL)
     assert bw.check_api_page(page, paths) == []

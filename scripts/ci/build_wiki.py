@@ -9,7 +9,13 @@ generated page opens with a header naming its source path and commit. Relative l
 rewritten to the repository at that commit, since they would break inside the wiki.
 
 The API page is generated from the backend's OpenAPI paths (the generated frontend types), so
-no path can appear there that the code does not serve -- ``check_api_page`` enforces it.
+it lists only paths the backend serves. ``check_api_page`` is a SELF-CONSISTENCY check -- it
+compares the page with the same path list it was rendered from, guarding the renderer, not the
+source; the source's fidelity is the generated types' own CI check (verify-generated-types).
+
+The wiki is public: private (RFC 1918) addresses and home-directory paths in a source are
+redacted in the output, and ``scan_output`` fails the build if any survive. /opt/autobot and
+/var/log/autobot are the documented install layout and are kept.
 
 Usage: build_wiki.py OUT_DIR [--sha SHA]
 """
@@ -34,6 +40,10 @@ MANIFEST = ROOT / "docs" / "wiki" / "manifest.yml"
 API_TYPES = ROOT / "autobot-frontend" / "src" / "types" / "generated" / "api.ts"
 _API_PATH = re.compile(r'^    "(/api/[^"]*)": \{', re.MULTILINE)
 _LINK = re.compile(r"(\]\()([^)\s#]+)(#[^)\s]*)?(\))")
+_REF_DEF = re.compile(r"^(\s{0,3}\[[^\]]+\]:\s+)(\S+?)(#\S*)?(\s.*)?$", re.MULTILINE)
+_FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
+_PRIVATE_IP = re.compile(r"\b(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b")
+_HOME = re.compile(r"/home/[\w.-]+")
 
 
 def repo_url() -> str:
@@ -64,22 +74,48 @@ def header(source: str, sha: str, url: str) -> str:
     )
 
 
+def _resolve(target: str, base: Path, sha: str, url: str) -> str | None:
+    """*target* as a repository URL at *sha*, or None when it is absolute, a scheme, or root-relative."""
+    if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE) or target.startswith("/"):
+        return None
+    parts = [p for p in (base / target).as_posix().split("/") if p not in ("", ".")]
+    while ".." in parts:
+        i = parts.index("..")
+        parts[max(0, i - 1) : i + 1] = []
+    return f"{url}/blob/{sha}/{'/'.join(parts)}"
+
+
 def rewrite_links(markdown: str, source: str, sha: str, url: str) -> str:
-    """Point relative links at the repository at *sha*; absolute and anchor links are kept."""
+    """Point relative links -- inline and reference-style -- at the repository at *sha*.
+    Absolute, anchor and root links are kept, and fenced code is left untouched."""
     base = Path(source).parent
 
-    def fix(m: re.Match) -> str:
-        target = m.group(2)
-        if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE) or target.startswith("/"):
-            return m.group(0)
-        resolved = (base / target).as_posix()
-        parts = [p for p in resolved.split("/") if p not in ("", ".")]
-        while ".." in parts:
-            i = parts.index("..")
-            parts[max(0, i - 1) : i + 1] = []
-        return f"{m.group(1)}{url}/blob/{sha}/{'/'.join(parts)}{m.group(3) or ''}{m.group(4)}"
+    def inline(m: re.Match) -> str:
+        new = _resolve(m.group(2), base, sha, url)
+        return m.group(0) if new is None else f"{m.group(1)}{new}{m.group(3) or ''}{m.group(4)}"
 
-    return _LINK.sub(fix, markdown)
+    def ref(m: re.Match) -> str:
+        new = _resolve(m.group(2), base, sha, url)
+        return m.group(0) if new is None else f"{m.group(1)}{new}{m.group(3) or ''}{m.group(4) or ''}"
+
+    out, last = [], 0
+    for fence in _FENCE.finditer(markdown):
+        prose = markdown[last : fence.start()]
+        out.append(_REF_DEF.sub(ref, _LINK.sub(inline, prose)))
+        out.append(fence.group(0))
+        last = fence.end()
+    out.append(_REF_DEF.sub(ref, _LINK.sub(inline, markdown[last:])))
+    return "".join(out)
+
+
+def redact(text: str) -> str:
+    """Private addresses and home paths out: the wiki is public."""
+    return _HOME.sub("<home>", _PRIVATE_IP.sub("<private-ip>", text))
+
+
+def scan_output(name: str, text: str) -> list[str]:
+    """Anything internal that survived redaction -- must be empty."""
+    return [f"{name}: {m}" for m in _PRIVATE_IP.findall(text) + _HOME.findall(text)]
 
 
 def render_api(paths: list[str], sha: str, url: str) -> str:
@@ -118,6 +154,10 @@ def build(out: Path, sha: str, url: str) -> list[str]:
             text = header(source, sha, url) + rewrite_links(
                 (ROOT / source).read_text(encoding="utf-8"), source, sha, url
             )
+        text = redact(text)
+        leaked = scan_output(name, text)
+        if leaked:
+            raise SystemExit(f"internal values would be published: {leaked[:5]}")
         (out / f"{name}.md").write_text(text, encoding="utf-8")
     return list(pages)
 
