@@ -52,7 +52,9 @@ def _slm_sources(include_tests: bool) -> dict[str, str]:
 
 
 def _is_env_read(node: ast.AST, name: str) -> bool:
-    """``os.environ.get(name, ...)`` / ``os.getenv(name, ...)`` / ``os.environ[name]``."""
+    """``env(name)`` (the registry), ``os.environ.get(name, ...)``, ``os.getenv(name, ...)``, ``os.environ[name]``."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "env":
+        return bool(node.args) and isinstance(node.args[0], ast.Constant) and node.args[0].value == name
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in {"get", "getenv"}:
         return bool(node.args) and isinstance(node.args[0], ast.Constant) and node.args[0].value == name
     if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
@@ -98,7 +100,57 @@ def test_slm_repo_path_guard_fails_on_a_deliberate_copy():
     sources = _slm_sources(include_tests=False)
     sources["services/code_distributor.py"] += '\nDEFAULT_REPO_PATH = os.environ.get("SLM_REPO_PATH", "/x")\n'
     sources["services/other.py"] = 'import os\nROOT = os.getenv("SLM_REPO_PATH")\n'
-    assert repo_path_homes(sources) == ["services/code_distributor.py", _REPO_PATH_HOME, "services/other.py"]
+    sources["services/third.py"] = 'from autobot_shared.env_registry import env\nROOT = env("SLM_REPO_PATH")\n'
+    expected = ["services/code_distributor.py", _REPO_PATH_HOME, "services/other.py", "services/third.py"]
+    assert repo_path_homes(sources) == expected
+
+
+def registrations(sources: dict[str, str], name: str) -> list[str]:
+    """Registry modules that register *name*: its default and meaning are written where it is registered."""
+    return sorted(
+        rel
+        for rel, text in sources.items()
+        for node in ast.walk(ast.parse(text))
+        if isinstance(node, ast.Call)
+        and ast.unparse(node.func) in {"_register", "EnvVarSpec"}
+        and name in [_literal(a) for a in [*node.args[:1], *(k.value for k in node.keywords if k.arg == "name")]]
+    )
+
+
+def _literal(node: ast.AST):
+    return node.value if isinstance(node, ast.Constant) else None
+
+
+def _registry_sources() -> dict[str, str]:
+    shared = _SLM.parent / "autobot_shared"
+    return {p.name: p.read_text(encoding="utf-8") for p in sorted(shared.glob("env_registry*.py"))}
+
+
+def _default_arg(sources: dict[str, str], rel: str, name: str) -> str:
+    """Source of the default given to *name*'s one registration in *rel*."""
+    for node in ast.walk(ast.parse(sources[rel])):
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "_register" and _literal(node.args[0]) == name:
+            return ast.unparse(node.args[2])
+    raise AssertionError(f"{name} is not registered in {rel}")
+
+
+def _git_tracker_fallback() -> str:
+    tree = ast.parse((_SLM / _REPO_PATH_HOME).read_text(encoding="utf-8"))
+    assigns = [n for n in tree.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == "DEFAULT_REPO_PATH"]
+    return ast.unparse(assigns[0].value.args[1])
+
+
+def test_slm_repo_path_is_documented_once_and_both_defaults_are_the_fleet_constant():
+    sources = _registry_sources()
+    assert registrations(sources, "SLM_REPO_PATH") == ["env_registry_npu.py"]
+    assert _default_arg(sources, "env_registry_npu.py", "SLM_REPO_PATH") == "FLEET_CODE_SOURCE_DIR"
+    assert _git_tracker_fallback() == "FLEET_CODE_SOURCE_DIR"
+
+
+def test_registration_guard_fails_on_a_second_registration():
+    sources = _registry_sources()
+    sources["env_registry_slm.py"] += '\n_register("SLM_REPO_PATH", str, "/x", "copy", "slm")\n'
+    assert registrations(sources, "SLM_REPO_PATH") == ["env_registry_npu.py", "env_registry_slm.py"]
 
 
 def test_code_distributor_packages_from_the_git_tracker_checkout():

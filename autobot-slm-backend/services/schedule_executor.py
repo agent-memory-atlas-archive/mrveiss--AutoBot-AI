@@ -148,15 +148,15 @@ def describe_cron_expression(expression: str) -> str:
 
 
 async def get_schedule_target_nodes(db, schedule: UpdateSchedule) -> list:
-    """The outdated nodes a schedule updates: every one, or only the selected ones (#665, #19367).
+    """The outdated nodes a schedule updates (#665, #19367): the one selection for run-now and the timed run.
 
-    The one selection for run-now and the timed run. Owner decision on #19367: a ``specific``
-    schedule touches only those of its selected nodes that are outdated; up-to-date nodes are never
-    redeployed or restarted.
+    Owner decision on #19367: a ``specific`` schedule touches only those of its selected nodes that are
+    outdated, so one with no nodes selected touches none -- never the whole fleet. Any other target
+    type (``all``, and ``tag``, which has no tag filter) updates every outdated node.
     """
     query = select(Node).where(Node.code_status == CodeStatus.OUTDATED.value)
-    if schedule.target_type == "specific" and schedule.target_nodes:
-        query = query.where(Node.node_id.in_(schedule.target_nodes))
+    if schedule.target_type == "specific":
+        query = query.where(Node.node_id.in_(schedule.target_nodes or []))
     result = await db.execute(query)
     return result.scalars().all()
 

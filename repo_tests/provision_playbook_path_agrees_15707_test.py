@@ -68,32 +68,26 @@ def ansible_playbook_path() -> str:
 
 
 def default_repo_path() -> str:
-    """`DEFAULT_REPO_PATH`'s fallback, evaluated from git_tracker's AST rather than restated.
+    """`DEFAULT_REPO_PATH`'s fallback, resolved from git_tracker's AST rather than restated.
 
-    Since #15708 the fallback is ``f"{FLEET_INSTALL_ROOT}/code_source"``: literal parts are taken as
-    written and each ``{NAME}`` is resolved from ``autobot_shared.fleet_constants``, which git_tracker
-    must import it from. Reading the AST means a commented-out copy is never matched.
+    The fallback is a ``fleet_constants`` name git_tracker must import from there (#15708); it is
+    resolved against that module. Reading the AST means a commented-out copy never matches.
     """
     tree = ast.parse(_GIT_TRACKER.read_text(encoding="utf-8"))
-    fleet = {a.asname or a.name for n in tree.body if isinstance(n, ast.ImportFrom)
-             and n.module == "autobot_shared.fleet_constants" for a in n.names}  # fmt: skip
+    fleet = {
+        a.asname or a.name
+        for n in tree.body
+        if isinstance(n, ast.ImportFrom) and n.module == "autobot_shared.fleet_constants"
+        for a in n.names
+    }
     call = next(
         n.value
         for n in tree.body
         if isinstance(n, ast.Assign) and [ast.unparse(t) for t in n.targets] == ["DEFAULT_REPO_PATH"]
     )
     assert ast.unparse(call.func) == "os.environ.get" and len(call.args) == 2, "DEFAULT_REPO_PATH is not an env read"
-    default = call.args[1]
-    parts = default.values if isinstance(default, ast.JoinedStr) else [default]
-    return "".join(_resolve_part(part, fleet) for part in parts)
-
-
-def _resolve_part(part: ast.expr, fleet: set) -> str:
-    """One piece of the fallback: a literal, or a fleet_constants name git_tracker imported."""
-    if isinstance(part, ast.Constant):
-        return part.value
-    name = ast.unparse(part.value)
-    assert name in fleet, f"{name} in DEFAULT_REPO_PATH's fallback is not imported from fleet_constants"
+    name = ast.unparse(call.args[1])
+    assert name in fleet, f"DEFAULT_REPO_PATH's fallback {name} is not imported from fleet_constants"
     return getattr(fleet_constants, name)
 
 

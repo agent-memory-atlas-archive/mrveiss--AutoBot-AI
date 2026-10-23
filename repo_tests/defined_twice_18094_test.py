@@ -268,6 +268,8 @@ def test_the_ansible_copies_agree_with_fleet_constants() -> None:
     assert base_dir == fleet_constants.FLEET_INSTALL_ROOT
     assert fleet_constants.FLEET_AGENT_DIR == fleet_constants.FLEET_INSTALL_ROOT + agent_suffix
     assert agent["slm_heartbeat_interval"] == fleet_constants.DEFAULT_HEARTBEAT_INTERVAL
+    code_source = _yaml("roles/autobot_shared/defaults/main.yml")["code_source_dir"]
+    assert code_source.replace("{{ autobot.base_dir }}", base_dir) == fleet_constants.FLEET_CODE_SOURCE_DIR  # #15708
 
 
 # --- contrast: each shape #18094 found must be flagged -------------------------------------------
