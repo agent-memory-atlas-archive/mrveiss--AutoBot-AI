@@ -147,24 +147,17 @@ def describe_cron_expression(expression: str) -> str:
         return expression
 
 
-async def _get_target_nodes(db, schedule: UpdateSchedule):
-    """
-    Query target nodes based on schedule configuration.
+async def get_schedule_target_nodes(db, schedule: UpdateSchedule) -> list:
+    """The outdated nodes a schedule updates: every one, or only the selected ones (#665, #19367).
 
-    Helper for execute_schedule (Issue #665).
+    The one selection for run-now and the timed run. Owner decision on #19367: a ``specific``
+    schedule touches only those of its selected nodes that are outdated; up-to-date nodes are never
+    redeployed or restarted.
     """
-    if schedule.target_type == "all":
-        result = await db.execute(select(Node).where(Node.code_status == CodeStatus.OUTDATED.value))
-    elif schedule.target_type == "specific" and schedule.target_nodes:
-        result = await db.execute(
-            select(Node).where(
-                Node.node_id.in_(schedule.target_nodes),
-                Node.code_status == CodeStatus.OUTDATED.value,
-            )
-        )
-    else:
-        # Default to all outdated nodes
-        result = await db.execute(select(Node).where(Node.code_status == CodeStatus.OUTDATED.value))
+    query = select(Node).where(Node.code_status == CodeStatus.OUTDATED.value)
+    if schedule.target_type == "specific" and schedule.target_nodes:
+        query = query.where(Node.node_id.in_(schedule.target_nodes))
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -205,7 +198,7 @@ async def execute_schedule(schedule: UpdateSchedule) -> Tuple[bool, str]:
     logger.info("Executing schedule: %s (id=%d)", schedule.name, schedule.id)
     try:
         async with db_service.session() as db:
-            nodes = await _get_target_nodes(db, schedule)
+            nodes = await get_schedule_target_nodes(db, schedule)
             if not nodes:
                 logger.info("Schedule %s has no outdated nodes to sync", schedule.name)
                 return True, "No outdated nodes to sync"

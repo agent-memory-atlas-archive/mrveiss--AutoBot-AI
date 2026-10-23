@@ -211,7 +211,7 @@ def _wire(executor, monkeypatch, node_ids):
     async def _targets(db, schedule):
         return nodes
 
-    monkeypatch.setattr(executor, "_get_target_nodes", _targets)
+    monkeypatch.setattr(executor, "get_schedule_target_nodes", _targets)
     return SimpleNamespace(id=7, name="nightly")
 
 

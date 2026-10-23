@@ -115,6 +115,7 @@ from services.drift_checker import (
 from services.fleet_sync_guard import assert_no_running_sync, fleet_sync_lock
 from services.git_tracker import DEFAULT_BRANCH, DEFAULT_REPO_PATH, get_git_tracker
 from services.playbook_executor import get_playbook_executor
+from services.schedule_executor import get_schedule_target_nodes
 from services.slm_frontend_build import build_slm_frontend as _build_slm_frontend
 from services.slm_frontend_build import write_slm_deployed_commit_marker as _write_slm_deployed_commit_marker
 from services.ssh_utils import _ssh_key_usable, ssh_remote_path
@@ -4090,22 +4091,6 @@ async def delete_schedule(
     return {"success": True, "message": f"Schedule '{schedule_name}' deleted"}
 
 
-async def _get_schedule_target_nodes(db: AsyncSession, schedule: UpdateSchedule) -> List[Node]:
-    """
-    Get target nodes based on schedule configuration.
-
-    Helper for run_schedule (Issue #665).
-    """
-    if schedule.target_type == "all":
-        nodes_result = await db.execute(select(Node).where(Node.code_status == CodeStatus.OUTDATED.value))
-    elif schedule.target_type == "specific" and schedule.target_nodes:
-        nodes_result = await db.execute(select(Node).where(Node.node_id.in_(schedule.target_nodes)))
-    else:
-        nodes_result = await db.execute(select(Node).where(Node.code_status == CodeStatus.OUTDATED.value))
-
-    return nodes_result.scalars().all()
-
-
 def _create_fleet_sync_job(nodes: List[Node], schedule: UpdateSchedule) -> FleetSyncJobState:
     """A schedule's fleet sync job; a ``manual`` restart strategy never restarts (#665, #19352)."""
     job = FleetSyncJobState(
@@ -4157,7 +4142,7 @@ async def run_schedule(
         )
 
     # Get target nodes based on schedule configuration
-    nodes = await _get_schedule_target_nodes(db, schedule)
+    nodes = await get_schedule_target_nodes(db, schedule)
 
     if not nodes:
         return ScheduleRunResponse(
