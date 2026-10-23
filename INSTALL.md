@@ -201,6 +201,20 @@ it. A stack started without the line has no main-app account; add the line with
 `bash docker/generate-secrets.sh` (it keeps every value already in the file) and restart the
 backend.
 
+Every credential compose needs comes from this file; none has a built-in default. If one is
+missing, `docker compose` stops with an error that names it (#17793).
+
+**Upgrading a stack that already has data.** An existing Postgres volume keeps the database
+password it was created with and ignores a new one. So if `docker/.env.secrets` has no
+`AUTOBOT_DB_PASSWORD` line, `generate-secrets.sh` refuses to create one while the Postgres
+volume exists. Add the password the stack already uses (a stack started from the old tracked
+default used `autobot`), then rerun the script to add any other missing line:
+
+```bash
+echo 'AUTOBOT_DB_PASSWORD=<the password this stack already uses>' >> docker/.env.secrets
+bash docker/generate-secrets.sh
+```
+
 ### SLM web GUI first (smallest start)
 
 Start only the Service Lifecycle Manager and its web GUI, then add the rest of the fleet

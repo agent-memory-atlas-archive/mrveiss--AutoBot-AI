@@ -196,6 +196,10 @@ ALLOWED_ADDITIONS = {
             ".python-version",
             # #18729: docker_admin_seed_18729_test.py reads every Docker entrypoint.
             "docker/*/*entrypoint*.sh",
+            # #17500: compose_exposure_and_credentials_17500_test.py checks every compose file.
+            "docker-compose.hardened.yml",
+            "docker-compose.override.example.yml",
+            "docker/mcp-bridges.yml",
             # #18666: install_release_signed_18666_test.py compares release.yml's cosign pin with this one.
             f"{WORKFLOWS}/image-sign.yml",
             # #18666: the same test runs the signing-key gate against the real cosign.pub.
