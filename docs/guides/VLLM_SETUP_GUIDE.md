@@ -227,7 +227,7 @@ print(f"Second request: {response2.processing_time:.2f}s (cached)")
 code_response = await llm.chat_completion(
     messages=[{"role": "user", "content": "Review this Python code: ..."}],
     provider="vllm",
-    model_name="codellama/CodeLlama-7b-Instruct-hf"
+    model_name="codellama/CodeLlama-7b-Instruct-hf"  # not provisioned
 )
 
 # For general tasks: Use Llama-3.2-3B
