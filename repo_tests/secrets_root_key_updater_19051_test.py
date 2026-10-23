@@ -37,8 +37,8 @@ def test_the_role_and_the_updater_share_one_back_fill() -> None:
     assert "include_tasks: secrets_root_key.yml" in _read(ROLE_MAIN)
     # The files a second copy would land in: the role's own flow, the updater, the backend role.
     # A named list, not a tree glob, so this guard declares no uncovered read (#15900).
-    marker = 'regexp: "^AUTOBOT_SECRETS_ROOT_KEY="'
-    copies = [p.name for p in (ROLE_MAIN, UPDATER, BACKEND_TASKS, BACKFILL) if marker in _read(p)]
+    marker = re.compile(r"^\s*regexp: .*AUTOBOT_SECRETS_ROOT_KEY=", re.MULTILINE)
+    copies = [p.name for p in (ROLE_MAIN, UPDATER, BACKEND_TASKS, BACKFILL) if marker.search(_read(p))]
     assert copies == [BACKFILL.name], f"the back-fill must exist exactly once, in {BACKFILL.name}; found {copies}"
 
 
@@ -59,3 +59,86 @@ def test_an_empty_key_from_the_slm_file_fails_the_backend_deploy() -> None:
     assert "ansible.builtin.fail" in block
     assert "_slm_secrets_stat.stat.exists" in block, "it must fire only where the SLM file is the key's source"
     assert "length == 0" in block
+
+
+# --- #19294 review F1/F2/F3/F5: never generate over an existing key -------------------------
+
+_GEN = "GENERATED-KEY"
+
+
+def _tasks():
+    yaml = __import__("yaml")
+    return yaml.safe_load(_read(BACKFILL))
+
+
+def _task(name_part):
+    found = [t for t in _tasks() if name_part in t["name"]]
+    assert len(found) == 1, f"expected one task named like {name_part!r}, found {len(found)}"
+    return found[0]
+
+
+def _render(expr, **context):
+    """Render one of the back-fill's own Jinja expressions; count generator calls."""
+    import jinja2
+
+    calls = []
+    env = jinja2.Environment()  # nosec B701  # rendering repo-owned expressions with test data only
+    env.filters["regex_replace"] = lambda v, pattern, repl: re.sub(pattern, repl, v)
+    env.globals["lookup"] = lambda *a, **k: calls.append(a) or _GEN
+    return env.from_string(expr).render(**context).strip(), len(calls)
+
+
+def _seed(operator="", backend_env=""):
+    expr = _task("Add AUTOBOT_SECRETS_ROOT_KEY")["vars"]["_root_key_seed"]
+    ctx = {"_backend_env_root_key": {"stdout": backend_env}}
+    if operator is not None:
+        ctx["autobot_secrets_root_key"] = operator
+    return _render(expr, **ctx)
+
+
+def test_an_operator_supplied_key_is_written_and_nothing_is_generated() -> None:
+    assert _seed(operator="OPERATOR-KEY") == ("OPERATOR-KEY", 0)
+
+
+def test_a_backend_env_only_key_is_written_and_nothing_is_generated() -> None:
+    assert _seed(operator=None, backend_env='"ENV-KEY"\n') == ("ENV-KEY", 0)
+
+
+def test_a_key_is_generated_only_when_none_exists_anywhere() -> None:
+    assert _seed(operator="", backend_env="") == (_GEN, 1)
+
+
+def test_two_different_existing_keys_are_a_conflict_and_equal_ones_are_not() -> None:
+    task = _task("Compare the operator and backend-env root keys")
+    expr, variables = task["ansible.builtin.set_fact"]["_root_keys_conflict"], task["vars"]
+
+    def conflict(operator, backend_env):
+        ctx = {"autobot_secrets_root_key": operator, "_backend_env_root_key": {"stdout": backend_env}}
+        resolved = {k: _render(v, **ctx)[0] for k, v in variables.items()}
+        return _render(expr, **ctx, **resolved)[0]
+
+    assert conflict("A", "B") == "True"
+    assert conflict("A", "'A'") == "False"
+    assert conflict("A", "") == "False" and conflict("", "B") == "False"
+    assert "no_log" not in _task("Refuse two different existing root keys"), "the refusal must stay readable"
+
+
+def test_an_export_line_counts_as_present_and_is_replaced_not_duplicated() -> None:
+    grep = _task("Check if AUTOBOT_SECRETS_ROOT_KEY present")["ansible.builtin.shell"]["cmd"]
+    ere = re.search(r"'(\^.*?)'", grep).group(1).replace("[[:space:]]", r"\s")
+    regexp = _task("Add AUTOBOT_SECRETS_ROOT_KEY")["ansible.builtin.lineinfile"]["regexp"]
+    for line in (
+        "AUTOBOT_SECRETS_ROOT_KEY=k",
+        "export AUTOBOT_SECRETS_ROOT_KEY=k",
+        "  export  AUTOBOT_SECRETS_ROOT_KEY=k",
+    ):
+        assert re.match(ere, line), f"the presence check must see {line!r}"
+        assert re.match(regexp, line), f"lineinfile must replace {line!r}, not add a second line"
+    assert not re.match(ere, "AUTOBOT_SECRETS_ROOT_KEY="), "an empty value is not a key (.+ required)"
+
+
+def test_every_key_handling_task_is_no_log_and_reads_run_in_check_mode() -> None:
+    for part in ("Check if", "Read an existing root key", "Compare the operator", "Add AUTOBOT_SECRETS_ROOT_KEY"):
+        assert _task(part).get("no_log") is True, f"{part!r} handles the key and must be no_log"
+    for part in ("Check if", "Read an existing root key"):
+        assert _task(part).get("check_mode") is False, f"{part!r} must run in check mode so rc is defined"

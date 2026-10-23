@@ -114,6 +114,7 @@ def test_every_root_key_jinja_expression_compiles() -> None:
     env = jinja2.Environment()  # nosec B701  # compiling only, never rendering untrusted input
     # Filters/lookups Ansible injects that core Jinja does not ship.
     env.filters["b64encode"] = lambda v: v
+    env.filters["regex_replace"] = lambda v, *a: v  # #19051: the back-fill strips quotes from a read-back key
     env.globals["lookup"] = lambda *a, **k: "x"
 
     task_files = [
