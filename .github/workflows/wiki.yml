@@ -1,0 +1,55 @@
+name: Wiki from docs
+
+# #19278 (owner decision 2026-10-23): the GitHub wiki is generated from docs/ on every merge to
+# main and is never edited by hand. Pages and their sources: docs/wiki/manifest.yml. Each page
+# names its source path and commit, and a hand edit is overwritten on the next run.
+#
+# Writing to the wiki repository needs a credential GITHUB_TOKEN does not carry. The repo owner
+# creates it and stores it as the WIKI_TOKEN Actions secret -- no agent does. Until it exists the
+# pages are still built and checked here, and the publish step says it was skipped.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-from-docs
+  cancel-in-progress: true
+
+jobs:
+  wiki:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the wiki pages (#19278)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/ci/build_wiki.py "${RUNNER_TEMP}/wiki" --sha "${GITHUB_SHA}"
+
+      - name: Publish to the wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WIKI_TOKEN}" ]; then
+            echo "::notice title=wiki not published::the WIKI_TOKEN secret is not set (owner action, #19278); pages were built and checked only"
+            exit 0
+          fi
+          git clone --quiet --depth 1 "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" "${RUNNER_TEMP}/wiki-repo"
+          cp "${RUNNER_TEMP}/wiki/"*.md "${RUNNER_TEMP}/wiki-repo/"
+          cd "${RUNNER_TEMP}/wiki-repo"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "wiki already matches ${GITHUB_SHA}"
+            exit 0
+          fi
+          git commit --quiet -m "wiki: generated from ${GITHUB_SHA} (#19278)"
+          git push --quiet origin HEAD
