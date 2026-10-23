@@ -798,8 +798,9 @@
             <div><span class="t-highlight">→ Service Lifecycle Manager</span> <span class="t-out">http://localhost/slm</span></div>
             <div style="margin-top:8px"><span class="t-success">✓ FastAPI backend</span> <span class="t-comment">· Redis · ChromaDB · Ollama with --profile ollama (pull its models), or a cloud provider</span></div>
             <div><span class="t-success">✓ Ask:</span> <span class="t-out">"Summarise last week's Ansible failures and suggest fixes"</span></div>
-            <div style="margin-top:8px"><span class="t-comment"># Native Ubuntu 22.04+ instead: the one-line installer, a verified pinned release, or uninstall — see INSTALL.md</span></div>
+            <div style="margin-top:8px"><span class="t-comment"># Native Ubuntu 22.04+ instead: installs the SLM control plane; its Setup Wizard provisions the rest</span></div>
             <div><span class="t-cmd">$ curl -fsSL https://raw.githubusercontent.com/mrveiss/AutoBot-AI/main/install.sh | sudo bash</span></div>
+            <div><span class="t-comment"># Verified pinned release and uninstall: see INSTALL.md (not shown here)</span></div>
           </div>
         </div>
       </div>
@@ -817,7 +818,7 @@
         <div class="feature-card">
           <div class="feature-icon"><svg class="icon"><use href="#i-scope"/></svg></div>
           <h3>You hold the data</h3>
-          <p>Docker on a single VM or bare metal. No telemetry. Your documents, memory, and knowledge graph stay on your infrastructure; in Local mode, model inference does too.</p>
+          <p>Docker on a single VM or bare metal. No telemetry. Your documents, memory, and knowledge graph stay on your infrastructure, and so does model inference unless you configure a hosted LLM provider.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon"><svg class="icon"><use href="#i-cpu"/></svg></div>
@@ -897,7 +898,7 @@
       <div class="features-header">
         <span class="section-label">What you can do</span>
         <h2 class="section-title">From first deploy to production operations</h2>
-        <p class="section-sub">Document storage and fleet data stay on your servers. Model inference does too in <strong>Local</strong> mode; <strong>Hybrid</strong> and <strong>Cloud</strong> send prompts to the hosted provider you configure. No telemetry, no vendor lock-in.</p>
+        <p class="section-sub">Document storage and fleet data stay on your servers. Model inference does too with local models; prompts go to a hosted provider only when you configure one. No telemetry, no vendor lock-in.</p>
       </div>
       <div class="features-grid">
         <div class="feature-card">
@@ -945,7 +946,7 @@
           <h3><span class="arch-num">1</span> FastAPI Backend + SLM</h3>
           <p><strong>SLM</strong> (Service Lifecycle Manager) is the admin control plane — it handles deployments, health checks, config, and user management separately from chat traffic, so a heavy inference job never blocks an operator command.</p>
           <ul>
-            <li>FastAPI · 4 uvicorn workers (native install; 1 in Docker)</li>
+            <li>FastAPI · up to 4 uvicorn workers (fleet backend, tuned to RAM; 1 in Docker)</li>
             <li>Multi-provider LLM gateway (Ollama, vLLM, Anthropic, OpenAI)</li>
             <li>Redis session cache · WebSocket streaming</li>
             <li>PostgreSQL or SQLite for persistence</li>
@@ -1009,7 +1010,7 @@
             <div class="sp-icon"><svg class="icon" style="width:16px;height:16px"><use href="#i-mesh"/></svg></div>
             <div>
               <strong>Redis-backed shared state across workers</strong>
-              <p>Backend workers (four on a native install, one in Docker) share session cache and rate-limit counters via Redis Stack. Adding more workers requires zero code change.</p>
+              <p>Backend workers (up to four on a fleet backend node, tuned to its RAM; one in Docker) share session cache and rate-limit counters via Redis Stack. Adding more workers requires zero code change.</p>
             </div>
           </div>
           <div class="scale-point">
@@ -1026,8 +1027,8 @@
             <div class="scale-tile-label">VMs supported</div>
           </div>
           <div class="scale-tile">
-            <div class="scale-tile-num">4</div>
-            <div class="scale-tile-label">Backend workers (native install)</div>
+            <div class="scale-tile-num">≤4</div>
+            <div class="scale-tile-label">Backend workers per node (RAM-tuned)</div>
           </div>
           <div class="scale-tile">
             <div class="scale-tile-num">8+</div>
