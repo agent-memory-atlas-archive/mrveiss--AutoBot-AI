@@ -95,6 +95,20 @@ def test_an_unknown_setting_is_refused_and_nothing_is_saved():
     assert manager.data == {}
 
 
+def test_a_failed_save_leaves_the_stored_settings_unchanged():
+    """CodeRabbit on #19243: values set before a failing save are rolled back, not reported later."""
+    manager = FakeConfigManager({"web_research": {"max_results": 4}})
+
+    def boom() -> None:
+        raise OSError("disk full")
+
+    manager.save_settings = boom
+    with pytest.raises(OSError):
+        wrc.save_settings(manager, {"max_results": 9, "enabled": False})
+    assert manager.data == {"web_research": {"max_results": 4}}
+    assert wrc.load_settings(manager)["max_results"] == 4
+
+
 def test_researcher_config_fills_every_setting_and_keeps_other_keys():
     manager = FakeConfigManager({"web_research": {"cache_ttl": 600, "max_results": 4}})
     config = wrc.researcher_config(manager)

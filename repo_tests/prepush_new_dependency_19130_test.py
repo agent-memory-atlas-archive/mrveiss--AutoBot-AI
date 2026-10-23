@@ -371,6 +371,14 @@ class TestVueTscNewDependency:
     def test_ts2307_for_a_relative_module_fails(self, tmp_path: Path) -> None:
         assert _tsc_verdict(self._TS2307.format("./missing"), "dompurify", tmp_path) != 0
 
+    def test_a_ts2307_quoted_inside_another_diagnostic_fails(self, tmp_path: Path) -> None:
+        """CodeRabbit on #19272: only the diagnostic's own code counts, not a TS2307 quoted in a message."""
+        line = (
+            "src/a.ts(4,7): error TS2322: Type '\"error TS2307: Cannot find module 'dompurify'\"' "
+            "is not assignable to type 'number'."
+        )
+        assert _tsc_verdict(line, "dompurify", tmp_path) != 0
+
     def test_a_lookalike_package_name_fails(self, tmp_path: Path) -> None:
         assert _tsc_verdict(self._TS2307.format("dompurify-extra"), "dompurify", tmp_path) != 0
 

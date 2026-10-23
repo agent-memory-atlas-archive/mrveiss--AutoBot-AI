@@ -13,6 +13,7 @@ API field names are the keys of ``DEFAULTS``; ``_CONFIG_KEYS`` maps the two whos
 differs.
 """
 
+import copy
 from typing import Any, Dict, Protocol
 
 SECTION = "web_research"
@@ -81,9 +82,15 @@ def save_settings(manager: ConfigManagerLike, changes: Dict[str, Any]) -> Dict[s
     unknown = set(changes) - set(DEFAULTS)
     if unknown:
         raise ValueError(f"unknown web research settings: {sorted(unknown)}")
+    before = copy.deepcopy(manager.get_nested(SECTION, None))
     for field, value in changes.items():
         manager.set_nested(f"{SECTION}.{_config_key(field)}", value)
-    manager.save_settings()
+    try:
+        manager.save_settings()
+    except Exception:
+        # A failed save must not leave the unsaved values in memory for the next read to report.
+        manager.set_nested(SECTION, before if before is not None else {})
+        raise
     return load_settings(manager)
 
 
