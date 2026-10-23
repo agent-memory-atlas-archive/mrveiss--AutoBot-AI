@@ -11,7 +11,8 @@ Each test fails when a second definition is re-added:
 * a bare ``RerankWeights()`` that bypasses ``RAGConfig.rerank_weights``;
 * a staleness key other than ``resolve_chunk_id`` (``chunk_id or id``);
 * a second reader of the doc indexer's hash cache (the home is ``knowledge/stale_filter.py``);
-* a string placeholder for a numeric RAGConfig field in an API docstring.
+* a string placeholder for a numeric RAGConfig field in an API docstring;
+* ``docs/guides/rag-pdf-workflow.md`` restating a ``RAGConfig`` / ``RerankWeights`` default.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from __future__ import annotations
 import ast
 import inspect
 import re
+from dataclasses import MISSING, fields
 from pathlib import Path
 
 import pytest
@@ -31,6 +33,9 @@ SKIP_DIRS = frozenset({"tests", "node_modules", "__pycache__", "venv", ".venv"})
 HASH_CACHE_HOMES = frozenset({"services/knowledge/doc_indexer.py", "knowledge/stale_filter.py"})
 STALENESS_KEY_HOME = "knowledge/chunk_identity.py"
 CHUNK_ID_OR = re.compile(r"""\.get\(\s*["']chunk_id["']\s*\)\s+or\s""")
+RAG_GUIDE = BACKEND.parent / "docs" / "guides" / "rag-pdf-workflow.md"
+# ``name: 0.3`` (yaml), ``"name": 0.3`` (json), ``name: float = 0.3`` / ``name=0.3`` (python).
+NUMERIC_ASSIGNMENT = r"""\b{name}\b["'`]?\s*(?::\s*[A-Za-z_][\w\[\], |]*\s*)?[:=]\s*-?\d"""
 
 
 def _source_files(root: Path) -> list[Path]:
@@ -138,3 +143,23 @@ def test_the_bare_optimizer_and_the_mesh_fallback_read_rag_config_weights():
         assert result["rerank_score"] == pytest.approx((0.1 * 0.5 + 0.9 * 1.0) / 1.0)
     finally:
         reset_rag_config()
+
+
+def _config_defaults() -> dict:
+    """Every ``RAGConfig`` and ``RerankWeights`` field with its default value."""
+    from knowledge.search_components.reranking import RerankWeights
+    from services.rag_config import RAGConfig
+
+    found = {}
+    for cls in (RAGConfig, RerankWeights):
+        for f in fields(cls):
+            found[f.name] = f.default if f.default is not MISSING else None
+    return found
+
+
+def test_the_rag_guide_restates_no_rag_config_default():
+    text = RAG_GUIDE.read_text(encoding="utf-8")
+    defaults = _config_defaults()
+    numeric = sorted(n for n in defaults if re.search(NUMERIC_ASSIGNMENT.format(name=re.escape(n)), text))
+    literal = sorted(n for n, v in defaults.items() if isinstance(v, str) and len(v) > 8 and v in text)
+    assert (numeric, literal) == ([], [])
