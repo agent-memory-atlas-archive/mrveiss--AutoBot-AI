@@ -152,13 +152,24 @@ _autobot_redis_override() {
     fi
 }
 
+# Highest Redis index, as database_overrides.MAX_DATABASE_INDEX (pinned equal by a test).
+_AUTOBOT_REDIS_MAX_DB=15
+
+# _autobot_redis_number VALUE -- VALUE trimmed, if it is ASCII digits within 0.._AUTOBOT_REDIS_MAX_DB.
+_autobot_redis_number() {
+    local v="$1"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    [[ "$v" =~ ^[0-9]+$ ]] && (( 10#$v <= _AUTOBOT_REDIS_MAX_DB )) && echo $((10#$v))
+}
+
 # autobot_redis_db NAME -- print NAME's database number; non-zero and a message if unknown.
 # Same rules as autobot_shared/redis_management/database_overrides.py: an override that is
 # not a non-negative integer, or that lands two databases on one number, is refused -- said
 # on stderr -- and that database keeps its YAML number.
 autobot_redis_db() {
     local -A yaml=() accepted=() source=() final=()
-    local name number entry other changed=1
+    local name number entry other parsed changed=1
     while read -r name number; do yaml[$name]=$number; done < <(_autobot_redis_yaml_table)
     if [ -z "${yaml[$1]:-}" ]; then
         echo "ssot-config.sh: no Redis database '$1' in ${_AUTOBOT_REDIS_DATABASES_YAML}" >&2
@@ -168,10 +179,10 @@ autobot_redis_db() {
         entry="$(_autobot_redis_override "$name")"
         [ -z "${entry}" ] && continue
         source[$name]="${entry}"
-        if [[ "${entry#*=}" =~ ^[0-9]+$ ]]; then
-            accepted[$name]=$((10#${entry#*=}))
+        if parsed="$(_autobot_redis_number "${entry#*=}")"; then
+            accepted[$name]=$parsed
         elif [ "$name" = "$1" ]; then
-            echo "ssot-config.sh: refused ${entry}: not a Redis database number (keeping redis-databases.yaml)" >&2
+            echo "ssot-config.sh: refused ${entry}: not a Redis database number (0-${_AUTOBOT_REDIS_MAX_DB}) (keeping redis-databases.yaml)" >&2
         fi
     done
     while [ "${changed}" = 1 ]; do

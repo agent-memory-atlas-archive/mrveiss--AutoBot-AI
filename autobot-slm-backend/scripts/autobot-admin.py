@@ -31,9 +31,10 @@ logger = logging.getLogger("autobot-admin")
 def load_env_file(path: str) -> dict:
     """Load key=value pairs from an env file, ignoring comments and blanks.
 
-    A recorded copy of ``autobot_shared.env_file.parse_env_file`` (#19232): this CLI is installed
-    as ``/usr/local/bin/autobot-admin`` and runs under the system interpreter with no
-    ``autobot_shared`` on its path -- see ARCHITECTURE_EXCEPTIONS.md.
+    A recorded copy of ``autobot_shared.env_file.parse_env_text`` (#19232): installed as
+    ``/usr/local/bin/autobot-admin`` and run by the system interpreter, which has the install
+    root on no import path, so ``autobot_shared`` cannot be imported -- see
+    ARCHITECTURE_EXCEPTIONS.md ("autobot-admin CLI").
     """
     env: dict = {}
     if not os.path.exists(path):

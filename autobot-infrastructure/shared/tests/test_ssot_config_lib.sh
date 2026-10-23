@@ -506,7 +506,7 @@ out=$(_db _DB_NAME=workflows AUTOBOT_REDIS_DB_TASKS=12)
 check "19232: legacy AUTOBOT_REDIS_DB_TASKS still means workflows" "$out" "12"
 out=$(_db _DB_NAME=main AUTOBOT_REDIS_DB_MAIN=zero)
 check "19232: a non-numeric override is refused, said, and the YAML number kept" "$out" \
-    "ssot-config.sh: refused AUTOBOT_REDIS_DB_MAIN=zero: not a Redis database number (keeping redis-databases.yaml)
+    "ssot-config.sh: refused AUTOBOT_REDIS_DB_MAIN=zero: not a Redis database number (0-15) (keeping redis-databases.yaml)
 0"
 out=$(_db _DB_NAME=testing AUTOBOT_REDIS_DB_TESTING=15)
 check "19232: an override colliding with celery_results is refused, said, and the YAML number kept" "$out" \

@@ -17,6 +17,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from autobot_shared.network_constants import NetworkConstants  # noqa: E402
 from autobot_shared.ssot_config import TimeoutConfig  # noqa: E402
 
 # Sibling helper module: the importing script may have been loaded by file path.
@@ -75,7 +76,26 @@ def _redis_database_lines() -> list:
 
 
 #: (service, scheme) for each computed service URL, in output order.
-_SERVICE_URLS = (("backend", "http"), ("frontend", "http"), ("redis", "redis"), ("ollama", "http"), ("ai_stack", "http"), ("npu_worker", "http"), ("browser_service", "http"))
+#: Redis is not here: its URL comes from RedisEndpoint.url, the one Redis URL builder (#19232).
+_SERVICE_URLS = (
+    ("backend", "http"),
+    ("frontend", "http"),
+    ("ollama", "http"),
+    ("ai_stack", "http"),
+    ("npu_worker", "http"),
+    ("browser_service", "http"),
+)
+
+
+def _redis_url(host, port) -> str:
+    """A credential-free Redis URL for a generated file, from the one URL builder (#19232).
+
+    The generator describes a TARGET deployment from complete.yaml, so it formats that
+    host and port with ``RedisEndpoint.url`` rather than resolving this process's endpoint.
+    """
+    from autobot_shared.redis_management.endpoint import RedisEndpoint
+
+    return RedisEndpoint(host=str(host), port=int(port)).url(with_auth=False)
 
 
 def _legacy_lines(config) -> list:
@@ -96,6 +116,7 @@ def _service_url_lines(config, label: str) -> list:
     hosts, ports = config["infrastructure"]["hosts"], config["infrastructure"]["ports"]
     lines = [f"# Service URLs ({label})"]
     lines += [f"AUTOBOT_{name.upper()}_URL={scheme}://{hosts[name]}:{ports[name]}" for name, scheme in _SERVICE_URLS]
+    lines.append(f"AUTOBOT_REDIS_URL={_redis_url(hosts['redis'], ports['redis'])}")
     return [*lines, "", "# WebSocket Configuration", f"AUTOBOT_WS_URL=ws://{hosts['backend']}:{ports['backend']}/ws"]
 
 
@@ -103,6 +124,7 @@ def _bare_service_url_lines(config) -> list:
     """The service URLs under their unprefixed names (``BACKEND_URL``, ...) for .env.network."""
     hosts, ports = config["infrastructure"]["hosts"], config["infrastructure"]["ports"]
     urls = [f"{name.upper()}_URL={scheme}://{hosts[name]}:{ports[name]}" for name, scheme in _SERVICE_URLS]
+    urls.append(f"REDIS_URL={_redis_url(hosts['redis'], ports['redis'])}")
     return ["# Service URL Construction", *urls]
 
 
@@ -219,7 +241,7 @@ def generate_localhost_env(config):
         "# Service URLs (Localhost)",
         f"AUTOBOT_BACKEND_URL=http://127.0.0.1:{config['infrastructure']['ports']['backend']}",
         f"AUTOBOT_FRONTEND_URL=http://127.0.0.1:{config['infrastructure']['ports']['frontend']}",
-        f"AUTOBOT_REDIS_URL=redis://127.0.0.1:{config['infrastructure']['ports']['redis']}",
+        f"AUTOBOT_REDIS_URL={_redis_url(NetworkConstants.LOCALHOST_IP, config['infrastructure']['ports']['redis'])}",
         f"AUTOBOT_OLLAMA_URL=http://127.0.0.1:{config['infrastructure']['ports']['ollama']}",
         f"AUTOBOT_AI_STACK_URL=http://127.0.0.1:{config['infrastructure']['ports']['ai_stack']}",
         f"AUTOBOT_NPU_WORKER_URL=http://127.0.0.1:{config['infrastructure']['ports']['npu_worker']}",
@@ -343,10 +365,6 @@ def generate_frontend_env(config):
         f"{config['infrastructure']['hosts']['ollama']}:"
         f"{config['infrastructure']['ports']['ollama']}",
         "",
-        "# Redis Configuration (for frontend services)",
-        f"VITE_REDIS_URL=redis://"
-        f"{config['infrastructure']['hosts']['redis']}:"
-        f"{config['infrastructure']['ports']['redis']}",
         f"VITE_AI_STACK_URL=http://"
         f"{config['infrastructure']['hosts']['ai_stack']}:"
         f"{config['infrastructure']['ports']['ai_stack']}",

@@ -77,13 +77,23 @@ def _requested(base: Mapping[str, int], source: Mapping[str, str]) -> Dict[str, 
     return requested
 
 
+#: Highest index a Redis server has by default (``databases 16``), the range the env
+#: registry documents for AUTOBOT_REDIS_DB_* (0-15). Shell (ssot-config.sh) and the
+#: standalone Ansible inventory apply the same bound -- one contract, pinned by a test.
+MAX_DATABASE_INDEX = 15
+
+
 def _parse(raw: str) -> int | None:
-    """A database number from an override value; None for anything but a non-negative int."""
-    try:
-        number = int(raw.strip())
-    except ValueError:
+    """A database number from an override value: ASCII digits after trimming, 0..MAX_DATABASE_INDEX.
+
+    ``int()`` alone would also take ``+5``, ``1_0`` and non-ASCII digits, which the shell
+    reader cannot; the contract is the intersection, spelled out.
+    """
+    text = raw.strip()
+    if not text.isascii() or not text.isdigit():
         return None
-    return number if number >= 0 else None
+    number = int(text)
+    return number if number <= MAX_DATABASE_INDEX else None
 
 
 def _parsed(base: Mapping[str, int], source: Mapping[str, str]) -> tuple[Dict[str, int], list[str]]:
@@ -93,7 +103,7 @@ def _parsed(base: Mapping[str, int], source: Mapping[str, str]) -> tuple[Dict[st
     for name, raw in _requested(base, source).items():
         number = _parse(raw)
         if number is None:
-            problems.append(f"{env_var_name(name)}={raw!r} is not a Redis database number")
+            problems.append(f"{env_var_name(name)}={raw!r} is not a Redis database number (0-{MAX_DATABASE_INDEX})")
         else:
             accepted[name] = number
     return accepted, problems
@@ -135,13 +145,14 @@ def override_problems(base: Mapping[str, int], source: Mapping[str, str]) -> lis
 def apply_overrides(base: Mapping[str, int], source: Mapping[str, str]) -> Dict[str, int]:
     """*base* with the ``AUTOBOT_REDIS_DB_*`` overrides in *source* applied.
 
-    A refused override keeps its database on the YAML number and is logged at ERROR --
-    refused rather than raised, because a stale ``AUTOBOT_REDIS_DB_LOGS=5`` from an old
-    installer was harmless while nothing read it, and must not take a host down now.
+    A refused override keeps its database on the YAML number and is logged once, at
+    WARNING -- refused rather than raised, because a stale ``AUTOBOT_REDIS_DB_LOGS=5`` from
+    an old installer was harmless while nothing read it, and must not take a host down now
+    or flood its log at ERROR. This runs once per process, when the table is built.
     """
     merged, problems = _resolve(base, source)
     for problem in problems:
-        logger.error("Refused Redis database override (keeping redis-databases.yaml): %s", problem)
+        logger.warning("Refused Redis database override (keeping redis-databases.yaml): %s", problem)
     for name, number in merged.items():
         if number != base[name]:
             logger.info("Redis database %r moved to DB %d by %s", name, number, env_var_name(name))

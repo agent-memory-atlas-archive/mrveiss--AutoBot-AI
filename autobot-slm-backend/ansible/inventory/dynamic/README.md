@@ -38,7 +38,9 @@ export REDIS_PORT=6379
 ```
 
 The database defaults to `main` in `autobot-infrastructure/shared/config/redis-databases.yaml`
-(#19232); set `REDIS_DB` or `AUTOBOT_REDIS_DB_MAIN` only to override it.
+(#19232); set `AUTOBOT_REDIS_DB_MAIN` only to override it. The override follows the same rules
+as the backend and `ssot-config.sh` (0-15, refused on collision). Without the YAML the script
+exits 1 rather than guess a number.
 
 ## Redis Data Structure
 

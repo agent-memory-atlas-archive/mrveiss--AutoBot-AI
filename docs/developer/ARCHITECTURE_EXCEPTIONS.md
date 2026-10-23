@@ -566,16 +566,22 @@ derived as `{{ autobot.base_dir | dirname }}/<svc>`.
 ## `autobot-admin` CLI — Own `.env` Reader (not `parse_env_file`)
 
 **File:** `autobot-slm-backend/scripts/autobot-admin.py` (`load_env_file`)
-**Shared authority it does not use:** `autobot_shared/env_file.py` (`parse_env_file`)
+**Shared authority it does not use:** `autobot_shared/env_file.py` (`parse_env_text` / `parse_env_file`)
 **Issue:** #19232
 
-**Reason:** the `slm_manager` role installs this script as `/usr/local/bin/autobot-admin`
-(`roles/slm_manager/tasks/main.yml`), where it runs under the system interpreter for
-password resets with the SLM backend down. `autobot_shared` is not on that interpreter's
-path, so it cannot import the shared reader. Every other `.env` reader in the tree was
-collapsed onto `parse_env_file` in #19232.
+**Reason:** the `slm_manager` role copies this one file to `/usr/local/bin/autobot-admin`
+(`roles/slm_manager/tasks/main.yml`), and it runs as `#!/usr/bin/env python3` -- the system
+interpreter -- so that a password can be reset while the SLM backend is down. That interpreter
+has the install root on no import path, so `import autobot_shared` fails there even though the
+package is present under the install root. Making it importable means putting the install root
+on the CLI's path, which needs the install root as a shared constant (#19350's
+`FLEET_INSTALL_ROOT`) rather than another literal.
 
-**Revisit when:** the CLI is run from the SLM venv (or ships with `autobot_shared` on its
-path); then `load_env_file` should become an import of `parse_env_file`.
+Its parsing differs from `parse_env_text` in one way: it strips quote characters from both
+ends even when they are unmatched, and keeps unquoted ` #` text. The SLM's other `.env` reader
+(`api/_pricing_post_sync._load_env_file`) and the env-file validator use `parse_env_text`.
 
-**Grep check:** `grep -n "autobot-admin.py" autobot-slm-backend/ansible/roles/slm_manager/tasks/main.yml` — if the install no longer copies the bare script, this exception is obsolete.
+**Revisit when:** #19350 lands `FLEET_INSTALL_ROOT`; then the CLI should add it to `sys.path`,
+import `parse_env_file`, and this entry should be removed.
+
+**Grep check:** `grep -n "def load_env_file" autobot-slm-backend/scripts/autobot-admin.py` -- if empty, this exception is obsolete.

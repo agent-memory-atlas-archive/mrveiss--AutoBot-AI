@@ -52,18 +52,29 @@ def restore_singleton(module: Any, original: Any) -> None:
         module.get_config()
 
 
+#: The module namespace as first seen, per module object -- copied ONCE, not per test, and
+#: used only if a test reloads the module in place.
+_FIRST_NAMESPACE: dict[int, dict[str, Any]] = {}
+
+
+def _first_namespace(module: Any) -> dict[str, Any]:
+    """The namespace *module* had when this plugin first saw it."""
+    return _FIRST_NAMESPACE.setdefault(id(module), dict(module.__dict__))
+
+
 @pytest.fixture(autouse=True)
 def _ssot_config_singleton_restored() -> Iterator[None]:
+    """Costs two identity reads and a cache-size read per test; acts only when ssot_config changed."""
     module = sys.modules.get(_MODULE)
     if module is None or not hasattr(module, "get_config"):
         yield
         return
-    namespace = dict(module.__dict__)
-    original = _cached_instance(module)
+    namespace = _first_namespace(module)
+    get_config, original = module.get_config, _cached_instance(module)
     yield
     if sys.modules.get(_MODULE) is not module:
         return  # the test removed or replaced the module object; nothing of ours to restore
-    if module.get_config is not namespace["get_config"]:
+    if module.get_config is not get_config:
         module.__dict__.clear()
         module.__dict__.update(namespace)  # undo an in-place reload
     if _cached_instance(module) is not original:

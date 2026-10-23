@@ -12,6 +12,7 @@ one table and every reader follows it, and a URL names the client's host/port/db
 
 from __future__ import annotations
 
+import os
 from urllib.parse import unquote, urlparse
 
 import pytest
@@ -100,7 +101,7 @@ def test_an_override_that_merges_two_databases_is_refused_and_named():
 
 def test_a_non_numeric_override_is_refused():
     assert override_problems(_types.DECLARED_DATABASES, {"AUTOBOT_REDIS_DB_MAIN": "zero"}) == [
-        "AUTOBOT_REDIS_DB_MAIN='zero' is not a Redis database number"
+        "AUTOBOT_REDIS_DB_MAIN='zero' is not a Redis database number (0-15)"
     ]
 
 
@@ -162,20 +163,20 @@ def test_the_number_table_and_the_tuning_loader_read_one_yaml(monkeypatch):
     assert RedisConfigLoader._resolve_yaml_path(None) is None
 
 
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {},
-        {"AUTOBOT_REDIS_DB_KNOWLEDGE": "12"},
-        {"AUTOBOT_REDIS_DB_MAIN": "12", "AUTOBOT_REDIS_DB_KNOWLEDGE": "0"},
-        {"AUTOBOT_REDIS_DB_TASKS": "12"},
-        {"AUTOBOT_REDIS_DB_TESTING": "15"},  # collides with celery_results: refused
-        {"AUTOBOT_REDIS_DB_MAIN": "zero"},  # not a number: refused
-        {"AUTOBOT_REDIS_DB_MAIN": "9", "AUTOBOT_REDIS_DB_TEMP": "9"},  # both refused
-    ],
-)
-def test_the_shell_library_agrees_with_python(overrides):
-    """ssot-config.sh's autobot_redis_db gives apply_overrides' answer for every database."""
+def _inventory_module():
+    """The standalone Ansible inventory script, loaded by path (it is not a package)."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "autobot-slm-backend/ansible/inventory/dynamic/generate_inventory.py"
+    spec = importlib.util.spec_from_file_location("_inventory_19232", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _shell_answers(overrides: dict) -> dict:
+    """ssot-config.sh's autobot_redis_db for every declared database, under *overrides*."""
     import shutil
     import subprocess  # nosec B404  # fixed argv, no shell string from input
     from pathlib import Path
@@ -187,8 +188,48 @@ def test_the_shell_library_agrees_with_python(overrides):
     script = f'source "{lib}"; for n in {names}; do printf "%s=%s\\n" "$n" "$(autobot_redis_db "$n" 2>/dev/null)"; done'
     env = {"PATH": "/usr/bin:/bin", "PROJECT_ROOT": str(lib.parents[4]), **overrides}
     out = subprocess.run([bash, "-c", script], env=env, capture_output=True, text=True, check=True).stdout  # nosec B603
-    expected = apply_overrides(_types.DECLARED_DATABASES, overrides)
-    assert dict(line.split("=") for line in out.split()) == {n: str(v) for n, v in expected.items()}
+    return dict(line.split("=", 1) for line in out.splitlines())
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"AUTOBOT_REDIS_DB_KNOWLEDGE": "12"},
+        {"AUTOBOT_REDIS_DB_MAIN": "12", "AUTOBOT_REDIS_DB_KNOWLEDGE": "0"},
+        {"AUTOBOT_REDIS_DB_TASKS": "12"},
+        {"AUTOBOT_REDIS_DB_TESTING": "15"},  # collides with celery_results: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "zero"},  # not a number: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "9", "AUTOBOT_REDIS_DB_TEMP": "9"},  # both refused
+        {"AUTOBOT_REDIS_DB_MAIN": " 12 "},  # trimmed: accepted
+        {"AUTOBOT_REDIS_DB_MAIN": "012"},  # leading zero: 12
+        {"AUTOBOT_REDIS_DB_MAIN": "+12"},  # sign: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "16"},  # above 0..15: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "-1"},  # negative: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "1_2"},  # int() would take it: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "\u0661\u0662"},  # non-ASCII digits: refused
+    ],
+)
+def test_python_shell_and_inventory_agree(overrides, monkeypatch):
+    """One override contract, three readers: apply_overrides, ssot-config.sh, the Ansible inventory."""
+    expected = {n: str(v) for n, v in apply_overrides(_types.DECLARED_DATABASES, overrides).items()}
+    assert _shell_answers(overrides) == expected
+    for var in [k for k in os.environ if k.startswith("AUTOBOT_REDIS_DB_")]:
+        monkeypatch.delenv(var)
+    for var, value in overrides.items():
+        monkeypatch.setenv(var, value)
+    inventory = {n: str(v) for n, v in _inventory_module().resolved_databases().items()}
+    assert inventory == expected
+
+
+def test_the_three_readers_share_one_upper_bound():
+    from pathlib import Path
+
+    from autobot_shared.redis_management.database_overrides import MAX_DATABASE_INDEX
+
+    lib = Path(__file__).resolve().parents[2] / "autobot-infrastructure/shared/scripts/lib/ssot-config.sh"
+    assert f"_AUTOBOT_REDIS_MAX_DB={MAX_DATABASE_INDEX}" in lib.read_text(encoding="utf-8")
+    assert _inventory_module()._MAX_DATABASE_INDEX == MAX_DATABASE_INDEX
 
 
 _NO_PROJECT_ROOT_PROBE = """
@@ -245,17 +286,11 @@ def test_import_survives_an_undeterminable_project_root_and_finds_app_config():
     assert result.stdout.split() == ["/app/config/redis-databases.yaml", "1"]
 
 
-def test_the_standalone_ansible_inventory_reads_main_from_the_yaml(monkeypatch):
-    """It cannot import autobot_shared (#1086), so it reads redis-databases.yaml itself."""
-    import importlib.util
-    from pathlib import Path
-
-    path = Path(__file__).resolve().parents[2] / "autobot-slm-backend/ansible/inventory/dynamic/generate_inventory.py"
-    spec = importlib.util.spec_from_file_location("_inventory_19232", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    monkeypatch.delenv("REDIS_DB", raising=False)
-    monkeypatch.delenv("AUTOBOT_REDIS_DB_MAIN", raising=False)
-    assert module._main_database_number() == _types.DECLARED_DATABASES["main"]
-    monkeypatch.setenv("AUTOBOT_REDIS_DB_MAIN", "12")
-    assert module._main_database_number() == 12
+def test_the_standalone_ansible_inventory_fails_closed_without_the_yaml(monkeypatch, capsys):
+    """No YAML, no inventory: it exits 1 and says why rather than guess a number."""
+    module = _inventory_module()
+    monkeypatch.setattr(module, "_DATABASES_YAML", module._DATABASES_YAML.with_name("absent.yaml"))
+    with pytest.raises(SystemExit) as exited:
+        module.resolved_databases()
+    assert exited.value.code == 1
+    assert "cannot read Redis databases" in capsys.readouterr().err

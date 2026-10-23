@@ -42,7 +42,8 @@ from autobot_shared.redis_management.types import _ALIASES, _FALLBACK_MAPPING
 
 _REPO = Path(__file__).resolve().parents[2]
 _ROOTS = ("autobot_shared", "autobot-backend", "autobot-slm-backend", "autobot-slm-agent", "autobot-infrastructure")
-_SKIP_DIRS = {"node_modules", ".git", "__pycache__", "venv", ".venv", "tests", "test"}
+#: migrations/alembic are history: a past revision is not rewritten (the fork scan skips them too).
+_SKIP_DIRS = {"node_modules", ".git", "__pycache__", "venv", ".venv", "tests", "test", "migrations", "alembic"}
 #: (repo-relative path, assigned name) of the one allowed literal mirror.
 _ALLOWED = {("autobot_shared/redis_management/types.py", "_FALLBACK_MAPPING")}
 #: The one file allowed to spell the YAML's file name as a path.
@@ -56,8 +57,14 @@ _YAML_NAME = "redis-databases.yaml"
 #: host/port (it has no process environment to resolve from).
 _URL_BUILDERS = {
     "autobot_shared/redis_management/endpoint.py",
-    "autobot-infrastructure/shared/scripts/validate-env-files.py",
+    # Declares the "redis" scheme LABEL of the service catalogue; its base_url() for redis
+    # delegates to the resolver (#19232).
+    "autobot_shared/service_registry_core.py",
+    # SLM fleet inventory: a "redis" protocol label per discovered node service, rendered by the
+    # generic api/discovery.py listing. Fleet metadata about remote nodes, not a client endpoint.
+    "autobot-slm-backend/services/compose_fleet.py",
 }
+_REDIS_SCHEMES = ("redis", "rediss")
 _CONFIG_SUFFIXES = (".sh", ".yml", ".yaml", ".j2", ".service", ".conf")
 #: A DB number pinned in config: `${X:-14}`, `: "${X:=14}"`, `X=14`, `X: 14`.
 _CONFIG_DB_LITERAL = re.compile(r"AUTOBOT_REDIS_DB_[A-Z_]+\s*(?::?[-=]|:)\s*['\"]?\d")
@@ -118,12 +125,41 @@ def _url_prefix(node: ast.AST) -> str | None:
 
 
 def _is_url_builder(node: ast.AST) -> bool:
-    """A string or f-string that composes a Redis URL (more than the bare scheme)."""
+    """Code that composes a Redis URL, however it is spelled.
+
+    * a literal longer than the bare scheme, or any f-string, starting ``redis:``/``rediss:``
+      (a bare ``"redis://"`` constant is a scheme, as in a prefix check);
+    * ``"redis" + "://" + ...`` concatenation;
+    * ``scheme``/``protocol`` set to ``"redis"`` -- a dict entry or a keyword -- which some
+      generic ``f"{scheme}://{host}:{port}"`` builder turns into a Redis URL.
+    """
     prefix = _url_prefix(node)
-    if prefix is None or not prefix.startswith(("redis://", "rediss://")):
-        return False
-    # f"redis://{host}..." composes one; a bare "redis://" constant is a scheme (prefix checks)
-    return isinstance(node, ast.JoinedStr) or prefix not in ("redis://", "rediss://")
+    if isinstance(node, ast.JoinedStr) and prefix is not None and prefix.startswith(("redis:", "rediss:")):
+        return True
+    if isinstance(node, ast.Constant) and prefix is not None and prefix.startswith(("redis://", "rediss://")):
+        return prefix not in ("redis://", "rediss://")  # "redis:read" is a capability, not a URL
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        parts = [p.value for p in (node.left, node.right) if isinstance(p, ast.Constant) and isinstance(p.value, str)]
+        return any(p in _REDIS_SCHEMES or p in ("redis:", "rediss:") for p in parts) and any(
+            p.startswith(("://", "//")) for p in parts
+        )
+    return _names_redis_scheme(node)
+
+
+def _names_redis_scheme(node: ast.AST) -> bool:
+    """``{"scheme": "redis"}`` / ``f(protocol="redis")``."""
+
+    def _is_redis(value: ast.AST | None) -> bool:
+        return isinstance(value, ast.Constant) and value.value in _REDIS_SCHEMES
+
+    if isinstance(node, ast.Dict):
+        return any(
+            isinstance(k, ast.Constant) and k.value in ("scheme", "protocol") and _is_redis(v)
+            for k, v in zip(node.keys, node.values)
+        )
+    if isinstance(node, ast.Call):
+        return any(kw.arg in ("scheme", "protocol") and _is_redis(kw.value) for kw in node.keywords)
+    return False
 
 
 def _is_db_number_literal(node: ast.AST) -> bool:
@@ -165,7 +201,7 @@ def find_tables(source: str, path: str) -> list[str]:
             found.append(f"{path}:{node.lineno} AUTOBOT_REDIS_DB_* field")
         elif _is_yaml_path(node) and path not in _STANDALONE_YAML_READERS:
             found.append(f"{path}:{node.lineno} yaml path")
-        elif _is_url_builder(node) and id(node) not in in_fstring and path not in _URL_BUILDERS:
+        if _is_url_builder(node) and id(node) not in in_fstring and path not in _URL_BUILDERS:
             found.append(f"{path}:{node.lineno} redis url builder")
     return found
 
@@ -193,6 +229,53 @@ def _production_sources() -> list[Path]:
                 if f.endswith(".py") and not f.endswith("_test.py") and not f.startswith("test_") and f != "conftest.py"
             ]
     return paths
+
+
+#: Browser and Node sources: a browser never dials Redis, so a Redis URL or DB number there is
+#: a copy by definition (frontend redisUrl/REDIS_VM/DatabaseConstants were retired, #19232).
+_SCRIPT_ROOTS = ("autobot-frontend/src", "autobot-slm-frontend/src", "autobot-infrastructure/shared/mcp")
+_SCRIPT_SUFFIXES = (".ts", ".js", ".vue", ".cjs", ".mjs")
+_SCRIPT_SKIP = ("__tests__", ".spec.", ".test.", ".stories.", "/tests/", "node_modules", "/dist/")
+_SCRIPT_PATTERNS = (
+    re.compile(r"rediss?://"),
+    re.compile(r"(?:protocol|scheme)\s*:\s*['\"]rediss?['\"]"),
+    re.compile(r"['\"]rediss?['\"]\s*\+\s*['\"]:?//"),
+    re.compile(r"\b[A-Z_]+_DB\s*:\s*\d"),
+    re.compile(r"\bdatabase\s*:\s*\d"),
+)
+#: Known, recorded, and NOT silently excluded: the MCP tracker stores its own data in DB 10,
+#: which redis-databases.yaml assigns to the security audit log. Moving that data is a decision
+#: (no agent moves stored data on its own), so these stay listed until it is made.
+_SCRIPT_KNOWN = {
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/index.ts",
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/correlate-unfinished-tasks.cjs",
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/generate-insights.cjs",
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/ingest-conversation.cjs",
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/validate-fixes.cjs",
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/real-time-ingestion.ts",
+    "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/knowledge-integration.ts",
+}
+
+
+def find_script_literals(text: str, path: str) -> list[str]:
+    """``path:line`` for every non-comment TS/JS line composing a Redis URL or pinning a DB number."""
+    found: list[str] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*")):
+            continue
+        if any(rx.search(line) for rx in _SCRIPT_PATTERNS):
+            found.append(f"{path}:{lineno} script literal")
+    return found
+
+
+def _script_sources() -> list[Path]:
+    """Every non-test browser/Node source under the script roots."""
+    paths: list[Path] = []
+    for root in _SCRIPT_ROOTS:
+        for dirpath, dirnames, filenames in os.walk(_REPO / root):
+            dirnames[:] = [d for d in dirnames if d not in {"node_modules", "dist", "__tests__", "tests"}]
+            paths += [Path(dirpath) / f for f in filenames if f.endswith(_SCRIPT_SUFFIXES)]
+    return [p for p in paths if not any(s in p.as_posix() for s in _SCRIPT_SKIP)]
 
 
 def _config_sources() -> list[Path]:
@@ -317,6 +400,54 @@ def test_detector_flags_shell_compose_env_and_ansible_copies():
 
 def test_detector_flags_a_db_number_kwarg():
     assert sorted(find_tables(_DB_KWARG_COPIES, "x.py")) == ["x.py:2 db number literal", "x.py:3 db number literal"]
+
+
+_COMPOSED_URL_COPIES = """
+a = "redis" + "://" + host
+b = f"redis:{host}"
+c = {"scheme": "redis", "host": h}
+d = build_url(protocol="rediss", host=h)
+fine = ("redis://", "http://")
+capability = "redis:read"
+"""
+
+_SCRIPT_COPIES = """
+REDIS_VM: `redis://${NetworkConstants.REDIS_VM_IP}:${NetworkConstants.REDIS_PORT}`,
+redis: { host: h, port: p, protocol: 'redis' },
+const u = 'redis' + '://' + host
+export const DatabaseConstants = { MAIN_DB: 0 }
+createClient({ socket: { host }, database: 10 })
+// const redisUrl = `redis://${host}` -- a comment is prose
+redisHost: config.vm.redis,
+"""
+
+
+def test_detector_flags_composed_url_builders():
+    assert sorted(find_tables(_COMPOSED_URL_COPIES, "x.py")) == [f"x.py:{n} redis url builder" for n in (2, 3, 4, 5)]
+
+
+def test_detector_flags_browser_and_node_copies():
+    assert [hit.split(" ")[0] for hit in find_script_literals(_SCRIPT_COPIES, "x")] == [
+        "x:2",
+        "x:3",
+        "x:4",
+        "x:5",
+        "x:6",
+    ]
+
+
+def test_browser_and_node_sources_build_no_redis_url_and_pin_no_db_number():
+    sources = _script_sources()
+    assert len(sources) > 300, f"sweep reached only {len(sources)} script files -- the walk is broken"
+    hits = [
+        h
+        for p in sources
+        for h in find_script_literals(p.read_text(encoding="utf-8", errors="replace"), p.relative_to(_REPO).as_posix())
+    ]
+    unknown = [h for h in hits if h.split(":")[0] not in _SCRIPT_KNOWN]
+    assert unknown == [], "Redis URL or DB number in browser/Node code (#19232):\n" + "\n".join(unknown)
+    stale = _SCRIPT_KNOWN - {h.split(":")[0] for h in hits}
+    assert not stale, f"no longer a copy -- drop from _SCRIPT_KNOWN: {sorted(stale)}"
 
 
 def test_detector_ignores_a_single_value():

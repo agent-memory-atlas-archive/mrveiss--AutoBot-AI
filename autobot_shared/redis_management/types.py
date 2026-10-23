@@ -155,8 +155,14 @@ def _build_database_mapping() -> Dict[str, int]:
     """The ONE name -> number table: the YAML, then ``AUTOBOT_REDIS_DB_*`` overrides, then aliases."""
     mapping = apply_overrides(DECLARED_DATABASES, override_source())
     for alias, target in _ALIASES.items():
-        if alias not in mapping:
-            mapping[alias] = mapping[target]
+        if alias in mapping:
+            continue
+        if target not in mapping:
+            # A YAML that drops an alias's target must not fail the import; the alias is
+            # simply undeclared, and database_number() refuses it by name.
+            logger.warning("Redis alias %r names %r, which redis-databases.yaml does not declare", alias, target)
+            continue
+        mapping[alias] = mapping[target]
     return mapping
 
 

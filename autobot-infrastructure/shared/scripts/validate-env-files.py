@@ -104,6 +104,15 @@ def validate_ip_consistency(env_vars: Dict[str, str], env_type: str) -> List[str
     return errors
 
 
+def _expected_redis_url(host: str, port: str) -> str:
+    """The credential-free Redis URL for *host*/*port*, from the one URL builder (#19232)."""
+    from autobot_shared.redis_management.endpoint import RedisEndpoint
+
+    if not port.strip().isdigit():
+        return f"<AUTOBOT_REDIS_PORT {port!r} is not a port>"
+    return RedisEndpoint(host=host, port=int(port)).url(with_auth=False)
+
+
 def validate_url_consistency(env_vars: Dict[str, str]) -> List[str]:
     """Validate URL construction consistency"""
     errors = []
@@ -121,7 +130,7 @@ def validate_url_consistency(env_vars: Dict[str, str]) -> List[str]:
             actual_url = env_vars[url_var]
 
             if url_var == "AUTOBOT_REDIS_URL":
-                expected_url = f"redis://{env_vars[host_var]}:{env_vars[port_var]}"
+                expected_url = _expected_redis_url(env_vars[host_var], env_vars[port_var])
 
             if actual_url != expected_url:
                 errors.append(f"URL mismatch: {url_var} = {actual_url}, expected {expected_url}")

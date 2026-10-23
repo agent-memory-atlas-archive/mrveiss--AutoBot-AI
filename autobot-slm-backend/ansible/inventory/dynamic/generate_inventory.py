@@ -12,7 +12,7 @@ Usage:
 Environment variables:
     REDIS_HOST: Redis server address (default: localhost)
     REDIS_PORT: Redis server port (default: 6379)
-    REDIS_DB / AUTOBOT_REDIS_DB_MAIN: Redis database number (default: main in redis-databases.yaml)
+    AUTOBOT_REDIS_DB_MAIN: Redis database number (default: main in redis-databases.yaml)
 """
 
 import argparse
@@ -20,7 +20,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -36,19 +36,61 @@ except ImportError:
 _DATABASES_YAML = (
     Path(__file__).resolve().parents[4] / "autobot-infrastructure" / "shared" / "config" / "redis-databases.yaml"
 )
+#: The override contract, mirrored from database_overrides.py (pinned equal to the Python and
+#: shell readers by redis_single_source_19232_test.py): AUTOBOT_REDIS_DB_<NAME>, trimmed ASCII
+#: digits within 0..15, refused (YAML number kept) when invalid or when two databases collide.
+_MAX_DATABASE_INDEX = 15
+_LEGACY_ENV_NAMES = {"AUTOBOT_REDIS_DB_TASKS": "workflows"}
 
 
-def _main_database_number() -> int:
-    """``REDIS_DB`` / ``AUTOBOT_REDIS_DB_MAIN`` if set, else ``main`` in redis-databases.yaml."""
-    override = os.getenv("REDIS_DB") or os.getenv("AUTOBOT_REDIS_DB_MAIN")
-    if override:
-        return int(override)
+def _declared_databases() -> Dict[str, int]:
+    """Every database redis-databases.yaml declares. Fail-closed: no YAML, no inventory."""
     try:
         with open(_DATABASES_YAML, encoding="utf-8") as f:
-            return int(yaml.safe_load(f)["redis_databases"]["main"]["db"])
-    except (OSError, KeyError, TypeError, ValueError) as exc:
-        sys.stderr.write(f"ERROR: cannot read main's Redis DB from {_DATABASES_YAML}: {exc}\n")
+            declared = yaml.safe_load(f)["redis_databases"]
+        return {name: int(cfg["db"]) for name, cfg in declared.items() if "db" in cfg}
+    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
+        sys.stderr.write(f"ERROR: cannot read Redis databases from {_DATABASES_YAML}: {exc}\n")
         sys.exit(1)
+
+
+def _override_number(raw: str) -> Optional[int]:
+    """database_overrides._parse: trimmed ASCII digits within 0.._MAX_DATABASE_INDEX, else None."""
+    text = raw.strip()
+    if not text.isascii() or not text.isdigit() or int(text) > _MAX_DATABASE_INDEX:
+        return None
+    return int(text)
+
+
+def _accepted_overrides(declared: Dict[str, int]) -> Dict[str, int]:
+    """The valid AUTOBOT_REDIS_DB_* overrides (legacy TASKS included); a refusal goes to stderr."""
+    accepted: Dict[str, int] = {}
+    names = {f"AUTOBOT_REDIS_DB_{n.upper()}": n for n in declared}
+    requested = {name: os.environ[var] for var, name in names.items() if var in os.environ}
+    for legacy, name in _LEGACY_ENV_NAMES.items():
+        if legacy in os.environ and name in declared and name not in requested:
+            requested[name] = os.environ[legacy]
+    for name, raw in requested.items():
+        number = _override_number(raw)
+        if number is None:
+            sys.stderr.write(f"WARNING: refused Redis DB override for {name}={raw!r} (keeping the YAML)\n")
+        else:
+            accepted[name] = number
+    return accepted
+
+
+def resolved_databases() -> Dict[str, int]:
+    """The YAML with every acceptable override applied; colliding overrides are refused."""
+    declared = _declared_databases()
+    accepted = _accepted_overrides(declared)
+    while True:
+        merged = {**declared, **accepted}
+        clashing = {n for n in accepted if any(o != n and merged[o] == merged[n] for o in merged)}
+        if not clashing:
+            return merged
+        for name in clashing:
+            sys.stderr.write(f"WARNING: refused Redis DB override for {name}: collides (keeping the YAML)\n")
+            del accepted[name]
 
 
 class AutoBotInventory:
@@ -57,7 +99,7 @@ class AutoBotInventory:
     def __init__(self):
         self.redis_host = os.getenv("REDIS_HOST", os.getenv("AUTOBOT_REDIS_HOST", "localhost"))
         self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        self.redis_db = _main_database_number()
+        self.redis_db = resolved_databases()["main"]
         self.inventory = {"_meta": {"hostvars": {}}}
 
     def connect_redis(self):
