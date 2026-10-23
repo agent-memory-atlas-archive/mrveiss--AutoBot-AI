@@ -38,12 +38,12 @@ runs:
       uses: actions/setup-python@v7
       with:
         python-version-file: '.python-version'
-        # Still worth keeping: this only speeds up the cache-MISS path, where
-        # pip has to fetch wheels before building the venv below.
-        cache: 'pip'
-        cache-dependency-path: |
-          requirements*.txt
-          autobot-backend/requirements*.txt
+        # #19308: no `cache: 'pip'`. It only sped up the venv cache's MISS path, yet every
+        # new requirements hash -- each dependency PR included -- saved a fresh 3.47 GB pip
+        # directory. Two of those filled most of the repo's 10 GB Actions cache and evicted
+        # the 67 MB apt archive the shards depend on (#18102). The venv cache below holds
+        # the installed environment; a miss now downloads wheels once, on the run that
+        # changed the requirements.
 
     # #14550: system packages ansible installs on every backend host for a
     # real capability (audio extraction here), that setup-python-suite never
@@ -194,6 +194,11 @@ runs:
         # and that risk does not improve with a longer wait.
         readonly APT_DOWNLOAD_TIMEOUT_S=540   # wall-clock bound per download try
         readonly APT_DOWNLOAD_ATTEMPTS=2      # tries per download command (it resumes)
+        # #19308: of those two tries, the second goes to a different mirror. A slow primary
+        # mirror was the failure every time (#18102), and resuming the same partial files
+        # from the same slow host bought little; another host serves the identical files,
+        # so the partial download carries over. Same two tries, same worst-case bound.
+        readonly APT_FALLBACK_MIRROR="http://mirrors.edge.kernel.org/ubuntu/"
         readonly APT_BACKOFF_S=15         # the sleep after try N is N times this
         readonly APT_FETCH_RETRIES=3      # apt's own retries of one failed download
         readonly APT_HTTP_IDLE_S=30       # drop a connection that sends nothing this long
@@ -247,6 +252,10 @@ runs:
             timeout "$APT_TIMEOUT_S" sudo dpkg --configure -a || echo "apt: dpkg --configure -a exited $?; the next attempt reports why" >&2
             sleep $((attempt * APT_BACKOFF_S))
           done
+          if [ "${APT_NOT_FINAL:-0}" = 1 ]; then
+            echo "apt: ${label}: failed ${tries} time(s) on this mirror; the fallback mirror is next (#19308)" >&2
+            return 1
+          fi
           if [ "${APT_ADVISORY:-0}" = 1 ]; then
             echo "::warning title=apt ${label} failed (continuing)::${label} failed ${tries} times, last exit ${rc}${why}; the installs decide" >&2
             return 0
@@ -299,10 +308,28 @@ runs:
           fi
           echo "::warning title=prefetched .debs did not satisfy the install::falling back to a network fetch (#18102)" >&2
         fi
-        APT_TRIES=$APT_DOWNLOAD_ATTEMPTS apt_retry "download ffmpeg" \
-          timeout "$APT_DOWNLOAD_TIMEOUT_S" sudo apt-get install -y --download-only --no-install-recommends ffmpeg
-        APT_TRIES=$APT_DOWNLOAD_ATTEMPTS apt_retry "download tesseract-ocr" \
-          timeout "$APT_DOWNLOAD_TIMEOUT_S" sudo apt-get install -y --download-only tesseract-ocr
+        # download_set TRIES: fetch both package sets, TRIES tries each (it resumes).
+        download_set() {
+          APT_TRIES=$1 apt_retry "download ffmpeg" \
+            timeout "$APT_DOWNLOAD_TIMEOUT_S" sudo apt-get install -y --download-only --no-install-recommends ffmpeg \
+            && APT_TRIES=$1 apt_retry "download tesseract-ocr" \
+              timeout "$APT_DOWNLOAD_TIMEOUT_S" sudo apt-get install -y --download-only tesseract-ocr
+        }
+        # Points the Ubuntu archive entries (both the one-line and the deb822 source format)
+        # at APT_FALLBACK_MIRROR. security.ubuntu.com is left as it is.
+        apt_use_fallback_mirror() {
+          local f
+          for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            [ -f "$f" ] || continue
+            sudo sed -i -E "s#https?://([a-z0-9.-]+\.)?archive\.ubuntu\.com/ubuntu/?#${APT_FALLBACK_MIRROR}#g" "$f"
+          done
+          echo "apt: Ubuntu archive now ${APT_FALLBACK_MIRROR} (#19308)" >&2
+          APT_ADVISORY=1 apt_retry "update (fallback mirror)" timeout "$APT_TIMEOUT_S" sudo apt-get update -qq
+        }
+        if ! APT_NOT_FINAL=1 download_set $((APT_DOWNLOAD_ATTEMPTS - 1)); then
+          apt_use_fallback_mirror
+          download_set 1
+        fi
         apt_retry "install ffmpeg" timeout "$APT_TIMEOUT_S" sudo apt-get install -y --no-install-recommends ffmpeg
         apt_retry "install tesseract-ocr" timeout "$APT_TIMEOUT_S" sudo apt-get install -y tesseract-ocr
         echo "installed: $(ffmpeg -version | head -1); $(tesseract --version 2>&1 | head -1)"
