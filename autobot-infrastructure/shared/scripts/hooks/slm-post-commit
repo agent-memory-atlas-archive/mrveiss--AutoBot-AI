@@ -28,7 +28,10 @@ SLM_AGENT_URL="${SLM_AGENT_URL:-http://localhost:8000}"
 SLM_CODE_SOURCE="${SLM_CODE_SOURCE:-true}"
 # SLM server URL for direct notification (fallback when agent not running)
 SLM_SERVER_URL="${SLM_SERVER_URL:-http://172.16.168.19:8000}"
-SLM_NODE_ID="${SLM_NODE_ID:-33792bf5}"
+# #19322: this node's own registered id (the SLM agent's SLM_NODE_ID). No fallback:
+# the old one, a fixed uuid4()[:8] of one particular machine, made every other node
+# notify as that machine. Unset means the direct-server notification below is skipped.
+SLM_NODE_ID="${SLM_NODE_ID:-}"
 
 # Only notify if this is marked as a code source node
 if [ "$SLM_CODE_SOURCE" != "true" ]; then
@@ -69,7 +72,9 @@ elif curl -s -X POST \
 fi
 
 # If local agent not available, notify SLM server directly
-if [ "$AGENT_NOTIFIED" != "true" ]; then
+if [ "$AGENT_NOTIFIED" != "true" ] && [ -z "$SLM_NODE_ID" ]; then
+    echo "[SLM] Warning: agent not reachable and SLM_NODE_ID unset -- SLM not notified"
+elif [ "$AGENT_NOTIFIED" != "true" ]; then
     # Create server notification payload (different schema)
     SERVER_PAYLOAD=$(cat <<EOFSERVER
 {
