@@ -169,12 +169,12 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ),
     ("autobot-backend/async_chat_workflow.py", "AsyncChatWorkflow._execute_kb_search"): _T2,
     (
-        "autobot-backend/knowledge/adapters/okf_adapter.py",
-        "OKFAdapter.export_from_kb",
+        "autobot-backend/knowledge/quarantine.py",
+        "read_every_fact",
     ): (
-        "NOT_USER_FACING: no caller anywhere in the tree besides its own test and the "
-        "module-level export_to_okf() re-export, which is itself uncalled outside tests "
-        "(#16665) -- not reachable from any route, CLI entry point, or scheduled task"
+        "NOT_USER_FACING: the backup and export serialisers read every fact through the audited "
+        "include_quarantined opt-out (one audit entry per read) and write operator files; nothing "
+        "reaches a chat, prompt or API response (#19163)"
     ),
     (
         "autobot-backend/knowledge/vector_search_engine.py",
