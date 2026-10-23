@@ -320,8 +320,9 @@ def main() -> int:
     except (OSError, UnicodeDecodeError):
         # An unreadable or undecodable record costs a selection, never a push.
         declared = {}
-    roots_record = root / REACH_ROOTS_RECORD
-    roots_text = roots_record.read_text(encoding="utf-8") if roots_record.is_file() else ""
+    # A missing record is a failed selection, not an empty one (#19312 review): without it no
+    # guard is reached through its scan roots, and that must not pass as "nothing to run".
+    roots_text = (root / REACH_ROOTS_RECORD).read_text(encoding="utf-8")
     chosen = select(
         changed,
         patterns=patterns,
