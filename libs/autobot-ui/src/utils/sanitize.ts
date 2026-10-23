@@ -40,8 +40,8 @@ let hooksRegistered = false
 function registerHooks(): void {
   if (hooksRegistered) return
   hooksRegistered = true
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.tagName === 'A' && node.hasAttribute('target')) {
+  DOMPurify.addHook('afterSanitizeAttributes', (node: Node) => {
+    if (node instanceof HTMLAnchorElement && node.hasAttribute('target')) {
       node.setAttribute('rel', 'noopener noreferrer')
     }
   })
