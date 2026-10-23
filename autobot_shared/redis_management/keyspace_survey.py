@@ -19,14 +19,16 @@ the caller advances past it, or when the generator is closed; wrap the call in
 from __future__ import annotations
 
 import dataclasses
+import logging
 from typing import Iterator
 
 import redis
 
-from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_management.types import DATABASE_MAPPING
 
-logger = get_logger(__name__)
+# stdlib logging, as redis_client.py: this module is imported by redis_client at import time, and
+# get_logger() reads config to size its file handler -- harnesses that mock config then crash on import.
+logger = logging.getLogger(__name__)
 
 #: Redis's own default for the ``databases`` server setting; used when ``CONFIG GET databases`` is
 #: refused (ACL, renamed CONFIG command) or the server cannot be reached.
