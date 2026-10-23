@@ -463,7 +463,7 @@ in addition to the nested legacy key.
 **Method 1: Environment variable**
 
 ```bash
-export AUTOBOT_DEFAULT_LLM_MODEL=llama3.2:latest
+export AUTOBOT_DEFAULT_LLM_MODEL=llama3.2:1b
 ```
 
 **Method 2: config.yaml (flat key -- preferred)**
@@ -474,7 +474,7 @@ backend:
   llm:
     ollama:
       endpoint: http://127.0.0.1:11434
-      selected_model: "llama3.2:latest"
+      selected_model: "llama3.2:1b"
 ```
 
 **Method 3: config.yaml (legacy nested key)**
@@ -486,7 +486,7 @@ backend:
     local:
       providers:
         ollama:
-          selected_model: "llama3.2:latest"
+          selected_model: "llama3.2:1b"
 ```
 
 **Method 4: Runtime API**
@@ -503,7 +503,7 @@ curl -sk -X POST https://localhost:8443/api/settings/ \
 ```python
 from dependencies import global_config_manager
 
-global_config_manager.update_llm_model("llama3.2:latest")
+global_config_manager.update_llm_model("llama3.2:1b")
 # Writes to both settings.json and config.yaml
 ```
 
@@ -1420,7 +1420,7 @@ free -h      # Check available memory
 
 **Fixes:**
 
-- Use a smaller model (e.g., `qwen3.5:9b` instead of `llama3.2:70b`)
+- Use a smaller model (e.g., `phi3:mini` instead of `qwen3.5:9b`)
 - Enable GPU acceleration if available (Ollama auto-detects CUDA GPUs)
 - Configure GPU routing in `config.yaml` (see [GPU Model Routing](#8-gpu-model-routing))
 - Increase system RAM or GPU VRAM
