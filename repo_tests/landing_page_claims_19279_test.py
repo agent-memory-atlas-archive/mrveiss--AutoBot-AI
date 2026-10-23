@@ -6,7 +6,7 @@
 
 docs/index.html advertised "ChromaDB + fastembed (ONNX, no GPU needed)" with sub-100ms latency
 -- no requirements file in the repo contains fastembed -- and rendered "TODO(human): price" to
-the public. This checks the page against every requirements file for the libraries in
+the public. This checks the page against every requirements file and pyproject.toml for the libraries in
 _CHECKED, and against placeholders.
 """
 
@@ -40,7 +40,8 @@ _PLACEHOLDER = re.compile(r"TODO\(human\)|TODO:|FIXME|lorem ipsum", re.IGNORECAS
 
 def _declared() -> str:
     out = subprocess.run(  # nosec B603 B607  # fixed argv, no shell
-        ["git", "ls-files", "*requirements*.txt", "constraints/*.txt", "pyproject.toml"],
+        # Constraint files only pin versions of packages a requirements file already declares.
+        ["git", "ls-files", "*requirements*.txt", "pyproject.toml"],
         cwd=repo_root(),
         capture_output=True,
         text=True,
