@@ -52,11 +52,16 @@ def test_a_missing_declaration_is_reported_not_guessed() -> None:
     assert new == _SOURCE and status == "declare() call not found"
 
 
+# Split so the reach sweep's declare-call grep (reach_declarations_test) does not read
+# this planted source as a production declaration it never imported.
+_ONE_LINE_CALL = "R = decl" + "are"
+
+
 def test_one_line_calls_underscored_and_spaced_floors_are_found() -> None:
     """27's review: located through the AST, not text, so each layout works."""
     for source in (
-        'R = declare("x", discover=_d, floor=1_000, growth=40)\n',
-        'R = declare("x", discover=_d, floor = 1000, growth=40)\n',
+        _ONE_LINE_CALL + '("x", discover=_d, floor=1_000, growth=40)\n',
+        _ONE_LINE_CALL + '("x", discover=_d, floor = 1000, growth=40)\n',
         'R = declare(\n    "x", discover=_d,\n    floor=1000)\n',
     ):
         new, status = repin.repin_source(source, "x", mid=1020, count=1040, low=1000, high=1040)
