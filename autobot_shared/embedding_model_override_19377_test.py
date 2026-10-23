@@ -78,3 +78,14 @@ def test_the_override_is_cached_for_the_window(monkeypatch, store):
     assert em.active_embedding_model() == "mxbai-embed-large:latest"
     store.value = b"bge-m3:latest"
     assert em.active_embedding_model() == "mxbai-embed-large:latest", "served from the cache"
+
+
+def test_a_switch_in_this_process_is_seen_at_once_despite_the_cache(monkeypatch, store):
+    """The cache window delays OTHER processes; the writer drops its own cache, so it sees the switch."""
+    monkeypatch.setattr(em, "EMBEDDING_OVERRIDE_CACHE_S", 60.0)
+    store.value = b"mxbai-embed-large:latest"
+    assert em.active_embedding_model() == "mxbai-embed-large:latest", "the old value is now cached"
+
+    em.set_embedding_model_override("bge-m3:latest")
+
+    assert em.active_embedding_model() == "bge-m3:latest"
