@@ -49,11 +49,9 @@
     - role: postgresql
       tags: ['postgresql']
       vars:
-        # #1038: fleet backends connect to PostgreSQL here for user management.
-        # #19239: listen on loopback and the SLM's fleet address (slm_host, the interface the
-        # installer chose; ansible_host where an inventory has no slm_host) -- never "*", which
-        # would expose 5432 on every interface. pg_hba below still limits clients to network_subnet.
-        postgresql_listen_addresses: "{{ (['localhost', slm_host | default(ansible_host)] | unique) | join(',') }}"
+        # #1038: fleet backends connect to PostgreSQL here for user management. listen_addresses
+        # comes from the postgresql role's single definition (#19239): loopback plus this host's
+        # fleet address. pg_hba below limits clients to network_subnet.
         pg_hba_remote_access:
           - database: autobot_users
             user: slm_app
