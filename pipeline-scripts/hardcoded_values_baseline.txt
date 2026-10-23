@@ -781,7 +781,6 @@
 1|other|autobot-infrastructure/shared/scripts/deployment_rollback.py|300
 1|ssot|autobot-infrastructure/shared/scripts/environment/set-env-deepseek.sh|:8001
 1|ssot|autobot-infrastructure/shared/scripts/export_service_keys.py|:6379
-1|ssot|autobot-infrastructure/shared/scripts/infrastructure/deploy_browser_vnc_services.sh|:3000
 1|ssot|autobot-infrastructure/shared/scripts/infrastructure/deploy_browser_vnc_services.sh|:6080
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|"/opt/autobot
 2|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|http://backend;
@@ -826,7 +825,6 @@
 1|ssot|autobot-infrastructure/shared/scripts/setup/verify_installation.sh|llama3.2-uncensored:1b
 1|ssot|autobot-infrastructure/shared/scripts/setup/verify_installation.sh|llama3.2-uncensored:3b
 4|other|autobot-infrastructure/shared/scripts/setup_browser_vnc.sh|/home/autobot
-1|ssot|autobot-infrastructure/shared/scripts/setup_browser_vnc.sh|:3000
 2|ssot|autobot-infrastructure/shared/scripts/setup_browser_vnc.sh|:6080
 1|ssot|autobot-infrastructure/shared/scripts/simple_populate.py|:8001
 1|other|autobot-infrastructure/shared/scripts/test_startup_coordinator.sh|http://127.0.0.3:8001/api/system/health
@@ -982,7 +980,6 @@
 1|other|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|30
 1|other|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|300
 2|other|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|60
-1|ssot|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|:3000
 1|other|autobot-slm-backend/ansible/inventory/group_vars/database.yml|"/tmp/autobot/models
 1|other|autobot-slm-backend/ansible/inventory/group_vars/database.yml|"/var/lib/autobot/models
 1|other|autobot-slm-backend/ansible/inventory/group_vars/database.yml|"/var/lib/autobot/models/cache
@@ -1055,7 +1052,6 @@
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://repositories.intel.com/graphics/intel-graphics.key
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://repositories.intel.com/graphics/ubuntu
 2|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:11434
-1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:3000
 1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:8080
 1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:8081
 1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|dolphin-llama3:8b
