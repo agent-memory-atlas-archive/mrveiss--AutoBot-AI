@@ -1202,8 +1202,8 @@ GraphRAGService
 async def graph_rag_search(
     query: str,
     auth_token: str,
+    max_depth: int,
     start_entity: str = None,
-    max_depth: int = 2,
     max_results: int = 5,
 ) -> dict:
     """
@@ -1213,7 +1213,8 @@ async def graph_rag_search(
         query: Search query string (1-1000 chars).
         auth_token: Bearer token for authenticated access.
         start_entity: Optional starting entity for graph traversal.
-        max_depth: Maximum traversal depth, 1-3 hops (default: 2).
+        max_depth: Maximum traversal depth, 1-3 hops. The server default is
+            RAGConfig.graph_traversal_depth (declared in constants/rag_graph_constants.py).
         max_results: Maximum results to return, 1-20 (default: 5).
 
     Returns:
@@ -1289,14 +1290,19 @@ async def graph_rag_search(
 
 **Performance Metrics (GET /api/graph-rag/metrics):**
 
+The numbers below are illustrative. The live values are `RAGConfig.graph_weight`,
+`RAGConfig.timeout_seconds` and `RAGConfig.graph_timeout_seconds`; their defaults are declared
+once, in `autobot-backend/constants/rag_graph_constants.py` and `services/rag_config.py`.
+
 ```json
 {
     "service": "GraphRAGService",
-    "graph_weight": 0.3,
+    "graph_weight": 0.5,
+    "graph_timeout_seconds": 15.0,
     "entity_extraction_enabled": true,
     "rag_service": {
         "enable_advanced_rag": true,
-        "timeout_seconds": 10.0
+        "timeout_seconds": 20.0
     },
     "graph_initialized": true
 }
