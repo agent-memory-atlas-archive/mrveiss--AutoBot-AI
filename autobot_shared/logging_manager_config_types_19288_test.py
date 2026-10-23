@@ -84,7 +84,8 @@ def test_get_logger_succeeds_when_every_config_value_is_a_magicmock(tmp_path: Pa
         {"logging.rotation.max_bytes": "10MB", "logging.rotation.backup_count": True},
         {"logging.rotation.max_bytes": -1, "logging.rotation.backup_count": 2.5},
         {"logging.file_handlers.backend": 42, "logging.format": 7, "logging.log_level": "LOUD"},
-        {"logging.format": "%(unclosed", "logging.log_level": 10},
+        {"logging.format": "%(unclosed", "logging.log_level": 7},
+        {"logging.log_level": True},
     ],
 )
 def test_get_logger_uses_defaults_for_wrong_typed_values(tmp_path: Path, bad: dict[str, object]) -> None:
@@ -123,6 +124,17 @@ def test_valid_config_still_drives_rotation_path_format_and_level(tmp_path: Path
         assert Path(handler.baseFilename) == log_file.resolve()
         assert handler.formatter is not None and handler.formatter._fmt == "%(levelname)s|%(message)s"
         assert logger.level == logging.WARNING
+    finally:
+        _close(logger)
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"), [(10, logging.DEBUG), (40, logging.ERROR), ("Error", logging.ERROR)]
+)
+def test_a_known_level_number_or_name_is_used(configured: object, expected: int) -> None:
+    logger = _fresh_logger(_DictConfig({"logging.log_level": configured}))
+    try:
+        assert logger.level == expected
     finally:
         _close(logger)
 

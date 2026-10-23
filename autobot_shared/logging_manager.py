@@ -250,20 +250,33 @@ def _log_file_path(log_type: str) -> str:
     return f"{logs_dir}/{log_type}.log"
 
 
+def _known_level(value: object) -> int | None:
+    """*value* as a level number when ``logging`` knows it: a name ("debug", "WARNING") or a number (10, 30).
+
+    ``getLevelName`` maps a known name to its number, a known number to its name, and anything else
+    to a "Level ..." str, which is what tells known from unknown here. Not getLevelNamesMapping():
+    it is 3.11+, and the pre-commit hooks import this module on older Pythons. bool is refused.
+    """
+    if isinstance(value, str):
+        level = logging.getLevelName(value.upper())
+        return level if isinstance(level, int) else None
+    if isinstance(value, int) and not isinstance(value, bool):
+        name = logging.getLevelName(value)
+        return value if not name.startswith("Level ") else None
+    return None
+
+
 def _config_log_level() -> int:
-    """The configured ``logging.log_level`` as a level number; an unknown or non-str name yields INFO.
+    """The configured ``logging.log_level`` as a level number; anything ``logging`` does not know yields INFO.
 
     Issue #15575: the config tree publishes "logging.log_level" (config/defaults.py, validated by
     config/validation.py, mapped from AUTOBOT_LOG_LEVEL); there has never been a "logging.level" key.
     """
     key = "logging.log_level"
     value = _get_config_manager().get_nested(key, _DEFAULT_LOG_LEVEL)
-    if isinstance(value, str):
-        # getLevelName maps a known name to its number and anything else to a "Level ..." str.
-        # Not getLevelNamesMapping(): it is 3.11+, and the pre-commit hooks import this on older Pythons.
-        level = logging.getLevelName(value.upper())
-        if isinstance(level, int):
-            return level
+    level = _known_level(value)
+    if level is not None:
+        return level
     _warn_config_fallback(key, value, _DEFAULT_LOG_LEVEL)
     return logging.INFO
 
