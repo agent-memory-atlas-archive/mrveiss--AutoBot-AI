@@ -80,7 +80,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/components/knowledge/GraphRAGQuery.vue": 713,
     "autobot-frontend/src/components/knowledge/KBSearchResultPanel.vue": 630,
     "autobot-frontend/src/components/knowledge/KnowledgeBrowser.vue": 1785,
-    "autobot-frontend/src/components/knowledge/KnowledgeEntries.vue": 1359,  # #18849: 1360 -> 1359
+    "autobot-frontend/src/components/knowledge/KnowledgeEntries.vue": 1358,  # #19118: 1359 -> 1358
     "autobot-frontend/src/components/knowledge/KnowledgeGraph.vue": 2073,
     "autobot-frontend/src/components/knowledge/KnowledgeHealth.vue": 925,
     "autobot-frontend/src/components/knowledge/KnowledgePersistenceDialog.vue": 891,  # #18819+#18849 one import (-1)

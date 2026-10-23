@@ -153,7 +153,7 @@ import CompletionSuggestions from './CompletionSuggestions.vue';
 import TerminalHeader from './TerminalHeader.vue';
 import { createLogger } from '@/utils/debugUtils';
 import { useTabCompletion } from '@/composables/useTabCompletion';
-import { escapeHtml } from '@/utils/sanitize';
+import { escapeHtml, sanitizeHtml } from '@/utils/sanitize';
 import { buildAutomationSteps, exampleWorkflow, useAutomationPacing, workflowStartedLines } from '@/composables/useAutomationPacing';
 
 const logger = createLogger('TerminalWindow');
@@ -953,7 +953,7 @@ export default {
     };
 
     const handlePromptChange = (prompt) => {
-      currentPrompt.value = prompt;
+      currentPrompt.value = sanitizeHtml(prompt); // #19118: backend text (cwd, host)
     };
 
     const handleStatusChange = (status) => {
