@@ -41,7 +41,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/agents/rag_agent.py": 602,
     "autobot-backend/agents/security_scanner_agent.py": 663,
     "autobot-backend/agents/system_command_agent.py": 903,
-    "autobot-backend/agents/web_researcher.py": 1435,
+    "autobot-backend/agents/web_researcher.py": 1390,
     "autobot-backend/ai_hardware_accelerator.py": 1040,
     "autobot-backend/api/advanced_control.py": 615,
     "autobot-backend/api/agent.py": 1370,
@@ -128,7 +128,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_code.py": 3265,
     "autobot-backend/api/schemas_knowledge.py": 5127,
     "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
-    "autobot-backend/api/schemas_workflows.py": 2907,
+    "autobot-backend/api/schemas_workflows.py": 2824,
     "autobot-backend/api/secrets.py": 1179,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
     "autobot-backend/api/settings.py": 881,
@@ -199,7 +199,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/events/stream_manager.py": 654,
     "autobot-backend/events/types.py": 885,
     "autobot-backend/hardware_acceleration.py": 609,
-    "autobot-backend/initialization/lifespan.py": 2320,
+    "autobot-backend/initialization/lifespan.py": 2318,
     "autobot-backend/initialization/router_registry/feature_routers.py": 762,
     "autobot-backend/integrations/cloud_integration.py": 616,
     "autobot-backend/integrations/communication_integration.py": 605,
