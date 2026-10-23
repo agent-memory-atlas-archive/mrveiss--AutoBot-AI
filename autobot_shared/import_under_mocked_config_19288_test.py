@@ -37,6 +37,8 @@ _SLM_MOVED = (
     "api.memory_lifecycle_proxy",
     "api.venv_reconcile",
     "services.admin_password_sync",
+    "services.auth",
+    "services.frontend_bundle_health",
     "services.full_tree_drift",
     "services.generated_system_secrets",
     "services.git_subprocess",
