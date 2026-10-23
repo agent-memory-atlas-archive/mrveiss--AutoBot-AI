@@ -33,6 +33,7 @@ from tools.lint._scan_helpers import tracked_paths
 _CANONICAL = "SLM_ADMIN_PASSWORD"  # pragma: allowlist secret
 _ALIAS = "AUTOBOT_" + _CANONICAL
 _READER = "autobot-slm-backend/ansible/_shared/tasks/read_slm_admin_password.yml"
+_SEED_READER = "autobot-slm-backend/ansible/_shared/tasks/read_admin_seed_password.yml"
 _PY_READER = "autobot-slm-backend/services/admin_seed_password.py"
 _SELF = "repo_tests/slm_admin_password_one_home_19318_test.py"
 
@@ -54,8 +55,7 @@ _READERS = {
     "autobot-slm-backend/scripts/autobot-admin.py": "reset-password rewrites the store's line",
     "install.sh": "the installer writes the store and preserves it on reinstall",
     "docker-compose.yml": "compose passes it to the container, required with :? (#17793)",
-    "autobot-slm-backend/ansible/roles/backend/tasks/main.yml": "AUTOBOT_ADMIN_PASSWORD seed fallback: #19370",
-    "autobot-slm-backend/ansible/playbooks/update-all-nodes.yml": "AUTOBOT_ADMIN_PASSWORD seed fallback: #19370",
+    _SEED_READER: "the one read of the main-app admin seed, which falls back to this password (#19370)",
 }
 
 _NAMES = re.compile(r"\b[A-Z0-9_]*SLM_ADMIN_PASS[A-Z0-9_]*\b")
@@ -191,3 +191,18 @@ def test_contrast_a_second_name_and_a_stray_reader_are_caught() -> None:
     login = 'password: "{{ slm_admin_password }}"'
     assert logs_in_without_reader(login)
     assert not logs_in_without_reader("include_tasks: _shared/tasks/read_slm_admin_password.yml\n" + login)
+
+
+_SEED_READ = re.compile(r"\^AUTOBOT_ADMIN_PASSWORD=")
+
+
+def test_the_main_app_admin_seed_is_read_once_in_ansible() -> None:
+    """#19370: the deploy path and the update path each had their own copy of this read."""
+    hits = _sweep(
+        lambda text, rel: (
+            ["reads the admin seed"]
+            if rel.startswith("autobot-slm-backend/ansible/") and rel != _SEED_READER and _SEED_READ.search(text)
+            else []
+        )
+    )
+    assert not hits, f"a second read of AUTOBOT_ADMIN_PASSWORD; include {_SEED_READER} (#19370):\n" + "\n".join(hits)
