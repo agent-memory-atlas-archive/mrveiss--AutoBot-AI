@@ -15,6 +15,12 @@ ABSOLUTE = "ABSOLUTE"
 CONVERTIBLE = "CONVERTIBLE"
 
 ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
+    "chunk-identity-single-home-18142": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test Python under the backend and shared trees, a subset of tracked Python; the test share and "
+        "the other trees grow at their own rate, so a share of all Python would sink with nothing wrong.",
+    ),
     "shadowed-literal-routes": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -71,10 +77,9 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
     ),
     "audio-extension-allowlist": (
         ABSOLUTE,
-        "COMPLETION_GAP",
-        "It declares `skips` because it cannot read every file it lists, and the relative mode "
-        "applies one fraction to both bounds -- a value that clears `examined()` fails "
-        "`completed()` and the reverse.",
+        "SUBSET_DRIFTS",
+        "Tracked Python minus the canonical file and `repo_tests/` (#16724); tests grow at their "
+        "own rate, so a share of all tracked Python sinks with nothing wrong with the sweep.",
     ),
     "blanket-skip-test-module-sweep": (
         ABSOLUTE,
@@ -300,6 +305,12 @@ ALLOWANCE_VERDICTS: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under one root; the test-file share drifts.",
+    ),
+    "script-module-name-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked scripts (.py, .sh, .bash, .js) under one scripts root, a subset of all tracked files; "
+        "the count drifts as scripts are added.",
     ),
     "post-commit-seed-scan": (
         ABSOLUTE,

@@ -171,19 +171,19 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/views/llc/CostDashboard.vue": 1017,
     "autobot-frontend/src/views/llc/GanttTimelineView.vue": 817,
     "autobot-frontend/src/views/llc/HeartbeatMonitor.vue": 807,
-    "autobot-frontend/src/views/llc/OrgChart.vue": 1527,
+    "autobot-frontend/src/views/llc/OrgChart.vue": 1522,  # #14780: 1527 -> 1522 (kit BaseDrawer)
     "autobot-frontend/src/views/llc/ProjectBrowserView.vue": 1372,  # #18819 1379->1374; #18849 -1; #14778 BaseInput -1
     "autobot-frontend/src/views/llc/RolesView.vue": 1026,  # #18819 1029->1027; #18849 one kit import on the merge (-1)
     "autobot-frontend/src/views/llc/RoutinesView.vue": 688,
     "autobot-frontend/src/views/llc/SprintBoardView.vue": 681,
-    "autobot-frontend/src/views/llc/WorkItemDetail.vue": 1046,
+    "autobot-frontend/src/views/llc/WorkItemDetail.vue": 1013,  # #14780: 1046 -> 1013 (kit BaseDrawer)
     "autobot-infrastructure/shared/ide-extensions/vscode-autobot/src/extension.ts": 741,
     "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/background-monitor.ts": 713,
     "autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/index.ts": 957,
     "autobot-slm-frontend/src/components/AddNodeModal.vue": 1067,  # #14777 batch 2: 1111 -> 1067
     "autobot-slm-frontend/src/components/fleet/DecommissionModal.vue": 619,  # #14777: 699 -> 621; 619 (#18941 review)
     "autobot-slm-frontend/src/components/fleet/NodeLifecyclePanel.vue": 984,
-    "autobot-slm-frontend/src/composables/useAutobotApi.ts": 2068,
+    "autobot-slm-frontend/src/composables/useAutobotApi.ts": 2062,  # #18734: 2068 -> 2062
     "autobot-slm-frontend/src/composables/useCodeSync.ts": 1078,
     "autobot-slm-frontend/src/composables/useOrchestrationManagement.ts": 693,
     "autobot-slm-frontend/src/composables/usePrometheusMetrics.ts": 622,
@@ -205,7 +205,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
     "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 773,  # #18819 + #14777: 807 -> 773
     "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 662,  # #18819 + #14777: 669 -> 662
-    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 720,  # #18819 + #14777: 736 -> 720
+    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 655,  # #14780: 664 -> 655 (BaseSwitch)
     "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 721,  # #18819 + #14777: 733 -> 721
     "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 824,  # #18819 + #14777: 869 -> 824
     "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1088,  # #18819 + #14777: 1099 -> 1088

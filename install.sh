@@ -56,7 +56,7 @@ readonly REPO_HOST="github.com"
 readonly REPO_SLUG="mrveiss/AutoBot-AI"
 readonly DEFAULT_REPO="https://${REPO_HOST}/${REPO_SLUG}.git"
 readonly NODESOURCE_HOST="deb.nodesource.com"
-readonly DEFAULT_BRANCH="main"
+readonly DEFAULT_BRANCH="main" PINNED_COMMIT=""  # a release build pins both: tag and its commit (#18666)
 # #18586: where this script was started from, resolved before any cd; empty under `curl | bash`
 SCRIPT_DIR=""
 [[ -f "${BASH_SOURCE[0]:-}" ]] && SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -136,6 +136,13 @@ run_ok() {
 record_install() {  # record_install <key> <value>, once (#18653)
     mkdir -p "$(dirname "${INSTALL_RECORD}")"
     grep -qxF "$1=$2" "${INSTALL_RECORD}" 2>/dev/null || echo "$1=$2" >> "${INSTALL_RECORD}"
+}
+pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'ok installed'; }
+apt_install_recorded() {  # <desc> <pkg>...: install; record only packages absent BEFORE (#18727)
+    local desc="$1" p new=(); shift
+    for p in "$@"; do pkg_installed "${p}" || new+=("${p}"); done
+    run_ok "${desc}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" || return
+    for p in "${new[@]}"; do record_install package "${p}"; done
 }
 
 # add_ppa_if_missing: prefer device-shipped PPA; only add if not already configured (#7144)
@@ -456,10 +463,7 @@ system_setup() {
         add_ppa_if_missing "ppa:deadsnakes/ppa" "deadsnakes/ppa" "deadsnakes (Python 3.14)"
         run_ok "Updating package lists (Python 3.14)" \
             apt-get update -qq
-        run_ok "Installing Python 3.14" \
-            env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-                python3.14 python3.14-venv python3.14-dev
-        for p in python3.14 python3.14-venv python3.14-dev; do record_install package "${p}"; done
+        apt_install_recorded "Installing Python 3.14" python3.14 python3.14-venv python3.14-dev
     else
         success "  Python 3.14 already installed ($(python3.14 --version))"
     fi
@@ -468,9 +472,7 @@ system_setup() {
         add_ppa_if_missing "ppa:ansible/ansible" "ansible/ansible" "Ansible"
         run_ok "Updating package lists (Ansible)" \
             apt-get update -qq
-        run_ok "Installing Ansible" \
-            env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ansible
-        record_install package ansible
+        apt_install_recorded "Installing Ansible" ansible
     else
         success "  Ansible already installed ($(ansible --version | head -1))"
     fi
@@ -478,9 +480,7 @@ system_setup() {
     if ! command -v node &>/dev/null; then
         run_ok "Adding NodeSource repository" \
             bash -c "curl -fsSL https://${NODESOURCE_HOST}/setup_20.x | bash -"
-        run_ok "Installing Node.js" \
-            env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs
-        record_install package nodejs; record_install apt_source nodesource
+        apt_install_recorded "Installing Node.js" nodejs; record_install apt_source nodesource
     else
         success "  Node.js already installed ($(node --version))"
     fi
@@ -567,18 +567,18 @@ code_deployment() {
         done
 
         run_ok "Fetching latest code" \
-            sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" fetch origin
+            sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" fetch --tags origin
         run_ok "Checking out ${GIT_BRANCH}" \
             sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" checkout "${GIT_BRANCH}"
         run_ok "Pulling latest changes" \
-            sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" pull origin "${GIT_BRANCH}"
+            sudo -u "${AUTOBOT_USER}" sh -c 'git -C "$1" symbolic-ref -q HEAD >/dev/null || exit 0; git -C "$1" pull origin "$2"' _ "${CODE_SOURCE}" "${GIT_BRANCH}"  # a release tag is already exact (#18666)
     else
         run_ok "Cloning AutoBot repository (branch: ${GIT_BRANCH})" \
             sudo -u "${AUTOBOT_USER}" git clone -b "${GIT_BRANCH}" "${DEFAULT_REPO}" "${CODE_SOURCE}"
     fi
 
     local installed_sha  # #18586: record exactly what was installed
-    installed_sha="$(sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" rev-parse HEAD)"
+    installed_sha="$(sudo -u "${AUTOBOT_USER}" git -C "${CODE_SOURCE}" rev-parse HEAD)"; [[ -z "${PINNED_COMMIT}" || "${GIT_BRANCH}" != "${DEFAULT_BRANCH}" || "${installed_sha}" == "${PINNED_COMMIT}" ]] || fatal "${GIT_BRANCH} checked out ${installed_sha}, but this signed installer was built for ${PINNED_COMMIT}; the tag moved -- refusing (#18666)"
     success "Installing ${DEFAULT_REPO} branch ${GIT_BRANCH} @ ${installed_sha}"
 
     # Copy code from code_source to service directories where Ansible expects them

@@ -3211,17 +3211,15 @@ async def _colocated_node_ids(slm_node_id: str) -> List[str]:
 async def _ansible_self_update(node_id: str, on_failure: Optional[Callable[[str], None]] = None) -> None:
     """Run update-all-nodes.yml against this machine to update all deployed roles (#9073).
 
-    Covers every role Ansible knows about (backend, frontend, shared, agent,
-    plugins, npu-worker, browser-worker, etc.) — not just the SLM components.
+    Covers every role Ansible knows about, not just the SLM components.
     Fire-and-forget: the SLM service restarts mid-run so this coroutine dies.
     ``detach=True`` runs the ansible-playbook process in its own systemd
     transient scope (#11492) so it — unlike this coroutine — survives that
     restart and completes Play 1's tail plus Play 2/3; callers must poll
     health rather than await a result.
 
-    Issue #9224: Update node version in DB after successful sync.
-    C2-a: Clear the resume plan on playbook failure (before restart) so stale
-          plans do not auto-fire forever.
+    Issue #9224: Update node version in DB after successful sync. C2-a: a real failure
+    clears the resume plan; a wait cut by this SLM's own restart keeps it (#19139).
     Issue #15475: ``--limit`` includes every Node row co-located on this same
     physical machine, not just the SLM's own node_id, so a co-located
     frontend (or any other co-located role) is refreshed by the same run.
@@ -3232,12 +3230,13 @@ async def _ansible_self_update(node_id: str, on_failure: Optional[Callable[[str]
     limit = ["localhost", *await _colocated_node_ids(node_id)]
     try:
         result = await executor.execute_playbook(playbook_name="update-all-nodes.yml", limit=limit, detach=True)
+        if restart_cut_the_wait(result, node_id):  # #19139: the restarted process owns the plan now
+            return
         failure = None if result["success"] else summarize_playbook_failure(result["output"])
     except Exception as exc:
         failure = f"Ansible full-machine update error: {exc}"
     if failure is not None:
         logger.error("Ansible full-machine update failed for %s: %s", node_id, failure)
-        # C2-a: failed before the restart — clear the plan so it never auto-fires
         await _clear_resume_plan()
         if on_failure is not None:
             on_failure(failure)
@@ -4550,8 +4549,10 @@ from api._resume_plan import (  # noqa: E402,F401 - re-exported; module-level im
     _clear_resume_plan,
     _persist_resume_plan,
     plan_version_is_supported,
+    restart_cut_the_wait,
     restored_stage,
 )
+from api._resume_wait import resolve_completion_time, wait_for_detached_self_update  # noqa: E402
 
 
 async def _get_slm_deployed_commit() -> Optional[str]:
@@ -5319,34 +5320,14 @@ async def _await_self_update_completion(job: "UpdateAllJob", since: Optional[str
         if job.status == "failed":  # #16610: the fired run failed before the restart; nothing will complete
             return None
         activity = await read_deploy_activity()
-        # #14703 interaction: waiting IS progress. This loop runs up to
-        # _SELF_UPDATE_WATCH_TIMEOUT_SECONDS (3600s default) and the staleness
-        # rule retires a job after _UPDATE_ALL_STALE_SECONDS (1800s default) of
-        # silence -- exactly half. Without a stamp per poll, a healthy
-        # self-update that takes longer than 1800s is retired as stale at the
-        # halfway point of its own permitted wait. The reconcile path is the
-        # no-restart case, so it deliberately persists no resume plan, and the
-        # resume plan is the only other thing that stays the staleness rule.
+        # #14703: waiting IS progress. The wait (3600s) outlives the staleness rule
+        # (1800s), so stamp every poll or a healthy long self-update is retired as stale.
         _mark_progress(job)
         # in_progress is None means the unit could not be queried — unknown is
         # not "finished", so keep waiting rather than resolving on a guess.
-        if activity.in_progress is False and _completion_is_newer_than(activity.last_completed_play_at, since):
-            rotated_at = _rotated_completion_time()
-            if rotated_at is None:
-                return activity.last_completed_play_at
-            # #14804: the reading came from the rotated log, so the live mtime
-            # above dates a truncation rather than a play. Resolve on the
-            # rotated file's own mtime when that post-dates our firing -- it is
-            # the one timestamp here that describes a real completion. Waiting
-            # instead made this condition permanent and turned a successful
-            # self-update into a FAILED job an hour later.
-            if _completion_is_newer_than(rotated_at, since):
-                logger.warning(
-                    "update-all: self-update recap landed in the rotated log; resolving on its rotation time %s",
-                    rotated_at,
-                )
-                return rotated_at
-            logger.warning("update-all: rotated-log verdict pre-dates this run — still waiting")
+        completed_at = resolve_completion_time(activity, since)
+        if completed_at is not None:
+            return completed_at
         # Checked after polling, never before: a misconfigured timeout must not
         # produce a verdict from zero observations.
         if time.monotonic() >= deadline:
@@ -5554,6 +5535,10 @@ async def _execute_resume(
     """
     global _resume_task
     try:
+        if not await wait_for_detached_self_update(
+            job, _mark_progress, _SELF_UPDATE_WATCH_TIMEOUT_SECONDS, _SELF_UPDATE_WATCH_POLL_SECONDS
+        ):
+            return
         if not await _resume_verify_slm_stage(job, target_commit):
             return
 

@@ -216,7 +216,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-emerald-600": 3,
     "slm:bg-emerald-700": 1,
     "slm:bg-gray-100": 198,  # #14780 BaseDrawer: 199 -> 198
-    "slm:bg-gray-200": 118,
+    "slm:bg-gray-200": 100,  # #14780 BaseSwitch: 118 -> 100
     "slm:bg-gray-300": 9,
     "slm:bg-gray-400": 41,
     "slm:bg-gray-400/15": 1,
@@ -291,7 +291,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:border-emerald-500/30": 2,
     "slm:border-gray-100": 55,
     "slm:border-gray-200": 309,  # #14780 BaseDrawer: 313 -> 309
-    "slm:border-gray-300": 343,  # #14780 BasePagination: 347 -> 343
+    "slm:border-gray-300": 322,  # #14780 BaseSwitch: 340 -> 322
     "slm:border-gray-50": 4,
     "slm:border-gray-500": 2,
     "slm:border-gray-500/30": 4,
@@ -353,7 +353,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-gray-400": 214,  # #14780 BaseDrawer: 217 -> 214
     "slm:text-gray-500": 869,  # #14780 BasePagination: 874 -> 869
     "slm:text-gray-600": 265,  # #14780 BaseDrawer: 268 -> 265
-    "slm:text-gray-700": 431,
+    "slm:text-gray-700": 428,  # #18734: 431 -> 428
     "slm:text-gray-800": 41,  # #14777: 43 -> 41, SLM dialogs moved onto the kit BaseModal
     "slm:text-gray-900": 439,  # #14780 BaseDrawer: 442 -> 439
     "slm:text-green-300": 4,
@@ -393,4 +393,4 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
 }
 
 #: Frozen total, asserted separately so a hand edit of one number cannot pass.
-TOTAL_OCCURRENCES = 6159  # #14780 BasePagination: 6180 -> 6159
+TOTAL_OCCURRENCES = 6117  # #14780 BaseSwitch: 6153 -> 6117
