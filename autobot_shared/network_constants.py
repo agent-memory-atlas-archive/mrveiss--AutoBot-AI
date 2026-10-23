@@ -537,32 +537,31 @@ def get_network_config() -> NetworkConfig:
     return _network_config
 
 
-class DatabaseConstants:
-    """Redis database assignments aligned with redis-databases.yaml (#2670).
+#: ``DatabaseConstants`` attribute -> the database it names. Names only (#19232): the
+#: numbers come from the one table, read on access because importing it here would cycle.
+_DB_TARGETS: tuple[str, ...] = ("main", "knowledge", "prompts", "agents", "metrics", "cache", "sessions", "logs")
+_DB_TARGETS += ("temp", "audit", "analytics", "testing", "celery_broker", "celery_results")
+_DATABASE_CONSTANT_NAMES = {f"{n.upper()}_DB": n for n in _DB_TARGETS} | {"TASKS_DB": "workflows", "BACKUP_DB": "audit"}
 
-    redis-databases.yaml is the single source of truth for DB allocation.
-    This class mirrors it for callers that import from network_constants.
-    Validated by tests/test_redis_db_ssot.py.
+
+class _DatabaseConstantsMeta(type):
+    """Resolves ``DatabaseConstants.MAIN_DB`` etc. through ``database_number`` on access."""
+
+    def __getattr__(cls, name: str) -> int:
+        target = _DATABASE_CONSTANT_NAMES.get(name)
+        if target is None:
+            raise AttributeError(name)
+        from autobot_shared.redis_management.database_names import database_number
+
+        return database_number(target)
+
+
+class DatabaseConstants(metaclass=_DatabaseConstantsMeta):
+    """Redis database numbers by constant name, read from the one table (#2670, #19232).
+
+    Formerly a literal mirror of redis-databases.yaml that ``AUTOBOT_REDIS_DB_*``
+    overrides could not move.
     """
-
-    # Core databases — aligned with redis-databases.yaml (#2670)
-    MAIN_DB = 0
-    KNOWLEDGE_DB = 1
-    PROMPTS_DB = 2
-    AGENTS_DB = 3
-    METRICS_DB = 4
-    CACHE_DB = 5
-    SESSIONS_DB = 6
-    TASKS_DB = 7  # workflows in redis-databases.yaml
-    LOGS_DB = 8
-    TEMP_DB = 9
-    AUDIT_DB = 10
-    ANALYTICS_DB = 11
-    CELERY_BROKER_DB = 14
-    CELERY_RESULTS_DB = 15
-    TESTING_DB = 13
-    # Legacy alias
-    BACKUP_DB = 10  # Alias for AUDIT_DB
 
     @classmethod
     def get_db_description(cls, db_number: int) -> str:

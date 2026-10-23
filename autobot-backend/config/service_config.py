@@ -216,6 +216,7 @@ class ServiceConfigMixin:
         db index db_tasks vs db_main here) — that is a different scope/owner
         sharing only the function name, intentionally left unconverged.
         """
+        from autobot_shared.redis_management.database_names import database_number
         from autobot_shared.ssot_config import config as ssot
 
         return {
@@ -224,7 +225,7 @@ class ServiceConfigMixin:
             "port": ssot.port.redis,
             "password": ssot.redis.password,
             "username": ssot.redis.username,
-            "db": ssot.redis.db_main,
+            "db": database_number("main"),  # #19232: the one name -> number table
         }
 
     def get_ollama_url(self) -> str:

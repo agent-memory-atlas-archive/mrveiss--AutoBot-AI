@@ -73,46 +73,19 @@ def validate_required_variables(env_vars: Dict[str, str], env_type: str) -> List
 
 
 def validate_redis_databases(env_vars: Dict[str, str], env_type: str = "") -> List[str]:
-    """Validate Redis database assignments"""
-    errors = []
+    """Refuse AUTOBOT_REDIS_DB_* overrides the runtime would refuse (#19232).
 
-    # Skip Redis database validation for frontend files
+    The numbers live in redis-databases.yaml; an env file only overrides one when a
+    deployment differs. So this checks what the runtime checks -- a non-numeric value,
+    or two declared databases on one number -- against that one table, instead of a
+    hand-kept copy of it (which had drifted: TESTING=15 is celery_results' DB).
+    """
     if env_type == "frontend":
-        return errors
+        return []
+    from autobot_shared.redis_management.database_overrides import override_problems
+    from autobot_shared.redis_management.types import DECLARED_DATABASES
 
-    # Expected Redis database variables
-    expected_dbs = {
-        "AUTOBOT_REDIS_DB_MAIN": "0",
-        "AUTOBOT_REDIS_DB_KNOWLEDGE": "1",
-        "AUTOBOT_REDIS_DB_PROMPTS": "2",
-        "AUTOBOT_REDIS_DB_AGENTS": "3",
-        "AUTOBOT_REDIS_DB_METRICS": "4",
-        "AUTOBOT_REDIS_DB_CACHE": "5",
-        "AUTOBOT_REDIS_DB_SESSIONS": "6",
-        "AUTOBOT_REDIS_DB_TASKS": "7",
-        "AUTOBOT_REDIS_DB_LOGS": "8",
-        "AUTOBOT_REDIS_DB_TEMP": "9",
-        "AUTOBOT_REDIS_DB_BACKUP": "10",
-        "AUTOBOT_REDIS_DB_TESTING": "15",
-    }
-
-    # Check for missing database assignments
-    for db_var, expected_value in expected_dbs.items():
-        if db_var in env_vars:
-            if env_vars[db_var] != expected_value:
-                errors.append(f"Redis database mismatch: {db_var} = {env_vars[db_var]}, expected {expected_value}")
-        else:
-            errors.append(f"Missing Redis database assignment: {db_var}")
-
-    # Check for duplicate database numbers
-    db_values = []
-    for db_var, value in env_vars.items():
-        if db_var.startswith("AUTOBOT_REDIS_DB_") and db_var != "AUTOBOT_REDIS_DB_TESTING":
-            if value in db_values:
-                errors.append(f"Duplicate Redis database number: {value} used by {db_var}")
-            db_values.append(value)
-
-    return errors
+    return [f"Redis database override: {problem}" for problem in override_problems(DECLARED_DATABASES, env_vars)]
 
 
 def validate_ip_consistency(env_vars: Dict[str, str], env_type: str) -> List[str]:
