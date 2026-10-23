@@ -204,6 +204,10 @@ ALLOWED_ADDITIONS = {
             f"{WORKFLOWS}/image-sign.yml",
             # #18666: the same test runs the signing-key gate against the real cosign.pub.
             "cosign.pub",
+            # #17793: compose_exposure_and_credentials_17500_test.py checks that both smoke jobs export
+            # exactly the credentials compose requires, so editing either workflow must run the suite.
+            f"{WORKFLOWS}/docker-smoke-test.yml",
+            f"{WORKFLOWS}/co-located-smoke.yml",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
