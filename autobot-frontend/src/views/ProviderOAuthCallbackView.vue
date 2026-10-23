@@ -9,6 +9,7 @@ import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ApiClient from '@/utils/ApiClient'
+import type { components } from '@/types/generated/api'
 import { createLogger } from '@/utils/debugUtils'
 import { useNotificationBus } from '@/composables/useNotificationBus'
 import { buildProviderRedirectUri, PROVIDER_OAUTH_SETTINGS_PATH } from '@/utils/providerOAuth'
@@ -35,7 +36,7 @@ async function finish(): Promise<void> {
     failure = t('settings.providerAuth.callback.missingParams')
   } else {
     try {
-      const resp = await ApiClient.post<{ provider_name: string; stored: boolean }>(
+      const resp: components['schemas']['OAuthInitiateResponse'] = await ApiClient.post(
         '/api/llm-auth/oauth/callback',
         { state, code, redirect_uri: buildProviderRedirectUri() },
       )

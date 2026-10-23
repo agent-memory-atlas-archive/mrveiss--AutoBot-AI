@@ -32,7 +32,7 @@ export function useStopGeneration() {
     stopping.value = true
     failed.value = false
     try {
-      await apiClient.post<unknown>(
+      await apiClient.post(
         `${getApiBase()}/chat/sessions/${encodeURIComponent(sessionId)}/turn/cancel`,
         {},
       )

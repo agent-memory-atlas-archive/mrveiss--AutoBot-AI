@@ -110,6 +110,7 @@
 import { ref, computed, onMounted, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ApiClient from '@/utils/ApiClient'
+import type { components } from '@/types/generated/api'
 import { useSharedTokenRevoke } from '@/composables/useSharedTokenRevoke'
 import {
   buildProviderRedirectUri,
@@ -135,10 +136,7 @@ interface AuthStatus {
   shared?: boolean
 }
 
-interface RevokeResult {
-  provider_revoked?: boolean | null
-  provider_error?: string | null
-}
+type RevokeResult = components['schemas']['ProviderRevokeResult']
 
 // #19241: provider endpoints, client ids and flow availability are server-side;
 // the SPA only receives which flows work and which operator settings are missing.
@@ -204,7 +202,7 @@ async function revoke(): Promise<void> {
   errorMsg.value = ''
   revokeWarning.value = ''
   try {
-    const result = await ApiClient.delete<RevokeResult>(`/api/llm-auth/${props.providerName}?scope=${props.scope}`)
+    const result: RevokeResult = await ApiClient.delete(`/api/llm-auth/${props.providerName}?scope=${props.scope}`)
     // #19241: the local delete always happens; a provider-side revoke failure is surfaced, not hidden.
     revokeWarning.value = result?.provider_revoked === false
       ? t('settings.providerAuth.providerRevokeFailed', { reason: result.provider_error ?? '' })
@@ -222,7 +220,7 @@ async function initiateOAuth(): Promise<void> {
   busy.value = true
   errorMsg.value = ''
   try {
-    const resp = await ApiClient.post<{ authorize_url: string; state: string }>(
+    const resp: components['schemas']['OAuthAuthorizeResponse'] = await ApiClient.post(
       '/api/llm-auth/oauth/initiate',
       {
         provider_name: props.providerName,

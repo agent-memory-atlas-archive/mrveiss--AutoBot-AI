@@ -55,6 +55,7 @@ import SharedTokenRevoke from '@/components/settings/SharedTokenRevoke.vue'
 import { isSuperadminRole } from '@/constants/roles'
 import { useUserStore } from '@/stores/useUserStore'
 import type { ProviderInfo } from '@/utils/providerOAuth'
+import type { components } from '@/types/generated/api'
 
 defineProps<{ isAdmin: boolean }>()
 
@@ -68,7 +69,8 @@ const loadError = ref('')
 
 onMounted(async () => {
   try {
-    providers.value = await ApiClient.get<ProviderInfo[]>('/api/llm-auth/providers')
+    const listing: components['schemas']['ProviderListing'][] = await ApiClient.get('/api/llm-auth/providers')
+    providers.value = listing
   } catch (err: unknown) {
     logger.error('Failed to load provider list', err)
     loadError.value = t('settings.providerAuth.loadFailed')

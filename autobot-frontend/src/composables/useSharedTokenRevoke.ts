@@ -13,11 +13,9 @@ import { useI18n } from 'vue-i18n'
 import ApiClient from '@/utils/ApiClient'
 import { createLogger } from '@/utils/debugUtils'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import type { components } from '@/types/generated/api'
 
-interface RevokeResult {
-  provider_revoked?: boolean | null
-  provider_error?: string | null
-}
+type RevokeResult = components['schemas']['ProviderRevokeResult']
 
 export interface SharedProvider {
   name: string
@@ -49,7 +47,8 @@ export function useSharedTokenRevoke() {
     if (!ok) return false
     busy.value = true
     try {
-      describe(p, await ApiClient.delete<RevokeResult>(`/api/llm-auth/${p.name}/shared`))
+      const result: RevokeResult = await ApiClient.delete(`/api/llm-auth/${p.name}/shared`)
+      describe(p, result)
       return true
     } catch (err: unknown) {
       logger.error('Shared token revoke failed', err)
