@@ -14,11 +14,12 @@
     </template>
 
             <!-- Name -->
-            <BaseFormField id="source-name" :label="$t('analytics.sources.form.name')" required :error="errors.name" v-slot="{ describedBy, invalid }">
+            <BaseFormField id="source-name" :label="$t('analytics.sources.form.name')" required :error="errors.name" v-slot="{ describedBy, invalid, required }">
               <input
                 id="source-name"
                 :aria-describedby="describedBy"
                 :aria-invalid="invalid"
+                :aria-required="required"
                 v-model="form.name"
                 class="form-input"
                 :placeholder="$t('analytics.sources.form.namePlaceholder')"
@@ -55,11 +56,12 @@
 
             <!-- GitHub fields -->
             <template v-if="form.source_type === 'github'">
-              <BaseFormField id="source-repo" :label="$t('analytics.sources.form.repository')" required :error="errors.repo" v-slot="{ describedBy, invalid }">
+              <BaseFormField id="source-repo" :label="$t('analytics.sources.form.repository')" required :error="errors.repo" v-slot="{ describedBy, invalid, required }">
                 <input
                   id="source-repo"
                   :aria-describedby="describedBy"
                   :aria-invalid="invalid"
+                  :aria-required="required"
                   v-model="form.repo"
                   class="form-input"
                   :placeholder="$t('analytics.sources.form.repoPlaceholder')"
@@ -103,11 +105,12 @@
 
             <!-- Local Path fields -->
             <template v-if="form.source_type === 'local'">
-              <BaseFormField id="source-path" :label="$t('analytics.sources.form.localPath')" required :error="errors.local_path" v-slot="{ describedBy, invalid }">
+              <BaseFormField id="source-path" :label="$t('analytics.sources.form.localPath')" required :error="errors.local_path" v-slot="{ describedBy, invalid, required }">
                 <input
                   id="source-path"
                   :aria-describedby="describedBy"
                   :aria-invalid="invalid"
+                  :aria-required="required"
                   v-model="form.local_path"
                   class="form-input"
                   :placeholder="$t('analytics.sources.form.localPathPlaceholder')"
