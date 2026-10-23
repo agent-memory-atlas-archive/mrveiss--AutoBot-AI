@@ -62,6 +62,8 @@ python:
   - 'docker/frontend/Dockerfile'
   - '.github/workflows/docker-smoke-test.yml'
   - '.github/workflows/co-located-smoke.yml'
+  # #17500, #18729: compose_exposure_and_credentials_17500_test.py and docker_admin_seed_18729_test.py read the secrets generator.
+  - 'docker/generate-secrets.sh'
   # #18556: one_static_data_copy_18556_test.py reads the canonical static data files.
   - 'autobot-backend/config/permission_rules.yaml'
   - 'autobot-backend/static/error_messages.yaml'

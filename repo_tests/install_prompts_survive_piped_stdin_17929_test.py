@@ -50,7 +50,12 @@ def _source() -> str:
 #: it exists to find.
 # Any statement-level `read` without input redirection reads stdin -- a prompt with -p, and the
 # echo-then-read form the interface choice used, which the -p-only pattern missed (#19239).
-_BARE_READ = re.compile(r"^\s*(?:IFS=\s*)?read\s+(?![^\n]*<)[^\n]*$", re.M)
+# A `<` counts as a redirect only OUTSIDE quotes: `read -rp "Enter <value>: " v` still reads stdin
+# (CodeRabbit on #19286), so the lookahead steps over whole quoted strings before looking for one.
+_BARE_READ = re.compile(
+    r"""^\s*(?:IFS=\s*)?read\s+(?!(?:[^\n"'<]|"[^"\n]*"|'[^'\n]*')*<)[^\n]*$""",
+    re.M,
+)
 
 
 def _code_lines(source: str) -> str:
@@ -87,6 +92,15 @@ def test_the_detector_sees_a_bare_prompt() -> None:
         "    while IFS= read -r line; do\n"
     ), "a while-loop read is fed by its done < redirect"
     assert not _BARE_READ.findall('    IFS= read -r v <"${f}"\n'), "a read with an input redirect is not a prompt"
+
+
+def test_a_quoted_angle_bracket_is_not_a_redirect() -> None:
+    """CodeRabbit on #19286: `<` inside the prompt text must not hide a stdin read."""
+    assert _BARE_READ.findall('    read -rp "Enter <value>: " choice\n')
+    assert _BARE_READ.findall("    read -rp 'Enter <value>: ' choice\n")
+    # contrast: the same prompt text WITH a real redirect after it is still not a stdin read
+    assert not _BARE_READ.findall('    read -rp "Enter <value>: " choice </dev/tty\n')
+    assert not _BARE_READ.findall('    read -rp "Enter <value>: " choice <&"${fd}"\n')
 
 
 def test_a_tty_backed_prompt_is_not_reported() -> None:

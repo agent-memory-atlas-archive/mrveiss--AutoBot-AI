@@ -76,7 +76,7 @@ UNINSTALL=false
 VALIDATE=false
 CONFIRM_YES=false
 ROTATE_SECRETS=false  # #7075: --rotate-secrets opts in to replacing existing SLM_ADMIN_PASSWORD
-INSTALL_TMP="" ADMIN_PASSWORD_GENERATED=false  # #19236: private temp dir; print the password only if generated
+INSTALL_TMP="" ADMIN_PASSWORD_GENERATED=false ADMIN_PASSWORD_PRESERVED=false  # #19236: private temp dir; print the password only if generated. PRESERVED: a reinstall kept the stored one
 GIT_BRANCH="${DEFAULT_BRANCH}"
 ADMIN_PASSWORD=""
 OVERRIDE_IP=""  # --ip= override for multi-interface hosts (#2832)
@@ -327,7 +327,7 @@ Options:
   --validate            Verify installation integrity (check required service distributions)
   --yes                 Skip confirmation prompts (use with --uninstall)
   --branch=BRANCH       Git branch to install (default: ${DEFAULT_BRANCH})
-  --admin-pass-file=F   read the SLM admin password from file F (auto-generated if not set)
+  --admin-pass-file=F   read the SLM admin password from file F (mode 600 or tighter, auto-generated if not set)
   --ip=IP               Override auto-detected IP address (#2832)
   --rotate-secrets      Replace existing SLM_ADMIN_PASSWORD on reinstall (#7075).
                         By default reinstall PRESERVES the wizard-set password
@@ -336,7 +336,7 @@ Options:
 
 Environment overrides (skip the corresponding interactive prompt; #7057):
   AUTOBOT_INSTALL_BRANCH=<branch>     same as --branch=
-  AUTOBOT_SLM_ADMIN_PASSWORD=<pass>   same as --admin-pass-file=
+  AUTOBOT_SLM_ADMIN_PASSWORD=<pass>   the admin password itself (not a file path)
   AUTOBOT_INSTALL_INTERFACE=<iface>   pick an interface by name (eth2, eth0, ...)
                                       instead of the menu prompt
   OVERRIDE_IP=<ip>                    skip detection entirely and use this IP
@@ -935,7 +935,7 @@ EOF
     echo
     echo -e "  ${BLUE}SLM URL:${NC}         https://${server_ip}/slm/"
     echo -e "  ${BLUE}Admin Username:${NC}  admin"
-    if ${ADMIN_PASSWORD_GENERATED}; then echo -e "  ${BLUE}Admin Password:${NC}  ${ADMIN_PASSWORD}"; else echo -e "  ${BLUE}Admin Password:${NC}  the one you supplied"; fi
+    if ${ADMIN_PASSWORD_GENERATED}; then echo -e "  ${BLUE}Admin Password:${NC}  ${ADMIN_PASSWORD}"; else echo -e "  ${BLUE}Admin Password:${NC}  $(${ADMIN_PASSWORD_PRESERVED} && echo "the existing password, kept from the previous install (see ${creds_file})" || echo "the one you supplied")"; fi
     echo
     echo -e "  ${YELLOW}Note:${NC} Using self-signed certificate — browser will show a warning."
     echo
@@ -1018,7 +1018,7 @@ prompt_config() {
                 warn "AUTOBOT_SLM_ADMIN_PASSWORD env-var ignored — existing wizard-set password preserved."
                 warn "  To rotate: rerun with --rotate-secrets (warns + replaces) or edit ${secrets_file} manually."
             fi
-            ADMIN_PASSWORD="${existing_pass}"
+            ADMIN_PASSWORD="${existing_pass}"; ADMIN_PASSWORD_PRESERVED=true
             info "Preserving existing SLM_ADMIN_PASSWORD from ${secrets_file}"
         fi
     fi

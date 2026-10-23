@@ -59,7 +59,7 @@ sudo ./install.sh --unattended # Unattended (CI/automation)
 | `--unattended` | No prompts, use all defaults |
 | `--reinstall` | Force reinstall over existing installation |
 | `--branch=BRANCH` | Git branch to install (default: `main`) |
-| `--admin-pass-file=PATH` | Read the SLM admin password from the first line of PATH (auto-generated if not set) |
+| `--admin-pass-file=PATH` | Read the SLM admin password from the first line of PATH (auto-generated if not set). The file must be non-empty and mode `600` or tighter (`chmod 600 PATH`); the installer refuses a group- or world-readable file or an empty first line |
 
 **The installer will:**
 1. Verify root access, systemd, disk space (5 GB+), memory (2 GB+), and internet

@@ -208,6 +208,8 @@ ALLOWED_ADDITIONS = {
             # exactly the credentials compose requires, so editing either workflow must run the suite.
             f"{WORKFLOWS}/docker-smoke-test.yml",
             f"{WORKFLOWS}/co-located-smoke.yml",
+            # #17500, #18729: both guards read the secrets generator, so editing it must run the suite.
+            "docker/generate-secrets.sh",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the

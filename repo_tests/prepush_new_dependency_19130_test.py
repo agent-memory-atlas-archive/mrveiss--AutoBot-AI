@@ -379,6 +379,24 @@ class TestVueTscNewDependency:
         )
         assert _tsc_verdict(line, "dompurify", tmp_path) != 0
 
+    _COLON = (
+        "src/utils/sanitize.ts:12:23 - error TS2307: Cannot find module '{0}' or its corresponding type declarations."
+    )
+
+    def test_the_colon_position_format_for_the_absent_new_dep_defers(self, tmp_path: Path) -> None:
+        """CodeRabbit on #19286: vue-tsc's `file:line:col - error` form defers like the parenthesised one."""
+        assert _tsc_verdict(self._COLON.format("dompurify"), "dompurify", tmp_path) == 0
+
+    def test_a_ts2307_quoted_inside_a_colon_format_diagnostic_fails(self, tmp_path: Path) -> None:
+        line = (
+            "src/a.ts:4:7 - error TS2322: Type '\"error TS2307: Cannot find module 'dompurify'\"' "
+            "is not assignable to type 'number'."
+        )
+        assert _tsc_verdict(line, "dompurify", tmp_path) != 0
+
+    def test_a_colon_format_ts2307_for_a_module_not_added_fails(self, tmp_path: Path) -> None:
+        assert _tsc_verdict(self._COLON.format("lodash"), "dompurify", tmp_path) != 0
+
     def test_a_lookalike_package_name_fails(self, tmp_path: Path) -> None:
         assert _tsc_verdict(self._TS2307.format("dompurify-extra"), "dompurify", tmp_path) != 0
 

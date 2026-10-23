@@ -170,6 +170,9 @@ def test_the_password_file_must_be_owner_only_and_non_empty(
 def test_the_summary_prints_the_password_only_when_generated() -> None:
     text = _INSTALL.read_text(encoding="utf-8")
     assert re.search(
-        r'if \$\{ADMIN_PASSWORD_GENERATED\}; then echo[^\n]*\$\{ADMIN_PASSWORD\}"; else echo[^\n]*supplied', text
+        r'if \$\{ADMIN_PASSWORD_GENERATED\}; then echo[^\n]*\$\{ADMIN_PASSWORD\}"; else echo[^\n]*supplied',
+        text,
     )
+    # CodeRabbit on #19286: a reinstall that kept the stored password is not "the one you supplied".
+    assert "ADMIN_PASSWORD_PRESERVED=true" in text and "the existing password" in text
     assert text.count("ADMIN_PASSWORD=$(generate_admin_password); ADMIN_PASSWORD_GENERATED=true") == 3

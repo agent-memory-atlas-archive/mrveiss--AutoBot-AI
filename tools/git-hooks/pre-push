@@ -304,9 +304,10 @@ tsc_failed_on_new_dep_only() {
     BEGIN { split(absent, names, " "); for (i in names) isabsent[names[i]] = 1 }
     !NF { next }
     { n++ }
-    # Anchored on the diagnostic position "<file>(<line>,<col>): error TS2307:" -- an unanchored match
-    # would accept another diagnostic whose MESSAGE quotes a TS2307 line (CodeRabbit on #19272).
-    !match($0, /^[^ ][^()]*\([0-9]+,[0-9]+\): error TS2307: Cannot find module ["\x27][^"\x27]+["\x27]/) { bad = 1; next }
+    # Anchored on the diagnostic position -- "<file>(<line>,<col>): error TS2307:" or the pretty
+    # form "<file>:<line>:<col> - error TS2307:" -- an unanchored match would accept
+    # another diagnostic whose MESSAGE quotes a TS2307 line (CodeRabbit on #19272, #19286).
+    !match($0, /^([^ ][^()]*\([0-9]+,[0-9]+\):|[^ ]+:[0-9]+:[0-9]+ -) error TS2307: Cannot find module ["\x27][^"\x27]+["\x27]/) { bad = 1; next }
     {
       pkg = substr($0, RSTART, RLENGTH); sub(/^[^"\x27]*["\x27]/, "", pkg); sub(/["\x27]$/, "", pkg)
       split(pkg, part, "/"); name = (pkg ~ /^@/) ? part[1] "/" part[2] : part[1]

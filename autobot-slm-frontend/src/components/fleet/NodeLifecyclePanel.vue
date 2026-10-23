@@ -101,7 +101,8 @@ const fleetStore = useFleetStore()
 const events = ref<LifecycleEvent[]>([])
 const totalEvents = ref(0)
 const isLoading = ref(true)
-const loadError = ref<string | null>(null)
+const loadError = ref(false) // a flag, never the exception text: detail is logged
+let fetchSeq = 0 // newest fetchEvents call; an older response landing later is ignored
 const isLoadingMore = ref(false)
 const currentOperation = ref<string | null>(null)
 const lastRefresh = ref<string | null>(null)
@@ -314,11 +315,9 @@ function getUpdateSeverityClass(severity: string): string {
 
 // API Methods - wired to real backend endpoints
 async function fetchEvents(): Promise<void> {
+  const seq = ++fetchSeq
   try {
-    const filters: EventFilters = {
-      limit: pageSize,
-      offset: 0,
-    }
+    const filters: EventFilters = { limit: pageSize, offset: 0 }
     // Note: Don't send event_type filter to API - we filter by category client-side
     // The API expects exact event types (e.g., 'deployment_completed') but UI filters
     // by category (e.g., 'deployment'). Client-side filteredEvents handles this.
@@ -332,6 +331,7 @@ async function fetchEvents(): Promise<void> {
       offset: filters.offset,
     })
 
+    if (seq !== fetchSeq) return // stale
     // Map backend events to local LifecycleEvent type
     events.value = nodeEvents.map((e) => ({
       id: e.id,
@@ -344,16 +344,17 @@ async function fetchEvents(): Promise<void> {
     totalEvents.value = events.value.length
     currentOffset.value = events.value.length
     lastRefresh.value = new Date().toISOString()
-    loadError.value = null
+    loadError.value = false
   } catch (error) {
     logger.error('Failed to fetch lifecycle events:', error)
+    if (seq !== fetchSeq) return
     // Say the events could not be loaded; never show invented ones (#19270).
     events.value = []
     totalEvents.value = 0
     currentOffset.value = 0
-    loadError.value = error instanceof Error ? error.message : String(error)
+    loadError.value = true
   } finally {
-    isLoading.value = false
+    if (seq === fetchSeq) isLoading.value = false
   }
 }
 
@@ -800,7 +801,6 @@ onUnmounted(() => {
       data-testid="lifecycle-load-error"
     >
       <p class="text-center">{{ $t('fleet.nodeLifecyclePanel.eventsUnavailable') }}</p>
-      <p class="text-sm text-autobot-text-tertiary">{{ loadError }}</p>
       <BaseButton variant="secondary" size="sm" @click="fetchEvents">{{ $t('fleet.nodeLifecyclePanel.retry') }}</BaseButton>
     </div>
 

@@ -66,6 +66,10 @@ async def get_agent_visibility(
     if user_id is None or session is None:
         return AgentVisibility(is_platform_admin=False)
     company_ids = await MembershipService().list_member_company_ids(session, str(user_id))
+    # End the read transaction now: this dependency's session is a different one from the route's
+    # (FastAPI caches per callable), and a held connection would starve a small pool until the
+    # request ends. Same commit-on-success the session scope does at teardown (CodeRabbit on #19286).
+    await session.commit()
     return AgentVisibility(is_platform_admin=False, company_ids=frozenset(company_ids))
 
 

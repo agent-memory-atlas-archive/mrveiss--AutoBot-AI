@@ -45,7 +45,8 @@ describe('NodeLifecyclePanel (#19270)', () => {
     await flushPromises()
     const alert = wrapper.get('[data-testid="lifecycle-load-error"]')
     expect(alert.text()).toContain('fleet.nodeLifecyclePanel.eventsUnavailable')
-    expect(alert.text()).toContain('HTTP 502')
+    // The exception text is logged, never rendered (CodeRabbit on #19286).
+    expect(alert.text()).not.toContain('HTTP 502')
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
   })
 
@@ -65,5 +66,21 @@ describe('NodeLifecyclePanel (#19270)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="lifecycle-load-error"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('fleet.nodeLifecyclePanel.noLifecycleEventsRecordedYet')
+  })
+
+  it('a slow older fetch that fails cannot overwrite a newer one that succeeded', async () => {
+    let failOld: (e: Error) => void = () => {}
+    getNodeEvents
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { failOld = reject }))
+      .mockResolvedValue([
+        { id: 'e1', type: 'deployment_completed', timestamp: '2026-01-01T00:00:00Z', message: 'newer', details: {}, severity: 'low' },
+      ])
+    const wrapper = mountPanel()
+    await flushPromises() // first call is still pending
+    ;(wrapper.vm as unknown as { fetchEvents: () => Promise<void> }).fetchEvents?.()
+    await flushPromises()
+    failOld(new Error('HTTP 502'))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="lifecycle-load-error"]').exists()).toBe(false)
   })
 })
