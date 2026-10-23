@@ -4,14 +4,16 @@
 # Author: mrveiss
 """`AUTOBOT_FEATURE_ROUTERS_STRICT` has one home: two SSOT profile constants (#19319).
 
-#6690 ruled strict boot for dev/CI and a degraded start for the managed fleet. The fleet value
+#6690 ruled strict boot for dev/CI and a degraded start in production. The production value
 lived only as a literal ``0`` in ``backend.env.j2`` while the SSOT field said ``"1"``, so the
 default a reader saw depended on which file it opened. Now:
 
-* ``FEATURE_ROUTERS_STRICT_DEFAULT`` / ``FEATURE_ROUTERS_STRICT_FLEET`` are assigned once each, in
-  ``ssot_role_mirrors``, and the ``ssot_config`` ``MiscConfig`` field defaults to the first by name;
-* the backend role default ``backend_feature_routers_strict`` mirrors the fleet constant (Ansible
-  cannot import Python) and the template renders that variable, never a literal;
+* ``FEATURE_ROUTERS_STRICT_DEFAULT`` / ``FEATURE_ROUTERS_STRICT_PRODUCTION`` are assigned once each,
+  in ``ssot_role_mirrors``, and the ``ssot_config`` ``MiscConfig`` field defaults to the first by name;
+* files that cannot import Python carry a profile value as a declared, pinned carrier
+  (``_CARRIERS``): the backend role default, the production ``docker-compose.yml`` (owner ruling on
+  #19319) and the dev compose override example. Every compose service serving the backend app is one;
+* the template renders the role variable, never a literal;
 * no other tracked file sets the variable to a literal: an env/compose/YAML assignment, a Python
   read with a literal fallback, or a second role/group default.
 
@@ -38,12 +40,18 @@ _MIRRORS = "autobot_shared/ssot_role_mirrors.py"
 _ROLE_DEFAULTS = "autobot-slm-backend/ansible/roles/backend/defaults/main.yml"
 _TEMPLATE = "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2"
 _TEMPLATE_LINE = f"{_NAME}={{{{ {_ROLE_VAR} }}}}"
-_PROFILES = ("FEATURE_ROUTERS_STRICT_DEFAULT", "FEATURE_ROUTERS_STRICT_FLEET")
+_DEFAULT = "FEATURE_ROUTERS_STRICT_DEFAULT"
+_PRODUCTION = "FEATURE_ROUTERS_STRICT_PRODUCTION"
+_PROFILES = (_DEFAULT, _PRODUCTION)
+_COMPOSE = "docker-compose.yml"
+_COMPOSE_DEV = "docker-compose.override.example.yml"
+#: The files allowed to hold a literal, each pinned to the profile constant it carries.
+_CARRIERS = {_ROLE_DEFAULTS: _PRODUCTION, _COMPOSE: _PRODUCTION, _COMPOSE_DEV: _DEFAULT}
 _SKIP_PARTS = frozenset({"__pycache__", "node_modules", ".worktrees", "venv", ".venv"})
 #: ``NAME=0`` / ``- NAME=0`` / ``export NAME=0`` / ``NAME: "0"`` / ``backend_feature_routers_strict: "1"``
 #: -- an assignment to a literal. A Jinja ``{{ var }}`` value is a derivation, not a copy.
 _LITERAL_ASSIGNMENT = re.compile(
-    rf"""^\s*(?:-\s*)?(?:export\s+)?["']?(?:{_NAME}|{_ROLE_VAR})["']?\s*[:=]\s*(?!\{{\{{)["']?[^\s"'{{#]""",
+    rf"""^\s*(?:-\s*)?(?:export\s+)?["']?(?:{_NAME}|{_ROLE_VAR})["']?\s*[:=]\s*(?!\{{\{{)["']?(?P<value>[^\s"'{{#]+)""",
     re.MULTILINE,
 )
 #: A fixture deliberately setting a value is configuration of that test, not a default.
@@ -90,10 +98,10 @@ def _python_copies(text: str) -> bool:
 
 
 def literal_copies(files: dict[str, str]) -> list[str]:
-    """Every file (outside the role default itself) that gives the flag a literal value."""
+    """Every file, other than a declared carrier, that gives the flag a literal value."""
     found = []
     for rel, text in files.items():
-        if rel == _ROLE_DEFAULTS or (_NAME not in text and _ROLE_VAR not in text):
+        if rel in _CARRIERS or (_NAME not in text and _ROLE_VAR not in text):
             continue
         hit = _python_copies(text) if rel.endswith(".py") else bool(_LITERAL_ASSIGNMENT.search(text))
         if hit:
@@ -109,6 +117,16 @@ def _live_files() -> dict[str, str]:
         except (UnicodeDecodeError, OSError):
             continue  # binary asset; holds no env assignment
     return files
+
+
+def carrier_mismatches(files: dict[str, str], profiles: dict[str, str]) -> list[str]:
+    """Each carrier must assign at least one literal, and every literal must equal its profile."""
+    bad = []
+    for rel, constant in _CARRIERS.items():
+        values = [m.group("value") for m in _LITERAL_ASSIGNMENT.finditer(files.get(rel, ""))]
+        if not values or any(v != profiles[constant] for v in values):
+            bad.append(f"{rel}: {values} != {constant} ({profiles[constant]!r})")
+    return bad
 
 
 def _tree(rel: str) -> ast.Module:
@@ -136,8 +154,8 @@ def _field_default() -> ast.expr:
 def test_each_profile_is_assigned_once_and_the_two_differ() -> None:
     values = _profile_values()
     assert all(len(v) == 1 for v in values.values()), f"each profile constant must be assigned once: {values}"
-    assert values["FEATURE_ROUTERS_STRICT_DEFAULT"] == ["1"], "the unset default must stay strict (#6690)"
-    assert values["FEATURE_ROUTERS_STRICT_FLEET"] == ["0"], "the fleet profile is the #6690 degraded start"
+    assert values[_DEFAULT] == ["1"], "the unset default must stay strict (#6690)"
+    assert values[_PRODUCTION] == ["0"], "the production profile is the #6690 degraded start"
 
 
 def test_the_field_defaults_to_the_default_profile_by_name() -> None:
@@ -152,9 +170,39 @@ def test_the_field_defaults_to_the_default_profile_by_name() -> None:
     assert default.id in imported, f"{_SSOT} must take the default profile from {_MIRRORS}, not define its own"
 
 
-def test_the_role_default_mirrors_the_fleet_profile() -> None:
+def _profiles() -> dict[str, str]:
+    return {name: values[0] for name, values in _profile_values().items()}
+
+
+def test_the_role_default_mirrors_the_production_profile() -> None:
     role = yaml.safe_load((_ROOT / _ROLE_DEFAULTS).read_text(encoding="utf-8"))
-    assert [str(role[_ROLE_VAR])] == _profile_values()["FEATURE_ROUTERS_STRICT_FLEET"]
+    assert str(role[_ROLE_VAR]) == _profiles()[_PRODUCTION]
+
+
+def test_every_carrier_holds_its_profile_value() -> None:
+    files = {rel: (_ROOT / rel).read_text(encoding="utf-8") for rel in _CARRIERS}
+    assert carrier_mismatches(files, _profiles()) == []
+
+
+def _backend_app_services(rel: str) -> dict[str, list[str]]:
+    """Compose services whose command serves the backend app (the only process that loads routers)."""
+    services = yaml.safe_load((_ROOT / rel).read_text(encoding="utf-8"))["services"]
+    found = {}
+    for name, svc in services.items():
+        command = svc.get("command") or ""
+        text = " ".join(command) if isinstance(command, list) else str(command)
+        if "main:app" in text and "/app/autobot-backend" in text:
+            found[name] = list(svc.get("environment") or [])
+    return found
+
+
+def test_every_compose_service_serving_the_backend_carries_its_profile() -> None:
+    profiles = _profiles()
+    for rel in (_COMPOSE, _COMPOSE_DEV):
+        services = _backend_app_services(rel)
+        assert services, f"{rel}: no service serves main:app from /app/autobot-backend -- the detector went blind"
+        expected = f"{_NAME}={profiles[_CARRIERS[rel]]}"
+        assert {n: expected in env for n, env in services.items()} == dict.fromkeys(services, True), rel
 
 
 def test_the_template_renders_the_role_variable_once() -> None:
@@ -171,7 +219,7 @@ def test_no_tracked_file_holds_a_literal_copy() -> None:
 def test_every_planted_copy_is_caught_and_derivations_are_not() -> None:
     copies = {
         ".env.example": f"{_NAME}=0\n",
-        "docker-compose.yml": f"    environment:\n      - {_NAME}=1\n",
+        "compose.prod.yml": f"    environment:\n      - {_NAME}=1\n",
         "values.yaml": f'{_NAME}: "0"\n',
         "deploy.sh": f"export {_NAME}=1\n",
         "inventory/group_vars/backend.yml": f'{_ROLE_VAR}: "1"\n',
@@ -185,3 +233,14 @@ def test_every_planted_copy_is_caught_and_derivations_are_not() -> None:
         _SSOT: f'f: str = Field(default=FEATURE_ROUTERS_STRICT_DEFAULT, alias="{_NAME}", description="d")\n',
     }
     assert literal_copies({**copies, **derived}) == sorted(copies)
+
+
+def test_a_carrier_with_the_wrong_value_or_no_value_is_caught() -> None:
+    profiles = {_DEFAULT: "1", _PRODUCTION: "0"}
+    files = {
+        _ROLE_DEFAULTS: f'{_ROLE_VAR}: "0"\n',
+        _COMPOSE: f"    environment:\n      - {_NAME}=1\n",
+        _COMPOSE_DEV: "    environment:\n      - AUTOBOT_ENVIRONMENT=development\n",
+    }
+    bad = carrier_mismatches(files, profiles)
+    assert [b.split(":")[0] for b in bad] == [_COMPOSE, _COMPOSE_DEV], bad

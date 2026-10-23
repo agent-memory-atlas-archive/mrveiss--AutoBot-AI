@@ -739,7 +739,7 @@ def load_feature_routers() -> List[Tuple]:
     #6797: When fewer routers loaded than configured, escalate the summary log
     to ERROR (was always INFO) so the partial-boot state is loud at deploy
     time. Strict mode (``config.misc.feature_routers_strict``) raises instead; on
-    by default, off in the Ansible fleet profile (``ssot_role_mirrors``, #19319).
+    by default, off in the production profile (``ssot_role_mirrors``, #19319).
 
     Returns:
         list: List of tuples in format (router, prefix, tags, name)
