@@ -17,8 +17,9 @@ import re
 from pathlib import Path
 
 from repo_tests._mocked_config_import import run_sweep
+from repo_tests._paths import repo_root
 
-_SLM_ROOT = Path(__file__).resolve().parent.parent
+_SLM_ROOT = repo_root() / "autobot-slm-backend"
 _BASELINE = Path(__file__).with_name("stdlib_logging_baseline_19288.txt")
 
 #: Modules that used stdlib logging only because of #19288 and now call get_logger at import.

@@ -16,7 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from repo_tests._paths import repo_root
+
+REPO_ROOT = repo_root()
 
 _SWEEP = """
 import importlib, json, pkgutil, sys
