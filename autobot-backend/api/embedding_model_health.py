@@ -14,7 +14,9 @@ Registers under ``KnownProbes.EMBEDDING_MODEL``. Two checks, both named in ``det
 * **One real embedding** -- in the background, never inside the 2 s probe budget. The result
   is cached for ``AUTOBOT_EMBEDDING_PROBE_TTL_SECONDS``; a stale or missing result starts a
   refresh and the probe answers from the last one. A model can pass the identity check and
-  still fail to embed (not pulled, server started without embeddings).
+  still fail to embed (not pulled, server started without embeddings). One background embedding
+  is bounded by ``AUTOBOT_EMBEDDING_PROBE_TIMEOUT_SECONDS``; past it the result is "timed out".
+  Until the first result lands the probe says "ok" with ``data["embedding_measured"] = False``.
 
 "degraded", not "down": the platform runs; what fails is storing and searching knowledge.
 """
@@ -29,13 +31,22 @@ from fastapi import Request
 from api.system_health import ComponentHealth, KnownProbes, register_health_probe
 from autobot_shared.embedding_model import active_embedding_model, is_embedding_model_id
 from autobot_shared.env_utils import env_int_clamped
+from autobot_shared.logging_manager import get_logger
 
-EMBEDDING_PROBE_TTL_S = env_int_clamped("AUTOBOT_EMBEDDING_PROBE_TTL_SECONDS", 300, min_v=10)
+logger = get_logger(__name__)
+
+EMBEDDING_PROBE_TTL_S = env_int_clamped("AUTOBOT_EMBEDDING_PROBE_TTL_SECONDS", 300, min_v=10, max_v=86400)
+EMBEDDING_PROBE_TIMEOUT_S = env_int_clamped("AUTOBOT_EMBEDDING_PROBE_TIMEOUT_SECONDS", 60, min_v=1, max_v=600)
 _FIX = "pick an embedding model in SLM Settings > LLM (#19373)"
+_NOT_MEASURED = "identity checked; test embedding not yet measured (runs in the background)"
+_TIMED_OUT = "timed out"
 
 # model -> (monotonic time measured, error or None). One entry per model, so a switch re-probes.
 _last_probe: dict[str, tuple[float, str | None]] = {}
 _refreshing: set[str] = set()
+# Strong references to in-flight refreshes: the loop only keeps weak ones, so an unreferenced
+# task can be garbage-collected mid-run.
+_refresh_tasks: set[asyncio.Task] = set()
 
 
 async def probe_one_embedding(model: str) -> str | None:
@@ -45,13 +56,18 @@ async def probe_one_embedding(model: str) -> str | None:
     try:
         vector = await generate_embedding_with_fallback("embedding model probe", model_name=model)
     except Exception as exc:  # noqa: BLE001 - the reason is the result
+        logger.warning("embedding probe of model %r failed", model, exc_info=True)
         return f"{type(exc).__name__}"
     return None if vector else "no vector returned"
 
 
 async def _refresh(model: str) -> None:
     try:
-        _last_probe[model] = (time.monotonic(), await probe_one_embedding(model))
+        try:
+            error = await asyncio.wait_for(probe_one_embedding(model), timeout=EMBEDDING_PROBE_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            error = _TIMED_OUT
+        _last_probe[model] = (time.monotonic(), error)
     finally:
         _refreshing.discard(model)
 
@@ -61,13 +77,15 @@ def _schedule_refresh(model: str) -> None:
     if model in _refreshing or (measured and time.monotonic() - measured[0] < EMBEDDING_PROBE_TTL_S):
         return
     _refreshing.add(model)
-    asyncio.get_running_loop().create_task(_refresh(model))
+    task = asyncio.get_running_loop().create_task(_refresh(model))
+    _refresh_tasks.add(task)
+    task.add_done_callback(_refresh_tasks.discard)
 
 
 @register_health_probe(KnownProbes.EMBEDDING_MODEL)
 async def _embedding_model_health_probe(request: Request | None = None) -> ComponentHealth:
     model = active_embedding_model()
-    data = {"embedding_model": model}
+    data: dict = {"embedding_model": model}
     if not is_embedding_model_id(model):
         return ComponentHealth(
             name=KnownProbes.EMBEDDING_MODEL,
@@ -77,6 +95,7 @@ async def _embedding_model_health_probe(request: Request | None = None) -> Compo
         )
     _schedule_refresh(model)
     measured = _last_probe.get(model)
+    data["embedding_measured"] = measured is not None
     if measured and measured[1] is not None:
         return ComponentHealth(
             name=KnownProbes.EMBEDDING_MODEL,
@@ -84,4 +103,5 @@ async def _embedding_model_health_probe(request: Request | None = None) -> Compo
             detail=f"embedding model '{model}' could not embed ({measured[1]}) -- {_FIX}",
             data=data,
         )
-    return ComponentHealth(name=KnownProbes.EMBEDDING_MODEL, status="ok", detail=None, data=data)
+    detail = None if measured else _NOT_MEASURED
+    return ComponentHealth(name=KnownProbes.EMBEDDING_MODEL, status="ok", detail=detail, data=data)

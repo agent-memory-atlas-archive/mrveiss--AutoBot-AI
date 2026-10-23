@@ -116,6 +116,21 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_EMBEDDING_PROBE_TIMEOUT_SECONDS",
+        type=int,
+        default=60,
+        description=(
+            "Seconds one background test embedding by the embedding_model health probe may run "
+            "before it is abandoned and recorded as 'timed out'; read by "
+            "api/embedding_model_health.py (#18834)."
+        ),
+        component="knowledge",
+        range=(1, 600),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_EMBEDDING_PROBE_TTL_SECONDS",
         type=int,
         default=300,
