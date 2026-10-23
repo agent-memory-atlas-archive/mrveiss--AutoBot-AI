@@ -286,6 +286,8 @@ from llm_shared import get_provider_registry
 from services.npu_pipeline_provider import NPUPipelineProvider
 
 registry = get_provider_registry()
+# `llama3:70b` stands for a model too large for one device -- the case pipeline parallelism is
+# for. The installer does not provision it (#15219); pull it yourself to run this example.
 pipeline_provider = NPUPipelineProvider(
     model_id="llama3:70b",
     worker_manager=npu_worker_manager,

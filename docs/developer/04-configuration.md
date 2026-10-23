@@ -63,9 +63,10 @@ llm_config:
     port: 11434                            # Ollama server port
     endpoint: "http://localhost:11434/api/generate"  # Generation endpoint
     base_url: "http://localhost:11434"     # Base URL for API calls
-    models:                                # Available model mappings
+    models:                                # Available model mappings -- example names only;
+                                           # the provisioned set is in TIERED_MODEL_ROUTING.md
       tinyllama: "tinyllama:latest"
-      phi2: "phi:latest"
+      phi2: "phi:latest"                   # example, not provisioned
       llama2: "llama2:latest"
 
   # OpenAI Configuration

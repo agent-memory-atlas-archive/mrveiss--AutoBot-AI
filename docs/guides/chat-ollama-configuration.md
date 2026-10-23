@@ -181,7 +181,7 @@ backend:
       # gpu_models:
       #   - "qwen3.5:9b"
       #   - "mistral:7b-instruct"
-      #   - "codellama:13b"
+      #   - "dolphin-llama3:8b"
 
 # Infrastructure host overrides
 # Fallback path for _get_ollama_endpoint_fallback() via get_host("ollama")
@@ -495,7 +495,7 @@ backend:
 curl -sk -X POST https://localhost:8443/api/settings/ \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${TOKEN}" \
-  -d '{"backend": {"llm": {"local": {"providers": {"ollama": {"selected_model": "mistral:latest"}}}}}}'
+  -d '{"backend": {"llm": {"local": {"providers": {"ollama": {"selected_model": "mistral:7b-instruct"}}}}}}'
 ```
 
 **Method 5: Programmatic update**
@@ -1020,7 +1020,7 @@ backend:
       gpu_models:
         - "qwen3.5:9b"
         - "mistral:7b-instruct"
-        - "codellama:13b"
+        - "dolphin-llama3:8b"
 ```
 
 ### How It Works
@@ -1400,7 +1400,7 @@ journalctl -u autobot-backend --since "1 minute ago" | grep "Using model"
 **Fixes:**
 
 - Pull the model: `ollama pull <model_name>`
-- Verify the model name matches exactly (including tag): `qwen3.5:9b` vs `mistral:latest`
+- Verify the model name matches exactly (including tag): `mistral:7b-instruct` (provisioned) vs `mistral:latest` (not provisioned): different tags pull different models
 - Update config to use an installed model
 
 ### Slow Responses
