@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.agent_org_visibility import AgentVisibility, agent_companies, get_agent_visibility, require_agents
 from api.schemas_agent import (
     AgentDelegateRequest,
     AgentStatusItem,
@@ -111,6 +112,7 @@ def _fallback_agents_from_registry() -> List[Dict[str, Any]]:
 )
 async def get_org_tree(
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> List[Dict[str, Any]]:
     """
     Return the full org tree from root agents (#1405).
@@ -118,7 +120,7 @@ async def get_org_tree(
     Each node contains nested children recursively.
     """
     svc = AgentOrgService(session)
-    return await svc.get_org_tree()
+    return await svc.get_org_tree(can_see=visibility.can_see)
 
 
 @router.get(
@@ -133,6 +135,7 @@ async def get_org_tree(
 )
 async def get_agents_status(
     session: Optional[AsyncSession] = Depends(get_optional_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> AgentStatusListResponse:
     """Return all registered agents with runtime status (#10502, #10511).
 
@@ -143,7 +146,7 @@ async def get_agents_status(
     """
     if session is not None:
         svc = AgentOrgService(session)
-        agents = await svc.get_agent_statuses()
+        agents = await svc.get_agent_statuses(can_see=visibility.can_see)
     else:
         logger.debug("PG unavailable — returning in-memory agents for /agents/status (#10511)")
         agents = _fallback_agents_from_registry()
@@ -165,17 +168,21 @@ async def get_agents_status(
 async def get_chain_of_command(
     agent_id: str,
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> ChainOfCommandResponse:
     """
     Return chain of command from agent_id up to org root (#1405).
 
     First entry is the agent itself; last is the root manager.
     """
+    companies = await agent_companies(session)
+    require_agents(visibility, companies, [agent_id])
     svc = AgentOrgService(session)
     try:
         chain = await svc.get_chain_of_command(agent_id)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request failed")
+    chain = [item for item in chain if _visible(visibility, companies, item["agent_id"])]
     return ChainOfCommandResponse(chain=[AgentSummary(**item) for item in chain])
 
 
@@ -192,10 +199,13 @@ async def get_chain_of_command(
 async def get_direct_reports(
     agent_id: str,
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> List[Dict[str, Any]]:
     """Return agents that directly report to agent_id (#1405)."""
-    svc = AgentOrgService(session)
-    return await svc.get_direct_reports(agent_id)
+    companies = await agent_companies(session)
+    require_agents(visibility, companies, [agent_id])
+    reports = await AgentOrgService(session).get_direct_reports(agent_id)
+    return [r for r in reports if _visible(visibility, companies, r["agent_id"])]
 
 
 @router.patch(
@@ -359,6 +369,25 @@ async def get_role_defaults(
     return svc.get_role_defaults(role)
 
 
+def _visible(visibility: AgentVisibility, companies: Dict[str, Any], agent_id: str) -> bool:
+    """True when agent_id is in the caller's view (#19246)."""
+    return visibility.is_platform_admin or (agent_id in companies and visibility.can_see(companies[agent_id]))
+
+
+async def _require_delegation_actable(session: AsyncSession, visibility: AgentVisibility, delegation_id: str) -> None:
+    """404 unless the caller may act on both agents of the delegation (#19246)."""
+    if visibility.is_platform_admin:
+        return
+    try:
+        delegation = await DelegationService(session).get_delegation(delegation_id)
+    except ValueError:
+        delegation = None
+    if delegation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request failed")
+    agents = [delegation.delegator_id, delegation.assignee_id]
+    require_agents(visibility, await agent_companies(session), agents, act=True)
+
+
 def _delegation_to_response(d) -> DelegationResponse:
     """Convert TaskDelegation ORM row to response (#1753)."""
     return DelegationResponse(
@@ -390,12 +419,14 @@ async def delegate_task(
     manager_id: str,
     body: AgentDelegateRequest,
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> DelegationResponse:
     """
     Assign a task from a manager to one of its direct reports (#1753).
 
     Validates reporting relationship and delegation permission.
     """
+    require_agents(visibility, await agent_companies(session), [manager_id, body.assignee_id], act=True)
     svc = DelegationService(session)
     try:
         delegation = await svc.delegate_task(
@@ -422,10 +453,12 @@ async def delegate_task(
 async def escalate_delegation(
     delegation_id: str,
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> DelegationResponse:
     """
     Escalate a stuck/failed delegation up the chain of command (#1753).
     """
+    await _require_delegation_actable(session, visibility, delegation_id)
     svc = DelegationService(session)
     try:
         delegation = await svc.escalate_task(delegation_id)
@@ -448,8 +481,10 @@ async def update_delegation_status(
     delegation_id: str,
     body: DelegationStatusUpdate,
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> DelegationResponse:
     """Update the status of a delegated task (#1753)."""
+    await _require_delegation_actable(session, visibility, delegation_id)
     svc = DelegationService(session)
     try:
         delegation = await svc.update_status(delegation_id, body.status, body.result)
@@ -471,8 +506,10 @@ async def update_delegation_status(
 async def get_delegation_activity(
     agent_id: str,
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> Dict[str, Any]:
     """Aggregate delegation activity for a manager (#1753)."""
+    require_agents(visibility, await agent_companies(session), [agent_id])
     svc = DelegationService(session)
     return await svc.get_activity_summary(agent_id)
 
@@ -496,8 +533,11 @@ async def list_agent_delegations(
     delegation_status: str | None = Query(default=None, alias="status", description="Filter by status"),
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_db_session),
+    visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> List[DelegationResponse]:
     """List delegations for an agent as delegator or assignee (#1753)."""
+    companies = await agent_companies(session)
+    require_agents(visibility, companies, [agent_id])
     svc = DelegationService(session)
     delegations = await svc.list_delegations(
         agent_id=agent_id,
@@ -505,4 +545,5 @@ async def list_agent_delegations(
         status_filter=delegation_status,
         limit=limit,
     )
-    return [_delegation_to_response(d) for d in delegations]
+    seen = [d for d in delegations if all(_visible(visibility, companies, a) for a in (d.delegator_id, d.assignee_id))]
+    return [_delegation_to_response(d) for d in seen]
