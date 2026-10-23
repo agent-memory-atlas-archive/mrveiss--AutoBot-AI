@@ -473,6 +473,20 @@ def _service_health_degraded(extra_data: dict | None, restart_churn_active: bool
     return False
 
 
+def _node_status_and_reason(
+    resource_level: str, extra_data: dict | None, restart_churn_active: bool
+) -> tuple[str, str | None]:
+    """``(NodeStatus value, reason)`` for a heartbeating node (#19292). Module-level and pure."""
+    service_degraded = _service_health_degraded(extra_data, restart_churn_active)
+    level, reason = status_level_and_reason(resource_level, service_degraded)
+    status = {
+        LEVEL_ERROR: NodeStatus.ERROR.value,
+        LEVEL_DEGRADED: NodeStatus.DEGRADED.value,
+        LEVEL_OK: NodeStatus.ONLINE.value,
+    }[level]
+    return status, reason
+
+
 def _status_change_severity(new_status: str) -> str:
     """Event severity for a heartbeat-driven status change (#665)."""
     if new_status in [NodeStatus.ERROR.value, NodeStatus.OFFLINE.value]:
@@ -1818,7 +1832,7 @@ class ReconcilerService:
         restart_churn_active = await self._update_node_metrics(db, node, *metrics, agent_version, os_info, extra_data)
         old = (node.status, degraded_reason(node))
         level = advance_resource_dwell(node, classify_resource_sample(*metrics))
-        new = self._node_status_and_reason(level, extra_data, restart_churn_active)
+        new = _node_status_and_reason(level, extra_data, restart_churn_active)
         await self._handle_node_status_change(db, node, old, new, metrics)
         node.status = new[0]
         set_degraded_reason(node, new[1])
@@ -2035,20 +2049,7 @@ class ReconcilerService:
         documented in ``services/node_health_status.py``.
         """
         level = classify_resource_sample(cpu_percent, memory_percent, disk_percent)
-        return self._node_status_and_reason(level, extra_data, restart_churn_active)[0]
-
-    def _node_status_and_reason(
-        self, resource_level: str, extra_data: dict | None, restart_churn_active: bool
-    ) -> tuple[str, str | None]:
-        """``(NodeStatus value, reason)`` for a heartbeating node (#19292)."""
-        service_degraded = _service_health_degraded(extra_data, restart_churn_active)
-        level, reason = status_level_and_reason(resource_level, service_degraded)
-        status = {
-            LEVEL_ERROR: NodeStatus.ERROR.value,
-            LEVEL_DEGRADED: NodeStatus.DEGRADED.value,
-            LEVEL_OK: NodeStatus.ONLINE.value,
-        }[level]
-        return status, reason
+        return _node_status_and_reason(level, extra_data, restart_churn_active)[0]
 
     # ------------------------------------------------------------------
     # Manifest-driven background tasks (Issue #926 Phase 3)

@@ -124,8 +124,7 @@ def test_recovery_from_resource_pressure_is_damped():
 
 
 def test_service_health_is_its_own_reason():
-    service = reconciler.ReconcilerService()
-    status, reason = service._node_status_and_reason(nhs.LEVEL_OK, None, True)
+    status, reason = reconciler._node_status_and_reason(nhs.LEVEL_OK, None, True)
     assert status == reconciler.NodeStatus.DEGRADED.value
     assert reason == nhs.REASON_SERVICE_HEALTH
 
@@ -195,6 +194,7 @@ def test_a_resource_degraded_node_that_goes_silent_becomes_a_restart_candidate()
     stale = datetime.now(timezone.utc) - timedelta(seconds=600)
     node = _node("n-silent", reconciler.NodeStatus.DEGRADED.value, nhs.REASON_RESOURCE_PRESSURE, stale)
     service = reconciler.ReconcilerService()
+    service._heartbeat_timeout = 90  # conftest's `settings` is a MagicMock; the window must be a number
     service._ping_host = AsyncMock(return_value=True)
     service._handle_degraded_node = AsyncMock()
     compose_fleet = SimpleNamespace(is_manager_node=lambda _nid: False)
