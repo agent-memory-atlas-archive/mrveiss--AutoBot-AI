@@ -299,6 +299,24 @@ class TestVitestGroupedCollectionErrors:
         output = " FAIL  src/b.test.ts > suite > adds\n" + _grouped(["src/a.test.ts"], "dompurify")
         assert _verdict(root, base, head, output, _install(root, "vue")).returncode != 0
 
+    def test_an_assertion_header_inside_a_shared_error_group_fails(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        output = " FAIL  src/a.test.ts [ src/a.test.ts ]\n FAIL  src/b.test.ts > suite > adds\n" + _grouped(
+            ["src/c.test.ts"], "dompurify"
+        )
+        assert _verdict(root, base, head, output, _install(root, "vue")).returncode != 0
+
+    def test_a_coloured_grouped_new_dep_error_defers(self, tmp_path: Path) -> None:
+        root, base, head = _repo(tmp_path)
+        _stage_tool(root)
+        red, dim, clr = "\x1b[31m", "\x1b[2m", "\x1b[39m\x1b[22m"
+        plain = _grouped(["src/a.test.ts", "src/b.test.ts"], "dompurify")
+        output = (
+            plain.replace(" FAIL ", f" {red}FAIL{clr} ").replace("Error:", f"{red}Error{clr}:") + f"{dim}⎯[1/2]⎯{clr}\n"
+        )
+        assert _verdict(root, base, head, output, _install(root, "vue")).returncode == 0
+
     def test_a_header_after_a_block_body_still_needs_its_own_error(self, tmp_path: Path) -> None:
         root, base, head = _repo(tmp_path)
         _stage_tool(root)
@@ -311,6 +329,27 @@ def _tsc_verdict(diagnostics: str, absent: str, tmp_path: Path) -> int:
     return subprocess.run(
         ["bash", "-c", script, "x", diagnostics, absent], cwd=tmp_path, capture_output=True, check=False
     ).returncode
+
+
+def _vitest_verdict(output: str, absent: str, tmp_path: Path) -> int:
+    script = f'{_fn("vitest_failed_on_new_dep_only")}\nvitest_failed_on_new_dep_only "$1" "$2"'
+    return subprocess.run(
+        ["bash", "-c", script, "x", output, absent], cwd=tmp_path, capture_output=True, check=False
+    ).returncode
+
+
+class TestARelativeSpecifierNeverDefers:
+    """The `pkg ~ /^[.\\/]/` guard: a relative or absolute specifier's first segment is `.`, `..` or empty,
+    never a valid npm name, so the absent-name check alone rejects it today. These pin the guard itself:
+    a manifest key that is not a package name must still not defer a relative import."""
+
+    def test_vitest_relative_import_with_a_dotdot_absent_name_fails(self, tmp_path: Path) -> None:
+        output = _grouped(["src/a.test.ts"], "../missing")
+        assert _vitest_verdict(output, "..", tmp_path) != 0
+
+    def test_tsc_relative_module_with_a_dotdot_absent_name_fails(self, tmp_path: Path) -> None:
+        line = TestVueTscNewDependency._TS2307.format("../missing")
+        assert _tsc_verdict(line, "..", tmp_path) != 0
 
 
 class TestVueTscNewDependency:
@@ -332,6 +371,16 @@ class TestVueTscNewDependency:
     def test_ts2307_for_a_relative_module_fails(self, tmp_path: Path) -> None:
         assert _tsc_verdict(self._TS2307.format("./missing"), "dompurify", tmp_path) != 0
 
+    def test_a_lookalike_package_name_fails(self, tmp_path: Path) -> None:
+        assert _tsc_verdict(self._TS2307.format("dompurify-extra"), "dompurify", tmp_path) != 0
+
+    def test_a_scoped_new_dep_defers(self, tmp_path: Path) -> None:
+        assert _tsc_verdict(self._TS2307.format("@scope/pkg/sub"), "@scope/pkg", tmp_path) == 0
+
+    def test_coloured_ts2307_fails_closed(self, tmp_path: Path) -> None:
+        coloured = self._TS2307.format("dompurify").replace("error", "\x1b[91merror\x1b[0m")
+        assert _tsc_verdict(coloured, "dompurify", tmp_path) != 0
+
     def test_no_diagnostics_is_not_a_deferral(self, tmp_path: Path) -> None:
         assert _tsc_verdict("", "dompurify", tmp_path) != 0
 
@@ -339,7 +388,10 @@ class TestVueTscNewDependency:
         guard = (
             'if [ -n "$relevant" ] && new_dep_absent=$(absent_added_deps "${base:-$remote_sha}" "$local_sha" "$project_dir") \\\n'
             '             && tsc_failed_on_new_dep_only "$relevant" "$new_dep_absent"; then\n'
+            "            # It ran: show exactly which diagnostics are being set aside, never a bare skip.\n"
+            '            echo "$relevant" | head -20 >&2\n'
             '            could_not_run "vue-tsc (${project})" \\\n'
+            '              "ran; only TS2307 for the new dependency (CI\'s npm ci verifies): $(echo $new_dep_absent)"'
         )
         assert guard in _SOURCE
         after = _SOURCE.find(guard)

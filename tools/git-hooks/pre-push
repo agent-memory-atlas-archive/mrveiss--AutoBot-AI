@@ -692,8 +692,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
             | grep -F -f <(echo "$boundaried") || true)
           if [ -n "$relevant" ] && new_dep_absent=$(absent_added_deps "${base:-$remote_sha}" "$local_sha" "$project_dir") \
              && tsc_failed_on_new_dep_only "$relevant" "$new_dep_absent"; then
+            # It ran: show exactly which diagnostics are being set aside, never a bare skip.
+            echo "$relevant" | head -20 >&2
             could_not_run "vue-tsc (${project})" \
-              "could not run (new dependency; CI's npm ci verifies): $(echo $new_dep_absent)"
+              "ran; only TS2307 for the new dependency (CI's npm ci verifies): $(echo $new_dep_absent)"
           elif [ -n "$relevant" ]; then
             fail "vue-tsc errors in CHANGED files (${project}, #5142):"
             echo "$relevant" | head -20 >&2
