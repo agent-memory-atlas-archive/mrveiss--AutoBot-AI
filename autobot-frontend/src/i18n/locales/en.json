@@ -949,7 +949,8 @@
         "revokeButton": "Revoke shared {provider} token",
         "confirmTitle": "Revoke the shared {provider} token?",
         "confirmMessage": "Every organisation that relies on the shared {provider} sign-in loses it immediately and falls back to its API key. This cannot be undone; a new sign-in is needed to restore it.",
-        "done": "The shared {provider} token was revoked."
+        "done": "The shared {provider} token was revoked.",
+        "superadminOnly": "This account has no organisation, so this is the {provider} sign-in every organisation shares. Only a superadmin can revoke it."
       },
       "deviceInitFailed": "Device flow initiation failed",
       "initiateFailed": "Could not start sign-in",

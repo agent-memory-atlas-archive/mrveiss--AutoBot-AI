@@ -10,6 +10,7 @@
             v-for="p in providers"
             :key="`system-${p.name}`"
             scope="system"
+            :can-revoke-shared="isSuperadmin"
             :provider-name="p.name"
             :provider-label="p.label"
             :flows="p.flows"

@@ -474,13 +474,17 @@ async def provider_auth_status(
     System scope (admin only) dual-reads (finding #1, #11497): the org-scoped token, else the
     legacy ``"global"`` one. User scope reads only the caller's own token.
     """
+    from api.provider_auth_revoke import refuses_shared_subject  # noqa: PLC0415
+
     _require_known_provider(provider_name)
     effective = resolve_scope(scope, is_admin)
+    subject = subject_for(effective, user)
+    shared = refuses_shared_subject(effective, subject)  # an org-less admin's system sign-in IS the shared token
     token_data = await _vault_read_dual(
-        session, provider_name=provider_name, subject=subject_for(effective, user), owner_vault_str=_SYSTEM_VAULT
+        session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT
     )
     if token_data is None:
-        return ProviderAuthStatus(provider_name=provider_name, connected=False, scope=effective)
+        return ProviderAuthStatus(provider_name=provider_name, connected=False, scope=effective, shared=shared)
     expires_at = token_data.get("expires_at")
     needs_reauth = bool(token_data.get(NEEDS_REAUTH_KEY))
     return ProviderAuthStatus(
@@ -490,6 +494,7 @@ async def provider_auth_status(
         auth_kind=token_data.get("auth_kind", "oauth"),
         scope=effective,
         needs_reauth=needs_reauth,
+        shared=shared,
     )
 
 

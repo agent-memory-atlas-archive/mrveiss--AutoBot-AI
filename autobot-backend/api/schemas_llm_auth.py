@@ -87,6 +87,9 @@ class ProviderAuthStatus(BaseModel):
     scope: AuthScope | None = None
     #: The provider answered ``invalid_grant``: only a new sign-in restores it (#19241).
     needs_reauth: bool = False
+    #: The system connection shown is the token shared by every org (the caller has no org):
+    #: only a superadmin can disconnect it, via DELETE /{provider}/shared (#19241).
+    shared: bool = False
 
 
 class ProviderRevokeResult(BaseModel):

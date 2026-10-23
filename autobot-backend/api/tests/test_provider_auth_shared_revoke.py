@@ -127,11 +127,20 @@ def test_every_disconnect_writes_one_audit_event_without_secret_material(ctx, ro
     assert not any(material in rendered for material in _SECRET_MATERIAL)
 
 
-def test_a_single_tenant_system_disconnect_is_audited_as_a_delete(ctx):
-    tc, who, _, audit, _ = ctx
+def test_an_org_less_admin_system_disconnect_is_refused_and_audited_as_denied(ctx):
+    tc, who, session, audit, revoke_one = ctx
     who.user = {"user_id": "u-7", "role": "admin"}  # no org: the system subject IS "global"
-    assert tc.delete("/api/llm-auth/openai?scope=system").status_code == 200
-    assert _metadata(audit)["subject_kind"] == "legacy" and _metadata(audit)["local"] == "deleted"
+    assert tc.delete("/api/llm-auth/openai?scope=system").status_code == 403
+    session.execute.assert_not_awaited()
+    revoke_one.assert_not_awaited()
+    assert audit.call_args.kwargs["outcome"] == "denied"
+    assert _metadata(audit) == {
+        "provider": "openai",
+        "scope": "system",
+        "subject_kind": "legacy",
+        "local": "none",
+        "provider_revoke": "not_attempted",
+    }
 
 
 def test_a_provider_revoke_failure_is_audited_as_partial(ctx, monkeypatch):

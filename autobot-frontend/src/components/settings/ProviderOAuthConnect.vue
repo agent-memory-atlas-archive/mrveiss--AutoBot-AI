@@ -35,9 +35,25 @@
           {{ t('settings.providerAuth.needsReauth', { provider: providerLabel }) }}
         </span>
         <span v-else class="status-text">{{ t('settings.providerAuth.notConnected') }}</span>
-        <button v-if="status.connected || status.needs_reauth" class="btn-danger-sm" @click="revoke">{{ t('settings.providerAuth.disconnect') }}</button>
+        <template v-if="status.shared && (status.connected || status.needs_reauth)">
+          <!-- #19241: an org-less admin's system connection IS the token every org shares. -->
+          <button
+            v-if="canRevokeShared"
+            class="btn-danger-sm"
+            data-testid="shared-revoke-inline"
+            :disabled="shared.busy.value"
+            @click="revokeSharedHere"
+          >
+            {{ t('settings.providerAuth.shared.revokeButton', { provider: providerLabel }) }}
+          </button>
+          <span v-else class="status-text" data-testid="shared-superadmin-only">
+            {{ t('settings.providerAuth.shared.superadminOnly', { provider: providerLabel }) }}
+          </span>
+        </template>
+        <button v-else-if="status.connected || status.needs_reauth" class="btn-danger-sm" @click="revoke">{{ t('settings.providerAuth.disconnect') }}</button>
       </div>
       <p v-if="revokeWarning" class="error-msg" data-testid="revoke-warning">{{ revokeWarning }}</p>
+      <p v-if="shared.message.value" class="status-text" role="status">{{ shared.message.value }}</p>
 
       <!-- ToS / capability notice -->
       <p v-if="tosText" class="tos-notice">{{ tosText }}</p>
@@ -94,6 +110,7 @@
 import { ref, computed, onMounted, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ApiClient from '@/utils/ApiClient'
+import { useSharedTokenRevoke } from '@/composables/useSharedTokenRevoke'
 import {
   buildProviderRedirectUri,
   type ProviderAuthFlow,
@@ -115,6 +132,7 @@ interface AuthStatus {
   auth_kind?: string | null
   scope?: ProviderAuthScope
   needs_reauth?: boolean
+  shared?: boolean
 }
 
 interface RevokeResult {
@@ -131,10 +149,13 @@ const props = withDefaults(defineProps<{
   flows?: ProviderAuthFlow[]
   configured?: boolean
   missingSettings?: string[]
+  /** Superadmin: may revoke the shared token from an org-less System row (#19241). */
+  canRevokeShared?: boolean
 }>(), {
   flows: () => [],
   configured: true,
   missingSettings: () => [],
+  canRevokeShared: false,
 })
 
 const slots = useSlots()
@@ -144,6 +165,11 @@ const status = ref<AuthStatus | null>(null)
 const busy = ref(false)
 const errorMsg = ref('')
 const revokeWarning = ref('')
+const shared = useSharedTokenRevoke()
+
+async function revokeSharedHere(): Promise<void> {
+  if (await shared.revokeShared({ name: props.providerName, label: props.providerLabel })) await loadStatus()
+}
 const deviceInstruction = ref<DeviceInstruction | null>(null)
 const deviceStep = ref<'idle' | 'initiating' | 'polling'>('idle')
 

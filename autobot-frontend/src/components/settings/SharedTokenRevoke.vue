@@ -23,52 +23,15 @@
 // #19241 (owner decision 2026-10-23): superadmin-only revoke of the legacy LLM
 // sign-in token every org may share. The backend gates it with
 // require_role(Role.SUPERADMIN); this component is only rendered for superadmins.
-import { ref } from 'vue'
 import { BaseButton } from '@autobot/ui'
 import { useI18n } from 'vue-i18n'
-import ApiClient from '@/utils/ApiClient'
-import { createLogger } from '@/utils/debugUtils'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useSharedTokenRevoke } from '@/composables/useSharedTokenRevoke'
 import type { ProviderInfo } from '@/utils/providerOAuth'
 
 defineProps<{ providers: ProviderInfo[] }>()
 
-interface RevokeResult {
-  provider_revoked?: boolean | null
-  provider_error?: string | null
-}
-
-const logger = createLogger('SharedTokenRevoke')
 const { t } = useI18n()
-const { confirm } = useConfirmDialog()
-const busy = ref(false)
-const message = ref('')
-const isWarning = ref(false)
-
-function describe(p: ProviderInfo, result: RevokeResult): void {
-  isWarning.value = result.provider_revoked === false
-  message.value = isWarning.value
-    ? t('settings.providerAuth.providerRevokeFailed', { reason: result.provider_error ?? '' })
-    : t('settings.providerAuth.shared.done', { provider: p.label })
-}
-
-async function revokeShared(p: ProviderInfo): Promise<void> {
-  const ok = await confirm({
-    title: t('settings.providerAuth.shared.confirmTitle', { provider: p.label }),
-    message: t('settings.providerAuth.shared.confirmMessage', { provider: p.label }),
-  })
-  if (!ok) return
-  busy.value = true
-  try {
-    describe(p, await ApiClient.delete<RevokeResult>(`/api/llm-auth/${p.name}/shared`))
-  } catch (err: unknown) {
-    logger.error('Shared token revoke failed', err)
-    isWarning.value = true
-    message.value = (err as Error)?.message || t('settings.providerAuth.disconnectFailed')
-  } finally {
-    busy.value = false
-  }
-}
+const { busy, message, isWarning, revokeShared } = useSharedTokenRevoke()
 </script>
 
 <style scoped>

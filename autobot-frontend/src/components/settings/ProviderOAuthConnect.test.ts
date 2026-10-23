@@ -16,6 +16,10 @@ vi.mock('@/utils/ApiClient', () => ({
     delete: (...a: unknown[]) => del(...a),
   },
 }))
+const confirm = vi.fn()
+vi.mock('@/composables/useConfirmDialog', () => ({
+  useConfirmDialog: () => ({ confirm: (...a: unknown[]) => confirm(...a) }),
+}))
 vi.mock('@/config/ssot-config', () => ({
   getConfig: () => ({ frontendUrl: 'https://app.example.test' }),
 }))
@@ -87,5 +91,25 @@ describe('ProviderOAuthConnect', () => {
     await flushPromises()
     expect(del).toHaveBeenCalledWith('/api/llm-auth/openai?scope=user')
     expect(wrapper.get('[data-testid="revoke-warning"]').text()).toContain('HTTP 500')
+  })
+
+  it('an org-less admin sees that only a superadmin can revoke the shared System sign-in', async () => {
+    get.mockResolvedValue({ provider_name: 'openai', connected: true, scope: 'system', shared: true })
+    const wrapper = mountIt({ scope: 'system', flows: ['redirect'], configured: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="shared-superadmin-only"]').exists()).toBe(true)
+    expect(wrapper.find('.btn-danger-sm').exists()).toBe(false)  // no plain disconnect: it would be refused
+  })
+
+  it('a superadmin is led to the confirmed shared revoke instead', async () => {
+    get.mockResolvedValue({ provider_name: 'openai', connected: true, scope: 'system', shared: true })
+    confirm.mockResolvedValue(true)
+    del.mockResolvedValue({ provider_revoked: true })
+    const wrapper = mountIt({ scope: 'system', flows: ['redirect'], configured: true, canRevokeShared: true })
+    await flushPromises()
+    await wrapper.get('[data-testid="shared-revoke-inline"]').trigger('click')
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(del).toHaveBeenCalledWith('/api/llm-auth/openai/shared')
   })
 })

@@ -5,8 +5,9 @@
 """PR #19259 review hardening of /api/llm-auth (#19241).
 
 - A multi-tenant system disconnect replaces the org's token with a per-org stop
-  marker (the shared legacy ``global`` token stays for other orgs); single-tenant
-  deletes outright. Only the deleted grant is revoked at the provider (RFC 7009),
+  marker (the shared legacy ``global`` token stays for other orgs); an org-less
+  admin's system disconnect (its subject IS ``global``) is refused -- that is the
+  superadmin's shared revoke. Only the deleted grant is revoked at the provider (RFC 7009),
   and a provider-side failure is reported while the local change still happens.
 - /status reports ``needs_reauth`` for a token the provider rejected.
 - The device flow refuses a non-https ``verification_uri`` and a non-JSON body (502).
@@ -100,14 +101,41 @@ def test_multi_tenant_system_revoke_leaves_a_stop_marker_and_keeps_the_legacy_to
     session.commit.assert_awaited()
 
 
-def test_single_tenant_system_revoke_deletes_outright(ctx, monkeypatch):
+def test_an_org_less_admin_system_disconnect_is_refused_without_side_effects(ctx, monkeypatch):
+    """Owner decision (#19241): an org-less admin's system subject IS the shared token -- superadmin only."""
     tc, _, who, session = ctx
-    who.user = {"user_id": "admin-1"}  # no org: the system subject IS "global"
-    _grants(monkeypatch, {"global": {"access_token": "g"}})
+    who.user = {"user_id": "admin-1"}  # no org: the system subject is "global"
+    _grants(monkeypatch, {"global": {"access_token": "g", "refresh_token": "gr"}})
+    revoke_one = AsyncMock(return_value=None)
+    monkeypatch.setattr(rv, "revoke_one", revoke_one)
+    resp = tc.delete("/api/llm-auth/openai?scope=system")
+    assert resp.status_code == 403
+    assert "/api/llm-auth/openai/shared" in resp.json()["detail"]
+    session.execute.assert_not_awaited()
+    session.commit.assert_not_awaited()
+    rv._vault_write.assert_not_awaited()
+    revoke_one.assert_not_awaited()
+    (call,) = rv.emit_security.call_args_list
+    assert call.kwargs["outcome"] == "denied"
+    assert call.kwargs["metadata"]["local"] == "none" and call.kwargs["metadata"]["provider_revoke"] == "not_attempted"
+
+
+def test_an_org_admin_with_an_org_still_gets_the_stop_marker(ctx, monkeypatch):
+    tc, _, _, session = ctx
+    _grants(monkeypatch, {"org:org-1": {"access_token": "a"}})
     monkeypatch.setattr(rv, "revoke_one", AsyncMock(return_value=None))
     assert tc.delete("/api/llm-auth/openai?scope=system").status_code == 200
-    assert "provider_auth:openai:global" in _deleted_names(session)
-    rv._vault_write.assert_not_awaited()
+    assert rv._vault_write.await_args.kwargs["token_data"]["legacy_fallback_stopped"] is True
+    session.execute.assert_not_awaited()  # nothing deleted by name
+
+
+def test_status_flags_an_org_less_admin_system_connection_as_shared(ctx, monkeypatch):
+    tc, _, who, _ = ctx
+    who.user = {"user_id": "admin-1"}
+    monkeypatch.setattr(mod, "_vault_read_dual", AsyncMock(return_value={"access_token": "g"}))
+    assert tc.get("/api/llm-auth/status/openai?scope=system").json()["shared"] is True
+    who.user = {"user_id": "admin-1", "org_id": "org-1"}
+    assert tc.get("/api/llm-auth/status/openai?scope=system").json()["shared"] is False
 
 
 def test_org_signing_in_again_overwrites_its_stop_marker(ctx, monkeypatch):

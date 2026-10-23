@@ -9,8 +9,9 @@ Owner decision (2026-10-23, recorded on #19241):
 - a **user** disconnect deletes the caller's own token;
 - an **org admin's system** disconnect deletes the org's token and leaves a
   per-org stop marker, so that org stops falling back to the shared legacy
-  ``"global"`` token while other orgs keep it (single-tenant: the org subject IS
-  ``"global"`` and is deleted outright);
+  ``"global"`` token while other orgs keep it;
+- an **org-less admin's system** disconnect (its subject IS ``"global"``) is
+  refused with 403 and audited as ``denied``: that is the shared token;
 - a **superadmin's shared** revoke deletes the ``"global"`` token itself.
 
 Each one revokes at the provider (RFC 7009) only the grant it actually deletes,
@@ -24,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 from api.provider_auth_scope import SCOPE_SYSTEM, current_user_id, subject_for
 from api.schemas_llm_auth import ProviderRevokeResult
@@ -45,20 +46,26 @@ logger = get_logger(__name__)
 
 _SYSTEM_VAULT = "system"
 SCOPE_SHARED = "shared"
-#: What a revoke did to the stored copy.
-LOCAL_DELETED, LOCAL_MARKED = "deleted", "marked"
-#: What the provider said: revoked, failed, or there is no revoke URL.
+#: What a revoke did to the stored copy (``none`` for a refused attempt).
+LOCAL_DELETED, LOCAL_MARKED, LOCAL_NONE = "deleted", "marked", "none"
+#: What the provider said: revoked, failed, no revoke URL, or not attempted (refused).
 PROVIDER_REVOKED, PROVIDER_FAILED, PROVIDER_NOT_CONFIGURED = "revoked", "failed", "not_configured"
+PROVIDER_NOT_ATTEMPTED = "not_attempted"
 
 
-def stops_legacy_fallback(scope: str, subject: str) -> bool:
-    """A multi-tenant system disconnect: the org's token is replaced by a stop marker.
+def stops_legacy_fallback(scope: str) -> bool:
+    """A system disconnect replaces the org's token with a stop marker; a user or shared one deletes.
 
     The legacy ``"global"`` token is shared by every org still falling back to it
-    (#11497), so one org's disconnect must not delete it. Single-tenant (the org
-    subject IS ``"global"``) deletes outright.
+    (#11497), so an org's disconnect must not delete it. Deleting it is the
+    superadmin's shared revoke alone (owner decision on #19241).
     """
-    return scope == SCOPE_SYSTEM and subject != LEGACY_SUBJECT
+    return scope == SCOPE_SYSTEM
+
+
+def refuses_shared_subject(scope: str, subject: str) -> bool:
+    """An org-less admin's system subject IS ``"global"``: only the superadmin shared revoke may touch it."""
+    return scope == SCOPE_SYSTEM and subject == LEGACY_SUBJECT
 
 
 def subject_kind(subject: str) -> str:
@@ -106,25 +113,37 @@ def _provider_outcome(revoked: bool | None) -> str:
     return PROVIDER_REVOKED if revoked else PROVIDER_FAILED
 
 
-def audit_disconnect(user: Any, provider_name: str, scope: str, subject: str, local: str, revoked: bool | None) -> None:
-    """One SECURITY audit event per disconnect/revoke -- never a token, never a subject id."""
+def audit_disconnect(user: Any, provider_name: str, scope: str, subject: str, result: dict[str, str]) -> None:
+    """One SECURITY audit event per disconnect/revoke attempt -- never a token, never a subject id.
+
+    *result* carries ``local``, ``provider_revoke`` and ``outcome`` (success / partial / denied).
+    """
+    metadata = {"provider": provider_name, "scope": scope, "subject_kind": subject_kind(subject)}
+    metadata.update(local=result["local"], provider_revoke=result["provider_revoke"])
     written = emit_security(
         AuditAction.PROVIDER_SIGNIN_REVOKE,
         current_user_id(user),
         resource_type="llm_provider_signin",
         resource_id=provider_name,
-        metadata={
-            "provider": provider_name,
-            "scope": scope,
-            "subject_kind": subject_kind(subject),
-            "local": local,
-            "provider_revoke": _provider_outcome(revoked),
-        },
-        outcome="success" if revoked is not False else "partial",
+        metadata=metadata,
+        outcome=result["outcome"],
     )
     if not written:
         # emit() schedules the write onto the canonical trail; False means nothing could be scheduled.
         logger.warning("Audit event for the %s %s disconnect could not be written", provider_name, scope)
+
+
+def _refuse_shared_subject(user: Any, provider_name: str) -> None:
+    """403 for an org-less admin's system disconnect, audited as ``denied`` with no side effect."""
+    refused = {"local": LOCAL_NONE, "provider_revoke": PROVIDER_NOT_ATTEMPTED, "outcome": "denied"}
+    audit_disconnect(user, provider_name, SCOPE_SYSTEM, LEGACY_SUBJECT, refused)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "This account has no organisation, so its system sign-in is the token shared by every "
+            f"organisation. Only a superadmin can revoke it: DELETE /api/llm-auth/{provider_name}/shared"
+        ),
+    )
 
 
 async def _read_grant(session: Any, provider_name: str, subject: str) -> list[dict]:
@@ -156,10 +175,12 @@ async def _mark(session: Any, provider_name: str, subject: str, user: Any) -> No
 async def _finish(session: Any, user: Any, provider_name: str, scope: str, subject: str, grants: list[dict]):
     """Provider revoke (only for *grants*), then mark or delete, commit and audit."""
     revoked, error = await revoke_at_provider(provider_name, grants)
-    marked = stops_legacy_fallback(scope, subject)
+    marked = stops_legacy_fallback(scope)
     await (_mark(session, provider_name, subject, user) if marked else _delete(session, provider_name, subject))
     await session.commit()
-    audit_disconnect(user, provider_name, scope, subject, LOCAL_MARKED if marked else LOCAL_DELETED, revoked)
+    outcome = "success" if revoked is not False else "partial"
+    result = {"local": LOCAL_MARKED if marked else LOCAL_DELETED, "provider_revoke": _provider_outcome(revoked)}
+    audit_disconnect(user, provider_name, scope, subject, {**result, "outcome": outcome})
     logger.info("Revoked provider auth for %s (scope=%s, provider_revoked=%s)", provider_name, scope, revoked)
     return ProviderRevokeResult(
         provider_name=provider_name, scope=scope, deleted=len(grants), provider_revoked=revoked, provider_error=error
@@ -167,8 +188,10 @@ async def _finish(session: Any, user: Any, provider_name: str, scope: str, subje
 
 
 async def disconnect(session: Any, user: Any, provider_name: str, scope: str) -> ProviderRevokeResult:
-    """The caller's own (user) or their org's (system) disconnect."""
+    """The caller's own (user) or their org's (system) disconnect; never the shared token (403)."""
     subject = subject_for(scope, user)
+    if refuses_shared_subject(scope, subject):
+        _refuse_shared_subject(user, provider_name)
     return await _finish(
         session, user, provider_name, scope, subject, await _read_grant(session, provider_name, subject)
     )
@@ -187,6 +210,7 @@ __all__ = [
     "revoke_at_provider",
     "revoke_one",
     "revoke_shared",
+    "refuses_shared_subject",
     "stops_legacy_fallback",
     "subject_kind",
 ]
