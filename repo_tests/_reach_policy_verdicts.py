@@ -33,6 +33,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "One test directory's Python, against all tracked Python; the rest of the suite grows at its own rate.",
     ),
+    "defined-twice-18094-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Production Python under six sweep roots, test files excluded: a subset of tracked files that drifts.",
+    ),
     "env-fallback-read-sites-18094": (
         ABSOLUTE,
         "NOT_PATHS",
@@ -92,10 +97,10 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "FIXED_INVENTORY",
         "Single-digit launch sites; the band is already near equality.",
     ),
-    "chromadb-compose-files": (
+    "compose-files": (
         ABSOLUTE,
         "FIXED_INVENTORY",
-        "Single-digit compose files; a fraction of any reference is noise at this size.",
+        "Single-digit compose files at any depth; a fraction of any reference is noise at this size.",
     ),
     "jekyll-processed-docs": (
         ABSOLUTE,
