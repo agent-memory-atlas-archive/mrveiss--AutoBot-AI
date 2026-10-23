@@ -4107,18 +4107,12 @@ async def _get_schedule_target_nodes(db: AsyncSession, schedule: UpdateSchedule)
 
 
 def _create_fleet_sync_job(nodes: List[Node], schedule: UpdateSchedule) -> FleetSyncJobState:
-    """
-    Create a fleet sync job with target nodes.
-
-    Helper for run_schedule (Issue #665).
-    """
-    job_id = str(uuid.uuid4())[:16]
-
+    """A schedule's fleet sync job; a ``manual`` restart strategy never restarts (#665, #19352)."""
     job = FleetSyncJobState(
-        job_id=job_id,
+        job_id=str(uuid.uuid4())[:16],
         strategy="rolling",
         batch_size=1,
-        restart=schedule.restart_after_sync,
+        restart=bool(schedule.restart_after_sync) and schedule.restart_strategy != "manual",
     )
 
     for node in nodes:
@@ -4130,6 +4124,15 @@ def _create_fleet_sync_job(nodes: List[Node], schedule: UpdateSchedule) -> Fleet
             ssh_port=node.ssh_port or 22,
         )
 
+    return job
+
+
+async def queue_schedule_job(db: AsyncSession, schedule: UpdateSchedule, nodes: List[Node]) -> FleetSyncJobState:
+    """Guard, build and persist a schedule's job: run-now and the schedule executor share it (#1979, #19352)."""
+    async with fleet_sync_lock:
+        await assert_no_running_sync(db)
+        job = _create_fleet_sync_job(nodes, schedule)
+        await _persist_fleet_sync_job(job)
     return job
 
 
@@ -4164,14 +4167,8 @@ async def run_schedule(
             job_id=None,
         )
 
-    # Guard: prevent overlapping fleet sync jobs (#1979)
-    async with fleet_sync_lock:
-        await assert_no_running_sync(db)
-
-        job = _create_fleet_sync_job(nodes, schedule)
-        await _persist_fleet_sync_job(job)
-        task = asyncio.create_task(_run_fleet_sync_job(job))
-        _running_tasks[job.job_id] = task
+    job = await queue_schedule_job(db, schedule, nodes)
+    _running_tasks[job.job_id] = asyncio.create_task(_run_fleet_sync_job(job))
 
     # Update schedule last_run
     schedule.last_run = datetime.now(timezone.utc)

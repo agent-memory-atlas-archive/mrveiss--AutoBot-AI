@@ -31,6 +31,8 @@ except ImportError:
 
 # Configuration
 VERSION_CHECK_INTERVAL = 300  # 5 minutes
+# SLM_REPO_PATH: the code_source git CHECKOUT (the dir holding .git), never the install root that
+# contains it. This is its one read; every SLM module imports DEFAULT_REPO_PATH from here (#15708).
 DEFAULT_REPO_PATH = os.environ.get("SLM_REPO_PATH", "/opt/autobot/code_source")
 DEFAULT_BRANCH = os.environ.get("SLM_REPO_BRANCH", "main")
 

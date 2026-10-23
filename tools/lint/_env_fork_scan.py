@@ -76,7 +76,6 @@ KNOWN_ENV_FORKS: dict[str, str] = {
     "AUTOBOT_ENV": "#17419",
     "AUTOBOT_REDIS_HOST": "#17419",
     "AUTOBOT_TLS_CERT_DIR": "#17419",
-    "SLM_REPO_PATH": "#15708",
 }
 
 
