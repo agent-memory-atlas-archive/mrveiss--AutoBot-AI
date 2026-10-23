@@ -28,12 +28,15 @@ from autobot_shared.logging_manager import get_llm_logger
 from constants.model_constants import model_config
 from constants.threshold_constants import CategoryDefaults
 from constants.ttl_constants import TTL_5_MINUTES
+from knowledge.chunk_identity import resolve_chunk_id
 from knowledge.quarantine import RESEARCH_QUARANTINE_FILTER
 from knowledge.search_components.bm25 import BM25Scorer
 from knowledge.search_components.reranking import (
     RerankWeights,
     apply_mmr_reorder_by_content,
-    compute_blended_score,
+    fetch_staleness_scores,
+    final_rerank_score,
+    ranking_score,
     set_reranking_active,
 )
 from knowledge.search_filters import SYSTEM_SCOPE, KbPrincipal
@@ -273,7 +276,7 @@ class AdvancedRAGOptimizer(OptimizedContextMixin):
         """
         if min_score <= 0.0:
             return results
-        return [r for r in results if (r.rerank_score if r.rerank_score is not None else r.hybrid_score) >= min_score]
+        return [r for r in results if ranking_score(r) >= min_score]
 
     def _get_cached_result(self, key: str) -> Tuple[List[RankedResult], RAGMetrics] | None:
         """Return cached result if present and within TTL, else None. Issue #1548."""
@@ -687,25 +690,22 @@ class AdvancedRAGOptimizer(OptimizedContextMixin):
         self._cross_encoder = get_cross_encoder()
 
     async def _apply_cross_encoder_scores(self, query: str, results: List[RankedResult]) -> None:
-        """Apply cross-encoder scores to results (Issue #398: extracted).
+        """Apply cross-encoder scores to results (#398) with ``RAGConfig.rerank_weights`` (#2034).
 
-        Issue #1526: Normalize cross-encoder logits with sigmoid before
-        combining with hybrid_score so the final rerank_score stays in 0-1.
-        Issue #2034: Use compute_blended_score() with self._rerank_weights so
-        RAGConfig.rerank_weights is honoured instead of always using 0.8/0.2.
+        Issue #18141: final_rerank_score, the mesh reranker's own blend (sigmoid, staleness, provenance).
         """
-        import math
-
         pairs = [(query, result.content) for result in results]
         cross_encoder_scores = await asyncio.to_thread(self._cross_encoder.predict, pairs)
+        chunk_ids = [resolve_chunk_id(r) for r in results]
+        staleness = await fetch_staleness_scores(chunk_ids, self._rerank_weights) or {}
 
-        for result, ce_score in zip(results, cross_encoder_scores):
-            # Sigmoid normalization: raw logits → 0-1 probability
-            normalized_ce = 1.0 / (1.0 + math.exp(-float(ce_score)))
-            result.rerank_score = compute_blended_score(
-                reranker_score=normalized_ce,
-                vector_score=result.hybrid_score,
-                weights=self._rerank_weights,
+        for result, chunk_id, ce_score in zip(results, chunk_ids, cross_encoder_scores):
+            result.rerank_score = final_rerank_score(
+                ce_score,
+                result.hybrid_score,
+                self._rerank_weights,
+                staleness_score=staleness.get(chunk_id, 0.0),
+                source_provenance=(result.metadata or {}).get("source_provenance"),
             )
 
         logger.debug("Cross-encoder reranking completed for %s results", len(results))

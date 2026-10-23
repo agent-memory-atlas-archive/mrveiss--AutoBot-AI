@@ -45704,7 +45704,7 @@ export interface paths {
          *         ```json
          *         {
          *             "service": "GraphRAGService",
-         *             "graph_weight": 0.3,
+         *             "graph_weight": "<RAGConfig.graph_weight>",
          *             "entity_extraction_enabled": true,
          *             "rag_service": {
          *                 "enable_advanced_rag": true,
@@ -77631,10 +77631,7 @@ export interface components {
              * @default
              */
             service: string;
-            /**
-             * Graph Weight
-             * @default 0
-             */
+            /** Graph Weight */
             graph_weight: number;
             /**
              * Entity Extraction Enabled
