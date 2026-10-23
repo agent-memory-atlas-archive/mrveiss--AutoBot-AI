@@ -44,11 +44,15 @@ def _load():
 
 
 cf = _load()
+# The node_health_status module compose_fleet itself bound (patch.dict drops it from sys.modules).
+nhs = SimpleNamespace(**cf.mark_agent_lost.__globals__)
 
 
-def _manager_row(agent_version, age_s):
+def _manager_row(agent_version, age_s, extra_data=None):
     beat = datetime.now(timezone.utc) - timedelta(seconds=age_s)
-    return SimpleNamespace(node_id=_MANAGER, agent_version=agent_version, last_heartbeat=beat)
+    return SimpleNamespace(
+        node_id=_MANAGER, agent_version=agent_version, last_heartbeat=beat, extra_data=extra_data or {}
+    )
 
 
 def _run_once(row) -> AsyncMock:
@@ -62,9 +66,12 @@ def _run_once(row) -> AsyncMock:
     return update
 
 
-def test_the_window_derives_from_the_heartbeat_interval_with_a_margin():
-    assert cf._agent_heartbeat_window_s() == _INTERVAL_S * cf.SELF_HEARTBEAT_STANDDOWN_BEATS
-    assert cf.SELF_HEARTBEAT_STANDDOWN_BEATS >= 1
+def test_the_window_uses_the_agents_reported_interval_with_a_margin():
+    beats = cf.SELF_HEARTBEAT_STANDDOWN_BEATS
+    assert beats >= 1
+    assert cf._agent_heartbeat_window_s(_manager_row("1.0.0", 0, {cf.AGENT_INTERVAL_KEY: 45})) == 45 * beats
+    # An agent that predates the report falls back to the fleet's interval.
+    assert cf._agent_heartbeat_window_s(_manager_row("1.0.0", 0)) == _INTERVAL_S * beats
 
 
 def test_stands_down_while_a_real_agent_heartbeats_the_manager():
@@ -72,20 +79,47 @@ def test_stands_down_while_a_real_agent_heartbeats_the_manager():
     update.assert_not_awaited()
 
 
-def test_resumes_once_the_real_agent_goes_silent():
-    silent_for = cf._agent_heartbeat_window_s() + 1
-    update = _run_once(_manager_row("1.0.0", age_s=silent_for))
+def test_resumes_once_the_real_agent_goes_silent_and_records_the_loss():
+    row = _manager_row("1.0.0", age_s=_INTERVAL_S * cf.SELF_HEARTBEAT_STANDDOWN_BEATS + 1)
+    update = _run_once(row)
     update.assert_awaited_once()
-    assert update.await_args.kwargs["agent_version"] == cf.SELF_AGENT_VERSION
+    assert update.await_args.kwargs["agent_version"] == nhs.SELF_AGENT_VERSION
+    assert nhs.read_health_state(row).get("agent_last_beat"), "the agent's death must be recorded"
 
 
-def test_keeps_heartbeating_when_no_agent_exists():
+def test_keeps_heartbeating_when_no_agent_exists_and_records_no_loss():
     """Its own previous beat is not a real agent: the no-external-agent case it exists for."""
-    update = _run_once(_manager_row(cf.SELF_AGENT_VERSION, age_s=1))
+    row = _manager_row(nhs.SELF_AGENT_VERSION, age_s=1)
+    update = _run_once(row)
     update.assert_awaited_once()
+    assert "agent_last_beat" not in nhs.read_health_state(row)
 
 
 def test_a_naive_timestamp_is_read_as_utc():
     row = _manager_row("1.0.0", age_s=1)
     row.last_heartbeat = row.last_heartbeat.replace(tzinfo=None)
     assert cf.real_agent_heartbeating(row, datetime.now(timezone.utc)) is True
+
+
+def test_the_cpu_sampler_owns_its_baseline():
+    """cpu_times deltas, primed at construction; never psutil.cpu_percent's shared baseline."""
+    times = iter(
+        [
+            SimpleNamespace(user=10.0, system=0.0, idle=90.0, iowait=0.0),
+            SimpleNamespace(user=40.0, system=0.0, idle=110.0, iowait=0.0),
+        ]
+    )
+    fake = MagicMock()
+    fake.cpu_times.side_effect = lambda: _Times(next(times))
+    sampler = cf.CpuSampler(fake)
+    assert sampler.sample() == 60.0  # 30 busy of 50 elapsed
+    fake.cpu_percent.assert_not_called()
+
+
+class _Times(tuple):
+    """A cpu_times-shaped tuple: summable, with named fields."""
+
+    def __new__(cls, ns):
+        obj = super().__new__(cls, (ns.user, ns.system, ns.idle, ns.iowait))
+        obj.idle, obj.iowait = ns.idle, ns.iowait
+        return obj

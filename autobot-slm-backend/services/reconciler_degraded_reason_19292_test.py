@@ -139,7 +139,7 @@ def test_a_missing_heartbeat_is_recorded_as_no_heartbeat():
 
 
 @contextmanager
-def _fake_db_service(rows_per_query: list):
+def _fake_db_service(rows_per_query: list, on_refresh=None):
     """Install ``services.database.db_service`` answering each query from ``rows_per_query``."""
     name = "services.database"
     created = name not in sys.modules
@@ -150,7 +150,7 @@ def _fake_db_service(rows_per_query: list):
 
     @asynccontextmanager
     async def _session():
-        yield FakeAsyncSession(results=rows_per_query)
+        yield FakeAsyncSession(results=rows_per_query, on_refresh=on_refresh)
 
     module.db_service = SimpleNamespace(session=_session)
     try:
@@ -168,12 +168,15 @@ def test_remediation_restarts_the_agent_only_for_no_heartbeat():
     no_beat = _node("n-no-beat", degraded, nhs.REASON_NO_HEARTBEAT, now - timedelta(seconds=600))
     pressure = _node("n-pressure", degraded, nhs.REASON_RESOURCE_PRESSURE, now)
     services = _node("n-services", degraded, nhs.REASON_SERVICE_HEALTH, now)
+    # Recorded no_heartbeat, but a beat landed after: the agent is alive (review item 1).
+    raced = _node("n-raced", degraded, nhs.REASON_NO_HEARTBEAT, now - timedelta(seconds=5))
     service = reconciler.ReconcilerService()
+    service._heartbeat_timeout = 90
     service._is_remediation_suppressed = AsyncMock(return_value=False)
     service._remediate_node = AsyncMock(return_value=True)
     auto_remediate = SimpleNamespace(value="true")
 
-    with _fake_db_service([[auto_remediate], [no_beat, pressure, services]]):
+    with _fake_db_service([[auto_remediate], [no_beat, pressure, services, raced]]):
         asyncio.run(service._attempt_remediation())
 
     remediated = [call.args[1].node_id for call in service._remediate_node.await_args_list]
@@ -190,25 +193,109 @@ class _Comparable:
         return True
 
 
-def test_a_resource_degraded_node_that_goes_silent_becomes_a_restart_candidate():
-    stale = datetime.now(timezone.utc) - timedelta(seconds=600)
-    node = _node("n-silent", reconciler.NodeStatus.DEGRADED.value, nhs.REASON_RESOURCE_PRESSURE, stale)
+def _run_check(node, *, reachable=True, on_refresh=None, real_handlers=False):
+    """Drive the real ``_check_node_health`` over one stale node."""
     service = reconciler.ReconcilerService()
     service._heartbeat_timeout = 90  # conftest's `settings` is a MagicMock; the window must be a number
-    service._ping_host = AsyncMock(return_value=True)
-    service._handle_degraded_node = AsyncMock()
+    service._ping_host = AsyncMock(return_value=reachable)
+    service._broadcast_node_status = AsyncMock()
+    if not real_handlers:
+        service._handle_degraded_node = AsyncMock()
     compose_fleet = SimpleNamespace(is_manager_node=lambda _nid: False)
-    # The query is built from (stubbed) Column objects; only `<` must not raise.
+    # The query is built from (stubbed) Column objects; only the operators must not raise.
     node_model = SimpleNamespace(status=MagicMock(), last_heartbeat=_Comparable())
-
     with (
         patch.dict(sys.modules, {"services.compose_fleet": compose_fleet}),
         patch.object(reconciler, "Node", node_model),
+        _recorded_events(),
+        _fake_db_service([[], [node]], on_refresh=on_refresh),
     ):
-        with _fake_db_service([[], [node]]):
-            asyncio.run(service._check_node_health())
+        asyncio.run(service._check_node_health())
+    return service
 
+
+_STALE = datetime.now(timezone.utc) - timedelta(seconds=600)
+
+
+def test_a_resource_degraded_node_that_goes_silent_becomes_a_restart_candidate():
+    node = _node("n-silent", reconciler.NodeStatus.DEGRADED.value, nhs.REASON_RESOURCE_PRESSURE, _STALE)
+    service = _run_check(node)
     service._handle_degraded_node.assert_awaited_once()
+
+
+def test_an_error_node_whose_agent_dies_becomes_no_heartbeat_and_a_restart_candidate():
+    node = _node("n-error", reconciler.NodeStatus.ERROR.value, nhs.REASON_RESOURCE_PRESSURE, _STALE)
+    _run_check(node, real_handlers=True)
+    assert node.status == reconciler.NodeStatus.DEGRADED.value
+    assert nhs.degraded_reason(node) == nhs.REASON_NO_HEARTBEAT
+    assert nhs.needs_agent_restart(node, datetime.now(timezone.utc), 90) is True
+
+
+def test_a_beat_landing_during_the_ping_is_not_overwritten():
+    node = _node("n-raced", reconciler.NodeStatus.ONLINE.value, None, _STALE)
+
+    def _beat_landed(row):
+        row.last_heartbeat = datetime.now(timezone.utc)
+
+    service = _run_check(node, on_refresh=_beat_landed)
+    service._handle_degraded_node.assert_not_called()
+    assert node.status == reconciler.NodeStatus.ONLINE.value
+
+
+def test_a_concurrent_extra_data_key_survives_the_no_heartbeat_write():
+    node = _node("n-merge", reconciler.NodeStatus.ONLINE.value, None, _STALE)
+
+    def _concurrent_merge(row):
+        row.extra_data = {**row.extra_data, "gpu": "written-by-a-concurrent-heartbeat"}
+
+    _run_check(node, on_refresh=_concurrent_merge, real_handlers=True)
+    assert node.extra_data["gpu"] == "written-by-a-concurrent-heartbeat"
+    assert nhs.degraded_reason(node) == nhs.REASON_NO_HEARTBEAT
+
+
+def test_going_offline_clears_the_dwell_state():
+    node = _node("n-offline", reconciler.NodeStatus.DEGRADED.value, nhs.REASON_RESOURCE_PRESSURE, _STALE)
+    _run_check(node, reachable=False, real_handlers=True)
+    assert node.status == reconciler.NodeStatus.OFFLINE.value
+    assert nhs.read_health_state(node) == {}
+
+
+def test_a_heartbeat_cannot_spoof_its_own_reason_or_dwell():
+    service, node = reconciler.ReconcilerService(), _node()
+    spoof = {nhs.HEALTH_STATE_KEY: {"reason": nhs.REASON_NO_HEARTBEAT, "resource_level": nhs.LEVEL_ERROR}}
+    session = FakeAsyncSession(results=[[node]])
+    with _recorded_events():
+        asyncio.run(service.update_node_heartbeat(session, node.node_id, _CALM_CPU, 10.0, 10.0, extra_data=spoof))
+    assert node.status == reconciler.NodeStatus.ONLINE.value
+    assert nhs.read_health_state(node).get("resource_level") == nhs.LEVEL_OK
+    assert nhs.degraded_reason(node) is None
+
+
+def test_a_manager_whose_real_agent_died_is_held_no_heartbeat_through_self_beats():
+    """Review item 4: the self-heartbeat resumes, the death is recorded, a real beat clears it."""
+    service, node = reconciler.ReconcilerService(), _node("00-SLM-Manager", last_heartbeat=_STALE)
+    node.agent_version = "1.0.0"
+    nhs.mark_agent_lost(node)
+    with _recorded_events():
+        session = FakeAsyncSession(results=[[node]])
+        asyncio.run(
+            service.update_node_heartbeat(
+                session, node.node_id, _CALM_CPU, 10.0, 10.0, agent_version=nhs.SELF_AGENT_VERSION
+            )
+        )
+        events = _events(session)
+        assert node.status == reconciler.NodeStatus.DEGRADED.value
+        assert nhs.degraded_reason(node) == nhs.REASON_NO_HEARTBEAT
+        assert len(events) == 1 and events[0].details["reason"] == nhs.REASON_NO_HEARTBEAT
+        assert nhs.needs_agent_restart(node, datetime.now(timezone.utc), 90) is True
+
+        asyncio.run(
+            service.update_node_heartbeat(
+                FakeAsyncSession(results=[[node]]), node.node_id, _CALM_CPU, 10.0, 10.0, agent_version="1.0.0"
+            )
+        )
+    assert node.status == reconciler.NodeStatus.ONLINE.value
+    assert nhs.degraded_reason(node) is None
 
 
 def test_the_14465_tracker_guarantees_are_untouched():

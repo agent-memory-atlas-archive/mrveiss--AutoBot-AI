@@ -281,7 +281,7 @@ class SLMAgent:
         code_version = self.version_manager.get_version()
 
         payload = build_heartbeat_payload(
-            health, os_info, code_version, self.role_detector, self._role_definitions_loaded
+            health, os_info, code_version, self.role_detector, self._role_definitions_loaded, self.heartbeat_interval
         )
         return await self._send_heartbeat_request(payload)
 

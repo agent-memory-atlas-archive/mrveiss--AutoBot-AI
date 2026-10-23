@@ -60,7 +60,8 @@ _register(
 _register(
     "AUTOBOT_SELF_HEARTBEAT_STANDDOWN_BEATS",
     2,
-    "Heartbeat intervals a real slm-agent's last beat on a self-managed node (the SLM "
+    "The agent's own heartbeat intervals (as it reports them, else the fleet's) that a real "
+    "slm-agent's last beat on a self-managed node (the SLM "
     "manager) keeps the SLM's local self-heartbeat stood down, so the node has one "
     "heartbeat source. 2 tolerates one missed agent beat; the local loop resumes after "
     "that (autobot-slm-backend/services/compose_fleet.py, #19292).",

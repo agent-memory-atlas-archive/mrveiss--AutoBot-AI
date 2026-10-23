@@ -40,3 +40,14 @@ def test_the_sampler_is_primed_at_construction_and_never_blocks():
     calls = psutil_mock.cpu_percent.call_args_list
     assert len(calls) == 3, "one prime plus one read per collect()"
     assert all(call.kwargs == {"interval": None} for call in calls), calls
+
+
+def test_the_heartbeat_reports_the_agents_own_interval():
+    """The SLM sizes its self-heartbeat stand-down window from it (#19292 review)."""
+    from slm.agent.heartbeat_payload import build_heartbeat_payload
+
+    with patch("slm.agent.heartbeat_payload.get_listening_ports", return_value=[]):
+        with_interval = build_heartbeat_payload({}, "Linux", None, MagicMock(), False, heartbeat_interval_s=45)
+        without = build_heartbeat_payload({}, "Linux", None, MagicMock(), False)
+    assert with_interval["extra_data"]["heartbeat_interval_s"] == 45
+    assert "heartbeat_interval_s" not in without["extra_data"]

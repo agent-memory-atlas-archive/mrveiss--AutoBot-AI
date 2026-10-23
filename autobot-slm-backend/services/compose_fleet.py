@@ -24,6 +24,7 @@ from autobot_shared.env_registry import env
 from autobot_shared.env_utils import env_int_clamped
 from config import settings
 from services.database import db_service
+from services.node_health_status import SELF_AGENT_VERSION, as_utc, mark_agent_lost
 from services.reconciler import reconciler_service
 
 logger = logging.getLogger(__name__)
@@ -32,41 +33,62 @@ logger = logging.getLogger(__name__)
 # Nodes the SLM hosts itself and heartbeats locally WHEN no real agent does.
 _SELF_MANAGED_NODE_IDS: set[str] = {settings.slm_node_id}
 
-# The agent_version this loop writes, which is how a self-written heartbeat is
-# told apart from a real slm-agent's (#19292).
-SELF_AGENT_VERSION = "slm-local"
-
-# #19292: how many heartbeat intervals a real agent's last beat counts as
+# #19292: how many of the AGENT's heartbeat intervals its last beat counts as
 # "recent" -- the self-heartbeat stands down inside that window. 2 tolerates one
 # missed agent beat before the local loop takes over again.
 SELF_HEARTBEAT_STANDDOWN_BEATS = env_int_clamped("AUTOBOT_SELF_HEARTBEAT_STANDDOWN_BEATS", 2, min_v=1, max_v=1000)
 
+# The key the agent reports its own heartbeat interval under (slm/agent/heartbeat_payload.py).
+AGENT_INTERVAL_KEY = "heartbeat_interval_s"
 
-def _agent_heartbeat_window_s() -> int:
-    """Seconds a real agent's last heartbeat keeps the self-heartbeat stood down."""
-    return settings.heartbeat_interval * SELF_HEARTBEAT_STANDDOWN_BEATS
+
+def _agent_heartbeat_window_s(node) -> int:
+    """Seconds a real agent's last heartbeat keeps the self-heartbeat stood down.
+
+    Measured in the agent's OWN interval when it reported one, else the
+    fleet's configured ``heartbeat_interval``.
+    """
+    reported = (getattr(node, "extra_data", None) or {}).get(AGENT_INTERVAL_KEY)
+    interval = reported if isinstance(reported, int) and reported > 0 else settings.heartbeat_interval
+    return interval * SELF_HEARTBEAT_STANDDOWN_BEATS
+
+
+def _last_written_by_real_agent(node) -> bool:
+    """True when the row's latest heartbeat came from a real slm-agent, not this loop."""
+    return node is not None and getattr(node, "agent_version", None) not in (None, SELF_AGENT_VERSION)
 
 
 def real_agent_heartbeating(node, now: datetime) -> bool:
     """True when a real slm-agent (not this loop) heartbeated ``node`` recently."""
-    if node is None or getattr(node, "agent_version", None) in (None, SELF_AGENT_VERSION):
+    if not _last_written_by_real_agent(node):
         return False
-    beat = getattr(node, "last_heartbeat", None)
-    if beat is None:
-        return False
-    if beat.tzinfo is None:
-        beat = beat.replace(tzinfo=timezone.utc)
-    return now - beat < timedelta(seconds=_agent_heartbeat_window_s())
+    beat = as_utc(getattr(node, "last_heartbeat", None))
+    return beat is not None and now - beat < timedelta(seconds=_agent_heartbeat_window_s(node))
 
 
-async def _agent_owns_heartbeat(db, node_id: str, now: datetime) -> bool:
-    """Look the node up and ask ``real_agent_heartbeating`` (#19292)."""
+async def _load_node(db, node_id: str):
+    """The node row by id, or None."""
     from sqlalchemy import select
 
     from models.database import Node
 
-    node = (await db.execute(select(Node).where(Node.node_id == node_id))).scalar_one_or_none()
-    return real_agent_heartbeating(node, now)
+    return (await db.execute(select(Node).where(Node.node_id == node_id))).scalar_one_or_none()
+
+
+async def _heartbeat_one_self_managed(db, node_id: str, metrics: tuple, now: datetime) -> None:
+    """Self-heartbeat one node unless a real agent owns it (#19292).
+
+    The first self-beat after a real agent goes silent records the loss
+    (``mark_agent_lost``): the heartbeat path then holds the node DEGRADED for
+    ``no_heartbeat`` -- a HEALTH_CHECK event -- until a real agent beats again.
+    """
+    node = await _load_node(db, node_id)
+    if real_agent_heartbeating(node, now):
+        return  # one heartbeat source per node: a live agent's samples are the truth
+    if _last_written_by_real_agent(node):
+        logger.warning("Real slm-agent on %s went silent; self-heartbeat resumes and records no_heartbeat", node_id)
+        mark_agent_lost(node)
+    await reconciler_service.update_node_heartbeat(db, node_id, *metrics, agent_version=SELF_AGENT_VERSION)
 
 
 async def _heartbeat_self_managed_once(db, metrics: tuple) -> None:
@@ -74,12 +96,30 @@ async def _heartbeat_self_managed_once(db, metrics: tuple) -> None:
     now = datetime.now(timezone.utc)
     for node_id in sorted(_SELF_MANAGED_NODE_IDS):
         # Unreachable container nodes are left to the reconciler's offline path.
-        if not await _node_reachable(node_id):
-            continue
-        # One heartbeat source per node: a live agent's samples are the truth.
-        if await _agent_owns_heartbeat(db, node_id, now):
-            continue
-        await reconciler_service.update_node_heartbeat(db, node_id, *metrics, agent_version=SELF_AGENT_VERSION)
+        if await _node_reachable(node_id):
+            await _heartbeat_one_self_managed(db, node_id, metrics, now)
+
+
+class CpuSampler:
+    """Host CPU busy-percent since this sampler's previous read, from ``cpu_times`` deltas.
+
+    Owned by the self-heartbeat so it shares no baseline with
+    ``psutil.cpu_percent(interval=None)`` callers elsewhere in this process,
+    which would otherwise reset each other's window (#19292 review).
+    """
+
+    def __init__(self, psutil_module) -> None:
+        self._psutil = psutil_module
+        self._last = psutil_module.cpu_times()
+
+    def sample(self) -> float:
+        now = self._psutil.cpu_times()
+        idle = (now.idle + getattr(now, "iowait", 0.0)) - (self._last.idle + getattr(self._last, "iowait", 0.0))
+        total = sum(now) - sum(self._last)
+        self._last = now
+        if total <= 0:
+            return 0.0
+        return round(100.0 * max(0.0, min(1.0, 1.0 - idle / total)), 1)
 
 
 async def _heartbeat_self_managed_nodes() -> None:
@@ -93,19 +133,15 @@ async def _heartbeat_self_managed_nodes() -> None:
     path locally for them (#9761). A manager host can ALSO run a real
     slm-agent; two writers then alternated their own samples and each
     recomputed the status (#19292), so this loop stands down for any node a
-    real agent heartbeated within ``_agent_heartbeat_window_s()`` and resumes
+    real agent heartbeated within ``_agent_heartbeat_window_s`` and resumes
     when that agent goes silent.
     """
     import psutil
 
-    psutil.cpu_percent(interval=None)  # prime: later reads average since the last beat
+    cpu = CpuSampler(psutil)
     while True:
         try:
-            metrics = (
-                psutil.cpu_percent(interval=None),
-                psutil.virtual_memory().percent,
-                psutil.disk_usage("/").percent,
-            )
+            metrics = (cpu.sample(), psutil.virtual_memory().percent, psutil.disk_usage("/").percent)
             async with db_service.session() as db:
                 await _heartbeat_self_managed_once(db, metrics)
         except Exception:

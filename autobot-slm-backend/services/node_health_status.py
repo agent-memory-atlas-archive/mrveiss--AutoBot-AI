@@ -25,7 +25,10 @@ Two defects this module answers, both observed live in #19292:
    ``Node.extra_data[HEALTH_STATE_KEY]``, and only ``no_heartbeat`` -- the one
    case an agent restart can fix -- selects a node for that remedy.
 
-Service health (#1604, #14465) is the reconciler's ``_service_health_degraded``:
+Service health (#1604, #14465) is the reconciler's ``_service_health_degraded``.
+It once degraded on ``n_restarts > 3``, but systemd's ``NRestarts`` only climbs
+while a unit keeps failing, so one long-resolved crash loop held the node
+DEGRADED forever. It was replaced by two signals over the same field:
 ``restart_churn_active`` is a LEVEL over the restart-churn window, not a pulse
 (health_collector's discovery sweep is cached for 300 s against a 30 s beat, so
 a pulse fired on ~1 in 10 beats and flapped the node), and
@@ -46,6 +49,10 @@ REASON_SERVICE_HEALTH = "service_health"
 # Reserved key on Node.extra_data. Prefixed so a heartbeat's own extra_data,
 # merged into the same dict, cannot collide with it.
 HEALTH_STATE_KEY = "slm_health_state"
+
+# The agent_version the SLM's own self-heartbeat writes (services/compose_fleet.py);
+# how a self-written heartbeat is told apart from a real slm-agent's.
+SELF_AGENT_VERSION = "slm-local"
 
 LEVEL_OK = "ok"
 LEVEL_DEGRADED = "degraded"
@@ -133,18 +140,66 @@ def status_level_and_reason(resource_level: str, service_degraded: bool) -> tupl
     return LEVEL_OK, None
 
 
-def needs_agent_restart(node, now: datetime, heartbeat_timeout_s: float) -> bool:
-    """Whether restarting slm-agent can help this DEGRADED node.
+def as_utc(moment: datetime | None) -> datetime | None:
+    """A naive DB timestamp is UTC; an aware one is returned unchanged."""
+    if moment is not None and moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment
 
-    Only a missing heartbeat can be fixed by a restart. A row DEGRADED before
-    #19292 carries no reason; it qualifies only if its heartbeat is stale.
+
+def _agent_last_beat(node) -> datetime | None:
+    """The last beat a real AGENT sent: the recorded one if the self-heartbeat took over, else the row's."""
+    lost = read_health_state(node).get("agent_last_beat")
+    if lost:
+        return as_utc(datetime.fromisoformat(lost))
+    return as_utc(getattr(node, "last_heartbeat", None))
+
+
+def needs_agent_restart(node, now: datetime, heartbeat_timeout_s: float) -> bool:
+    """Whether restarting slm-agent can help this DEGRADED node -- decided on the row as read NOW.
+
+    Only a missing heartbeat can be fixed by a restart, so the stored reason
+    must be ``no_heartbeat`` (or absent, on a pre-#19292 row) AND the agent's
+    last beat must still be older than the timeout: a beat that landed after
+    the reason was written means the agent is alive (#19292 review).
     """
-    reason = degraded_reason(node)
-    if reason is not None:
-        return reason == REASON_NO_HEARTBEAT
-    last = getattr(node, "last_heartbeat", None)
-    if last is None:
-        return True
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
-    return last < now - timedelta(seconds=heartbeat_timeout_s)
+    if degraded_reason(node) not in (None, REASON_NO_HEARTBEAT):
+        return False
+    last = _agent_last_beat(node)
+    return last is None or last < now - timedelta(seconds=heartbeat_timeout_s)
+
+
+def clear_health_state(node) -> None:
+    """Forget dwell and reason, e.g. when the node goes offline: a later return starts clean."""
+    _write_health_state(node, {})
+
+
+def strip_reserved(extra_data: dict | None) -> dict | None:
+    """Drop ``HEALTH_STATE_KEY`` from a heartbeat's extra_data, so an agent cannot set its own reason or dwell."""
+    if not extra_data or HEALTH_STATE_KEY not in extra_data:
+        return extra_data
+    return {k: v for k, v in extra_data.items() if k != HEALTH_STATE_KEY}
+
+
+def mark_agent_lost(node) -> None:
+    """Record that the node's real agent stopped beating, as of its last beat (self-managed nodes)."""
+    beat = as_utc(getattr(node, "last_heartbeat", None))
+    stamp = beat.isoformat() if beat else datetime.now(timezone.utc).isoformat()
+    _write_health_state(node, {**read_health_state(node), "agent_last_beat": stamp})
+
+
+def apply_agent_presence(node, agent_version: str | None, status_reason: tuple, degraded_status) -> tuple:
+    """Keep a lost agent visible through self-heartbeats; a real agent's beat clears the mark.
+
+    While ``agent_last_beat`` is set, a ``SELF_AGENT_VERSION`` beat cannot
+    report the node healthy: it stays ``(degraded_status, no_heartbeat)``.
+    """
+    state = read_health_state(node)
+    if agent_version and agent_version != SELF_AGENT_VERSION:
+        if "agent_last_beat" in state:
+            state.pop("agent_last_beat")
+            _write_health_state(node, state)
+        return status_reason
+    if state.get("agent_last_beat"):
+        return degraded_status, REASON_NO_HEARTBEAT
+    return status_reason

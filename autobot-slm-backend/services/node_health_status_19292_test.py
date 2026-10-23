@@ -119,14 +119,23 @@ def test_status_reason_per_path():
 
 def test_only_no_heartbeat_selects_an_agent_restart():
     now = datetime.now(timezone.utc)
+    stale = now - timedelta(seconds=600)
     for reason, expected in (
         (nhs.REASON_NO_HEARTBEAT, True),
         (nhs.REASON_RESOURCE_PRESSURE, False),
         (nhs.REASON_SERVICE_HEALTH, False),
     ):
-        node = _node(last_heartbeat=now)
+        node = _node(last_heartbeat=stale)
         nhs.set_degraded_reason(node, reason)
         assert nhs.needs_agent_restart(node, now, 90) is expected, reason
+
+
+def test_a_fresh_beat_after_no_heartbeat_was_recorded_wins_the_race():
+    """The reason was written before a beat landed; the row read now shows the agent alive."""
+    now = datetime.now(timezone.utc)
+    node = _node(last_heartbeat=now - timedelta(seconds=5))
+    nhs.set_degraded_reason(node, nhs.REASON_NO_HEARTBEAT)
+    assert nhs.needs_agent_restart(node, now, 90) is False
 
 
 def test_a_reasonless_legacy_row_restarts_only_when_its_heartbeat_is_stale():
@@ -137,3 +146,32 @@ def test_a_reasonless_legacy_row_restarts_only_when_its_heartbeat_is_stale():
     assert nhs.needs_agent_restart(fresh, now, 90) is False
     assert nhs.needs_agent_restart(stale, now, 90) is True
     assert nhs.needs_agent_restart(never, now, 90) is True
+
+
+def test_an_agent_cannot_supply_its_own_health_state():
+    spoof = {nhs.HEALTH_STATE_KEY: {"reason": nhs.REASON_NO_HEARTBEAT}, "gpu": []}
+    assert nhs.strip_reserved(spoof) == {"gpu": []}
+    assert nhs.strip_reserved(None) is None
+
+
+def test_clearing_forgets_dwell_and_reason_but_keeps_other_extra_data():
+    node = _node(extra_data={"gpu": "kept"})
+    _feed(node, [_HIGH])
+    nhs.set_degraded_reason(node, nhs.REASON_RESOURCE_PRESSURE)
+    nhs.clear_health_state(node)
+    assert nhs.read_health_state(node) == {} and node.extra_data["gpu"] == "kept"
+
+
+def test_a_lost_agent_is_judged_on_its_own_last_beat_not_the_self_heartbeat():
+    now = datetime.now(timezone.utc)
+    node = _node(last_heartbeat=now - timedelta(seconds=600), agent_version="1.0.0")
+    nhs.mark_agent_lost(node)
+    node.last_heartbeat = now  # the self-heartbeat keeps the row fresh from here on
+    held = nhs.apply_agent_presence(node, nhs.SELF_AGENT_VERSION, ("online", None), "degraded")
+    assert held == ("degraded", nhs.REASON_NO_HEARTBEAT)
+    nhs.set_degraded_reason(node, held[1])
+    assert nhs.needs_agent_restart(node, now, 90) is True
+
+    back = nhs.apply_agent_presence(node, "1.0.0", ("online", None), "degraded")
+    assert back == ("online", None)
+    assert "agent_last_beat" not in nhs.read_health_state(node)

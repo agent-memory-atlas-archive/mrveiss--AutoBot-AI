@@ -46,11 +46,15 @@ from services.node_health_status import (
     LEVEL_OK,
     REASON_NO_HEARTBEAT,
     advance_resource_dwell,
+    apply_agent_presence,
+    as_utc,
     classify_resource_sample,
+    clear_health_state,
     degraded_reason,
     needs_agent_restart,
     set_degraded_reason,
     status_level_and_reason,
+    strip_reserved,
 )
 from services.service_extra_data import engine_degraded_fields, is_managed_autobot_service
 from services.service_remediation_tracker import (
@@ -399,7 +403,7 @@ def _restart_count_increased(svc_data: dict, previous_extra: dict) -> bool:
     `NRestarts` is lifetime-cumulative for as long as a unit keeps failing
     (systemd resets it on the next clean manual start once a unit settles,
     not merely with the passage of time), so a static gate on it can never
-    self-heal on its own (see `_calculate_node_status`'s docstring). A
+    self-heal on its own (see `services/node_health_status.py`'s docstring). A
     decrease (e.g. that reset, or a reboot) is deliberately not itself a
     signal here -- only a rise arms the churn window; `_update_existing_
     service` still rewrites the stored baseline to the new, lower value
@@ -455,7 +459,7 @@ def _restart_churn_active(svc_data: dict, previous_extra: dict, now: datetime) -
 
 
 def _service_health_degraded(extra_data: dict | None, restart_churn_active: bool) -> bool:
-    """The two current-state service signals `_calculate_node_status` acts on.
+    """The two current-state service signals `_node_status_and_reason` acts on.
 
     Module-level and pure: `restart_churn_active` is computed elsewhere
     (against the OLD `Service` row this function does not have); this only
@@ -615,6 +619,7 @@ class ReconcilerService:
         Helper for _check_node_health (Issue #665).
         """
         node.status = NodeStatus.OFFLINE.value
+        clear_health_state(node)  # a node that comes back starts its dwell clean (#19292)
         event = NodeEvent(
             event_id=str(uuid.uuid4())[:16],
             node_id=node.node_id,
@@ -653,39 +658,45 @@ class ReconcilerService:
 
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=self._heartbeat_timeout)
 
-            # Get nodes with stale or missing heartbeats
-            result = await db.execute(
-                select(Node)
-                .where(
-                    Node.status.in_(
-                        [
-                            NodeStatus.ONLINE.value,
-                            NodeStatus.DEGRADED.value,
-                            NodeStatus.OFFLINE.value,
-                        ]
-                    )
-                )
-                .where(or_(Node.last_heartbeat < cutoff, Node.last_heartbeat.is_(None)))
-            )
-            stale_nodes = result.scalars().all()
-
-            for node in stale_nodes:
+            # Stale or missing heartbeats. ERROR is included (#19292): an ERROR
+            # node whose agent then dies must still become a restart candidate.
+            tracked = [s.value for s in (NodeStatus.ONLINE, NodeStatus.DEGRADED, NodeStatus.ERROR, NodeStatus.OFFLINE)]
+            stale = or_(Node.last_heartbeat < cutoff, Node.last_heartbeat.is_(None))
+            result = await db.execute(select(Node).where(Node.status.in_(tracked)).where(stale))
+            for node in result.scalars().all():
                 if is_manager_node(node.node_id):
                     continue
-
-                is_reachable = await self._ping_host(node.ip_address)
-                old_status = node.status
-
-                if is_reachable:
-                    # #19292: a node DEGRADED for another reason whose heartbeat
-                    # then stops is re-marked, so it becomes a restart candidate.
-                    if node.status != NodeStatus.DEGRADED.value or degraded_reason(node) != REASON_NO_HEARTBEAT:
-                        await self._handle_degraded_node(db, node, old_status)
-                else:
-                    if node.status != NodeStatus.OFFLINE.value:
-                        await self._handle_offline_node(db, node, old_status)
+                await self._demote_stale_node(db, node, cutoff)
 
             await db.commit()
+
+    async def _still_stale(self, db: AsyncSession, node: Node, cutoff: datetime) -> bool:
+        """Re-read the row under a row lock after the ping (#19292 review).
+
+        The ping takes seconds; a heartbeat committed meanwhile must win, and
+        the write below must merge into the row's CURRENT extra_data rather
+        than the one read before the ping. The lock holds until the commit
+        that follows the demotion.
+        """
+        await db.refresh(node, ["status", "last_heartbeat", "extra_data"], with_for_update=True)
+        beat = as_utc(getattr(node, "last_heartbeat", None))
+        return beat is None or beat < cutoff
+
+    async def _demote_stale_node(self, db: AsyncSession, node: Node, cutoff: datetime) -> None:
+        """Ping one stale node and mark it degraded (no_heartbeat) or offline (#665, #19292)."""
+        is_reachable = await self._ping_host(node.ip_address)
+        if not await self._still_stale(db, node, cutoff):
+            await db.commit()  # release the row lock; a beat landed during the ping
+            return
+        old_status = node.status
+        if is_reachable:
+            # A node DEGRADED for another reason whose heartbeat then stops is
+            # re-marked, so it becomes a restart candidate.
+            if node.status != NodeStatus.DEGRADED.value or degraded_reason(node) != REASON_NO_HEARTBEAT:
+                await self._handle_degraded_node(db, node, old_status)
+        elif node.status != NodeStatus.OFFLINE.value:
+            await self._handle_offline_node(db, node, old_status)
+        await db.commit()
 
     async def _ping_host(self, ip_address: str, timeout: int = 2) -> bool:
         """Check if a host responds to ping."""
@@ -1746,7 +1757,7 @@ class ReconcilerService:
         """Update basic metrics and optional fields.
 
         Returns whether a managed service is CURRENTLY churning (#14465), for
-        `_calculate_node_status` to act on.
+        `_node_status_and_reason` to act on.
         """
         node.cpu_percent = cpu_percent
         node.memory_percent = memory_percent
@@ -1828,11 +1839,13 @@ class ReconcilerService:
         node = await self._find_node_by_id_or_hostname(db, node_id)
         if not node:
             return None
+        extra_data = strip_reserved(extra_data)  # the reason and dwell are the SLM's, never the agent's
         metrics = (cpu_percent, memory_percent, disk_percent)
         restart_churn_active = await self._update_node_metrics(db, node, *metrics, agent_version, os_info, extra_data)
         old = (node.status, degraded_reason(node))
         level = advance_resource_dwell(node, classify_resource_sample(*metrics))
         new = _node_status_and_reason(level, extra_data, restart_churn_active)
+        new = apply_agent_presence(node, agent_version, new, NodeStatus.DEGRADED.value)
         await self._handle_node_status_change(db, node, old, new, metrics)
         node.status = new[0]
         set_degraded_reason(node, new[1])
@@ -1856,7 +1869,7 @@ class ReconcilerService:
         Returns whether this managed service is CURRENTLY churning -- its
         restart count rose within the last `RESTART_CHURN_WINDOW_S` (#14465),
         a level rather than a pulse. Computed here, not in
-        `_calculate_node_status`, because only this call site holds the OLD
+        `_node_status_and_reason`, because only this call site holds the OLD
         `Service` row before it gets overwritten.
         """
         is_churning, last_increase_iso = _restart_churn_active(svc_data, service.extra_data or {}, now)
@@ -2033,23 +2046,6 @@ class ReconcilerService:
 
         # Note: commit happens in the calling method (update_node_heartbeat)
         return any_churning
-
-    def _calculate_node_status(
-        self,
-        cpu_percent: float,
-        memory_percent: float,
-        disk_percent: float,
-        extra_data: dict | None = None,
-        restart_churn_active: bool = False,
-    ) -> str:
-        """Status ONE sample would give, with no dwell (#1604, #14465).
-
-        The heartbeat path damps the resource level across beats first
-        (``update_node_heartbeat``, #19292); the signals and their history are
-        documented in ``services/node_health_status.py``.
-        """
-        level = classify_resource_sample(cpu_percent, memory_percent, disk_percent)
-        return _node_status_and_reason(level, extra_data, restart_churn_active)[0]
 
     # ------------------------------------------------------------------
     # Manifest-driven background tasks (Issue #926 Phase 3)
