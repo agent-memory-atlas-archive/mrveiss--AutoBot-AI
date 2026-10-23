@@ -35,7 +35,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/agents/development_speedup_agent.py": 831,
     "autobot-backend/agents/graph_entity_extractor.py": 790,
     "autobot-backend/agents/knowledge_extraction_agent.py": 766,
-    "autobot-backend/agents/knowledge_manager.py": 1131,
+    "autobot-backend/agents/knowledge_manager.py": 1130,
     "autobot-backend/agents/knowledge_manager_test.py": 807,
     "autobot-backend/agents/knowledge_retrieval_agent.py": 602,
     "autobot-backend/agents/llm_failsafe_agent.py": 815,

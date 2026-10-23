@@ -6,16 +6,17 @@
 
 The import (#18577 / #19216) used to run only from the operator CLI: ``get_knowledge_manager``
 had no production caller, so a deployed backend never wrote the templates into its KB. This is
-the one startup wiring point. Phase 2 calls :func:`start_system_knowledge_import` once, right
-after the knowledge base is published.
+the one startup wiring point. Phase 2's ``_init_knowledge_base`` calls
+:func:`start_system_knowledge_import` once, right after the knowledge base is published.
 
 * Non-blocking: the import runs as a retained background task (``fire_and_forget``).
 * One worker: a :class:`LeaderLease` lets only one uvicorn worker import. The lease is renewed
-  while the import runs and is left to expire afterwards, so workers that start in the same
-  window skip instead of re-running it.
+  while the import runs and is never deleted: it is left to expire, also after a cancelled run,
+  so workers that start in the same window skip instead of re-running it.
 * Idempotent: ``SystemKnowledgeManager`` compares the template file-state hash and the per-item
   hashes, so a restart with unchanged templates makes no KB writes.
-* A failure is logged and never reaches startup.
+* A failure is logged and never reaches startup; items that failed to store are counted, logged
+  as a warning, and retried on the next start.
 """
 
 from __future__ import annotations
@@ -39,34 +40,61 @@ def import_lease() -> LeaderLease:
 
 
 def start_system_knowledge_import(app: Any) -> asyncio.Task | None:
-    """Schedule the import once the KB is ready; returns the retained task, or None without a KB."""
+    """Schedule the import once the KB is ready; returns the retained task, or None.
+
+    Never raises: a scheduling failure is logged, so the KB wiring around the call still runs.
+    """
     knowledge_base = getattr(app.state, "knowledge_base", None)
     if knowledge_base is None:
         logger.warning("System knowledge import skipped: knowledge base not ready")
         return None
-    return fire_and_forget(run_system_knowledge_import(knowledge_base), name=IMPORT_TASK_NAME)
+    coro = run_system_knowledge_import(knowledge_base)
+    try:
+        return fire_and_forget(coro, name=IMPORT_TASK_NAME)
+    except Exception as exc:
+        coro.close()
+        logger.error("System knowledge import not scheduled; startup continues: %s", exc, exc_info=True)
+        return None
 
 
 async def run_system_knowledge_import(knowledge_base: Any, lease: LeaderLease | None = None) -> bool:
-    """Import the templates if this worker wins the lease. True only when the import ran cleanly."""
+    """Import the templates if this worker wins the lease.
+
+    True only when the import ran with no failed item. False when another worker holds the lease,
+    the import raised, or some items failed to store (those are retried on the next start).
+    """
     lease = lease or import_lease()
-    if not await lease.update_leadership():
-        logger.info("System knowledge import: lease not acquired (another worker or no Redis), skipping")
-        return False
-    keeper = asyncio.create_task(_keep_lease(lease), name=f"{IMPORT_TASK_NAME}-lease")
+    keeper: asyncio.Task | None = None
     try:
-        await _import(knowledge_base)
+        if not await lease.update_leadership():
+            logger.info("System knowledge import: lease not acquired (another worker or no Redis), skipping")
+            return False
+        keeper = asyncio.create_task(_keep_lease(lease), name=f"{IMPORT_TASK_NAME}-lease")
+        failures = await _import(knowledge_base)
     except Exception as exc:
         logger.error("System knowledge import failed; startup continues: %s", exc, exc_info=True)
         return False
     finally:
-        keeper.cancel()
-    logger.info("System knowledge import finished")
+        if keeper is not None:
+            keeper.cancel()
+    return _report(failures)
+
+
+def _report(failures: list[str]) -> bool:
+    """Log the outcome truthfully; a failed item makes the run unsuccessful."""
+    if failures:
+        logger.warning(
+            "System knowledge import incomplete: %d item(s) failed and will retry on the next start: %s",
+            len(failures),
+            ", ".join(failures),
+        )
+        return False
+    logger.info("System knowledge import finished with no failed item")
     return True
 
 
-async def _import(knowledge_base: Any) -> None:
-    """Run the import through the one entry point, the ``KnowledgeManager`` facade."""
+async def _import(knowledge_base: Any) -> list[str]:
+    """Run the import through the one entry point, the ``KnowledgeManager`` facade; return failed items."""
     from agents.knowledge_manager import get_knowledge_manager
 
     # Machine-aware mode adapts per-host copies and never imports the base templates; temporal
@@ -75,6 +103,7 @@ async def _import(knowledge_base: Any) -> None:
         get_knowledge_manager, knowledge_base, enable_temporal=False, enable_machine_aware=False
     )
     await manager.initialize()
+    return manager.import_failures
 
 
 async def _keep_lease(lease: LeaderLease) -> None:
@@ -82,4 +111,5 @@ async def _keep_lease(lease: LeaderLease) -> None:
     while True:
         await asyncio.sleep(lease.refresh_s)
         if not await lease.update_leadership():
+            logger.warning("System knowledge import lost its lease mid-run; another worker may start it")
             return
