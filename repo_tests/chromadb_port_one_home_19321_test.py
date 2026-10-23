@@ -61,7 +61,6 @@ PINNED: dict[str, tuple[str, int]] = {
         r'Test ChromaDB health endpoint[^\n]*\n\s+uri:\n\s+url: "http://127\.0\.0\.1:(\d+)',
         1,
     ),
-    "autobot-frontend/src/components/knowledge/ChromaDBExplorer.vue": (r"vector collections at port (\d+)", 1),
 }
 
 #: Compose clients that dial ChromaDB inside the network: the container port, not the SSOT.
@@ -155,6 +154,8 @@ def test_no_unrecorded_chromadb_port_definition() -> None:
 
 #: Python readers that restated the port before #19321; each now derives from ``port.chromadb``.
 PYTHON_READERS = (
+    "autobot-backend/api/monitoring.py",
+    "autobot-backend/api/service_monitor.py",
     "autobot-slm-backend/api/infrastructure.py",
     "autobot-slm-backend/api/setup_wizard.py",
     "autobot-slm-backend/services/role_registry.py",
@@ -174,6 +175,36 @@ def test_the_python_readers_derive_from_the_ssot() -> None:
         if hits or "port.chromadb" not in text:
             stale[rel] = hits
     assert not stale, f"a ChromaDB port literal is back (use config.port.chromadb): {stale}"
+
+
+#: A ChromaDB value taken from the AI-stack's host or port -- the monitoring.py shape (#19321 review).
+_FROM_AISTACK = re.compile(r"(?i)chroma\w*\s*=.*\baistack\b")
+
+
+def aistack_borrowers(root: Path, paths: list[str]) -> list[str]:
+    """``path:line`` for each ``chromadb_* = ...aistack...`` assignment in a Python file."""
+    found = []
+    for rel in paths:
+        if not rel.endswith(".py") or _SKIP.search(rel) or not (root / rel).is_file():
+            continue
+        for no, line in enumerate((root / rel).read_text(encoding="utf-8").splitlines(), 1):
+            if _FROM_AISTACK.search(_strip_comment(line)):
+                found.append(f"{rel}:{no}")
+    return found
+
+
+def test_no_chromadb_value_is_taken_from_the_ai_stack() -> None:
+    found = aistack_borrowers(_ROOT, _tracked())
+    assert not found, f"ChromaDB is not the AI-stack service; use vm/port.chromadb: {found}"
+
+
+def test_an_ai_stack_borrower_is_caught(tmp_path: Path) -> None:
+    rel = "autobot-backend/api/probe.py"
+    (tmp_path / rel).parent.mkdir(parents=True)
+    (tmp_path / rel).write_text('chromadb_port = ConfigRegistry.get("port.aistack")\n', encoding="utf-8")
+    assert aistack_borrowers(tmp_path, [rel]) == [f"{rel}:1"]
+    (tmp_path / rel).write_text('chromadb_port = ConfigRegistry.get("port.chromadb")\n', encoding="utf-8")
+    assert aistack_borrowers(tmp_path, [rel]) == []
 
 
 def test_a_re_added_copy_is_caught(tmp_path: Path) -> None:
