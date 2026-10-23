@@ -55,6 +55,10 @@ export { default as BaseDrawer } from './src/components/BaseDrawer.vue'
 export { default as BaseSwitch } from './src/components/BaseSwitch.vue'
 export type { SwitchSize } from './src/components/BaseSwitch.vue'
 
+export { default as BaseAvatar } from './src/components/BaseAvatar.vue'
+export type { AvatarSize, AvatarVariant, AvatarStatus } from './src/components/BaseAvatar.vue'
+export { initialsOf } from './src/utils/initials'
+
 export { default as BasePagination } from './src/components/BasePagination.vue'
 export type { PaginationLabels } from './src/components/BasePagination.vue'
 
