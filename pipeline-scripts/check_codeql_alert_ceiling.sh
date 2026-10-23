@@ -95,20 +95,28 @@ if [ -n "$ALERT_REF" ]; then
   # every CODEQL_POLL_S, for at most CODEQL_WAIT_S (a CodeQL run here takes about 14 min).
   # Only "not finished yet" waits: a run that has COMPLETED with no analysis still fails
   # below, and so does a run still going when the wait runs out -- a timeout is not a verdict.
-  readonly CODEQL_WAIT_S="${CODEQL_WAIT_S:-1500}" CODEQL_POLL_S="${CODEQL_POLL_S:-30}"
-  waited=0
+  #
+  # Check runs attach to the commit that was PUSHED -- the PR head -- while analyses are recorded
+  # against the merge commit GITHUB_SHA names (#18123 review: merge bc3dd1f240 had 0 runs, its
+  # head 54). So every check-run read uses CODEQL_CHECK_SHA, which code-quality.yml sets.
+  # The default wait covers codeql.yml's job bounds: Analyze 30 min plus detect 5 min, plus margin.
+  readonly CODEQL_CHECK_SHA="${CODEQL_CHECK_SHA:-${GITHUB_SHA:-${ALERT_REF}}}"
+  readonly CODEQL_WAIT_S="${CODEQL_WAIT_S:-2400}" CODEQL_POLL_S="${CODEQL_POLL_S:-30}"
+  [[ "$CODEQL_WAIT_S" =~ ^[0-9]+$ ]] || fail "CODEQL_WAIT_S='${CODEQL_WAIT_S}' is not a whole number of seconds"
+  [[ "$CODEQL_POLL_S" =~ ^[1-9][0-9]*$ ]] || fail "CODEQL_POLL_S='${CODEQL_POLL_S}' must be a positive whole number of seconds"
+  wait_started=$SECONDS
   while [ "$analyses_count" -eq 0 ]; do
     pending=$(python3 "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/check_run_status.py" pending-named \
-      "${REPO}" "${GITHUB_SHA:-${ALERT_REF}}" 'codeql|^Analyze \(|Detect changed languages' 2>/dev/null) || pending=""
+      "${REPO}" "${CODEQL_CHECK_SHA}" 'codeql|^Analyze \(|Detect changed languages' 2>/dev/null) || pending=""
     [[ "$pending" =~ ^[0-9]+$ ]] \
       || fail "could not determine whether a CodeQL run for ${GITHUB_SHA:-$ALERT_REF} is still in progress (the check-runs API errored) — an undetermined answer is not a pass"
     [ "$pending" -eq 0 ] && break
+    waited=$((SECONDS - wait_started))
     [ "$waited" -lt "$CODEQL_WAIT_S" ] \
-      || fail "CodeQL is still running for ${GITHUB_SHA:-$ALERT_REF} after ${waited}s (${pending} check(s) not completed) — re-run once it finishes; a scan that has not finished is not a verdict (#18123)"
+      || fail "CodeQL is still running for ${CODEQL_CHECK_SHA} after ${waited}s (${pending} check(s) not completed) — re-run once it finishes; a scan that has not finished is not a verdict (#18123)"
     printf '[codeql-ceiling] CodeQL still running for %s (%s check(s)); waiting %ss (%ss so far)\n' \
-      "${GITHUB_SHA:-$ALERT_REF}" "$pending" "$CODEQL_POLL_S" "$waited"
+      "${CODEQL_CHECK_SHA}" "$pending" "$CODEQL_POLL_S" "$waited"
     sleep "$CODEQL_POLL_S"
-    waited=$((waited + CODEQL_POLL_S))
     read_analyses
   done
 
@@ -143,7 +151,7 @@ if [ -n "$ALERT_REF" ]; then
     # CodeQL run sitting past run 100 read as "did not run" (#19085). The helper
     # also exits nonzero when the API's total_count is not the runs read.
     codeql_checks=$(python3 "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/check_run_status.py" count-named \
-      "${REPO}" "${GITHUB_SHA:-${ALERT_REF}}" 'codeql|^Analyze \(|Detect changed languages' 2>/dev/null) || codeql_checks=""
+      "${REPO}" "${CODEQL_CHECK_SHA}" 'codeql|^Analyze \(|Detect changed languages' 2>/dev/null) || codeql_checks=""
     if [ -z "$codeql_checks" ] || ! [[ "$codeql_checks" =~ ^[0-9]+$ ]]; then
       fail "could not determine whether CodeQL ran for ${ALERT_REF} (the check-runs API errored) — an undetermined answer is not a pass"
     elif [ "$codeql_checks" -eq 0 ]; then
