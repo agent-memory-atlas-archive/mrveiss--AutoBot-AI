@@ -19,8 +19,14 @@ its restated default must equal the home. A default site in any other file is a 
 **Boundary.** Tracked files with the suffixes in :data:`_SUFFIXES` outside ``docs/`` and Markdown. A
 site is one of the five shapes in :data:`_SHAPES`: a literal ``getenv``/``environ.get`` fallback, a
 literal pydantic ``default=`` beside the alias, an Ansible ``lookup('env', ...) | default(...)``, an
-env-file assignment, or a shell/compose ``${NAME:-...}``. A path literal that never names the
-variable (``/etc/autobot/certs/server-cert.pem`` in a role) is outside this guard: #19366 owns it.
+env-file assignment, or a shell/compose ``${NAME:-...}`` -- plus, for the remote dir only, the Ansible
+fallback ``autobot_tls_remote_cert_dir | default(...)`` that a file spells once when it may run without
+``group_vars/all.yml`` (where the Ansible home ``autobot_tls_remote_cert_dir`` lives).
+
+**Bare literals (#19366).** Outside those sites, the remote dir's VALUE may not appear on any code line
+of a non-test file except its home (:data:`_REMOTE_HOME_FILES`). Comment lines (``#``, ``{#``) are
+prose and skipped; test files (``repo_tests/``, ``tests/``, ``*_test.py``, ``test_*.py``) restate the
+path as fixtures and assertions and are outside this half.
 """
 
 from __future__ import annotations
@@ -60,7 +66,30 @@ PINNED: dict[str, frozenset[str]] = {
     f"{_ANSIBLE}/roles/redis/defaults/main.yml": frozenset({_DIR, _REMOTE}),
     f"{_SECURITY_SH}/generate-tls-certificates.sh": frozenset({_DIR}),
     f"{_SECURITY_SH}/renew-certificates.sh": frozenset({_DIR}),
+    # #19366: the Ansible home and each file's one fallback to it.
+    f"{_ANSIBLE}/inventory/group_vars/all.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/_shared/tasks/ensure_node_tls_cert.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/backup-node-data.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/setup-user-frontend.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/playbooks/bootstrap-node.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/playbooks/enroll-node.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/playbooks/rotate-certs.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/playbooks/setup-internal-ca.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/playbooks/update-all-nodes.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/roles/backend/defaults/main.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/roles/backend/templates/backend.env.j2": frozenset({_REMOTE}),  # rendered outside the role too
+    f"{_ANSIBLE}/roles/backend/templates/nginx-backend.conf.j2": frozenset({_REMOTE}),  # ditto
+    f"{_ANSIBLE}/roles/frontend/defaults/main.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/roles/slm_manager/defaults/main.yml": frozenset({_REMOTE}),
+    f"{_ANSIBLE}/roles/vnc/defaults/main.yml": frozenset({_REMOTE}),
+    # #19366: VNC shell scripts, one ${AUTOBOT_TLS_REMOTE_CERT_DIR:-...} each.
+    "autobot-infrastructure/shared/scripts/setup_browser_vnc.sh": frozenset({_REMOTE}),
+    "autobot-infrastructure/shared/scripts/utilities/fix-vnc-desktop.sh": frozenset({_REMOTE}),
+    "autobot-infrastructure/shared/scripts/utilities/fix-vnc-wsl.sh": frozenset({_REMOTE}),
 }
+
+#: Where the remote dir's value is DEFINED, so a bare literal there is the home, not a copy.
+_REMOTE_HOME_FILES = frozenset({"autobot_shared/env_registry_tls.py"})
 
 _SUFFIXES = (".py", ".yml", ".yaml", ".j2", ".sh", ".env", ".example", ".docker", ".toml", ".ini", ".cfg", ".conf")
 _THIS = "repo_tests/tls_cert_dir_one_home_19317_test.py"
@@ -74,11 +103,38 @@ _SHAPES = (
     r"""\$\{{{name}:?-(?P<v>[^}}\n]*)\}}""",
 )
 _PATTERNS = {name: [re.compile(shape.format(name=re.escape(name))) for shape in _SHAPES] for name in HOME}
+_PATTERNS[_REMOTE] += [
+    re.compile(r"""autobot_tls_remote_cert_dir\s*\|\s*default\(\s*(['"])(?P<v>[^'"\n]*)\1"""),  # per-file fallback
+    re.compile(r"""(?m)^autobot_tls_remote_cert_dir:[ \t]*(["']?)(?P<v>[^"'\s#]*)\1"""),  # the group_vars home
+]
 
 
 def default_sites(text: str) -> list[tuple[str, str]]:
     """``(name, restated default)`` for every default site of a :data:`HOME` variable in *text*."""
     return [(name, m.group("v")) for name, pats in _PATTERNS.items() for pat in pats for m in pat.finditer(text)]
+
+
+def _is_test_file(rel: str) -> bool:
+    name = Path(rel).name
+    return rel.startswith("repo_tests/") or "/tests/" in rel or name.endswith("_test.py") or name.startswith("test_")
+
+
+def bare_literals(text: str) -> list[str]:
+    """Code lines still naming the remote dir's value once every recognised site is removed."""
+    for pat in (p for pats in _PATTERNS.values() for p in pats):
+        text = pat.sub("", text)
+    lines = (line.strip() for line in text.splitlines())
+    return [line for line in lines if HOME[_REMOTE] in line and not line.startswith(("#", "{#"))]
+
+
+def bare_literal_violations(texts: dict[str, str]) -> list[str]:
+    """``path: line`` for each bare remote-dir literal outside the home and test files."""
+    return [
+        f"{rel}: bare {HOME[_REMOTE]!r} in {line!r}; derive it from the home (#19366)"
+        for rel, text in sorted(texts.items())
+        if rel not in _REMOTE_HOME_FILES and not _is_test_file(rel)
+        for line in bare_literals(text)
+    ]
 
 
 def violations(sites: dict[str, list[tuple[str, str]]], pinned: dict[str, frozenset[str]]) -> list[str]:
@@ -134,21 +190,51 @@ REACH = declare(
 
 
 @functools.lru_cache(maxsize=1)
-def _live_sites() -> dict[str, list[tuple[str, str]]]:
+def _live_texts() -> dict[str, str]:
     root = repo_root()
     out = {}
     for rel in _population(root):
         try:
-            text = (root / rel).read_text(encoding="utf-8")
+            out[rel] = (root / rel).read_text(encoding="utf-8")
         except (UnicodeDecodeError, FileNotFoundError):
             continue
-        if found := default_sites(text):
-            out[rel] = found
     return out
+
+
+def _live_sites() -> dict[str, list[tuple[str, str]]]:
+    return {rel: found for rel, text in _live_texts().items() if (found := default_sites(text))}
 
 
 def test_every_default_site_is_pinned_and_equals_the_home() -> None:
     assert not violations(_live_sites(), PINNED), "\n".join(violations(_live_sites(), PINNED))
+
+
+def test_no_bare_remote_cert_dir_literal_outside_the_home() -> None:
+    found = bare_literal_violations(_live_texts())
+    assert not found, "\n".join(found)
+
+
+@pytest.mark.parametrize(
+    ("rel", "copy"),
+    [
+        ("autobot-slm-backend/ansible/roles/x/defaults/main.yml", "x_cert: /etc/autobot/certs/server-cert.pem"),
+        ("autobot-backend/x.py", '    "--cert=/etc/autobot/certs/server-cert.pem",'),
+        ("autobot-infrastructure/x.sh", "    --key=/etc/autobot/certs/server-key.pem \\"),
+        ("autobot-slm-backend/ansible/x.j2", "ssl_certificate /etc/autobot/certs/server-cert.pem;"),
+    ],
+)
+def test_a_deliberate_bare_literal_is_flagged(rel: str, copy: str) -> None:
+    assert bare_literal_violations({rel: copy}), f"missed a bare literal in {rel}"
+
+
+def test_comments_sites_tests_and_the_home_are_not_bare_literals() -> None:
+    fallback = "d: \"{{ autobot_tls_remote_cert_dir | default('/etc/autobot/certs') }}\"\n# reads /etc/autobot/certs\n"
+    assert bare_literals(fallback) == []
+    texts = {
+        "repo_tests/a_test.py": "P = '/etc/autobot/certs'",
+        "autobot_shared/env_registry_tls.py": "X = '/etc/autobot/certs'",
+    }
+    assert bare_literal_violations(texts) == []
 
 
 def test_the_registry_and_the_settings_use_the_home() -> None:
