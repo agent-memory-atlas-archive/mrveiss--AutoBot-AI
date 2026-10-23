@@ -110,3 +110,28 @@ def test_database_config_repr_does_not_expose_the_password() -> None:
     for rendered in (repr(config), str(config)):
         assert "s3cr3t-pw" not in rendered
         assert "127.0.0.1:5432/slm_users" in rendered
+
+
+# --- #19320: the SLM's role on the user-management DB is SLM_POSTGRES_USER -----------------------
+
+
+def _clear_roles(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("AUTOBOT_USERS_DATABASE_URL", "SLM_POSTGRES_USER", "AUTOBOT_POSTGRES_USER"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_slm_role_on_users_db_reads_the_canonical_slm_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_roles(monkeypatch)
+    monkeypatch.setenv("SLM_POSTGRES_USER", "slm_role")
+    monkeypatch.setenv("AUTOBOT_POSTGRES_USER", "backend_role")
+    assert get_autobot_db_config().url.startswith("postgresql+asyncpg://slm_role@")
+
+
+def test_slm_role_on_users_db_honours_the_deprecated_alias(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _clear_roles(monkeypatch)
+    monkeypatch.setenv("AUTOBOT_POSTGRES_USER", "legacy_role")
+    with caplog.at_level("WARNING"):
+        assert get_autobot_db_config().url.startswith("postgresql+asyncpg://legacy_role@")
+    assert "deprecated" in caplog.text
