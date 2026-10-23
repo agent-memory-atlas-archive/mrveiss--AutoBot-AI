@@ -17,7 +17,8 @@ done
 source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh" 2>/dev/null || true
 ANSIBLE_DIR="$(dirname "$SCRIPT_DIR")"
 INVENTORY_FILE="$ANSIBLE_DIR/inventory/production.yml"
-BACKUP_BASE_DIR="/opt/autobot/backups"
+# The install root's one definition, autobot.base_dir (#18587, #18882); backups live under it.
+BACKUP_BASE_DIR="$(python3 -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["autobot"]["base_dir"])' "$ANSIBLE_DIR/inventory/group_vars/all.yml")/backups"
 LOG_DIR="/var/log/autobot/backup"
 LOG_FILE="$LOG_DIR/backup-$(date +%Y%m%d-%H%M%S).log"
 
