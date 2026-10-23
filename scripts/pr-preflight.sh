@@ -47,8 +47,9 @@ done
 # would read as "no match" and so deselect every required check without a word.
 [[ "" =~ $ONLY ]]; [ $? -ne 2 ] || { echo "--only: not a valid ERE: $ONLY" >&2; exit 2; }
 
+PREFLIGHT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # shellcheck source=scripts/lib/git-root.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/git-root.sh" || exit 2
+source "${PREFLIGHT_DIR}/lib/git-root.sh" || exit 2
 REPO_ROOT=$(git_repo_root) || exit 2
 cd "$REPO_ROOT" || exit 2
 
@@ -80,17 +81,16 @@ fi
 PY_VERSION=$("$PY" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")' 2>/dev/null || echo unknown)
 FAILED=0
 
-# The fleet range is deliberately NOT written here -- putting it in a script is
-# the very thing being checked for. It is read from the existing lint rule,
-# which is the single source of truth for what "fleet IP" means.
-FLEET_RULE="tools/lint/check_no_hardcoded_ip_fallbacks.py"
-FLEET_IP_RE=$(grep -oE '\^[0-9]{1,3}\\\.[0-9]{1,3}\\\.[0-9]{1,3}\\\.' "$FLEET_RULE" 2>/dev/null \
+# The fleet range is deliberately NOT written here -- putting it in a script is the very thing
+# being checked for. It is read from the lint rule, the one source of what "fleet IP" means.
+# #19233: read beside this script, never cwd-relative; unreadable/underivable exits 2, since an
+# empty rule reported "no fleet IP" about every body. PREFLIGHT_FLEET_RULE overrides it (tests).
+FLEET_RULE="${PREFLIGHT_FLEET_RULE:-${PREFLIGHT_DIR}/../tools/lint/check_no_hardcoded_ip_fallbacks.py}"
+[ -r "$FLEET_RULE" ] || { echo "fleet IP rule unreadable: ${FLEET_RULE} -- refusing to check against nothing (#19233)" >&2; exit 2; }
+FLEET_IP_RE=$(grep -oE '\^[0-9]{1,3}\\\.[0-9]{1,3}\\\.[0-9]{1,3}\\\.' "$FLEET_RULE" \
               | head -1 | sed 's/^\^//' | sed 's/\\\././g')
-if [ -n "$FLEET_IP_RE" ]; then
-  FLEET_IP_RE="$(printf '%s' "$FLEET_IP_RE" | sed 's/\./\\./g')[0-9]{1,3}"
-else
-  FLEET_IP_RE='(?!)'  # rule file unreadable -- match nothing rather than guess
-fi
+[ -n "$FLEET_IP_RE" ] || { echo "no fleet range found in ${FLEET_RULE} -- refusing to check against nothing (#19233)" >&2; exit 2; }
+FLEET_IP_RE="$(printf '%s' "$FLEET_IP_RE" | sed 's/\./\\./g')[0-9]{1,3}"
 pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n' "$1"; FAILED=$((FAILED + 1)); }
 note() { printf '  --    %s\n' "$1"; }
