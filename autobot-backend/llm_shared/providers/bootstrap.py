@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, List
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from autobot_shared.ssot_config import get_config as get_ssot_config
-from autobot_shared.ssot_hosted_models import hosted_default_model
+from autobot_shared.ssot_hosted_models import NOUS_HERMES2_MIXTRAL_DPO, hosted_default_model
 from llm_shared.providers.anthropic import AnthropicProvider
 from llm_shared.providers.bedrock import BedrockProvider
 from llm_shared.providers.custom_openai import CustomOpenAIProvider
@@ -217,7 +217,7 @@ def _register_hosted_inference(registry: "ProviderRegistry", fallback: List[str]
             nous_provider = NousPortalProvider(
                 settings={
                     "api_key": nous_key,
-                    "default_model": config.misc.nous_default_model or "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO",
+                    "default_model": config.misc.nous_default_model or NOUS_HERMES2_MIXTRAL_DPO,
                 }
             )
             registry.register(nous_provider)
@@ -284,7 +284,7 @@ def _register_cloud_providers(registry: "ProviderRegistry", fallback: List[str])
                     "aws_access_key_id": aws_access_key,
                     "aws_secret_access_key": aws_secret_key,
                     "region": aws_region,
-                    "default_model": "claude-3-5-sonnet",
+                    "default_model": hosted_default_model("bedrock"),  # #15501 review
                 }
             )
             registry.register(bedrock_provider)
@@ -297,7 +297,7 @@ def _register_cloud_providers(registry: "ProviderRegistry", fallback: List[str])
             bedrock_provider = BedrockProvider(
                 settings={
                     "region": aws_region,
-                    "default_model": "claude-3-5-sonnet",
+                    "default_model": hosted_default_model("bedrock"),  # #15501 review
                 }
             )
             registry.register(bedrock_provider)

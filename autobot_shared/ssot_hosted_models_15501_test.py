@@ -58,3 +58,17 @@ def test_bedrock_resolves_its_default_to_a_model_id():
     from llm_shared.providers.bedrock import BEDROCK_MODELS
 
     assert BEDROCK_MODELS[hm.BEDROCK_CLAUDE_SONNET4] == hm.BEDROCK_CLAUDE_SONNET4_ID
+
+
+def test_a_value_in_the_project_env_file_applies_without_load_dotenv(monkeypatch, tmp_path):
+    """#15501 review: the removed pydantic fields read .env through env_file; a worker or script
+    that never ran load_dotenv must still see the override."""
+    import autobot_shared.ssot_config as sc
+
+    model = "mistral-large-latest"
+    (tmp_path / ".env").write_text(f"MISTRAL_DEFAULT_MODEL={model}\n", encoding="utf-8")
+    monkeypatch.setattr(sc, "PROJECT_ROOT", tmp_path)
+    monkeypatch.delenv("MISTRAL_DEFAULT_MODEL", raising=False)
+    assert hm.hosted_default_model("mistral") == model
+    monkeypatch.setenv("MISTRAL_DEFAULT_MODEL", "open-mistral-nemo")
+    assert hm.hosted_default_model("mistral") == "open-mistral-nemo", "the process environment wins"

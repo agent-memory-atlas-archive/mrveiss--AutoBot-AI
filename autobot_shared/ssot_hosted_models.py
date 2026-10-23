@@ -24,9 +24,15 @@ model names come from it.
 
 Each provider's ``default`` tier can be overridden by its ``{PROVIDER}_DEFAULT_MODEL``
 environment variable (``VERTEX_AI_DEFAULT_MODEL`` for Vertex AI); a blank value is no override.
+The process environment wins; otherwise the project ``.env`` is read, as the pydantic fields
+these replace did through ``env_file`` -- so a worker or script that never ran ``load_dotenv``
+still sees a value set there (#15501 review).
 """
 
 from __future__ import annotations
+
+import os
+from functools import lru_cache
 
 from autobot_shared.env_utils import env_raw
 from autobot_shared.ssot_constants import (
@@ -48,6 +54,8 @@ OPENROUTER_OPENAI_GPT41_NANO = f"openai/{OPENAI_GPT41_NANO}"
 BEDROCK_CLAUDE_SONNET4 = "claude-sonnet-4"
 BEDROCK_CLAUDE_SONNET4_ID = "anthropic.claude-sonnet-4-20250514-v1:0"
 HUGGINGFACE_LLAMA32_3B_INSTRUCT = "meta-llama/Llama-3.2-3B-Instruct"
+#: Nous's fallback when NOUS_DEFAULT_MODEL is unset (moved from bootstrap.py, #15501 review).
+NOUS_HERMES2_MIXTRAL_DPO = "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO"
 #: The chat models the HuggingFace provider lists (moved from its module, #15501).
 HUGGINGFACE_KNOWN_CHAT_MODELS: tuple[str, ...] = (
     "meta-llama/Meta-Llama-3.1-8B-Instruct",
@@ -80,6 +88,25 @@ _ENV_OVERRIDE: dict[str, str] = {
 }
 
 
+@lru_cache(maxsize=4)
+def _dotenv(path: str, mtime: float) -> dict[str, str]:
+    """The project .env as a dict, re-read when its mtime changes."""
+    from dotenv import dotenv_values
+
+    return {k: v for k, v in dotenv_values(path).items() if v is not None}
+
+
+def _from_dotenv(name: str) -> str | None:
+    from autobot_shared.ssot_config import PROJECT_ROOT
+
+    path = str(PROJECT_ROOT / ".env")
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    return (_dotenv(path, mtime).get(name) or "").strip() or None
+
+
 def hosted_default_model(provider: str, tier: str = "default") -> str:
     """The *tier* model for hosted *provider*; the ``default`` tier honours its env override.
 
@@ -89,7 +116,7 @@ def hosted_default_model(provider: str, tier: str = "default") -> str:
     if tier not in TIERS:
         raise KeyError(f"unknown tier {tier!r}; expected one of {TIERS}")
     if tier == "default":
-        override = env_raw(_ENV_OVERRIDE[provider])
+        override = (env_raw(_ENV_OVERRIDE[provider]) or "").strip() or _from_dotenv(_ENV_OVERRIDE[provider])
         if override:
-            return override.strip()
+            return override
     return models[tier]
