@@ -4,7 +4,7 @@
 # Author: mrveiss
 """ChromaDB's heartbeat path has one home: ``CHROMADB_HEARTBEAT_PATH`` (#19413).
 
-The pinned server is chromadb 1.x, which serves ``/api/v2/heartbeat`` only: ``/api/v1/heartbeat``
+The pinned server is chromadb 1.x, which serves ``/api/v2/heartbeat`` only: the v1 heartbeat
 answers 410 and ``/health`` 404. Two shell probes still called v1 and the ansible health check
 called ``/health``, so they failed against a healthy server.
 
@@ -31,6 +31,8 @@ from tools.lint._scan_helpers import tracked_paths
 
 _ROOT = repo_root()
 HOME = "autobot_shared/chromadb_endpoints.py"
+#: This guard spells the forbidden path in its own fixtures.
+SELF = "repo_tests/chromadb_heartbeat_one_home_19413_test.py"
 
 #: Non-Python copies of the path: file -> the pattern capturing its value.
 PINNED: dict[str, str] = {
@@ -89,7 +91,7 @@ def sweep(root: Path, paths: list[str]) -> dict[str, list[str]]:
     allowed = {HOME, *PINNED, *PYTHON_LITERALS_PENDING_19414}
     for rel in paths:
         text = _read(root, rel)
-        if text is None:
+        if text is None or rel == SELF:
             continue
         if bad := foreign_versions(text):
             found["foreign"].append(f"{rel}: {bad}")

@@ -6,7 +6,7 @@
 
 The pinned server is chromadb 1.x (``chromadb>=1.5.9,<2.0.0``; compose pins
 ``chromadb/chroma:1.5.9``). 1.x serves the heartbeat only under ``/api/v2``;
-``/api/v1/heartbeat`` answers 410 "The v1 API is deprecated" and ``/health`` is 404.
+the v1 heartbeat answers 410 "The v1 API is deprecated" and ``/health`` is 404.
 
 Python probes import :data:`CHROMADB_HEARTBEAT_PATH`. Files that cannot import Python
 (shell, ansible, compose, manifests) keep a copy that
