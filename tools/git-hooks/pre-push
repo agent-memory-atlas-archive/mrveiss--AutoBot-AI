@@ -801,6 +801,25 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       "$(echo "$frontend_unclaimed" | grep -c .) changed .ts/.vue file(s) are outside ${FRONTEND_PROJECTS// /, }, which are the only trees declaring a type-check script: $(echo "$frontend_unclaimed" | head -3 | tr '\n' ' ')"
   fi
 
+  # ----- Hardcoded-values baseline (#18808) --------------------------------
+  # A change that removes a baselined value leaves its entry over-claiming, which
+  # ssot-coverage.yml's --audit-baseline fails on (trains 30, 32). Audit the changed
+  # files that have entries -- scoped, so it costs under a second, not the
+  # whole-tree scan's minutes.
+  hv_baselined=$(printf '%s\n' "$changed" | grep -v '^$' | grep -Fxf - <(cut -d'|' -f3 "$REPO_ROOT/pipeline-scripts/hardcoded_values_baseline.txt" | sort -u) || true)
+  if [ -n "$hv_baselined" ]; then
+    hv_paths=$(mktemp)
+    printf '%s\n' "$hv_baselined" > "$hv_paths"
+    if hv_out=$("$REPO_ROOT/pipeline-scripts/detect-hardcoded-values.sh" --audit-baseline --paths-from="$hv_paths" 2>&1); then
+      ok "hardcoded-values baseline: $(echo "$hv_baselined" | grep -c .) baselined file(s) changed, every entry still matches"
+    else
+      fail "hardcoded-values baseline over-claims for the changed files (#18808):"
+      echo "$hv_out" >&2
+      EXIT_CODE=1
+    fi
+    rm -f "$hv_paths"
+  fi
+
   # ----- Backend (Python) -------------------------------------------------
   # #16711: tools/lint/prepush_selection.py chooses the tests and says why. It
   # picks changed tests under every pytest.ini python_files pattern (test_*.py
@@ -898,6 +917,26 @@ while read -r local_ref local_sha remote_ref remote_sha; do
           fi
         fi
       done
+
+      # #18808: the sys.modules leak guard (#13337) sees a stub only at a node OUTSIDE its
+      # owner's directory, and a selection is usually one directory -- so #18785's import-time
+      # leak passed here and failed all 12 CI shards. Collect the selected files again, serially
+      # (xdist would put the probe on another worker), followed by a probe outside every backend
+      # tree. Collection is the phase import-time stubs leak in; a run-phase leak is not covered.
+      # autobot-slm-backend is not probed: its conftest's tree-wide stubs are legal inside that
+      # tree and an outside probe would report them, not the change (see #16069 above).
+      leak_targets=$(echo "$other_py_tests" | grep -v '^repo_tests/' | grep -v '^$' || true)
+      leak_probe="repo_tests/sys_modules_leak_probe_18808_test.py"
+      if [ "$pytest_failed" = "0" ] && [ "$pytest_timed_out" = "0" ] && [ -n "$leak_targets" ] && [ -f "$REPO_ROOT/$leak_probe" ]; then
+        # shellcheck disable=SC2086 # word-splitting the file list is intended
+        if leak_output=$(cd "$REPO_ROOT" && timeout "$PYTEST_TIMEOUT" "$PYTEST_PYTHON" -m pytest --collect-only -q -p no:xdist -p no:cacheprovider $leak_targets "$leak_probe" 2>&1); then
+          ok "sys.modules leak check: $(echo "$leak_targets" | grep -c .) selected file(s) leave no stub outside their directory"
+        else
+          pytest_failed=1
+          fail "sys.modules leak check failed (#18808, the guard is #13337):"
+          printf '%s\n' "$leak_output" | sed -n '/sys.modules leak guard/,/^=\{5,\} .* in /p' | head -30 >&2
+        fi
+      fi
 
       if [ "$pytest_failed" != "0" ]; then
         EXIT_CODE=1

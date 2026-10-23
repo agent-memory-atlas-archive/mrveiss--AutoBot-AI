@@ -13,7 +13,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.lint.prepush_selection import format_selection, pytest_settings, select
+from autobot_shared.isolated_git import git, make_repo
+from tools.lint.prepush_selection import (
+    ALWAYS_RUN,
+    declared_roots,
+    format_selection,
+    pytest_settings,
+    select,
+    tests_naming,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PATTERNS = ("test_*.py", "*_test.py")
@@ -154,3 +162,86 @@ def test_an_unparseable_record_degrades_instead_of_breaking_the_push():
 
     assert glob_declared_guards("def broken(:\n") == {}
     assert glob_declared_guards("SOMETHING_ELSE = 1\n") == {}
+
+
+# ----- #18808 / #16715: guards no sibling or recorded glob reaches ----------------------------
+
+_GUARD = "repo_tests/forks_test.py"
+
+
+def test_every_push_runs_the_cheap_whole_tree_guards():
+    """#18808: the file-size ratchets and their kin fire on the tree's shape, not on a sibling."""
+    always = {"repo_tests/size_ratchet_test.py": "whole-tree: sizes"}
+    chosen = select(["docs/README.md"], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, always=always)
+
+    assert chosen["repo_tests/size_ratchet_test.py"] == "whole-tree: sizes"
+
+
+def test_an_empty_changeset_runs_nothing_even_the_whole_tree_guards():
+    always = {"repo_tests/size_ratchet_test.py": "whole-tree: sizes"}
+
+    assert select([], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, always=always) == {}
+
+
+def test_every_always_run_guard_exists():
+    """A renamed guard would drop out silently: ``exists`` filters it, so pin the list itself."""
+    missing = [g for g in ALWAYS_RUN if not (_REPO_ROOT / g).is_file()]
+
+    assert not missing, f"ALWAYS_RUN names guards that no longer exist: {missing}"
+
+
+def test_a_guard_runs_when_a_path_under_its_declared_roots_changes():
+    """#16691's shape: an ansible template change tripped a guard that scans autobot-slm-backend."""
+    roots = {_GUARD: ("autobot-slm-backend", "autobot_shared/")}
+    template = "autobot-slm-backend/ansible/roles/redis/templates/redis.conf.j2"
+    chosen = select([template], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, roots=roots)
+
+    assert chosen[_GUARD] == f"scans autobot-slm-backend, autobot_shared/; {template} changed"
+
+
+def test_a_path_outside_every_root_or_sharing_only_a_prefix_selects_nothing():
+    roots = {_GUARD: ("autobot-slm-backend",)}
+    changed = ["docs/README.md", "autobot-slm-backend-extras/x.py"]
+
+    assert _GUARD not in select(changed, patterns=_PATTERNS, ignores=(), exists=lambda rel: True, roots=roots)
+
+
+def test_roots_are_read_from_declare_calls_as_data():
+    sources = {
+        _GUARD: 'REACH = declare("forks", roots=("autobot-backend", "autobot_shared/"), floor=3)\n',
+        "repo_tests/no_roots_test.py": 'REACH = declare("other", floor=3)\n',
+        "repo_tests/broken_test.py": "def (:\n    roots=('x',)\n",
+    }
+
+    assert declared_roots(sources) == {_GUARD: ("autobot-backend", "autobot_shared/")}
+
+
+def test_a_test_that_names_a_changed_file_runs_with_it():
+    """#16715 AC1: a template-slicing test names the template; a change to it runs that test."""
+    template = "autobot-slm-backend/ansible/roles/x/templates/x.service.j2"
+    refs = {template: ["autobot-slm-backend/tests/test_x_unit.py"]}
+    chosen = select([template], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, references=refs)
+
+    assert chosen["autobot-slm-backend/tests/test_x_unit.py"] == f"names {template}"
+
+
+def test_tests_naming_finds_a_path_and_a_unique_basename_but_not_a_shared_one(tmp_path):
+    repo = make_repo(tmp_path / "repo")
+    files = {
+        "roles/a/templates/unique.conf.j2": "x\n",
+        "roles/a/tasks/main.yml": "x\n",
+        "roles/b/tasks/main.yml": "x\n",
+        "tests/test_by_path.py": "P = 'roles/a/templates/unique.conf.j2'\n",
+        "tests/test_by_name.py": "P = 'unique.conf.j2'\n",
+        "tests/test_main_yml.py": "P = 'main.yml'\n",
+        "docs/notes.md": "unique.conf.j2\n",
+    }
+    for rel, body in files.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(body, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "fixture")
+
+    found = tests_naming(repo, ["roles/a/templates/unique.conf.j2", "roles/a/tasks/main.yml", "x.py"], _PATTERNS)
+
+    assert found == {"roles/a/templates/unique.conf.j2": ["tests/test_by_name.py", "tests/test_by_path.py"]}

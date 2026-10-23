@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import re
+import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Mapping, Sequence
@@ -138,6 +139,58 @@ def is_test(path: str, patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatchcase(PurePosixPath(path).name, pattern) for pattern in patterns)
 
 
+#: Cheap whole-tree guards run on EVERY push (#18808, #16715). Each fires on the tree's shape, so
+#: the change that trips it is rarely its sibling or a recorded glob -- trains 30-33 surfaced nine
+#: such trips only at train time. Kept to guards measured cheap in .test_durations (about 50s
+#: serial in all, 2026-10-23); a costly whole-tree guard is reached through its declared scan
+#: roots instead (see declared_roots).
+ALWAYS_RUN = {
+    "repo_tests/isolated_git_env_guard_18940_test.py": "whole-tree: test git-repo fixtures (#18940)",
+    "repo_tests/python_file_size_ratchet_test.py": "whole-tree: python file-size ceilings",
+    "repo_tests/shell_file_size_ratchet_test.py": "whole-tree: shell file-size ceilings",
+    "repo_tests/frontend_file_size_ratchet_test.py": "whole-tree: frontend file-size ceilings",
+    "repo_tests/python_filter_covers_its_guards_test.py": "whole-tree: the python filter covers every guard input",
+    "repo_tests/changes_job_equivalence_15360_test.py": "whole-tree: the #15360 changes-job equivalence",
+    "repo_tests/secrets_baseline_reasons_guard_test.py": "whole-tree: every secrets-baseline entry has a reason",
+    "repo_tests/reach_scope_claim_17844_test.py": "whole-tree: reach declarations match their scopes",
+    "repo_tests/guard_reach_meta_test.py": "whole-tree: every tree-scanning guard has a reach floor",
+    "repo_tests/one_git_enumeration_15926_test.py": "whole-tree: one git enumeration (#18808: #18802)",
+    "repo_tests/regex_concept_fork_guard_18093_test.py": "whole-tree: regex concept forks (#18808: #18802)",
+    "repo_tests/frontend_api_contract_ratchet_test.py": "whole-tree: frontend API contract (#18808: #18755)",
+    "repo_tests/raw_palette_class_ratchet_14580_test.py": "whole-tree: raw palette classes (#18808: #18797)",
+    "repo_tests/docstring_restatement_guard_17165_test.py": "whole-tree: docstring restatement (#18808: #18742)",
+    "repo_tests/remote_command_quoting_18359_test.py": "whole-tree: remote command quoting (#18808: #18782)",
+}
+
+
+def declared_roots(sources: Mapping[str, str]) -> Dict[str, tuple]:
+    """``{guard: roots}`` for every ``declare(..., roots=(...))`` in the given ``{path: source}``.
+
+    Read as DATA through the AST, never imported: the hook must not depend on repo_tests being
+    importable (see GLOB_RECORD). A guard declaring roots is selected when a changed path falls
+    under one, so a costly whole-tree guard runs when -- and only when -- its scope changed.
+    """
+    found: Dict[str, tuple] = {}
+    for path, source in sources.items():
+        if "roots=" not in source:
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "declare"):
+                continue
+            for kw in node.keywords:
+                if kw.arg == "roots" and isinstance(kw.value, (ast.Tuple, ast.List)):
+                    roots = tuple(
+                        e.value for e in kw.value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                    )
+                    if roots:
+                        found[path] = found.get(path, ()) + roots
+    return found
+
+
 def _under(path: str, prefixes: Sequence[str]) -> bool:
     """Whether *path* is one of *prefixes* or lies below one."""
     return any(path == p.rstrip("/") or path.startswith(p.rstrip("/") + "/") for p in prefixes)
@@ -151,6 +204,9 @@ def select(
     exists: Callable[[str], bool],
     declared_globs: Mapping[str, frozenset] | None = None,
     testpaths: Sequence[str] = (),
+    roots: Mapping[str, tuple] | None = None,
+    references: Mapping[str, Sequence[str]] | None = None,
+    always: Mapping[str, str] | None = None,
 ) -> Dict[str, str]:
     """The tests to run for *changed*, each mapped to the reason it was chosen.
 
@@ -168,14 +224,27 @@ def select(
     """
     chosen: Dict[str, str] = {}
     declared = declared_globs or {}
+
+    def add(test: str, why: str) -> None:
+        if test not in chosen and exists(test) and not _under(test, ignores):
+            chosen[test] = why
+
+    if changed:
+        for guard, why in (always or {}).items():
+            add(guard, why)
+    for guard, scanned in (roots or {}).items():
+        hit = next((p for p in changed if _under(p, scanned)), None)
+        if hit:
+            add(guard, f"scans {', '.join(scanned)}; {hit} changed")
+    for path, tests in (references or {}).items():
+        for test in tests:
+            add(test, f"names {path}")
     if any(p.startswith("repo_tests/") and p.endswith(".py") for p in changed):
         for guard, why in GUARDS_POLICING_GUARDS.items():
-            if guard not in chosen and exists(guard) and not _under(guard, ignores):
-                chosen[guard] = f"a repo_tests file changed; {why}"
+            add(guard, f"a repo_tests file changed; {why}")
     for path in changed:
         for guard in _guards_reading(path, declared):
-            if guard not in chosen and exists(guard) and not _under(guard, ignores):
-                chosen[guard] = f"declares a glob matching {path}"
+            add(guard, f"declares a glob matching {path}")
     for path in changed:
         if is_test(path, patterns):
             test, reason = path, "changed"
@@ -187,6 +256,43 @@ def select(
         if test not in chosen and collected and exists(test) and not _under(test, ignores):
             chosen[test] = reason
     return chosen
+
+
+def tests_naming(root: Path, changed: Sequence[str], patterns: Sequence[str]) -> Dict[str, list]:
+    """``{changed path: [test files that name it]}`` (#16715 AC1).
+
+    A test that slices a template or reads a YAML file names it by its repo path, or by its
+    basename when that basename is unique in the tree (``main.yml`` is not; a template's name
+    usually is). Python paths too: ``frontmatter_test`` lists the modules it polices by path, and
+    #18790 changed one of them (#18808). One ``git grep -F`` per changed path, over test files.
+    """
+    from autobot_shared.paths import scrubbed_git_env  # noqa: PLC0415 - hook-time only
+    from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths  # noqa: PLC0415 - hook-time only
+
+    targets = list(changed)
+    if not targets:
+        return {}
+    try:
+        tracked = tracked_paths(root)
+    except EmptyEnumeration:
+        return {}
+    basenames: Dict[str, int] = {}
+    for rel in tracked:
+        name = rel.rsplit("/", 1)[-1]
+        basenames[name] = basenames.get(name, 0) + 1
+    specs = [f":(glob)**/{pattern}" for pattern in patterns]
+    found: Dict[str, list] = {}
+    for path in targets:
+        name = path.rsplit("/", 1)[-1]
+        needles = [path] + ([name] if basenames.get(name) == 1 and name != path else [])
+        args = ["git", "-C", str(root), "grep", "-l", "-F"]
+        for needle in needles:
+            args += ["-e", needle]
+        out = subprocess.run([*args, "--", *specs], capture_output=True, text=True, timeout=60, env=scrubbed_git_env())
+        hits = [line for line in out.stdout.splitlines() if line and line != path]
+        if hits:
+            found[path] = hits
+    return found
 
 
 def format_selection(chosen: Mapping[str, str]) -> str:
@@ -206,6 +312,10 @@ def main() -> int:
     except (OSError, UnicodeDecodeError):
         # An unreadable or undecodable record costs a selection, never a push.
         declared = {}
+    guard_sources = {
+        f"repo_tests/{p.name}": p.read_text(encoding="utf-8", errors="replace")
+        for p in sorted((root / "repo_tests").glob("*_test.py"))
+    }
     chosen = select(
         changed,
         patterns=patterns,
@@ -213,6 +323,9 @@ def main() -> int:
         exists=lambda rel: (root / rel).is_file(),
         declared_globs=declared,
         testpaths=pytest_testpaths(ini_text),
+        roots=declared_roots(guard_sources),
+        references=tests_naming(root, changed, patterns),
+        always=ALWAYS_RUN,
     )
     sys.stdout.write(format_selection(chosen))
     return 0
