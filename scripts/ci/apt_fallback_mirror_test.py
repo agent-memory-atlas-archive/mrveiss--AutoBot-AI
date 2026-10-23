@@ -18,6 +18,17 @@ _RUNNER_LIST = "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://arch
 _MIRROR_SOURCES = "Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble\n\nTypes: deb\nURIs: http://security.ubuntu.com/ubuntu/\n"
 
 
+def _effective_order(entries: list[str]) -> list[str]:
+    """The order apt's mirror+file method tries entries in: by `priority:`, entries without one last."""
+
+    def priority(entry: str) -> float:
+        fields = entry.split("\t")[1:]
+        values = [int(f.split(":", 1)[1]) for f in fields if f.startswith("priority:")]
+        return values[0] if values else float("inf")
+
+    return [e.split("\t")[0] for e in sorted(entries, key=priority)]
+
+
 def _run(apt: Path) -> subprocess.CompletedProcess:
     return subprocess.run(  # nosec B603  # fixed argv, no shell
         ["bash", str(_SCRIPT), str(apt), _MIRROR], capture_output=True, text=True, timeout=30, check=False
@@ -38,8 +49,12 @@ def test_the_runners_mirror_list_gets_the_fallback_first(tmp_path):
     result = _run(apt)
 
     assert result.returncode == 0 and result.stdout.strip() == "1", result.stdout + result.stderr
-    lines = (apt / "apt-mirrors.txt").read_text(encoding="utf-8").splitlines()
-    assert lines[0] == _MIRROR and len(lines) == 3, "fallback first, the runner's own entries kept after it"
+    entries = (apt / "apt-mirrors.txt").read_text(encoding="utf-8").splitlines()
+    assert _effective_order(entries) == [
+        _MIRROR,
+        "http://azure.archive.ubuntu.com/ubuntu/",
+        "http://archive.ubuntu.com/ubuntu/",
+    ]
     assert (apt / "sources.list.d/ubuntu.sources").read_text(encoding="utf-8") == _MIRROR_SOURCES
 
 
@@ -65,4 +80,15 @@ def test_a_second_run_does_not_stack_the_fallback(tmp_path):
     _run(apt)
 
     assert _run(apt).returncode == 3, "already first: nothing changed, so it says so"
-    assert (apt / "apt-mirrors.txt").read_text(encoding="utf-8").splitlines().count(_MIRROR) == 1
+    firsts = [e.split("\t")[0] for e in (apt / "apt-mirrors.txt").read_text(encoding="utf-8").splitlines()]
+    assert firsts.count(_MIRROR) == 1
+
+
+def test_the_fallback_outranks_entries_with_and_without_a_priority(tmp_path):
+    """#19345 review: a plain prepended line ranked LAST, behind the runner's priority:1/2."""
+    apt = _apt(tmp_path, {"apt-mirrors.txt": "http://slow.example/ubuntu/\tpriority:1\nhttp://other.example/ubuntu/\n"})
+
+    assert _run(apt).returncode == 0
+    entries = (apt / "apt-mirrors.txt").read_text(encoding="utf-8").splitlines()
+    assert _effective_order(entries)[0] == _MIRROR
+    assert "http://slow.example/ubuntu/\tpriority:2" in entries

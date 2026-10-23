@@ -174,6 +174,9 @@ runs:
       shell: bash
       env:
         APT_FALLBACK_MIRROR: ${{ inputs.apt-fallback-mirror }}
+        # Relative to this action, not to the workspace (#19345 review): a caller that checks
+        # the repo out elsewhere still finds the script that ships beside the action.
+        APT_FALLBACK_SCRIPT: ${{ github.action_path }}/../../../scripts/ci/apt_fallback_mirror.sh
       run: |
         set -euo pipefail
         if command -v ffmpeg >/dev/null 2>&1 && command -v tesseract >/dev/null 2>&1; then
@@ -331,12 +334,13 @@ runs:
         # then hits the same mirror. The update gets ONE try (#19345 review): three would add
         # up to 15 minutes to a worst case already near the 30-minute provision job limit.
         apt_use_fallback_mirror() {
-          local n=0
-          if n=$(sudo bash "${GITHUB_WORKSPACE:-.}/scripts/ci/apt_fallback_mirror.sh" /etc/apt "$APT_FALLBACK_MIRROR"); then
-            echo "apt: fallback mirror applied to ${n} apt file(s) (#19308)" >&2
-          else
-            echo "::warning title=apt fallback mirror not applied::no Ubuntu archive entry found to repoint (${n} changed); the retry uses the same mirror (#19308)" >&2
-          fi
+          local n=0 rc=0
+          n=$(sudo bash "$APT_FALLBACK_SCRIPT" /etc/apt "$APT_FALLBACK_MIRROR") || rc=$?
+          case "$rc" in
+            0) echo "apt: fallback mirror applied to ${n} apt file(s) (#19308)" >&2 ;;
+            3) echo "::warning title=apt fallback mirror not applied::no Ubuntu archive entry found to repoint; the retry uses the same mirror (#19308)" >&2 ;;
+            *) echo "::warning title=apt fallback mirror script failed::exit ${rc}; the retry uses whatever apt is configured with (#19308)" >&2 ;;
+          esac
           APT_TRIES=1 APT_ADVISORY=1 apt_retry "update (fallback mirror)" timeout "$APT_TIMEOUT_S" sudo apt-get update -qq
         }
         # At least one try on the primary mirror, however APT_DOWNLOAD_ATTEMPTS is set.
