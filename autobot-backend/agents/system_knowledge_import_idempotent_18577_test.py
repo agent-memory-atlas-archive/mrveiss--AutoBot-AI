@@ -356,10 +356,12 @@ async def test_an_ownerless_or_system_duplicate_is_still_adopted_and_stable(scop
 
 
 @pytest.mark.asyncio
-async def test_a_duplicate_that_cannot_be_read_back_is_unresolved_not_written(tmp_path) -> None:
+# None: not read back; a record with no metadata dict is unreadable too, never "ownerless" (CodeRabbit #19364).
+@pytest.mark.parametrize("record", [None, {"id": "x"}, {"id": "x", "metadata": None}, {"id": "x", "metadata": "{}"}])
+async def test_a_duplicate_that_cannot_be_read_back_is_unresolved_not_written(record, tmp_path) -> None:
     kb = _FakeKB()
     kb.duplicate = True
-    kb.get_fact = lambda fact_id: None  # owner unknown -> fail closed
+    kb.get_fact = lambda fact_id: record  # owner unknown -> fail closed
     manager = _manager(kb, tmp_path)
     with patch("agents.kb_librarian.librarian.publish_event", new=AsyncMock()):
         assert await manager._import_system_knowledge() == 0

@@ -67,16 +67,17 @@ def repin_source(source: str, name: str, mid: int, count: int, low: int, high: i
         return source, "declare() call has no floor= keyword"
     if not (isinstance(node, ast.Constant) and type(node.value) is int):
         return source, "floor is not a literal integer -- re-pin by hand"
-    lines = source.splitlines(keepends=True)
+    # ast columns are UTF-8 BYTE offsets, and only bytes.splitlines breaks lines where ast does (\n, \r, \r\n).
+    lines = source.encode("utf-8").splitlines(keepends=True)
     row = node.lineno - 1
-    line = lines[row]
-    new_line = line[: node.col_offset] + str(mid) + line[node.end_col_offset :]
+    head = lines[row][: node.col_offset].decode("utf-8")
+    new_line = head + str(mid) + lines[row][node.end_col_offset :].decode("utf-8")
     stamp = f"# mid-window: population {count}, window ({low}, {high})"
     new_line = re.sub(r"#\s*mid-window:[^\n]*", stamp, new_line)
-    if "#" not in new_line[node.col_offset :]:
+    if "#" not in new_line[len(head) :]:
         new_line = new_line.rstrip("\n") + f"  {stamp}\n"
-    lines[row] = new_line
-    return "".join(lines), "re-pinned"
+    lines[row] = new_line.encode("utf-8")
+    return b"".join(lines).decode("utf-8"), "re-pinned"
 
 
 def _source_file(reach) -> Path | None:

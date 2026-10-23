@@ -46,15 +46,20 @@ _SIMILARITY_NAMES = frozenset({"SIMILARITY_HIGH", "SIMILARITY_MEDIUM", "SIMILARI
 _SLM_SETTINGS = "autobot-slm-backend/config.py"
 _ANSIBLE = "autobot-slm-backend/ansible"
 
-#: Install-root literals that predate this guard or genuinely mean something else, each with its reason.
-#: Shrink-only: an entry whose file no longer states the literal fails the run.
-KNOWN_INSTALL_ROOT_LITERALS: dict[str, str] = {
-    "autobot-slm-backend/services/code_distributor.py": "#15708 (SLM_REPO_PATH, two modules disagree)",
-    "autobot-slm-backend/services/git_tracker.py": "#15708 (SLM_REPO_PATH, two modules disagree)",
-    "autobot_shared/redis_management/types.py": "owned by #19232 (rewrites this YAML resolver; one file, one PR)",
+#: Install-root literals that predate this guard or genuinely mean something else: file -> (how many, reason).
+#: Counted per occurrence, so a NEW literal in a listed file fails, and shrink-only: a file stating fewer
+#: than its count fails as stale until the count is lowered (or the entry deleted at zero).
+KNOWN_INSTALL_ROOT_LITERALS: dict[str, tuple[int, str]] = {
+    "autobot-slm-backend/services/code_distributor.py": (1, "#15708 (SLM_REPO_PATH, two modules disagree)"),
+    "autobot-slm-backend/services/git_tracker.py": (1, "#15708 (SLM_REPO_PATH, two modules disagree)"),
+    "autobot_shared/redis_management/types.py": (
+        1,
+        "owned by #19232 (rewrites this YAML resolver; one file, one PR)",
+    ),
     "autobot-backend/security/enterprise/compliance_manager.py": (
+        1,
         "historical: the literal junk-directory NAME the unexpanded #13658 placeholder created, matched "
-        "verbatim to find that legacy tree -- not a path resolved under the install root"
+        "verbatim to find that legacy tree -- not a path resolved under the install root",
     ),
 }
 
@@ -187,14 +192,28 @@ def settings_heartbeat_literals(rel: str, source: str) -> list[str]:
     ]
 
 
+def _over_baseline(rel: str, found: list[str]) -> list[str]:
+    """A listed file's literals when it states MORE than its baseline count (which one is new is unknowable)."""
+    allowed = KNOWN_INSTALL_ROOT_LITERALS.get(rel, (0, ""))[0]
+    return found if len(found) > allowed else []
+
+
 def findings(sources: dict[str, str]) -> list[str]:
-    """Every restatement in *sources*, minus the shrink-only bare-root baseline."""
+    """Every restatement in *sources*, minus the shrink-only, per-occurrence install-root baseline."""
     out: list[str] = []
     for rel, source in sorted(sources.items()):
         out += similarity_restatements(rel, source) + settings_heartbeat_literals(rel, source)
-        if rel not in KNOWN_INSTALL_ROOT_LITERALS:
-            out += _beyond_the_copy(rel, install_root_literals(rel, source), source)
+        out += _beyond_the_copy(rel, _over_baseline(rel, install_root_literals(rel, source)), source)
     return out
+
+
+def stale_baseline_entries(sources: dict[str, str]) -> list[str]:
+    """Baseline entries whose file now states the root FEWER times than counted: lower or delete them."""
+    return [
+        f"{rel}: baseline {count}, file states {len(install_root_literals(rel, sources.get(rel, '')))}"
+        for rel, (count, _) in KNOWN_INSTALL_ROOT_LITERALS.items()
+        if len(install_root_literals(rel, sources.get(rel, ""))) < count
+    ]
 
 
 def _copy_line(source: str, name: str) -> int | None:
@@ -229,9 +248,8 @@ def test_each_value_has_one_home_on_the_live_tree() -> None:
 
 
 def test_the_install_root_baseline_only_shrinks() -> None:
-    sources = _sources(_ROOT)
-    stale = [rel for rel in KNOWN_INSTALL_ROOT_LITERALS if not install_root_literals(rel, sources.get(rel, ""))]
-    assert stale == [], f"{stale} no longer state the literal -- delete the KNOWN_INSTALL_ROOT_LITERALS entry"
+    stale = stale_baseline_entries(_sources(_ROOT))
+    assert stale == [], f"{stale} -- lower the KNOWN_INSTALL_ROOT_LITERALS count, or delete the entry at zero"
 
 
 def test_each_standalone_copy_is_declared_once_and_equal() -> None:
@@ -298,3 +316,20 @@ def test_a_standalone_copy_may_state_the_root_once_only() -> None:
 def test_a_literal_settings_heartbeat_is_flagged() -> None:
     source = "class Settings:\n    heartbeat_interval: int = 30\n"
     assert len(findings({_SLM_SETTINGS: source})) == 1
+
+
+def test_a_shared_settings_heartbeat_is_allowed() -> None:
+    source = "class Settings:\n    heartbeat_interval: int = DEFAULT_HEARTBEAT_INTERVAL\n"
+    assert findings({_SLM_SETTINGS: source}) == []
+
+
+def test_a_new_literal_in_a_baselined_file_is_flagged_and_a_removed_one_is_stale() -> None:
+    rel = "autobot-slm-backend/services/git_tracker.py"
+    one = 'REPO = "/opt/autobot"\n'
+
+    def stale(source: str) -> list[str]:
+        return [entry for entry in stale_baseline_entries({rel: source}) if entry.startswith(rel)]
+
+    assert findings({rel: one}) == [] and stale(one) == []
+    assert len(findings({rel: one + 'OTHER = "/opt/autobot/x"\n'})) == 2, "a second literal hid behind the entry"
+    assert stale("REPO = None\n"), "a removed literal must make its entry stale"

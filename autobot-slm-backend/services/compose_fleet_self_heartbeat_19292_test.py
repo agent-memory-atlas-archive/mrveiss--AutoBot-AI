@@ -74,6 +74,16 @@ def test_the_window_uses_the_agents_reported_interval_with_a_margin():
     assert cf._agent_heartbeat_window_s(_manager_row("1.0.0", 0)) == _INTERVAL_S * beats
 
 
+def test_a_bool_or_over_cap_reported_interval_falls_back_to_the_fleets():
+    """A misreporting agent must not size an unbounded window that freezes the manager's status."""
+    beats = cf.SELF_HEARTBEAT_STANDDOWN_BEATS
+    cap = cf.AGENT_INTERVAL_MAX_S
+    for bad in (True, 0, -5, cap + 1, 10**9, "45", 45.0):
+        row = _manager_row("1.0.0", 0, {cf.AGENT_INTERVAL_KEY: bad})
+        assert cf._agent_heartbeat_window_s(row) == _INTERVAL_S * beats, f"{bad!r} was accepted"
+    assert cf._agent_heartbeat_window_s(_manager_row("1.0.0", 0, {cf.AGENT_INTERVAL_KEY: cap})) == cap * beats
+
+
 def test_stands_down_while_a_real_agent_heartbeats_the_manager():
     update = _run_once(_manager_row("1.0.0", age_s=_INTERVAL_S / 2))
     update.assert_not_awaited()
@@ -116,10 +126,27 @@ def test_the_cpu_sampler_owns_its_baseline():
     fake.cpu_percent.assert_not_called()
 
 
+def test_the_cpu_sampler_counts_guest_time_once():
+    """guest/guest_nice sit inside user/nice already; summing them again under-reports busy time."""
+    times = iter(
+        [
+            SimpleNamespace(user=10.0, system=0.0, idle=90.0, iowait=0.0, guest=0.0, guest_nice=0.0),
+            SimpleNamespace(user=40.0, system=0.0, idle=110.0, iowait=0.0, guest=30.0, guest_nice=0.0),
+        ]
+    )
+    fake = MagicMock()
+    fake.cpu_times.side_effect = lambda: _Times(next(times))
+    assert cf.CpuSampler(fake).sample() == 60.0  # 30 busy of 50, not 30 of 80
+
+
 class _Times(tuple):
-    """A cpu_times-shaped tuple: summable, with named fields."""
+    """A cpu_times-shaped tuple: summable, with named fields (guest fields only when given)."""
 
     def __new__(cls, ns):
-        obj = super().__new__(cls, (ns.user, ns.system, ns.idle, ns.iowait))
+        guest = tuple(getattr(ns, f) for f in ("guest", "guest_nice") if hasattr(ns, f))
+        obj = super().__new__(cls, (ns.user, ns.system, ns.idle, ns.iowait) + guest)
         obj.idle, obj.iowait = ns.idle, ns.iowait
+        for field in ("guest", "guest_nice"):
+            if hasattr(ns, field):
+                setattr(obj, field, getattr(ns, field))
         return obj

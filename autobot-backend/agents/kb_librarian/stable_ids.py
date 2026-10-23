@@ -148,7 +148,9 @@ def _system_writable(found: Any) -> bool:
     """Whether the matched fact may take a system import's write: read back, and no principal holds it."""
     from knowledge.ownership_index import is_ownerless_platform_fact  # lazy: pulls the ownership stack
 
-    return isinstance(found, dict) and is_ownerless_platform_fact(found.get("metadata"))
+    # A record with no metadata dict is unreadable, not ownerless: the predicate reads None as {} (#19296).
+    meta = found.get("metadata") if isinstance(found, dict) else None
+    return isinstance(meta, dict) and is_ownerless_platform_fact(meta)
 
 
 async def _adopt_duplicate(knowledge_base: Any, result: Dict[str, Any], metadata: Dict[str, Any], ref: Any):

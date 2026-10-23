@@ -58,7 +58,7 @@ def test_an_empty_key_from_the_slm_file_fails_the_backend_deploy() -> None:
     block = text[guard : text.index("\n- name:", guard)]
     assert "ansible.builtin.fail" in block
     assert "_slm_secrets_stat.stat.exists" in block, "it must fire only where the SLM file is the key's source"
-    assert "length == 0" in block
+    assert "_backend_slm_root_key | length == 0" in block, "judge the FILE's key; an inventory key must not mask it"
 
 
 # --- #19294 review F1/F2/F3/F5: never generate over an existing key -------------------------
@@ -125,7 +125,8 @@ def test_two_different_existing_keys_are_a_conflict_and_equal_ones_are_not() -> 
 
 def test_an_export_line_counts_as_present_and_is_replaced_not_duplicated() -> None:
     grep = _task("Check if AUTOBOT_SECRETS_ROOT_KEY present")["ansible.builtin.shell"]["cmd"]
-    ere = re.search(r"'(\^.*?)'", grep).group(1).replace("[[:space:]]", r"\s")
+    ere = re.search(r'grep -Eq "(.+)"\s', grep).group(1).replace('\\"', '"')
+    ere = ere.replace("[[:space:]]", r"\s").replace("[:space:]", r"\s")  # POSIX class -> Python, bare or bracketed
     regexp = _task("Add AUTOBOT_SECRETS_ROOT_KEY")["ansible.builtin.lineinfile"]["regexp"]
     for line in (
         "AUTOBOT_SECRETS_ROOT_KEY=k",
@@ -134,7 +135,23 @@ def test_an_export_line_counts_as_present_and_is_replaced_not_duplicated() -> No
     ):
         assert re.match(ere, line), f"the presence check must see {line!r}"
         assert re.match(regexp, line), f"lineinfile must replace {line!r}, not add a second line"
-    assert not re.match(ere, "AUTOBOT_SECRETS_ROOT_KEY="), "an empty value is not a key (.+ required)"
+    for empty in ("AUTOBOT_SECRETS_ROOT_KEY=", 'AUTOBOT_SECRETS_ROOT_KEY=""', "export AUTOBOT_SECRETS_ROOT_KEY=''"):
+        assert not re.match(ere, empty), f"{empty!r} is no key: the back-fill must replace it"
+    for unrelated in ("export OTHER_SECRET=k", "MY_AUTOBOT_SECRETS_ROOT_KEY=k", "# AUTOBOT_SECRETS_ROOT_KEY=k"):
+        assert not re.match(ere, unrelated), f"the presence check must not count {unrelated!r}"
+        assert not re.match(regexp, unrelated), f"lineinfile must not replace {unrelated!r}"
+
+
+def test_the_backend_reads_every_key_line_the_back_fill_counts_as_present() -> None:
+    # CodeRabbit on #19364: an `export`-prefixed or quoted key skipped the back-fill but read back empty.
+    text = _read(BACKEND_TASKS)
+    block = text[text.index("Read AUTOBOT_SECRETS_ROOT_KEY from slm-secrets.env") :]
+    pcre = re.search(r"grep -oP '(.+?)'", block).group(1).replace(r"\K", "(?P<key>") + ")"
+    lines = ("AUTOBOT_SECRETS_ROOT_KEY=k", "export AUTOBOT_SECRETS_ROOT_KEY=k", "  export  AUTOBOT_SECRETS_ROOT_KEY=k")
+    for line in lines:
+        assert (m := re.match(pcre, line)) and m.group("key") == "k", f"the backend must read the key in {line!r}"
+    unquote = text[text.index("Unquote the root key read from slm-secrets.env") :]
+    assert "regex_replace(" in unquote.split("\n- name:")[0], "a quoted key must be unquoted before use"
 
 
 def test_every_key_handling_task_is_no_log_and_reads_run_in_check_mode() -> None:

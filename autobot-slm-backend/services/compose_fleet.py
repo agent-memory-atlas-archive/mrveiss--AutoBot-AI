@@ -40,16 +40,19 @@ SELF_HEARTBEAT_STANDDOWN_BEATS = env_int_clamped("AUTOBOT_SELF_HEARTBEAT_STANDDO
 
 # The key the agent reports its own heartbeat interval under (slm/agent/heartbeat_payload.py).
 AGENT_INTERVAL_KEY = "heartbeat_interval_s"
+# A larger report is ignored: an unbounded window would keep the self-heartbeat down after the agent dies.
+AGENT_INTERVAL_MAX_S = env_int_clamped("AUTOBOT_SELF_HEARTBEAT_AGENT_INTERVAL_MAX_S", 3600, min_v=1, max_v=86400)
 
 
 def _agent_heartbeat_window_s(node) -> int:
     """Seconds a real agent's last heartbeat keeps the self-heartbeat stood down.
 
     Measured in the agent's OWN interval when it reported one, else the
-    fleet's configured ``heartbeat_interval``.
+    fleet's configured ``heartbeat_interval``. A bool, non-positive or over-cap report is not one.
     """
     reported = (getattr(node, "extra_data", None) or {}).get(AGENT_INTERVAL_KEY)
-    interval = reported if isinstance(reported, int) and reported > 0 else settings.heartbeat_interval
+    valid = type(reported) is int and 0 < reported <= AGENT_INTERVAL_MAX_S  # type(): True is an int
+    interval = reported if valid else settings.heartbeat_interval
     return interval * SELF_HEARTBEAT_STANDDOWN_BEATS
 
 
@@ -112,10 +115,15 @@ class CpuSampler:
         self._psutil = psutil_module
         self._last = psutil_module.cpu_times()
 
+    @staticmethod
+    def _total(times) -> float:
+        """All CPU time once: Linux already counts guest/guest_nice inside user/nice (as cpu_percent does)."""
+        return sum(times) - getattr(times, "guest", 0.0) - getattr(times, "guest_nice", 0.0)
+
     def sample(self) -> float:
         now = self._psutil.cpu_times()
         idle = (now.idle + getattr(now, "iowait", 0.0)) - (self._last.idle + getattr(self._last, "iowait", 0.0))
-        total = sum(now) - sum(self._last)
+        total = self._total(now) - self._total(self._last)
         self._last = now
         if total <= 0:
             return 0.0

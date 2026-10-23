@@ -67,3 +67,13 @@ _register(
     "that (autobot-slm-backend/services/compose_fleet.py, #19292).",
     (1, 1000),
 )
+
+_register(
+    "AUTOBOT_SELF_HEARTBEAT_AGENT_INTERVAL_MAX_S",
+    3600,
+    "Largest heartbeat interval, in seconds, the SLM accepts from a real slm-agent's own "
+    "report when sizing the self-heartbeat stand-down window; a larger, zero or non-integer "
+    "report falls back to the fleet's interval, so a misreporting agent cannot freeze the "
+    "manager node's status (autobot-slm-backend/services/compose_fleet.py, #19292).",
+    (1, 86400),
+)
