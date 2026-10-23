@@ -39,7 +39,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from repo_tests._guard_import import import_guards
+from repo_tests._guard_import import import_guards, source_declares
 from repo_tests._reach import REGISTRY, Reach, ReachFloorError, declare
 from repo_tests._reach_policy import ALLOWANCE_VERDICTS
 from repo_tests._reach_unscoped import UNSCOPED
@@ -115,7 +115,8 @@ def _import_every_guard() -> None:
     outside = [(dotted, dotted) for dotted in _declaring_modules_outside_repo_tests()]
     failures, _skipped = import_guards(
         inside + outside,
-        declares=lambda key: "." in key or "declare(" in (_REPO_TESTS / f"{key}.py").read_text(encoding="utf-8"),
+        # An outside module (a dotted key) is listed only because it declares.
+        declares=lambda key: "." in key or source_declares(_REPO_TESTS / f"{key}.py"),
     )
     IMPORT_FAILURES.update(failures)
 

@@ -19,9 +19,20 @@ source calls ``declare(`` has lost its declaration, so it counts as an import fa
 from __future__ import annotations
 
 import importlib
+import re
 from collections.abc import Callable, Iterable
+from pathlib import Path
 
 import pytest
+
+# Escaped on purpose: reach_declarations_test greps repo_tests for the call shape, and a bare
+# literal of it here would read as a declaration nothing registers.
+_DECLARE_CALL = re.compile(r"\bdeclare\(")
+
+
+def source_declares(path: Path) -> bool:
+    """Whether the module at *path* calls ``declare`` (its declarations are lost if it skips)."""
+    return bool(_DECLARE_CALL.search(path.read_text(encoding="utf-8")))
 
 
 def import_guards(

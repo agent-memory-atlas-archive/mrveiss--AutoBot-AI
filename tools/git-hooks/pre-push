@@ -933,7 +933,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       leak_probe="repo_tests/sys_modules_leak_probe_18808_test.py"
       if [ "$pytest_failed" = "0" ] && [ "$pytest_timed_out" = "0" ] && [ -n "$leak_targets" ] && [ -f "$REPO_ROOT/$leak_probe" ]; then
         # shellcheck disable=SC2086 # word-splitting the file list is intended
-        if leak_output=$(cd "$REPO_ROOT" && timeout "$PYTEST_TIMEOUT" "$PYTEST_PYTHON" -m pytest --collect-only -q -p no:xdist -p no:cacheprovider $leak_targets "$leak_probe" 2>&1); then
+        if leak_output=$(cd "$REPO_ROOT" && timeout "$PYTEST_TIMEOUT" "$PYTEST_PYTHON" -m pytest --collect-only -q -p no:xdist -p no:cacheprovider -m "not reach_floor" $leak_targets "$leak_probe" 2>&1); then
           ok "sys.modules leak check: $(echo "$leak_targets" | grep -c .) selected file(s) leave no stub outside their directory"
         else
           pytest_failed=1
