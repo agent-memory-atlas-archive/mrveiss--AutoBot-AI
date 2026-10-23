@@ -11,7 +11,8 @@ registry (repo_tests/_reach_roots.py); this pins it, both ways.
 
 from __future__ import annotations
 
-from repo_tests._reach_roots import expected_record, render
+from repo_tests._paths import repo_root
+from repo_tests._reach_roots import expected_record
 from repo_tests._reach_roots_record import REACH_ROOTS
 
 
@@ -30,8 +31,10 @@ def test_a_roots_constant_resolves_where_the_call_parse_did_not():
     assert "repo_tests/ai_line_single_policy_18430_test.py" in expected_record()
 
 
-def test_the_record_renders_to_its_own_source():
-    from pathlib import Path  # noqa: PLC0415
+def test_the_hook_reads_the_record_back_exactly():
+    """The hook parses the record as data (prepush_selection.declared_roots); a formatter
+    rewrapping the file must not change what that parse recovers."""
+    from tools.lint.prepush_selection import declared_roots  # noqa: PLC0415
 
-    path = Path(__file__).with_name("_reach_roots_record.py")
-    assert path.read_text(encoding="utf-8") == render(REACH_ROOTS)
+    text = (repo_root() / "repo_tests" / "_reach_roots_record.py").read_text(encoding="utf-8")
+    assert declared_roots(text) == REACH_ROOTS
