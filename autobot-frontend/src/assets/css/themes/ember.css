@@ -91,16 +91,6 @@
 [data-theme-variant="ember"][data-theme="light"] {
   color-scheme: light;
 
-  /* Status pills (#16253): text/background pairs, each AA (>= 6:1) on its background and on a card. */
-  --ok-bg: var(--green-bg);
-  --ok-fg: #1f5c3f;
-  --warn-bg: #fdf1d8;
-  --warn-fg: #7a4a0c;
-  --bad-bg: var(--red-bg);
-  --bad-fg: #8f2219;
-  --info-bg: #f3e2ea;
-  --info-fg: var(--wine-700);
-
   --bg-primary: var(--wax-75);
   --bg-secondary: var(--wax-25);
   --bg-tertiary: var(--wax-50);
@@ -238,16 +228,6 @@
 ---------------------------------------------------------------------------- */
 [data-theme-variant="ember"][data-theme="dark"] {
   color-scheme: dark;
-
-  /* Status pills (#16253): text/background pairs, each AA (>= 6:1) on its background and on a card. */
-  --ok-bg: var(--green-bg-dk);
-  --ok-fg: var(--green-300);
-  --warn-bg: #2a2010;
-  --warn-fg: var(--gold-400);
-  --bad-bg: var(--red-bg-dk);
-  --bad-fg: var(--red-300);
-  --info-bg: #2e1822;
-  --info-fg: var(--wine-300);
 
   --bg-primary: var(--plum-950);
   --bg-secondary: var(--plum-900);
