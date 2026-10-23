@@ -15,25 +15,15 @@ from typing import Any, Dict, List
 
 # Sibling helper module: the importing script may have been loaded by file path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Runs from any directory with no PYTHONPATH: the repository root provides `autobot_shared` (#18289).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from env_files_config import load_config  # noqa: E402
 
-
-def parse_env_file(file_path: Path) -> Dict[str, str]:
-    """Parse environment file and return variables as dict"""
-    env_vars = {}
-
-    if not file_path.exists():
-        return env_vars
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                env_vars[key.strip()] = value.strip()
-
-    return env_vars
+# #19232: the one .env reader -- this file kept its own copy (no quote or inline-comment handling).
+from autobot_shared.env_file import parse_env_file  # noqa: E402
 
 
 def validate_required_variables(env_vars: Dict[str, str], env_type: str) -> List[str]:
@@ -200,9 +190,11 @@ def effective_env_vars(file_path: Path) -> Dict[str, str]:
     A native overlay validated alone would report every shared key as missing.
     """
     env_vars: Dict[str, str] = {}
-    if file_path.name in NATIVE_OVERLAYS:
-        env_vars.update(parse_env_file(file_path.parent / ".env.base"))
-    env_vars.update(parse_env_file(file_path))
+    base = file_path.parent / ".env.base"
+    if file_path.name in NATIVE_OVERLAYS and base.exists():
+        env_vars.update(parse_env_file(base))
+    if file_path.exists():
+        env_vars.update(parse_env_file(file_path))
     return env_vars
 
 

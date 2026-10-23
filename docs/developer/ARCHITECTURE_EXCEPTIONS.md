@@ -560,3 +560,22 @@ derived as `{{ autobot.base_dir | dirname }}/<svc>`.
 **Revisit when:** the platform decides to relocate service state under the install root.
 
 **Grep check:** `grep -n "_config_dir\|_data_dir" autobot-slm-backend/ansible/roles/monitoring/defaults/main.yml` -- if no `/etc` or `/var` literal remains, this exception is obsolete.
+
+---
+
+## `autobot-admin` CLI — Own `.env` Reader (not `parse_env_file`)
+
+**File:** `autobot-slm-backend/scripts/autobot-admin.py` (`load_env_file`)
+**Shared authority it does not use:** `autobot_shared/env_file.py` (`parse_env_file`)
+**Issue:** #19232
+
+**Reason:** the `slm_manager` role installs this script as `/usr/local/bin/autobot-admin`
+(`roles/slm_manager/tasks/main.yml`), where it runs under the system interpreter for
+password resets with the SLM backend down. `autobot_shared` is not on that interpreter's
+path, so it cannot import the shared reader. Every other `.env` reader in the tree was
+collapsed onto `parse_env_file` in #19232.
+
+**Revisit when:** the CLI is run from the SLM venv (or ships with `autobot_shared` on its
+path); then `load_env_file` should become an import of `parse_env_file`.
+
+**Grep check:** `grep -n "autobot-admin.py" autobot-slm-backend/ansible/roles/slm_manager/tasks/main.yml` — if the install no longer copies the bare script, this exception is obsolete.

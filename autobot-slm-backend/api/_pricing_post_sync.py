@@ -28,6 +28,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from autobot_shared.env_file import parse_env_file
 from autobot_shared.env_utils import env_float
 
 # Plain stdlib logging, deliberately -- see autobot_shared/user_management/
@@ -75,17 +76,8 @@ def _load_env_file(env_path: Path) -> Dict[str, str]:
     if not real.startswith(root + os.sep):
         raise ValueError(f"env file path resolves outside the deployed root {root!r}")
     real_path = Path(real)
-
-    env: Dict[str, str] = {}
-    if not real_path.exists():
-        return env
-    for raw in real_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        env[key.strip()] = value.strip().strip('"').strip("'")
-    return env
+    # #19232: parsing is the one .env reader's; only the containment guard stays inline.
+    return parse_env_file(real_path) if real_path.exists() else {}
 
 
 def _pricing_subprocess_env(deployed_dir: str) -> Dict[str, str]:
