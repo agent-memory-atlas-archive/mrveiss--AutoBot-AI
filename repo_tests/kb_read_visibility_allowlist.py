@@ -223,7 +223,7 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("autobot-backend/api/knowledge_chroma.py", "search_collection"): _EXPLORER,
     ("autobot-backend/knowledge/facts.py", "FactsMixin._find_duplicate"): _IMPL_DEDUP,
     ("autobot-backend/knowledge/search.py", "SearchMixin._query_chromadb"): _IMPL_SEARCH,
-    ("autobot-backend/api/knowledge_maintenance.py", "_fetch_all_chunks._load"): _RAW_ADMIN,
+    ("autobot-backend/api/knowledge_lint_chunks.py", "_fetch_all_chunks._load"): _RAW_ADMIN,
     ("autobot-backend/api/knowledge_vectorization.py", "_fetch_chunks_by_ids"): _RAW_ADMIN,
     ("autobot-backend/api/knowledge_vectorization.py", "_fetch_unenriched_ids"): _RAW_ADMIN,
     ("autobot-backend/knowledge/summary_search.py", "SummarySearchService.search_summaries"): _SUMMARIES,
