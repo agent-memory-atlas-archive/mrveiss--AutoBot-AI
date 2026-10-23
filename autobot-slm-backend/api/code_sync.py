@@ -2572,7 +2572,7 @@ _BACKEND_COMPONENTS = frozenset(_COMPONENT_PIP_PATHS.keys())
 
 
 def _get_deploy_base() -> Path:
-    """Return the installation base directory from config (AUTOBOT_BASE_DIR, default /opt/autobot).
+    """Return the installation base directory from config (AUTOBOT_BASE_DIR, else project_root()).
 
     Reads the value at call time so that tests can monkeypatch the environment
     variable or the config object without needing to patch a module-level string.
@@ -2583,10 +2583,10 @@ def _get_deploy_base() -> Path:
 
         return Path(_get_config().path.base_dir)
     except Exception:
-        # ssot_config unavailable at bootstrap — fall back to the env var directly.
-        import os
+        # ssot_config unavailable at bootstrap — the stdlib rule ssot_config's default uses (#18094).
+        from autobot_shared.paths import install_base_dir
 
-        return Path(os.environ.get("AUTOBOT_BASE_DIR", "/opt/autobot"))
+        return install_base_dir()
 
 
 def _get_code_source_root() -> Path:

@@ -146,6 +146,17 @@ def project_root() -> Path:
     return resolve_project_root(Path(__file__).resolve())
 
 
+def install_base_dir() -> Path:
+    """This process's install base: ``AUTOBOT_BASE_DIR``, else :func:`project_root` (#18094).
+
+    The rule ``ssot_config``'s ``path.base_dir`` follows (its env alias, then this as the default),
+    stated once here so a bootstrap path that cannot import ``ssot_config`` answers the same way
+    instead of restating ``/opt/autobot``.
+    """
+    configured = os.environ.get(BASE_DIR_ENV)  # ssot-config-exempt: bootstrap, ssot_config defaults to this
+    return Path(configured) if configured else project_root()
+
+
 def chromadb_data_dir() -> Path:
     """The local ChromaDB store, ``<project root>/data/chromadb``: the one spelling of that directory (#18143)."""
     return project_root() / "data" / "chromadb"
