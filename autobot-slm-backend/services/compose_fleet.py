@@ -12,13 +12,16 @@ owns that logic so main.py stays a lean app entrypoint.
 Public API (wired from main.py's lifespan):
     - ``seed_compose_nodes()``     — idempotent node registration at startup
     - ``start_compose_heartbeat()`` — background heartbeat task for self-managed nodes
+      that no real agent is heartbeating (#19292)
 """
 
 import asyncio
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from autobot_shared.env_registry import env
+from autobot_shared.env_utils import env_int_clamped
 from config import settings
 from services.database import db_service
 from services.reconciler import reconciler_service
@@ -26,40 +29,85 @@ from services.reconciler import reconciler_service
 logger = logging.getLogger(__name__)
 
 
-# Nodes the SLM hosts itself and must heartbeat locally (no external agent).
+# Nodes the SLM hosts itself and heartbeats locally WHEN no real agent does.
 _SELF_MANAGED_NODE_IDS: set[str] = {settings.slm_node_id}
+
+# The agent_version this loop writes, which is how a self-written heartbeat is
+# told apart from a real slm-agent's (#19292).
+SELF_AGENT_VERSION = "slm-local"
+
+# #19292: how many heartbeat intervals a real agent's last beat counts as
+# "recent" -- the self-heartbeat stands down inside that window. 2 tolerates one
+# missed agent beat before the local loop takes over again.
+SELF_HEARTBEAT_STANDDOWN_BEATS = env_int_clamped("AUTOBOT_SELF_HEARTBEAT_STANDDOWN_BEATS", 2, min_v=1, max_v=1000)
+
+
+def _agent_heartbeat_window_s() -> int:
+    """Seconds a real agent's last heartbeat keeps the self-heartbeat stood down."""
+    return settings.heartbeat_interval * SELF_HEARTBEAT_STANDDOWN_BEATS
+
+
+def real_agent_heartbeating(node, now: datetime) -> bool:
+    """True when a real slm-agent (not this loop) heartbeated ``node`` recently."""
+    if node is None or getattr(node, "agent_version", None) in (None, SELF_AGENT_VERSION):
+        return False
+    beat = getattr(node, "last_heartbeat", None)
+    if beat is None:
+        return False
+    if beat.tzinfo is None:
+        beat = beat.replace(tzinfo=timezone.utc)
+    return now - beat < timedelta(seconds=_agent_heartbeat_window_s())
+
+
+async def _agent_owns_heartbeat(db, node_id: str, now: datetime) -> bool:
+    """Look the node up and ask ``real_agent_heartbeating`` (#19292)."""
+    from sqlalchemy import select
+
+    from models.database import Node
+
+    node = (await db.execute(select(Node).where(Node.node_id == node_id))).scalar_one_or_none()
+    return real_agent_heartbeating(node, now)
+
+
+async def _heartbeat_self_managed_once(db, metrics: tuple) -> None:
+    """One pass of the self-heartbeat over every self-managed node."""
+    now = datetime.now(timezone.utc)
+    for node_id in sorted(_SELF_MANAGED_NODE_IDS):
+        # Unreachable container nodes are left to the reconciler's offline path.
+        if not await _node_reachable(node_id):
+            continue
+        # One heartbeat source per node: a live agent's samples are the truth.
+        if await _agent_owns_heartbeat(db, node_id, now):
+            continue
+        await reconciler_service.update_node_heartbeat(db, node_id, *metrics, agent_version=SELF_AGENT_VERSION)
 
 
 async def _heartbeat_self_managed_nodes() -> None:
-    """Drive heartbeats for nodes the SLM hosts itself (no external agent).
+    """Drive heartbeats for self-managed nodes that no real agent is heartbeating.
 
-    VM nodes stay online because their autobot-slm-agent POSTs
+    VM nodes stay online because their slm-agent POSTs
     ``/api/nodes/{id}/heartbeat`` -> ``reconciler_service.update_node_heartbeat``.
-    The SLM's own node (and, in compose, the colocated service nodes registered
-    in ``_SELF_MANAGED_NODE_IDS``) have no external agent, so ``last_heartbeat``
-    never updates and the reconciler flips them OFFLINE after
-    ``heartbeat_interval * unhealthy_threshold``. This loop feeds the SAME
-    heartbeat path locally so they stay online — uniform with VM nodes, only the
-    heartbeat source differs (#9761).
+    The SLM's own node and, in compose, the colocated service nodes in
+    ``_SELF_MANAGED_NODE_IDS`` may have no agent; then ``last_heartbeat`` never
+    updates and the reconciler flips them OFFLINE. This loop feeds the SAME
+    path locally for them (#9761). A manager host can ALSO run a real
+    slm-agent; two writers then alternated their own samples and each
+    recomputed the status (#19292), so this loop stands down for any node a
+    real agent heartbeated within ``_agent_heartbeat_window_s()`` and resumes
+    when that agent goes silent.
     """
     import psutil
 
-    from services.database import db_service
-
+    psutil.cpu_percent(interval=None)  # prime: later reads average since the last beat
     while True:
         try:
-            cpu = psutil.cpu_percent(interval=None)
-            mem = psutil.virtual_memory().percent
-            disk = psutil.disk_usage("/").percent
+            metrics = (
+                psutil.cpu_percent(interval=None),
+                psutil.virtual_memory().percent,
+                psutil.disk_usage("/").percent,
+            )
             async with db_service.session() as db:
-                for node_id in sorted(_SELF_MANAGED_NODE_IDS):
-                    # Only heartbeat reachable nodes; unreachable container nodes
-                    # are left to the reconciler's offline path (same as VM nodes).
-                    if not await _node_reachable(node_id):
-                        continue
-                    await reconciler_service.update_node_heartbeat(
-                        db, node_id, cpu, mem, disk, agent_version="slm-local"
-                    )
+                await _heartbeat_self_managed_once(db, metrics)
         except Exception:
             logger.exception("Self-managed node heartbeat failed (non-fatal)")
         await asyncio.sleep(settings.heartbeat_interval)
@@ -172,9 +220,9 @@ def _compose_nodes_enabled() -> bool:
 def is_manager_node(node_id: str) -> bool:
     """True when node_id is the SLM's own (manager/self) node (#11963).
 
-    The manager node's status is derived solely from
-    ``_heartbeat_self_managed_nodes`` — real-time psutil metrics of this very
-    process — so the reconciler's ICMP-ping reachability fallback in
+    The manager node is heartbeated by its real slm-agent when one runs, and
+    otherwise by ``_heartbeat_self_managed_nodes`` (#19292) — either way from
+    real-time metrics of a live process — so the reconciler's ICMP-ping reachability fallback in
     ``_check_node_health`` (designed for externally-agent-heartbeating VM
     nodes) must never override it. Ping is an unreliable/redundant signal for
     a node that is, by definition, up while it is serving the health check.
