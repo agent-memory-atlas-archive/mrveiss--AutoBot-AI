@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, List
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from autobot_shared.ssot_config import get_config as get_ssot_config
+from autobot_shared.ssot_hosted_models import hosted_default_model
 from llm_shared.providers.anthropic import AnthropicProvider
 from llm_shared.providers.bedrock import BedrockProvider
 from llm_shared.providers.custom_openai import CustomOpenAIProvider
@@ -125,7 +126,7 @@ def _register_api_key_providers(registry: "ProviderRegistry", fallback: List[str
         return resolve_provider_key("MISTRAL_API_KEY", config.mistral_api_key)
 
     def _mistral_provider(k: str):
-        base_url, model = config.mistral_api_base_url or None, config.mistral_default_model or None
+        base_url, model = config.mistral_api_base_url or None, hosted_default_model("mistral")
         return MistralProvider(settings={"api_key": k, "base_url": base_url, "default_model": model})
 
     _register_keyed(
@@ -191,7 +192,7 @@ def _register_openai_compatible(registry: "ProviderRegistry", fallback: List[str
 
     # OpenRouter — Issue #4341; construction errors stay debug-logged as before.
     def _openrouter(key: str):
-        return OpenRouterProvider(settings={"api_key": key, "default_model": config.openrouter_default_model})
+        return OpenRouterProvider(settings={"api_key": key, "default_model": hosted_default_model("openrouter")})
 
     def _openrouter_key():
         return resolve_provider_key("OPENROUTER_API_KEY", config.openrouter_api_key)
@@ -257,7 +258,7 @@ def _register_cloud_providers(registry: "ProviderRegistry", fallback: List[str])
                     "project": vertex_project,
                     "location": config.vertex_ai_location,
                     "service_account_json": config.vertex_ai_service_account_json,
-                    "default_model": config.vertex_ai_default_model,
+                    "default_model": hosted_default_model("vertexai"),
                 }
             )
             registry.register(vertex_provider)
