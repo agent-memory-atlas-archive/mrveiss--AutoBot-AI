@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from autobot_shared.isolated_git import git, make_repo
 from tools.lint.prepush_selection import (
     ALWAYS_RUN,
@@ -199,21 +201,44 @@ def test_a_guard_runs_when_a_path_under_its_declared_roots_changes():
     assert chosen[_GUARD] == f"scans autobot-slm-backend, autobot_shared/; {template} changed"
 
 
-def test_a_path_outside_every_root_or_sharing_only_a_prefix_selects_nothing():
+def test_a_path_outside_every_root_selects_nothing():
     roots = {_GUARD: ("autobot-slm-backend",)}
-    changed = ["docs/README.md", "autobot-slm-backend-extras/x.py"]
 
-    assert _GUARD not in select(changed, patterns=_PATTERNS, ignores=(), exists=lambda rel: True, roots=roots)
+    assert _GUARD not in select(
+        ["docs/README.md"], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, roots=roots
+    )
 
 
-def test_roots_are_read_from_declare_calls_as_data():
-    sources = {
-        _GUARD: 'REACH = declare("forks", roots=("autobot-backend", "autobot_shared/"), floor=3)\n',
-        "repo_tests/no_roots_test.py": 'REACH = declare("other", floor=3)\n',
-        "repo_tests/broken_test.py": "def (:\n    roots=('x',)\n",
-    }
+def test_roots_match_as_raw_prefixes_the_way_scope_claims_read_them():
+    """A look-alike sibling tree is selected too: over-selecting is the safe direction, and it is
+    exactly what `_reach_scope.scope_complaint` counts as inside the root."""
+    roots = {_GUARD: ("autobot-slm-backend",)}
+    chosen = select(
+        ["autobot-slm-backend-extras/x.py"], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, roots=roots
+    )
 
-    assert declared_roots(sources) == {_GUARD: ("autobot-backend", "autobot_shared/")}
+    assert _GUARD in chosen
+
+
+def test_roots_are_read_from_the_record_as_data():
+    record = "REACH_ROOTS = {\n    'repo_tests/forks_test.py': ('autobot-backend', 'autobot_shared/'),\n}\n"
+
+    assert declared_roots(record) == {_GUARD: ("autobot-backend", "autobot_shared/")}
+    assert declared_roots("def (:\n") == {}, "an unparseable record selects nothing extra"
+
+
+def test_a_raw_prefix_root_covers_every_tree_it_prefixes():
+    """#19312 review: a root `autobot-` (as scope_complaint reads it) never matched as a directory."""
+    roots = {_GUARD: ("autobot-",)}
+    chosen = select(["autobot-slm-backend/x.py"], patterns=_PATTERNS, ignores=(), exists=lambda rel: True, roots=roots)
+
+    assert chosen[_GUARD] == "scans autobot-; autobot-slm-backend/x.py changed"
+
+
+def test_the_real_record_parses_to_every_guard_it_names():
+    text = (_REPO_ROOT / "repo_tests" / "_reach_roots_record.py").read_text(encoding="utf-8")
+
+    assert len(declared_roots(text)) >= 80
 
 
 def test_a_test_that_names_a_changed_file_runs_with_it():
@@ -245,3 +270,11 @@ def test_tests_naming_finds_a_path_and_a_unique_basename_but_not_a_shared_one(tm
     found = tests_naming(repo, ["roles/a/templates/unique.conf.j2", "roles/a/tasks/main.yml", "x.py"], _PATTERNS)
 
     assert found == {"roles/a/templates/unique.conf.j2": ["tests/test_by_name.py", "tests/test_by_path.py"]}
+
+
+def test_a_search_that_cannot_enumerate_fails_instead_of_selecting_fewer(tmp_path):
+    """#19312 review: an empty enumeration returned {} -- fewer tests, in silence."""
+    repo = make_repo(tmp_path / "empty")
+
+    with pytest.raises(Exception, match="(?i)enumerat|no tracked|empty"):
+        tests_naming(repo, ["roles/a/templates/x.j2"], _PATTERNS)

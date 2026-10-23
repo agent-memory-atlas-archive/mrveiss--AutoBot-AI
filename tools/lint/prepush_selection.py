@@ -166,32 +166,35 @@ ALWAYS_RUN = {
 }
 
 
-def declared_roots(sources: Mapping[str, str]) -> Dict[str, tuple]:
-    """``{guard: roots}`` for every ``declare(..., roots=(...))`` in the given ``{path: source}``.
+REACH_ROOTS_RECORD = "repo_tests/_reach_roots_record.py"
 
-    Read as DATA through the AST, never imported: the hook must not depend on repo_tests being
-    importable (see GLOB_RECORD). A guard declaring roots is selected when a changed path falls
-    under one, so a costly whole-tree guard runs when -- and only when -- its scope changed.
+
+def declared_roots(record_text: str) -> Dict[str, tuple]:
+    """``{guard: roots}`` from the text of REACH_ROOTS_RECORD, read as DATA, never imported.
+
+    The hook must not depend on repo_tests being importable (see GLOB_RECORD). The record is
+    computed from the live registry (repo_tests/_reach_roots.py), because a parse of the
+    ``declare(`` calls missed every ``roots=`` written as a constant (#19312 review). An
+    unparseable record selects nothing extra, the same degradation as the glob record.
     """
-    found: Dict[str, tuple] = {}
-    for path, source in sources.items():
-        if "roots=" not in source:
-            continue
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "declare"):
-                continue
-            for kw in node.keywords:
-                if kw.arg == "roots" and isinstance(kw.value, (ast.Tuple, ast.List)):
-                    roots = tuple(
-                        e.value for e in kw.value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
-                    )
-                    if roots:
-                        found[path] = found.get(path, ()) + roots
-    return found
+    try:
+        tree = ast.parse(record_text)
+    except SyntaxError:
+        return {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "REACH_ROOTS" for t in node.targets):
+            try:
+                value = ast.literal_eval(node.value)
+            except ValueError:
+                return {}
+            return {str(k): tuple(v) for k, v in value.items()}
+    return {}
+
+
+def _under_root(path: str, roots: Sequence[str]) -> bool:
+    """Whether *path* falls under a declared root. Roots are raw prefixes, the way
+    ``_reach_scope.scope_complaint`` checks them, so ``autobot-`` covers every ``autobot-*`` tree."""
+    return any(path.startswith(root) for root in roots)
 
 
 def _under(path: str, prefixes: Sequence[str]) -> bool:
@@ -236,7 +239,7 @@ def select(
         for guard, why in (always or {}).items():
             add(guard, why)
     for guard, scanned in (roots or {}).items():
-        hit = next((p for p in changed if _under(p, scanned)), None)
+        hit = next((p for p in changed if _under_root(p, scanned)), None)
         if hit:
             add(guard, f"scans {', '.join(scanned)}; {hit} changed")
     for path, tests in (references or {}).items():
@@ -270,15 +273,15 @@ def tests_naming(root: Path, changed: Sequence[str], patterns: Sequence[str]) ->
     #18790 changed one of them (#18808). One ``git grep -F`` per changed path, over test files.
     """
     from autobot_shared.paths import scrubbed_git_env  # noqa: PLC0415 - hook-time only
-    from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths  # noqa: PLC0415 - hook-time only
+    from tools.lint._scan_helpers import tracked_paths  # noqa: PLC0415 - hook-time only
 
     targets = list(changed)
     if not targets:
         return {}
-    try:
-        tracked = tracked_paths(root)
-    except EmptyEnumeration:
-        return {}
+    # An empty enumeration raises (EmptyEnumeration) instead of returning {}: selecting fewer
+    # tests in silence is the failure this function exists to prevent (#19312 review). main()
+    # turns the raise into a failed selection, which blocks the push.
+    tracked = tracked_paths(root)
     basenames: Dict[str, int] = {}
     for rel in tracked:
         name = rel.rsplit("/", 1)[-1]
@@ -292,6 +295,8 @@ def tests_naming(root: Path, changed: Sequence[str], patterns: Sequence[str]) ->
         for needle in needles:
             args += ["-e", needle]
         out = subprocess.run([*args, "--", *specs], capture_output=True, text=True, timeout=60, env=scrubbed_git_env())
+        if out.returncode not in (0, 1):  # 1 is "no match"; anything else is a failed search
+            raise RuntimeError(f"git grep for {path!r} failed (exit {out.returncode}): {out.stderr.strip()}")
         hits = [line for line in out.stdout.splitlines() if line and line != path]
         if hits:
             found[path] = hits
@@ -315,10 +320,8 @@ def main() -> int:
     except (OSError, UnicodeDecodeError):
         # An unreadable or undecodable record costs a selection, never a push.
         declared = {}
-    guard_sources = {
-        f"repo_tests/{p.name}": p.read_text(encoding="utf-8", errors="replace")
-        for p in sorted((root / "repo_tests").glob("*_test.py"))
-    }
+    roots_record = root / REACH_ROOTS_RECORD
+    roots_text = roots_record.read_text(encoding="utf-8") if roots_record.is_file() else ""
     chosen = select(
         changed,
         patterns=patterns,
@@ -326,7 +329,7 @@ def main() -> int:
         exists=lambda rel: (root / rel).is_file(),
         declared_globs=declared,
         testpaths=pytest_testpaths(ini_text),
-        roots=declared_roots(guard_sources),
+        roots=declared_roots(roots_text),
         references=tests_naming(root, changed, patterns),
         always=ALWAYS_RUN,
     )

@@ -165,6 +165,16 @@ STATUS="pass"
 [ "$TOTAL_VIOLATIONS" -gt 0 ] && STATUS="fail"
 
 if [ "$AUDIT_BASELINE" = true ]; then
+    # #19312 review: a scoped (pre-push) audit also gives the verdict for its paths. An entry
+    # over-claiming is one way a changed file drifts from the baseline; a NEW value in it is
+    # the other, and the pre-push check that saw only the first passed the second.
+    if [ "${#HV_ONLY_FILES[@]}" -gt 0 ] && [ "$TOTAL_VIOLATIONS" -gt 0 ]; then
+        echo "${TOTAL_VIOLATIONS} hardcoded value(s) in the changed files are not in ${BASELINE#"$REPO_ROOT"/}:"
+        grep '^VIOLATION|' "$NEWFILE" | sed 's/^/  /'
+        echo
+        echo "Move each value to the SSOT config (see the detector's --report for the fix per class)."
+        exit 1
+    fi
     # `claimed|found|key` per entry that found fewer than it claims (#16334).
     # found 0 -> delete the entry; 0 < found < claimed -> lower it to found.
     # Calling both "no longer match anything" made #16298 delete an entry that

@@ -590,7 +590,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     diff_range="${remote_sha}..${local_sha}"
   fi
 
-  changed=$(git diff --name-only "$diff_range" 2>/dev/null || echo "")
+  # #19312 review: a failed diff used to read as an empty changeset, so nothing ran and the
+  # push passed. It blocks instead -- an unknown changeset is not an empty one.
+  changed=$(git diff --name-only "$diff_range" 2>&1) || {
+    fail "git diff --name-only ${diff_range} failed, so the changeset is unknown and nothing was checked (#19312):"
+    printf '%s\n' "$changed" | head -5 >&2
+    EXIT_CODE=1
+    continue
+  }
 
   # Scale the budget with the changeset (#15985). A fixed 120s made the gate's
   # coverage inversely proportional to the risk of the push: small changes finished
@@ -845,9 +852,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     hv_paths=$(mktemp)
     printf '%s\n' "$hv_baselined" > "$hv_paths"
     if hv_out=$("$REPO_ROOT/pipeline-scripts/detect-hardcoded-values.sh" --audit-baseline --paths-from="$hv_paths" 2>&1); then
-      ok "hardcoded-values baseline: $(echo "$hv_baselined" | grep -c .) baselined file(s) changed, every entry still matches"
+      ok "hardcoded-values baseline: $(echo "$hv_baselined" | grep -c .) baselined file(s) changed: every entry still matches and no new value appeared"
     else
-      fail "hardcoded-values baseline over-claims for the changed files (#18808):"
+      fail "hardcoded-values baseline drifted for the changed files (#18808, #19312):"
       echo "$hv_out" >&2
       EXIT_CODE=1
     fi
@@ -901,7 +908,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     slm_py_tests=$(echo "$all_py_tests" | grep -E '^autobot-slm-backend/' || true)
     other_py_tests=$(echo "$all_py_tests" | grep -vE '^autobot-slm-backend/' || true)
 
-    if [ -n "$all_py_tests" ] && command -v pytest >/dev/null 2>&1; then
+    # #19312 review: this gated on a `pytest` executable on PATH, which the run below never
+    # uses, so a machine without one skipped every selected test with no word said. What
+    # matters is whether the interpreter that runs them can import pytest; when it cannot,
+    # that is reported as not run -- never as a pass.
+    pytest_importable=0
+    "$PYTEST_PYTHON" -c 'import pytest' >/dev/null 2>&1 && pytest_importable=1
+    if [ -n "$all_py_tests" ] && [ "$pytest_importable" = 0 ]; then
+      could_not_run "pytest" "${PYTEST_PYTHON} cannot import pytest, so ${selected_count} selected test file(s) did not run"
+    fi
+    if [ -n "$all_py_tests" ] && [ "$pytest_importable" = 1 ]; then
       log "running pytest on (why each was selected, #16711):"
       printf '%s\n' "$selection" | awk -F'\t' 'NF { printf "    %s  (%s)\n", $1, $2 }' >&2
       [ -n "$slm_py_tests" ] && [ -n "$other_py_tests" ] && \

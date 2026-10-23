@@ -158,3 +158,11 @@ def test_only_the_audit_may_be_scoped(tmp_path):
     for flag in ("--json", "--prune-baseline"):
         result = _run(root, flag, f"--paths-from={listing}")
         assert result.returncode == 1 and "needs --audit-baseline" in result.stderr, flag
+
+
+def test_a_scoped_audit_catches_a_new_value_in_a_changed_file(tmp_path):
+    """#19312 review: three occurrences against a baseline of two is a NEW finding, not an over-claim."""
+    result = _scoped(_repo_claiming_two(tmp_path, 3), "autobot-backend/svc.py")
+
+    assert result.returncode == 1
+    assert "not in pipeline-scripts/hardcoded_values_baseline.txt" in result.stdout
