@@ -543,7 +543,7 @@ async def notify_new_commit(
 # Phase 5 (#926): per-role version tracking + air-gapped upload
 # =============================================================================
 
-_CACHE_BASE = os.environ.get("AUTOBOT_CODE_CACHE_DIR", "/opt/autobot/cache")
+_CACHE_BASE = os.environ.get("AUTOBOT_CODE_CACHE_DIR", f"{FLEET_INSTALL_ROOT}/cache")
 
 
 class NodeCodeVersionResponse(BaseModel):

@@ -420,11 +420,11 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/workflow_scheduler.py": 1070,
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
     "autobot-slm-backend/api/code_source.py": 701,
-    "autobot-slm-backend/api/code_sync.py": 5804,  # #16644 (was 5818)
+    "autobot-slm-backend/api/code_sync.py": 5803,  # #16644 (was 5818)
     "autobot-slm-backend/api/errors.py": 866,
-    "autobot-slm-backend/api/infrastructure.py": 724,
+    "autobot-slm-backend/api/infrastructure.py": 723,
     "autobot-slm-backend/api/monitoring.py": 1087,
-    "autobot-slm-backend/api/nodes.py": 2878,
+    "autobot-slm-backend/api/nodes.py": 2877,
     "autobot-slm-backend/api/nodes_execution.py": 699,
     "autobot-slm-backend/api/nodes_execution_test.py": 756,
     "autobot-slm-backend/api/orchestration.py": 769,
