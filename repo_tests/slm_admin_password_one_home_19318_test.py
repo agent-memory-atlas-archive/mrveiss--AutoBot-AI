@@ -33,6 +33,7 @@ from tools.lint._scan_helpers import tracked_paths
 _CANONICAL = "SLM_ADMIN_PASSWORD"  # pragma: allowlist secret
 _ALIAS = "AUTOBOT_" + _CANONICAL
 _READER = "autobot-slm-backend/ansible/_shared/tasks/read_slm_admin_password.yml"
+_PY_READER = "autobot-slm-backend/services/admin_seed_password.py"
 _SELF = "repo_tests/slm_admin_password_one_home_19318_test.py"
 
 #: Where the deprecated alias may still appear, and why.
@@ -43,12 +44,12 @@ _ALIAS_HOMES = {
 }
 #: Upper-case names containing SLM_ADMIN_PASS that are not a second name for the variable.
 _NOT_A_SECOND_NAME = {
-    _CANONICAL + "_FILE": "docker-compose.hardened.yml's compose-secrets path, unwired: #19368",
+    _CANONICAL + "_FILE": "a PATH to the value (hardened compose secret); seeds a fresh install only (#19368)",
 }
 #: Files that read the password from the environment or from slm-secrets.env, and why.
 _READERS = {
     _READER: "the one ansible reader",
-    "autobot-slm-backend/main.py": "the backend seed, through the env registry",
+    _PY_READER: "the SLM's one reader of SLM_ADMIN_PASSWORD and its _FILE (#19368)",
     "autobot-slm-backend/ansible/roles/slm_manager/tasks/main.yml": "the store's owner reads back what it wrote",
     "autobot-slm-backend/scripts/autobot-admin.py": "reset-password rewrites the store's line",
     "install.sh": "the installer writes the store and preserves it on reinstall",
@@ -77,8 +78,7 @@ _SUFFIXES = ("*.py", "*.sh", "*.yml", "*.yaml", "*.j2", "*.cfg", "*.toml", "*.in
 
 def _code_files(root: Path) -> list[str]:
     """Tracked code and config files, test files excluded (they plant the old shapes)."""
-    paths = tracked_paths(root, *_SUFFIXES, exclude=("*_test.py", "test_*.py", "**/test_*.py"))
-    return sorted(set(paths) | ({_READER} if (root / _READER).is_file() else set()))
+    return sorted(tracked_paths(root, *_SUFFIXES, exclude=("*_test.py", "test_*.py", "**/test_*.py")))
 
 
 #: Relative reach: measured 4,810 of 12,318 tracked files (0.39) at declaration; 0.35 fires
@@ -145,7 +145,7 @@ def test_one_name_for_the_admin_password() -> None:
 
 def test_only_the_known_readers_read_it() -> None:
     hits = _sweep(lambda text, rel: ["reads the password"] if reads(text) and rel not in _READERS else [])
-    assert not hits, f"a new reader of {_CANONICAL}; go through {_READER} or main.py (#19318):\n" + "\n".join(hits)
+    assert not hits, f"a new reader of {_CANONICAL}; go through {_READER} or {_PY_READER} (#19318):\n" + "\n".join(hits)
 
 
 def test_every_login_goes_through_the_one_reader() -> None:

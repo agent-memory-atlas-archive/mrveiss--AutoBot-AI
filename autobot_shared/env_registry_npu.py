@@ -89,6 +89,15 @@ _register(
     "slm",
 )
 _register(
+    "SLM_ADMIN_PASSWORD_FILE",
+    str,
+    "",
+    "Path to a file holding the SLM admin password (the hardened compose overlay's mounted "
+    "secret). Seeds a fresh install only; an existing admin keeps its stored password (#19368). "
+    "Set but unreadable or empty stops the first start with an error.",
+    "slm",
+)
+_register(
     "SLM_USERS_DATABASE_URL",
     str,
     None,
