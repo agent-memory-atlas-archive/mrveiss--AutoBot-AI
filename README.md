@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="libs/autobot-ui/src/assets/brand/mark.svg" width="96" height="96" alt="AutoBot" />
+
 # Your data. Your AI.
 
 **AutoBot is a self-hosted AI platform you own — not a service you rent.**
