@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 from repo_tests._paths import repo_root
-from repo_tests._ratchet_base import base_text, literal_in, raised_entries
+from repo_tests._ratchet_base import base_table, raised_entries
 from repo_tests._raw_palette_baseline import RAW_PALETTE_CLASSES
 from repo_tests._raw_palette_detect import (
     RAW_PALETTE_CLASS,
@@ -100,8 +100,7 @@ class TestThePopulationOnlyShrinks:
 
     def test_no_entry_rose_against_the_base(self):
         """#19283: the tripwire for a raised entry is the base commit's table, not a hand total."""
-        base_src = base_text(repo_root(), "repo_tests/_raw_palette_baseline.py")
-        base = literal_in(base_src, "RAW_PALETTE_CLASSES") if base_src is not None else {}
+        base = base_table(repo_root(), ("repo_tests/_raw_palette_baseline.py",), "RAW_PALETTE_CLASSES")
         rose = raised_entries(RAW_PALETTE_CLASSES, base)
         assert not rose, f"entries raised or added against the base (base, now): {rose}. {_FIX}"
 

@@ -38,7 +38,7 @@ from repo_tests._hardcoded_colour_detect import (
     _token_redefinitions,
 )
 from repo_tests._paths import repo_root
-from repo_tests._ratchet_base import base_text, literal_in, raised_entries
+from repo_tests._ratchet_base import base_table, raised_entries
 
 
 @pytest.fixture(scope="module")
@@ -54,9 +54,8 @@ def measured_important() -> dict[str, int]:
 
 
 def _base_table(name: str) -> dict:
-    """*name* from the colour baseline at the base commit; empty if the file is new there."""
-    src = base_text(repo_root(), "repo_tests/_hardcoded_colour_baseline.py")
-    return literal_in(src, name) if src is not None else {}
+    """*name* from the colour baseline at the base commit and the anchor (see base_table)."""
+    return base_table(repo_root(), ("repo_tests/_hardcoded_colour_baseline.py",), name)
 
 
 class TestTheDetectorWorksBeforeItsOutputIsRead:

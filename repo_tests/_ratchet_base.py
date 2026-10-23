@@ -10,10 +10,19 @@ exceed what the same table said at the base, and an entry the base did not have 
 Nothing is hand-summed, so PRs that lower different entries touch different lines.
 
 The base is:
-- in CI (``GITHUB_ACTIONS``): ``HEAD^1``. A pull_request run checks out the merge ref, whose
-  first parent is the base tip; a push run's first parent is the previous base commit. The
-  checkout needs ``fetch-depth: 2``.
+- in CI (``GITHUB_ACTIONS``): ``AUTOBOT_RATCHET_BASE_SHA`` when ci.yml sets it -- a merge
+  group's ``base_sha``, a push's ``before`` -- else ``HEAD^1``. A pull_request run checks out
+  the merge ref, whose first parent is the base tip. The checkout needs ``fetch-depth: 2``.
 - elsewhere: ``git merge-base HEAD <AUTOBOT_RATCHET_BASE_REF, default origin/main>``.
+
+That base alone is one-shot: only the run whose base spans a raise sees it, and a cancelled or
+skipped run makes the raise the next base for good. So when ``AUTOBOT_RATCHET_ANCHOR`` names a
+commit -- ci.yml sets the last main commit whose CI passed -- every entry is also held to that
+commit's table (:func:`base_table` takes the minimum over both). A raise that slipped past
+its spanning run stays red on every later run until it is lowered again.
+
+A table that moved path is read from its first path present at each base, so a rename PR lists
+the old path after the new one (``base_table(root, ("new.py", "old.py"), NAME)``).
 
 If the base cannot be read, :class:`BaseUnavailable` is raised. It is never treated as
 "nothing rose": a ratchet that cannot see its base has proved nothing.
@@ -29,6 +38,8 @@ from pathlib import Path
 from autobot_shared.paths import scrubbed_git_env
 
 BASE_REF_ENV = "AUTOBOT_RATCHET_BASE_REF"
+BASE_SHA_ENV = "AUTOBOT_RATCHET_BASE_SHA"
+ANCHOR_ENV = "AUTOBOT_RATCHET_ANCHOR"
 
 
 class BaseUnavailable(RuntimeError):
@@ -44,6 +55,9 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def base_commit(root: Path) -> str:
     """The commit this tree is ratcheted against (see the module docstring)."""
     if os.environ.get("GITHUB_ACTIONS") == "true":
+        given = os.environ.get(BASE_SHA_ENV, "").strip()
+        if given.strip("0"):  # a new branch's push carries before=000...0, which names no commit
+            return _commit(root, given, BASE_SHA_ENV)
         out = _git(root, "rev-parse", "--verify", "--quiet", "HEAD^1")
         if out.returncode != 0:
             raise BaseUnavailable(
@@ -60,9 +74,23 @@ def base_commit(root: Path) -> str:
     return out.stdout.strip()
 
 
-def base_text(root: Path, rel: str) -> str | None:
-    """*rel*'s content at the base, or None if the file did not exist there."""
-    sha = base_commit(root)
+def _commit(root: Path, sha: str, source: str) -> str:
+    """*sha* resolved to a commit in this clone, or BaseUnavailable naming where it came from."""
+    out = _git(root, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
+    if out.returncode != 0:
+        raise BaseUnavailable(f"{source}={sha} is not a commit in this clone; ci.yml must fetch it first.")
+    return out.stdout.strip()
+
+
+def anchor_commit(root: Path) -> str | None:
+    """The backstop commit from ``AUTOBOT_RATCHET_ANCHOR``, or None when it is unset."""
+    given = os.environ.get(ANCHOR_ENV, "").strip()
+    return _commit(root, given, ANCHOR_ENV) if given else None
+
+
+def base_text(root: Path, rel: str, sha: str | None = None) -> str | None:
+    """*rel*'s content at the base (or at *sha*), or None if the file did not exist there."""
+    sha = sha or base_commit(root)
     out = _git(root, "show", f"{sha}:{rel}")
     if out.returncode == 0:
         return out.stdout
@@ -83,14 +111,35 @@ def literal_in(source: str, name: str) -> object:
     raise BaseUnavailable(f"no literal {name} = ... in the base source")
 
 
+def base_table(root: Path, rels: tuple[str, ...], name: str) -> dict[str, int]:
+    """The literal *name* as the ratchet's reference: each key's MINIMUM over the base and the
+    anchor, keeping only keys every base has (a key one of them lacks is an addition there).
+
+    *rels* is the table's path, then any path it had before a move; each base reads the first
+    one it has. A base with none of them contributes ``{}`` -- except the anchor, which then
+    constrains nothing: an anchor older than the table's creation is not a reason to refuse it.
+    """
+    tables = []
+    anchor = anchor_commit(root)
+    for sha, is_anchor in ((base_commit(root), False), (anchor, True)):
+        if sha is None:
+            continue
+        src = next((s for s in (base_text(root, rel, sha) for rel in rels) if s is not None), None)
+        if src is None and is_anchor:
+            continue
+        tables.append(literal_in(src, name) if src is not None else {})
+    keys = set.intersection(*(set(t) for t in tables))
+    return {k: min(t[k] for t in tables) for k in keys}
+
+
 def raised_entries(now: dict[str, int], base: dict[str, int]) -> dict[str, tuple[int | None, int]]:
     """Entries that rose against the base, ``{key: (base value or None if new, now)}``."""
     return {k: (base.get(k), v) for k, v in now.items() if k not in base or v > base[k]}
 
 
-def base_tree_texts(root: Path, prefix: str) -> dict[str, str]:
-    """``{path: text}`` for every file under *prefix* at the base, in two git calls."""
-    sha = base_commit(root)
+def base_tree_texts(root: Path, prefix: str, sha: str | None = None) -> dict[str, str]:
+    """``{path: text}`` for every file under *prefix* at the base (or at *sha*), in two git calls."""
+    sha = sha or base_commit(root)
     listing = _git(root, "ls-tree", "-r", "-z", "--name-only", sha, "--", prefix)
     if listing.returncode != 0:
         raise BaseUnavailable(f"cannot list {prefix} at the base {sha[:10]}: {listing.stderr.strip()}")
