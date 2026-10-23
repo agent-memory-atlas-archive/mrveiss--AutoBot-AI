@@ -12,11 +12,10 @@ and embed with the old model against the new index.
 from __future__ import annotations
 
 import re
-import subprocess  # nosec B404  # fixed argv, no shell
 
 from repo_tests._paths import repo_root
 
-from autobot_shared.paths import scrubbed_git_env
+from tools.lint._scan_helpers import tracked_paths
 
 _DIRECT = re.compile(
     r"llm\.embedding_model\b"
@@ -48,9 +47,7 @@ _ALLOWED = {
 
 
 def _python_files() -> list[str]:
-    out = subprocess.run(  # nosec B603 B607  # fixed argv, no shell
-        ["git", "ls-files", "*.py"], cwd=repo_root(), capture_output=True, text=True, check=True, env=scrubbed_git_env()
-    ).stdout.split()
+    out = tracked_paths(repo_root(), "*.py")
     return [
         p for p in out if not (p.endswith("_test.py") or "/tests/" in p or p.rsplit("/", 1)[-1].startswith("test_"))
     ]
