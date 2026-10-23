@@ -25,6 +25,8 @@ import yaml
 from repo_tests._compose_files import COMPOSE_FILES, load_yaml_mapping
 from repo_tests._paths import repo_root
 
+from tools.lint._comment_syntax import code_lines
+
 _ROOT = repo_root()
 _GENERATOR = _ROOT / "docker" / "generate-secrets.sh"
 
@@ -268,10 +270,13 @@ def usage_lines_missing_secrets(text: str) -> list[str]:
         (line + " " + lines[i + 1]) if line.rstrip().endswith("\\") and i + 1 < len(lines) else line
         for i, line in enumerate(lines)
     ]
+    # Canonical comment syntax (#17941): a line the shared helper does not keep is a comment.
+    code_linenos = {cl.lineno for cl in code_lines(text, name="compose.yml")}
     return [
         line.strip()
-        for line in joined
-        if line.lstrip().startswith("#")
+        for lineno, line in enumerate(joined, 1)
+        if lineno not in code_linenos
+        and line.strip()
         and "docker compose" in line
         and "--env-file docker/.env.docker" in line
         and ".env.secrets" not in line
