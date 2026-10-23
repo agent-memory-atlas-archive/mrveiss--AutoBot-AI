@@ -11,15 +11,15 @@ Nothing is hand-summed, so PRs that lower different entries touch different line
 
 The base is:
 - in CI (``GITHUB_ACTIONS``): ``AUTOBOT_RATCHET_BASE_SHA`` when ci.yml sets it -- a merge
-  group's ``base_sha``, a push's ``before`` -- else ``HEAD^1``. A pull_request run checks out
-  the merge ref, whose first parent is the base tip. The checkout needs ``fetch-depth: 2``.
+  group's ``base_sha``, or on a push to main the commit main pointed at before -- else
+  ``HEAD^1``. A pull_request run checks out the merge ref, whose first parent is the base tip.
+  The checkout needs ``fetch-depth: 2``.
 - elsewhere: ``git merge-base HEAD <AUTOBOT_RATCHET_BASE_REF, default origin/main>``.
 
-That base alone is one-shot: only the run whose base spans a raise sees it, and a cancelled or
-skipped run makes the raise the next base for good. So when ``AUTOBOT_RATCHET_ANCHOR`` names a
-commit -- ci.yml sets the last main commit whose CI passed -- every entry is also held to that
-commit's table (:func:`base_table` takes the minimum over both). A raise that slipped past
-its spanning run stays red on every later run until it is lowered again.
+A PR run that spans a raise can be cancelled, so the backstop is main's own push run: its base
+is ``github.event.before``, always an ancestor, so a raise that slipped through turns main red on
+the push that lands it (#19283 review). A pull_request's ``before`` is the previous PR head --
+orphaned by a rebase -- which is why ci.yml passes it only for pushes.
 
 A table that moved path is read from its first path present at each base, so a rename PR lists
 the old path after the new one (``base_table(root, ("new.py", "old.py"), NAME)``).
@@ -39,7 +39,6 @@ from autobot_shared.paths import scrubbed_git_env
 
 BASE_REF_ENV = "AUTOBOT_RATCHET_BASE_REF"
 BASE_SHA_ENV = "AUTOBOT_RATCHET_BASE_SHA"
-ANCHOR_ENV = "AUTOBOT_RATCHET_ANCHOR"
 
 
 class BaseUnavailable(RuntimeError):
@@ -82,12 +81,6 @@ def _commit(root: Path, sha: str, source: str) -> str:
     return out.stdout.strip()
 
 
-def anchor_commit(root: Path) -> str | None:
-    """The backstop commit from ``AUTOBOT_RATCHET_ANCHOR``, or None when it is unset."""
-    given = os.environ.get(ANCHOR_ENV, "").strip()
-    return _commit(root, given, ANCHOR_ENV) if given else None
-
-
 def base_text(root: Path, rel: str, sha: str | None = None) -> str | None:
     """*rel*'s content at the base (or at *sha*), or None if the file did not exist there."""
     sha = sha or base_commit(root)
@@ -112,24 +105,14 @@ def literal_in(source: str, name: str) -> object:
 
 
 def base_table(root: Path, rels: tuple[str, ...], name: str) -> dict[str, int]:
-    """The literal *name* as the ratchet's reference: each key's MINIMUM over the base and the
-    anchor, keeping only keys every base has (a key one of them lacks is an addition there).
+    """The literal *name* at the base: the ratchet's reference.
 
-    *rels* is the table's path, then any path it had before a move; each base reads the first
-    one it has. A base with none of them contributes ``{}`` -- except the anchor, which then
-    constrains nothing: an anchor older than the table's creation is not a reason to refuse it.
+    *rels* is the table's path, then any path it had before a move; the first one the base has
+    is read. A base with none of them gives ``{}``, so every entry reads as an addition.
     """
-    tables = []
-    anchor = anchor_commit(root)
-    for sha, is_anchor in ((base_commit(root), False), (anchor, True)):
-        if sha is None:
-            continue
-        src = next((s for s in (base_text(root, rel, sha) for rel in rels) if s is not None), None)
-        if src is None and is_anchor:
-            continue
-        tables.append(literal_in(src, name) if src is not None else {})
-    keys = set.intersection(*(set(t) for t in tables))
-    return {k: min(t[k] for t in tables) for k in keys}
+    sha = base_commit(root)
+    src = next((s for s in (base_text(root, rel, sha) for rel in rels) if s is not None), None)
+    return literal_in(src, name) if src is not None else {}
 
 
 def raised_entries(now: dict[str, int], base: dict[str, int]) -> dict[str, tuple[int | None, int]]:

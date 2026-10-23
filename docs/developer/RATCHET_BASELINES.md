@@ -487,13 +487,14 @@ hand-summed total or a mirrored copy, so that a raise showed up somewhere. Every
 `repo_tests/_ratchet_base.py` now holds each entry to the same table at the base commit instead:
 an entry above the base, or a key the base lacks, is a raise.
 
-- **The base:** `AUTOBOT_RATCHET_BASE_SHA` in CI (a merge group's `base_sha`, a push's
-  `before`), else `HEAD^1`. Locally it is the merge-base with `origin/main`.
-- **The backstop:** `AUTOBOT_RATCHET_ANCHOR`, the last main commit whose CI passed (ci.yml
-  sets it). The base alone is one-shot: a cancelled run that spanned a raise would make the raise
-  the next base. `base_table` takes each key's minimum over both, so such a raise stays red.
-- **Fail closed:** a base or anchor that cannot be read raises `BaseUnavailable`. It never
-  passes as "nothing rose".
+- **The base:** `AUTOBOT_RATCHET_BASE_SHA` in CI (a merge group's `base_sha`; on a push to
+  main, the commit main pointed at before), else `HEAD^1`. Locally it is the merge-base with
+  `origin/main`.
+- **The backstop:** a PR run that spans a raise can be cancelled. Main's own push run then
+  compares with `github.event.before`, always an ancestor, so the raise turns main red on the
+  push that lands it.
+- **Fail closed:** a base that cannot be read raises `BaseUnavailable`. It never passes as
+  "nothing rose".
 - **Moving a table:** pass the old path after the new one,
   `base_table(root, ("new.py", "old.py"), NAME)`. Without it every entry reads as an addition.
 

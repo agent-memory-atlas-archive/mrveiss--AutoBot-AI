@@ -75,19 +75,19 @@ def _history(tmp_path: Path, *tables: str, path: str = "table.py") -> tuple[Path
     return repo, shas
 
 
-def _ci(monkeypatch, *, anchor: str = "", base_sha: str = "") -> None:
+def _ci(monkeypatch, *, base_sha: str = "") -> None:
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setenv("AUTOBOT_RATCHET_ANCHOR", anchor)
     monkeypatch.setenv("AUTOBOT_RATCHET_BASE_SHA", base_sha)
 
 
-def test_a_raise_its_spanning_run_missed_stays_red_against_the_anchor(tmp_path, monkeypatch) -> None:
-    """#19297 review: c1 raised 700 -> 720 and its run was cancelled; c2's base (c1) agrees with
-    720, so only the anchor -- the last green main, c0 -- still sees the raise."""
+def test_a_raise_its_pr_run_missed_turns_mains_landing_push_red(tmp_path, monkeypatch) -> None:
+    """#19283 review: c1 raised 700 -> 720 and the PR run that spanned it was cancelled. Main's
+    push run compares with `event.before` (c0, always an ancestor), so the landing push sees it,
+    even when HEAD^1 (c1) already agrees with 720."""
     repo, shas = _history(tmp_path, "T = {'x.py': 700}\n", "T = {'x.py': 720}\n", "T = {'x.py': 720, 'y.py': 1}\n")
     _ci(monkeypatch)
     assert raised_entries({"x.py": 720}, base_table(repo, ("table.py",), "T")) == {}
-    _ci(monkeypatch, anchor=shas[0])
+    _ci(monkeypatch, base_sha=shas[0])
     assert raised_entries({"x.py": 720}, base_table(repo, ("table.py",), "T")) == {"x.py": (700, 720)}
 
 
@@ -101,16 +101,6 @@ def test_raising_both_mirrors_together_is_still_refused(tmp_path, monkeypatch) -
     _ci(monkeypatch)
     now = literal_in((repo / "table.py").read_text(encoding="utf-8"), "KNOWN_LARGE")
     assert raised_entries(now, base_table(repo, ("table.py",), "KNOWN_LARGE")) == {"x.py": (700, 750)}
-
-
-def test_an_anchor_older_than_the_table_constrains_nothing(tmp_path, monkeypatch) -> None:
-    repo, shas = _history(tmp_path, "unrelated\n", path="README")
-    for body in ("T = {'x.py': 700}\n", "T = {'x.py': 690}\n"):
-        (repo / "t.py").write_text(body, encoding="utf-8")
-        git(repo, "add", "t.py")
-        git(repo, "commit", "-q", "-m", "c")
-    _ci(monkeypatch, anchor=shas[0])
-    assert base_table(repo, ("t.py",), "T") == {"x.py": 700}
 
 
 def test_a_moved_table_is_read_from_its_old_path_at_the_base(tmp_path, monkeypatch) -> None:
@@ -131,11 +121,8 @@ def test_an_event_base_sha_is_used_and_a_zero_one_is_ignored(tmp_path, monkeypat
     assert base_commit(repo) == shas[1]
 
 
-def test_an_unfetched_event_base_or_anchor_refuses(tmp_path, monkeypatch) -> None:
+def test_an_unfetched_event_base_refuses(tmp_path, monkeypatch) -> None:
     repo, _ = _history(tmp_path, "T = {}\n", "T = {'x.py': 1}\n")
     _ci(monkeypatch, base_sha="1" * 40)
     with pytest.raises(BaseUnavailable, match="AUTOBOT_RATCHET_BASE_SHA"):
         base_commit(repo)
-    _ci(monkeypatch, anchor="1" * 40)
-    with pytest.raises(BaseUnavailable, match="AUTOBOT_RATCHET_ANCHOR"):
-        base_table(repo, ("table.py",), "T")

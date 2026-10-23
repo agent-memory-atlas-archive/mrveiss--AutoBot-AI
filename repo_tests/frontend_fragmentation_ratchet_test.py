@@ -60,7 +60,7 @@ from pathlib import Path
 
 import pytest
 from repo_tests._paths import repo_root
-from repo_tests._ratchet_base import anchor_commit, base_commit, base_tree_texts
+from repo_tests._ratchet_base import base_tree_texts
 
 _REPO_ROOT = repo_root()
 _FRONTEND_SRC = _REPO_ROOT / "autobot-frontend" / "src"
@@ -238,21 +238,14 @@ def _measure() -> dict[str, int]:
 
 @functools.lru_cache(maxsize=1)
 def _measure_base() -> dict[str, int]:
-    """The same measurement over the base commit's tree (#19283), with the same file filter --
-    and over the anchor's when one is set, keeping each dimension's minimum (see base_table)."""
+    """The same measurement over the base commit's tree (#19283), with the same file filter."""
     prefix = str(_FRONTEND_SRC.relative_to(_REPO_ROOT))
-    shas = [base_commit(_REPO_ROOT)] + [a for a in [anchor_commit(_REPO_ROOT)] if a]
-    measures = []
-    for sha in shas:
-        items = [
-            (Path(rel), text)
-            for rel, text in base_tree_texts(_REPO_ROOT, prefix, sha).items()
-            if Path(rel).suffix in _SOURCE_SUFFIXES
-            and "node_modules" not in Path(rel).parts
-            and not _is_test(Path(rel))
-        ]
-        measures.append(_measure_texts(items))
-    return {k: min(m[k] for m in measures) for k in measures[0]}
+    items = [
+        (Path(rel), text)
+        for rel, text in base_tree_texts(_REPO_ROOT, prefix).items()
+        if Path(rel).suffix in _SOURCE_SUFFIXES and "node_modules" not in Path(rel).parts and not _is_test(Path(rel))
+    ]
+    return _measure_texts(items)
 
 
 def _measure_texts(items) -> dict[str, int]:
