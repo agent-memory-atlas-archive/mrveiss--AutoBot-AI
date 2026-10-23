@@ -169,6 +169,16 @@
   --badge-sprint-active-bg: #d1fae5;    --badge-sprint-active-fg: #065f46;
   --badge-sprint-review-bg: #ddd6fe;    --badge-sprint-review-fg: #5b21b6;
   --badge-sprint-closed-bg: #f3f4f6;    --badge-sprint-closed-fg: #374151;
+
+  /* Status pills (#16253): text/background pairs, each AA (>= 6:1) on its background and on a card. */
+  --ok-bg: #dcfce7;
+  --ok-fg: #166534;
+  --warn-bg: #fef9c3;
+  --warn-fg: #854d0e;
+  --bad-bg: #fee2e2;
+  --bad-fg: #991b1b;
+  --info-bg: #dbeafe;
+  --info-fg: #1e40af;
 }
 
 /* ============================================

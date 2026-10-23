@@ -33,9 +33,9 @@ function mountWith(status: string) {
 
 describe('SystemStatusNotification details (#16253)', () => {
   it.each([
-    ['healthy', en.ui.systemStatus.states.healthy, 'text-autobot-success'],
-    ['degraded', en.ui.systemStatus.states.degraded, 'text-autobot-warning'],
-    ['critical', en.ui.systemStatus.states.critical, 'text-autobot-error'],
+    ['healthy', en.ui.systemStatus.states.healthy, 'text-autobot-pill-ok-fg'],
+    ['degraded', en.ui.systemStatus.states.degraded, 'text-autobot-pill-warn-fg'],
+    ['critical', en.ui.systemStatus.states.critical, 'text-autobot-pill-bad-fg'],
   ])('%s is shown as %j in %s', (state, label, tone) => {
     const html = mountWith(state).html()
     expect(html).toContain(label)

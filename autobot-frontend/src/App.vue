@@ -160,7 +160,10 @@ export default {
 
     // Store references
     const appStore = useAppStore();
-    const backendHealthNotice = useBackendHealthNotice(appStore, t, () => healthMonitor.consecutiveFailures?.backend ?? 0);
+    const backendHealthNotice = useBackendHealthNotice(appStore, t, () => ({
+      consecutiveFailures: healthMonitor.consecutiveFailures?.backend ?? 0,
+      error: healthMonitor.lastBackendError,
+    }));
     const userStore = useUserStore();
     const chatStore = useChatStore();
     const knowledgeStore = useKnowledgeStore();

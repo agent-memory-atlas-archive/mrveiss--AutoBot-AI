@@ -31,20 +31,27 @@ interface NoticeStore {
 
 const NOTICE_SEVERITY: Partial<Record<BackendState, SystemSeverity>> = { degraded: 'warning', critical: 'error' }
 
+/** What the monitor knows about the backend's recent checks. */
+export interface BackendCheckState {
+  consecutiveFailures: number
+  error?: string | null
+}
+
 export function useBackendHealthNotice(
   store: NoticeStore,
   t: (key: string) => string,
-  consecutiveFailures: () => number,
+  backendChecks: () => BackendCheckState,
 ) {
   let notice: { id: string; state: BackendState } | null = null
 
   function details(health: HealthData): SystemStatusDetails {
-    const now = Date.now()
+    const checks = backendChecks()
     return {
       status: health.status.backend,
       lastCheck: health.monitoring.lastCheck,
-      consecutiveFailures: consecutiveFailures(),
-      timestamp: now,
+      consecutiveFailures: checks.consecutiveFailures,
+      ...(checks.error ? { error: checks.error } : {}),
+      timestamp: Date.now(),
     }
   }
 
@@ -61,11 +68,14 @@ export function useBackendHealthNotice(
       if (state === 'healthy') clear() // 'unknown' says nothing new: keep what is shown
       return
     }
-    if (notice?.state === state) {
-      const shown = store.systemNotifications.find((n) => n.id === notice?.id)
-      if (shown) shown.statusDetails = details(health)
+    const shown = notice ? store.systemNotifications.find((n) => n.id === notice?.id) : undefined
+    if (notice?.state === state && shown) {
+      shown.statusDetails = details(health)
       return
     }
+    // A notice that is gone (cleared at startup, removed) while the state holds is raised
+    // again: a backend that stays down must keep saying so. A dismissed one stays in the
+    // store, hidden, until the state changes.
     clear()
     const id = store.addSystemNotification({
       severity,

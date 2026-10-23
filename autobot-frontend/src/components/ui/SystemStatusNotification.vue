@@ -122,13 +122,13 @@
                   </div>
                   <div v-if="notificationData.statusDetails.consecutiveFailures" class="flex justify-between text-sm">
                     <dt class="text-autobot-text-secondary">{{ t('ui.systemStatus.consecutiveFailures') }}</dt>
-                    <dd class="text-autobot-error font-medium">
+                    <dd class="text-autobot-pill-bad-fg font-medium">
                       {{ notificationData.statusDetails.consecutiveFailures }}
                     </dd>
                   </div>
                   <div v-if="notificationData.statusDetails.error" class="mt-2">
                     <dt class="text-sm text-autobot-text-secondary mb-1">{{ t('ui.systemStatus.errorDetails') }}</dt>
-                    <dd class="text-xs text-autobot-error bg-autobot-error-bg p-2 rounded font-mono">
+                    <dd class="text-xs text-autobot-pill-bad-fg bg-autobot-pill-bad-bg p-2 rounded font-mono">
                       {{ notificationData.statusDetails.error }}
                     </dd>
                   </div>
@@ -293,20 +293,42 @@ watch(() => notificationData.value.visible, (newValue) => {
 
 // The monitor's states (#16253): a translated label and a token tone, never the raw value.
 const STATE_TONE: Record<string, string> = {
-  healthy: 'text-autobot-success',
-  degraded: 'text-autobot-warning',
-  critical: 'text-autobot-error',
+  healthy: 'text-autobot-pill-ok-fg',
+  degraded: 'text-autobot-pill-warn-fg',
+  critical: 'text-autobot-pill-bad-fg',
 }
 const stateTone = (state: string): string => STATE_TONE[state] ?? 'text-autobot-text-secondary'
 const stateLabel = (state: string): string =>
   state in STATE_TONE || state === 'unknown' ? t(`ui.systemStatus.states.${state}`) : state
 
-// Severity colours come from the theme's state tokens, never palette steps (#16253).
+// Severity colours are the theme's status pill pairs (#16253): each text/background pair is
+// AA in every theme, which the plain state colours were not as text on a light card.
+// Spelled out in full: Tailwind generates only the class names it finds in source.
 const TONES = {
-  error: { text: 'text-autobot-error', header: 'bg-autobot-error-bg border-autobot-error', hover: 'hover:text-autobot-error', button: 'bg-autobot-error hover:opacity-90 text-autobot-text-inverse focus:ring-autobot-error' },
-  warning: { text: 'text-autobot-warning', header: 'bg-autobot-warning-bg border-autobot-warning', hover: 'hover:text-autobot-warning', button: 'bg-autobot-warning hover:opacity-90 text-autobot-text-inverse focus:ring-autobot-warning' },
-  info: { text: 'text-autobot-info', header: 'bg-autobot-info-bg border-autobot-info', hover: 'hover:text-autobot-info', button: 'bg-autobot-info hover:opacity-90 text-autobot-text-inverse focus:ring-autobot-info' },
-  success: { text: 'text-autobot-success', header: 'bg-autobot-success-bg border-autobot-success', hover: 'hover:text-autobot-success', button: 'bg-autobot-success hover:opacity-90 text-autobot-text-inverse focus:ring-autobot-success' },
+  error: {
+    text: 'text-autobot-pill-bad-fg',
+    header: 'bg-autobot-pill-bad-bg border-autobot-pill-bad-fg',
+    hover: 'hover:text-autobot-pill-bad-fg',
+    button: 'bg-autobot-pill-bad-bg text-autobot-pill-bad-fg border border-autobot-pill-bad-fg hover:opacity-90 focus:ring-autobot-pill-bad-fg',
+  },
+  warning: {
+    text: 'text-autobot-pill-warn-fg',
+    header: 'bg-autobot-pill-warn-bg border-autobot-pill-warn-fg',
+    hover: 'hover:text-autobot-pill-warn-fg',
+    button: 'bg-autobot-pill-warn-bg text-autobot-pill-warn-fg border border-autobot-pill-warn-fg hover:opacity-90 focus:ring-autobot-pill-warn-fg',
+  },
+  info: {
+    text: 'text-autobot-pill-info-fg',
+    header: 'bg-autobot-pill-info-bg border-autobot-pill-info-fg',
+    hover: 'hover:text-autobot-pill-info-fg',
+    button: 'bg-autobot-pill-info-bg text-autobot-pill-info-fg border border-autobot-pill-info-fg hover:opacity-90 focus:ring-autobot-pill-info-fg',
+  },
+  success: {
+    text: 'text-autobot-pill-ok-fg',
+    header: 'bg-autobot-pill-ok-bg border-autobot-pill-ok-fg',
+    hover: 'hover:text-autobot-pill-ok-fg',
+    button: 'bg-autobot-pill-ok-bg text-autobot-pill-ok-fg border border-autobot-pill-ok-fg hover:opacity-90 focus:ring-autobot-pill-ok-fg',
+  },
 } as const
 const tone = (severity: string | undefined) => TONES[severity as keyof typeof TONES] ?? TONES.success
 
