@@ -57,7 +57,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/components/charts/BaseChart.vue": 602,
     "autobot-frontend/src/components/charts/FunctionCallGraph.vue": 2165,
     "autobot-frontend/src/components/charts/ImportTreeChart.vue": 1365,
-    "autobot-frontend/src/components/chat/ChatInput.vue": 1716,
+    "autobot-frontend/src/components/chat/ChatInput.vue": 1672,
     "autobot-frontend/src/components/chat/ChatInterface.vue": 1521,
     "autobot-frontend/src/components/chat/ChatMessages.vue": 2118,  # #18849: 2119 -> 2118
     "autobot-frontend/src/components/chat/ChatSidebar.vue": 807,  # #18849: 808 -> 807

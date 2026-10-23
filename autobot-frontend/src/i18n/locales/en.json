@@ -350,7 +350,8 @@
       "thinkingOffLabel": "thinking Off",
       "thinkingOn": "Thinking on",
       "thinkingOnLabel": "thinking On",
-      "moreActions": "More actions"
+      "moreActions": "More actions",
+      "stopFailed": "Couldn't stop the reply"
     },
     "translate": {
       "title": "Translate Text",
