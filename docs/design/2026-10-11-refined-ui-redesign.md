@@ -127,7 +127,7 @@ first item of the **Danger Zone** card in SLM console → Advanced control. Refe
 Route/view as found on `main` at 940da29. **New** = no view exists yet; confirm the backend before
 building UI for it.
 
-Page groups on the canvas (130 screens): Entry & Home 8 · Chat & Workspace 3 · Knowledge 9 ·
+Page groups on the canvas (130 screens; the 131st file, `screens/CompanyOSRefined.dc.html`, is not placed on the canvas): Entry & Home 8 · Chat & Workspace 3 · Knowledge 9 ·
 Company OS 40 (includes BusinessIntelligence, the Transcriber screens and Handbook) · Automation 8 · Agents 3 ·
 Analytics 6 · Settings 2 (Secrets, Preferences) · **SLM console (server-wide) 25** · Auth & Account
 10 · Components 16. The SLM console group holds Operations, ErrorMonitoring, FailureAnalysis,
@@ -239,15 +239,15 @@ that exists but does not serve the screen.
 | ErrorMonitoring | SLM `/monitoring/errors`; moving from `/analytics/errors` | `views/ErrorMonitoringView.vue` → `autobot-slm-frontend` `views/monitoring/ErrorMonitor.vue` |
 | FailureAnalysis | SLM — **new** (closest today: `/monitoring/errors`); moving from `/analytics/diagnostics` | `views/FailureAnalysisDashboard.vue` |
 | Plugins / Marketplace | SLM — **new**; moving from `/plugins`, `/plugins/marketplace` | `views/PluginsView.vue`, `MarketplaceView.vue` |
-| Secrets / SecretsApiKeys / SecretsAudit | SLM — **new** (closest today: `settings/admin/secrets`, system secrets only; there is no `/secrets` route in the SLM); moving from `/secrets`, `/secrets/llm-keys`, `/secrets/audit-log` | `components/security/SecretsManager.vue` + child routes |
+| Secrets / SecretsApiKeys / SecretsAudit | SLM — **new** (closest today: `/settings/admin/secrets`, system secrets only; there is no `/secrets` route in the SLM); moving from `/secrets`, `/secrets/llm-keys`, `/secrets/audit-log` | `components/security/SecretsManager.vue` + child routes |
 | Preferences | `/preferences` | `views/SettingsView.vue` |
-| LlmConfig | SLM `settings/admin/llm` | `autobot-slm-frontend` (`/llm-config` in the user frontend redirects) |
+| LlmConfig | SLM `/settings/admin/llm` | `autobot-slm-frontend` (`/llm-config` in the user frontend redirects) |
 | ThemeManager | SLM — **new** | SLM admin screen for installed themes (#10472) |
-| AdminUsers | SLM `settings/admin/users`; moving from `/admin/users` | `views/AdminUsersView.vue` → SLM `views/settings/admin/UserManagementSettings.vue` |
+| AdminUsers | SLM `/settings/admin/users`; moving from `/admin/users` | `views/AdminUsersView.vue` → SLM `views/settings/admin/UserManagementSettings.vue` |
 | AdminSandbox | SLM — **new**; moving from `/admin/sandbox` | `views/AdminSandboxView.vue` |
 | AdminAdvancedControl | SLM `/tools/advanced-control`; moving from `/admin/advanced-control` | `views/AdvancedControlView.vue` → SLM `views/tools/admin/AdvancedControlTool.vue` |
-| AdminBudgetPolicies | SLM — **new** (closest today: `settings/admin/budget-audit`, read-only audit); moving from `/admin/budget-policies` | `views/BudgetPolicies.vue` |
-| AdminProviderFallback | SLM `settings/admin/llm-fallbacks`; moving from `/admin/provider-fallback` | `views/ProviderFallbackView.vue` → SLM `views/settings/admin/LLMFallbacksView.vue` |
+| AdminBudgetPolicies | SLM — **new** (closest today: `/settings/admin/budget-audit`, read-only audit); moving from `/admin/budget-policies` | `views/BudgetPolicies.vue` |
+| AdminProviderFallback | SLM `/settings/admin/llm-fallbacks`; moving from `/admin/provider-fallback` | `views/ProviderFallbackView.vue` → SLM `views/settings/admin/LLMFallbacksView.vue` |
 | AdminPricing | SLM — **new**; moving from `/admin/pricing` | `views/AdminPricingView.vue` |
 | AdminMcpServers | SLM — **new** (closest today: `/tools/mcp`, the MCP Registry); moving from `/admin/mcp-servers` | `views/AdminMcpServersView.vue` |
 | AdminPermissionScopes | SLM — **new**; moving from `/admin/permission-scopes` | `views/AdminPermissionScopesView.vue` (empty state today) |
