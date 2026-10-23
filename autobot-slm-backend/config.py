@@ -186,13 +186,15 @@ def _resolve_slm_node_id() -> str:
     A deployment that set only the legacy ``SLM_NODE_ID`` keeps the id it registered under,
     with a deprecation warning, so no existing manager row is orphaned (#19322).
     """
-    from autobot_shared.ssot_config import MiscConfig, get_config
+    from autobot_shared.ssot_config import get_config
 
-    canonical = get_config().misc.slm_node_id
+    misc = get_config().misc
+    canonical = misc.slm_node_id
     legacy = os.environ.get(_LEGACY_SLM_NODE_ID_VAR)
     if not legacy or legacy == canonical:
         return canonical
-    if canonical != MiscConfig.model_fields["slm_node_id"].default:
+    # Set explicitly (environment or .env), even to the default value: the canonical name wins.
+    if "slm_node_id" in misc.model_fields_set:
         logger.error("SLM_NODE_ID=%s ignored: AUTOBOT_SLM_NODE_ID=%s is set and wins", legacy, canonical)
         return canonical
     logger.warning("SLM_NODE_ID is deprecated for the manager's node id; set AUTOBOT_SLM_NODE_ID=%s", legacy)

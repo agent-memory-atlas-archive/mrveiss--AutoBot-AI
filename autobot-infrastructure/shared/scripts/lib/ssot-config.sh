@@ -153,7 +153,13 @@ fi
 # PathConfig.ssh_user
 : "${AUTOBOT_SSH_USER:=autobot}"
 
-# MiscConfig.slm_node_id
+# MiscConfig.slm_node_id. #19322: SLM_NODE_ID is each host's own agent id; as the
+# manager's id it is a deprecated alias, honoured (with a warning) only when the
+# canonical name is unset -- the same order the SLM backend resolves them in.
+if [ -z "${AUTOBOT_SLM_NODE_ID:-}" ] && [ -n "${SLM_NODE_ID:-}" ]; then
+    echo "WARNING: SLM_NODE_ID is deprecated for the SLM manager's node id; set AUTOBOT_SLM_NODE_ID=${SLM_NODE_ID}" >&2
+    AUTOBOT_SLM_NODE_ID="${SLM_NODE_ID}"
+fi
 : "${AUTOBOT_SLM_NODE_ID:=00-SLM-Manager}"
 
 # VNC: network/network-config.sh is the only script that reads all four

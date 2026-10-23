@@ -17,9 +17,13 @@ each is a test here:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 from repo_tests._paths import repo_root
 
@@ -131,3 +135,29 @@ def test_the_sweep_reads_each_default_shape() -> None:
         "# SLM_NODE_ID=commented\n"
     )
     assert literal_defaults("x.py", text) == ["00-SLM-Manager", "33792bf5", "a-b", "lit"]
+
+
+_HOOK = _ROOT / "autobot-infrastructure/shared/scripts/hooks/slm-post-commit"
+
+
+def _hook_node_id(tmp_path: Path, config_text: str | None, exported: str = "") -> str:
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash unavailable")
+    fn = re.search(r"^agent_node_id\(\) \{.*?^\}$", _HOOK.read_text(encoding="utf-8"), re.M | re.S)
+    assert fn, "slm-post-commit no longer defines agent_node_id()"
+    config = tmp_path / "config.yaml"
+    if config_text is not None:
+        config.write_text(config_text, encoding="utf-8")
+    script = f'{fn.group(0)}\nSLM_NODE_ID="${{SLM_NODE_ID:-$(agent_node_id "{config}")}}"\necho "$SLM_NODE_ID"'
+    env = {"PATH": os.environ.get("PATH", ""), **({"SLM_NODE_ID": exported} if exported else {})}
+    return subprocess.run([bash, "-c", script], capture_output=True, text=True, env=env, timeout=30).stdout.strip()
+
+
+def test_the_post_commit_hook_reads_the_agents_node_id(tmp_path: Path) -> None:
+    # agent-config.yaml.j2 renders `node_id: "<id>"`; the hook's git shell has no agent environment.
+    assert _hook_node_id(tmp_path, '# Node: x\n---\nnode_id: "a1b2c3d4"\nhostname: "h"\n') == "a1b2c3d4"
+    assert _hook_node_id(tmp_path, "node_id: plain-id\n") == "plain-id"
+    assert _hook_node_id(tmp_path, 'node_id: "a1b2c3d4"\n', exported="exported-id") == "exported-id"
+    (tmp_path / "absent").mkdir()
+    assert _hook_node_id(tmp_path / "absent", None) == "", "an absent agent config must skip, not invent an id"

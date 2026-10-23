@@ -53,6 +53,7 @@ def _assigns(node: ast.stmt, names: set[str]) -> bool:
         ("99-Renamed", None, "99-Renamed"),  # the canonical name is read
         (None, "77-Legacy", "77-Legacy"),  # a legacy-only deployment keeps its id
         ("99-Renamed", "77-Legacy", "99-Renamed"),  # both set: the canonical name wins
+        (_DEFAULT, "77-Legacy", _DEFAULT),  # canonical set to the default value still wins
     ],
 )
 def test_the_manager_node_id_resolves_canonical_first(monkeypatch, canonical, legacy, expected) -> None:
