@@ -122,8 +122,37 @@ fi
 
 # RedisConfig
 : "${AUTOBOT_REDIS_PASSWORD:=}"
-: "${AUTOBOT_REDIS_DB_CELERY_BROKER:=14}"
-: "${AUTOBOT_REDIS_DB_CELERY_RESULTS:=15}"
+
+# Redis database numbers: never a literal here (#19232). redis-databases.yaml is the
+# one table (autobot_shared/redis_management/types.py reads the same file), and an
+# AUTOBOT_REDIS_DB_<NAME> already in the environment wins, as it does in Python.
+_AUTOBOT_REDIS_DATABASES_YAML="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../config" 2>/dev/null && pwd)/redis-databases.yaml"
+if [ ! -f "${_AUTOBOT_REDIS_DATABASES_YAML}" ]; then
+    _AUTOBOT_REDIS_DATABASES_YAML="${PROJECT_ROOT}/autobot-infrastructure/shared/config/redis-databases.yaml"
+fi
+
+# autobot_redis_db NAME -- print NAME's database number; non-zero and a message if unknown.
+autobot_redis_db() {
+    local override_var="AUTOBOT_REDIS_DB_${1^^}" number
+    if [[ "${!override_var:-}" =~ ^[0-9]+$ ]]; then
+        echo "${!override_var}"
+        return 0
+    fi
+    number="$(awk -v want="$1" '
+        /^redis_databases:/ { inside = 1; next }
+        inside && /^[^ #]/ { exit }
+        inside && /^  [a-z_]+:/ { name = $1; sub(":", "", name); next }
+        inside && name == want && /^    db:/ { print $2; exit }
+    ' "${_AUTOBOT_REDIS_DATABASES_YAML}" 2>/dev/null)"
+    if [ -z "${number}" ]; then
+        echo "ssot-config.sh: no Redis database '$1' in ${_AUTOBOT_REDIS_DATABASES_YAML}" >&2
+        return 1
+    fi
+    echo "${number}"
+}
+
+: "${AUTOBOT_REDIS_DB_CELERY_BROKER:=$(autobot_redis_db celery_broker)}"
+: "${AUTOBOT_REDIS_DB_CELERY_RESULTS:=$(autobot_redis_db celery_results)}"
 
 # TimeoutConfig.api -- frontend API timeout in ms (#17856 row 6)
 : "${AUTOBOT_API_TIMEOUT:=60000}"

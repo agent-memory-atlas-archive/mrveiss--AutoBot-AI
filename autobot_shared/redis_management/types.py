@@ -40,7 +40,12 @@ _YAML_NAME = "redis-databases.yaml"
 
 
 def _base_dir() -> str | None:
-    """``AUTOBOT_BASE_DIR``, else the project root (the SSOT ``path.base_dir`` rule), else None."""
+    """``AUTOBOT_BASE_DIR``, else the project root (the SSOT ``path.base_dir`` rule), else None.
+
+    Never raises: importing ``redis_management`` must not fail on path resolution. With no
+    determinable root the host-absolute candidate is skipped; #19350 adds the install-root
+    fallback (``fleet_constants.FLEET_INSTALL_ROOT``) -- a literal here is a hardcoding finding.
+    """
     explicit = os.environ.get("AUTOBOT_BASE_DIR")  # ssot-config-exempt: bootstrap before config available
     if explicit:
         return explicit
@@ -53,7 +58,10 @@ def _base_dir() -> str | None:
 
 
 def _yaml_candidates() -> list[str]:
-    """Every place redis-databases.yaml may live, in priority order -- the ONE list (#19232)."""
+    """Every place redis-databases.yaml may live, in priority order -- the ONE list (#19232).
+
+    Built per call, never at import, so a path that changes after import is seen.
+    """
     here = os.path.dirname(__file__)
     candidates = [
         os.path.join(here, "..", "..", "autobot-infrastructure", "shared", "config", _YAML_NAME),  # checkout/install

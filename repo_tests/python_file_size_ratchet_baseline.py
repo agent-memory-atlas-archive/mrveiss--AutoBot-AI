@@ -476,7 +476,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot_shared/circuit_breaker.py": 689,
     "autobot_shared/env_registry.py": 1125,  # #13602, #18765: sibling imports; blocks moved to siblings
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
-    "autobot_shared/network_constants.py": 613,
+    "autobot_shared/network_constants.py": 608,
     "autobot_shared/npu/integration.py": 929,
     "autobot_shared/plugin_sdk/loader.py": 690,
     "autobot_shared/plugin_sdk/plugin_load_visibility_test.py": 750,

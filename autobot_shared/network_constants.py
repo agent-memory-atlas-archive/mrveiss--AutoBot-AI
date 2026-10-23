@@ -16,8 +16,8 @@ MIGRATION (Issue #763):
 Usage:
     from constants.network_constants import NetworkConstants, ServiceURLs
 
-    # Use VM IP addresses
-    redis_url = f"redis://{NetworkConstants.REDIS_VM_IP}:6379"
+    # A Redis URL comes from the one endpoint resolver (#19232), never from these constants:
+    #   autobot_shared.redis_management.endpoint.resolve_redis_endpoint().url(db)
 
     # Use service URLs
     backend_url = ServiceURLs.BACKEND_API
@@ -312,8 +312,6 @@ _LAZY_SERVICE_URLS: dict = {
     "BACKEND_LOCAL": lambda: f"http://{NetworkConstants.LOCALHOST_NAME}:{NetworkConstants.BACKEND_PORT}",
     "FRONTEND_VM": lambda: f"http://{NetworkConstants.FRONTEND_VM_IP}:{NetworkConstants.FRONTEND_PORT}",
     "FRONTEND_LOCAL": lambda: f"http://{NetworkConstants.LOCALHOST_NAME}:{NetworkConstants.FRONTEND_PORT}",
-    "REDIS_VM": lambda: f"redis://{NetworkConstants.REDIS_VM_IP}:{NetworkConstants.REDIS_PORT}",
-    "REDIS_LOCAL": lambda: f"redis://{NetworkConstants.LOCALHOST_IP}:{NetworkConstants.REDIS_PORT}",
     "OLLAMA_LOCAL": lambda: f"http://{NetworkConstants.LOCALHOST_NAME}:{NetworkConstants.OLLAMA_PORT}",
     "VNC_DESKTOP": lambda: f"http://{NetworkConstants.MAIN_MACHINE_IP}:{NetworkConstants.VNC_PORT}/vnc.html",
     "CHROME_DEBUGGER_LOCAL": lambda: (
@@ -366,10 +364,7 @@ class ServiceURLs(metaclass=_LazyURLMeta):
 
     FRONTEND_LOCAL: str
 
-    # Redis URLs (computed from ConfigRegistry)
-    REDIS_VM: str
-
-    REDIS_LOCAL: str
+    # No Redis URLs here: endpoint.resolve_redis_endpoint is the one builder (#19232).
 
     # Ollama LLM URLs (computed from ConfigRegistry)
     # Ollama runs on the local host (.20); OLLAMA_MAIN pointed to .24 (wrong).
@@ -452,10 +447,10 @@ class NetworkConfig:
 
     @property
     def redis_url(self) -> str:
-        """Get Redis URL based on deployment context"""
-        if self._deployment_mode == "local":
-            return ServiceURLs.REDIS_LOCAL
-        return ServiceURLs.REDIS_VM
+        """The Redis URL without credentials, from the one endpoint resolver (#19232)."""
+        from autobot_shared.redis_management.endpoint import resolve_redis_endpoint
+
+        return resolve_redis_endpoint().url(with_auth=False)
 
     @property
     def ollama_url(self) -> str:

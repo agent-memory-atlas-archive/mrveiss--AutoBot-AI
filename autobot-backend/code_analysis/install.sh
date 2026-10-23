@@ -98,10 +98,16 @@ REDIS_HOST="${AUTOBOT_REDIS_HOST:-localhost}"
 REDIS_PORT="${AUTOBOT_REDIS_PORT:-6379}"
 # AUTOBOT_REDIS_DB_MAIN: 11 of the 12 code_analysis Redis call sites default
 # to get_async_redis_client() with no `database` arg, which resolves to
-# "main" (autobot_shared/redis_client.py) -- so the installer's fallback
-# tracks that default rather than the retired, unset bare-name variable
-# this replaced (#15577).
-REDIS_DB="${AUTOBOT_REDIS_DB_MAIN:-0}"
+# "main" (autobot_shared/redis_client.py) -- so the installer tracks that
+# database rather than the retired, unset bare-name variable (#15577).
+# #19232: its number comes from redis-databases.yaml (via the shell SSOT
+# library), never a literal; an AUTOBOT_REDIS_DB_MAIN in the environment wins.
+_INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${_INSTALL_DIR}/../../autobot-infrastructure/shared/scripts/lib/ssot-config.sh"
+AUTOBOT_REDIS_DB_MAIN="$(autobot_redis_db main)"
+export AUTOBOT_REDIS_DB_MAIN
+REDIS_DB="${AUTOBOT_REDIS_DB_MAIN}"
 
 cat > .env << EOF
 # AutoBot Code Analysis Suite Configuration
@@ -140,7 +146,7 @@ import redis
 import os
 redis_host = os.getenv('AUTOBOT_REDIS_HOST', 'localhost')
 redis_port = int(os.getenv('AUTOBOT_REDIS_PORT', '6379'))
-redis_db = int(os.getenv('AUTOBOT_REDIS_DB_MAIN', '0'))
+redis_db = int(os.environ['AUTOBOT_REDIS_DB_MAIN'])
 r = redis.Redis(host=redis_host, port=redis_port, db=redis_db)
 r.ping()
 print('✅ Redis connection successful')

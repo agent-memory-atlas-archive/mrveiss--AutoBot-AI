@@ -52,3 +52,22 @@ def test_the_cache_api_reports_the_moved_numbers(overridden):
     databases = redis_databases()
     assert (databases["main"], databases["knowledge"]) == (12, 0)
     assert databases["websockets"] is None, "a name nothing declares has no number"
+
+
+def test_the_service_registry_reports_the_resolved_redis_endpoint():
+    """#19232: the registry's deployment-mode host patterns were a second Redis host path."""
+    from urllib.parse import urlparse
+
+    from autobot_shared.redis_management.endpoint import resolve_redis_endpoint
+    from utils.service_registry import ServiceRegistry
+
+    resolved = resolve_redis_endpoint()
+    url = urlparse(ServiceRegistry().get_service_url("redis"))
+    assert (url.scheme, url.hostname, url.port) == ("rediss" if resolved.tls else "redis", resolved.host, resolved.port)
+
+
+def test_network_config_redis_url_is_the_resolvers():
+    from autobot_shared.network_constants import NetworkConfig
+    from autobot_shared.redis_management.endpoint import resolve_redis_endpoint
+
+    assert NetworkConfig().redis_url == resolve_redis_endpoint().url(with_auth=False)

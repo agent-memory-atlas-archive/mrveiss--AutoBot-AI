@@ -160,3 +160,74 @@ def test_the_number_table_and_the_tuning_loader_read_one_yaml(monkeypatch):
     monkeypatch.setattr(_types, "_yaml_candidates", lambda: ["/nonexistent/redis-databases.yaml"])
     assert _types.resolve_databases_yaml() is None
     assert RedisConfigLoader._resolve_yaml_path(None) is None
+
+
+def test_the_shell_library_reads_the_same_table():
+    """ssot-config.sh's autobot_redis_db answers from redis-databases.yaml, override first."""
+    import shutil
+    import subprocess  # nosec B404  # fixed argv, no shell string from input
+    from pathlib import Path
+
+    bash = shutil.which("bash")
+    assert bash, "bash is required to check the shell SSOT library"
+    lib = Path(__file__).resolve().parents[2] / "autobot-infrastructure/shared/scripts/lib/ssot-config.sh"
+    names = " ".join(_types.DECLARED_DATABASES)
+    script = f'source "{lib}"; for n in {names}; do printf "%s=%s\\n" "$n" "$(autobot_redis_db "$n")"; done'
+    env = {"PATH": "/usr/bin:/bin", "PROJECT_ROOT": str(lib.parents[4]), "AUTOBOT_REDIS_DB_KNOWLEDGE": "12"}
+    out = subprocess.run([bash, "-c", script], env=env, capture_output=True, text=True, check=True).stdout  # nosec B603
+    expected = {**_types.DECLARED_DATABASES, "knowledge": 12}
+    assert dict(line.split("=") for line in out.split()) == {n: str(v) for n, v in expected.items()}
+
+
+_NO_PROJECT_ROOT_PROBE = """
+import builtins, os, sys
+import autobot_shared.paths as paths
+# ssot_config/ssot_tls resolve PROJECT_ROOT at their own import (outside redis_management, and
+# raising there is theirs to fix); load them first so only redis_management's resolution is probed.
+import autobot_shared.ssot_config  # noqa: F401
+
+def _undeterminable():
+    raise paths.ProjectRootUndeterminable("simulated: no project root")
+
+paths.project_root = _undeterminable
+os.environ.pop("AUTOBOT_BASE_DIR", None)
+APP_YAML = "/app/config/redis-databases.yaml"
+real_exists, real_open = os.path.exists, builtins.open
+
+def _exists(path):
+    path = os.path.normpath(str(path))
+    if path == APP_YAML:
+        return True
+    if path.endswith("autobot-infrastructure/shared/config/redis-databases.yaml"):
+        return False  # only the container copy is present
+    return real_exists(path)
+
+def _open(path, *args, **kwargs):
+    return real_open(sys.argv[1] if os.path.normpath(str(path)) == APP_YAML else path, *args, **kwargs)
+
+os.path.exists, builtins.open = _exists, _open
+import autobot_shared.redis_management  # must not raise
+from autobot_shared.redis_management import types
+print(types.resolve_databases_yaml())
+print(types.DECLARED_DATABASES["knowledge"])
+"""
+
+
+def test_import_survives_an_undeterminable_project_root_and_finds_app_config():
+    """#19232 / #19350 review: path resolution never fails the import, and /app/config is found."""
+    import subprocess  # nosec B404  # fixed argv
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    real_yaml = repo / "autobot-infrastructure/shared/config/redis-databases.yaml"
+    env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(repo)}
+    result = subprocess.run(  # nosec B603
+        [sys.executable, "-c", _NO_PROJECT_ROOT_PROBE, str(real_yaml)],
+        env=env,
+        cwd="/",
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.split() == ["/app/config/redis-databases.yaml", "1"]

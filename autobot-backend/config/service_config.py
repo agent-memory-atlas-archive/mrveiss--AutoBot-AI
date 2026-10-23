@@ -262,14 +262,12 @@ class ServiceConfigMixin:
         return self.get_ollama_endpoint_for_model(model_name)
 
     def get_redis_url(self) -> str:
-        """Get the Redis service URL from configuration (backward compatibility)"""
-        env_url = ssot_config.redis_url
-        if env_url:
-            return env_url
+        """The Redis URL without credentials (backward compatibility).
 
-        host = self.get_nested("memory.redis.host", NetworkConstants.LOCALHOST_IP)
-        port = self.get_nested("memory.redis.port", NetworkConstants.REDIS_PORT)
-        return f"redis://{host}:{port}"
+        #19232: the one endpoint resolver builds it; the ``memory.redis`` fallback
+        here was a second builder, and unreachable once ``redis_url`` always answers.
+        """
+        return ssot_config.redis_url
 
     def get_distributed_services_config(self) -> Dict[str, Any]:
         """Get distributed services configuration from NetworkConstants"""
