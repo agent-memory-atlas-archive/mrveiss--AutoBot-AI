@@ -9,12 +9,12 @@ re-import. One id per (kind, name) makes a repeat import update the fact instead
 """
 
 import asyncio
-import hashlib
 import json
 import uuid
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Dict, List, Tuple
 
+from autobot_shared.content_digest import content_digest
 from autobot_shared.logging_manager import get_logger
 
 logger = get_logger(__name__)
@@ -44,7 +44,7 @@ def system_fact_id(kind: str, name: str) -> str:
 
 def text_digest(text: str) -> str:
     """sha256 of a fact body."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return content_digest(text)
 
 
 def template_digest(item: Dict[str, Any]) -> str:
