@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from api import provider_auth as mod
 from api import provider_auth_flow_state as flow_state
 from api import provider_auth_scope as scope_mod
-from api.provider_auth_scope import caller_is_admin
+from api.provider_auth_scope import provider_caller_is_admin
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
 from autobot_shared.ssot_config import config
@@ -67,7 +67,7 @@ def ctx(monkeypatch, single_use_fake_redis):
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
     app.dependency_overrides[get_current_user] = lambda: who.user
-    app.dependency_overrides[caller_is_admin] = lambda: who.admin
+    app.dependency_overrides[provider_caller_is_admin] = lambda: who.admin
     app.dependency_overrides[get_db_session] = lambda: AsyncMock()
     return TestClient(app), single_use_fake_redis, who, write
 
@@ -208,10 +208,10 @@ async def test_caller_is_admin_maps_only_403_to_false(monkeypatch):
         raise HTTPException(status_code=401, detail="no")
 
     monkeypatch.setattr(scope_mod, "check_admin_permission", _forbidden)
-    assert await scope_mod.caller_is_admin(object()) is False
+    assert await scope_mod.provider_caller_is_admin(object()) is False
     monkeypatch.setattr(scope_mod, "check_admin_permission", _unauthenticated)
     with pytest.raises(HTTPException):
-        await scope_mod.caller_is_admin(object())
+        await scope_mod.provider_caller_is_admin(object())
 
 
 def test_user_scope_without_a_user_id_is_refused():

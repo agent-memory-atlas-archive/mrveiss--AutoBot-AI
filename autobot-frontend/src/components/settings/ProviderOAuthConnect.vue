@@ -31,7 +31,7 @@
             {{ t('settings.providerAuth.expiresAt', { date: formatExpiry(status.expires_at) }) }}
           </span>
         </span>
-        <span v-else-if="status.needs_reauth" class="status-text needs-reauth-text" data-testid="needs-reauth">
+        <span v-else-if="status.needs_reauth" class="text-sm text-autobot-warning" data-testid="needs-reauth">
           {{ t('settings.providerAuth.needsReauth', { provider: providerLabel }) }}
         </span>
         <span v-else class="status-text">{{ t('settings.providerAuth.notConnected') }}</span>
@@ -59,9 +59,9 @@
       <p v-if="tosText" class="tos-notice">{{ tosText }}</p>
 
       <!-- Operator has not configured this provider: guidance only -->
-      <div v-if="!configured" class="not-configured" data-testid="provider-not-configured">
+      <div v-if="!configured" class="text-sm text-autobot-text-secondary" data-testid="provider-not-configured">
         <p>{{ t('settings.providerAuth.notConfigured', { provider: providerLabel }) }}</p>
-        <ul v-if="missingSettings.length" class="missing-settings">
+        <ul v-if="missingSettings.length" class="ml-4 mt-1 text-xs">
           <li v-for="name in missingSettings" :key="name"><code>{{ name }}</code></li>
         </ul>
       </div>
@@ -322,9 +322,5 @@ function formatExpiry(ts: number): string {
 .btn-danger-sm:hover { background: var(--color-error-bg); }
 .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.75rem; }
 
-.not-configured { font-size: 0.85rem; color: var(--text-secondary); }
-.missing-settings { margin: 0.25rem 0 0 1rem; font-size: 0.8rem; }
-
-.needs-reauth-text { color: var(--color-warning); }
 .error-msg { color: var(--color-error); font-size: 0.8rem; }
 </style>

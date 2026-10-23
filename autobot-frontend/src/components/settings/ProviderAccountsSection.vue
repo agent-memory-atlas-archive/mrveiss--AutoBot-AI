@@ -1,11 +1,11 @@
 <template>
-  <div class="provider-accounts">
-    <p v-if="loadError" class="error-msg" role="alert">{{ loadError }}</p>
+  <div class="flex flex-col gap-5">
+    <p v-if="loadError" class="text-sm text-autobot-error" role="alert">{{ loadError }}</p>
     <template v-else>
       <div v-if="isAdmin" class="provider-scope-section" data-testid="provider-section-system">
-        <h4 class="provider-scope-heading">{{ t('settings.providerAuth.systemHeading') }}</h4>
-        <p class="provider-scope-desc">{{ t('settings.providerAuth.systemDesc') }}</p>
-        <div class="provider-auth-list">
+        <h4 class="text-sm font-semibold text-autobot-text-primary">{{ t('settings.providerAuth.systemHeading') }}</h4>
+        <p class="mb-2 text-xs text-autobot-text-muted">{{ t('settings.providerAuth.systemDesc') }}</p>
+        <div class="flex flex-col gap-4">
           <ProviderOAuthConnect
             v-for="p in providers"
             :key="`system-${p.name}`"
@@ -26,9 +26,9 @@
       </div>
 
       <div class="provider-scope-section" data-testid="provider-section-user">
-        <h4 class="provider-scope-heading">{{ t('settings.providerAuth.userHeading') }}</h4>
-        <p class="provider-scope-desc">{{ t('settings.providerAuth.userDesc') }}</p>
-        <div class="provider-auth-list">
+        <h4 class="text-sm font-semibold text-autobot-text-primary">{{ t('settings.providerAuth.userHeading') }}</h4>
+        <p class="mb-2 text-xs text-autobot-text-muted">{{ t('settings.providerAuth.userDesc') }}</p>
+        <div class="flex flex-col gap-4">
           <ProviderOAuthConnect
             v-for="p in providers"
             :key="`user-${p.name}`"
@@ -75,11 +75,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped>
-.provider-accounts { display: flex; flex-direction: column; gap: 1.25rem; }
-.provider-scope-heading { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
-.provider-scope-desc { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
-.provider-auth-list { display: flex; flex-direction: column; gap: 1rem; }
-.error-msg { color: var(--color-error); font-size: 0.85rem; }
-</style>

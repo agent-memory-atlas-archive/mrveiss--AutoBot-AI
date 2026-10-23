@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import provider_auth as mod
-from api.provider_auth_scope import caller_is_admin
+from api.provider_auth_scope import provider_caller_is_admin
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
 from autobot_shared.ssot_config import config
@@ -70,7 +70,7 @@ def ctx(monkeypatch, single_use_fake_redis):
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
     app.dependency_overrides[get_current_user] = lambda: _ADMIN
-    app.dependency_overrides[caller_is_admin] = lambda: True
+    app.dependency_overrides[provider_caller_is_admin] = lambda: True
     app.dependency_overrides[get_db_session] = lambda: AsyncMock()
     return TestClient(app), fake_redis, app
 

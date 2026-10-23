@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from api import provider_auth as mod
 from api import provider_auth_flow_state as flow_state
 from api import provider_auth_revoke as rv
-from api.provider_auth_scope import caller_is_admin
+from api.provider_auth_scope import provider_caller_is_admin
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
 from autobot_shared.ssot_config import config
@@ -82,7 +82,7 @@ def ctx(monkeypatch, single_use_fake_redis):
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
     app.dependency_overrides[get_current_user] = lambda: _USER
-    app.dependency_overrides[caller_is_admin] = lambda: False
+    app.dependency_overrides[provider_caller_is_admin] = lambda: False
     app.dependency_overrides[get_db_session] = lambda: session
     return TestClient(app), single_use_fake_redis, app, session, write
 
@@ -91,7 +91,7 @@ def ctx(monkeypatch, single_use_fake_redis):
 def test_every_endpoint_rejects_an_unauthenticated_caller(ctx, method, path, body):
     tc, fake_redis, app, session, write = ctx
     app.dependency_overrides[get_current_user] = _unauthenticated
-    app.dependency_overrides[caller_is_admin] = _unauthenticated
+    app.dependency_overrides[provider_caller_is_admin] = _unauthenticated
     resp = tc.request(method.upper(), path, json=body)
     assert resp.status_code == 401
     assert not fake_redis.store

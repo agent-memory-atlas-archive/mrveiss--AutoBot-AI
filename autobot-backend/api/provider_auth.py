@@ -37,9 +37,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api import provider_auth_flow_state as flow_state
 from api.provider_auth_poll_limit import device_poll_key, load_and_check_poll_state, record_poll
 from api.provider_auth_scope import (
-    caller_is_admin,
     current_user_id,
-    resolve_scope,
+    provider_caller_is_admin,
+    resolve_provider_auth_scope,
     subject_for,
     validate_redirect_uri,
 )
@@ -277,7 +277,7 @@ def _flow_context(user: Any, provider_name: str, scope: str) -> dict:
 def _require_completion_allowed(ctx: dict, user: Any, is_admin: bool) -> None:
     """The completing caller must be the initiator; a system flow also still needs admin."""
     flow_state.require_initiator(ctx, _current_user_id(user))
-    resolve_scope(ctx.get("scope"), is_admin)
+    resolve_provider_auth_scope(ctx.get("scope"), is_admin)
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +300,7 @@ async def list_providers(user: Any = Depends(get_current_user)) -> List[Provider
 async def oauth_initiate(
     req: OAuthInitiateRequest,
     user: Any = Depends(get_current_user),
-    is_admin: bool = Depends(caller_is_admin),
+    is_admin: bool = Depends(provider_caller_is_admin),
 ) -> OAuthAuthorizeResponse:
     """Begin a provider auth-code + PKCE flow; return the authorize URL + state.
 
@@ -310,7 +310,7 @@ async def oauth_initiate(
     """
     from knowledge.connectors.oauth_flow import build_authorize_url, generate_pkce, generate_state  # noqa: PLC0415
 
-    ctx = _flow_context(user, req.provider_name, resolve_scope(req.scope, is_admin))
+    ctx = _flow_context(user, req.provider_name, resolve_provider_auth_scope(req.scope, is_admin))
     client = _resolve_client(req.provider_name, FLOW_REDIRECT)
     validate_redirect_uri(req.redirect_uri)
     redis = _main_redis()
@@ -349,7 +349,7 @@ async def oauth_callback(
     req: OAuthCallbackRequest,
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
-    is_admin: bool = Depends(caller_is_admin),
+    is_admin: bool = Depends(provider_caller_is_admin),
 ) -> OAuthInitiateResponse:
     """Exchange an OAuth authorization code for tokens and persist to the vault.
 
@@ -400,14 +400,14 @@ def _device_instructions(data: dict) -> DeviceInitiateResponse:
 async def device_initiate(
     req: DeviceInitiateRequest,
     user: Any = Depends(get_current_user),
-    is_admin: bool = Depends(caller_is_admin),
+    is_admin: bool = Depends(provider_caller_is_admin),
 ) -> DeviceInitiateResponse:
     """Start a device-code flow at the registry's device endpoint (RFC 8628).
 
     Returns the ``user_code`` + ``verification_uri``; the context (caller, scope,
     subject) is held server-side so /device/poll stores to the right place.
     """
-    ctx = _flow_context(user, req.provider_name, resolve_scope(req.scope, is_admin))
+    ctx = _flow_context(user, req.provider_name, resolve_provider_auth_scope(req.scope, is_admin))
     client = _resolve_client(req.provider_name, FLOW_DEVICE)
     redis = _main_redis()
     payload = {**_client_auth(client), "scope": " ".join(client.provider.default_scopes)}
@@ -423,7 +423,7 @@ async def device_poll(
     req: DevicePollRequest,
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
-    is_admin: bool = Depends(caller_is_admin),
+    is_admin: bool = Depends(provider_caller_is_admin),
 ) -> OAuthInitiateResponse:
     """Poll the token endpoint for a device-code grant and persist on approval.
 
@@ -467,7 +467,7 @@ async def provider_auth_status(
     scope: AuthScope = Query(default="user"),
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
-    is_admin: bool = Depends(caller_is_admin),
+    is_admin: bool = Depends(provider_caller_is_admin),
 ) -> ProviderAuthStatus:
     """Return the caller's connection status for a provider at *scope* (default: the caller's own).
 
@@ -477,7 +477,7 @@ async def provider_auth_status(
     from api.provider_auth_revoke import refuses_shared_subject  # noqa: PLC0415
 
     _require_known_provider(provider_name)
-    effective = resolve_scope(scope, is_admin)
+    effective = resolve_provider_auth_scope(scope, is_admin)
     subject = subject_for(effective, user)
     shared = refuses_shared_subject(effective, subject)  # an org-less admin's system sign-in IS the shared token
     token_data = await _vault_read_dual(
@@ -504,7 +504,7 @@ async def revoke_provider_auth(
     scope: AuthScope = Query(...),
     session: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user),
-    is_admin: bool = Depends(caller_is_admin),
+    is_admin: bool = Depends(provider_caller_is_admin),
 ) -> ProviderRevokeResult:
     """Disconnect the caller's provider sign-in at *scope* (system needs admin).
 
@@ -516,7 +516,7 @@ async def revoke_provider_auth(
     from api.provider_auth_revoke import disconnect  # noqa: PLC0415
 
     _require_known_provider(provider_name)
-    return await disconnect(session, user, provider_name, resolve_scope(scope, is_admin))
+    return await disconnect(session, user, provider_name, resolve_provider_auth_scope(scope, is_admin))
 
 
 #: The existing RBAC gate, superadmin only: the shared token serves every org (owner decision, #19241).

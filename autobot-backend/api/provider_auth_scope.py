@@ -65,7 +65,7 @@ def current_org_id(user: Any) -> str | None:
     return str(org) if org is not None else None
 
 
-async def caller_is_admin(request: Request) -> bool:
+async def provider_caller_is_admin(request: Request) -> bool:
     """FastAPI dependency: True for an admin, False for an authenticated non-admin.
 
     Delegates to the canonical ``check_admin_permission``; only its 403 becomes
@@ -79,7 +79,7 @@ async def caller_is_admin(request: Request) -> bool:
         raise
 
 
-def resolve_scope(requested: str | None, is_admin: bool) -> str:
+def resolve_provider_auth_scope(requested: str | None, is_admin: bool) -> str:
     """The effective scope: *requested*, else system for an admin and user otherwise. 403 on a non-admin system."""
     scope = requested or (SCOPE_SYSTEM if is_admin else SCOPE_USER)
     if scope == SCOPE_SYSTEM and not is_admin:

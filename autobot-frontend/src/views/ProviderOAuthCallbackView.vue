@@ -1,5 +1,5 @@
 <template>
-  <div class="provider-oauth-callback" role="status" aria-live="polite">
+  <div class="p-8 text-autobot-text-secondary" role="status" aria-live="polite">
     <p>{{ t('settings.providerAuth.callback.finishing') }}</p>
   </div>
 </template>
@@ -58,7 +58,3 @@ async function finish(): Promise<void> {
 
 onMounted(finish)
 </script>
-
-<style scoped>
-.provider-oauth-callback { padding: 2rem; color: var(--text-secondary); }
-</style>

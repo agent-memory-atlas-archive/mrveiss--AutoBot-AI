@@ -1,8 +1,8 @@
 <template>
-  <div class="shared-token-revoke" data-testid="shared-token-revoke">
-    <h5 class="shared-heading">{{ t('settings.providerAuth.shared.heading') }}</h5>
-    <p class="shared-desc">{{ t('settings.providerAuth.shared.description') }}</p>
-    <div class="shared-actions">
+  <div class="flex flex-col gap-2 border-t border-autobot-border pt-3" data-testid="shared-token-revoke">
+    <h5 class="text-sm font-semibold text-autobot-text-primary">{{ t('settings.providerAuth.shared.heading') }}</h5>
+    <p class="text-xs text-autobot-text-muted">{{ t('settings.providerAuth.shared.description') }}</p>
+    <div class="flex flex-wrap gap-2">
       <BaseButton
         v-for="p in providers"
         :key="p.name"
@@ -15,7 +15,7 @@
         {{ t('settings.providerAuth.shared.revokeButton', { provider: p.label }) }}
       </BaseButton>
     </div>
-    <p v-if="message" :class="['shared-result', { warning: isWarning }]" role="status">{{ message }}</p>
+    <p v-if="message" :class="['text-xs', isWarning ? 'text-autobot-error' : 'text-autobot-text-secondary']" role="status">{{ message }}</p>
   </div>
 </template>
 
@@ -33,12 +33,3 @@ defineProps<{ providers: ProviderInfo[] }>()
 const { t } = useI18n()
 const { busy, message, isWarning, revokeShared } = useSharedTokenRevoke()
 </script>
-
-<style scoped>
-.shared-token-revoke { border-top: 1px solid var(--border-default); padding-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.shared-heading { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
-.shared-desc { font-size: 0.8rem; color: var(--text-muted); }
-.shared-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.shared-result { font-size: 0.8rem; color: var(--text-secondary); }
-.shared-result.warning { color: var(--color-error); }
-</style>
