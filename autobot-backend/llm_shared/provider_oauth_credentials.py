@@ -116,20 +116,29 @@ def _usable(token_data: dict | None) -> bool:
 
 
 async def _mark_needs_reauth(session: Any, provider_name: str, subject: str) -> None:
-    """Record ``invalid_grant`` on the stored token so every worker and /status see it (#19241)."""
-    token_data = await _read(session, provider_name, subject)
-    if token_data is None:
-        return
-    created_by = token_data.get("created_by", "00000000-0000-0000-0000-000000000000")
-    await _vault_write(
-        session,
-        provider_name=provider_name,
-        subject=subject,
-        owner_vault_str=_SYSTEM_VAULT,
-        token_data={**token_data, NEEDS_REAUTH_KEY: True},
-        created_by_id=created_by,
-    )
-    await session.commit()
+    """Record ``invalid_grant`` on the stored token so every worker and /status see it (#19241).
+
+    Best effort: a vault failure here is logged and rolled back, and resolution
+    falls through to the next source (the process backoff still skips this one).
+    """
+    try:
+        token_data = await _read(session, provider_name, subject)
+        if token_data is None:
+            return
+        created_by = token_data.get("created_by", "00000000-0000-0000-0000-000000000000")
+        flagged = {**token_data, NEEDS_REAUTH_KEY: True}
+        await _vault_write(
+            session,
+            provider_name=provider_name,
+            subject=subject,
+            owner_vault_str=_SYSTEM_VAULT,
+            token_data=flagged,
+            created_by_id=created_by,
+        )
+        await session.commit()
+    except Exception as exc:  # the vault/DB write failed: keep resolving instead of failing the LLM call
+        logger.warning("%s: could not record needs-re-sign-in (%s)", provider_name, type(exc).__name__)
+        await session.rollback()
 
 
 def _refresher(session: Any, auth: OAuthAuth, provider_name: str, subject: str):

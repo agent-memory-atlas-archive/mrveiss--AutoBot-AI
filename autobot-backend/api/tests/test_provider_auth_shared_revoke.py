@@ -153,3 +153,13 @@ def test_no_revoke_url_is_audited_as_not_configured(ctx, monkeypatch):
     monkeypatch.setattr(rv, "build_provider", lambda name: dataclasses.replace(_PROVIDER, revocation_url=""))
     assert tc.delete("/api/llm-auth/openai?scope=user").status_code == 200
     assert _metadata(audit)["provider_revoke"] == "not_configured"
+
+
+def test_a_failed_audit_write_is_warned_about(ctx, monkeypatch):
+    """Review low: emit_security() returning False must not pass silently."""
+    tc, _, _, audit, _ = ctx
+    audit.return_value = False
+    log = MagicMock()
+    monkeypatch.setattr(rv, "logger", log)
+    assert tc.delete("/api/llm-auth/openai?scope=user").status_code == 200
+    assert any("could not be written" in str(c.args[0]) for c in log.warning.call_args_list)

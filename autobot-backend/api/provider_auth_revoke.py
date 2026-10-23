@@ -108,7 +108,7 @@ def _provider_outcome(revoked: bool | None) -> str:
 
 def audit_disconnect(user: Any, provider_name: str, scope: str, subject: str, local: str, revoked: bool | None) -> None:
     """One SECURITY audit event per disconnect/revoke -- never a token, never a subject id."""
-    emit_security(
+    written = emit_security(
         AuditAction.PROVIDER_SIGNIN_REVOKE,
         current_user_id(user),
         resource_type="llm_provider_signin",
@@ -122,6 +122,9 @@ def audit_disconnect(user: Any, provider_name: str, scope: str, subject: str, lo
         },
         outcome="success" if revoked is not False else "partial",
     )
+    if not written:
+        # emit() schedules the write onto the canonical trail; False means nothing could be scheduled.
+        logger.warning("Audit event for the %s %s disconnect could not be written", provider_name, scope)
 
 
 async def _read_grant(session: Any, provider_name: str, subject: str) -> list[dict]:

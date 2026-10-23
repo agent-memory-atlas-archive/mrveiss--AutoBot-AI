@@ -155,6 +155,21 @@ async def test_invalid_grant_flags_the_token_for_a_new_sign_in(world, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_a_failed_needs_reauth_write_falls_through_instead_of_raising(world, monkeypatch):
+    """Review low: recording invalid_grant is best effort; the call still resolves the next source."""
+    monkeypatch.setattr(
+        "knowledge.connectors.oauth_flow.refresh_access_token",
+        AsyncMock(side_effect=TokenEndpointError(400, {"error": "invalid_grant"})),
+    )
+    monkeypatch.setattr(creds, "_vault_write", AsyncMock(side_effect=RuntimeError("vault down")))
+    session = _session()
+    session.rollback = AsyncMock()
+    assert await creds.first_usable_token(session, "openai", "u-1", "") == "system-at"
+    session.rollback.assert_awaited_once()
+    assert refresh_mod.is_backed_off("openai", _USER)
+
+
+@pytest.mark.asyncio
 async def test_refresh_runs_the_public_egress_check(world, monkeypatch):
     from autobot_shared.http_egress_guard import EgressBlockedError
 
