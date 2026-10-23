@@ -88,7 +88,9 @@ def test_the_ansible_generator_asks_for_the_right_byte_count() -> None:
     different N here means every provisioned key fails to decode to the 32
     bytes `load_root_key` requires.
     """
-    tasks = (REPO_ROOT / "autobot-slm-backend/ansible/roles/slm_manager/tasks/main.yml").read_text(encoding="utf-8")
+    # #19051: the back-fill generator moved to secrets_root_key.yml; read both.
+    role_tasks = REPO_ROOT / "autobot-slm-backend/ansible/roles/slm_manager/tasks"
+    tasks = "\n".join((role_tasks / f).read_text(encoding="utf-8") for f in ("main.yml", "secrets_root_key.yml"))
     assert ROOT_KEY in tasks or "autobot_secrets_root_key" in tasks
 
     generators = re.findall(r"autobot_secrets_root_key.*?openssl rand -base64 (\d+)", tasks, re.DOTALL) + re.findall(
@@ -112,10 +114,12 @@ def test_every_root_key_jinja_expression_compiles() -> None:
     env = jinja2.Environment()  # nosec B701  # compiling only, never rendering untrusted input
     # Filters/lookups Ansible injects that core Jinja does not ship.
     env.filters["b64encode"] = lambda v: v
+    env.filters["regex_replace"] = lambda v, *a: v  # #19051: the back-fill strips quotes from a read-back key
     env.globals["lookup"] = lambda *a, **k: "x"
 
     task_files = [
         REPO_ROOT / "autobot-slm-backend/ansible/roles/slm_manager/tasks/main.yml",
+        REPO_ROOT / "autobot-slm-backend/ansible/roles/slm_manager/tasks/secrets_root_key.yml",
         REPO_ROOT / "autobot-slm-backend/ansible/roles/backend/tasks/main.yml",
     ]
     checked = 0
