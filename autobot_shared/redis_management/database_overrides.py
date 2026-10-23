@@ -48,26 +48,24 @@ def env_var_name(database: str) -> str:
     return f"{ENV_PREFIX}{database.upper()}"
 
 
-def _dotenv_values() -> Dict[str, str]:
-    """The project-root ``.env``, read the way ``ssot_config`` reads it (pydantic-settings' parser)."""
-    try:
-        from dotenv import dotenv_values
+def _env_file_values() -> Dict[str, str]:
+    """The project-root ``.env`` (the file ``ssot_config`` reads), via the stdlib-only reader.
 
-        from autobot_shared.paths import ProjectRootUndeterminable, project_root
-    except ImportError:
-        return {}
+    Not python-dotenv: the SLM agent imports this module and its venv does not ship it (#14278).
+    """
+    from autobot_shared.env_file import parse_env_file
+    from autobot_shared.paths import ProjectRootUndeterminable, project_root
+
     try:
         env_file = project_root() / ".env"
     except ProjectRootUndeterminable:
         return {}
-    if not env_file.is_file():
-        return {}
-    return {k: v for k, v in dotenv_values(env_file, encoding="utf-8").items() if v is not None}
+    return parse_env_file(env_file) if env_file.is_file() else {}
 
 
 def override_source() -> Dict[str, str]:
     """``.env`` values overlaid by the process environment (the process wins, as in pydantic-settings)."""
-    return {**_dotenv_values(), **os.environ}
+    return {**_env_file_values(), **os.environ}
 
 
 def _requested(base: Mapping[str, int], source: Mapping[str, str]) -> Dict[str, str]:
