@@ -72,6 +72,9 @@ def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "_vault_write", write)
     monkeypatch.setattr(mod, "_vault_read", AsyncMock(return_value=None))  # DELETE reads the grant it may revoke
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
+    # The code exchange's public-egress check resolves DNS; the fake token host has none. That the
+    # check runs and blocks is proved in test_provider_auth_hardening.py (#19241).
+    monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "_post_provider", AsyncMock(return_value={"device_code": "dc", "user_code": "UC"}))
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")

@@ -40,6 +40,9 @@ def hf_configured(monkeypatch):
 def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "get_redis_client", lambda database="main": single_use_fake_redis)
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
+    # The code exchange's public-egress check resolves DNS; the fake token host has none. That the
+    # check runs and blocks is proved in test_provider_auth_hardening.py (#19241).
+    monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
     app.dependency_overrides[get_current_user] = lambda: types.SimpleNamespace(user_id="admin-1")

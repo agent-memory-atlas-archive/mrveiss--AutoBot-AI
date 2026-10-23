@@ -63,6 +63,9 @@ def ctx(monkeypatch, single_use_fake_redis):
     # #11497 finding #2: the outbound POST is now IP-pinned. Stub the resolve so the
     # test never does real DNS on the fake token host.
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
+    # The code exchange's public-egress check resolves DNS; the fake token host has none. That the
+    # check runs and blocks is proved in test_provider_auth_hardening.py (#19241).
+    monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))
 
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")

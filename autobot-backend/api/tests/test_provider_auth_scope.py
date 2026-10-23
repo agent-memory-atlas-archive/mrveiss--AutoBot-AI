@@ -60,6 +60,9 @@ def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "resolve_client", lambda name, flow=None: _CLIENT)
     monkeypatch.setattr(mod, "_vault_write", write)
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
+    # The code exchange's public-egress check resolves DNS; the fake token host has none. That the
+    # check runs and blocks is proved in test_provider_auth_hardening.py (#19241).
+    monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))
     monkeypatch.setattr(oauth_flow, "exchange_code", AsyncMock(return_value={"access_token": "at", "expires_in": 60}))
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
