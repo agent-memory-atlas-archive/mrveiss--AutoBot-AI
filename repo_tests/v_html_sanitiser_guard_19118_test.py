@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 REPO = repo_root()
 ROOTS = ("autobot-frontend/src", "autobot-slm-frontend/src", "libs/autobot-ui/src", "libs/autobot-ui/index.ts")
@@ -83,17 +84,37 @@ _IDENT = re.compile(r"^\s*!?\s*([A-Za-z_$][\w$]*)")
 _LITERAL_RHS = re.compile(r"""^\s*(?:['"`]|\d|null\b|true\b|false\b|undefined\b|\[\s*\]|ref\b)""")
 
 
-def _source_files() -> list[Path]:
+def _discover(repo: Path) -> list[Path]:
+    """Every non-test ``.vue`` / ``.ts`` under ``ROOTS``; empty on an empty tree, never a raise."""
     found: set[Path] = set()
     for root in ROOTS:
-        base = REPO / root
+        base = repo / root
         paths = [base] if base.is_file() else [*base.rglob("*.vue"), *base.rglob("*.ts")]
         for p in paths:
-            rel = p.relative_to(REPO).as_posix()
+            rel = p.relative_to(repo).as_posix()
             if re.search(r"\.(test|spec)\.ts$|/__tests__/|/test/|\.d\.ts$", rel):
                 continue
             found.add(p)
     return sorted(found)
+
+
+#: Train 84 (#19118): pinned mid-window on the population this sweep discovers, so an empty or
+#: truncated enumeration fails rather than reporting the same green as a clean tree.
+REACH = declare(
+    "v-html-sanitiser-sinks",
+    discover=_discover,
+    floor=1296,  # mid-window [1221, 1371] on a population of 1371
+    growth=150,
+    skips=0,
+    what="non-test .vue/.ts source files",
+    roots=ROOTS,
+)
+
+
+def _source_files() -> list[Path]:
+    files = REACH.examined(REPO)
+    REACH.completed(files)
+    return list(files)
 
 
 def _live_lines(text: str) -> list[str]:
