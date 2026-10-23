@@ -44,6 +44,10 @@ from knowledge.where_combine import and_where
 
 logger = get_logger(__name__)
 
+#: Actors recorded by the backup and export paths, which must carry every fact (#19163).
+BACKUP_AUDIT_ACTOR = "system:backup"
+EXPORT_AUDIT_ACTOR = "system:export"
+
 #: Audit operation written by every read that opts out of the quarantine (#19163).
 QUARANTINE_READ_OPERATION = "knowledge.quarantine.read"
 
@@ -150,3 +154,21 @@ async def gate_response(response: Any, include_unservable: bool, include_quarant
     if include_quarantined:
         await audit_quarantine_read(audit_actor, "kb.search", quarantined_ids(response_hits(response)))
     return servable_response(response, keep_predicate(include_unservable, include_quarantined))
+
+
+async def read_every_fact(kb: Any, actor: str, **kwargs: Any) -> list:
+    """Every fact, quarantined ones included, through the audited opt-out (#19163).
+
+    For backup and export, which must carry the ``collection`` marker of research facts so a
+    restore puts them back quarantined; dropping them would lose the research data.
+    """
+    return await kb.get_all_facts(include_quarantined=True, audit_actor=actor, **kwargs)
+
+
+def servable_unquarantined(results: Any) -> Any:
+    """The serving check plus the quarantine check, for readers that bypass ``KB.search`` (#19163).
+
+    The NPU search paths read the vector index or a FAISS/Chroma collection directly; they apply this
+    in place of bare ``servable_response`` so a quarantined fact never reaches their callers either.
+    """
+    return servable_response(results, keep_predicate(False, False))

@@ -218,7 +218,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/judges/security_risk_judge.py": 842,
     "autobot-backend/knowledge/adapters/okf_adapter.py": 770,
     "autobot-backend/knowledge/base.py": 709,
-    "autobot-backend/knowledge/bulk.py": 2013,
+    "autobot-backend/knowledge/bulk.py": 1984,
     "autobot-backend/knowledge/categories.py": 965,
     "autobot-backend/knowledge/collections.py": 728,
     "autobot-backend/knowledge/connectors/base.py": 663,
