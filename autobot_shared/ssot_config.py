@@ -50,6 +50,7 @@ from urllib.parse import quote
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from autobot_shared import deployment_profile as _profile  # #19315/#19316: environment/mode/debug home
 from autobot_shared.env_utils import env_int_clamped
 from autobot_shared.paths import project_root
 from autobot_shared.secret_redaction import RedactedReprMixin
@@ -1599,7 +1600,6 @@ class MiscConfig(RedactedSettings):
         default="",
         validation_alias=AliasChoices("AUTOBOT_ENCRYPTION_KEY", "ENCRYPTION_KEY"),
     )
-    env: str = Field(default="development", alias="AUTOBOT_ENV")  # #13264 batch 3
     error_resolved_ttl_seconds: str = Field(
         default="",
         alias="AUTOBOT_ERROR_RESOLVED_TTL_SECONDS",
@@ -2368,9 +2368,9 @@ class AutoBotConfig(RedactedSettings):
     cost_model: CostModelConfig = Field(default_factory=CostModelConfig)  # Issue #10720
 
     # Top-level settings
-    deployment_mode: str = Field(default="distributed", alias="AUTOBOT_DEPLOYMENT_MODE")
-    environment: str = Field(default="development", alias="AUTOBOT_ENVIRONMENT")
-    debug: bool = Field(default=False, alias="AUTOBOT_DEBUG")
+    deployment_mode: str = Field(default=_profile.DEPLOYMENT_MODE_DEFAULT, alias="AUTOBOT_DEPLOYMENT_MODE")
+    environment: str = Field(default=_profile.ENVIRONMENT_DEFAULT, validation_alias=AliasChoices(*_profile.ENV_NAMES))
+    debug: bool = Field(default=_profile.DEBUG_DEFAULT, alias="AUTOBOT_DEBUG")
     log_level: str = Field(default="INFO", alias="AUTOBOT_LOG_LEVEL")
 
     # GH#8995: Data-hygiene TTL settings (retention OFF by default — 0 means disabled)

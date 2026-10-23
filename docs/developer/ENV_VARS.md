@@ -139,8 +139,8 @@ appears outside the known overlays.
 | `AUTOBOT_DUPLICATE_ORPHAN_LEASE_SECONDS` | backend | float | `300.0` | How long an abandoned duplicate scan may keep the single-flight lock after it was told to stop. Past this the lock is treated as leaked and replaced, so a scan thread that never exits cannot decline every later call (#18013). |
 | `AUTOBOT_EGRESS_INTERNAL_ORIGINS_TTL_S` | security | int | `60` | Seconds the egress policy reuses the origins returned by registered internal-origin providers (e.g. SLM-managed nodes) before asking them again (#17576). Static origins from the SSOT are never cached. A provider that raises is logged and skipped. |
 | `AUTOBOT_EGRESS_PROVIDER_TIMEOUT_S` | security | int | `5` | Seconds one internal-origin provider may run before it is abandoned for this refresh (#17576). A provider that times out or raises is logged and skipped; the static SSOT origins still apply. |
-| `AUTOBOT_ENV` | system | str | `'production'` | Short environment label used in logs and traces (e.g. 'development', 'production'). |
-| `AUTOBOT_ENVIRONMENT` | system | str | `'development'` | Full environment name for OTel deployment.environment attribute. Prefer AUTOBOT_ENV for new code. |
+| `AUTOBOT_ENV` | system | str | `'production'` | Legacy spelling of AUTOBOT_ENVIRONMENT, read only when that is unset (#19315). |
+| `AUTOBOT_ENVIRONMENT` | system | str | `'production'` | Deployment environment (production/development/test); profiles in deployment_profile.py. |
 | `AUTOBOT_ESSENTIAL_STORY_RECENCY_HALFLIFE_SECONDS` | memory | float | `2592000.0` | Half-life in seconds of the recency boost on a recalled fact (memory/essential_story.py). Default 30 days. |
 | `AUTOBOT_ESSENTIAL_STORY_REINFORCE` | memory | bool | true | Rank always-loaded facts by usage-aware effective score instead of static quality_score alone; off reproduces the pre-A2 ordering (memory/essential_story.py). |
 | `AUTOBOT_ESSENTIAL_STORY_REINFORCE_WEIGHT` | memory | float | `0.3` | Weight of recall frequency and recency in the effective fact score; 0 reproduces the static quality_score ordering (memory/essential_story.py). |

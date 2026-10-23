@@ -202,9 +202,9 @@ class ElevationWrapper:
         - CI env var is set (headless runner with NOPASSWD service account)
         - AUTOBOT_ALLOW_UNAPPROVED_SUDO=true   (explicit operator opt-in)
 
-        The default AUTOBOT_ENVIRONMENT is "development", so new deployments
-        that forget to configure an elevation_client are still safe — they only
-        break when AUTOBOT_ENVIRONMENT=production is set without a client.
+        An unset AUTOBOT_ENVIRONMENT resolves to "production" (#19315,
+        ``autobot_shared.deployment_profile``), so a host that configures
+        neither a client nor an environment refuses the fallback.
         Issue #10799.
         """
         if config.environment != "production":
