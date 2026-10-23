@@ -53,7 +53,7 @@ import type { IconName } from '@/components/ui/Icon.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import DOMPurify from 'dompurify'
+import { sanitizeHtml } from '@/utils/sanitize'
 import type { HLJSApi } from 'highlight.js'
 
 const { t } = useI18n()
@@ -166,16 +166,10 @@ const highlightCode = async () => {
     }
 
     // Sanitize the highlighted HTML to prevent XSS
-    highlightedCode.value = DOMPurify.sanitize(highlighted, {
-      ALLOWED_TAGS: ['span', 'br'],
-      ALLOWED_ATTR: ['class']
-    })
+    highlightedCode.value = sanitizeHtml(highlighted, 'code')
   } catch {
     // Fallback to plain text if highlighting fails
-    highlightedCode.value = DOMPurify.sanitize(rawCode.value, {
-      ALLOWED_TAGS: [],
-      ALLOWED_ATTR: []
-    })
+    highlightedCode.value = sanitizeHtml(rawCode.value, 'plain')
   }
 }
 

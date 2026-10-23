@@ -12,69 +12,60 @@
 import DOMPurify from 'dompurify'
 import type { Config as DOMPurifyConfig } from 'dompurify'
 
+/** Named allow-lists. Call sites choose a preset; they never supply a config. */
+export type SanitizePreset = 'chat' | 'knowledge' | 'code' | 'plain'
+
+const FORMAT_TAGS = ['br', 'strong', 'b', 'em', 'i', 'code', 'pre', 'span', 'p', 'ul', 'ol', 'li']
+
+const PRESETS: Readonly<Record<SanitizePreset, DOMPurifyConfig>> = Object.freeze({
+  // Chat/message content: formatting plus links.
+  chat: {
+    ALLOWED_TAGS: [...FORMAT_TAGS, 'a', 'div'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+  },
+  // Knowledge/document content: formatting only, no links.
+  knowledge: { ALLOWED_TAGS: FORMAT_TAGS, ALLOWED_ATTR: ['class'] },
+  // Syntax-highlighter output: spans carrying token classes.
+  code: { ALLOWED_TAGS: ['span', 'br'], ALLOWED_ATTR: ['class'] },
+  // Text only: every tag and attribute removed.
+  plain: { ALLOWED_TAGS: [], ALLOWED_ATTR: [] },
+})
+
+let hooksRegistered = false
+
 /**
- * Default DOMPurify configuration for chat/message content.
- * Allows safe formatting tags while stripping scripts and event handlers.
+ * Registered once for the process: any link that opens a new browsing context
+ * gets rel="noopener noreferrer" so the target page cannot reach window.opener.
  */
-const CHAT_SANITIZE_CONFIG: DOMPurifyConfig = {
-  ALLOWED_TAGS: [
-    'br',
-    'strong',
-    'em',
-    'code',
-    'pre',
-    'a',
-    'span',
-    'div',
-    'p',
-  ],
-  ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+function registerHooks(): void {
+  if (hooksRegistered) return
+  hooksRegistered = true
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A' && node.hasAttribute('target')) {
+      node.setAttribute('rel', 'noopener noreferrer')
+    }
+  })
 }
 
 /**
- * Strict DOMPurify configuration for knowledge/document content.
- * Allows basic formatting only.
- */
-const KNOWLEDGE_SANITIZE_CONFIG: DOMPurifyConfig = {
-  ALLOWED_TAGS: ['br', 'strong', 'em', 'code', 'pre', 'span', 'p'],
-  ALLOWED_ATTR: ['class'],
-}
-
-/**
- * Sanitize HTML content intended for chat messages.
- * Permits formatting tags (br, strong, em, code, pre, a, span)
- * and safe attributes (href, target, rel, class).
+ * Sanitize HTML with a named preset (default: chat). Safe for v-html.
  *
  * @param html - Raw HTML string to sanitize
- * @returns Sanitized HTML string safe for v-html rendering
+ * @param preset - Named allow-list; there is deliberately no way to pass a config
  */
+export function sanitizeHtml(html: string, preset: SanitizePreset = 'chat'): string {
+  registerHooks()
+  return DOMPurify.sanitize(html, PRESETS[preset]) as string
+}
+
+/** Sanitize chat message HTML (formatting + links). */
 export function sanitizeChatHtml(html: string): string {
-  return DOMPurify.sanitize(html, CHAT_SANITIZE_CONFIG) as string
+  return sanitizeHtml(html, 'chat')
 }
 
-/**
- * Sanitize HTML content intended for knowledge entries.
- * More restrictive than chat -- no links allowed.
- *
- * @param html - Raw HTML string to sanitize
- * @returns Sanitized HTML string safe for v-html rendering
- */
+/** Sanitize knowledge entry HTML (formatting only, no links). */
 export function sanitizeKnowledgeHtml(html: string): string {
-  return DOMPurify.sanitize(html, KNOWLEDGE_SANITIZE_CONFIG) as string
-}
-
-/**
- * Sanitize HTML content with a custom DOMPurify configuration.
- *
- * @param html - Raw HTML string to sanitize
- * @param config - DOMPurify configuration object
- * @returns Sanitized HTML string safe for v-html rendering
- */
-export function sanitizeHtml(
-  html: string,
-  config?: DOMPurifyConfig,
-): string {
-  return DOMPurify.sanitize(html, config ?? CHAT_SANITIZE_CONFIG) as string
+  return sanitizeHtml(html, 'knowledge')
 }
 
 /**

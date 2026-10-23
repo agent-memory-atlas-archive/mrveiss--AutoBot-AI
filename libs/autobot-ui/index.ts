@@ -128,6 +128,7 @@ export { log, createLogger } from './src/utils/logger'
 
 // One DOMPurify-backed sanitiser for every v-html binding in both apps (#2847, #19118).
 export { sanitizeChatHtml, sanitizeKnowledgeHtml, sanitizeHtml, escapeHtml } from './src/utils/sanitize'
+export type { SanitizePreset } from './src/utils/sanitize'
 export type { LogLevel } from './src/utils/logger'
 
 // The one exponential-backoff formula for reconnects and retries (#15402).
