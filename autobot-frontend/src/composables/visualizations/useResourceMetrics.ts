@@ -48,7 +48,7 @@ export function useResourceMetrics(machine: () => string) {
       case '6h':
         return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
       case '24h':
-        return date.toLocaleTimeString(undefined, { hour: '2-digit' }) + 'h'
+        return date.toLocaleTimeString(undefined, { hour: '2-digit' })
       case '7d':
         return (
           date.toLocaleDateString(undefined, { weekday: 'short' }) +
@@ -86,7 +86,7 @@ export function useResourceMetrics(machine: () => string) {
         processData(data)
       } catch (err) {
         logger.error('Failed to fetch heatmap data:', err)
-        error.value = err instanceof Error ? err.message : 'Failed to load data'
+        error.value = err instanceof Error ? err.message : String(err) // shown under the translated heading
         heatmapData.value = [] // the error state shows; no invented values behind it (#19270)
       }
     })
