@@ -35,10 +35,11 @@ def test_play_1_runs_the_back_fill_before_the_backend_play() -> None:
 
 def test_the_role_and_the_updater_share_one_back_fill() -> None:
     assert "include_tasks: secrets_root_key.yml" in _read(ROLE_MAIN)
-    copies = [
-        p for p in ANSIBLE.rglob("*.yml") if 'regexp: "^AUTOBOT_SECRETS_ROOT_KEY="' in p.read_text(encoding="utf-8")
-    ]
-    assert copies == [BACKFILL], f"the back-fill must exist exactly once, in {BACKFILL.name}; found {copies}"
+    # The files a second copy would land in: the role's own flow, the updater, the backend role.
+    # A named list, not a tree glob, so this guard declares no uncovered read (#15900).
+    marker = 'regexp: "^AUTOBOT_SECRETS_ROOT_KEY="'
+    copies = [p.name for p in (ROLE_MAIN, UPDATER, BACKEND_TASKS, BACKFILL) if marker in _read(p)]
+    assert copies == [BACKFILL.name], f"the back-fill must exist exactly once, in {BACKFILL.name}; found {copies}"
 
 
 def test_the_back_fill_only_adds() -> None:
