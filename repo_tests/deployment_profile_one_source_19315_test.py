@@ -304,3 +304,56 @@ def test_a_writer_off_its_profile_or_undeclared_is_flagged(path: str, text: str)
 
 def test_a_templated_value_is_not_a_literal_write() -> None:
     assert writes_in("x.sh", 'AUTOBOT_ENVIRONMENT="${AUTOBOT_ENVIRONMENT:-$(detect)}"\n') == []
+
+
+# --- one normalisation (#19315 security review) -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({"AUTOBOT_ENVIRONMENT": ""}, "production"),
+        ({"AUTOBOT_ENVIRONMENT": "   "}, "production"),
+        ({"AUTOBOT_ENVIRONMENT": " Development "}, "development"),
+        ({"AUTOBOT_ENVIRONMENT": "PRODUCTION"}, "production"),
+        ({"AUTOBOT_ENVIRONMENT": "", "AUTOBOT_ENV": "Test"}, "test"),
+    ],
+)
+def test_ssot_and_the_home_normalise_alike(environ: dict, expected: str) -> None:
+    from autobot_shared.ssot_config import AutoBotConfig
+
+    with patch.dict(os.environ, environ, clear=True):
+        assert AutoBotConfig(_env_file=None).environment == expected
+    assert profile.environment_name(environ) == expected
+
+
+@pytest.mark.parametrize("name", ["Production", "prod", "", " production ", "garbage", "staging", None])
+def test_only_the_allow_list_is_non_production(name: str | None) -> None:
+    assert profile.is_non_production(name) is False
+
+
+@pytest.mark.parametrize("name", ["development", "dev", "test", "ci", " CI "])
+def test_the_allow_list_is_non_production(name: str) -> None:
+    assert profile.is_non_production(name) is True
+
+
+def test_a_conflict_and_an_unknown_value_each_warn_once(caplog: pytest.LogCaptureFixture) -> None:
+    profile._warned.clear()
+    with caplog.at_level("WARNING", logger=profile.__name__):
+        for _ in range(3):
+            profile.resolve_environment("development", "production")
+            profile.resolve_environment("prdo", None)
+    messages = [r.getMessage() for r in caplog.records]
+    assert sum("differ; AUTOBOT_ENVIRONMENT wins" in m for m in messages) == 1
+    assert sum("Unknown environment 'prdo'" in m for m in messages) == 1
+
+
+def test_a_value_set_only_in_dotenv_reaches_environment_name(tmp_path: Path) -> None:
+    from autobot_shared import ssot_config
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("AUTOBOT_ENVIRONMENT=Development\n", encoding="utf-8")
+    with patch.dict(os.environ, {}, clear=True):
+        loaded = ssot_config.AutoBotConfig(_env_file=str(dotenv))
+        with patch.object(ssot_config, "get_config", return_value=loaded):
+            assert profile.environment_name() == "development"

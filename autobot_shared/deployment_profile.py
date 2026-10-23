@@ -20,8 +20,11 @@ Dependency-free on purpose: standalone scripts and pre-init tracing import it wi
 
 from __future__ import annotations
 
+import logging  # stdlib: this module stays dependency-free (imported by ssot_config itself)
 import os
 from typing import Mapping, Optional
+
+logger = logging.getLogger(__name__)
 
 #: Canonical name of the deployment environment (production / development / test / ...).
 ENVIRONMENT_VAR = "AUTOBOT_ENVIRONMENT"
@@ -71,15 +74,79 @@ DEBUG_DEFAULT = DEFAULTS[DEBUG_VAR] == "true"
 #: Names the environment is read from, canonical first (pydantic ``AliasChoices`` order).
 ENV_NAMES = (ENVIRONMENT_VAR, ENVIRONMENT_ALIAS_VAR)
 
+#: The ONLY environment names that relax a safety decision (e.g. the unapproved-sudo fallback).
+#: An allow-list: every other value -- "prod", a typo, "staging" -- is treated as production.
+NON_PRODUCTION_ENVIRONMENTS = frozenset({"development", "dev", "test", "ci"})
+#: Every recognised name; anything else is warned about once (and is production for safety).
+KNOWN_ENVIRONMENTS = NON_PRODUCTION_ENVIRONMENTS | {"production", "staging"}
+
+_warned: set[str] = set()
+
+
+def _warn_once(key: str, message: str, *args: object) -> None:
+    if key not in _warned:
+        _warned.add(key)
+        logger.warning(message, *args)
+
 
 def _env(environ: Optional[Mapping[str, str]]) -> Mapping[str, str]:
     return os.environ if environ is None else environ
 
 
+def resolve_environment(canonical: Optional[str], alias: Optional[str]) -> str:
+    """The one normalisation: strip + lower; canonical, else alias, else the default profile's.
+
+    Warns once when both names are set and differ (the canonical one wins), and once per value
+    outside :data:`KNOWN_ENVIRONMENTS`.
+    """
+    primary, legacy = (canonical or "").strip().lower(), (alias or "").strip().lower()
+    if primary and legacy and primary != legacy:
+        _warn_once(
+            "conflict",
+            "%s=%r and %s=%r differ; %s wins",
+            ENVIRONMENT_VAR,
+            primary,
+            ENVIRONMENT_ALIAS_VAR,
+            legacy,
+            ENVIRONMENT_VAR,
+        )
+    name = primary or legacy or ENVIRONMENT_DEFAULT
+    if name not in KNOWN_ENVIRONMENTS:
+        _warn_once(
+            f"unknown:{name}",
+            "Unknown environment %r (known: %s); treated as production",
+            name,
+            ", ".join(sorted(KNOWN_ENVIRONMENTS)),
+        )
+    return name
+
+
+def env_field(value: object) -> str:
+    """pydantic before-validator for ``AutoBotConfig.environment``: the same normalisation."""
+    return resolve_environment(value if isinstance(value, str) else None, os.environ.get(ENVIRONMENT_ALIAS_VAR))
+
+
+def _ssot_environment() -> str:
+    """The ssot-loaded value (it also reads ``.env``); the default where pydantic is absent."""
+    try:
+        from autobot_shared.ssot_config import get_config  # lazy: keeps this module dependency-free
+    except ImportError:
+        return ENVIRONMENT_DEFAULT
+    return str(get_config().environment)
+
+
 def environment_name(environ: Optional[Mapping[str, str]] = None) -> str:
-    """``AUTOBOT_ENVIRONMENT``, else the legacy ``AUTOBOT_ENV``, else the default profile's."""
+    """The normalised environment: the process env, else (for ``os.environ``) the ssot/.env value."""
     env = _env(environ)
-    return env.get(ENVIRONMENT_VAR) or env.get(ENVIRONMENT_ALIAS_VAR) or ENVIRONMENT_DEFAULT
+    canonical, alias = env.get(ENVIRONMENT_VAR), env.get(ENVIRONMENT_ALIAS_VAR)
+    if environ is None and not (canonical or "").strip() and not (alias or "").strip():
+        return _ssot_environment()
+    return resolve_environment(canonical, alias)
+
+
+def is_non_production(name: Optional[str]) -> bool:
+    """True only for an allow-listed non-production name; every other value is production."""
+    return resolve_environment(name, None) in NON_PRODUCTION_ENVIRONMENTS
 
 
 def deployment_mode(environ: Optional[Mapping[str, str]] = None) -> str:
