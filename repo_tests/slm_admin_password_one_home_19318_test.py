@@ -15,6 +15,13 @@ never read. Now:
   playbook or role that logs in with it includes that reader.
 - Nothing supplies a literal fallback for it, in Jinja, shell, or Python.
 
+The sweep reads the file types that can hold the password: ``.py``, ``.sh``, ``.j2``,
+``.yml``/``.yaml`` (Ansible, compose, workflows), env files and Dockerfiles. ``.cfg``,
+``.ini`` and ``.toml`` are left out on purpose: on 2026-10-23 none of the 12 tracked ones
+named SLM_ADMIN_PASSWORD, its alias, AUTOBOT_ADMIN_PASSWORD or admin_password, and the python
+path filter does not cover those trees (#15900). If one ever needs to hold it, widen the
+filter to cover it and add the suffix here; do not add a record entry.
+
 Test files are out of the sweep: they plant the old shapes on purpose (see
 ``compose_exposure_and_credentials_17500_test.py``). The detectors are proven on planted
 copies below instead.
@@ -73,7 +80,7 @@ _READ = re.compile(
     r"|(?:getenv|environ\.get|environ\[|\benv)\(?\s*['\"](?:AUTOBOT_)?SLM_ADMIN_PASSWORD['\"]"
 )
 _LOGIN = re.compile(r"password:\s*['\"]\{\{\s*slm_admin_password\b")
-_SUFFIXES = ("*.py", "*.sh", "*.yml", "*.yaml", "*.j2", "*.cfg", "*.toml", "*.ini", "*.env*", "Dockerfile*")
+_SUFFIXES = ("*.py", "*.sh", "*.yml", "*.yaml", "*.j2", "*.env*", "Dockerfile*")
 
 
 def _code_files(root: Path) -> list[str]:
