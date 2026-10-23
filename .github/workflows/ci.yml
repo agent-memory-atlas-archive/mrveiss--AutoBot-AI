@@ -60,7 +60,12 @@ on:
     # job doing real work stays gated on `changes` below and self-skips.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # #19283 review: a push keys on its own commit, so no later merge can cancel it. With one
+  # group per ref, GitHub's `queue: single` cancelled a PENDING push run when the next merge
+  # queued -- and the ratchets' base for a push is the commit before it, so a raise in the
+  # cancelled merge was accepted for good by the next one (`queue: max` cannot be combined
+  # with cancel-in-progress, which PRs need). PRs and merge groups keep the per-ref group.
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   # #13432: cancel superseded PR runs, but let a push to a base branch finish.
   #
   # On a pull request a new push makes the previous run obsolete, so cancelling
@@ -70,11 +75,9 @@ concurrency:
   # base branch was effectively never verified, and measuring the #13162 backlog
   # repeatedly meant hunting for a run that happened to survive.
   #
-  # This does not queue unboundedly. This group keeps GitHub's default
-  # `queue: single` (python-shard opts into `queue: max`, #16320): with
-  # cancel-in-progress false, at most one run is in progress and one pending per
-  # group, and a newly queued run cancels the pending one. Base runs serialise and
-  # at most one waits; under a burst you get a verdict for a recent commit.
+  # Base pushes no longer serialise in one group (#19283 review, above): each runs in its
+  # own, so every merge gets a verdict. That is bounded by the merge rate -- trains land a
+  # few times an hour -- not by PR traffic, which keeps the per-ref, cancel-superseded group.
   #
   # Cost is bounded to GitHub-hosted capacity: every job in THIS workflow is
   # ubuntu-latest (the twelve python-suite shards included, see the note above

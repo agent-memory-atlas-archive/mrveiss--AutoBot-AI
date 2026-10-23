@@ -126,3 +126,15 @@ def test_an_unfetched_event_base_refuses(tmp_path, monkeypatch) -> None:
     _ci(monkeypatch, base_sha="1" * 40)
     with pytest.raises(BaseUnavailable, match="AUTOBOT_RATCHET_BASE_SHA"):
         base_commit(repo)
+
+
+def test_no_later_merge_can_cancel_a_push_to_main():
+    """#19283 review: the backstop is main's push run, so it must not share a cancellable
+    group. Per-ref, GitHub's `queue: single` cancelled the pending push when the next merge
+    queued, and the next merge's base already held the raise."""
+    import yaml  # noqa: PLC0415
+
+    ci = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    group = ci["concurrency"]["group"]
+    assert "github.event_name == 'push' && github.sha" in group, f"push runs must key on their commit: {group!r}"
+    assert ci["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"

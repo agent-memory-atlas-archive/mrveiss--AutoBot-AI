@@ -492,7 +492,8 @@ an entry above the base, or a key the base lacks, is a raise.
   `origin/main`.
 - **The backstop:** a PR run that spans a raise can be cancelled. Main's own push run then
   compares with `github.event.before`, always an ancestor, so the raise turns main red on the
-  push that lands it.
+  push that lands it. That holds only because every push to main runs: ci.yml keys a push's
+  concurrency group on its commit, so a later merge cannot cancel it while it waits.
 - **Fail closed:** a base that cannot be read raises `BaseUnavailable`. It never passes as
   "nothing rose".
 - **Moving a table:** pass the old path after the new one,
