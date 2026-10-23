@@ -88,16 +88,26 @@ def _slm_role_on_users_db() -> str:
     old name is honoured only as a deprecated alias -- an environment that set
     it keeps connecting exactly as before.
     """
-    role = os.getenv("SLM_POSTGRES_USER")
+    role, legacy = os.getenv("SLM_POSTGRES_USER") or "", os.getenv("AUTOBOT_POSTGRES_USER") or ""
+    if role and legacy and role != legacy:
+        _warn_once("conflict", "SLM_POSTGRES_USER and AUTOBOT_POSTGRES_USER differ; SLM_POSTGRES_USER wins (#19320)")
     if role:
         return role
-    legacy = os.getenv("AUTOBOT_POSTGRES_USER")
     if legacy:
-        logger.warning(
-            "AUTOBOT_POSTGRES_USER as the SLM's user-DB role is deprecated (#19320); set SLM_POSTGRES_USER instead"
-        )
+        _warn_once("deprecated", "AUTOBOT_POSTGRES_USER as the SLM's user-DB role is deprecated; set SLM_POSTGRES_USER")
         return legacy
     return pg.SLM_DB_ROLE
+
+
+#: Warnings already logged by this process (each fires once, never per connection).
+_WARNED: set[str] = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    """Log *message* once per process. Names variables only, never their values."""
+    if key not in _WARNED:
+        _WARNED.add(key)
+        logger.warning(message)
 
 
 def _build_url(host: str, port: str, database: str, user: str, password: str) -> str:
