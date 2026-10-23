@@ -201,3 +201,64 @@ async def test_a_member_sees_their_memberships(monkeypatch):  # noqa: ANN001
 async def test_without_a_database_a_member_sees_platform_agents_only():
     view = await get_agent_visibility(current_user={"user_id": str(uuid.uuid4()), "role": "user"}, session=None)
     assert view.company_ids == frozenset() and view.can_see(None) and not view.can_see(COMPANY_A)
+
+
+# -- review of #19269: the escalation target, limits and counts ---------------------
+
+
+async def _add(factory, *rows) -> None:  # noqa: ANN001
+    async with factory() as session:
+        session.add_all(rows)
+        await session.commit()
+
+
+def _node(agent_id: str, company, reports_to: str | None) -> AgentOrgNode:  # noqa: ANN001
+    return AgentOrgNode(
+        id=uuid.uuid4(), agent_id=agent_id, name=agent_id, org_role="manager", company_id=company, reports_to=reports_to
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_member_cannot_escalate_to_a_platform_manager_and_nothing_is_written(factory):  # noqa: ANN001
+    delegation = uuid.uuid4()
+    await _add(
+        factory,
+        _node("a-ceo", COMPANY_A, "platform"),
+        TaskDelegation(id=delegation, delegator_id="a-ceo", assignee_id="a-mgr", task_description="t"),
+    )
+    async with _client(factory, MEMBER_OF_A) as client:
+        assert (await client.post(f"/agents/delegations/{delegation}/escalate")).status_code == 404
+    async with factory() as session:
+        stored = await session.get(TaskDelegation, delegation)
+    assert stored.escalated_to is None
+    async with _client(factory, ADMIN) as client:
+        response = await client.post(f"/agents/delegations/{delegation}/escalate")
+    assert response.status_code == 200
+    assert response.json()["escalated_to"] == "platform"
+
+
+@pytest.mark.asyncio
+async def test_the_delegation_page_limit_counts_visible_rows_only(factory):  # noqa: ANN001
+    # A legacy cross-company row is the newest; filtering after LIMIT 1 returned an empty page.
+    await _add(
+        factory, TaskDelegation(id=uuid.uuid4(), delegator_id="a-mgr", assignee_id="a-rep", task_description="mine")
+    )
+    await _add(
+        factory, TaskDelegation(id=uuid.uuid4(), delegator_id="a-mgr", assignee_id="b-rep", task_description="legacy")
+    )
+    async with _client(factory, MEMBER_OF_A) as client:
+        page = (await client.get("/agents/a-mgr/delegations", params={"limit": 1})).json()
+    assert [d["assignee_id"] for d in page] == ["a-rep"]
+
+
+@pytest.mark.asyncio
+async def test_the_activity_summary_counts_visible_assignees_only(factory):  # noqa: ANN001
+    await _add(
+        factory,
+        TaskDelegation(id=uuid.uuid4(), delegator_id="a-mgr", assignee_id="a-rep", task_description="mine"),
+        TaskDelegation(id=uuid.uuid4(), delegator_id="a-mgr", assignee_id="b-rep", task_description="legacy"),
+    )
+    async with _client(factory, MEMBER_OF_A) as client:
+        assert (await client.get("/agents/a-mgr/activity")).json()["total_delegated"] == 1
+    async with _client(factory, ADMIN) as client:
+        assert (await client.get("/agents/a-mgr/activity")).json()["total_delegated"] == 2

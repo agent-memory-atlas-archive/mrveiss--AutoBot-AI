@@ -148,6 +148,8 @@ async def get_agents_status(
         svc = AgentOrgService(session)
         agents = await svc.get_agent_statuses(can_see=visibility.can_see)
     else:
+        # The in-memory registry holds platform agents only (no company), which every
+        # signed-in caller may see (#19246), so this fallback needs no tenant filter.
         logger.debug("PG unavailable — returning in-memory agents for /agents/status (#10511)")
         agents = _fallback_agents_from_registry()
 
@@ -374,10 +376,20 @@ def _visible(visibility: AgentVisibility, companies: Dict[str, Any], agent_id: s
     return visibility.is_platform_admin or (agent_id in companies and visibility.can_see(companies[agent_id]))
 
 
-async def _require_delegation_actable(session: AsyncSession, visibility: AgentVisibility, delegation_id: str) -> None:
-    """404 unless the caller may act on both agents of the delegation (#19246)."""
+def _visible_ids(visibility: AgentVisibility, companies: Dict[str, Any]) -> Optional[List[str]]:
+    """The agent ids in the caller's view, or None for a platform admin (no filter) (#19246)."""
     if visibility.is_platform_admin:
-        return
+        return None
+    return [agent_id for agent_id, company in companies.items() if visibility.can_see(company)]
+
+
+async def _require_delegation_actable(session: AsyncSession, visibility: AgentVisibility, delegation_id: str):
+    """404 unless the caller may act on both agents of the delegation (#19246).
+
+    Returns the delegation for a non-admin caller (already loaded), None for an admin.
+    """
+    if visibility.is_platform_admin:
+        return None
     try:
         delegation = await DelegationService(session).get_delegation(delegation_id)
     except ValueError:
@@ -386,6 +398,7 @@ async def _require_delegation_actable(session: AsyncSession, visibility: AgentVi
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request failed")
     agents = [delegation.delegator_id, delegation.assignee_id]
     require_agents(visibility, await agent_companies(session), agents, act=True)
+    return delegation
 
 
 def _delegation_to_response(d) -> DelegationResponse:
@@ -458,9 +471,12 @@ async def escalate_delegation(
     """
     Escalate a stuck/failed delegation up the chain of command (#1753).
     """
-    await _require_delegation_actable(session, visibility, delegation_id)
+    delegation = await _require_delegation_actable(session, visibility, delegation_id)
     svc = DelegationService(session)
     try:
+        if delegation is not None:  # the escalation target must be in reach too (#19246)
+            target = await svc.escalation_target(delegation)
+            require_agents(visibility, await agent_companies(session), [target], act=True)
         delegation = await svc.escalate_task(delegation_id)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request failed")
@@ -509,9 +525,10 @@ async def get_delegation_activity(
     visibility: AgentVisibility = Depends(get_agent_visibility),
 ) -> Dict[str, Any]:
     """Aggregate delegation activity for a manager (#1753)."""
-    require_agents(visibility, await agent_companies(session), [agent_id])
+    companies = await agent_companies(session)
+    require_agents(visibility, companies, [agent_id])
     svc = DelegationService(session)
-    return await svc.get_activity_summary(agent_id)
+    return await svc.get_activity_summary(agent_id, assignees=_visible_ids(visibility, companies))
 
 
 @router.get(
@@ -544,6 +561,6 @@ async def list_agent_delegations(
         role=role,
         status_filter=delegation_status,
         limit=limit,
+        counterparts=_visible_ids(visibility, companies),
     )
-    seen = [d for d in delegations if all(_visible(visibility, companies, a) for a in (d.delegator_id, d.assignee_id))]
-    return [_delegation_to_response(d) for d in seen]
+    return [_delegation_to_response(d) for d in delegations]

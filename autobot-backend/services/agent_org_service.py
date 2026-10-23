@@ -113,15 +113,16 @@ class AgentOrgService:
             "children": self._build_tree(nodes, node.agent_id),
         }
 
-    async def get_org_tree(self, can_see: Callable[[Any], bool] | None = None) -> List[Dict[str, Any]]:
+    async def get_org_tree(self, *, can_see: Callable[[Any], bool]) -> List[Dict[str, Any]]:
         """
         Return recursive org tree from root agents (#1405).
 
-        Root agents are those with reports_to == None. With ``can_see`` (a company_id
-        predicate, #19246) only visible agents are kept, and a visible agent whose manager
-        is hidden becomes a root rather than disappearing.
+        Root agents are those with reports_to == None. ``can_see`` is the caller's
+        company_id predicate (#19246), required so no caller can forget to scope: only
+        visible agents are kept, and a visible agent whose manager is hidden becomes a root
+        rather than disappearing.
         """
-        nodes = [n for n in await self.get_all_nodes() if can_see is None or can_see(n.company_id)]
+        nodes = [n for n in await self.get_all_nodes() if can_see(n.company_id)]
         visible = {n.agent_id for n in nodes}
         roots = [n for n in nodes if n.reports_to is None or n.reports_to not in visible]
         return [self._subtree(root, nodes) for root in roots]
@@ -133,7 +134,7 @@ class AgentOrgService:
             return "paused"
         return "idle"
 
-    async def get_agent_statuses(self, can_see: Callable[[Any], bool] | None = None) -> List[Dict[str, Any]]:
+    async def get_agent_statuses(self, *, can_see: Callable[[Any], bool]) -> List[Dict[str, Any]]:
         """Return all registered agents with runtime status (#10502).
 
         Backs ``GET /api/agents/status`` for the Home dashboard "Agent
@@ -141,7 +142,7 @@ class AgentOrgService:
         of agents. Sourced from the org registry so every registered agent
         is returned.
         """
-        nodes = [n for n in await self.get_all_nodes() if can_see is None or can_see(n.company_id)]
+        nodes = [n for n in await self.get_all_nodes() if can_see(n.company_id)]  # #19246: caller's view
         return [
             {
                 "id": node.agent_id,
