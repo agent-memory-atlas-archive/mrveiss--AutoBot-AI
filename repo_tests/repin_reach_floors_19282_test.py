@@ -72,10 +72,10 @@ def test_one_line_calls_underscored_and_spaced_floors_are_found() -> None:
 
 def test_non_ascii_before_the_floor_and_a_form_feed_line_break_are_handled() -> None:
     """CodeRabbit on #19364: ast columns are UTF-8 bytes, and str.splitlines breaks on \\f where ast does not."""
-    source = '# \x0c\nR = declare("x", what="déjà vu", floor=1000, growth=40)\n'
+    source = "# \x0c\n" + _ONE_LINE_CALL + '("x", what="déjà vu", floor=1000, growth=40)\n'
     new, status = repin.repin_source(source, "x", mid=1020, count=1040, low=1000, high=1040)
     assert status == "re-pinned"
-    assert new.startswith('# \x0c\nR = declare("x", what="déjà vu", floor=1020, growth=40)'), new
+    assert new.startswith("# \x0c\n" + _ONE_LINE_CALL + '("x", what="déjà vu", floor=1020, growth=40)'), new
     ast.parse(new)
 
 
