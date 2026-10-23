@@ -183,32 +183,24 @@ async def test_service_credentials_are_refused():
     assert refused.value.status_code == 403
 
 
-class _RecordingSession:
-    """Records the calls the visibility dependency makes on its session, in order."""
-
-    def __init__(self, calls: list) -> None:
-        self.calls = calls
-
-    async def commit(self) -> None:
-        self.calls.append("commit")
-
-
 @pytest.mark.asyncio
 async def test_the_membership_read_transaction_is_ended_before_returning(monkeypatch):  # noqa: ANN001
     """CodeRabbit on #19286: the dependency's own session must not stay checked out after the query."""
-    calls: list = []
+    from testkit.fake_async_session import FakeAsyncSession
 
-    async def memberships(self, session, user_id):  # noqa: ANN001, ANN202
-        calls.append("query")
+    session = FakeAsyncSession()
+    commits_at_query: list = []
+
+    async def memberships(self, session_arg, user_id):  # noqa: ANN001, ANN202
+        commits_at_query.append(session_arg.commits)
         return {COMPANY_A}
 
     from llc.services.membership_service import MembershipService
 
     monkeypatch.setattr(MembershipService, "list_member_company_ids", memberships)
-    await get_agent_visibility(
-        current_user={"user_id": str(uuid.uuid4()), "role": "user"}, session=_RecordingSession(calls)
-    )
-    assert calls == ["query", "commit"]
+    await get_agent_visibility(current_user={"user_id": str(uuid.uuid4()), "role": "user"}, session=session)
+    # The query ran on an open transaction, and the dependency committed after it.
+    assert commits_at_query == [0] and session.commits == 1
 
 
 @pytest.mark.asyncio
@@ -219,8 +211,10 @@ async def test_a_member_sees_their_memberships(monkeypatch):  # noqa: ANN001
     from llc.services.membership_service import MembershipService
 
     monkeypatch.setattr(MembershipService, "list_member_company_ids", memberships)
+    from testkit.fake_async_session import FakeAsyncSession
+
     view = await get_agent_visibility(
-        current_user={"user_id": str(uuid.uuid4()), "role": "user"}, session=_RecordingSession([])
+        current_user={"user_id": str(uuid.uuid4()), "role": "user"}, session=FakeAsyncSession()
     )
     assert view == MEMBER_OF_A
     assert view.can_see(None) and view.can_see(COMPANY_A) and not view.can_see(COMPANY_B)
