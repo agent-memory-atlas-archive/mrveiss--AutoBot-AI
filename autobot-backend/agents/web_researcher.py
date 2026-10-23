@@ -1349,7 +1349,7 @@ def _load_web_research_config() -> Dict[str, Any]:
         return researcher_config(config_manager)
     except Exception as e:
         logger.warning("Could not load web research config: %s", e)
-        return {}
+        return {}  # unreadable config: the researcher starts disabled (enabled=False), fail closed
 
 
 def get_web_researcher(

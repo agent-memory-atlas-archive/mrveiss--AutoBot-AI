@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 import config
 from agents.web_researcher import WebResearcher
-from api.web_research_settings import router
+from api.web_research_settings import SAVED_NOT_APPLIED, router
 from services import web_research_config
 from services.config_service import ConfigService
 from services.web_research_config_test import FakeConfigManager
@@ -99,3 +99,23 @@ def test_status_reports_the_saved_method_not_a_constant(manager):
     researcher.get_circuit_breaker_status = MagicMock(return_value={})
     researcher.get_cache_stats = AsyncMock(return_value={"cache_size": 0})
     assert _client(researcher).get("/api/web-research/status").json()["preferred_method"] == "api_based"
+
+
+def test_put_saved_but_not_applied_live_says_so(manager):
+    researcher = MagicMock()
+    researcher.apply_settings = MagicMock(side_effect=RuntimeError("researcher busy"))
+    response = _client(researcher).put("/api/web-research/settings", json={"max_results": 7})
+    assert response.status_code == 200
+    assert response.json()["status"] == SAVED_NOT_APPLIED
+    assert "after a restart" in response.json()["message"]
+    assert manager.data["web_research"]["max_results"] == 7
+
+
+def test_enable_saved_but_not_applied_live_says_so(manager):
+    researcher = MagicMock(enabled=False)
+    researcher.enable_research = AsyncMock(side_effect=RuntimeError("researcher busy"))
+    response = _client(researcher).post("/api/web-research/enable")
+    assert response.status_code == 200
+    assert response.json()["status"] == SAVED_NOT_APPLIED
+    assert response.json()["enabled"] is False
+    assert manager.data["web_research"]["enabled"] is True

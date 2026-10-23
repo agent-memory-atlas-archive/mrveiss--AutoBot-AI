@@ -102,3 +102,17 @@ def test_researcher_config_fills_every_setting_and_keeps_other_keys():
     assert config["max_results"] == 4
     assert config["rate_limit_window"] == wrc.DEFAULTS["rate_limit_window"]
     assert config["daily_research_limit"] == wrc.DEFAULTS["daily_limit"]
+
+
+def test_every_field_the_old_put_wrote_to_agents_research_is_carried_over():
+    # The pre-#19226 PUT wrote exactly these six to agents.research.* and nothing else there.
+    legacy = {
+        "enabled": False,
+        "preferred_method": "advanced",
+        "max_results": 12,
+        "timeout_seconds": 90,
+        "rate_limit_requests": 8,
+        "rate_limit_window": 300,
+    }
+    settings = wrc.load_settings(FakeConfigManager({"agents": {"research": legacy}}))
+    assert {field: settings[field] for field in legacy} == legacy

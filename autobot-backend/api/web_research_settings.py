@@ -141,26 +141,31 @@ async def get_research_status(request: Request):
         )
 
 
+# A save that reached the config but not the running researcher is not rolled back: the saved
+# value is what the admin asked for, and startup applies it (#19226). The response says so.
+SAVED_NOT_APPLIED = "saved_not_applied"
+_SAVED_NOT_APPLIED_MESSAGE = "{what} saved; the running researcher did not take it and will after a restart"
+
+
 async def _set_enabled(request: Request, enabled: bool) -> JSONResponse:
     """Save the switch, then flip the live researcher; a failed save changes neither (#19226)."""
     researcher = _require_web_researcher(request)
     word = "enabled" if enabled else "disabled"
     try:
         _persist({"enabled": enabled})
-        changed = await (researcher.enable_research(user_confirmed=True) if enabled else researcher.disable_research())
     except Exception as e:
-        logger.error("Failed to switch web research to %s: %s", word, e)
+        logger.error("Failed to save web research as %s: %s", word, e)
         raise HTTPException(status_code=500, detail=f"Failed to switch web research to {word}")
-    logger.info("Web research %s by an admin", word)
-    return JSONResponse(
-        status_code=200 if changed else 400,
-        content={
-            "status": "success" if changed else "error",
-            "message": f"Web research {word}" if changed else f"Web research could not be {word}",
-            "enabled": researcher.enabled,
-            "timestamp": _now(),
-        },
-    )
+    try:
+        applied = await (researcher.enable_research(user_confirmed=True) if enabled else researcher.disable_research())
+    except Exception as e:
+        logger.error("Web research saved as %s but not applied live: %s", word, e)
+        applied = False
+    logger.info("Web research %s by an admin (applied live: %s)", word, applied)
+    content = {"status": "success", "message": f"Web research {word}", "enabled": researcher.enabled}
+    if not applied:
+        content.update(status=SAVED_NOT_APPLIED, message=_SAVED_NOT_APPLIED_MESSAGE.format(what=f"Web research {word}"))
+    return JSONResponse(status_code=200, content={**content, "timestamp": _now()})
 
 
 @router.post("/enable", response_model=DataResponse[WebResearchToggleData])
@@ -216,13 +221,17 @@ async def update_research_settings(
     except Exception as e:
         logger.error("Failed to update research settings: %s", e)
         raise HTTPException(status_code=500, detail="Failed to update research settings")
+    content = {"status": "success", "message": "Web research settings updated", "settings": settings}
     researcher = getattr(request.app.state, "web_researcher", None)
-    if researcher is not None:
-        researcher.apply_settings(web_research_config.researcher_config(config_manager))
-    message = "Web research settings updated"
-    return JSONResponse(
-        status_code=200, content={"status": "success", "message": message, "settings": settings, "timestamp": _now()}
-    )
+    try:
+        if researcher is not None:
+            researcher.apply_settings(web_research_config.researcher_config(config_manager))
+    except Exception as e:
+        logger.error("Web research settings saved but not applied live: %s", e)
+        content.update(
+            status=SAVED_NOT_APPLIED, message=_SAVED_NOT_APPLIED_MESSAGE.format(what="Web research settings")
+        )
+    return JSONResponse(status_code=200, content={**content, "timestamp": _now()})
 
 
 @router.post("/test", response_model=DataResponse[WebResearchTestData])
