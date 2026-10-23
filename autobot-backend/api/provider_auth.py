@@ -76,6 +76,7 @@ from llm_shared.llm_oauth_registry import (
     resolve_client,
 )
 from llm_shared.provider_auth import (
+    LEGACY_FALLBACK_STOP_KEY,
     LEGACY_SUBJECT,
     NEEDS_REAUTH_KEY,
     _vault_read,
@@ -496,14 +497,15 @@ async def provider_auth_status(
     )
 
 
-def _revoke_subjects(scope: str, user: Any) -> list[str]:
-    """Subjects a revoke deletes: the caller's own, or for system the org subject AND the legacy one.
+def _stops_legacy_fallback(scope: str, subject: str) -> bool:
+    """A multi-tenant system disconnect: the org's token goes, and a stop marker replaces it.
 
-    The legacy ``"global"`` token stays readable through the system dual-read
-    (#11497), so a system disconnect that left it would not disconnect anything.
+    The legacy ``"global"`` token is shared by every org still falling back to it
+    (#11497), so one org's disconnect must not delete it; the marker makes only
+    this org stop reading it (owner decision, #19241). Single-tenant (the org
+    subject IS ``"global"``) deletes outright.
     """
-    subject = subject_for(scope, user)
-    return [subject, LEGACY_SUBJECT] if scope == SCOPE_SYSTEM and subject != LEGACY_SUBJECT else [subject]
+    return scope == SCOPE_SYSTEM and subject != LEGACY_SUBJECT
 
 
 async def _revoke_one(url: str, client: LlmOAuthClient, token_data: dict) -> None:
@@ -545,9 +547,11 @@ async def revoke_provider_auth(
     """Disconnect the caller's provider sign-in at *scope* (system needs admin).
 
     *scope* is required (422 without it): a scope-less "disconnect" from an
-    admin must never default to deleting the org-shared credential. When the
-    provider has an RFC 7009 endpoint the grant is revoked there first; a
-    failure there is logged and reported, and the local delete still happens.
+    admin must never default to deleting the org-shared credential. A
+    multi-tenant system disconnect replaces the org's token with a stop marker
+    (see :func:`_stops_legacy_fallback`). When the provider has an RFC 7009
+    endpoint the deleted grant is revoked there first; a failure there is
+    logged and reported, and the local delete still happens.
     """
     from sqlalchemy import delete  # noqa: PLC0415
 
@@ -555,19 +559,26 @@ async def revoke_provider_auth(
 
     _require_known_provider(provider_name)
     effective = resolve_scope(scope, is_admin)
-    subjects = _revoke_subjects(effective, user)
-    grants = []
-    for subject in subjects:
-        grant = await _vault_read(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
-        if grant:
-            grants.append(grant)
+    subject = subject_for(effective, user)
+    grant = await _vault_read(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
+    grants = [grant] if grant and grant.get("access_token") else []  # a stop marker is not a grant
+    # RFC 7009 only for what this call deletes -- never the shared legacy token.
     revoked, error = await _revoke_at_provider(provider_name, grants)
-    names = [_vault_secret_name(provider_name, s) for s in subjects]
-    await session.execute(delete(Secret).where(Secret.name.in_(names), Secret.owner_vault == _SYSTEM_VAULT))
+    if _stops_legacy_fallback(effective, subject):
+        marker = {LEGACY_FALLBACK_STOP_KEY: True, "created_by": _current_user_id(user)}
+        await _vault_write(
+            session,
+            provider_name=provider_name,
+            subject=subject,
+            owner_vault_str=_SYSTEM_VAULT,
+            token_data=marker,
+            created_by_id=_current_user_id(user),
+        )
+    else:
+        name = _vault_secret_name(provider_name, subject)
+        await session.execute(delete(Secret).where(Secret.name == name, Secret.owner_vault == _SYSTEM_VAULT))
     await session.commit()
-    logger.info(
-        "Revoked provider auth tokens for %s (scope=%s, provider_revoked=%s)", provider_name, effective, revoked
-    )
+    logger.info("Revoked provider auth for %s (scope=%s, provider_revoked=%s)", provider_name, effective, revoked)
     return ProviderRevokeResult(
         provider_name=provider_name,
         scope=effective,

@@ -73,7 +73,7 @@ def world(monkeypatch):
         await asyncio.sleep(0.01)  # keep the callers overlapping
         return {"access_token": "fresh-at", "refresh_token": "rt-2", "expires_in": 3600}
 
-    monkeypatch.setattr(creds, "_vault_read_dual", vault.read)
+    monkeypatch.setattr(creds, "_vault_read", vault.read)
     monkeypatch.setattr(creds, "_vault_write", vault.write)
     monkeypatch.setitem(OAuthAuth._refresh.__globals__, "_vault_write", vault.write)
     monkeypatch.setattr(creds, "resolve_client", lambda name, flow=None: _CLIENT)

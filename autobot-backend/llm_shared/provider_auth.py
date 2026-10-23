@@ -50,6 +50,7 @@ from typing import Any
 from autobot_shared.logging_manager import get_logger
 
 from .provider_token_response import (  # noqa: F401  # re-exported (#19241 split)
+    LEGACY_FALLBACK_STOP_KEY,
     NEEDS_REAUTH_KEY,
     ProviderAuthError,
     TokenExpiredError,
@@ -226,6 +227,9 @@ async def _vault_read_dual(
         subject=subject,
         owner_vault_str=owner_vault_str,
     )
+    # An org that disconnected its system sign-in no longer falls back to "global" (#19241).
+    if token_data is not None and token_data.get(LEGACY_FALLBACK_STOP_KEY):
+        return None
     # A user subject (#19241) is single-read: falling back to "global" would hand
     # a user the shared credential under their own name.
     if token_data is not None or subject == LEGACY_SUBJECT or subject.startswith(USER_SUBJECT_PREFIX):
@@ -574,6 +578,7 @@ __all__ = [
     "org_vault_subject",
     "user_vault_subject",
     "NEEDS_REAUTH_KEY",
+    "LEGACY_FALLBACK_STOP_KEY",
     "TokenRevokedError",
     "USER_SUBJECT_PREFIX",
     "validate_token_response",

@@ -33,6 +33,12 @@ class TokenRevokedError(TokenExpiredError):
 #: token is skipped until a new sign-in overwrites it, and /status reports it.
 NEEDS_REAUTH_KEY = "needs_reauth"  # pragma: allowlist secret  # a dict key name, not a credential
 
+#: Record stored at an ORG subject by that org's system disconnect (#19241, owner
+#: decision): the org stops falling back to the legacy shared ``"global"`` token,
+#: which other orgs may still use. It lives in the vault beside the tokens, so
+#: every worker sees it, and a new system sign-in for the org overwrites it.
+LEGACY_FALLBACK_STOP_KEY = "legacy_fallback_stopped"
+
 
 # ---------------------------------------------------------------------------
 # Token dict helpers

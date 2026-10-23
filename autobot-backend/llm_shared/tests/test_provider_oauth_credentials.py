@@ -44,7 +44,7 @@ class _Vault:
 def vault(monkeypatch):
     def _install(tokens):
         fake = _Vault(tokens)
-        monkeypatch.setattr(creds, "_vault_read_dual", fake.read)
+        monkeypatch.setattr(creds, "_vault_read", fake.read)
         return fake
 
     return _install
@@ -57,9 +57,59 @@ def _token(value, expires_at=_FRESH, refresh=None):
     return data
 
 
-def test_candidate_order_is_user_then_system():
-    assert creds.candidate_subjects("u-1", "org-9") == [("user", "user:u-1"), ("system", "org:org-9")]
+@pytest.fixture(autouse=True)
+def _fresh_backoff_cache():
+    """The refresh backoff is process-wide; keep one test's failures out of the next."""
+    from llm_shared import provider_token_refresh
+
+    provider_token_refresh._unusable_until.clear()
+    yield
+    provider_token_refresh._unusable_until.clear()
+
+
+def test_candidate_order_is_user_then_org_then_legacy():
+    assert creds.candidate_subjects("u-1", "org-9") == [
+        ("user", "user:u-1"),
+        ("system", "org:org-9"),
+        ("system", "global"),
+    ]
     assert creds.candidate_subjects("", "") == [("system", "global")]
+
+
+_STOP = {"legacy_fallback_stopped": True}
+
+
+@pytest.mark.asyncio
+async def test_org_a_revoke_leaves_org_b_on_the_legacy_token(vault):
+    """Owner decision (#19241): one org's disconnect is a per-org stop marker, not a delete of "global"."""
+    vault({"org:A": _STOP, "global": _token("legacy-at")})
+    assert await creds.first_usable_token(None, "openai", "", "B") == "legacy-at"
+
+
+@pytest.mark.asyncio
+async def test_org_a_no_longer_resolves_the_legacy_token_after_its_revoke(vault):
+    fake = vault({"org:A": _STOP, "global": _token("legacy-at")})
+    assert await creds.first_usable_token(None, "openai", "u-1", "A") is None
+    assert "global" not in fake.reads
+
+
+@pytest.mark.asyncio
+async def test_org_a_signing_in_again_replaces_the_marker(vault):
+    vault({"org:A": _token("org-a-at"), "global": _token("legacy-at")})  # the new sign-in overwrote the marker
+    assert await creds.first_usable_token(None, "openai", "", "A") == "org-a-at"
+
+
+@pytest.mark.asyncio
+async def test_the_dual_read_honours_the_stop_marker(monkeypatch):
+    store = {"org:A": _STOP, "global": {"access_token": "legacy-at"}}
+
+    async def _read(session, *, provider_name, subject, owner_vault_str):
+        return store.get(subject)
+
+    monkeypatch.setattr(provider_auth, "_vault_read", _read)
+    kwargs = {"provider_name": "openai", "owner_vault_str": "system"}
+    assert await provider_auth._vault_read_dual(None, subject="org:A", **kwargs) is None
+    assert (await provider_auth._vault_read_dual(None, subject="org:B", **kwargs))["access_token"] == "legacy-at"
 
 
 @pytest.mark.asyncio

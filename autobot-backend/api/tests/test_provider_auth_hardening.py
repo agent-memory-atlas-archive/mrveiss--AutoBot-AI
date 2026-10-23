@@ -4,10 +4,10 @@
 # Author: mrveiss
 """PR #19259 review hardening of /api/llm-auth (#19241).
 
-- System disconnect also removes the legacy ``global`` token the dual-read would
-  otherwise keep serving, and revokes at the provider (RFC 7009) when a revoke
-  URL is configured. A provider-side failure is reported, and the local delete
-  still happens.
+- A multi-tenant system disconnect replaces the org's token with a per-org stop
+  marker (the shared legacy ``global`` token stays for other orgs); single-tenant
+  deletes outright. Only the deleted grant is revoked at the provider (RFC 7009),
+  and a provider-side failure is reported while the local change still happens.
 - /status reports ``needs_reauth`` for a token the provider rejected.
 - The device flow refuses a non-https ``verification_uri`` and a non-JSON body (502).
 - The code exchange runs the public-egress check.
@@ -60,6 +60,7 @@ def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "build_provider", lambda name: _PROVIDER)
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "_vault_write", AsyncMock(return_value=None))
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
     app.dependency_overrides[get_current_user] = lambda: who.user
@@ -81,17 +82,49 @@ def _deleted_names(session) -> str:
 # --- revoke -------------------------------------------------------------------
 
 
-def test_system_revoke_deletes_the_org_and_the_legacy_global_token(ctx, monkeypatch):
+def test_multi_tenant_system_revoke_leaves_a_stop_marker_and_keeps_the_legacy_token(ctx, monkeypatch):
     tc, _, _, session = ctx
-    _grants(monkeypatch, {"org:org-1": {"access_token": "a"}, "global": {"access_token": "g"}})
-    monkeypatch.setattr(mod, "_revoke_one", AsyncMock(return_value=None))
+    _grants(monkeypatch, {"org:org-1": {"access_token": "a"}, "global": {"access_token": "g", "refresh_token": "gr"}})
+    revoke_one = AsyncMock(return_value=None)
+    monkeypatch.setattr(mod, "_revoke_one", revoke_one)
     resp = tc.delete("/api/llm-auth/openai?scope=system")
     assert resp.status_code == 200, resp.text
-    statement = _deleted_names(session)
-    assert "provider_auth:openai:org:org-1" in statement
-    assert "provider_auth:openai:global" in statement
-    assert resp.json()["deleted"] == 2
+    write = mod._vault_write.await_args.kwargs
+    assert write["subject"] == "org:org-1" and write["token_data"]["legacy_fallback_stopped"] is True
+    session.execute.assert_not_awaited()  # nothing deleted by name: "global" survives for other orgs
+    assert [c.args[2] for c in revoke_one.await_args_list] == [{"access_token": "a"}]  # never the shared token
+    assert resp.json()["deleted"] == 1
     session.commit.assert_awaited()
+
+
+def test_single_tenant_system_revoke_deletes_outright(ctx, monkeypatch):
+    tc, _, who, session = ctx
+    who.user = {"user_id": "admin-1"}  # no org: the system subject IS "global"
+    _grants(monkeypatch, {"global": {"access_token": "g"}})
+    monkeypatch.setattr(mod, "_revoke_one", AsyncMock(return_value=None))
+    assert tc.delete("/api/llm-auth/openai?scope=system").status_code == 200
+    assert "provider_auth:openai:global" in _deleted_names(session)
+    mod._vault_write.assert_not_awaited()
+
+
+def test_org_signing_in_again_overwrites_its_stop_marker(ctx, monkeypatch):
+    """The callback writes the new token to the same org subject, replacing the marker."""
+    tc, fake_redis, _, _ = ctx
+    monkeypatch.setattr(oauth_flow, "exchange_code", AsyncMock(return_value={"access_token": "new-at"}))
+    fake_redis.store[flow_state.state_key("st")] = json.dumps(
+        {
+            "initiator_id": "admin-1",
+            "provider_name": "openai",
+            "scope": "system",
+            "subject": "org:org-1",
+            "verifier": "v",
+            "redirect_uri": _REDIRECT,
+        }
+    )
+    resp = tc.post("/api/llm-auth/oauth/callback", json={"state": "st", "code": "c", "redirect_uri": _REDIRECT})
+    assert resp.status_code == 200, resp.text
+    write = mod._vault_write.await_args.kwargs
+    assert write["subject"] == "org:org-1" and "legacy_fallback_stopped" not in write["token_data"]
 
 
 def test_user_revoke_never_touches_the_shared_tokens(ctx, monkeypatch):
@@ -128,7 +161,7 @@ def test_a_provider_revoke_failure_is_reported_and_the_local_delete_still_happen
     assert resp.status_code == 200
     assert resp.json()["provider_revoked"] is False
     assert "boom" in resp.json()["provider_error"]
-    assert "provider_auth:openai:org:org-1" in _deleted_names(session)
+    assert mod._vault_write.await_args.kwargs["token_data"]["legacy_fallback_stopped"] is True  # local change done
     session.commit.assert_awaited()
 
 

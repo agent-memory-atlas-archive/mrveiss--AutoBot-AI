@@ -7,8 +7,9 @@
 Resolution order for a sign-in-capable provider (``llm_oauth_registry``):
 
 1. the requesting user's own token (``user_vault_subject``);
-2. the system token for the user's org (``org_vault_subject``, which dual-reads
-   the legacy ``"global"`` subject, #11497);
+2. the system token for the user's org (``org_vault_subject``), then the legacy
+   ``"global"`` one (#11497) -- unless the org disconnected its system sign-in,
+   which leaves a per-org stop marker;
 3. ``None`` — the provider then uses its configured API key, as before.
 
 The principal comes only from ``run_credentials.get_llm_principal()``, set by
@@ -34,12 +35,14 @@ from .llm_oauth_registry import (
     resolve_client,
 )
 from .provider_auth import (
+    LEGACY_FALLBACK_STOP_KEY,
+    LEGACY_SUBJECT,
     NEEDS_REAUTH_KEY,
     OAuthAuth,
     ProviderAuthError,
     TokenExpiredError,
     TokenRevokedError,
-    _vault_read_dual,
+    _vault_read,
     _vault_write,
     org_vault_subject,
     user_vault_subject,
@@ -62,10 +65,27 @@ def request_principal() -> tuple[str, str]:
 
 
 def candidate_subjects(user_id: str, org_id: str) -> list[tuple[str, str]]:
-    """``[(source, subject), ...]`` in resolution order: the user's own, then the org/system one."""
+    """``[(source, subject), ...]`` in resolution order: the user's own, the org's, then the legacy one.
+
+    Each subject is read on its own (never dual-read), so a refresh writes the
+    rotated pair back to the subject it was read from -- a legacy token refreshed
+    for one org is not copied under that org's name (#19241).
+    """
     subjects = [("user", user_vault_subject(user_id))] if user_id else []
-    subjects.append(("system", org_vault_subject(org_id or None)))
+    org_subject = org_vault_subject(org_id or None)
+    subjects.append(("system", org_subject))
+    if org_subject != LEGACY_SUBJECT:
+        subjects.append(("system", LEGACY_SUBJECT))
     return subjects
+
+
+async def _legacy_fallback_stopped(session: Any, provider_name: str, org_id: str) -> bool:
+    """True when the caller's org disconnected its system sign-in (the per-org stop marker)."""
+    org_subject = org_vault_subject(org_id or None)
+    if org_subject == LEGACY_SUBJECT:
+        return False
+    data = await _read(session, provider_name, org_subject)
+    return bool(data and data.get(LEGACY_FALLBACK_STOP_KEY))
 
 
 def _refresh_strategy(provider_name: str, subject: str) -> OAuthAuth:
@@ -87,11 +107,12 @@ def _refresh_strategy(provider_name: str, subject: str) -> OAuthAuth:
 
 
 async def _read(session: Any, provider_name: str, subject: str) -> dict | None:
-    return await _vault_read_dual(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
+    return await _vault_read(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
 
 
 def _usable(token_data: dict | None) -> bool:
-    return bool(token_data) and not token_data.get(NEEDS_REAUTH_KEY)
+    """A real token (not a stop marker) that the provider has not rejected."""
+    return bool(token_data) and bool(token_data.get("access_token")) and not token_data.get(NEEDS_REAUTH_KEY)
 
 
 async def _mark_needs_reauth(session: Any, provider_name: str, subject: str) -> None:
@@ -139,6 +160,12 @@ async def _token_for_subject(session: Any, provider_name: str, source: str, subj
     auth = _refresh_strategy(provider_name, subject)
     if not auth.needs_refresh(token_data):
         return token_data["access_token"]
+    if not token_data.get("refresh_token"):  # expired and nothing to refresh with: no lock, no POST
+        logger.warning(
+            "%s %s sign-in token expired with no refresh token; trying the next source", provider_name, source
+        )
+        mark_unusable(provider_name, subject)
+        return None
     try:
         return await single_flight_refresh(provider_name, subject, *_refresher(session, auth, provider_name, subject))
     except RefreshWaitTimeout as exc:
@@ -156,6 +183,8 @@ async def _token_for_subject(session: Any, provider_name: str, source: str, subj
 async def first_usable_token(session: Any, provider_name: str, user_id: str, org_id: str) -> str | None:
     """Walk :func:`candidate_subjects` and return the first usable token."""
     for source, subject in candidate_subjects(user_id, org_id):
+        if subject == LEGACY_SUBJECT and await _legacy_fallback_stopped(session, provider_name, org_id):
+            break
         token = await _token_for_subject(session, provider_name, source, subject)
         if token:
             logger.debug("%s call uses the %s sign-in token", provider_name, source)
