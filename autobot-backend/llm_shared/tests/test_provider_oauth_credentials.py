@@ -100,6 +100,14 @@ async def test_org_a_signing_in_again_replaces_the_marker(vault):
 
 
 @pytest.mark.asyncio
+async def test_after_a_superadmin_shared_revoke_orgs_on_the_legacy_token_fall_through_to_the_api_key(vault):
+    """The shared revoke deletes "global": an org that had no token of its own now resolves none."""
+    vault({"org:A": _token("org-a-at")})  # "global" is gone
+    assert await creds.first_usable_token(None, "openai", "", "B") is None  # -> the provider's API key
+    assert await creds.first_usable_token(None, "openai", "", "A") == "org-a-at"  # own tokens are untouched
+
+
+@pytest.mark.asyncio
 async def test_the_dual_read_honours_the_stop_marker(monkeypatch):
     store = {"org:A": _STOP, "global": {"access_token": "legacy-at"}}
 

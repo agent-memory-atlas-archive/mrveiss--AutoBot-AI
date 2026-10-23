@@ -15,7 +15,7 @@
 
 import dataclasses
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient
 
 from api import provider_auth as mod
 from api import provider_auth_flow_state as flow_state
+from api import provider_auth_revoke as rv
 from api.provider_auth_scope import caller_is_admin
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
@@ -57,10 +58,12 @@ def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "get_redis_client", lambda database="main": single_use_fake_redis)
     monkeypatch.setattr(mod, "get_oauth_allowed_hosts", lambda: {"auth.example.com", "token.example.com"})
     monkeypatch.setattr(mod, "resolve_client", lambda name, flow=None: _CLIENT)
-    monkeypatch.setattr(mod, "build_provider", lambda name: _PROVIDER)
+    monkeypatch.setattr(rv, "build_provider", lambda name: _PROVIDER)
+    monkeypatch.setattr(rv, "emit_security", MagicMock(return_value=True))
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "assert_public_egress", AsyncMock(return_value=None))
-    monkeypatch.setattr(mod, "_vault_write", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "_vault_write", AsyncMock(return_value=None))  # a sign-in's token write
+    monkeypatch.setattr(rv, "_vault_write", AsyncMock(return_value=None))  # a disconnect's stop-marker write
     app = FastAPI()
     app.include_router(mod.router, prefix="/api")
     app.dependency_overrides[get_current_user] = lambda: who.user
@@ -71,7 +74,7 @@ def ctx(monkeypatch, single_use_fake_redis):
 
 def _grants(monkeypatch, by_subject: dict) -> AsyncMock:
     read = AsyncMock(side_effect=lambda session, *, provider_name, subject, owner_vault_str: by_subject.get(subject))
-    monkeypatch.setattr(mod, "_vault_read", read)
+    monkeypatch.setattr(rv, "_vault_read", read)
     return read
 
 
@@ -86,10 +89,10 @@ def test_multi_tenant_system_revoke_leaves_a_stop_marker_and_keeps_the_legacy_to
     tc, _, _, session = ctx
     _grants(monkeypatch, {"org:org-1": {"access_token": "a"}, "global": {"access_token": "g", "refresh_token": "gr"}})
     revoke_one = AsyncMock(return_value=None)
-    monkeypatch.setattr(mod, "_revoke_one", revoke_one)
+    monkeypatch.setattr(rv, "revoke_one", revoke_one)
     resp = tc.delete("/api/llm-auth/openai?scope=system")
     assert resp.status_code == 200, resp.text
-    write = mod._vault_write.await_args.kwargs
+    write = rv._vault_write.await_args.kwargs
     assert write["subject"] == "org:org-1" and write["token_data"]["legacy_fallback_stopped"] is True
     session.execute.assert_not_awaited()  # nothing deleted by name: "global" survives for other orgs
     assert [c.args[2] for c in revoke_one.await_args_list] == [{"access_token": "a"}]  # never the shared token
@@ -101,10 +104,10 @@ def test_single_tenant_system_revoke_deletes_outright(ctx, monkeypatch):
     tc, _, who, session = ctx
     who.user = {"user_id": "admin-1"}  # no org: the system subject IS "global"
     _grants(monkeypatch, {"global": {"access_token": "g"}})
-    monkeypatch.setattr(mod, "_revoke_one", AsyncMock(return_value=None))
+    monkeypatch.setattr(rv, "revoke_one", AsyncMock(return_value=None))
     assert tc.delete("/api/llm-auth/openai?scope=system").status_code == 200
     assert "provider_auth:openai:global" in _deleted_names(session)
-    mod._vault_write.assert_not_awaited()
+    rv._vault_write.assert_not_awaited()
 
 
 def test_org_signing_in_again_overwrites_its_stop_marker(ctx, monkeypatch):
@@ -131,7 +134,7 @@ def test_user_revoke_never_touches_the_shared_tokens(ctx, monkeypatch):
     tc, _, who, session = ctx
     who.admin = False
     _grants(monkeypatch, {"user:admin-1": {"access_token": "u"}})
-    monkeypatch.setattr(mod, "_revoke_one", AsyncMock(return_value=None))
+    monkeypatch.setattr(rv, "revoke_one", AsyncMock(return_value=None))
     assert tc.delete("/api/llm-auth/openai?scope=user").status_code == 200
     statement = _deleted_names(session)
     assert "provider_auth:openai:user:admin-1" in statement
@@ -156,18 +159,18 @@ def test_a_provider_revoke_failure_is_reported_and_the_local_delete_still_happen
     tc, _, _, session = ctx
     _grants(monkeypatch, {"org:org-1": {"access_token": "a"}})
     failing = AsyncMock(side_effect=HTTPException(status_code=502, detail="Revocation endpoint failed: boom"))
-    monkeypatch.setattr(mod, "_revoke_one", failing)
+    monkeypatch.setattr(rv, "revoke_one", failing)
     resp = tc.delete("/api/llm-auth/openai?scope=system")
     assert resp.status_code == 200
     assert resp.json()["provider_revoked"] is False
     assert "boom" in resp.json()["provider_error"]
-    assert mod._vault_write.await_args.kwargs["token_data"]["legacy_fallback_stopped"] is True  # local change done
+    assert rv._vault_write.await_args.kwargs["token_data"]["legacy_fallback_stopped"] is True  # local change done
     session.commit.assert_awaited()
 
 
 def test_no_revoke_url_means_local_only(ctx, monkeypatch):
     tc, _, _, _ = ctx
-    monkeypatch.setattr(mod, "build_provider", lambda name: dataclasses.replace(_PROVIDER, revocation_url=""))
+    monkeypatch.setattr(rv, "build_provider", lambda name: dataclasses.replace(_PROVIDER, revocation_url=""))
     _grants(monkeypatch, {"org:org-1": {"access_token": "a"}})
     sent = AsyncMock()
     monkeypatch.setattr(mod, "_post_form", sent)
@@ -178,7 +181,7 @@ def test_no_revoke_url_means_local_only(ctx, monkeypatch):
 def test_an_unsafe_revoke_url_is_refused_before_any_request(ctx, monkeypatch):
     tc, _, _, session = ctx
     monkeypatch.setattr(
-        mod, "build_provider", lambda name: dataclasses.replace(_PROVIDER, revocation_url="https://evil.example.net/r")
+        rv, "build_provider", lambda name: dataclasses.replace(_PROVIDER, revocation_url="https://evil.example.net/r")
     )
     _grants(monkeypatch, {"org:org-1": {"access_token": "a"}})
     sent = AsyncMock()

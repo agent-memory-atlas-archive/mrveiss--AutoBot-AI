@@ -94,7 +94,8 @@ class ProviderRevokeResult(BaseModel):
     RFC 7009 revoke is reported separately (None when no revoke URL is configured)."""
 
     provider_name: str
-    scope: AuthScope
+    #: ``shared`` is the superadmin's revoke of the legacy token every org may share (#19241).
+    scope: Literal["system", "user", "shared"]
     deleted: int
     provider_revoked: bool | None = None
     provider_error: str | None = None

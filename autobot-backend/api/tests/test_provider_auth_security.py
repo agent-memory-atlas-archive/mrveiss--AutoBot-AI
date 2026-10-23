@@ -15,7 +15,7 @@ protected still holds, under the per-user scope the owner chose (#19241):
 """
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient
 
 from api import provider_auth as mod
 from api import provider_auth_flow_state as flow_state
+from api import provider_auth_revoke as rv
 from api.provider_auth_scope import caller_is_admin
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
@@ -54,6 +55,7 @@ _ALL_ROUTES = [
     ("post", "/api/llm-auth/device/poll", {"provider_name": "openai", "device_code": "dc"}),
     ("get", "/api/llm-auth/status/openai?scope=user", None),
     ("delete", "/api/llm-auth/openai?scope=user", None),
+    ("delete", "/api/llm-auth/openai/shared", None),
 ]
 
 
@@ -70,7 +72,8 @@ def ctx(monkeypatch, single_use_fake_redis):
     monkeypatch.setattr(mod, "get_oauth_allowed_hosts", lambda: {"auth.example.com", "token.example.com"})
     monkeypatch.setattr(mod, "resolve_client", lambda name, flow=None: _CLIENT)
     monkeypatch.setattr(mod, "_vault_write", write)
-    monkeypatch.setattr(mod, "_vault_read", AsyncMock(return_value=None))  # DELETE reads the grant it may revoke
+    monkeypatch.setattr(rv, "_vault_read", AsyncMock(return_value=None))  # DELETE reads the grant it may revoke
+    monkeypatch.setattr(rv, "emit_security", MagicMock(return_value=True))
     monkeypatch.setattr(mod, "_pinned_connector", AsyncMock(return_value=None))
     # The code exchange's public-egress check resolves DNS; the fake token host has none. That the
     # check runs and blocks is proved in test_provider_auth_hardening.py (#19241).

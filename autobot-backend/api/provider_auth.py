@@ -37,7 +37,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api import provider_auth_flow_state as flow_state
 from api.provider_auth_poll_limit import device_poll_key, load_and_check_poll_state, record_poll
 from api.provider_auth_scope import (
-    SCOPE_SYSTEM,
     caller_is_admin,
     current_user_id,
     resolve_scope,
@@ -59,6 +58,8 @@ from api.schemas_llm_auth import (
 )
 from api.user_management.dependencies import get_db_session
 from auth_middleware import get_current_user
+from auth_rbac import require_role
+from autobot_shared.auth.permissions import Role
 from autobot_shared.http_egress_guard import assert_public_egress
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_redis_client
@@ -71,17 +72,12 @@ from llm_shared.llm_oauth_registry import (
     LlmOAuthClient,
     ProviderNotConfiguredError,
     UnknownProviderError,
-    build_provider,
     describe_providers,
     resolve_client,
 )
 from llm_shared.provider_auth import (
-    LEGACY_FALLBACK_STOP_KEY,
-    LEGACY_SUBJECT,
     NEEDS_REAUTH_KEY,
-    _vault_read,
     _vault_read_dual,
-    _vault_secret_name,
     _vault_write,
     build_token_data,
     validate_token_response,
@@ -497,45 +493,6 @@ async def provider_auth_status(
     )
 
 
-def _stops_legacy_fallback(scope: str, subject: str) -> bool:
-    """A multi-tenant system disconnect: the org's token goes, and a stop marker replaces it.
-
-    The legacy ``"global"`` token is shared by every org still falling back to it
-    (#11497), so one org's disconnect must not delete it; the marker makes only
-    this org stop reading it (owner decision, #19241). Single-tenant (the org
-    subject IS ``"global"``) deletes outright.
-    """
-    return scope == SCOPE_SYSTEM and subject != LEGACY_SUBJECT
-
-
-async def _revoke_one(url: str, client: LlmOAuthClient, token_data: dict) -> None:
-    """RFC 7009 revoke of one stored grant (the refresh token when there is one)."""
-    hint = "refresh_token" if token_data.get("refresh_token") else "access_token"
-    payload = {**_client_auth(client), "token": token_data.get(hint, ""), "token_type_hint": hint}
-
-    async def _check(r) -> None:
-        if r.status >= 400:
-            raise await _error_detail(r, "Revocation endpoint")
-
-    await _post_form(url, payload, "Revocation endpoint", _check)
-
-
-async def _revoke_at_provider(provider_name: str, grants: list[dict]) -> tuple[bool | None, str | None]:
-    """``(revoked, error)`` for the provider-side revoke; ``(None, None)`` when no revoke URL is set."""
-    url = build_provider(provider_name).revocation_url
-    if not url or not grants:
-        return None, None
-    try:
-        _validate_outbound_url(url)
-        client = _resolve_client(provider_name, None)
-        for token_data in grants:
-            await _revoke_one(url, client, token_data)
-    except HTTPException as exc:
-        logger.warning("Provider-side revoke failed for %s: %s", provider_name, exc.detail)
-        return False, str(exc.detail)
-    return True, None
-
-
 @router.delete("/{provider_name}", response_model=ProviderRevokeResult)
 async def revoke_provider_auth(
     provider_name: str,
@@ -548,44 +505,35 @@ async def revoke_provider_auth(
 
     *scope* is required (422 without it): a scope-less "disconnect" from an
     admin must never default to deleting the org-shared credential. A
-    multi-tenant system disconnect replaces the org's token with a stop marker
-    (see :func:`_stops_legacy_fallback`). When the provider has an RFC 7009
-    endpoint the deleted grant is revoked there first; a failure there is
-    logged and reported, and the local delete still happens.
+    multi-tenant system disconnect leaves a per-org stop marker; see
+    ``api.provider_auth_revoke``, which also revokes at the provider and audits.
     """
-    from sqlalchemy import delete  # noqa: PLC0415
-
-    from models.secret import Secret  # noqa: PLC0415
+    from api.provider_auth_revoke import disconnect  # noqa: PLC0415
 
     _require_known_provider(provider_name)
-    effective = resolve_scope(scope, is_admin)
-    subject = subject_for(effective, user)
-    grant = await _vault_read(session, provider_name=provider_name, subject=subject, owner_vault_str=_SYSTEM_VAULT)
-    grants = [grant] if grant and grant.get("access_token") else []  # a stop marker is not a grant
-    # RFC 7009 only for what this call deletes -- never the shared legacy token.
-    revoked, error = await _revoke_at_provider(provider_name, grants)
-    if _stops_legacy_fallback(effective, subject):
-        marker = {LEGACY_FALLBACK_STOP_KEY: True, "created_by": _current_user_id(user)}
-        await _vault_write(
-            session,
-            provider_name=provider_name,
-            subject=subject,
-            owner_vault_str=_SYSTEM_VAULT,
-            token_data=marker,
-            created_by_id=_current_user_id(user),
-        )
-    else:
-        name = _vault_secret_name(provider_name, subject)
-        await session.execute(delete(Secret).where(Secret.name == name, Secret.owner_vault == _SYSTEM_VAULT))
-    await session.commit()
-    logger.info("Revoked provider auth for %s (scope=%s, provider_revoked=%s)", provider_name, effective, revoked)
-    return ProviderRevokeResult(
-        provider_name=provider_name,
-        scope=effective,
-        deleted=len(grants),
-        provider_revoked=revoked,
-        provider_error=error,
-    )
+    return await disconnect(session, user, provider_name, resolve_scope(scope, is_admin))
+
+
+#: The existing RBAC gate, superadmin only: the shared token serves every org (owner decision, #19241).
+_require_superadmin = require_role(Role.SUPERADMIN)
+
+
+@router.delete("/{provider_name}/shared", response_model=ProviderRevokeResult)
+async def revoke_shared_provider_auth(
+    provider_name: str,
+    session: AsyncSession = Depends(get_db_session),
+    user: Any = Depends(get_current_user),
+    _superadmin: bool = Depends(_require_superadmin),
+) -> ProviderRevokeResult:
+    """Superadmin: delete the shared legacy ``"global"`` token and revoke it at the provider.
+
+    Every org still falling back to it loses it, which is the point (key
+    compromise, account-owner offboarding). Audited like every disconnect.
+    """
+    from api.provider_auth_revoke import revoke_shared  # noqa: PLC0415
+
+    _require_known_provider(provider_name)
+    return await revoke_shared(session, user, provider_name)
 
 
 __all__ = ["router"]

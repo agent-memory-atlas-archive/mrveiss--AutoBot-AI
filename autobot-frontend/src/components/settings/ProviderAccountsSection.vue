@@ -21,6 +21,7 @@
             </template>
           </ProviderOAuthConnect>
         </div>
+        <SharedTokenRevoke v-if="isSuperadmin" :providers="providers" />
       </div>
 
       <div class="provider-scope-section" data-testid="provider-section-user">
@@ -44,11 +45,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ApiClient from '@/utils/ApiClient'
 import { createLogger } from '@/utils/debugUtils'
 import ProviderOAuthConnect from '@/components/settings/ProviderOAuthConnect.vue'
+import SharedTokenRevoke from '@/components/settings/SharedTokenRevoke.vue'
+import { isSuperadminRole } from '@/constants/roles'
+import { useUserStore } from '@/stores/useUserStore'
 import type { ProviderInfo } from '@/utils/providerOAuth'
 
 defineProps<{ isAdmin: boolean }>()
@@ -56,6 +60,9 @@ defineProps<{ isAdmin: boolean }>()
 const logger = createLogger('ProviderAccountsSection')
 const { t } = useI18n()
 const providers = ref<ProviderInfo[]>([])
+// #19241: the shared-token revoke is superadmin-only (backend: require_role(Role.SUPERADMIN)).
+const userStore = useUserStore()
+const isSuperadmin = computed(() => isSuperadminRole(userStore.currentUser?.role))
 const loadError = ref('')
 
 onMounted(async () => {

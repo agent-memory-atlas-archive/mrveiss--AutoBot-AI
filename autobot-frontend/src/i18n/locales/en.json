@@ -943,6 +943,14 @@
       "disconnectFailed": "Disconnect failed",
       "needsReauth": "{provider} rejected the saved sign-in. Sign in again to reconnect.",
       "providerRevokeFailed": "Disconnected here, but the provider did not confirm revoking access: {reason}",
+      "shared": {
+        "heading": "Shared sign-in (all organisations)",
+        "description": "Organisations without their own system sign-in fall back to this shared token. Revoking it removes it for every one of them and revokes it at the provider.",
+        "revokeButton": "Revoke shared {provider} token",
+        "confirmTitle": "Revoke the shared {provider} token?",
+        "confirmMessage": "Every organisation that relies on the shared {provider} sign-in loses it immediately and falls back to its API key. This cannot be undone; a new sign-in is needed to restore it.",
+        "done": "The shared {provider} token was revoked."
+      },
       "deviceInitFailed": "Device flow initiation failed",
       "initiateFailed": "Could not start sign-in",
       "notConfigured": "{provider} sign-in is not configured on this server. Ask an administrator to set:",
