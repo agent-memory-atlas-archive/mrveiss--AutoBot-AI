@@ -872,7 +872,7 @@ def _build_system_config_info() -> str:
 Network Layout (role-based, count-agnostic -- any host count; SSOT-resolved):
 - Backend role (Main Machine): {NetworkConstants.MAIN_MACHINE_IP} - Backend API
   (port {NetworkConstants.BACKEND_PORT}) + Windows NPU Worker (port {NetworkConstants.NPU_WORKER_WINDOWS_PORT}) +
-  Desktop/Terminal VNC (port 6080)
+  Desktop/Terminal VNC (port {NetworkConstants.VNC_PORT})
 - Frontend role: {NetworkConstants.FRONTEND_VM_IP}:5173 - Web interface
   (SINGLE FRONTEND SERVER)
 - NPU Worker role: {NetworkConstants.NPU_WORKER_VM_IP}:{NetworkConstants.NPU_WORKER_PORT} - Secondary NPU worker (Linux)

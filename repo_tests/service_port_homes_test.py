@@ -17,7 +17,9 @@ Two checks, each with a contrast test proving it fires:
    definition. Production Python is read through the AST (docstrings are prose and are skipped);
    other sources are read as text with ``#``/``//`` comments stripped.
 
-Concepts: the Windows NPU worker, 8082, separate from the Linux worker's ``npu`` (#19325).
+Concepts: the Windows NPU worker, 8082, separate from the Linux worker's ``npu`` (#19325); the
+noVNC web port, ``vnc``, which the browser host serves on the same 6080 as the backend desktop --
+the frontend's Playwright default of 6081 was a port no host listens on, now retired (#19327).
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ _SSOT_HOME = "autobot_shared/ssot_config.py"
 #: Literal tables of every SSOT port by design: the hardcoded-value detector's rules (#14316).
 _DETECTOR_TABLES = frozenset({"scripts/lib/hardcoded-value-rules.sh"})
 _WIN = "autobot-npu-worker/resources/windows-npu-worker"
+_ANSIBLE = "autobot-slm-backend/ansible"
 
 
 class Pin(NamedTuple):
@@ -90,12 +93,40 @@ PINNED: tuple[Pin, ...] = (
         r"AUTOBOT_NPU_WORKER_WINDOWS_PORT:=(\d+)",
         1,
     ),
+    Pin("vnc", ".env.example", r"^AUTOBOT_VNC_PORT=(\d+)$", 1),
+    Pin("vnc", ".env.example", r"^VITE_(?:DESKTOP|TERMINAL|PLAYWRIGHT)_VNC_PORT=(\d+)$", 3),
+    Pin("vnc", "autobot-infrastructure/shared/scripts/lib/ssot-config.sh", r"AUTOBOT_VNC_PORT:=(\d+)", 1),
+    Pin(
+        "vnc",
+        "autobot-infrastructure/shared/scripts/infrastructure/browser-vnc-websockify.service",
+        r"0\.0\.0\.0:(\d+)",
+        1,
+    ),
+    Pin(
+        "vnc",
+        "autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml",
+        r':(\d+):\d+"\s+# noVNC',
+        1,
+    ),
+    Pin("vnc", f"{_ANSIBLE}/roles/vnc/defaults/main.yml", r"WEBSOCKIFY_PORT'\) \| default\('(\d+)'", 1),
+    Pin("vnc", f"{_ANSIBLE}/roles/common/defaults/main.yml", r"^\s+novnc: (\d+)", 1),
+    Pin("vnc", f"{_ANSIBLE}/roles/slm_manager/defaults/main.yml", r"^novnc_port: (\d+)", 1),
+    Pin("vnc", f"{_ANSIBLE}/roles/distributed_setup/defaults/main.yml", r"^vnc_port: (\d+)", 1),
+    Pin("vnc", f"{_ANSIBLE}/inventory/production.yml", r"novnc_port: (\d+)", 1),
+    Pin("vnc", f"{_ANSIBLE}/roles/frontend/templates/nginx-frontend.conf.j2", r"\(ansible_host\) \}\}:(\d+)/", 1),
 )
 
-#: field -> {file: (how many sites, reason)} for a forbidden number that legitimately stays.
+#: number -> the PortConfig field a reader should use instead. A number equal to its field's value
+#: is forbidden outside that field's homes and pins; a RETIRED number (no host serves it) everywhere.
+FORBIDDEN: dict[int, str] = {
+    8082: "npu_windows",  # #19325
+    6081: "vnc",  # #19327: retired -- the browser host's noVNC is port.vnc; nothing listens on 6081
+}
+
+#: number -> {file: (how many sites, reason)} for a forbidden number that legitimately stays.
 #: Shrink-only and per occurrence: a new site in a listed file fails, and so does a stale count.
-KNOWN: dict[str, dict[str, tuple[int, str]]] = {
-    "npu_windows": {
+KNOWN: dict[int, dict[str, tuple[int, str]]] = {
+    8082: {
         "autobot-slm-backend/ansible/fix-slm-env-ports.yml": (
             4,
             "a one-off fixer that rewrites a Linux worker env still set to the old wrong 8082 -- "
@@ -109,7 +140,9 @@ _SCAN_ROOTS = (*scan_mod.SCAN_ROOTS, "autobot-frontend")
 _NOT_PRODUCTION = re.compile(
     r"(_test\.py$|(^|/)test_[^/]*\.py$|/tests?/|/__tests__/|\.spec\.|\.test\.|\.stories\.|/generated/)"
 )
-_COMMENT = re.compile(r"(^|[ \t])(#|//).*$", re.MULTILINE)
+_COMMENT = re.compile(r"(^|[ \t])(#|//).*$|^[ \t]*(/\*|\*).*$", re.MULTILINE)
+#: A port as a whole number: not part of a longer one, a version (1.6081) or an issue ref (#6081).
+_WORD = r"(?<![\d.#]){}(?!\d)"
 
 
 def ssot_port(field: str) -> int:
@@ -165,7 +198,7 @@ def _docstrings(tree: ast.Module) -> set[int]:
 
 def _python_sites(source: str, value: int) -> list[int]:
     """Lines of each non-docstring int or string constant stating *value*."""
-    tree, word = ast.parse(source), re.compile(rf"(?<![\d.]){value}(?!\d)")
+    tree, word = ast.parse(source), re.compile(_WORD.format(value))
     prose = _docstrings(tree)
     lines = []
     for node in ast.walk(tree):
@@ -179,7 +212,7 @@ def _python_sites(source: str, value: int) -> list[int]:
 def _text_sites(text: str, value: int) -> list[int]:
     """Lines stating *value* in a non-Python source, comments stripped."""
     code = _COMMENT.sub("", text)
-    word = re.compile(rf"(?<![\d.]){value}(?!\d)")
+    word = re.compile(_WORD.format(value))
     return [code.count("\n", 0, m.start()) + 1 for m in word.finditer(code)]
 
 
@@ -188,19 +221,21 @@ def sites(rel: str, text: str, value: int) -> list[int]:
     return _python_sites(text, value) if rel.endswith(".py") else _text_sites(text, value)
 
 
-def _homes(field: str) -> set[str]:
+def _homes(number: int) -> set[str]:
+    """Where *number* may stand: its field's home and pins -- none at all for a retired number."""
+    field = FORBIDDEN[number]
+    if ssot_port(field) != number:
+        return set()
     return {_SSOT_HOME} | {pin.rel for pin in PINNED if pin.field == field}
 
 
-def forbidden_sites(field: str, sources: dict[str, str]) -> list[str]:
-    """Every statement of the field's number outside its homes and pins, beyond its KNOWN count."""
-    value, known, out = ssot_port(field), KNOWN.get(field, {}), []
+def forbidden_sites(number: int, sources: dict[str, str]) -> list[str]:
+    """Every statement of a FORBIDDEN number outside its homes and pins, beyond its KNOWN count."""
+    homes, known, out = _homes(number) | _DETECTOR_TABLES, KNOWN.get(number, {}), []
     for rel, text in sorted(sources.items()):
-        if rel in _homes(field) or rel in _DETECTOR_TABLES:
-            continue
-        lines = sites(rel, text, value)
+        lines = [] if rel in homes else sites(rel, text, number)
         if len(lines) > known.get(rel, (0, ""))[0]:
-            out += [f"{rel}:{line}: {value} restated -- read PortConfig.{field}" for line in lines]
+            out += [f"{rel}:{line}: {number} -- read PortConfig.{FORBIDDEN[number]}" for line in lines]
     return out
 
 
@@ -225,17 +260,17 @@ def test_no_forbidden_number_outside_its_homes() -> None:
     assert len(sources) >= 1000, f"the sweep read {len(sources)} files -- a clean result would be blind"
     missing = [pin.rel for pin in PINNED if pin.rel.endswith(".py") and pin.rel not in sources]
     assert missing == [], f"the sweep never reached the in-bundle homes {missing}"
-    found = [f for field in KNOWN.keys() | {p.field for p in PINNED} for f in forbidden_sites(field, sources)]
+    found = [f for number in FORBIDDEN for f in forbidden_sites(number, sources)]
     assert found == [], f"checked {len(sources)} files:\n" + "\n".join(found)
 
 
 def test_the_known_counts_only_shrink() -> None:
     sources = _sources()
     stale = [
-        f"{rel}: known {count}, states {len(sites(rel, sources.get(rel, ''), ssot_port(field)))}"
-        for field, entries in KNOWN.items()
+        f"{rel}: known {count}, states {len(sites(rel, sources.get(rel, ''), number))}"
+        for number, entries in KNOWN.items()
         for rel, (count, _) in entries.items()
-        if len(sites(rel, sources.get(rel, ""), ssot_port(field))) < count
+        if len(sites(rel, sources.get(rel, ""), number)) < count
     ]
     assert stale == [], f"{stale} -- lower the KNOWN count, or delete the entry at zero"
 
@@ -254,5 +289,13 @@ def test_a_re_added_copy_is_caught_in_each_language() -> None:
     assert sites("a.py", '"""Listens on 8082."""\n# 8082 in a comment\n', 8082) == []
     assert sites("a.ps1", "$p = 8082 # the worker\n# port 8082\n", 8082) == [1]
     assert sites("a.ts", "const P = '18082' // 8082\n", 8082) == []
-    found = forbidden_sites("npu_windows", {"autobot-backend/x.py": "PORT = 8082\n"})
-    assert found == ["autobot-backend/x.py:1: 8082 restated -- read PortConfig.npu_windows"]
+    found = forbidden_sites(8082, {"autobot-backend/x.py": "PORT = 8082\n"})
+    assert found == ["autobot-backend/x.py:1: 8082 -- read PortConfig.npu_windows"]
+    assert sites("a.ts", " * Extracted (issue #6081).\n/* 6081 */\n", 6081) == []
+    assert sites("a.ts", "\n  /** doc */\nport: 8082\n", 8082) == [3], "stripping a comment must not shift lines"
+
+
+def test_a_retired_number_has_no_home() -> None:
+    assert _homes(6081) == set(), "6081 is served by no host; nothing may state it"
+    found = forbidden_sites(6081, {"autobot-frontend/src/config/x.ts": "port: getEnvNumber('P', 6081),\n"})
+    assert found == ["autobot-frontend/src/config/x.ts:1: 6081 -- read PortConfig.vnc"]
