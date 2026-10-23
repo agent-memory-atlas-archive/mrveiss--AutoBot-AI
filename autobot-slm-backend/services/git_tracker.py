@@ -17,6 +17,7 @@ from typing import Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from autobot_shared.fleet_constants import FLEET_INSTALL_ROOT
 from models.database import NodeCodeSource, Setting
 from services.git_subprocess import GIT_TIMEOUT_S, GIT_TRANSPORT_TIMEOUT_S, run_git_capture
 
@@ -33,7 +34,7 @@ except ImportError:
 VERSION_CHECK_INTERVAL = 300  # 5 minutes
 # SLM_REPO_PATH: the code_source git CHECKOUT (the dir holding .git), never the install root that
 # contains it. This is its one read; every SLM module imports DEFAULT_REPO_PATH from here (#15708).
-DEFAULT_REPO_PATH = os.environ.get("SLM_REPO_PATH", "/opt/autobot/code_source")
+DEFAULT_REPO_PATH = os.environ.get("SLM_REPO_PATH", f"{FLEET_INSTALL_ROOT}/code_source")
 DEFAULT_BRANCH = os.environ.get("SLM_REPO_BRANCH", "main")
 
 # Log the "no local code source" condition once, not every interval (#9716).
