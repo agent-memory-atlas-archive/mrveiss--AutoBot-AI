@@ -2568,24 +2568,25 @@ async def _restart_dependents_with_health(component: str, snapshot: Optional[str
 
 # Python backend components that embed an autobot_shared symlink (#10912).
 _BACKEND_COMPONENTS = frozenset(_COMPONENT_PIP_PATHS.keys())
+# Every component whose code imports autobot_shared: a resolve syncs the library first (#11611, #18094).
+_SHARED_IMPORTERS = _BACKEND_COMPONENTS | {"autobot-npu-worker", "autobot-slm-agent"}
 
 
 def _get_deploy_base() -> Path:
     """Return the installation base directory from config (AUTOBOT_BASE_DIR, else project_root()).
 
-    Reads the value at call time so that tests can monkeypatch the environment
-    variable or the config object without needing to patch a module-level string.
-    Avoids importing autobot_shared.ssot_config at module load (bootstrap safety).
+    Read at call time so tests can monkeypatch the env var or the config object, not a module string;
+    ssot_config is imported lazily, not at module load (bootstrap safety).
     """
     try:
         from autobot_shared.ssot_config import get_config as _get_config
 
         return Path(_get_config().path.base_dir)
     except Exception:
-        # ssot_config unavailable at bootstrap — the stdlib rule ssot_config's default uses (#18094).
+        # ssot_config unavailable at bootstrap — its own stdlib rule, else the fleet layout (#18094).
         from autobot_shared.paths import install_base_dir
 
-        return install_base_dir()
+        return install_base_dir(when_undeterminable=FLEET_INSTALL_ROOT)
 
 
 def _get_code_source_root() -> Path:
@@ -2659,11 +2660,10 @@ async def _ensure_autobot_shared_synced(component: str, force: bool = False) -> 
     startup and the control plane crash-looped (taking the code-sync API offline —
     a chicken-and-egg that needed a manual recovery).
 
-    Enforce autobot_shared-first ordering at the per-component deploy sites: for a
-    Python backend component, rsync the shared library from code_source ahead of
-    the component's own rsync + restart so every new shared import resolves. No-op
-    (returns success) for autobot_shared itself and for frontends — they either ARE
-    the shared component or do not import it at start.
+    Enforce autobot_shared-first ordering at the per-component deploy sites: for every
+    component in ``_SHARED_IMPORTERS`` (the backends, the NPU worker and the SLM agent, #18094),
+    rsync the shared library from code_source ahead of the component's own rsync + restart so
+    every new shared import resolves. No-op (success) for the rest, which do not import it.
 
     Returns (ok, message, blocked_deletions): on a guard refusal the caller
     must surface ``blocked_deletions`` rather than only prose, and on rsync
@@ -2674,7 +2674,7 @@ async def _ensure_autobot_shared_synced(component: str, force: bool = False) -> 
     file the source tree does not have. (``_deploy_constraints_dir`` and
     ``_sync_slm_from_code_source`` also delete, neither reachable from a resolve.)
     """
-    if component not in _BACKEND_COMPONENTS:
+    if component not in _SHARED_IMPORTERS:
         return True, "", []
     try:
         shared_source = get_default_source_dir("autobot_shared")

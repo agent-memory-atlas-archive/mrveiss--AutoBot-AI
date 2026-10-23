@@ -31,11 +31,13 @@ from pathlib import Path
 
 import yaml
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from autobot_shared import fleet_constants
 from tools.lint import check_getenv_ssot_drift  # noqa: F401 -- puts tools/lint on sys.path for the sibling import
 
 from tools.lint import _env_fork_scan as scan_mod  # isort: skip
+from tools.lint._scan_helpers import EmptyEnumeration  # isort: skip
 
 _ROOT = repo_root()
 _FLEET_HOME = "autobot_shared/fleet_constants.py"
@@ -49,6 +51,7 @@ _ANSIBLE = "autobot-slm-backend/ansible"
 KNOWN_INSTALL_ROOT_LITERALS: dict[str, str] = {
     "autobot-slm-backend/services/code_distributor.py": "#15708 (SLM_REPO_PATH, two modules disagree)",
     "autobot-slm-backend/services/git_tracker.py": "#15708 (SLM_REPO_PATH, two modules disagree)",
+    "autobot_shared/redis_management/types.py": "owned by #19232 (rewrites this YAML resolver; one file, one PR)",
     "autobot-backend/security/enterprise/compliance_manager.py": (
         "historical: the literal junk-directory NAME the unexpanded #13658 placeholder created, matched "
         "verbatim to find that legacy tree -- not a path resolved under the install root"
@@ -84,6 +87,29 @@ def _sources(root: Path) -> dict[str, str]:
         except (UnicodeDecodeError, OSError):
             continue
     return out
+
+
+def _scanned_files(root: Path) -> list[str]:
+    """The population the live sweep reads: production Python under the env-fork sweep's roots.
+
+    An empty tree returns ``[]`` rather than raising, so the floor below refuses it as the typed
+    ``ReachFloorError`` the reach meta-test hands every declaration (as excluded_tree_size_debt_test).
+    """
+    try:
+        return sorted(_sources(root))
+    except EmptyEnumeration:
+        return []
+
+
+#: ONE population (``_sources``) and its floor; ``reach_declarations_test`` proves the floor against it.
+FILES = declare(
+    "defined-twice-18094-scan",
+    discover=_scanned_files,
+    floor=3558,  # mid-window; the arithmetic is in the commit message, which cannot drift from the tree
+    growth=150,
+    what="production python files swept for a second definition of a #18094 value",
+    roots=scan_mod.SCAN_ROOTS,
+)
 
 
 def _is_number(node: ast.AST) -> bool:
@@ -191,6 +217,7 @@ def _beyond_the_copy(rel: str, found: list[str], source: str) -> list[str]:
 def test_each_value_has_one_home_on_the_live_tree() -> None:
     tracked = [rel for rel in scan_mod.tracked_paths(_ROOT, "*.py") if rel.split("/")[0] in scan_mod.SCAN_ROOTS]
     sources = _sources(_ROOT)
+    assert len(FILES.examined(_ROOT)) >= FILES.floor, "the sweep read fewer files than its floor"
     missing = [rel for rel in _WITNESSES if rel not in sources]
     assert missing == [], f"the sweep never reached {missing} -- a clean result would be blind"
     unread = [rel for rel in tracked if rel not in sources and not (rel.endswith("_test.py") or "/tests/" in rel)]

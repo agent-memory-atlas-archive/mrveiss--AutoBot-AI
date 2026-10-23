@@ -24,8 +24,6 @@ import os
 from enum import Enum
 from typing import Dict
 
-from autobot_shared.paths import install_base_dir
-
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +48,7 @@ def _resolve_yaml_path() -> str | None:
         "/app/config/redis-databases.yaml",  # Container
         "./config/redis-databases.yaml",  # Host relative
         os.path.join(
-            str(install_base_dir()),  # bootstrap before config: ssot_config's own base_dir rule (#18094)
+            os.environ.get("AUTOBOT_BASE_DIR", "/opt/autobot"),  # ssot-config-exempt: bootstrap before config available
             "config/redis-databases.yaml",
         ),
     ]
