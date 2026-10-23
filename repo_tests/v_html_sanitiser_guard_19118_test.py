@@ -67,15 +67,17 @@ UNSANITISED_ALLOWLIST: dict[str, tuple[int, str]] = {
     ),
 }
 
-_VHTML = re.compile(r"""(?<![\w-])v-html\s*=\s*"([^"]*)\"""")
+# Both Vue attribute quote styles; group 2 is the bound expression.
+_VHTML = re.compile(r"""(?<![\w-])v-html\s*=\s*(["'])(.*?)\1""")
 _DOM_SINK = re.compile(r"""\.(?:innerHTML|outerHTML)\s*=(?!=)\s*([^\n]*)|\binsertAdjacentHTML\s*\([^,]*,\s*([^\n]*)""")
 # The canonical module is libs/autobot-ui/src/utils/sanitize.ts, reached through the
 # kit (`@autobot/ui`) or the autobot-frontend re-export (`@/utils/sanitize`).
 CANONICAL = "libs/autobot-ui/src/utils/sanitize.ts"
 _SANITISER = re.compile(
     r"""from\s+['"]@/utils/sanitize['"]"""
-    r"""|\bsanitize(?:Html|ChatHtml|KnowledgeHtml)\b[^;]*?from\s+['"]@autobot/ui['"]""",
-    re.S,
+    # The name must sit inside the braces of the import that names @autobot/ui -- `[^}]` cannot
+    # cross into a neighbouring import, so `import { sanitizeHtml } from './x'` is never credited.
+    r"""|\bimport\s*(?:type\s+)?\{[^}]*\bsanitize(?:Html|ChatHtml|KnowledgeHtml)\b[^}]*\}\s*from\s+['"]@autobot/ui['"]""",
 )
 _CALL = re.compile(r"\bsanitize(?:Html|ChatHtml|KnowledgeHtml)\s*\(")
 _COMMENT_LINE = re.compile(r"^\s*(<!--|//|\*|/\*)")
@@ -143,8 +145,35 @@ def _definitions(name: str, lines: list[str]) -> list[str]:
     return spans
 
 
+def _call_end(s: str, open_at: int) -> int:
+    """Index of the ``)`` closing the ``(`` at ``open_at``, skipping string literals; -1 if unclosed."""
+    depth, quote, i = 0, "", open_at
+    while i < len(s):
+        c = s[i]
+        if quote:
+            i += 1 if c == "\\" else 0
+            quote = "" if c == quote else quote
+        elif c in "'\"`":
+            quote = c
+        elif c in "()":
+            depth += 1 if c == "(" else -1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _wholly_sanitised(value: str) -> bool:
+    """``value`` is ONE kit-sanitiser call and nothing else on its line (a ``;`` aside), so
+    ``raw + sanitizeHtml('')`` or ``sanitizeHtml(a) + raw`` is not credited."""
+    s = value.strip()
+    m = _CALL.match(s)
+    end = _call_end(s, m.end() - 1) if m else -1
+    return end >= 0 and s[end + 1 :].split("\n", 1)[0].strip() in ("", ";")
+
+
 def _binding_ok(expr: str, lines: list[str], depth: int = 2) -> bool:
-    if _CALL.search(expr):
+    if _wholly_sanitised(expr):
         return True
     m = _IDENT.match(expr)
     if not m:
@@ -178,12 +207,13 @@ def _unsanitised(path: Path) -> int:
     lines = _live_lines(text)
     imported = bool(_SANITISER.search(text)) or path.relative_to(REPO).as_posix() == CANONICAL
     bad = 0
-    for line in lines:
+    for i, line in enumerate(lines):
         for m in _VHTML.finditer(line):
-            bad += 0 if imported and _binding_ok(m.group(1), lines) else 1
+            bad += 0 if imported and _binding_ok(m.group(2), lines) else 1
         for m in _DOM_SINK.finditer(line):
             rhs = m.group(1) if m.group(1) is not None else m.group(2)
-            bad += 0 if imported and _CALL.match(rhs.strip()) else 1
+            # the call may close on a later line; the value is checked to its own end
+            bad += 0 if imported and _wholly_sanitised("\n".join([rhs, *lines[i + 1 :]])) else 1
     return bad
 
 
@@ -276,3 +306,20 @@ def test_guard_is_per_binding() -> None:
     assert _DOM_SINK.search("el.innerHTML = sanitizeHtml(x)") and _DOM_SINK.search(
         "el.insertAdjacentHTML('beforeend', x)"
     )
+
+
+def test_contrast_single_quotes_import_binding_and_whole_value() -> None:
+    """CodeRabbit on #19388: each near miss the detector once accepted, beside the case it must accept."""
+    # single-quoted bindings are sinks too
+    assert _VHTML.search("<div v-html='untrustedHtml'></div>").group(2) == "untrustedHtml"
+    assert _VHTML.search("""<div v-html='sanitizeHtml(x, "plain")'></div>""").group(2) == 'sanitizeHtml(x, "plain")'
+    # the sanitiser name must come from the import that names the kit
+    assert not _SANITISER.search("import { sanitizeHtml } from './unsafe'\nimport { BaseModal } from '@autobot/ui'\n")
+    assert _SANITISER.search("import {\n  BaseModal,\n  sanitizeHtml,\n} from '@autobot/ui'\n")
+    # the whole sink value is the sanitiser call, not just a part of it
+    lines = _live_lines("const a = 1")
+    assert not _binding_ok("untrustedHtml + sanitizeHtml('')", lines)
+    assert not _binding_ok("sanitizeHtml(a) + untrustedHtml", lines)
+    assert _binding_ok("sanitizeHtml(a + ')', 'plain')", lines)
+    assert not _wholly_sanitised("sanitizeHtml(a) + raw;")
+    assert _wholly_sanitised("sanitizeHtml(\n  a,\n  'plain'\n);\nnext()")

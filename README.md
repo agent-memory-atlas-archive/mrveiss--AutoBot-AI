@@ -289,9 +289,11 @@ docker compose --env-file docker/.env.docker --env-file docker/.env.secrets up -
 - **Upgrade:** use the built-in updater in the SLM web UI: **Maintenance > Updates**, then
   the **Code Sync** tab. See the [Code Update runbook](docs/runbooks/CODE_UPDATE.md).
 - **Backup, restore and disaster recovery:** [Disaster Recovery](docs/operations/disaster-recovery.md).
-- **Hardened Docker deployment** (production overlay):
+- **Hardened Docker deployment** (production overlay). `--profile ollama` starts the bundled
+  model server the default provider settings point at; pull the models as in
+  [Quick Start](#quick-start), or configure a hosted provider and drop the profile:
   ```bash
-  docker compose -f docker-compose.yml -f docker-compose.hardened.yml --env-file docker/.env.docker --env-file docker/.env.secrets up -d
+  docker compose -f docker-compose.yml -f docker-compose.hardened.yml --env-file docker/.env.docker --env-file docker/.env.secrets --profile ollama up -d
   ```
 - **Uninstall and other installer options:** [INSTALL.md](INSTALL.md).
 
@@ -321,17 +323,6 @@ AutoBot runs as a coordinated set of services. Ports differ by install mode.
 
 **Health check:** Docker `curl http://localhost/api/health`; native
 `curl -k https://<server>/api/health` (self-signed certificate).
-
----------|------|------|
-| **Frontend** | Vue.js UI, TLS termination | 80, 443 |
-| **Backend** | FastAPI API server | 8001 |
-| **SLM** | Service Lifecycle Manager — deploys, operates, and scales AutoBot's own services | (via dashboard `/slm`) |
-| **Redis** | Cache, message queue | 6379 |
-| **PostgreSQL** | Relational database | 5432 |
-| **ChromaDB** | Vector embeddings store | 8100 |
-| **Inference (Ollama)** | Local LLM inference | 11434 (optional) |
-| **Prometheus** | Metrics collection | 9090 (optional) |
-| **Grafana** | Monitoring dashboards | 3000 (optional) |
 
 ---
 

@@ -27,6 +27,18 @@ const getTabIcon = (tab?: UserPresence['currentTab']): string => {
 }
 
 
+type Translate = (key: string, named: Record<string, unknown>) => string
+
+// #14780: compact avatars are decorative, so each wrapper is named for the person and status.
+const presenceLabel = (tr: Translate, p: UserPresence, isMe = false): string =>
+  isMe
+    ? tr('collaboration.presenceIndicator.youStatus', { status: p.status })
+    : tr('collaboration.presenceIndicator.collaboratorTooltip', {
+        username: p.username,
+        status: p.status,
+        tab: p.currentTab || tr('collaboration.presenceIndicator.unknownTab', {}),
+      })
+
 // Other collaborators (excluding myself)
 const otherCollaborators = computed<UserPresence[]>(() => {
   if (!myPresence.value) return sessionPresence.value
@@ -47,7 +59,9 @@ const props = defineProps<{
       <div
         v-if="myPresence"
         class="relative"
-        :title="$t('collaboration.presence.youStatus', { status: myPresence.status })"
+        :title="presenceLabel($t, myPresence, true)"
+        role="img"
+        :aria-label="presenceLabel($t, myPresence, true)"
       >
         <BaseAvatar :name="myPresence.username" size="md" variant="primary" :status="myPresence.status" ring decorative />
       </div>
@@ -59,7 +73,9 @@ const props = defineProps<{
           :key="collaborator.userId"
           class="relative"
           :style="{ zIndex: 3 - index }"
-          :title="$t('collaboration.presence.collaboratorTooltip', { name: collaborator.username, status: collaborator.status, tab: collaborator.currentTab || $t('collaboration.presence.unknownTab') })"
+          :title="presenceLabel($t, collaborator)"
+          role="img"
+          :aria-label="presenceLabel($t, collaborator)"
         >
           <BaseAvatar :name="collaborator.username" size="sm" :status="collaborator.status" ring decorative />
         </div>

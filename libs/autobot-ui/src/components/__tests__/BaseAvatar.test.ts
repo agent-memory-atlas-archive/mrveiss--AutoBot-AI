@@ -19,6 +19,7 @@ describe('initialsOf', () => {
     ['admin', 'AD'],
     ['x', 'X'],
     ['Émile Zola', 'ÉZ'],
+    ['e\u0301mile Zola', 'ÉZ'], // decomposed accent: the mark stays with its letter
     ['', ''],
   ])('%j gives %j', (name, expected) => {
     expect(initialsOf(name)).toBe(expected)

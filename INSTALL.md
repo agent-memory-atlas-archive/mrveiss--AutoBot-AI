@@ -353,13 +353,18 @@ To start the wizard over from the first step, use **Settings > General > Reset W
 SLM web UI.
 
 Over the API, log in to the SLM first. The response's `access_token` is the bearer token
-(an account with MFA enabled gets an MFA challenge instead; use the UI for that one):
+(an account with MFA enabled gets an MFA challenge instead; use the UI for that one). These
+commands send the admin password and a token, so run them **on the SLM server itself**: the
+installer's certificate is self-signed, and `-k` (skip certificate checks) is only safe over
+loopback. From another machine, install a certificate from a CA you trust, drop `-k`, and use
+the server's name instead of `127.0.0.1`. `--fail` makes a rejected login or reset exit non-zero
+instead of looking successful:
 
 ```bash
-TOKEN=$(curl -sk -X POST https://<server-ip>/slm/api/auth/login \
+TOKEN=$(curl -sSk --fail -X POST https://127.0.0.1/slm/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username": "admin", "password": "<password>"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
-curl -sk -X POST https://<server-ip>/slm/api/setup/reset -H "Authorization: Bearer ${TOKEN}"
+curl -sSk --fail -X POST https://127.0.0.1/slm/api/setup/reset -H "Authorization: Bearer ${TOKEN}"
 ```
 
 ### After the wizard

@@ -48,9 +48,14 @@ def _docstring_lines(text: str) -> set[int]:
     return lines
 
 
+def _in_scope(path: str) -> bool:
+    """Configuration, not prose or a frozen copy -- the one boundary discovery and counting share."""
+    return not (path.endswith(_PROSE_SUFFIXES) or path.startswith(_FROZEN_PREFIX))
+
+
 def _ansible_files(root: Path) -> list[str]:
     try:
-        return tracked_paths(root, _ANSIBLE)
+        return [p for p in tracked_paths(root, _ANSIBLE) if _in_scope(p)]
     except EmptyEnumeration:
         return []
 
@@ -58,7 +63,9 @@ def _ansible_files(root: Path) -> list[str]:
 REACH = declare(
     "opt-autobot-literal-ratchet-18880",
     discover=_ansible_files,
-    floor=458,  # mid-window: population 478, window (438, 478)
+    # mid-window on the SCANNED population (prose and fixtures excluded at discovery, CodeRabbit
+    # on #19388): 479 tracked - 17 out of scope = 462; floor 462 - 20 = 442, window (422, 462)
+    floor=442,
     growth=40,
     what="tracked ansible files",
     roots=(_ANSIBLE,),
@@ -69,7 +76,7 @@ def literal_counts(files: dict[str, str]) -> dict[str, int]:
     """{path: code occurrences of /opt/autobot}, the one definition excluded, zeros dropped."""
     counts = {}
     for path, text in files.items():
-        if path.endswith(_PROSE_SUFFIXES) or path.startswith(_FROZEN_PREFIX):
+        if not _in_scope(path):
             continue
         prose = _docstring_lines(text) if path.endswith(".py") else set()
         lines = code_lines(text, name=path, strip_trailing=True)
@@ -163,19 +170,43 @@ def test_prose_and_frozen_fixtures_are_outside_the_boundary_and_code_still_count
 _SYNONYMS = ("project_root", "slm_base_dir", "autobot_repo_dir", "frontend_install_dir")
 
 
+# `[ \t]*` (never `\s*`, which crosses the newline) and `.*?` so an EMPTY value is captured.
+_SYNONYM_DEF = re.compile(rf"^[ \t]*({'|'.join(_SYNONYMS)}):[ \t]*(.*?)[ \t]*(?:#.*)?$", re.M)
+
+
+def synonym_definitions(files: dict[str, str]) -> dict[str, list[tuple[str, str]]]:
+    """{synonym: [(path, value), ...]} over YAML files, an empty value kept as ``""``."""
+    defs: dict[str, list[tuple[str, str]]] = {}
+    for rel, text in files.items():
+        if rel.endswith((".yml", ".yaml")) and not rel.startswith(_FROZEN_PREFIX):
+            for m in _SYNONYM_DEF.finditer(text):
+                defs.setdefault(m.group(1), []).append((rel, m.group(2)))
+    return defs
+
+
+def stray_synonyms(defs: dict[str, list[tuple[str, str]]]) -> list[tuple[str, str, str]]:
+    return [(name, rel, v) for name, sites in defs.items() for rel, v in sites if v != '"{{ autobot.base_dir }}"']
+
+
 def test_the_root_synonyms_are_the_root_not_a_second_name_for_it() -> None:
     """#18882 AC2/AC3: the four older names for the install root are each defined only as
     `{{ autobot.base_dir }}`, so none can name the root separately again."""
-    defs = {}
-    for rel in REACH.examined(_ROOT):
-        if not rel.endswith((".yml", ".yaml")) or rel.startswith(_FROZEN_PREFIX):
-            continue
-        for m in re.finditer(
-            rf"^\s*({'|'.join(_SYNONYMS)}):\s*(.+?)\s*(?:#.*)?$", (_ROOT / rel).read_text(encoding="utf-8"), re.M
-        ):
-            defs.setdefault(m.group(1), []).append((rel, m.group(2)))
+    yaml_files = [rel for rel in REACH.examined(_ROOT) if rel.endswith((".yml", ".yaml"))]
+    defs = synonym_definitions({rel: (_ROOT / rel).read_text(encoding="utf-8") for rel in yaml_files})
     assert set(defs) == set(
         _SYNONYMS
     ), f"a synonym's definition is no longer found: {sorted(set(_SYNONYMS) - set(defs))}"
-    stray = [(name, rel, v) for name, sites in defs.items() for rel, v in sites if v != '"{{ autobot.base_dir }}"']
+    stray = stray_synonyms(defs)
     assert not stray, f"a root synonym that is not autobot.base_dir: {stray}"
+
+
+def test_contrast_an_empty_synonym_definition_is_stray() -> None:
+    files = {
+        "good.yml": 'project_root: "{{ autobot.base_dir }}"  # the root\n',
+        "empty.yml": "project_root:\n  nested: x\n",
+        "blank.yml": "slm_base_dir: # nothing\n",
+    }
+    defs = synonym_definitions(files)
+    assert defs["project_root"] == [("good.yml", '"{{ autobot.base_dir }}"'), ("empty.yml", "")]
+    assert stray_synonyms(defs) == [("project_root", "empty.yml", ""), ("slm_base_dir", "blank.yml", "")]
+    assert stray_synonyms(synonym_definitions({"good.yml": files["good.yml"]})) == []

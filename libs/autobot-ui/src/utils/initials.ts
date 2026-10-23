@@ -8,10 +8,10 @@
  *
  * Words are split on whitespace, `.`, `_` and `-`: two or more words give the first letter
  * of the first two; a single word gives its first two letters. Letters are whole code
- * points, so an accented or non-Latin name is not cut in half.
+ * points of the NFC form, so an accented (even decomposed) or non-Latin name is not cut in half.
  */
 export function initialsOf(name: string | null | undefined): string {
-  const words = (name ?? '').split(/[\s._-]+/).filter(Boolean)
+  const words = (name ?? '').normalize('NFC').split(/[\s._-]+/).filter(Boolean)
   if (words.length === 0) return ''
   const letters =
     words.length > 1 ? [Array.from(words[0])[0], Array.from(words[1])[0]] : Array.from(words[0]).slice(0, 2)

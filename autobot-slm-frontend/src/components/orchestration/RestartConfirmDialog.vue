@@ -27,8 +27,9 @@ const props = withDefaults(defineProps<Props>(), {
   isProcessing: false,
 })
 
-// #19118: message carries i18n markup plus interpolated hostnames/service names.
-const safeMessage = computed(() => sanitizeHtml(props.message))
+// #19118: message carries i18n markup plus interpolated hostnames/service names -- inline
+// formatting only, no links.
+const safeMessage = computed(() => sanitizeHtml(props.message, 'knowledge'))
 
 const emit = defineEmits<{
   confirm: []

@@ -29,6 +29,8 @@ def _user_docs() -> list[Path]:
 
 _FENCE = re.compile(r"^```.*?^```", re.M | re.S)
 _LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+# A reference definition, `[label]: dest`; footnotes (`[^1]: text`) are not links.
+_REF_DEF = re.compile(r"^ {0,3}\[(?!\^)[^\]]+\]:[ \t]*<?([^\s>]+)>?", re.M)
 
 
 def anchor_slug(heading: str) -> str:
@@ -43,10 +45,16 @@ def anchors(md: Path) -> set[str]:
     return {anchor_slug(m.group(1)) for m in re.finditer(r"^#{1,6}\s+(.+?)\s*#*\s*$", body, re.M)}
 
 
+def link_targets(text: str) -> list[str]:
+    """Every link destination outside code fences: inline `[t](dest)` and reference `[l]: dest`."""
+    body = _FENCE.sub("", text)
+    return _LINK.findall(body) + _REF_DEF.findall(body)
+
+
 def broken_links(md: Path) -> list[str]:
     """Relative links in *md* whose file, or #anchor, does not exist."""
     bad = []
-    for target in _LINK.findall(_FENCE.sub("", md.read_text(encoding="utf-8"))):
+    for target in link_targets(md.read_text(encoding="utf-8")):
         if re.match(r"^[a-z][a-z0-9+.-]*:", target) or target.startswith("<"):
             continue  # absolute URL, mailto:, or an autolink
         path_part, _, anchor = target.partition("#")
@@ -128,6 +136,18 @@ def test_no_user_doc_or_ui_string_says_llc() -> None:
     }
     found = {k: v for k, v in found.items() if v}
     assert not found, f"'LLC' where users should read 'Company OS': {found}"
+
+
+def test_contrast_reference_links_are_checked(tmp_path: Path) -> None:
+    """A reference-style destination is a link like any other: a broken one fails, a good one passes."""
+    (tmp_path / "INSTALL.md").write_text("# Setup\n", encoding="utf-8")
+    good = tmp_path / "good.md"
+    good.write_text("See [Install][setup].\n\n[setup]: ./INSTALL.md#setup\n[^1]: a footnote\n", encoding="utf-8")
+    bad = tmp_path / "bad.md"
+    bad.write_text("See [Install][setup].\n\n[setup]: ./MISSING.md\n", encoding="utf-8")
+    assert link_targets(good.read_text(encoding="utf-8")) == ["./INSTALL.md#setup"]
+    assert broken_links(good) == []
+    assert broken_links(bad) == ["./MISSING.md (no such file)"]
 
 
 def test_contrast_each_detector_fires() -> None:

@@ -47,4 +47,14 @@ describe('RestartConfirmDialog message sanitisation (#19118)', () => {
     expect(box.find('script').exists()).toBe(false)
     expect(box.html()).not.toContain('onerror')
   })
+
+  it('renders an interpolated link as text, not a live anchor', () => {
+    const w = mount(RestartConfirmDialog, {
+      props: { show: true, message: 'restart <a href="https://evil.example">host</a>' },
+      global: { mocks: { $t: (k: string) => k }, stubs: { teleport: true } },
+    })
+    const box = w.find('.text-gray-600')
+    expect(box.find('a').exists()).toBe(false)
+    expect(box.text()).toContain('host')
+  })
 })

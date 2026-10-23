@@ -73,6 +73,15 @@ def test_maxsize_cap_still_present_in_logrotate_config():
     assert "copytruncate" in rendered
 
 
+def test_runtime_log_glob_follows_the_install_root():
+    """#18882: the runtime-log stanza is built from `autobot.base_dir`, so a different root moves it."""
+    root = "/srv/autobot-render-test"
+    rendered = _render("autobot-logrotate.j2", autobot={**_inventory_autobot(), "base_dir": root})
+    assert f"{root}/logs/*.log {{" in rendered
+    default = _inventory_autobot()["base_dir"]
+    assert f"{default}/logs/*.log" not in rendered
+
+
 def test_task_installs_dropin_and_notifies_a_real_handler():
     """A drop-in needs daemon-reload + timer restart, or the new cadence does
     not apply until the next boot."""

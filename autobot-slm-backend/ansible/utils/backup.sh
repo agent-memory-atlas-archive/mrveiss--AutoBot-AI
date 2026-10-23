@@ -18,7 +18,10 @@ source "$_PROJECT_ROOT/autobot-infrastructure/shared/scripts/lib/ssot-config.sh"
 ANSIBLE_DIR="$(dirname "$SCRIPT_DIR")"
 INVENTORY_FILE="$ANSIBLE_DIR/inventory/production.yml"
 # The install root's one definition, autobot.base_dir (#18587, #18882); backups live under it.
-BACKUP_BASE_DIR="$(python3 -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["autobot"]["base_dir"])' "$ANSIBLE_DIR/inventory/group_vars/all.yml")/backups"
+# A host or extra-vars override is not visible from this file: pass the deployed root as
+# AUTOBOT_BASE_DIR (the variable autobot_shared.paths and ssot-config.sh already honour).
+_INSTALL_ROOT="${AUTOBOT_BASE_DIR:-$(python3 -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["autobot"]["base_dir"])' "$ANSIBLE_DIR/inventory/group_vars/all.yml")}"
+BACKUP_BASE_DIR="$_INSTALL_ROOT/backups"
 LOG_DIR="/var/log/autobot/backup"
 LOG_FILE="$LOG_DIR/backup-$(date +%Y%m%d-%H%M%S).log"
 
@@ -379,6 +382,9 @@ EXAMPLES:
 BACKUP LOCATIONS:
   Base Directory: $BACKUP_BASE_DIR
   Log File: $LOG_FILE
+
+ENVIRONMENT:
+  AUTOBOT_BASE_DIR    Deployed install root when it differs from inventory/group_vars/all.yml
 
 PREREQUISITES:
   - SSH key authentication to all VMs
