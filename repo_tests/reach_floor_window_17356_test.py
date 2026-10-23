@@ -145,3 +145,10 @@ def test_a_real_reach_loss_fails_with_or_without_the_audit(monkeypatch: pytest.M
         monkeypatch.setenv(REACH_AUDIT_ENV, audit)
         with pytest.raises(ReachFloorError, match="exceeds the live population"):
             _reach(floor=1001, population=1000, growth=400).verify_floor(_ROOT)
+
+
+def test_outside_the_audit_slack_past_the_allowance_warns_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """27's review: the other staleness shape -- the tree grew past skips + growth."""
+    monkeypatch.delenv(REACH_AUDIT_ENV, raising=False)
+    with pytest.warns(ReachFloorStale, match="exceeds the declared allowance"):
+        _reach(floor=500, population=1000, growth=400).verify_floor(_ROOT)
