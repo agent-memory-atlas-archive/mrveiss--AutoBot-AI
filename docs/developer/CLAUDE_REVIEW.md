@@ -107,6 +107,16 @@ Check each before sending the PR# and head:
 
 Items 1 and 3 need a reader; 2 is caught when a reviewer diffs the comments; 4 is automatic.
 
+## CodeRabbit and merge trains (#19284)
+
+- **Admission:** a member PR joins a train only once its own CodeRabbit threads are resolved.
+  Its code is reviewed there, once.
+- **Train PRs skip automatic review** (`.coderabbit.yaml` `ignore_title_keywords: ["train("]`).
+  The coordinator reviews the train's own commits (fixes and merge resolutions) and requests
+  `@coderabbitai review` by hand when a fix is substantial. Whole-diff train reviews re-opened
+  approved member code after green CI: train 74 (#19191) took 9 and then 4 threads, each costing
+  a full CI rerun.
+
 ## Code Review Agent Requirements (MANDATORY)
 
 **Every finder and verifier agent prompt MUST contain all three — refuse to dispatch if any missing:**
