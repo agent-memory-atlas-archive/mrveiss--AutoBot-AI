@@ -334,6 +334,9 @@ async def _import_twice_against(dup_meta: dict, tmp_path) -> tuple[_FakeKB, Syst
         {"visibility": " Organization ", "organization_id": "org-7"},
         {"visibility": "group", "group_ids": ["g1"]},
         {"shared_with": ["u42"]},
+        # CodeRabbit on #19309: an explicit narrow access level with no visibility is someone's data too.
+        {"access_level": "private"},
+        {"access_level": " Owner "},
     ],
 )
 async def test_a_duplicate_a_principal_holds_is_never_written_and_reported_unresolved(held_by, tmp_path) -> None:

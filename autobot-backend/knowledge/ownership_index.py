@@ -62,7 +62,12 @@ def is_ownerless_platform_fact(metadata: Optional[Dict[str, Any]]) -> bool:
     if any(meta.get(key) for key in _OWNER_KEYS + _PRINCIPAL_KEYS):
         return False
     visibility = _norm(meta.get("visibility"))
-    return not visibility or visibility in PLATFORM_WIDE_VISIBILITY
+    if visibility and visibility not in PLATFORM_WIDE_VISIBILITY:
+        return False
+    # An explicit access level narrower than platform-wide is someone's restriction too
+    # (CodeRabbit on #19309): {"access_level": "private"} with no visibility is NOT ownerless.
+    access = _norm(meta.get("access_level"))
+    return not access or access in PLATFORM_WIDE_ACCESS
 
 
 def _norm(value: Any) -> Any:
