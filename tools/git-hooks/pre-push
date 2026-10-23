@@ -310,13 +310,17 @@ failure_excerpt() {
   # are never displaced; assertion/`Error:` context fills what the cap leaves. The
   # app's own log lines (`[<ISO time>] [ERROR] ...`, provoked on purpose by tests)
   # are not context -- 53 of them once filled the cap and cut both test names.
+  # #18808: the failing-test NAMES come before everything else. A long assertion diff's
+  # `E   ` lines precede pytest's short summary, and 60 of them once cut every name.
   excerpt=$(printf '%s\n' "$clean" | awk -v cap="${FAILURE_EXCERPT_LINES:-60}" '
     /Unhandled (Error|Rejection)/ { ctx = 8 }
     seen[$0]++ { if (ctx > 0) ctx--; next }
-    ctx > 0 || /^ *(FAIL |× |✗ |FAILED |ERROR )/ || /^E   / { first[++a] = $0; if (ctx > 0) ctx--; next }
+    /^ *(FAIL |× |✗ |FAILED |ERROR )/ { names[++z] = $0; if (ctx > 0) ctx--; next }
+    ctx > 0 || /^E   / { first[++a] = $0; if (ctx > 0) ctx--; next }
     /^\[[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[^]]*\] \[[A-Z]+\]/ { next }
     /AssertionError|Error: |Test timed out/ { rest[++b] = $0 }
     END {
+      for (i = 1; i <= z && n < cap; i++) { print names[i]; n++ }
       for (i = 1; i <= a && n < cap; i++) { print first[i]; n++ }
       for (i = 1; i <= b && n < cap; i++) { print rest[i]; n++ }
     }')

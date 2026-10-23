@@ -12,9 +12,9 @@ hook's invocations, whose loss would be silent -- a hook that skips a check stil
 
 from __future__ import annotations
 
-from pathlib import Path
+from repo_tests._paths import repo_root
 
-_HOOK = Path(__file__).resolve().parents[1] / "tools" / "git-hooks" / "pre-push"
+_HOOK = repo_root() / "tools" / "git-hooks" / "pre-push"
 _PROBE = "repo_tests/sys_modules_leak_probe_18808_test.py"
 
 
@@ -37,4 +37,4 @@ def test_the_hook_collects_the_selection_serially_before_the_leak_probe():
     assert "-p no:xdist" in line
     assert line.index("$leak_targets") < line.index('"$leak_probe"'), "the probe must be collected last"
     assert f'leak_probe="{_PROBE}"' in text
-    assert (_HOOK.parents[2] / _PROBE).is_file()
+    assert (repo_root() / _PROBE).is_file()

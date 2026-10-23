@@ -141,7 +141,7 @@ def is_test(path: str, patterns: Sequence[str]) -> bool:
 
 #: Cheap whole-tree guards run on EVERY push (#18808, #16715). Each fires on the tree's shape, so
 #: the change that trips it is rarely its sibling or a recorded glob -- trains 30-33 surfaced nine
-#: such trips only at train time. Kept to guards measured cheap in .test_durations (about 50s
+#: such trips only at train time. Kept to guards measured cheap in .test_durations (about 85s
 #: serial in all, 2026-10-23); a costly whole-tree guard is reached through its declared scan
 #: roots instead (see declared_roots).
 ALWAYS_RUN = {
@@ -160,6 +160,9 @@ ALWAYS_RUN = {
     "repo_tests/raw_palette_class_ratchet_14580_test.py": "whole-tree: raw palette classes (#18808: #18797)",
     "repo_tests/docstring_restatement_guard_17165_test.py": "whole-tree: docstring restatement (#18808: #18742)",
     "repo_tests/remote_command_quoting_18359_test.py": "whole-tree: remote command quoting (#18808: #18782)",
+    "repo_tests/env_var_bare_cast_test.py": "whole-tree: bare env-var casts and their baseline",
+    "repo_tests/symbol_fork_ratchet_17312_test.py": "whole-tree: symbol forks and their baseline",
+    "pipeline-scripts/check_baseline_no_growth_test.py": "the baseline no-growth check",
 }
 
 
