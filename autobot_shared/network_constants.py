@@ -421,16 +421,16 @@ class NetworkConfig:
     Provides context-aware URL generation.
 
     SSOT Migration (Issue #763):
-        This class now uses ConfigRegistry for deployment mode.
-        For direct access, prefer using ConfigRegistry:
-            from config.registry import ConfigRegistry
-            mode = ConfigRegistry.get("deployment.mode", deployment_profile.deployment_mode())
+        The mode comes from the one resolver (#19316, #19372):
+            from autobot_shared import service_registry_core
+            mode = service_registry_core.resolve_deployment_mode().value
     """
 
     def __init__(self) -> None:
         """Initialize network config using ConfigRegistry values."""
-        # #19315/#19316: both fallbacks come from the one home; unset never resolves to development.
-        self._deployment_mode = _get_config_value("deployment.mode", _profile.deployment_mode())
+        from autobot_shared.service_registry_core import resolve_deployment_mode  # lazy (ssot_config); #19316
+
+        self._deployment_mode = resolve_deployment_mode().value
         self._is_development = _get_config_value("deployment.environment", _profile.environment_name()) == "development"
 
     @property

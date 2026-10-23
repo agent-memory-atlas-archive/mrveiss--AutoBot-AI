@@ -27,7 +27,8 @@ from typing import Mapping, Optional
 ENVIRONMENT_VAR = "AUTOBOT_ENVIRONMENT"
 #: Legacy short spelling of the same setting, consulted only when the canonical one is unset.
 ENVIRONMENT_ALIAS_VAR = "AUTOBOT_ENV"
-#: Topology selector (see ``service_registry_core.DeploymentMode``).
+#: Topology selector (see ``service_registry_core.DeploymentMode``). Unset is ``""``: auto-detect,
+#: decided by ``service_registry_core.resolve_deployment_mode`` (owner ruling on #19315, per #12771).
 DEPLOYMENT_MODE_VAR = "AUTOBOT_DEPLOYMENT_MODE"
 #: Debug switch; ``"true"``/``"false"`` as written in env files.
 DEBUG_VAR = "AUTOBOT_DEBUG"
@@ -41,9 +42,12 @@ DEFAULT_PROFILE = "production"
 #: profile -> the values it sets. A file carrying a profile may set a subset, never another value.
 #: ``hybrid`` and ``native`` are not ``DeploymentMode`` members; their validity is #19187.
 PROFILES: dict[str, dict[str, str]] = {
-    # What an unset value resolves to (the role-separated fleet sets none of the three).
-    "production": {ENVIRONMENT_VAR: "production", DEPLOYMENT_MODE_VAR: "distributed", DEBUG_VAR: "false"},
-    # One host, production: docker-compose.yml, the Dockerfiles, install-bare-metal.sh.
+    # What an unset value resolves to. Mode "" = auto-detect (container -> docker_local, else local).
+    "production": {ENVIRONMENT_VAR: "production", DEPLOYMENT_MODE_VAR: "", DEBUG_VAR: "false"},
+    # The ansible fleet: backend.env.j2 writes the environment explicitly and leaves the mode to detection.
+    "fleet": {ENVIRONMENT_VAR: "production"},
+    # One host, production: docker-compose.yml and the Dockerfiles (environment only; the container
+    # is detected as docker_local) and install-bare-metal.sh (environment and mode).
     "single-host": {ENVIRONMENT_VAR: "production", DEPLOYMENT_MODE_VAR: "local"},
     # Developer checkout: .env.example and docker-compose.override.example.yml.
     "development": {ENVIRONMENT_VAR: "development", DEPLOYMENT_MODE_VAR: "hybrid", DEBUG_VAR: "true"},

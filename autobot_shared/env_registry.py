@@ -195,7 +195,7 @@ register_env_var(
         name="AUTOBOT_DEPLOYMENT_MODE",
         type=str,
         default=_profile.DEPLOYMENT_MODE_DEFAULT,
-        description="Topology. Unset: the backend assumes 'distributed'; deploy scripts detect it from /.dockerenv.",
+        description="Topology. Unset: auto-detect -- docker_local in a container, else local (#19316).",
         component="system",
     )
 )

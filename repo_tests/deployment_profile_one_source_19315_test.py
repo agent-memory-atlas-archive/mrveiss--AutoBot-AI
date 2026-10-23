@@ -47,6 +47,7 @@ PROFILE_CARRIERS: dict[str, tuple[str, ...]] = {
     "docker-compose.override.example.yml": ("development",),
     ".env.localhost": ("dev-localhost",),
     ".env.native-vm": ("dev-native-vm",),
+    "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2": ("fleet",),
     "docker-compose.yml": ("single-host",),
     "docker/backend/Dockerfile": ("single-host",),
     "docker/slm/Dockerfile": ("single-host",),
@@ -170,7 +171,7 @@ def code_copies(root: Path) -> list[str]:
 WRITES = declare(
     "deployment-profile-writers-19315",
     discover=profile_writes,
-    floor=34,  # 39 live; window [29, 39], pin 34
+    floor=31,  # 36 live; window [26, 36], pin 31
     growth=10,
     what="literal assignments of AUTOBOT_ENVIRONMENT/ENV/DEPLOYMENT_MODE/DEBUG",
 )
@@ -206,6 +207,28 @@ def test_a_missing_value_never_means_development_or_debug() -> None:
     assert profile.DEFAULT_PROFILE == "production"
     assert profile.ENVIRONMENT_DEFAULT == "production"
     assert profile.DEBUG_DEFAULT is False
+    assert profile.DEPLOYMENT_MODE_DEFAULT == "", "unset mode is auto-detect (owner ruling on #19315, #12771)"
+
+
+def test_the_fleet_writes_production_explicitly() -> None:
+    writes = [w for w in profile_writes(_ROOT) if PROFILE_CARRIERS.get(w[0]) == ("fleet",)]
+    assert (profile.ENVIRONMENT_VAR, "production") in {(w[2], w[3]) for w in writes}
+
+
+@pytest.mark.parametrize(
+    ("environ", "in_container", "expected"),
+    [
+        ({"AUTOBOT_DEPLOYMENT_MODE": "distributed"}, False, "distributed"),
+        ({}, False, "local"),
+        ({}, True, "docker_local"),
+        ({"AUTOBOT_DEPLOYMENT_MODE": "hybrid"}, True, "docker_local"),  # not a mode: detection decides
+    ],
+)
+def test_one_resolver_explicit_wins_else_detects(environ: dict, in_container: bool, expected: str) -> None:
+    from autobot_shared import service_registry_core as core
+
+    with patch.dict(os.environ, environ, clear=True), patch.object(core.os.path, "exists", return_value=in_container):
+        assert core.resolve_deployment_mode().value == expected
 
 
 def test_ssot_fields_take_their_defaults_from_the_home() -> None:
