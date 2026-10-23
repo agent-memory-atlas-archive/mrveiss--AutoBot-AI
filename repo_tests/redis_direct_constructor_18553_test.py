@@ -75,8 +75,9 @@ def _population(root: Path) -> list[str]:
 REACH = declare(
     "redis-direct-constructor-scan",
     discover=_population,
-    # Mid-window, from REACH.window(): population 3827 at d050455c7e -> (3527, 3827, 3677).
-    floor=3677,
+    # Mid-window, from REACH.window(): population 3948 on train 85a -> (3648, 3948, 3798);
+    # earlier population 3827 at d050455c7e -> 3677.
+    floor=3798,
     what="non-test python and shell source",
     roots=SCAN_ROOTS,
     growth=300,
