@@ -325,6 +325,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
+      # #19283: depth 2, so HEAD^1 -- the merge ref's base parent -- is readable. Down-only
+      # ratchets compare each entry with the base commit's table (repo_tests/_ratchet_base.py)
+      # instead of a hand-summed total, and refuse when the base cannot be read.
+      with:
+        fetch-depth: 2
 
     # #18102: the .debs provision-packages already fetched. The setup action installs from
     # this directory with --no-download when it exists, so a shard does no network fetch.
