@@ -689,6 +689,17 @@
       delegate_to: localhost
       tags: [always]
 
+    # #19318: resolved by the one shared reader -- never a default password. Best-effort:
+    # unresolved leaves it empty and the login below is refused, skipping sync tracking.
+    - name: "[PLAY 1] SLM | Resolve the SLM admin password (#19318)"
+      ansible.builtin.include_tasks:
+        file: ../_shared/tasks/read_slm_admin_password.yml
+        apply:
+          tags: [always]
+      vars:
+        require_slm_admin_password: false
+      tags: [always]
+
     - name: "[PLAY 1] SLM | Login to get auth token"
       uri:
         url: "https://{{ ansible_host }}/slm/api/auth/login"
@@ -696,7 +707,7 @@
         body_format: json
         body:
           username: "admin"
-          password: "{{ slm_admin_password | default('admin') }}"
+          password: "{{ slm_admin_password }}"
         validate_certs: false
         status_code: [200, 401, 403]
       register: slm_login_play1
@@ -770,6 +781,15 @@
     deploy_tmp: "/tmp/autobot-deploy"
 
   pre_tasks:
+    - name: "[PLAY 2] Resolve the SLM admin password (#19318)"
+      ansible.builtin.include_tasks:
+        file: ../_shared/tasks/read_slm_admin_password.yml
+        apply:
+          tags: [always]
+      vars:
+        require_slm_admin_password: false
+      tags: [always]
+
     - name: "[PLAY 2] Login to SLM API"
       uri:
         url: "https://{{ slm_host }}/slm/api/auth/login"
@@ -777,7 +797,7 @@
         body_format: json
         body:
           username: "admin"
-          password: "{{ slm_admin_password | default('admin') }}"
+          password: "{{ slm_admin_password }}"
         validate_certs: false
         status_code: [200, 401, 403]
       register: slm_login

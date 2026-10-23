@@ -480,15 +480,15 @@ async def _ensure_admin_user():
 
     Uses the user_management UserService and slm_users database (Issue #1900).
     """
-    import os
     import secrets
 
+    from autobot_shared.env_registry import env
     from autobot_shared.user_management.user_service_errors import DuplicateUserError
     from services.admin_password_sync import sync_admin_password_at_startup
     from user_management.database import get_slm_session
     from user_management.services import TenantContext, UserService
 
-    env_password = os.getenv("SLM_ADMIN_PASSWORD", "")
+    env_password = env("SLM_ADMIN_PASSWORD")  # the one name; default "" lives in the registry (#19318)
 
     async with get_slm_session() as db:
         context = TenantContext(is_platform_admin=True)
