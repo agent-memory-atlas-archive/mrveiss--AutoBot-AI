@@ -209,7 +209,9 @@ def _configure_llamaindex_settings(fixes_attempted):
     vector_store = RedisVectorStore(
         schema=schema,
         redis_url=resolve_redis_endpoint().url(),
-        redis_kwargs={"db": 2},
+        # #19232: the existing llama_index lives in "knowledge" (knowledge/base.py); the old
+        # literal 2 is the prompts database.
+        redis_kwargs={"db": database_number("knowledge")},
     )
     fixes_attempted.append("Connected to existing vector store without overwriting")
 

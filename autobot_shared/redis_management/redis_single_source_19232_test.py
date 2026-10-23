@@ -162,8 +162,20 @@ def test_the_number_table_and_the_tuning_loader_read_one_yaml(monkeypatch):
     assert RedisConfigLoader._resolve_yaml_path(None) is None
 
 
-def test_the_shell_library_reads_the_same_table():
-    """ssot-config.sh's autobot_redis_db answers from redis-databases.yaml, override first."""
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"AUTOBOT_REDIS_DB_KNOWLEDGE": "12"},
+        {"AUTOBOT_REDIS_DB_MAIN": "12", "AUTOBOT_REDIS_DB_KNOWLEDGE": "0"},
+        {"AUTOBOT_REDIS_DB_TASKS": "12"},
+        {"AUTOBOT_REDIS_DB_TESTING": "15"},  # collides with celery_results: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "zero"},  # not a number: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "9", "AUTOBOT_REDIS_DB_TEMP": "9"},  # both refused
+    ],
+)
+def test_the_shell_library_agrees_with_python(overrides):
+    """ssot-config.sh's autobot_redis_db gives apply_overrides' answer for every database."""
     import shutil
     import subprocess  # nosec B404  # fixed argv, no shell string from input
     from pathlib import Path
@@ -172,10 +184,10 @@ def test_the_shell_library_reads_the_same_table():
     assert bash, "bash is required to check the shell SSOT library"
     lib = Path(__file__).resolve().parents[2] / "autobot-infrastructure/shared/scripts/lib/ssot-config.sh"
     names = " ".join(_types.DECLARED_DATABASES)
-    script = f'source "{lib}"; for n in {names}; do printf "%s=%s\\n" "$n" "$(autobot_redis_db "$n")"; done'
-    env = {"PATH": "/usr/bin:/bin", "PROJECT_ROOT": str(lib.parents[4]), "AUTOBOT_REDIS_DB_KNOWLEDGE": "12"}
+    script = f'source "{lib}"; for n in {names}; do printf "%s=%s\\n" "$n" "$(autobot_redis_db "$n" 2>/dev/null)"; done'
+    env = {"PATH": "/usr/bin:/bin", "PROJECT_ROOT": str(lib.parents[4]), **overrides}
     out = subprocess.run([bash, "-c", script], env=env, capture_output=True, text=True, check=True).stdout  # nosec B603
-    expected = {**_types.DECLARED_DATABASES, "knowledge": 12}
+    expected = apply_overrides(_types.DECLARED_DATABASES, overrides)
     assert dict(line.split("=") for line in out.split()) == {n: str(v) for n, v in expected.items()}
 
 
@@ -231,3 +243,19 @@ def test_import_survives_an_undeterminable_project_root_and_finds_app_config():
     )
     assert result.returncode == 0, result.stderr[-2000:]
     assert result.stdout.split() == ["/app/config/redis-databases.yaml", "1"]
+
+
+def test_the_standalone_ansible_inventory_reads_main_from_the_yaml(monkeypatch):
+    """It cannot import autobot_shared (#1086), so it reads redis-databases.yaml itself."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "autobot-slm-backend/ansible/inventory/dynamic/generate_inventory.py"
+    spec = importlib.util.spec_from_file_location("_inventory_19232", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.delenv("REDIS_DB", raising=False)
+    monkeypatch.delenv("AUTOBOT_REDIS_DB_MAIN", raising=False)
+    assert module._main_database_number() == _types.DECLARED_DATABASES["main"]
+    monkeypatch.setenv("AUTOBOT_REDIS_DB_MAIN", "12")
+    assert module._main_database_number() == 12

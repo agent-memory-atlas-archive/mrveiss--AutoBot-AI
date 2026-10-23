@@ -47,6 +47,9 @@ _SKIP_DIRS = {"node_modules", ".git", "__pycache__", "venv", ".venv", "tests", "
 _ALLOWED = {("autobot_shared/redis_management/types.py", "_FALLBACK_MAPPING")}
 #: The one file allowed to spell the YAML's file name as a path.
 _YAML_RESOLVER = "autobot_shared/redis_management/types.py"
+#: Readers that cannot import it, so they read the same file themselves: the Ansible dynamic
+#: inventory runs under Ansible's interpreter without autobot_shared (#1086).
+_STANDALONE_YAML_READERS = {_YAML_RESOLVER, "autobot-slm-backend/ansible/inventory/dynamic/generate_inventory.py"}
 _YAML_NAME = "redis-databases.yaml"
 
 #: The one URL builder, and a validator that checks an env FILE's URL against that file's own
@@ -58,6 +61,8 @@ _URL_BUILDERS = {
 _CONFIG_SUFFIXES = (".sh", ".yml", ".yaml", ".j2", ".service", ".conf")
 #: A DB number pinned in config: `${X:-14}`, `: "${X:=14}"`, `X=14`, `X: 14`.
 _CONFIG_DB_LITERAL = re.compile(r"AUTOBOT_REDIS_DB_[A-Z_]+\s*(?::?[-=]|:)\s*['\"]?\d")
+#: A generic ``REDIS_DB`` pinned to a number: ``REDIS_DB=0``, ``${REDIS_DB:-0}``.
+_GENERIC_DB_LITERAL = re.compile(r"(?<![A-Z_])REDIS_DB\s*(?::?[-=]|:)\s*['\"]?\d")
 #: A Redis URL naming its database by number.
 _URL_DB_LITERAL = re.compile(r"rediss?://[^\s\"'`]*/\d+\b")
 
@@ -121,6 +126,17 @@ def _is_url_builder(node: ast.AST) -> bool:
     return isinstance(node, ast.JoinedStr) or prefix not in ("redis://", "rediss://")
 
 
+def _is_db_number_literal(node: ast.AST) -> bool:
+    """``{"db": 2}`` or ``f(db=2)`` -- a Redis database chosen by number, not through the table."""
+    if isinstance(node, ast.Dict):
+        return any(
+            isinstance(k, ast.Constant) and k.value == "db" and _is_number(v) for k, v in zip(node.keys, node.values)
+        )
+    if isinstance(node, ast.Call):
+        return any(kw.arg == "db" and _is_number(kw.value) for kw in node.keywords)
+    return False
+
+
 def _assigned_names(tree: ast.AST) -> dict[int, str]:
     """``{id(dict node): target name}`` for dicts assigned straight to a name."""
     names: dict[int, str] = {}
@@ -138,6 +154,8 @@ def find_tables(source: str, path: str) -> list[str]:
     in_fstring = {id(v) for n in ast.walk(tree) if isinstance(n, ast.JoinedStr) for v in n.values}
     found: list[str] = []
     for node in ast.walk(tree):
+        if _is_db_number_literal(node):
+            found.append(f"{path}:{node.lineno} db number literal")
         if isinstance(node, ast.Dict) and _dict_hits(node) >= 2:
             if (path, assigned.get(id(node), "")) not in _ALLOWED:
                 found.append(f"{path}:{node.lineno} dict {assigned.get(id(node), '<expr>')}")
@@ -145,7 +163,7 @@ def find_tables(source: str, path: str) -> list[str]:
             found.append(f"{path}:{node.lineno} class {node.name}")
         elif isinstance(node, ast.Call) and _is_db_field(node):
             found.append(f"{path}:{node.lineno} AUTOBOT_REDIS_DB_* field")
-        elif _is_yaml_path(node) and path != _YAML_RESOLVER:
+        elif _is_yaml_path(node) and path not in _STANDALONE_YAML_READERS:
             found.append(f"{path}:{node.lineno} yaml path")
         elif _is_url_builder(node) and id(node) not in in_fstring and path not in _URL_BUILDERS:
             found.append(f"{path}:{node.lineno} redis url builder")
@@ -158,7 +176,7 @@ def find_config_literals(text: str, path: str) -> list[str]:
     for lineno, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("#"):
             continue
-        if _CONFIG_DB_LITERAL.search(line) or _URL_DB_LITERAL.search(line):
+        if any(rx.search(line) for rx in (_CONFIG_DB_LITERAL, _GENERIC_DB_LITERAL, _URL_DB_LITERAL)):
             found.append(f"{path}:{lineno} config literal")
     return found
 
@@ -269,6 +287,14 @@ AUTOBOT_REDIS_DB_LOGS=5
     AUTOBOT_REDIS_DB_TESTING: 15
 # AUTOBOT_REDIS_DB_MAIN=0 is a comment, and comments are prose
 AUTOBOT_REDIS_DB_MAIN="$(autobot_redis_db main)"
+REDIS_DB=0
+REDIS_DB=${_SLM_REDIS_DB}
+"""
+
+_DB_KWARG_COPIES = """
+store = RedisVectorStore(schema=schema, redis_kwargs={"db": 2})
+client = redis.Redis(host=h, port=p, db=0)
+fine = redis.Redis(host=h, port=p, db=database_number("main"))
 """
 
 
@@ -285,7 +311,12 @@ def test_detector_flags_shell_compose_env_and_ansible_copies():
         "x:4",
         "x:5",
         "x:6",
+        "x:9",
     ]
+
+
+def test_detector_flags_a_db_number_kwarg():
+    assert sorted(find_tables(_DB_KWARG_COPIES, "x.py")) == ["x.py:2 db number literal", "x.py:3 db number literal"]
 
 
 def test_detector_ignores_a_single_value():

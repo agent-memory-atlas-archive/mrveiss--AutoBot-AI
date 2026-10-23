@@ -131,28 +131,67 @@ if [ ! -f "${_AUTOBOT_REDIS_DATABASES_YAML}" ]; then
     _AUTOBOT_REDIS_DATABASES_YAML="${PROJECT_ROOT}/autobot-infrastructure/shared/config/redis-databases.yaml"
 fi
 
-# autobot_redis_db NAME -- print NAME's database number; non-zero and a message if unknown.
-autobot_redis_db() {
-    local override_var="AUTOBOT_REDIS_DB_${1^^}" number
-    if [[ "${!override_var:-}" =~ ^[0-9]+$ ]]; then
-        echo "${!override_var}"
-        return 0
-    fi
-    number="$(awk -v want="$1" '
+# _autobot_redis_yaml_table -- "name number" for every database redis-databases.yaml declares.
+_autobot_redis_yaml_table() {
+    awk '
         /^redis_databases:/ { inside = 1; next }
         inside && /^[^ #]/ { exit }
         inside && /^  [a-z_]+:/ { name = $1; sub(":", "", name); next }
-        inside && name == want && /^    db:/ { print $2; exit }
-    ' "${_AUTOBOT_REDIS_DATABASES_YAML}" 2>/dev/null)"
-    if [ -z "${number}" ]; then
+        inside && name != "" && /^    db:/ { print name, $2; name = "" }
+    ' "${_AUTOBOT_REDIS_DATABASES_YAML}" 2>/dev/null
+}
+
+# _autobot_redis_override NAME -- the raw AUTOBOT_REDIS_DB_<NAME> value; workflows also
+# answers to the legacy AUTOBOT_REDIS_DB_TASKS (database_overrides.LEGACY_ENV_NAMES).
+_autobot_redis_override() {
+    local var="AUTOBOT_REDIS_DB_${1^^}"
+    if [ -n "${!var:-}" ]; then
+        echo "${var}=${!var}"
+    elif [ "$1" = "workflows" ] && [ -n "${AUTOBOT_REDIS_DB_TASKS:-}" ]; then
+        echo "AUTOBOT_REDIS_DB_TASKS=${AUTOBOT_REDIS_DB_TASKS}"
+    fi
+}
+
+# autobot_redis_db NAME -- print NAME's database number; non-zero and a message if unknown.
+# Same rules as autobot_shared/redis_management/database_overrides.py: an override that is
+# not a non-negative integer, or that lands two databases on one number, is refused -- said
+# on stderr -- and that database keeps its YAML number.
+autobot_redis_db() {
+    local -A yaml=() accepted=() source=() final=()
+    local name number entry other changed=1
+    while read -r name number; do yaml[$name]=$number; done < <(_autobot_redis_yaml_table)
+    if [ -z "${yaml[$1]:-}" ]; then
         echo "ssot-config.sh: no Redis database '$1' in ${_AUTOBOT_REDIS_DATABASES_YAML}" >&2
         return 1
     fi
-    echo "${number}"
+    for name in "${!yaml[@]}"; do
+        entry="$(_autobot_redis_override "$name")"
+        [ -z "${entry}" ] && continue
+        source[$name]="${entry}"
+        if [[ "${entry#*=}" =~ ^[0-9]+$ ]]; then
+            accepted[$name]=$((10#${entry#*=}))
+        elif [ "$name" = "$1" ]; then
+            echo "ssot-config.sh: refused ${entry}: not a Redis database number (keeping redis-databases.yaml)" >&2
+        fi
+    done
+    while [ "${changed}" = 1 ]; do
+        changed=0
+        for name in "${!yaml[@]}"; do final[$name]="${accepted[$name]:-${yaml[$name]}}"; done
+        for name in "${!accepted[@]}"; do
+            for other in "${!final[@]}"; do
+                [ "$other" = "$name" ] || [ "${final[$other]}" != "${final[$name]}" ] && continue
+                [ "$name" = "$1" ] && echo "ssot-config.sh: refused ${source[$name]}: collides with ${other} (keeping redis-databases.yaml)" >&2
+                unset "accepted[$name]"
+                changed=1
+                break
+            done
+        done
+    done
+    echo "${accepted[$1]:-${yaml[$1]}}"
 }
 
-: "${AUTOBOT_REDIS_DB_CELERY_BROKER:=$(autobot_redis_db celery_broker)}"
-: "${AUTOBOT_REDIS_DB_CELERY_RESULTS:=$(autobot_redis_db celery_results)}"
+# No AUTOBOT_REDIS_DB_* is exported from here: a script asks autobot_redis_db, and exporting
+# resolved values would turn them into overrides that the next lookup has to vet (#19232).
 
 # TimeoutConfig.api -- frontend API timeout in ms (#17856 row 6)
 : "${AUTOBOT_API_TIMEOUT:=60000}"
@@ -201,7 +240,7 @@ export AUTOBOT_BACKEND_HOST AUTOBOT_FRONTEND_HOST AUTOBOT_NPU_WORKER_HOST \
     AUTOBOT_BACKEND_PORT AUTOBOT_FRONTEND_PORT AUTOBOT_NPU_WORKER_PORT \
     AUTOBOT_REDIS_PORT AUTOBOT_AI_STACK_PORT AUTOBOT_BROWSER_SERVICE_PORT \
     AUTOBOT_OLLAMA_PORT AUTOBOT_VNC_PORT \
-    AUTOBOT_REDIS_PASSWORD AUTOBOT_REDIS_DB_CELERY_BROKER AUTOBOT_REDIS_DB_CELERY_RESULTS \
+    AUTOBOT_REDIS_PASSWORD \
     AUTOBOT_API_TIMEOUT \
     AUTOBOT_NOVNC_PATH NETWORK_SUBNET \
     AUTOBOT_SSH_KEY AUTOBOT_SSH_USER AUTOBOT_SLM_NODE_ID \

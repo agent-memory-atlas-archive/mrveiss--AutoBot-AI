@@ -12,14 +12,17 @@ Usage:
 Environment variables:
     REDIS_HOST: Redis server address (default: localhost)
     REDIS_PORT: Redis server port (default: 6379)
-    REDIS_DB: Redis database number (default: 0)
+    REDIS_DB / AUTOBOT_REDIS_DB_MAIN: Redis database number (default: main in redis-databases.yaml)
 """
 
 import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any, Dict
+
+import yaml
 
 try:
     import redis
@@ -28,13 +31,33 @@ except ImportError:
     sys.exit(1)
 
 
+#: The one name -> number table (#19232), read with plain PyYAML: this script runs under
+#: Ansible's interpreter without autobot_shared (#1086), so it cannot use database_number().
+_DATABASES_YAML = (
+    Path(__file__).resolve().parents[4] / "autobot-infrastructure" / "shared" / "config" / "redis-databases.yaml"
+)
+
+
+def _main_database_number() -> int:
+    """``REDIS_DB`` / ``AUTOBOT_REDIS_DB_MAIN`` if set, else ``main`` in redis-databases.yaml."""
+    override = os.getenv("REDIS_DB") or os.getenv("AUTOBOT_REDIS_DB_MAIN")
+    if override:
+        return int(override)
+    try:
+        with open(_DATABASES_YAML, encoding="utf-8") as f:
+            return int(yaml.safe_load(f)["redis_databases"]["main"]["db"])
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        sys.stderr.write(f"ERROR: cannot read main's Redis DB from {_DATABASES_YAML}: {exc}\n")
+        sys.exit(1)
+
+
 class AutoBotInventory:
     """Generate Ansible inventory from AutoBot service registry"""
 
     def __init__(self):
         self.redis_host = os.getenv("REDIS_HOST", os.getenv("AUTOBOT_REDIS_HOST", "localhost"))
         self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        self.redis_db = int(os.getenv("REDIS_DB", "0"))
+        self.redis_db = _main_database_number()
         self.inventory = {"_meta": {"hostvars": {}}}
 
     def connect_redis(self):

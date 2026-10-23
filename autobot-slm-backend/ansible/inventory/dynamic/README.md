@@ -35,8 +35,10 @@ Set environment variables to customize Redis connection:
 ```bash
 export REDIS_HOST=172.16.168.23
 export REDIS_PORT=6379
-export REDIS_DB=0
 ```
+
+The database defaults to `main` in `autobot-infrastructure/shared/config/redis-databases.yaml`
+(#19232); set `REDIS_DB` or `AUTOBOT_REDIS_DB_MAIN` only to override it.
 
 ## Redis Data Structure
 
