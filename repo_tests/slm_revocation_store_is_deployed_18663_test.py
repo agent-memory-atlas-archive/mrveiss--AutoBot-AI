@@ -60,13 +60,29 @@ def test_the_slm_play_deploys_postgresql() -> None:
     assert "postgresql" in roles, f"the SLM play no longer deploys the revocation store's database: {roles}"
 
 
+def _deploy_slm_manager_command(install: str) -> str:
+    """The `ansible-playbook ... deploy-slm-manager.yml ...` command, joined from its continuation lines.
+
+    A line scan, not a backtracking regex (CodeQL py/redos on the earlier pattern).
+    """
+    lines = install.splitlines()
+    for start, line in enumerate(lines):
+        if not line.strip().startswith("ansible-playbook"):
+            continue
+        end = start
+        while lines[end].rstrip().endswith("\\") and end + 1 < len(lines):
+            end += 1
+        command = "\n".join(lines[start : end + 1])
+        if "playbooks/deploy-slm-manager.yml" in command:
+            return command
+    return ""
+
+
 def test_install_sh_does_not_skip_the_postgresql_role() -> None:
     install = (_ROOT / "install.sh").read_text(encoding="utf-8")
-    run = re.search(
-        r"ansible-playbook \\\s*\n(?:.*\\\s*\n)*?\s*playbooks/deploy-slm-manager\.yml.*?(?=\n\s*2>&1)", install, re.S
-    )
+    run = _deploy_slm_manager_command(install)
     assert run, "install.sh no longer runs deploy-slm-manager.yml"
-    skipped = re.findall(r'--skip-tags\s+"?([\w,]+)"?', run.group(0))
+    skipped = re.findall(r'--skip-tags\s+"?([\w,]+)"?', run)
     assert all("postgresql" not in s.split(",") for s in skipped), f"install.sh skips the database: {skipped}"
 
 
