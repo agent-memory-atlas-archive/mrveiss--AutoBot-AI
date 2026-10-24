@@ -124,6 +124,14 @@ export type {
   OptimizationRecommendation,
   UsePrometheusMetricsOptions,
 } from './src/types/prometheus-metrics'
+// The headline monitoring numbers both apps derive from those shapes (#18225).
+export { useMetricsSummary } from './src/composables/useMetricsSummary'
+export type {
+  SystemHealth,
+  MetricsSummary,
+  MetricsSummarySources,
+  MetricsSummaryDashboard,
+} from './src/composables/useMetricsSummary'
 
 // Shared duration-formatting vocabulary (#14908).
 export type { DurationStyle } from './src/utils/duration'
