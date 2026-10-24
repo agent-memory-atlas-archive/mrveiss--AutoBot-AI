@@ -328,10 +328,6 @@ export function useTheme() {
     clearNamedPreset()
   }
 
-  /**
-   * Set the theme preset
-   * @param preset - Theme preset to apply
-   */
   /** A manual theme or accent change leaves no named preset; high contrast goes with it */
   function clearNamedPreset(): void {
     currentPreset.value = presetFor(NO_NAMED_PRESET, currentTheme.value, currentAccent.value)
@@ -339,6 +335,10 @@ export function useTheme() {
     document.documentElement.removeAttribute('data-high-contrast')
   }
 
+  /**
+   * Set the theme preset
+   * @param preset - Theme preset to apply
+   */
   function setPreset(preset: ThemePreset): void {
     currentPreset.value = preset
     savePreset(preset)
@@ -572,6 +572,7 @@ export function initializeTheme(): void {
     const savedAccent = loadAccentColor()
     applyTheme(savedTheme)
     applyAccentColor(savedAccent)
+    document.documentElement.removeAttribute('data-high-contrast')
     currentTheme.value = savedTheme
     currentAccent.value = savedAccent
     currentPreset.value = presetFor(savedPreset, savedTheme, savedAccent)

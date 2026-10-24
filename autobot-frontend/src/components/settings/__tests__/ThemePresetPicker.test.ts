@@ -54,10 +54,23 @@ describe('ThemePresetPicker', () => {
     expect(active[0].text()).toContain(en.ui.themePresets.names.midnight)
   })
 
+  it('a picked preset becomes the one highlight, and a manual base theme clears it', async () => {
+    const wrapper = await mountPicker()
+    const autoCard = wrapper.findAll('.preset-card').find((c) => c.text().includes(en.ui.themePresets.names.auto))
+    await autoCard!.trigger('click')
+    expect(wrapper.findAll('.preset-card.active')).toHaveLength(1)
+    expect(autoCard!.attributes('aria-pressed')).toBe('true')
+
+    const darkButton = wrapper.findAll('.option-btn').find((b) => b.text().includes(en.ui.themeToggle.dark))
+    await darkButton!.trigger('click')
+    expect(wrapper.findAll('.preset-card.active')).toHaveLength(0)
+  })
+
   it('renders the header and preset names from en.json', async () => {
     const wrapper = await mountPicker()
     expect(wrapper.find('.picker-title').text()).toContain(en.ui.themePresets.title)
     expect(wrapper.text()).toContain(en.ui.themePresets.descriptions['high-contrast-dark'])
-    expect(wrapper.text()).not.toContain('ui.themePresets.')
+    // No i18n key path renders raw, whichever namespace it is in
+    expect(wrapper.text()).not.toMatch(/\bui\.[a-zA-Z]+\.[a-zA-Z]/)
   })
 })

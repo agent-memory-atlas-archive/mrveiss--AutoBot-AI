@@ -31,6 +31,7 @@ describe('useTheme', () => {
     // Reset localStorage before each test
     localStorage.clear()
     // Reset document attributes
+    document.documentElement.removeAttribute('data-high-contrast')
     document.documentElement.removeAttribute('data-theme')
     document.documentElement.removeAttribute('data-accent')
     document.documentElement.style.colorScheme = ''
@@ -245,6 +246,25 @@ describe('useTheme', () => {
       expect(preset.value).toBeNull()
       expect(localStorage.getItem('autobot-theme-preset')).toBe('auto')
       expect(document.documentElement.hasAttribute('data-high-contrast')).toBe(false)
+    })
+
+    it('a manual accent change after a high-contrast preset leaves no preset and no high contrast', () => {
+      const { setPreset, setAccentColor, preset } = useTheme()
+      setPreset('high-contrast-light')
+      setAccentColor('green')
+      expect(preset.value).toBeNull()
+      expect(localStorage.getItem('autobot-theme-preset')).toBe('auto')
+      expect(document.documentElement.hasAttribute('data-high-contrast')).toBe(false)
+    })
+
+    it('initializeTheme applies a stored named preset before mount', async () => {
+      localStorage.setItem('autobot-theme-preset', 'high-contrast-dark')
+      const module = await import('./useTheme')
+      module.initializeTheme()
+      const { preset, theme } = module.useTheme()
+      expect(preset.value).toBe('high-contrast-dark')
+      expect(theme.value).toBe('dark')
+      expect(document.documentElement.getAttribute('data-high-contrast')).toBe('true')
     })
 
     it('choosing system theme with the theme accent is the Auto preset', () => {
