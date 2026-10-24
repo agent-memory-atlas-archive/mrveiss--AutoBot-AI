@@ -189,7 +189,8 @@ class TestContentKeyedPassCache:
         repo = _repo(tmp_path)
         lock = repo / "app" / "node_modules" / ".package-lock.json"
         probe = (
-            f"{_fn('fe_key')}\nproject=app; KIT_TREE=libs/autobot-ui; project_dir={repo}/app\n"
+            f"{_fn('fe_key')}\n{_fn('fe_reach_trees')}\n"
+            f"REPO_ROOT={repo}; project=app; KIT_TREE=libs/autobot-ui; project_dir={repo}/app\n"
             'fe_install=$(sha256sum "$project_dir/node_modules/.package-lock.json" 2>/dev/null | cut -c1-64)\n'
             'fe_env="install=${fe_install}"; key=$(fe_key vitest sel); echo "key=[$key]"\n'
             'stage_cached vitest "$key" || echo MISS'
@@ -200,6 +201,32 @@ class TestContentKeyedPassCache:
         first = _run(repo, probe).stdout
         lock.write_text('{"v": 2}', encoding="utf-8")
         assert "key=[]" not in first and first != _run(repo, probe).stdout
+
+    def test_a_tree_the_app_config_reaches_is_in_the_key(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        (repo / "app" / "node_modules").mkdir(parents=True)
+        (repo / "app" / "node_modules" / ".package-lock.json").write_text("{}", encoding="utf-8")
+        (repo / "app" / "vite.config.ts").write_text("alias: { '@s': '../shared/src' }\n", encoding="utf-8")
+        (repo / "shared").mkdir()
+        (repo / "shared" / "x.ts").write_text("1", encoding="utf-8")
+        (repo / "other").mkdir()
+        (repo / "other" / "y.ts").write_text("1", encoding="utf-8")
+        git(repo, "add", "-A", "app/vite.config.ts", "shared", "other")
+        git(repo, "commit", "-qm", "configs")
+        probe = (
+            f"{_fn('fe_key')}\n{_fn('fe_reach_trees')}\n"
+            f"REPO_ROOT={repo}; project=app; KIT_TREE=libs/autobot-ui; fe_install=x; fe_env=e\n"
+            'echo "trees=[$(fe_reach_trees app | tr "\\n" " ")]"; echo "key=$(fe_key vitest sel)"'
+        )
+        before = _run(repo, probe).stdout
+        assert "trees=[shared ]" in before
+        for tree, changes in (("other", False), ("shared", True)):
+            (repo / tree / "z.ts").write_text("2", encoding="utf-8")
+            git(repo, "add", "-A", tree)
+            git(repo, "commit", "-qm", tree)
+            after = _run(repo, probe).stdout
+            assert (after != before) is changes, tree
+            before = after
 
     def test_the_cache_can_be_switched_off(self, tmp_path: Path) -> None:
         repo = _repo(tmp_path)
@@ -396,10 +423,11 @@ class TestTrainMode:
         done = _guards(tmp_path, repin="raise SystemExit(1)")
         assert "exit=1" in done.stdout and "crashed (exit 1)" in done.stderr
 
-    def test_a_repin_exit_2_without_stale_lines_is_clean_but_names_the_unmeasured(self, tmp_path: Path) -> None:
+    def test_a_repin_exit_2_passes_but_is_never_cached_and_names_the_unmeasured(self, tmp_path: Path) -> None:
         repin = "import sys; print('ERROR: 1 guard module(s) failed to import: g', file=sys.stderr); sys.exit(2)"
         done = _guards(tmp_path, repin=repin)
-        assert "exit=0 clean=1" in done.stdout, done.stderr
+        # The push passes (exit 0) but the stage is unclean, so stage_exit returns 3: never cached.
+        assert "exit=0 clean=0" in done.stdout, done.stderr
         assert (
             "WARN reach floors NOT measured for some guards: ERROR: 1 guard module(s) failed to import: g"
             in done.stderr
