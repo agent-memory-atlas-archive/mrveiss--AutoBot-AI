@@ -729,9 +729,9 @@ EOF
         -e "@${vars_file}" \
         -e "target_host=localhost" \
         2>&1 | tee -a "${LOG_FILE}" | \
-        grep --line-buffered -E \
-            "^(PLAY \[|TASK \[|ok: \[|changed: \[|failed: \[|skipping: \[|fatal:|PLAY RECAP|[A-Za-z0-9_-].*: ok=)"
-    _ansible_exit=${PIPESTATUS[0]}
+        { grep --line-buffered -E \
+            "^(PLAY \[|TASK \[|ok: \[|changed: \[|failed: \[|skipping: \[|fatal:|PLAY RECAP|[A-Za-z0-9_-].*: ok=)" || true; }
+    _ansible_exit=${PIPESTATUS[0]}  # #19493: `|| true` -- a no-match grep exit killed the run here, silently, under set -e
     set -o pipefail
 
     echo

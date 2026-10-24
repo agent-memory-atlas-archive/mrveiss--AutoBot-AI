@@ -109,3 +109,8 @@ jobs:
           for unit in autobot-slm-backend nginx; do
             echo "== ${unit}"; sudo journalctl -u "${unit}" -n 80 --no-pager 2>&1 | bash scripts/ci/mask_install_summary.sh || true
           done
+          # #19493: the console shows only the filtered Ansible progress; the error is in the install log.
+          for log in /var/log/autobot/install-*.log; do
+            [ -e "${log}" ] || continue
+            echo "== ${log} (last 150 lines)"; sudo tail -n 150 "${log}" | bash scripts/ci/mask_install_summary.sh || true
+          done
