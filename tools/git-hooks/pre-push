@@ -220,20 +220,14 @@ stage_key() {
     done
   } | sha256sum | cut -c1-64
 }
-# A frontend stage's key: <stage> <selection>, over the app and kit trees and $fe_env; empty
-# (never cached) when the app's install has no hidden lockfile ($fe_install) to describe it.
+# A frontend stage's key: <stage> <selection> over the WHOLE root tree plus $fe_env -- as
+# pytest. Parsing the configs for the trees they reach failed open (path.resolve, globs,
+# extends chains, imports in the config), and a missed tree reuses a stale pass; so the cache
+# only answers an identical re-push. Empty (never cached) when the app's install has no
+# hidden lockfile ($fe_install) to describe it.
 fe_key() {
   [ -n "$fe_install" ] || return 0
-  # shellcheck disable=SC2046 # one tree per word is intended
-  stage_key "$1|${fe_env}|$2" "$project" "$KIT_TREE" $(fe_reach_trees "$project")
-}
-# The top-level trees <project>'s own tsconfig/vite/vitest configs reach with a `../` path
-# (aliases, `extends`, include roots: autobot-slm-frontend reads autobot-frontend's generated
-# types and autobot_shared). Read from the configs, never hand-listed, so a new alias is keyed
-# the day it is written. Package `extends` resolve into node_modules, which fe_install covers.
-fe_reach_trees() {
-  cat "$REPO_ROOT/$1"/tsconfig*.json "$REPO_ROOT/$1"/vite*.config.* "$REPO_ROOT/$1"/vitest*.config.* 2>/dev/null \
-    | grep -oE "[\"'\`]\.\./[^\"'\`]+" | cut -c5- | cut -d/ -f1 | grep -vxE '\.\.?|' | sort -u
+  stage_key "$1|${fe_env}|$2" ""
 }
 stage_marker() {
   local dir
