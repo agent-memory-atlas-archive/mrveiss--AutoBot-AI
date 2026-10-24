@@ -37,8 +37,22 @@ from typing import Any, Dict, List
 import numpy as np
 
 from autobot_shared.logging_manager import get_llm_logger
+from autobot_shared.pinned_model_registry import get_pinned_revision
 
 logger = get_llm_logger("semantic_chunker_base")
+
+# #19430 (owner decision 2026-10-24): the sentence models are code-pinned -- one name each, here,
+# with its revision in autobot_shared/pinned_model_registry.py. No configuration overrides them.
+SENTENCE_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+SENTENCE_EMBEDDING_FALLBACKS = ("sentence-transformers/all-mpnet-base-v2", "sentence-transformers/all-MiniLM-L12-v2")
+
+
+def load_sentence_transformer(model_name: str, **kwargs: Any):
+    """*model_name* at its pinned revision; an unregistered name raises KeyError (#19430)."""
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(model_name, revision=get_pinned_revision(model_name), **kwargs)
+
 
 # Issue #380: Pre-compiled regex patterns for sentence splitting
 _SENTENCE_ENDINGS_RE = re.compile(r"([.!?]+(?:\s|$))")
@@ -73,12 +87,13 @@ class SemanticChunkerBase(ABC):
 
     def __init__(
         self,
-        embedding_model: str = "all-MiniLM-L6-v2",
+        embedding_model: str = SENTENCE_EMBEDDING_MODEL,
         percentile_threshold: float = 95.0,
         min_chunk_size: int = 100,
         max_chunk_size: int = 1000,
         overlap_sentences: int = 1,
     ):
+        get_pinned_revision(embedding_model)  # an unpinned name fails here, never in a load fallback (#19430)
         self.embedding_model_name = embedding_model
         self.percentile_threshold = percentile_threshold
         self.min_chunk_size = min_chunk_size
