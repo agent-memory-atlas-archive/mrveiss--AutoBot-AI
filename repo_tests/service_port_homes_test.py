@@ -13,9 +13,11 @@ Two checks, each with a contrast test proving it fires:
 
 1. ``PINNED``: every listed copy states its concept's SSOT value at every site its pattern finds,
    and finds at least ``floor`` sites, so a reworded file cannot pass by matching nothing.
-2. ``FORBIDDEN``: a number that, outside its homes and pinned copies, can only be a second
-   definition. Production Python is read through the AST (docstrings are prose and are skipped);
-   other sources are read as text with ``#``/``//`` comments stripped.
+2. ``FORBIDDEN``: a number that, outside its home and its pinned SITES, can only be a second
+   definition. A pin admits the sites its pattern captures, not its whole file: those are masked
+   and the rest of the file is swept like any other. Production Python is read through the AST
+   (docstrings are prose and are skipped); other sources are read as text with ``#``/``//``
+   comments stripped. A discovered file that cannot be read fails the sweep, never counts as clean.
 
 Concepts: the Windows NPU worker, 8082, separate from the Linux worker's ``npu`` (#19325); the
 noVNC web port, ``vnc``, which the browser host serves on the same 6080 as the backend desktop --
@@ -27,8 +29,9 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 
+import pytest
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
@@ -166,7 +169,7 @@ def _scanned_files(root: Path) -> list[str]:
 FILES = declare(
     "service-port-homes-scan",
     discover=_scanned_files,
-    floor=5125,  # mid-window: 5200 files measured at authoring, less half of growth
+    floor=5381,  # mid-window: 5456 files measured at re-pin, less half of growth
     growth=150,
     what="production python and text sources swept for a second definition of a service port",
     roots=_SCAN_ROOTS,
@@ -229,27 +232,69 @@ def _homes(number: int) -> set[str]:
     return {_SSOT_HOME} | {pin.rel for pin in PINNED if pin.field == field}
 
 
+def masked(text: str, pattern: str) -> str:
+    """*text* with each capture of *pattern* overwritten by ``_``: the pinned sites, and only them.
+
+    ``_`` keeps a masked Python literal parseable (it becomes a name), and every line keeps its
+    length and number, so the sites left over are reported where they stand.
+    """
+
+    def _blank(m: re.Match[str]) -> str:
+        out, last = [], m.start()
+        for group in range(1, (m.re.groups or 0) + 1):
+            if m.start(group) >= 0:
+                out += [text[last : m.start(group)], "_" * (m.end(group) - m.start(group))]
+                last = m.end(group)
+        return "".join(out) + text[last : m.end()]
+
+    return re.sub(pattern, _blank, text, flags=re.MULTILINE)
+
+
+def _unpinned(rel: str, text: str, number: int) -> str:
+    """*text* with the sites *rel*'s pins hold at *number* masked; any other statement remains."""
+    for pin in PINNED:
+        if pin.rel == rel and ssot_port(pin.field) == number:
+            text = masked(text, pin.pattern)
+    return text
+
+
 def forbidden_sites(number: int, sources: dict[str, str]) -> list[str]:
-    """Every statement of a FORBIDDEN number outside its homes and pins, beyond its KNOWN count."""
-    homes, known, out = _homes(number) | _DETECTOR_TABLES, KNOWN.get(number, {}), []
-    retired = not _homes(number)
+    """Every statement of a FORBIDDEN number outside its home and pinned sites, beyond its KNOWN count.
+
+    Only the SSOT home (for a live number) and the detector tables are exempt as whole files.
+    """
+    retired, known, out = not _homes(number), KNOWN.get(number, {}), []
+    exempt = _DETECTOR_TABLES | (set() if retired else {_SSOT_HOME})
     for rel, text in sorted(sources.items()):
-        skip = rel in homes or (bool(_STORY.search(rel)) and not retired)
-        lines = [] if skip else sites(rel, text, number)
+        if rel in exempt or (bool(_STORY.search(rel)) and not retired):
+            continue
+        lines = sites(rel, _unpinned(rel, text, number), number)
         if len(lines) > known.get(rel, (0, ""))[0]:
             out += [f"{rel}:{line}: {number} -- read PortConfig.{FORBIDDEN[number]}" for line in lines]
     return out
 
 
 def _read(rel: str) -> str:
+    """Lenient, for the pin check only: a missing pin file reads empty and fails its floor there."""
     try:
         return (_ROOT / rel).read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return ""
 
 
+def read_sources(root: Path, paths: Sequence[str]) -> dict[str, str]:
+    """The text of every discovered path; one that cannot be read fails the sweep, never reads as clean."""
+    out = {}
+    for rel in paths:
+        try:
+            out[rel] = (root / rel).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as exc:
+            raise AssertionError(f"{rel}: discovered but unreadable ({exc!r})") from exc
+    return out
+
+
 def _sources() -> dict[str, str]:
-    return {rel: _read(rel) for rel in FILES.examined(_ROOT)}
+    return read_sources(_ROOT, FILES.examined(_ROOT))
 
 
 def test_every_pinned_copy_states_its_home() -> None:
@@ -295,6 +340,28 @@ def test_a_re_added_copy_is_caught_in_each_language() -> None:
     assert found == ["autobot-backend/x.py:1: 8082 -- read PortConfig.npu_windows"]
     assert sites("a.ts", " * Extracted (issue #6081).\n/* 6081 */\n", 6081) == []
     assert sites("a.ts", "\n  /** doc */\nport: 8082\n", 8082) == [3], "stripping a comment must not shift lines"
+
+
+def test_a_second_site_in_a_pinned_file_is_caught() -> None:
+    # A pin admits its own site, not its file: the pinned copy alone passes, one extra fails.
+    rel = f"{_WIN}/app/utils/config_bootstrap.py"
+    pinned = "DEFAULT_WORKER_PORT = 8082\n"
+    assert forbidden_sites(8082, {rel: pinned}) == []
+    assert forbidden_sites(8082, {rel: pinned + "X = 8082\n"}) == [f"{rel}:2: 8082 -- read PortConfig.npu_windows"]
+    assert forbidden_sites(8082, {_SSOT_HOME: pinned + "X = 8082\n"}) == [], "the SSOT home is exempt whole"
+
+
+def test_masking_blanks_only_the_pinned_capture() -> None:
+    text = "DEFAULT_WORKER_PORT = 8082\nOTHER = 8082\n"
+    assert masked(text, r"^DEFAULT_WORKER_PORT = (\d+)$") == "DEFAULT_WORKER_PORT = ____\nOTHER = 8082\n"
+
+
+def test_an_unreadable_discovered_file_fails_the_sweep(tmp_path: Path) -> None:
+    (tmp_path / "ok.sh").write_text("P=1\n", encoding="utf-8")
+    (tmp_path / "bad.sh").write_bytes(b"P=\xff\xfe\n")
+    assert read_sources(tmp_path, ["ok.sh"]) == {"ok.sh": "P=1\n"}
+    with pytest.raises(AssertionError, match="bad.sh: discovered but unreadable"):
+        read_sources(tmp_path, ["ok.sh", "bad.sh"])
 
 
 def test_a_retired_number_has_no_home() -> None:
