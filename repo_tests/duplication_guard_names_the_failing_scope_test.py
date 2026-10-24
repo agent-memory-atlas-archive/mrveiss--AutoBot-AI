@@ -151,7 +151,7 @@ def test_a_failure_outside_both_gates_says_so_rather_than_blaming_duplication() 
     is elsewhere.
     """
     output = _run_explain(main_outcome="success", slm_outcome="success")
-    assert "outside both duplication gates" in output
+    assert "outside every duplication gate" in output
     assert MAIN_SCOPE not in output
     assert SLM_SCOPE not in output
 
