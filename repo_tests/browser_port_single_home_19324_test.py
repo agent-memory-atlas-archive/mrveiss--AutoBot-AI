@@ -18,9 +18,8 @@ Three rules, each its own test:
    ``VITE_BROWSER_PORT || 'N'`` ...) anywhere else fails: it is a second home.
 3. 3000 in a browser/Playwright port context fails. 3000 is Grafana's port; the
    live fleet runs ``autobot-playwright`` on 9001 with Grafana on loopback 3000.
-   The exceptions are ``_BINDS_3000``: the two Docker paths that still bind the
-   container to 3000 (#18549 kept it; changing a host's bind is out of scope) and
-   the clients of exactly those containers. Their reconciliation is #19418.
+   There is no Docker exception: the Playwright compose files and the hybrid
+   playbook bind 9001 like the fleet, and so do their clients (#19418).
 
 Shell ``${AUTOBOT_BROWSER_SERVICE_PORT:-N}`` fallbacks are not definitions here:
 ``tools/lint/check_port_fallbacks_match_ssot.py`` already holds them to the SSOT.
@@ -125,29 +124,29 @@ _PINNED: dict[str, tuple[str, ...]] = {
     "autobot-slm-backend/ansible/setup-user-backend.yml": (r"browser_worker_port: (\d+)\b",),
     "autobot-slm-backend/ansible/setup-browser-worker.yml": (r"playwright_port \| default\((\d+)\)",),
     "autobot-slm-backend/ansible/playbooks/update-all-nodes.yml": (r"playwright_port \| default\((\d+)\)",),
+    "autobot-infrastructure/shared/tests/frontend-test-via-playwright-api.js": (
+        r"process\.env\.AUTOBOT_BROWSER_SERVICE_PORT \|\| '(\d+)'",
+    ),
+    "autobot-infrastructure/shared/tests/screenshots/test-browser-console-errors.js": (
+        r"process\.env\.AUTOBOT_BROWSER_SERVICE_PORT \|\| '(\d+)'",
+    ),
+    "autobot-infrastructure/shared/tests/screenshots/test-frontend-edge-error.js": (
+        r"process\.env\.AUTOBOT_BROWSER_SERVICE_PORT \|\| '(\d+)'",
+    ),
+    "autobot-infrastructure/shared/tests/screenshots/test-frontend-via-docker.js": (
+        r"process\.env\.AUTOBOT_BROWSER_SERVICE_PORT \|\| '(\d+)'",
+    ),
+    "autobot-infrastructure/shared/tests/screenshots/test-silent-chat-deletion.js": (
+        r"process\.env\.AUTOBOT_BROWSER_SERVICE_PORT \|\| '(\d+)'",
+    ),
+    "autobot-infrastructure/shared/tests/screenshots/test-visible-browser.js": (
+        r"process\.env\.AUTOBOT_BROWSER_SERVICE_PORT \|\| '(\d+)'",
+    ),
+    "autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml": (
+        r"playwright_port \| default\((\d+)\)",
+    ),  # #19418
     "autobot-slm-backend/ansible/playbooks/health-check.yml": (r"browser_port \| default\((\d+)\)",),
 }
-
-#: The Docker paths that bind the container to 3000 today, and their clients (#19418).
-_BINDS_3000 = frozenset(
-    {
-        "autobot-infrastructure/shared/docker/compose/docker-compose.playwright.yml",
-        "autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml",
-        "autobot-infrastructure/shared/scripts/testing/manage_playwright.sh",
-        "autobot-infrastructure/shared/scripts/setup/setup_repair.sh",
-        "autobot-infrastructure/shared/scripts/setup/verify_installation.sh",
-        "autobot-infrastructure/shared/scripts/deployment/start_all_containers.sh",
-        "autobot-infrastructure/shared/scripts/analysis/test_gui_chat_visual.py",
-        "autobot-infrastructure/shared/tests/frontend-test-via-playwright-api.js",
-        "autobot-infrastructure/shared/tests/screenshots/test-browser-console-errors.js",
-        "autobot-infrastructure/shared/tests/screenshots/test-frontend-edge-error.js",
-        "autobot-infrastructure/shared/tests/screenshots/test-frontend-via-docker.js",
-        "autobot-infrastructure/shared/tests/screenshots/test-silent-chat-deletion.js",
-        "autobot-infrastructure/shared/tests/screenshots/test-visible-browser.js",
-        "autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml",
-        "autobot-slm-backend/ansible/deploy-hybrid.sh",
-    }
-)
 
 #: Files whose 3000 or browser-port literal is a test input or a rule ABOUT the port.
 _NOT_A_COPY = frozenset(
@@ -205,7 +204,7 @@ def unpinned_definitions(root: Path, paths: list[str], pinned: set[str], home: s
     """Browser-port definitions outside the home and the pinned set, or pinned ones off the home."""
     found = []
     for rel in paths:
-        if rel == _HOME or rel in _NOT_A_COPY or rel in _BINDS_3000:
+        if rel == _HOME or rel in _NOT_A_COPY:
             continue
         text = _read(root, rel)
         if not _NAME_HINT.search(text):
@@ -221,7 +220,7 @@ def browser_3000(root: Path, paths: list[str]) -> list[str]:
     """3000 in a browser/Playwright port context, outside the Docker 3000 paths."""
     found = []
     for rel in paths:
-        if rel in _NOT_A_COPY or rel in _BINDS_3000:
+        if rel in _NOT_A_COPY:
             continue
         text = _read(root, rel)
         if "3000" not in text:
@@ -264,7 +263,7 @@ def test_no_browser_context_carries_grafanas_3000(scanned: list[str]) -> None:
 
 
 def test_every_exception_still_exists() -> None:
-    missing = sorted(p for p in _BINDS_3000 | _NOT_A_COPY | set(_PINNED) if not (_REPO_ROOT / p).is_file())
+    missing = sorted(p for p in _NOT_A_COPY | set(_PINNED) if not (_REPO_ROOT / p).is_file())
     assert not missing, f"listed but gone -- shrink the list: {missing}"
 
 
