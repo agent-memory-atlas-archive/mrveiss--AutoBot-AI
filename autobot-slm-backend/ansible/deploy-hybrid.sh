@@ -62,7 +62,7 @@ show_deployment_plan() {
     log "INFO" "  • Ollama LLM server (port 11434)"
     log "INFO" ""
     log "INFO" "VM5 (${AUTOBOT_BROWSER_SERVICE_HOST:-localhost}) - autobot-browser:"
-    log "INFO" "  • Playwright browser service (port 9001)"
+    log "INFO" "  • Playwright browser service (port ${AUTOBOT_BROWSER_SERVICE_PORT:-9001})"
     log "INFO" "  • VNC server for desktop access (port 5900)"
     log "INFO" ""
 }

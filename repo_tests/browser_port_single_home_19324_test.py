@@ -23,6 +23,7 @@ Three rules, each its own test:
 
 Shell ``${AUTOBOT_BROWSER_SERVICE_PORT:-N}`` fallbacks are not definitions here:
 ``tools/lint/check_port_fallbacks_match_ssot.py`` already holds them to the SSOT.
+Compose files are not shell, so their fallbacks are pinned in ``_PINNED`` instead.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ _SCAN = (
     "*.service",
     "*.ts",
     ".env*",
+    "*/.env*",  # nested env files (autobot-frontend/.env.example, docker/.env.docker)
     "autobot-frontend/src/**",
     "autobot-infrastructure/**",
     "autobot-frontend/vite.config.js",
@@ -160,6 +162,13 @@ _PINNED: dict[str, tuple[str, ...]] = {
     "autobot-infrastructure/shared/config/deployment/kubernetes.yml": (r"playwright-vnc:\n.*\n\s+port: (\d+)\n",),
     "autobot-infrastructure/shared/config/deployment/local.yml": (r"playwright-vnc:\n.*\n\s+port: (\d+)\n",),
     "autobot-infrastructure/shared/config/distributed.yaml": (r"    browser:\n.*\n\s+port: (\d+)\n",),
+    # Compose reads the env var; its `:-N` fallback is the copy (#19432).
+    "autobot-infrastructure/shared/docker/compose/docker-compose.playwright.yml": (
+        r"\$\{AUTOBOT_BROWSER_SERVICE_PORT:-(\d+)\}",
+    ),
+    "autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml": (
+        r"\$\{AUTOBOT_BROWSER_SERVICE_PORT:-(\d+)\}",
+    ),
 }
 
 #: Files whose 3000 or browser-port literal is a test input or a rule ABOUT the port.
@@ -177,7 +186,6 @@ _NOT_A_COPY = frozenset(
         "autobot-backend/tests/unit/api/test_browser_url_guard.py",  # an arbitrary localhost URL
         "autobot-frontend/src/components/__tests__/VisualBrowserPanel.test.ts",  # URL normalisation input
         "autobot-infrastructure/shared/config/.eslintrc.js",  # the rule that bans the literal
-        "autobot-frontend/src/config/__tests__/ssot-config.spec.ts",  # lines 60/72: asserts 3000 is absent
         "autobot-slm-backend/ansible/roles/browser/defaults/main.yml",  # playwright_ports_legacy cleanup list (#19419)
     }
 )
@@ -201,7 +209,7 @@ def _scanned(root: Path) -> list[str]:
 REACH = declare(
     "browser-port-single-home-scan",
     discover=_scanned,
-    floor=10105,  # re-measured at 10405 on 4fc08f128a, pinned mid-window (#15928)
+    floor=10130,  # re-measured at 10430 with the nested .env* glob, pinned mid-window (#15928)
     growth=600,
     skips=0,
     what="tracked files scanned for a second browser-port home or Grafana's 3000 (#19324)",
@@ -229,11 +237,13 @@ def pinned_drift(root: Path, pinned: dict[str, tuple[str, ...]], home: str) -> l
     return problems
 
 
-def unpinned_definitions(root: Path, paths: list[str], pinned: set[str], home: str) -> list[str]:
+def unpinned_definitions(
+    root: Path, paths: list[str], pinned: set[str], home: str, exempt: frozenset[str] = _NOT_A_COPY
+) -> list[str]:
     """Browser-port definitions outside the home and the pinned set, or pinned ones off the home."""
     found = []
     for rel in paths:
-        if rel == _HOME or rel in _NOT_A_COPY:
+        if rel == _HOME or rel in exempt:
             continue
         text = _read(root, rel)
         if not _NAME_HINT.search(text):
@@ -268,11 +278,11 @@ def _ancestor_lines(lines: list[str], index: int, code: set[int]) -> list[str]:
     return found
 
 
-def browser_3000(root: Path, paths: list[str]) -> list[str]:
-    """3000 in a browser/Playwright port context, outside the Docker 3000 paths."""
+def browser_3000(root: Path, paths: list[str], exempt: frozenset[str] = _NOT_A_COPY) -> list[str]:
+    """3000 in a browser/Playwright port context, outside the files in *exempt*."""
     found = []
     for rel in paths:
-        if rel in _NOT_A_COPY:
+        if rel in exempt:
             continue
         text = _read(root, rel)
         if "3000" not in text:
@@ -324,6 +334,15 @@ def test_no_browser_context_carries_grafanas_3000(scanned: list[str]) -> None:
 def test_every_exception_still_exists() -> None:
     missing = sorted(p for p in _NOT_A_COPY | set(_PINNED) if not (_REPO_ROOT / p).is_file())
     assert not missing, f"listed but gone -- shrink the list: {missing}"
+
+
+def test_every_exception_still_trips_a_detector() -> None:
+    """A `_NOT_A_COPY` entry whose file no longer trips either rule is a stale exemption."""
+    home, paths = _home_port(_REPO_ROOT), sorted(_NOT_A_COPY)
+    tripped = {f.split(":", 1)[0] for f in unpinned_definitions(_REPO_ROOT, paths, set(_PINNED), home, frozenset())}
+    tripped |= {f.split(":", 1)[0] for f in browser_3000(_REPO_ROOT, paths, frozenset())}
+    stale = sorted(_NOT_A_COPY - tripped)
+    assert not stale, f"exempt but no longer tripping a detector -- shrink _NOT_A_COPY: {stale}"
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
