@@ -45,7 +45,6 @@ _NO_HOSTS_MARKERS = (
     "Could not match supplied host pattern",
     "No inventory was parsed",
 )
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def ansible_run_failure(output: str, host: str, returncode: int) -> str | None:
@@ -59,13 +58,12 @@ def ansible_run_failure(output: str, host: str, returncode: int) -> str | None:
     """
     if returncode != 0:
         return output
-    text = _ANSI_RE.sub("", output)
     for marker in _NO_HOSTS_MARKERS:
-        if marker in text:
+        if marker in output:
             return f"ansible matched no hosts ({marker!r})"
     recap = re.search(
         rf"^{re.escape(host)}\s*:\s*ok=\d+.*?unreachable=(\d+)\s+failed=(\d+)",
-        text,
+        output,
         re.MULTILINE,
     )
     if not recap:
