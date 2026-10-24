@@ -12,7 +12,8 @@ the one startup wiring point. Phase 2's ``_init_knowledge_base`` calls
 * Non-blocking: the import runs as a retained background task (``fire_and_forget``).
 * One worker: a :class:`LeaderLease` lets only one uvicorn worker import. The lease is renewed
   while the import runs and is never deleted: it is left to expire, also after a cancelled run,
-  so workers that start in the same window skip instead of re-running it.
+  so workers that start in the same window skip instead of re-running it. If a renewal fails,
+  the import is cancelled: a worker that no longer holds the lease never keeps writing.
 * Idempotent: ``SystemKnowledgeManager`` compares the template file-state hash and the per-item
   hashes, so a restart with unchanged templates makes no KB writes.
 * A failure is logged and never reaches startup; items that failed to store are counted, logged
@@ -58,26 +59,46 @@ def start_system_knowledge_import(app: Any) -> asyncio.Task | None:
 
 
 async def run_system_knowledge_import(knowledge_base: Any, lease: LeaderLease | None = None) -> bool:
-    """Import the templates if this worker wins the lease.
+    """Import the templates if this worker wins the lease, and only while it keeps it.
 
     True only when the import ran with no failed item. False when another worker holds the lease,
-    the import raised, or some items failed to store (those are retried on the next start).
+    the lease was lost mid-run (the import is cancelled), the import raised, or some items failed
+    to store (those are retried on the next start).
     """
     lease = lease or import_lease()
-    keeper: asyncio.Task | None = None
     try:
         if not await lease.update_leadership():
             logger.info("System knowledge import: lease not acquired (another worker or no Redis), skipping")
             return False
-        keeper = asyncio.create_task(_keep_lease(lease), name=f"{IMPORT_TASK_NAME}-lease")
-        failures = await _import(knowledge_base)
+        completed, failures = await _import_while_leading(knowledge_base, lease)
     except Exception as exc:
         logger.error("System knowledge import failed; startup continues: %s", exc, exc_info=True)
         return False
+    return completed and _report(failures)
+
+
+async def _import_while_leading(knowledge_base: Any, lease: LeaderLease) -> tuple[bool, list[str]]:
+    """Race the import against the lease keeper: (completed, failed items).
+
+    ``completed`` is False when the lease was lost first; the import is then cancelled.
+    """
+    import_task = asyncio.create_task(_import(knowledge_base), name=f"{IMPORT_TASK_NAME}-run")
+    keeper = asyncio.create_task(_keep_lease(lease), name=f"{IMPORT_TASK_NAME}-lease")
+    try:
+        await asyncio.wait({import_task, keeper}, return_when=asyncio.FIRST_COMPLETED)
     finally:
-        if keeper is not None:
-            keeper.cancel()
-    return _report(failures)
+        keeper.cancel()
+        if not import_task.done():
+            import_task.cancel()
+    if not import_task.cancelled() and import_task.done():
+        return True, import_task.result()
+    await asyncio.gather(import_task, return_exceptions=True)
+    renewal_error = None if keeper.cancelled() else keeper.exception()
+    logger.error(
+        "System knowledge import cancelled: this worker lost the import lease mid-run (renewal error: %r)",
+        renewal_error,
+    )
+    return False, []
 
 
 def _report(failures: list[str]) -> bool:
@@ -107,9 +128,9 @@ async def _import(knowledge_base: Any) -> list[str]:
 
 
 async def _keep_lease(lease: LeaderLease) -> None:
-    """Renew the lease while the import runs, so a slow import is not joined by a late worker."""
+    """Renew the lease while the import runs; return as soon as a renewal fails, which ends the import."""
     while True:
         await asyncio.sleep(lease.refresh_s)
         if not await lease.update_leadership():
-            logger.warning("System knowledge import lost its lease mid-run; another worker may start it")
+            logger.warning("System knowledge import lost its lease mid-run; cancelling the import")
             return

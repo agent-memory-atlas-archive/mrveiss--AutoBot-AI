@@ -354,3 +354,30 @@ async def test_losing_the_lease_mid_run_is_warned() -> None:
     with patch.object(ski.logger, "warning") as warned:
         await ski._keep_lease(lease)
     assert "lost its lease" in str(warned.call_args)
+
+
+@pytest.mark.asyncio
+async def test_losing_the_lease_mid_run_cancels_the_import() -> None:
+    started, outcome = asyncio.Event(), []
+
+    async def _hanging_import(_kb):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            outcome.append("cancelled")
+            raise
+        outcome.append("finished")
+
+    lease = MagicMock(refresh_s=0)
+    lease.update_leadership = AsyncMock(side_effect=[True, False])
+    with (
+        patch.object(ski, "_import", new=_hanging_import),
+        patch.object(ski.logger, "error") as logged,
+    ):
+        # Bounded: an import that ignores the lost lease hangs here instead of returning.
+        run = ski.run_system_knowledge_import(_FakeKB(), lease=lease)
+        assert await asyncio.wait_for(run, timeout=5) is False
+    assert started.is_set() and outcome == ["cancelled"], "the import kept running after the lease was lost"
+    assert "lost the import lease" in str(logged.call_args)
+    assert lease.update_leadership.await_count == 2
