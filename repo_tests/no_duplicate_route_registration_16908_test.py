@@ -13,28 +13,28 @@ never landed; this revives it against the current loaders and replaces the AST g
 property is a fork. The AST read it replaces was blind to ``add_api_route``, loop-built routes and computed
 prefixes, and counted a router mounted twice as one entry. Here every occurrence is counted.
 
-The SLM backend is still read with ``autobot_shared/api_routing/route_order.py`` (source, ``ast``): it has no
-router-loader pair to call, so the real-object read is not available for it (tracked by #19033).
+The SLM backend is read the same way: ``main.py`` builds its ``app`` at import, so the app's own router tree is
+walked. Each app is dumped by ``repo_tests/_dump_real_routes.py`` in a child interpreter, because both apps ship
+top-level ``api`` and ``config`` packages and cannot share a process (#17325, #19033).
 
 What it cannot see, stated so a green run reads correctly: the three routers ``app_factory.py`` mounts
-directly (``/v1`` OpenAI and Anthropic compat, ``/.well-known`` JWKS), the SLM's runtime-only routes, and any
-route a router adds after import. A route whose mount path cannot be recovered is asserted empty, never skipped.
+directly (``/v1`` OpenAI and Anthropic compat, ``/.well-known`` JWKS), and any route added after import. A route whose mount path cannot be recovered is asserted empty, never skipped.
 """
 
 from __future__ import annotations
 
 import collections
 import functools
-import logging
+import json
+import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+from repo_tests._dump_real_routes import registered_routes as _registered
 from repo_tests._paths import repo_root
-
-from autobot_shared.api_routing.route_order import OrderedRoute, RouteOrder, slm_routes
-from autobot_shared.api_routing.router_routes import effective_routes
 
 _BACKEND = "autobot-backend"
 _SLM = "autobot-slm-backend"
@@ -44,66 +44,43 @@ _ROOT = repo_root()
 #: Resolving them is a judgement (they differ in declared auth and capability), owned by #18721 -- decision
 #: pending. SHRINK-ONLY: entries leave when #18721 lands, and none may be added; a new duplicate is what
 #: this guard is for.
-#: Population floors, measured 2026-10-24 under Python 3.14.6 / fastapi 0.141.1: 276 registry entries and
-#: 2567 backend routes; 53 SLM source files parsed. Each floor leaves ~20% headroom.
-BACKEND_REGISTRATIONS_FLOOR = 220
-BACKEND_ROUTES_FLOOR = 2000
-SLM_PARSED_FLOOR = 42
-KNOWN_DUPLICATES = {
-    ("POST", "/api/voice/realtime/tools/call"): "#18721",
-    ("GET", "/api/llc/agent/context/{item_id}"): "#18721",
-}
+#: Population floors, measured 2026-10-24 under Python 3.14.6 / fastapi 0.141.1: backend 276 registry entries and
+#: 2567 routes; SLM 56 top-level entries and 428 routes. Each floor leaves ~20% headroom.
+FLOORS = {_BACKEND: (220, 2000), _SLM: (45, 340)}  # (registrations, routes)
 
 
-#: app name -> source files the SLM read parsed (the reach of that sweep), filled by ``_read``.
-_PARSED: dict[str, int] = {}
-#: Registry entries ``load_core_routers()`` + ``load_optional_routers()`` returned (the backend's reach).
-_REGISTRATIONS: list[int] = []
+@dataclass(frozen=True)
+class OrderedRoute:
+    """One registered route: the method, the full served path, and the handler that answers it."""
+
+    method: str
+    path: str
+    site: str
 
 
 def registered_routes(entries: list[tuple[Any, str, Any, str]]) -> tuple[list[OrderedRoute], list[str]]:
-    """``(routes, unrecoverable)`` for registry tuples ``(router, prefix, tags, name)``, mounted at ``/api``.
-
-    ``app_factory.py`` does ``app.include_router(router, prefix=f"/api{prefix}")``; this applies the same prefix to
-    ``effective_routes(router)``. A route whose full path could not be recovered is listed, never dropped.
-    """
-    routes: list[OrderedRoute] = []
-    unrecoverable: list[str] = []
-    for router, prefix, _tags, name in entries:
-        for mounted in effective_routes(router):
-            if not mounted.prefix_complete:
-                unrecoverable.append(f"{name}:{mounted.path}")
-                continue
-            endpoint = getattr(mounted.route, "endpoint", None)
-            site = f"{name}:{getattr(endpoint, '__module__', '?')}.{getattr(endpoint, '__qualname__', '?')}"
-            for method in mounted.methods or {"WEBSOCKET"}:
-                routes.append(OrderedRoute(method, f"/api{prefix}{mounted.path}", site))
-    return routes, unrecoverable
-
-
-def _backend_entries() -> list[tuple[Any, str, Any, str]]:
-    """The same two loader calls ``app_factory.py`` makes, in the same order."""
-    backend = str(_ROOT / _BACKEND)
-    if backend not in sys.path:
-        sys.path.insert(0, backend)
-    from initialization.router_registry.core_routers import load_core_routers
-    from initialization.routers import load_optional_routers
-
-    logging.disable(logging.INFO)  # the loaders log one line per router
-    try:
-        return [*load_core_routers(), *load_optional_routers()]
-    finally:
-        logging.disable(logging.NOTSET)
+    routes, unrecoverable = _registered(entries)
+    return [OrderedRoute(*row) for row in routes], unrecoverable
 
 
 @functools.lru_cache(maxsize=4)
+def _dump(root: Path, app: str) -> dict[str, Any]:
+    """The child interpreter's JSON for *app*; a failed child fails the guard loudly, never reads as empty."""
+    script = root / "repo_tests" / "_dump_real_routes.py"
+    short = "backend" if app == _BACKEND else "slm"
+    done = subprocess.run(
+        [sys.executable, str(script), short], capture_output=True, text=True, encoding="utf-8", check=False
+    )
+    assert done.returncode == 0, f"{app}: route dump failed rc={done.returncode}\n{done.stderr[-2000:]}"
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
 def _read(root: Path) -> dict[str, tuple[list[OrderedRoute], list[str]]]:
-    entries = _backend_entries()
-    _REGISTRATIONS[:] = [len(entries)]
-    order = RouteOrder(root / _SLM)
-    slm = slm_routes(order)  # parses lazily: the reach is only known after the read
-    _PARSED[_SLM] = len(order.parsed)
-    return {_BACKEND: registered_routes(entries), _SLM: (slm, list(order.unresolved))}
+    return {
+        app: ([OrderedRoute(*row) for row in dump["routes"]], dump["unrecoverable"])
+        for app in (_BACKEND, _SLM)
+        for dump in (_dump(root, app),)
+    }
 
 
 def duplicates(routes: list[OrderedRoute]) -> dict[tuple[str, str], list[str]]:
@@ -119,31 +96,19 @@ def duplicates(routes: list[OrderedRoute]) -> dict[tuple[str, str], list[str]]:
 
 @pytest.mark.parametrize("app", [_BACKEND, _SLM])
 def test_no_route_is_registered_twice(app: str) -> None:
-    routes, unresolved = _read(_ROOT)[app]
-    assert not unresolved, f"{app}: could not read {unresolved[:5]} -- this guard has NOT checked them"
-    new = {k: v for k, v in duplicates(routes).items() if k not in KNOWN_DUPLICATES}
-    assert not new, "\n".join(f"{m} {p} registered by {', '.join(sites)}" for (m, p), sites in sorted(new.items()))
+    routes, unrecoverable = _read(_ROOT)[app]
+    assert not unrecoverable, f"{app}: could not recover the mount path of {unrecoverable[:5]}"
+    dupes = duplicates(routes)
+    assert not dupes, "\n".join(f"{m} {p} registered by {', '.join(sites)}" for (m, p), sites in sorted(dupes.items()))
 
 
-def test_the_allowlist_only_lists_duplicates_that_still_exist() -> None:
-    """A stale entry silently re-licenses the collision it named."""
-    live = {key for routes, _ in _read(_ROOT).values() for key in duplicates(routes)}
-    gone = set(KNOWN_DUPLICATES) - live
-    assert not gone, f"these are fixed; remove them from KNOWN_DUPLICATES: {sorted(gone)}"
-
-
-def test_the_allowlist_names_its_owning_issue() -> None:
-    assert all(owner.startswith("#") for owner in KNOWN_DUPLICATES.values())
-
-
-def test_the_reader_reached_both_apps() -> None:
-    apps = _read(_ROOT)
-    # Reach first, routes second: registry entries (backend) and source files parsed (SLM) say whether whole
-    # modules silently stopped being read; the route counts stay as a second, independent instrument. A broken
-    # import must not let the guard pass by finding nothing.
-    assert _REGISTRATIONS[0] > BACKEND_REGISTRATIONS_FLOOR, _REGISTRATIONS
-    assert _PARSED[_SLM] > SLM_PARSED_FLOOR, dict(_PARSED)
-    assert len(apps[_BACKEND][0]) > BACKEND_ROUTES_FLOOR and len(apps[_SLM][0]) > 200, "the route read has drifted"
+@pytest.mark.parametrize("app", [_BACKEND, _SLM])
+def test_the_reader_reached_the_app(app: str) -> None:
+    """Reach first, routes second: a broken import must not let the guard pass by finding nothing."""
+    dump = _dump(_ROOT, app)
+    registrations, route_floor = FLOORS[app]
+    assert dump["registrations"] > registrations, (app, dump["registrations"])
+    assert len(dump["routes"]) > route_floor, (app, len(dump["routes"]))
 
 
 # -- the guard proved by plant --------------------------------------------------------------------------
@@ -164,81 +129,16 @@ def test_distinct_routes_and_methods_are_not_duplicates() -> None:
     assert duplicates(routes) == {}
 
 
-def _planted_app(tmp_path: Path, main_body: str) -> list[OrderedRoute]:
-    """A miniature SLM app: ``api.child`` has one route, ``api.parent`` composes it with include_router."""
-    (tmp_path / "api").mkdir()
-    (tmp_path / "api" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "api" / "child.py").write_text(
-        'from fastapi import APIRouter\nrouter = APIRouter()\n@router.get("/dup")\ndef one(): ...\n',
-        encoding="utf-8",
-    )
-    (tmp_path / "api" / "parent.py").write_text(
-        "from fastapi import APIRouter\nfrom api.child import router as child_router\n"
-        "router = APIRouter()\nrouter.include_router(child_router)\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "main.py").write_text(
-        "from api.child import router as child_router\nfrom api.parent import router as parent_router\n" + main_body,
-        encoding="utf-8",
-    )
-    order = RouteOrder(tmp_path)
-    routes = slm_routes(order)
-    assert not order.unresolved
-    return routes
+def test_a_duplicate_websocket_route_is_caught() -> None:
+    """A WebSocket route only collides with another WebSocket route, never with a GET at the same path."""
+    from fastapi import APIRouter
 
-
-def test_a_double_mount_through_include_router_is_caught(tmp_path: Path) -> None:
-    """Contrast with the AST guard this replaces, which missed exactly this (#17325).
-
-    ``parent`` already includes ``child``; ``main`` mounts ``child`` again directly.
-    """
-    routes = _planted_app(
-        tmp_path, 'app.include_router(parent_router, prefix="/api")\napp.include_router(child_router, prefix="/api")\n'
-    )
-    assert duplicates(routes) == {("GET", "/api/dup"): ["api.child:3", "api.child:3"]}
-
-
-def test_a_single_mount_through_include_router_is_clean(tmp_path: Path) -> None:
-    routes = _planted_app(tmp_path, 'app.include_router(parent_router, prefix="/api")\n')
-    assert [r.path for r in routes] == ["/api/dup"]
-    assert duplicates(routes) == {}
-
-
-def test_the_same_router_included_twice_into_one_parent_is_caught(tmp_path: Path) -> None:
-    (tmp_path / "api").mkdir()
-    (tmp_path / "api" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "api" / "child.py").write_text(
-        'from fastapi import APIRouter\nrouter = APIRouter()\n@router.get("/dup")\ndef one(): ...\n', encoding="utf-8"
-    )
-    (tmp_path / "api" / "parent.py").write_text(
-        "from fastapi import APIRouter\nfrom api.child import router as child_router\n"
-        "router = APIRouter()\nrouter.include_router(child_router)\nrouter.include_router(child_router)\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "main.py").write_text(
-        'from api.parent import router as parent_router\napp.include_router(parent_router, prefix="/api")\n',
-        encoding="utf-8",
-    )
-    routes = slm_routes(RouteOrder(tmp_path))
-    assert len(duplicates(routes)[("GET", "/api/dup")]) == 2
-
-
-def test_a_duplicate_websocket_route_is_caught(tmp_path: Path) -> None:
-    """The AST guard this replaced counted ``@router.websocket``; the route read must too."""
-    (tmp_path / "api").mkdir()
-    (tmp_path / "api" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "api" / "w.py").write_text(
-        'from fastapi import APIRouter\nrouter = APIRouter()\n@router.websocket("/ws")\nasync def a(ws): ...\n'
-        '@router.get("/ws")\ndef b(): ...\n',
-        encoding="utf-8",
-    )
-    (tmp_path / "main.py").write_text(
-        "from api.w import router as w_router\n"
-        'app.include_router(w_router, prefix="/api")\napp.include_router(w_router, prefix="/api")\n',
-        encoding="utf-8",
-    )
-    dupes = duplicates(slm_routes(RouteOrder(tmp_path)))
-    assert set(dupes) == {("WEBSOCKET", "/api/ws"), ("GET", "/api/ws")}
+    router = APIRouter()
+    router.add_api_websocket_route("/ws", lambda ws: None)
+    router.add_api_websocket_route("/ws", lambda ws: None)
+    router.add_api_route("/ws", lambda: None, methods=["GET"])
+    routes, _ = registered_routes([(router, "", [], "w")])
+    assert set(duplicates(routes)) == {("WEBSOCKET", "/api/ws")}
 
 
 # -- the real-router read proved by plant (#17325) -------------------------------------------------------
@@ -279,3 +179,21 @@ def test_the_same_router_registered_twice_by_the_registry_is_caught() -> None:
     router = _router_with("/dup")
     routes, _ = registered_routes([(router, "/x", [], "a"), (router, "/x", [], "a")])
     assert len(duplicates(routes)[("GET", "/api/x/dup")]) == 2
+
+
+# -- which handler answers each formerly shared path (#18721) ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "handler"),
+    [
+        ("POST", "/api/voice/realtime/tools/call", "api.realtime_session.call_realtime_tool"),
+        ("GET", "/api/llc/agent/context/{item_id}", "llc.api.agent_api.get_item_context"),
+        ("GET", "/api/llc/context/{item_id}", "llc.api.context.get_context"),
+    ],
+)
+def test_the_full_app_order_has_one_named_handler_per_path(method: str, path: str, handler: str) -> None:
+    """The route list is in registration order, so a single entry here is the only handler Starlette can pick."""
+    routes, _ = _read(_ROOT)[_BACKEND]
+    sites = [r.site for r in routes if (r.method, r.path) == (method, path)]
+    assert len(sites) == 1 and sites[0].endswith(handler), (method, path, sites)
