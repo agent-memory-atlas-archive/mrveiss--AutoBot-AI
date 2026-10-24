@@ -180,7 +180,7 @@ def test_every_file_a_scope_scans_is_covered_by_a_trigger_glob() -> None:
 def test_the_coverage_check_fails_when_a_glob_is_removed() -> None:
     """Negative control: the check above must be able to fail."""
     on = _document()[True]
-    trimmed = [g for g in on["pull_request"]["paths"] if g != "autobot-plugins/**/*.ts"]
+    trimmed = [g for g in on["pull_request"]["paths"] if not (g.startswith("autobot-plugins/") and g.endswith(".ts"))]
     assert _uncovered(_tracked("autobot-plugins"), trimmed), "removing a glob went unnoticed"
 
 
