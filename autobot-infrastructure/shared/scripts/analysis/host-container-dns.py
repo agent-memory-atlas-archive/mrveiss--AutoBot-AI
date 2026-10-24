@@ -31,7 +31,7 @@ class HostContainerDNS:
         """Get container name to IP mappings from Docker network"""
         try:
             # Get network info
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607  # fixed argv, no user input
                 ["docker", "network", "inspect", self.network_name],
                 capture_output=True,
                 text=True,
@@ -118,7 +118,7 @@ class HostContainerDNS:
             content = "\n".join(all_lines)
 
             # Use sudo to write
-            process = subprocess.run(
+            process = subprocess.run(  # nosec B603 B607  # fixed argv; the hosts path is a constant
                 ["sudo", "tee", self.hosts_file],
                 input=content,
                 text=True,
