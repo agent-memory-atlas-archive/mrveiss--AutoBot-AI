@@ -123,6 +123,27 @@ async def test_restore_stores_the_fact_with_its_marker_so_it_returns_quarantined
     assert kb.store_fact.await_args.kwargs["metadata"]["collection"] == _RESEARCH
 
 
-def test_json_import_normalization_keeps_the_marker():
-    metadata, errors = _KB()._normalize_metadata({"metadata": {"collection": _RESEARCH}}, "imported")
-    assert not errors and metadata["collection"] == _RESEARCH
+@pytest.mark.asyncio
+async def test_json_import_stores_the_fact_with_its_marker():
+    kb = _KB()
+    kb.store_fact = AsyncMock(return_value={"status": "success", "fact_id": "held"})
+    payload = json.dumps([{"fact_id": "held", "content": "held", "metadata": {"collection": _RESEARCH}}])
+
+    result = await kb.import_facts(data=payload, skip_duplicates=False)
+
+    assert result["status"] == "success"
+    assert kb.store_fact.await_args.kwargs["metadata"]["collection"] == _RESEARCH
+
+
+@pytest.mark.asyncio
+async def test_okf_round_trip_reimports_the_fact_still_quarantined(tmp_path):
+    with patch(_AUDIT, AsyncMock(return_value=True)):
+        await OKFAdapter(_KB()).export_from_kb(str(tmp_path))
+    target = _KB()
+    target.store_fact = AsyncMock(return_value={"status": "success"})
+
+    result = await OKFAdapter(target).import_into_kb(str(tmp_path))
+
+    assert result["stored_count"] == 2 and result["error_count"] == 0
+    stored = {c.args[2]: c.args[1].get("collection") for c in target.store_fact.await_args_list}
+    assert stored == {"good": None, "held": _RESEARCH}
