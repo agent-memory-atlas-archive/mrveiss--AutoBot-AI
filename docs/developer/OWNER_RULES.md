@@ -17,8 +17,8 @@ Each entry: **rule** · date · replaces · detail.
 | 9 | At session end: push everything, release claims, remove worktrees with plain `git worktree remove`, never `--force` | 2026-10-24 | forced sweeps | [CLAUDE_GIT.md](CLAUDE_GIT.md) |
 | 10 | `Closes #N` auto-closes on merge: write `Closes` only when every AC is delivered, otherwise `Refs` | 2026-09-12 | "Closes never auto-closes" | [CLAUDE_CLOSURE.md](CLAUDE_CLOSURE.md) |
 | 11 | No commit trailers; `mrveiss` is sole author | standing | tool-default trailers | [CLAUDE.md](../../CLAUDE.md) |
-| 12 | CodeRabbit is advisory and never blocks a first CI run; a relaunch (push or update-branch) answers open threads first | 2026-10-02/10-11 | n/a | [CLAUDE_REVIEW.md](CLAUDE_REVIEW.md#merge-trains) |
+| 12 | CodeRabbit is advisory, but every comment is answered (fixed, or replied to with the reason): it never blocks a PR opening or its first CI run, while answers are due before any relaunch and before merge | 2026-10-02/10-11/10-24 | "resolve every thread before any CI" read as blocking | [CLAUDE_REVIEW.md](CLAUDE_REVIEW.md#merge-trains) |
 | 13 | A hook or guard that blocks your branch is fixed in its own PR first, because the installed hook runs from the main checkout | standing | "fix it in the same PR" for hooks | [CLAUDE_REVIEW.md](CLAUDE_REVIEW.md#pr-granularity) |
-| 14 | Goal milestones M1-M4 hold all their issues; phases are `phase:Mx.y` labels | 2026-10-23 | n/a | [CLAUDE_WORKFLOW.md](CLAUDE_WORKFLOW.md) |
-| 15 | User-facing name is "Company OS" (code name `llc`) | 2026-10-22 | n/a | [CLAUDE_WORKFLOW.md](CLAUDE_WORKFLOW.md) |
+| 14 | Goal milestones M1-M4 hold all their issues; phases are `phase:Mx.y` labels, listed in order in each milestone's description | 2026-10-23 | phase sub-milestones Mx.y | GitHub milestones M1-M4 |
+| 15 | User-facing name is "Company OS" (code name `llc`); docs, UI strings and issue titles about user behaviour say Company OS | 2026-10-22 | "AutoBot LLC" in user-facing text | [#19184](https://github.com/mrveiss/AutoBot-AI/issues/19184) |
 | 16 | Compliance wording is "aims towards", never "is compliant"; register: [`docs/compliance/COMPLIANCE_TARGETS.md`](../compliance/COMPLIANCE_TARGETS.md) | 2026-10-22 | n/a | [COMPLIANCE_TARGETS.md](../compliance/COMPLIANCE_TARGETS.md) |
