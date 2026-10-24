@@ -15,6 +15,7 @@ import re
 
 from repo_tests._paths import repo_root
 
+from tools.lint._comment_syntax import code_lines
 from tools.lint._scan_helpers import tracked_paths
 
 _DIRECT = re.compile(
@@ -61,9 +62,8 @@ def _offenders(files: list[str]) -> list[str]:
             continue
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
         alias = _alias_reads(text)
-        for n, line in enumerate(text.splitlines(), 1):
-            hit = _DIRECT.search(line) or (alias is not None and alias.search(line))
-            if hit and not line.lstrip().startswith("#"):
+        for n, line in code_lines(text, name=rel):
+            if _DIRECT.search(line) or (alias is not None and alias.search(line)):
                 hits.append(f"{rel}:{n}: {line.strip()}")
     return hits
 

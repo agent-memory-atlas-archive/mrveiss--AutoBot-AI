@@ -64,7 +64,9 @@ def test_a_plain_archive_uri_is_rewritten_and_security_is_left_alone(tmp_path):
 
     assert _run(apt).returncode == 0
     text = (apt / "sources.list.d/ubuntu.sources").read_text(encoding="utf-8")
-    assert f"URIs: {_MIRROR}" in text and "security.ubuntu.com" in text and "azure.archive" not in text
+    assert f"URIs: {_MIRROR}" in text
+    assert "URIs: http://security.ubuntu.com/ubuntu/\n" in text
+    assert "azure.archive" not in text
 
 
 def test_nothing_to_point_anywhere_exits_3_rather_than_reporting_success(tmp_path):

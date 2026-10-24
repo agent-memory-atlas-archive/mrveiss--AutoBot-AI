@@ -40,8 +40,10 @@ def _importers(module: str) -> list[str]:
 
 def expected_record() -> dict[str, tuple[str, ...]]:
     """``{test file: roots}`` for every live declaration that carries ``roots=``."""
-    import repo_tests.reach_declarations_test  # noqa: F401, PLC0415 - imports every guard
+    from repo_tests._guard_import import import_every_guard  # noqa: PLC0415
     from repo_tests._reach import REGISTRY  # noqa: PLC0415
+
+    import_every_guard()
 
     record: dict[str, set[str]] = {}
     for name, reach in REGISTRY.items():

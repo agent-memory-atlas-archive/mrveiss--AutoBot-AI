@@ -59,11 +59,11 @@ def test_the_audit_gets_every_changed_path_not_only_baselined_ones(tmp_path):
         + block
     )
     out = tmp_path / "paths.txt"
-    subprocess.run(
+    subprocess.run(  # nosec B603
         ["bash", "-c", script, "_", str(tmp_path)],
         env={"OUT": str(out), "PATH": "/usr/bin:/bin"},
         check=True,
         timeout=30,
-    )  # nosec B603
+    )
 
     assert out.read_text(encoding="utf-8").split() == ["autobot-backend/old.py", "autobot-backend/brand_new.py"]

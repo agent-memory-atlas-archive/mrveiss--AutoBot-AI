@@ -51,6 +51,14 @@ REACH_ROOTS = {
         "tools",
     ),
     "repo_tests/data_db_path_single_source_test.py": ("autobot-backend", "autobot_shared"),
+    "repo_tests/defined_twice_18094_test.py": (
+        "autobot-backend",
+        "autobot-infrastructure",
+        "autobot-npu-worker",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "scripts",
+    ),
     "repo_tests/direct_secrets_service_callers_17773_test.py": ("autobot-backend", "autobot_shared"),
     "repo_tests/docker_admin_seed_18729_test.py": (
         ".env",

@@ -19,11 +19,20 @@ source calls ``declare(`` has lost its declaration, so it counts as an import fa
 from __future__ import annotations
 
 import importlib
+import pkgutil
 import re
+import subprocess
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
+
+from autobot_shared.paths import scrubbed_git_env
+
+_REPO_TESTS = Path(__file__).resolve().parent
+_REPO_ROOT = _REPO_TESTS.parent
+#: The sweep that imports every guard; it is not one of them.
+_SWEEP_STEM = "reach_declarations_test"
 
 # Escaped on purpose: reach_declarations_test greps repo_tests for the call shape, and a bare
 # literal of it here would read as a declaration nothing registers.
@@ -52,3 +61,59 @@ def import_guards(
         except Exception as exc:  # noqa: BLE001 - recorded, never discarded
             failures[key] = f"{type(exc).__name__}: {exc}"
     return failures, skipped
+
+
+def declaring_modules_outside_repo_tests() -> list[str]:
+    """Import paths of modules that call `declare(...)` and do not live here.
+
+    Discovered with `git grep`, not enumerated: an enumeration is exactly what
+    reach_declarations_test distrusts everywhere else, and a declaration added under a new
+    path tomorrow must be swept without anyone remembering to edit a list.
+
+    Why this is needed (#17144, #17298): `declare(...)` registers into a shared
+    REGISTRY as an *import side effect*, and the sweep imports only modules
+    under `repo_tests/`. A declaration living elsewhere reached the registry
+    only when some other test in the same pytest session happened to import its
+    module first -- true in CI's whole-suite run, false under
+    `pytest repo_tests/`, where the parametrisation dropped from 36 floors to 35
+    and reported a clean pass over the smaller set. Not a weaker check: a check
+    of a DIFFERENT set, reported identically. It produced a real wrong answer
+    today -- a floor re-pinned against a local run that had never examined it.
+    """
+    out = subprocess.run(
+        ["git", "grep", "-lE", r"(^|\s)declare\(", "--", "*.py"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_git_env(),
+    )
+    modules = []
+    for rel in out.stdout.splitlines():
+        if not rel:
+            continue
+        path = Path(rel)
+        if path.parts[0] == "repo_tests":
+            continue
+        modules.append(".".join(path.with_suffix("").parts))
+    return sorted(modules)
+
+
+def import_every_guard() -> dict[str, str]:
+    """Import every guard module so its `declare(...)` runs; returns ``{module: import error}``.
+
+    Import errors are surfaced, not swallowed: a guard that cannot import is a
+    guard that is not running, and reach_declarations_test exists to notice exactly that class
+    of silence. Lives here, not in that test file, because repo_tests/_reach_roots.py needs
+    the same sweep and a shipped module must not import a file .dockerignore strips (#14127).
+    """
+    inside = [(m.name, f"repo_tests.{m.name}") for m in pkgutil.iter_modules([str(_REPO_TESTS)])]
+    inside = [(name, dotted) for name, dotted in inside if not name.startswith("_") and name != _SWEEP_STEM]
+    # Declarations that live outside this package (#17144, #17298) are listed because they declare.
+    outside = [(dotted, dotted) for dotted in declaring_modules_outside_repo_tests()]
+    failures, _skipped = import_guards(
+        inside + outside,
+        # An outside module (a dotted key) is listed only because it declares.
+        declares=lambda key: "." in key or source_declares(_REPO_TESTS / f"{key}.py"),
+    )
+    return failures
