@@ -13,6 +13,9 @@ each is a test here:
 * a literal fallback for either name is re-added anywhere (``getenv(.., "x")``, ``${..:-x}``,
   ``| default('x')``) -- the shape that produced ``01-Backend`` and a fixed hex id;
 * the SLM backend stops resolving the canonical name first.
+
+A pinned file is swept too, with only its pinned sites masked, so a second default beside a
+pinned one is caught. Reach is declared (:data:`SCAN`) and bound on what the sweep READ.
 """
 
 from __future__ import annotations
@@ -26,9 +29,10 @@ from pathlib import Path
 import pytest
 import yaml
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from autobot_shared.ssot_config import MiscConfig
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 
@@ -73,55 +77,139 @@ def literal_defaults(rel: str, text: str) -> list[str]:
     return out
 
 
-def unrecorded_defaults(root: Path, paths: list[str]) -> list[str]:
+def masked(text: str, pattern: str) -> str:
+    """*text* with each capture of *pattern* blanked to spaces: the pinned sites, and only them.
+
+    Spaces, because ``_FALLBACK`` reads ``_`` as part of an id; lines keep their length and number.
+    """
+
+    def _blank(m: re.Match[str]) -> str:
+        out, last = [], m.start()
+        for group in range(1, (m.re.groups or 0) + 1):
+            if m.start(group) >= 0:
+                out += [text[last : m.start(group)], " " * (m.end(group) - m.start(group))]
+                last = m.end(group)
+        return "".join(out) + text[last : m.end()]
+
+    return re.sub(pattern, _blank, text, flags=re.M)
+
+
+def unrecorded_defaults(texts: dict[str, str]) -> list[str]:
+    """``path: values`` for each literal default outside a pinned site."""
     found = []
-    for rel in paths:
-        if rel in PINNED or _SKIP.search(rel):
+    for rel, text in texts.items():
+        if _SKIP.search(rel):
             continue
-        try:
-            text = (root / rel).read_text(encoding="utf-8")
-        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
-            continue
-        values = literal_defaults(rel, text)
+        values = literal_defaults(rel, masked(text, PINNED[rel][0]) if rel in PINNED else text)
         if values:
             found.append(f"{rel}: {values}")
     return found
 
 
-def test_every_pinned_copy_equals_the_ssot() -> None:
-    wrong = {}
-    for path, (pattern, count) in PINNED.items():
-        values = _values((_ROOT / path).read_text(encoding="utf-8"), pattern)
-        if len(values) != count or any(v != CANONICAL for v in values):
-            wrong[path] = values
-    assert not wrong, f"SLM manager node id copies disagree with MiscConfig.slm_node_id={CANONICAL!r}: {wrong}"
+def _swept(root: Path) -> list[str]:
+    """Tracked files outside docs and tests, the pinned ones included; ``[]`` on an empty tree."""
+    try:
+        paths = tracked_paths(root)
+    except EmptyEnumeration:
+        return []
+    return [rel for rel in paths if not _SKIP.search(rel)]
 
 
-def test_the_inventory_slm_server_host_is_the_ssot_id() -> None:
-    inv = yaml.safe_load((_ROOT / "autobot-slm-backend/ansible/inventory/slm-nodes.yml").read_text("utf-8"))
+SCAN = declare(
+    "slm-node-id-one-home-scan",
+    discover=_swept,
+    floor=6895,  # mid-window: 6979 discovered at authoring, less skips, less half of growth
+    growth=150,
+    skips=9,  # tracked binaries (images, icons, executables) that do not decode as UTF-8
+    what="tracked non-doc, non-test files swept for a literal SLM manager node id default",
+)
+
+
+def readable(root: Path, paths: list[str]) -> dict[str, str]:
+    """The text of each path that decodes; the rest are counted out by ``SCAN.completed``."""
+    texts = {}
+    for rel in paths:
+        try:
+            texts[rel] = (root / rel).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+    return texts
+
+
+def pin_violations(text: str, pattern: str, count: int) -> list[str]:
+    """The values *pattern* finds in *text*, when it finds other than *count* or other than the SSOT."""
+    values = _values(text, pattern)
+    return values if len(values) != count or any(v != CANONICAL for v in values) else []
+
+
+def inventory_mismatch(inv: dict) -> tuple[str, list] | None:
+    """``(manager host, its slm_node_id values)`` when the slm_server host is not the SSOT id."""
     children = inv["all"]["children"]
     (manager,) = children["slm_server"]["hosts"]
     groups = [(g or {}).get("hosts") or {} for g in children.values()]
     ids = [(hosts[manager] or {}).get("slm_node_id") for hosts in groups if manager in hosts]
-    assert manager == CANONICAL and CANONICAL in ids, (manager, ids)
+    return None if manager == CANONICAL and CANONICAL in ids else (manager, ids)
+
+
+def test_every_pinned_copy_equals_the_ssot() -> None:
+    wrong = {}
+    for path, (pattern, count) in PINNED.items():
+        bad = pin_violations((_ROOT / path).read_text(encoding="utf-8"), pattern, count)
+        if bad:
+            wrong[path] = bad
+    assert not wrong, f"SLM manager node id copies disagree with MiscConfig.slm_node_id={CANONICAL!r}: {wrong}"
+
+
+def test_a_drifted_pin_is_caught() -> None:
+    pattern, count = PINNED[".env.example"]
+    assert pin_violations(f"AUTOBOT_SLM_NODE_ID={CANONICAL}\n", pattern, count) == []
+    assert pin_violations("AUTOBOT_SLM_NODE_ID=01-Backend\n", pattern, count) == ["01-Backend"]
+    assert pin_violations("SLM_ID=x\n", pattern, count) == [], "no site found: the count must say so"
+
+
+def test_the_inventory_slm_server_host_is_the_ssot_id() -> None:
+    inv = yaml.safe_load((_ROOT / "autobot-slm-backend/ansible/inventory/slm-nodes.yml").read_text("utf-8"))
+    assert inventory_mismatch(inv) is None, inventory_mismatch(inv)
+
+
+def _inventory(manager: str, node_id: str) -> dict:
+    hosts = {manager: {"slm_node_id": node_id}}
+    return {"all": {"children": {"slm_server": {"hosts": {manager: None}}, "nodes": {"hosts": hosts}}}}
+
+
+def test_an_inventory_mismatch_is_caught() -> None:
+    assert inventory_mismatch(_inventory(CANONICAL, CANONICAL)) is None
+    assert inventory_mismatch(_inventory("01-Backend", CANONICAL)) == ("01-Backend", [None, CANONICAL])
+    assert inventory_mismatch(_inventory(CANONICAL, "01-Backend")) == (CANONICAL, [None, "01-Backend"])
 
 
 def test_no_unrecorded_literal_default() -> None:
-    tracked = tracked_paths(_ROOT)
-    assert len(tracked) > 1000, "the tracked-file enumeration is near empty -- the sweep would pass vacuously"
-    found = unrecorded_defaults(_ROOT, tracked)
+    texts = readable(_ROOT, list(SCAN.examined(_ROOT)))
+    SCAN.completed(len(texts))
+    assert set(PINNED) <= set(texts), f"the sweep never read {sorted(set(PINNED) - set(texts))}"
+    found = unrecorded_defaults(texts)
     assert not found, f"a literal SLM node id default outside its home (read AUTOBOT_SLM_NODE_ID): {found}"
 
 
-def test_a_re_added_default_is_caught(tmp_path: Path) -> None:
+def test_a_re_added_default_is_caught() -> None:
     # The deliberate copy: the enroll-local default this issue removed.
     rel = "autobot-slm-backend/ansible/playbooks/enroll-x.yml"
-    (tmp_path / rel).parent.mkdir(parents=True)
     line = "    slm_node_id: \"{{ lookup('env', 'SLM_NODE_ID') | default('01-Backend', true) }}\"\n"
-    (tmp_path / rel).write_text(line, encoding="utf-8")
-    assert unrecorded_defaults(tmp_path, [rel]) == [f"{rel}: ['01-Backend']"]
-    (tmp_path / rel).write_text("    slm_node_id: \"{{ lookup('env', 'SLM_NODE_ID') }}\"\n", encoding="utf-8")
-    assert unrecorded_defaults(tmp_path, [rel]) == []
+    assert unrecorded_defaults({rel: line}) == [f"{rel}: ['01-Backend']"]
+    assert unrecorded_defaults({rel: "    slm_node_id: \"{{ lookup('env', 'SLM_NODE_ID') }}\"\n"}) == []
+
+
+def test_a_second_default_in_a_pinned_file_is_caught() -> None:
+    rel = ".env.example"
+    text = (_ROOT / rel).read_text(encoding="utf-8")
+    assert unrecorded_defaults({rel: text}) == []
+    assert unrecorded_defaults({rel: text + "SLM_NODE_ID=01-Backend\n"}) == [f"{rel}: ['01-Backend']"]
+
+
+def test_the_sweep_reads_what_it_lists(tmp_path: Path) -> None:
+    (tmp_path / "ok.yml").write_text("a: 1\n", encoding="utf-8")
+    (tmp_path / "bin.png").write_bytes(b"\x89PNG\xff\xfe")
+    assert readable(tmp_path, ["ok.yml", "bin.png", "gone.yml"]) == {"ok.yml": "a: 1\n"}
 
 
 def test_the_sweep_reads_each_default_shape() -> None:

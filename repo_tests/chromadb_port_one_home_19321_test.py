@@ -18,8 +18,10 @@ Two meanings exist and are kept apart:
 
 The sweep (:func:`unrecorded_definitions`) finds every *named* ChromaDB port definition in the
 tree -- ``chromadb_port: N``, ``CHROMADB_PORT=N``, ``| default(N)``, ``${..CHROMADB_PORT:-N}`` --
-and fails on one in a file outside the record, whatever its value: a re-added copy is the
-finding, not only a conflicting one.
+and fails on one outside the record, whatever its value: a re-added copy is the finding, not only
+a conflicting one. A pinned file is swept too, with only its pinned sites masked (:func:`masked`),
+so a second definition beside a pinned one is caught. Reach is declared (:data:`SCAN`) and bound
+on what the sweep READ, not on what it listed.
 """
 
 from __future__ import annotations
@@ -29,9 +31,10 @@ from pathlib import Path
 
 import yaml
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from autobot_shared.ssot_config import PortConfig
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 
@@ -66,6 +69,10 @@ PINNED: dict[str, tuple[str, int]] = {
 #: Compose clients that dial ChromaDB inside the network: the container port, not the SSOT.
 COMPOSE = "docker-compose.yml"
 COMPOSE_CONTAINER_PORT_SITES = 3
+_COMPOSE_CLIENT = r"^\s+- AUTOBOT_CHROMADB_PORT=(\d+)$"
+
+#: The sites each recorded file may state the port at: its pin, or compose's in-network clients.
+_RECORDED: dict[str, str] = {**{rel: pattern for rel, (pattern, _) in PINNED.items()}, COMPOSE: _COMPOSE_CLIENT}
 
 #: Named definitions the sweep recognises (on comment-stripped lines).
 _NAMED = re.compile(
@@ -95,17 +102,31 @@ def named_definitions(text: str) -> list[int]:
     return out
 
 
-def unrecorded_definitions(root: Path, paths: list[str]) -> list[str]:
-    """``path: values`` for each file outside the record that defines the ChromaDB port."""
+def masked(text: str, pattern: str) -> str:
+    """*text* with each capture of *pattern* overwritten by ``_``: the pinned sites, and only them.
+
+    The capture, not the whole match, so a definition inside a multi-line pin's context is still
+    swept, and every line keeps its length and number.
+    """
+
+    def _blank(m: re.Match[str]) -> str:
+        out, last = [], m.start()
+        for group in range(1, (m.re.groups or 0) + 1):
+            if m.start(group) >= 0:
+                out += [text[last : m.start(group)], "_" * (m.end(group) - m.start(group))]
+                last = m.end(group)
+        return "".join(out) + text[last : m.end()]
+
+    return re.sub(pattern, _blank, text, flags=re.M)
+
+
+def unrecorded_definitions(texts: dict[str, str]) -> list[str]:
+    """``path: values`` for each named ChromaDB port definition outside the record."""
     found = []
-    for rel in paths:
-        if rel in PINNED or rel == COMPOSE or _SKIP.search(rel):
+    for rel, text in texts.items():
+        if _SKIP.search(rel):
             continue
-        try:
-            text = (root / rel).read_text(encoding="utf-8")
-        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
-            continue
-        values = named_definitions(text)
+        values = named_definitions(masked(text, _RECORDED[rel]) if rel in _RECORDED else text)
         if values:
             found.append(f"{rel}: {values}")
     return found
@@ -113,6 +134,36 @@ def unrecorded_definitions(root: Path, paths: list[str]) -> list[str]:
 
 def _tracked() -> list[str]:
     return tracked_paths(_ROOT)
+
+
+def _swept(root: Path) -> list[str]:
+    """Tracked files outside docs and tests, the recorded ones included; ``[]`` on an empty tree."""
+    try:
+        paths = tracked_paths(root)
+    except EmptyEnumeration:
+        return []
+    return [rel for rel in paths if not _SKIP.search(rel)]
+
+
+SCAN = declare(
+    "chromadb-port-one-home-scan",
+    discover=_swept,
+    floor=6463,  # mid-window: 6547 discovered at authoring, less skips, less half of growth
+    growth=150,
+    skips=9,  # tracked binaries (images, icons, executables) that do not decode as UTF-8
+    what="tracked non-doc, non-test files swept for a named ChromaDB port definition",
+)
+
+
+def readable(root: Path, paths: list[str]) -> dict[str, str]:
+    """The text of each path that decodes; the rest are counted out by ``SCAN.completed``."""
+    texts = {}
+    for rel in paths:
+        try:
+            texts[rel] = (root / rel).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+    return texts
 
 
 def test_the_canonical_default_is_the_provisioned_port() -> None:
@@ -134,7 +185,7 @@ def _compose_chromadb() -> tuple[int, int, list[int]]:
     text = (_ROOT / COMPOSE).read_text(encoding="utf-8")
     mapping = yaml.safe_load(text)["services"]["autobot-chromadb"]["ports"][0]
     host, container = (int(p) for p in mapping.rsplit(":", 2)[-2:])
-    clients = [int(v) for v in re.findall(r"^\s+- AUTOBOT_CHROMADB_PORT=(\d+)$", text, re.M)]
+    clients = [int(v) for v in re.findall(_COMPOSE_CLIENT, text, re.M)]
     return host, container, clients
 
 
@@ -146,9 +197,10 @@ def test_compose_publishes_the_ssot_port_and_clients_dial_the_container_port() -
 
 
 def test_no_unrecorded_chromadb_port_definition() -> None:
-    tracked = _tracked()
-    assert len(tracked) > 1000, "git ls-files returned almost nothing -- the sweep would pass vacuously"
-    found = unrecorded_definitions(_ROOT, tracked)
+    texts = readable(_ROOT, list(SCAN.examined(_ROOT)))
+    SCAN.completed(len(texts))
+    assert set(_RECORDED) <= set(texts), f"the sweep never read {sorted(set(_RECORDED) - set(texts))}"
+    found = unrecorded_definitions(texts)
     assert not found, f"ChromaDB port defined outside its home (derive from config.port.chromadb): {found}"
 
 
@@ -207,14 +259,32 @@ def test_an_ai_stack_borrower_is_caught(tmp_path: Path) -> None:
     assert aistack_borrowers(tmp_path, [rel]) == []
 
 
-def test_a_re_added_copy_is_caught(tmp_path: Path) -> None:
+def test_a_re_added_copy_is_caught() -> None:
     # The deliberate copy: a role default that re-states the port, at the old compose value.
     rel = "autobot-slm-backend/ansible/roles/vector/defaults/main.yml"
-    (tmp_path / rel).parent.mkdir(parents=True)
-    (tmp_path / rel).write_text("chromadb_port: 8000\nother_port: 9000\n", encoding="utf-8")
-    assert unrecorded_definitions(tmp_path, [rel]) == [f"{rel}: [8000]"]
-    (tmp_path / rel).write_text("other_port: 9000\n", encoding="utf-8")
-    assert unrecorded_definitions(tmp_path, [rel]) == []
+    assert unrecorded_definitions({rel: "chromadb_port: 8000\nother_port: 9000\n"}) == [f"{rel}: [8000]"]
+    assert unrecorded_definitions({rel: "other_port: 9000\n"}) == []
+
+
+def test_a_second_definition_in_a_pinned_file_is_caught() -> None:
+    # A pin admits its own sites, not the whole file: the unchanged role default passes, the
+    # same file with an extra named port beside the pinned one fails.
+    rel = "autobot-slm-backend/ansible/roles/ai-stack/defaults/main.yml"
+    text = (_ROOT / rel).read_text(encoding="utf-8")
+    assert unrecorded_definitions({rel: text}) == []
+    assert unrecorded_definitions({rel: text + "chromadb_http_port: 9000\n"}) == [f"{rel}: [9000]"]
+
+
+def test_masking_blanks_only_the_pinned_capture() -> None:
+    pattern = PINNED["autobot-slm-backend/ansible/playbooks/deploy-aiml.yml"][0]
+    text = "a: {{ chromadb_port | default(8100) }}\nchromadb_port: 8100\n"
+    assert masked(text, pattern) == "a: {{ chromadb_port | default(____) }}\nchromadb_port: 8100\n"
+
+
+def test_the_sweep_reads_what_it_lists(tmp_path: Path) -> None:
+    (tmp_path / "ok.yml").write_text("chromadb_port: 8100\n", encoding="utf-8")
+    (tmp_path / "bin.png").write_bytes(b"\x89PNG\xff\xfe")
+    assert readable(tmp_path, ["ok.yml", "bin.png", "gone.yml"]) == {"ok.yml": "chromadb_port: 8100\n"}
 
 
 def test_the_sweep_reads_each_definition_shape() -> None:

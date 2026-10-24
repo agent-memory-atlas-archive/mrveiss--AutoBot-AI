@@ -184,17 +184,20 @@ def _resolve_slm_node_id() -> str:
     """The SLM manager's node id: ``MiscConfig.slm_node_id`` (AUTOBOT_SLM_NODE_ID), the one home.
 
     A deployment that set only the legacy ``SLM_NODE_ID`` keeps the id it registered under,
-    with a deprecation warning, so no existing manager row is orphaned (#19322).
+    with a deprecation warning, so no existing manager row is orphaned (#19322). A blank value
+    of either name counts as unset, as ``ssot-config.sh`` treats it: canonical, then legacy,
+    then the field default -- never an empty id.
     """
     from autobot_shared.ssot_config import get_config
 
     misc = get_config().misc
-    canonical = misc.slm_node_id
-    legacy = os.environ.get(_LEGACY_SLM_NODE_ID_VAR)
+    canonical = misc.slm_node_id.strip()
+    default = type(misc).model_fields["slm_node_id"].default
+    legacy = os.environ.get(_LEGACY_SLM_NODE_ID_VAR, "").strip()
     if not legacy or legacy == canonical:
-        return canonical
+        return canonical or default
     # Set explicitly (environment or .env), even to the default value: the canonical name wins.
-    if "slm_node_id" in misc.model_fields_set:
+    if canonical and "slm_node_id" in misc.model_fields_set:
         logger.error("SLM_NODE_ID=%s ignored: AUTOBOT_SLM_NODE_ID=%s is set and wins", legacy, canonical)
         return canonical
     logger.warning("SLM_NODE_ID is deprecated for the manager's node id; set AUTOBOT_SLM_NODE_ID=%s", legacy)

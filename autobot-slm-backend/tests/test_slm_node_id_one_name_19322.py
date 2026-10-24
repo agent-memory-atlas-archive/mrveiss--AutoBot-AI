@@ -54,6 +54,12 @@ def _assigns(node: ast.stmt, names: set[str]) -> bool:
         (None, "77-Legacy", "77-Legacy"),  # a legacy-only deployment keeps its id
         ("99-Renamed", "77-Legacy", "99-Renamed"),  # both set: the canonical name wins
         (_DEFAULT, "77-Legacy", _DEFAULT),  # canonical set to the default value still wins
+        # Blank counts as unset, as ssot-config.sh treats it: never an empty manager id.
+        ("", "77-Legacy", "77-Legacy"),  # blank canonical: the legacy name is honoured
+        ("   ", "77-Legacy", "77-Legacy"),  # whitespace is blank too
+        ("", None, _DEFAULT),  # blank canonical, no legacy: the SSOT default
+        ("", "  ", _DEFAULT),  # both blank: the SSOT default
+        (" 99-Renamed ", None, "99-Renamed"),  # a padded canonical value is stripped
     ],
 )
 def test_the_manager_node_id_resolves_canonical_first(monkeypatch, canonical, legacy, expected) -> None:
