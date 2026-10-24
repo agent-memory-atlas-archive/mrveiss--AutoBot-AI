@@ -48,9 +48,6 @@ logger = get_logger(__name__)
 BACKUP_AUDIT_ACTOR = "system:backup"
 EXPORT_AUDIT_ACTOR = "system:export"
 
-#: Audit operation written by every read that opts out of the quarantine (#19163).
-QUARANTINE_READ_OPERATION = "knowledge.quarantine.read"
-
 # Module-level constant (not a function): the filter is a static dict, cheap
 # to import and share; no per-call construction needed.
 _NOT_QUARANTINED_WHERE: dict = {"collection": {"$ne": config.research_quarantine_collection}}
@@ -106,11 +103,12 @@ async def audit_quarantine_read(actor: str | None, surface: str, ids: Iterable[s
 
     Goes through the canonical ``services.audit_logger.audit_log``; there is no second audit path.
     """
+    from services.audit.taxonomy import AuditAction
     from services.audit_logger import audit_log
 
     id_list = list(ids)
     return await audit_log(
-        QUARANTINE_READ_OPERATION,
+        AuditAction.KNOWLEDGE_QUARANTINE_READ.value,
         user_id=actor,
         resource=surface,
         details={"surface": surface, "count": len(id_list), "ids": id_list},

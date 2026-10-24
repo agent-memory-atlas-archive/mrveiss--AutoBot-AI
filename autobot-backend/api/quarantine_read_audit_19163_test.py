@@ -20,8 +20,9 @@ from api import knowledge_chroma, knowledge_maintenance
 from api.quarantine_read_audit import INTERNAL_SERVICE_ACTOR, request_actor
 from autobot_shared.ssot_config import config
 from knowledge.pipeline.loaders.chromadb_loader import ChromaDBLoader
-from knowledge.quarantine import QUARANTINE_READ_OPERATION, audit_quarantine_read
+from knowledge.quarantine import audit_quarantine_read
 from knowledge.summary_search import SummarySearchService
+from services.audit.taxonomy import AuditAction
 from services.knowledge.contradiction_detector import ConflictPair, _mark_quarantined
 
 _RESEARCH = config.research_quarantine_collection
@@ -35,7 +36,7 @@ async def test_audit_helper_writes_through_the_canonical_audit_log():
         await audit_quarantine_read("admin", "kb.search", ["a", "b"])
 
     audit_log.assert_awaited_once()
-    assert audit_log.await_args.args == (QUARANTINE_READ_OPERATION,)
+    assert audit_log.await_args.args == (AuditAction.KNOWLEDGE_QUARANTINE_READ.value,)
     kwargs = audit_log.await_args.kwargs
     assert kwargs["user_id"] == "admin"
     assert kwargs["details"] == {"surface": "kb.search", "count": 2, "ids": ["a", "b"]}
