@@ -129,7 +129,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/schemas_knowledge.py": 5127,
     "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
     "autobot-backend/api/schemas_workflows.py": 2824,
-    "autobot-backend/api/secrets.py": 1179,  # #16444 review: except HTTPException, ValueError handlers
+    "autobot-backend/api/secrets.py": 1178,  # #16444 review: except HTTPException, ValueError handlers
     "autobot-backend/api/security_assessment.py": 913,
     "autobot-backend/api/settings.py": 881,
     "autobot-backend/api/system.py": 1011,
