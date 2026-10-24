@@ -21,6 +21,7 @@
       <!-- Session Takeover / Pause Automation -->
       <button
         class="control-button takeover"
+        data-testid="takeover-button"
         @click="$emit('toggle-automation')"
         :class="{ 'active': automationPaused }"
         :disabled="!hasAutomatedWorkflow"
