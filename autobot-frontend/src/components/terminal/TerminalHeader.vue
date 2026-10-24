@@ -1,5 +1,5 @@
 <template>
-  <PageHeader class="window-header" :level="2">
+  <PageHeader class="window-header" :level="2" size="sm">
     <template #leading>
       <span class="terminal-icon" aria-hidden="true">⬛</span>
     </template>
@@ -100,9 +100,21 @@ defineEmits<Emits>()
 
 <style scoped>
 /* Issue #704: Migrated to CSS design tokens */
-/* Layout, spacing and the bottom border come from the kit PageHeader (#17563). */
+/* The terminal's window chrome on the kit PageHeader (#17563): set through its hooks, not by
+   overriding its rules, so the cascade order cannot decide the look. */
 .window-header {
+  --aui-page-header-bg: var(--terminal-chrome-bg);
+  --aui-page-header-border: var(--terminal-border-subtle);
+  --aui-page-header-py: var(--spacing-2);
+  --aui-page-header-px: var(--spacing-4);
   user-select: none;
+}
+
+@media (max-width: 768px) {
+  .window-header {
+    --aui-page-header-py: var(--spacing-1-5);
+    --aui-page-header-px: var(--spacing-3);
+  }
 }
 
 .terminal-icon {

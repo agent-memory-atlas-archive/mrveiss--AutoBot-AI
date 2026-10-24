@@ -6,9 +6,13 @@
   knowledge browser): an optional leading control or icon, a title with an optional subtitle,
   an actions row on the right, and an optional toolbar row under them (path navigation,
   filters, search). The kit ships no text: the title and subtitle come in translated.
-    props : title, subtitle, level (heading level, 1-6; default 1)
+    props : title, subtitle, level (heading level, 1-6; default 1),
+            size (title size: sm | md | lg | xl; default lg; the level stays semantic)
     slots : breadcrumb, leading, title (rich title content), subtitle, actions,
             default (the toolbar row under the title)
+  A surface that needs its own chrome (the terminal window) sets these on the root rather than
+  overriding the rules: --aui-page-header-bg, --aui-page-header-border, --aui-page-header-py,
+  --aui-page-header-px, --aui-page-header-title-color.
 -->
 <script setup lang="ts">
 import { computed, useSlots } from 'vue'
@@ -18,8 +22,9 @@ const props = withDefaults(
     title?: string
     subtitle?: string
     level?: 1 | 2 | 3 | 4 | 5 | 6
+    size?: 'sm' | 'md' | 'lg' | 'xl'
   }>(),
-  { title: undefined, subtitle: undefined, level: 1 },
+  { title: undefined, subtitle: undefined, level: 1, size: 'lg' },
 )
 
 const slots = useSlots()
@@ -37,7 +42,7 @@ const hasSubtitle = computed(() => !!(props.subtitle || slots.subtitle))
       <div class="aui-page-header__start">
         <slot name="leading" />
         <div v-if="hasTitle" class="aui-page-header__text">
-          <component :is="heading" class="aui-page-header__title">
+          <component :is="heading" class="aui-page-header__title" :class="`aui-page-header__title--${size}`">
             <slot name="title">{{ title }}</slot>
           </component>
           <p v-if="hasSubtitle" class="aui-page-header__subtitle">
@@ -60,9 +65,9 @@ const hasSubtitle = computed(() => !!(props.subtitle || slots.subtitle))
   display: flex;
   flex-direction: column;
   gap: var(--aui-space-3);
-  padding: var(--aui-space-4) var(--aui-space-6);
-  border-bottom: 1px solid var(--aui-color-border);
-  background: var(--aui-color-surface);
+  padding: var(--aui-page-header-py, var(--aui-space-4)) var(--aui-page-header-px, var(--aui-space-6));
+  border-bottom: 1px solid var(--aui-page-header-border, var(--aui-color-border));
+  background: var(--aui-page-header-bg, var(--aui-color-surface));
 }
 
 .aui-page-header__row {
@@ -89,12 +94,27 @@ const hasSubtitle = computed(() => !!(props.subtitle || slots.subtitle))
   align-items: center;
   gap: var(--aui-space-2);
   margin: 0;
-  color: var(--aui-color-text);
-  font-size: var(--aui-text-lg);
+  color: var(--aui-page-header-title-color, var(--aui-color-text));
   font-weight: var(--aui-font-weight-semibold);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.aui-page-header__title--sm {
+  font-size: var(--aui-text-sm);
+}
+
+.aui-page-header__title--md {
+  font-size: var(--aui-text-base);
+}
+
+.aui-page-header__title--lg {
+  font-size: var(--aui-text-lg);
+}
+
+.aui-page-header__title--xl {
+  font-size: var(--aui-text-xl);
 }
 
 .aui-page-header__subtitle {

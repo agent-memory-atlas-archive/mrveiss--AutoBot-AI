@@ -1,5 +1,5 @@
 <template>
-  <PageHeader class="file-browser-header" :title="title || $t('fileBrowser.header.title')" :level="2">
+  <PageHeader class="file-browser-header" :title="title || $t('fileBrowser.header.title')" :level="2" size="xl">
     <template #actions>
       <BaseButton
         variant="outline"

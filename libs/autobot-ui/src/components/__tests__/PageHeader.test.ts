@@ -55,4 +55,10 @@ describe('PageHeader', () => {
     expect(w.find('.aui-page-header__row').exists()).toBe(false)
     expect(w.find('.aui-page-header__toolbar input').exists()).toBe(true)
   })
+
+  it('sizes the title independently of its heading level', () => {
+    expect(mount(PageHeader, { props: { title: 'A' } }).find('h1').classes()).toContain('aui-page-header__title--lg')
+    const w = mount(PageHeader, { props: { title: 'Terminal', level: 2, size: 'sm' } })
+    expect(w.find('h2').classes()).toContain('aui-page-header__title--sm')
+  })
 })

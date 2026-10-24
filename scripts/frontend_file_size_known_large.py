@@ -72,7 +72,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/components/knowledge/GraphConnectionPath.vue": 701,
     "autobot-frontend/src/components/knowledge/GraphRAGQuery.vue": 713,
     "autobot-frontend/src/components/knowledge/KBSearchResultPanel.vue": 630,
-    "autobot-frontend/src/components/knowledge/KnowledgeBrowser.vue": 1785,
+    "autobot-frontend/src/components/knowledge/KnowledgeBrowser.vue": 1772,
     "autobot-frontend/src/components/knowledge/KnowledgeEntries.vue": 1359,  # #18849: 1360 -> 1359
     "autobot-frontend/src/components/knowledge/KnowledgeGraph.vue": 2073,
     "autobot-frontend/src/components/knowledge/KnowledgeHealth.vue": 925,
@@ -97,7 +97,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/components/terminal/AdvancedStepConfirmationModal.vue": 615,  # #18849: 616 -> 615
     "autobot-frontend/src/components/terminal/BaseXTerminal.vue": 825,
     "autobot-frontend/src/components/terminal/TerminalModals.vue": 742,  # #18849: 743 -> 742
-    "autobot-frontend/src/components/terminal/TerminalWindow.vue": 1726,
+    "autobot-frontend/src/components/terminal/TerminalWindow.vue": 1612,
     "autobot-frontend/src/components/ui/HostSelectionDialog.vue": 965,
     "autobot-frontend/src/components/vision/GUIAutomationControls.vue": 793,
     "autobot-frontend/src/components/vision/MediaGallery.vue": 843,

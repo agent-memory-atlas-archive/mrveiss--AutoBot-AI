@@ -1,5 +1,5 @@
 <template>
-  <PageHeader class="analytics-header" :level="2">
+  <PageHeader class="analytics-header" :level="2" size="xl">
     <template #title><Icon name="code" /> {{ $t('analytics.header.title') }}</template>
     <div class="header-controls">
       <!-- Source selector row -->
@@ -182,8 +182,9 @@ function handleSourceChange(event: Event) {
 /** Issue #704: Migrated to design tokens */
 /** Issue #1133: Source selector additions */
 
-/* Layout, spacing and the title come from the kit PageHeader (#17563). */
+/* Layout and spacing come from the kit PageHeader (#17563); the title keeps its info colour. */
 .analytics-header {
+  --aui-page-header-title-color: var(--color-info);
   margin-bottom: var(--spacing-6);
 }
 

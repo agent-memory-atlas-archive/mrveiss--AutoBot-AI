@@ -50,4 +50,29 @@ describe('Breadcrumb', () => {
     expect(seps).toHaveLength(2)
     seps.forEach((s) => expect(s.attributes('aria-hidden')).toBe('true'))
   })
+
+  it('a selectable item is a button that emits its index; the current page is not', async () => {
+    const w = mount(Breadcrumb, {
+      props: { label: 'Path', items: [{ label: 'Home', selectable: true }, { label: 'src', selectable: true }, { label: 'app', selectable: true }] },
+    })
+    const buttons = w.findAll('button')
+    expect(buttons.map((b) => b.text())).toEqual(['Home', 'src'])
+    buttons.forEach((b) => expect(b.attributes('type')).toBe('button'))
+    await buttons[1].trigger('click')
+    expect(w.emitted('select')).toEqual([[1]])
+    expect(w.find('[aria-current="page"]').text()).toBe('app')
+  })
+
+  it('takes item content and the separator from slots', () => {
+    const w = mount(Breadcrumb, {
+      props: { items, label: 'Trail' },
+      slots: {
+        item: '<template #item="{ item, index }"><i class="glyph" />{{ index }}:{{ item.label }}</template>',
+        separator: '<b class="chev" />',
+      },
+    })
+    expect(w.findAll('.glyph')).toHaveLength(3)
+    expect(w.find('[aria-current="page"]').text()).toBe('2:Release 2')
+    expect(w.findAll('.aui-breadcrumb__sep .chev')).toHaveLength(2)
+  })
 })

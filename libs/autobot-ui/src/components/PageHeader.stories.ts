@@ -10,6 +10,7 @@ const meta = {
   component: PageHeader,
   argTypes: {
     level: { control: { type: 'select' }, options: [1, 2, 3] },
+    size: { control: { type: 'select' }, options: ['sm', 'md', 'lg', 'xl'] },
   },
 } as Meta<typeof PageHeader>
 
