@@ -40,13 +40,12 @@ _BACKEND = "autobot-backend"
 _SLM = "autobot-slm-backend"
 _ROOT = repo_root()
 
-#: Handler-level duplicates: two DIFFERENT implementations on one (method, path), not a double mount.
-#: Resolving them is a judgement (they differ in declared auth and capability), owned by #18721 -- decision
-#: pending. SHRINK-ONLY: entries leave when #18721 lands, and none may be added; a new duplicate is what
-#: this guard is for.
 #: Population floors, measured 2026-10-24 under Python 3.14.6 / fastapi 0.141.1: backend 276 registry entries and
 #: 2567 routes; SLM 56 top-level entries and 428 routes. Each floor leaves ~20% headroom.
 FLOORS = {_BACKEND: (220, 2000), _SLM: (45, 340)}  # (registrations, routes)
+
+#: Both children import a whole app; a hung import must fail the guard, not stall the shard (#17325).
+_DUMP_TIMEOUT_S = 300
 
 
 @dataclass(frozen=True)
@@ -83,10 +82,22 @@ def _dumps(root: Path) -> dict[str, dict[str, Any]]:
     }
     out: dict[str, dict[str, Any]] = {}
     for app, proc in procs.items():
-        stdout, stderr = proc.communicate()
+        try:
+            stdout, stderr = proc.communicate(timeout=_DUMP_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            _kill_all(procs.values())
+            pytest.fail(f"{app}: route dump did not finish within {_DUMP_TIMEOUT_S}s")
         assert proc.returncode == 0, f"{app}: route dump failed rc={proc.returncode}\n{stderr[-2000:]}"
         out[app] = json.loads(stdout.strip().splitlines()[-1])
     return out
+
+
+def _kill_all(procs: Any) -> None:
+    """Kill and reap every child, so a timed-out dump leaves no interpreter behind."""
+    for proc in procs:
+        proc.kill()
+    for proc in procs:
+        proc.communicate()
 
 
 def _dump(root: Path, app: str) -> dict[str, Any]:
@@ -123,10 +134,33 @@ def test_no_route_is_registered_twice(app: str) -> None:
 @pytest.mark.parametrize("app", [_BACKEND, _SLM])
 def test_the_reader_reached_the_app(app: str) -> None:
     """Reach first, routes second: a broken import must not let the guard pass by finding nothing."""
-    dump = _dump(_ROOT, app)
-    registrations, route_floor = FLOORS[app]
-    assert dump["registrations"] > registrations, (app, dump["registrations"])
-    assert len(dump["routes"]) > route_floor, (app, len(dump["routes"]))
+    assert reach_shortfall(_dump(_ROOT, app), FLOORS[app]) == []
+
+
+def reach_shortfall(dump: dict[str, Any], floors: tuple[int, int]) -> list[str]:
+    """Why *dump* does not show the reader reached its app; empty when it did.
+
+    The floors catch a broken import that empties a whole group; ``optional_failed`` catches the one optional
+    router the loader swallowed, which the ~20% floor headroom would let through. It is read from the registry's
+    own per-entry load results, so the expected router list has one home: the registry configs.
+    """
+    registrations, route_floor = floors
+    findings = [f"optional router not loaded: {entry}" for entry in dump["optional_failed"]]
+    if dump["registrations"] <= registrations:
+        findings.append(f"registrations {dump['registrations']} <= floor {registrations}")
+    if len(dump["routes"]) <= route_floor:
+        findings.append(f"routes {len(dump['routes'])} <= floor {route_floor}")
+    return findings
+
+
+def test_a_dump_below_the_floors_is_a_finding() -> None:
+    dump = {"registrations": 3, "routes": [["GET", "/api/x", "s"]], "optional_failed": ["feature:x: ImportError"]}
+    assert len(reach_shortfall(dump, (10, 10))) == 3
+
+
+def test_a_dump_above_the_floors_is_not() -> None:
+    dump = {"registrations": 11, "routes": [["GET", "/api/x", "s"]] * 11, "optional_failed": []}
+    assert reach_shortfall(dump, (10, 10)) == []
 
 
 # -- the guard proved by plant --------------------------------------------------------------------------
@@ -191,6 +225,16 @@ def test_a_two_level_include_prefix_is_recovered_whole() -> None:
     routes, unrecoverable = registered_routes([(_nested(_nested(_router_with("/leaf", "/own"))), "/p", [], "deep")])
     assert not unrecoverable
     assert [r.path for r in routes] == ["/api/p/inner/inner/own/leaf"]
+
+
+def test_a_wrapper_hiding_its_prefix_is_unrecoverable_never_dropped() -> None:
+    """A deferred-inclusion wrapper with no ``include_context`` hides its prefix: reported, not skipped."""
+    from types import SimpleNamespace
+
+    parent = SimpleNamespace(routes=[SimpleNamespace(original_router=_router_with("/hidden"))], prefix="")
+    routes, unrecoverable = registered_routes([(parent, "/x", [], "wrapped")])
+    assert routes == []
+    assert unrecoverable == ["wrapped:/hidden"]
 
 
 def test_the_same_router_registered_twice_by_the_registry_is_caught() -> None:

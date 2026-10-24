@@ -3,7 +3,9 @@
 """Every route an AutoBot app really registers, read from the real router objects (#17325, #19033).
 
 Run as ``python repo_tests/_dump_real_routes.py backend|slm <repo-root>`` it prints one JSON document on stdout:
-``{"registrations": N, "routes": [[method, path, site], ...], "unrecoverable": [...]}``.
+``{"registrations": N, "routes": [[method, path, site], ...], "unrecoverable": [...]}``, plus
+``"optional_failed"``: every configured optional router the backend registry loader swallowed (always empty
+for the SLM, whose ``main.py`` imports its routers unconditionally).
 
 It is a script, not an import, because the two apps cannot share a process: both ship top-level ``api``,
 ``config`` and ``services`` packages. The caller (``no_duplicate_route_registration_16908_test.py``) runs it
@@ -55,11 +57,13 @@ def _rows(mounted: Any, full_path: str, name: str) -> list[list[str]]:
 def _dump_backend(root: Path) -> dict[str, Any]:
     sys.path.insert(0, str(root / "autobot-backend"))
     from initialization.router_registry.core_routers import load_core_routers
+    from initialization.router_registry.loader import get_load_results
     from initialization.routers import load_optional_routers
 
     entries = [*load_core_routers(), *load_optional_routers()]
     routes, unrecoverable = registered_routes(entries)
-    return {"registrations": len(entries), "routes": routes, "unrecoverable": unrecoverable}
+    failed = [f"{r['group']}:{r['name']}: {r['error']}" for r in get_load_results() if not r["loaded"]]
+    return {"registrations": len(entries), "routes": routes, "unrecoverable": unrecoverable, "optional_failed": failed}
 
 
 def _dump_slm(root: Path) -> dict[str, Any]:
@@ -79,7 +83,9 @@ def _dump_slm(root: Path) -> dict[str, Any]:
             routes.extend(_rows(mounted, mounted.path, "slm"))
         else:
             unrecoverable.append(mounted.path)
-    return {"registrations": len(main.app.router.routes), "routes": routes, "unrecoverable": unrecoverable}
+    # main.py includes every router unconditionally: an import failure fails the dump, so nothing is swallowed.
+    registrations = len(main.app.router.routes)
+    return {"registrations": registrations, "routes": routes, "unrecoverable": unrecoverable, "optional_failed": []}
 
 
 def main_cli(argv: list[str]) -> int:

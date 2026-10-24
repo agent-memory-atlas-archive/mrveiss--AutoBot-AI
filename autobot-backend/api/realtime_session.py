@@ -25,8 +25,9 @@ from pydantic import BaseModel, Field
 
 from api.schemas_realtime_session import RealtimeSessionSummary
 from api.user_management.dependencies import get_current_user
+from api.voice_bundle_helpers import voice_bundle_user_id
 from auth_middleware import check_admin_permission
-from autobot_shared.auth.permissions import is_admin_role
+from autobot_shared.auth.permissions import Role, is_admin_role
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import get_config
 from voice_processing.realtime.base import RealtimeProviderError
@@ -227,10 +228,10 @@ async def call_realtime_tool(
     """
     from services.realtime_mcp_bridge import get_realtime_bridge
 
-    role = current_user.get("role")
-    user_id = current_user.get("id") or current_user.get("sub")
+    role = current_user.get("role") or Role.USER.value
+    user_id = voice_bundle_user_id(current_user)  # the same key the listing endpoint resolves the bundle by
     bridge = await get_realtime_bridge(is_admin=is_admin_role(role))  # #12717
-    allowed = {t.name for t in await bridge.list_realtime_tools(user_id=str(user_id) if user_id else None, role=role)}
+    allowed = {t.name for t in await bridge.list_realtime_tools(user_id=user_id, role=role)}
     if body.name not in allowed:
         raise HTTPException(status_code=403, detail="Tool not permitted in active voice bundle")
     result = await bridge.call_tool(

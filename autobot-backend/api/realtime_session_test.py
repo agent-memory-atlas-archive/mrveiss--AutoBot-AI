@@ -41,7 +41,12 @@ def _make_app() -> FastAPI:
 
     app = FastAPI()
     app.include_router(router, prefix="/api/voice/realtime")
-    app.dependency_overrides[get_current_user] = lambda: {"id": "test-user", "username": "test"}
+    app.dependency_overrides[get_current_user] = lambda: {
+        "user_id": "test-user",
+        "sub": "test-sub",
+        "username": "test",
+        "org_id": "test-org",
+    }
     app.dependency_overrides[check_admin_permission] = lambda: True
     return app
 
@@ -421,4 +426,5 @@ class TestToolCallIsTheOneScopedHandler:
         assert response.json() == {"call_id": "c1", "content": "ok", "is_error": False}
         kwargs = bridge.call_tool.call_args.kwargs
         assert (kwargs["session_id"], kwargs["user_id"]) == ("sess-1", "test-user")
-        assert "company_id" in kwargs
+        assert kwargs["company_id"] == "test-org"
+        bridge.list_realtime_tools.assert_awaited_once_with(user_id="test-user", role="user")
