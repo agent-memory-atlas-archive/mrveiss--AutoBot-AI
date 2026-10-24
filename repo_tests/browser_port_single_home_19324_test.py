@@ -33,8 +33,10 @@ from pathlib import Path
 
 import pytest
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._comment_syntax import code_lines
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _REPO_ROOT = repo_root()
 _HOME = "autobot_shared/ssot_config.py"
@@ -59,7 +61,6 @@ _SCAN = (
 _SKIP_PREFIXES = ("docs/", "changelog/")
 #: Prose describes the port; it does not define one (stale prose: #19419).
 _SKIP_SUFFIXES = (".md",)
-_MIN_SCANNED = 3000
 
 _NAMES = (
     "AUTOBOT_BROWSER_SERVICE_PORT|AUTOBOT_BROWSER_PORT|BROWSER_SERVICE_PORT|BROWSER_PORT|"
@@ -189,8 +190,22 @@ def _home_port(root: Path) -> str:
 
 
 def _scanned(root: Path) -> list[str]:
-    paths = tracked_paths(root, *_SCAN)
+    """The tracked files a browser-port copy could live in; ``[]`` on an empty tree, so the floor refuses it."""
+    try:
+        paths = tracked_paths(root, *_SCAN)
+    except EmptyEnumeration:
+        return []
     return [p for p in paths if not p.startswith(_SKIP_PREFIXES) and not p.endswith(_SKIP_SUFFIXES)]
+
+
+REACH = declare(
+    "browser-port-single-home-scan",
+    discover=_scanned,
+    floor=10105,  # re-measured at 10405 on 4fc08f128a, pinned mid-window (#15928)
+    growth=600,
+    skips=0,
+    what="tracked files scanned for a second browser-port home or Grafana's 3000 (#19324)",
+)
 
 
 @lru_cache(maxsize=None)
@@ -234,14 +249,17 @@ def unpinned_definitions(root: Path, paths: list[str], pinned: set[str], home: s
 _CONTEXT_LOOKBACK = 12
 
 
-def _ancestor_lines(lines: list[str], index: int) -> list[str]:
-    """The task ``name:`` and parent keys above *index*: each strictly less indented than the last."""
+def _ancestor_lines(lines: list[str], index: int, code: set[int]) -> list[str]:
+    """The task ``name:`` and parent keys above *index*: each strictly less indented than the last.
+
+    *code* holds the 1-based numbers of the non-comment lines, from ``tools.lint._comment_syntax`` (#17941).
+    """
     indent = len(lines[index]) - len(lines[index].lstrip())
     found = []
     for back in range(index - 1, max(index - 1 - _CONTEXT_LOOKBACK, -1), -1):
         line = lines[back]
         stripped = line.lstrip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped or back + 1 not in code:
             continue
         lead = len(line) - len(stripped)
         if lead < indent:
@@ -260,6 +278,7 @@ def browser_3000(root: Path, paths: list[str]) -> list[str]:
         if "3000" not in text:
             continue
         lines = text.splitlines()
+        code: set[int] | None = None
         for lineno, line in enumerate(lines, start=1):
             if not _PORT_3000.search(line) or _EXPLAINS_3000.search(line):
                 continue
@@ -267,7 +286,9 @@ def browser_3000(root: Path, paths: list[str]) -> list[str]:
                 found.append(f"{rel}:{lineno}: {line.strip()[:120]}")
             elif rel.endswith((".yml", ".yaml", ".j2")):
                 # An Ansible task names its browser context on `- name:`, not on the url/port line.
-                above = _ancestor_lines(lines, lineno - 1)
+                if code is None:
+                    code = {kept.lineno for kept in code_lines(text, name=rel)}
+                above = _ancestor_lines(lines, lineno - 1, code)
                 if any(_BROWSER_CONTEXT.search(a) and not _EXPLAINS_3000.search(a) for a in above):
                     found.append(f"{rel}:{lineno}: {line.strip()[:100]}  [under: {above[-1][:60]}]")
     return found
@@ -275,9 +296,7 @@ def browser_3000(root: Path, paths: list[str]) -> list[str]:
 
 @pytest.fixture(scope="module")
 def scanned() -> list[str]:
-    paths = _scanned(_REPO_ROOT)
-    assert len(paths) >= _MIN_SCANNED, f"only {len(paths)} files enumerated -- the scan, not the tree, is empty"
-    return paths
+    return list(REACH.examined(_REPO_ROOT))
 
 
 def test_the_home_is_9001_not_grafanas_3000() -> None:

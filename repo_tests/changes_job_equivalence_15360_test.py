@@ -214,6 +214,8 @@ ALLOWED_ADDITIONS = {
             "docs/README.md",
             # #18266: social_preview_18266_test.py pins the rendered preview image.
             "docs/assets/social-preview.png",
+            # #19324: browser_port_single_home_19324_test.py pins this file's browser-port fallback.
+            "autobot-frontend/vite.config.js",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
