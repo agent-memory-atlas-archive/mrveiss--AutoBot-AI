@@ -100,8 +100,8 @@ RedisInsight, not the backend (#19183).
 
 | Install | Web UI | Health check |
 |---|---|---|
-| Docker | `http://localhost` | `curl http://localhost/api/health` |
-| Native (`install.sh`) | `https://<server>` (SLM at `/slm/`) | `curl -k https://<server>/api/health` (self-signed certificate) |
+| Docker | `http://localhost` (`https://localhost` when `AUTOBOT_DOCKER_NGINX_CONF` selects the TLS config) | `curl http://localhost/api/system/health` (with TLS: `curl -k https://localhost/api/system/health`) |
+| Native (`install.sh`) | `https://<server>` (SLM at `/slm/`) | `curl -k https://<server>/api/system/health` (self-signed certificate) |
 
 **Diagnosis**:
 ```bash

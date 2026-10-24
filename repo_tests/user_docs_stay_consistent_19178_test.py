@@ -11,8 +11,10 @@ check below reads the docs a user actually reaches and fails the moment one drif
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
+import pytest
 from repo_tests._paths import repo_root
 
 _ROOT = repo_root()
@@ -162,7 +164,10 @@ def test_no_user_doc_or_ui_string_says_llc() -> None:
     assert not found, f"'LLC' where users should read 'Company OS': {found}"
 
 
-_BACKEND_ON_8001 = re.compile(r"localhost:8001/(?:api|health)")
+_BACKEND_ON_8001 = re.compile(r"(?:localhost|127\.0\.0\.1|0\.0\.0\.0):8001/(?:api|health)")
+# The main backend's canonical health path is /api/system/health (docs/api/health.md); /api/health is
+# a legacy alias. The SLM's own /slm/api/health is a different service and is fine.
+_LEGACY_BACKEND_HEALTH = re.compile(r"(?<!/slm)/api/health\b")
 
 
 def test_no_user_doc_health_checks_the_backend_on_8001() -> None:
@@ -171,6 +176,24 @@ def test_no_user_doc_health_checks_the_backend_on_8001() -> None:
     found = {str(f.relative_to(_ROOT)): _BACKEND_ON_8001.findall(f.read_text(encoding="utf-8")) for f in _user_docs()}
     found = {k: v for k, v in found.items() if v}
     assert not found, f"backend health checked on RedisInsight's port: {found}"
+
+
+def test_user_docs_check_the_backend_on_its_canonical_health_path() -> None:
+    """#19183 review: the main backend is checked at /api/system/health, not the legacy alias."""
+    found = {
+        str(f.relative_to(_ROOT)): _LEGACY_BACKEND_HEALTH.findall(f.read_text(encoding="utf-8")) for f in _user_docs()
+    }
+    found = {k: v for k, v in found.items() if v}
+    assert not found, f"the legacy /api/health alias where /api/system/health is canonical: {found}"
+
+
+def test_contrast_a_locale_glob_that_matches_nothing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One wrong locale path must fail on its own, even when the other glob matches."""
+    monkeypatch.setattr(
+        sys.modules[__name__], "_LOCALE_GLOBS", (_LOCALE_GLOBS[0], "autobot-slm-frontend/src/i18n/locales/*.json")
+    )
+    with pytest.raises(AssertionError, match="matches no locale file"):
+        _locale_files()
 
 
 def test_contrast_reference_links_are_checked(tmp_path: Path) -> None:
@@ -197,5 +220,9 @@ def test_contrast_each_detector_fires() -> None:
     assert llc_mentions("Run AutoBot LLC today") == ["LLC"]
     assert llc_mentions("| [LLC Module PRD](../planning/PRD_AutoBot_LLC_Module.md) |") == ["LLC"]
     assert _BACKEND_ON_8001.findall("curl http://localhost:8001/health")
-    assert not _BACKEND_ON_8001.findall("RedisInsight on 127.0.0.1:8001; curl http://localhost/api/health")
+    assert _BACKEND_ON_8001.findall("curl http://127.0.0.1:8001/api/system/health")
+    assert _BACKEND_ON_8001.findall("curl http://0.0.0.0:8001/health")
+    assert not _BACKEND_ON_8001.findall("RedisInsight on 127.0.0.1:8001; curl http://localhost/api/system/health")
+    assert _LEGACY_BACKEND_HEALTH.findall("curl http://localhost/api/health")
+    assert not _LEGACY_BACKEND_HEALTH.findall("curl -sk https://127.0.0.1/slm/api/health; /api/system/health")
     assert llc_mentions("the llc_agents module and LLC_MODE flag, docs/llc/x.md") == []

@@ -23,7 +23,7 @@ it is built on the platform's bones rather than reimplementing them. See **[The 
 Platform Model](../architecture/PLATFORM_MODEL.md)** for how core, the Service Lifecycle
 Manager (SLM), and modules fit together.
 
-> The product is **Company OS**. Its code package, API paths and file names keep the historical name `llc` (#19184).
+> The product is **Company OS**. Its code package, API paths and file names keep the historical name `llc`.
 
 ---
 
