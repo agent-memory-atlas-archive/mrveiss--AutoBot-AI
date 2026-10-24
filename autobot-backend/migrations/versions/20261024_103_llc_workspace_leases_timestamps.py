@@ -17,8 +17,8 @@ and no heartbeat run could finish.
 ``NO DATA LOSS``: additive only. Each column is added with the same type, timezone,
 nullability and ``now()`` server default ``Base`` declares, so existing rows are filled with
 the time of the migration and nothing is rewritten or deleted. Idempotent (``has_column``)
-for a database built by ``create_all``, which already has both. ``downgrade`` drops exactly
-these two columns.
+for a database built by ``create_all``, which already has both. ``downgrade`` is a no-op:
+the columns are ORM-owned and may predate this revision.
 """
 
 from typing import Sequence, Union
@@ -54,7 +54,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drops only the two columns this revision adds, and only when present.
-    for column in ("updated_at", "created_at"):
-        if has_column(_TABLE, column):
-            op.drop_column(_TABLE, column)
+    # Deliberate no-op. created_at/updated_at are ORM-owned: the shared Base declares them
+    # on every model, so dropping them re-breaks every LLCWorkspaceLease read (#17996). And
+    # upgrade() skips them on a create_all-built database, so a drop here would also
+    # destroy real timestamps this revision never created.
+    pass
