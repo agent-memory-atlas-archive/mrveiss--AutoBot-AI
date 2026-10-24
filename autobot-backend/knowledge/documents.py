@@ -99,12 +99,15 @@ class DocumentsMixin:
         metadata.setdefault("verification_status", "unverified")
         return await self.store_fact(content, metadata, doc_id)
 
-    async def export_all_data(self, output_dir: str = "data/exports") -> Dict[str, Any]:
+    async def export_all_data(
+        self, output_dir: str = "data/exports", audit_actor: str = EXPORT_AUDIT_ACTOR
+    ) -> Dict[str, Any]:
         """
         Export all knowledge base data to JSON files.
 
         Args:
             output_dir: Directory to save exports
+            audit_actor: The human who asked; named in the quarantine-read audit entry (#19163)
 
         Returns:
             Dict with export status and file paths
@@ -115,7 +118,7 @@ class DocumentsMixin:
             await asyncio.to_thread(output_path.mkdir, parents=True, exist_ok=True)
 
             # Export facts
-            facts = await read_every_fact(self, EXPORT_AUDIT_ACTOR)
+            facts = await read_every_fact(self, audit_actor)
             facts_file = output_path / "facts.json"
             await asyncio.to_thread(
                 facts_file.write_text,

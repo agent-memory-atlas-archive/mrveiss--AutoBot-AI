@@ -616,16 +616,16 @@ class OKFAdapter:
         collection: Optional[str] = None,
         limit: Optional[int] = None,
         offset: int = 0,
+        audit_actor: str = EXPORT_AUDIT_ACTOR,
     ) -> Dict[str, Any]:
-        """Export facts from a live KB to an OKF bundle.
+        """Export facts from a live (fully initialised) ``KnowledgeBase`` to an OKF bundle.
 
-        Requires ``self._kb`` to be a fully initialised ``KnowledgeBase``. Reads quarantined
-        facts too (audited); their ``collection`` marker lands in the frontmatter (#19163).
+        Quarantined facts are read too, audited under ``audit_actor`` (the human who asked); their
+        ``collection`` marker lands in the frontmatter (#19163).
         Args:
             output_dir: Target directory for ``.md`` files.
             collection: Optional collection filter (passed to ``get_all_facts``).
-            limit: Maximum number of facts to export.
-            offset: Fact scan offset.
+            limit: Maximum number of facts to export; offset: fact scan offset.
 
         Returns:
             Same dict shape as ``export_to_okf``.
@@ -633,7 +633,7 @@ class OKFAdapter:
         if self._kb is None:
             return {"status": "error", "message": "No KnowledgeBase instance provided"}
 
-        facts = await read_every_fact(self._kb, EXPORT_AUDIT_ACTOR, limit=limit, offset=offset, collection=collection)
+        facts = await read_every_fact(self._kb, audit_actor, limit=limit, offset=offset, collection=collection)
         return await self.export_to_okf(facts, output_dir)
 
     async def import_into_kb(

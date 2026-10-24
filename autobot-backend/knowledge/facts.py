@@ -27,7 +27,7 @@ from knowledge.fact_redis_codec import (  # noqa: F401 -- names stay patchable h
 from knowledge.fact_sharing import FactSharingMixin
 from knowledge.ingest_sanitize import redact_url_metadata_fields, sanitize_fact_content
 from knowledge.ownership_index import index_ownership, ownership_changed, reindex_ownership
-from knowledge.quarantine import audit_quarantine_read, not_quarantined, quarantined_ids, require_audit_actor
+from knowledge.quarantine import QuarantineAuditFailed, apply_quarantine, require_audit_actor, without_quarantine
 
 if TYPE_CHECKING:
     import aioredis
@@ -419,6 +419,7 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
                 chroma_collection.query,
                 query_embeddings=[embedding],
                 n_results=3,
+                where=without_quarantine(),  # a quarantined fact is not a duplicate, and its id is not returned
                 include=["metadatas", "distances"],
             )
             ids = (results.get("ids") or [[]])[0]
@@ -982,19 +983,16 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
         self.ensure_initialized()
 
         try:
-            # Get all fact keys using async scanner
             fact_keys = await self._scan_redis_keys_async("fact:*")
 
             if not fact_keys:
                 return []
 
-            # Apply offset and limit
             if offset > 0:
                 fact_keys = fact_keys[offset:]
             if limit is not None:
                 fact_keys = fact_keys[:limit]
 
-            # Batch fetch facts
             facts = []
             pipeline = self.redis().pipeline()
             for key in fact_keys:
@@ -1006,20 +1004,13 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
                 if fact:
                     facts.append(fact)
 
-            return await self._apply_quarantine(facts, include_quarantined, audit_actor)
+            return await apply_quarantine(facts, include_quarantined, audit_actor)
 
+        except QuarantineAuditFailed:
+            raise  # fail closed: an unaudited privileged read is refused, not turned into []
         except Exception as e:
             logger.error("Error retrieving all facts: %s", e)
             return []
-
-    async def _apply_quarantine(
-        self, facts: List[Dict[str, Any]], include_quarantined: bool, audit_actor: str | None
-    ) -> List[Dict[str, Any]]:
-        """Drop quarantined facts, or keep them and audit the read (#19163)."""
-        if include_quarantined:
-            await audit_quarantine_read(audit_actor, "kb.get_all_facts", quarantined_ids(facts))
-            return facts
-        return [f for f in facts if not_quarantined(f)]
 
     def _decode_fact_data(self, fact_data: Dict) -> Dict[str, str]:
         """Decode Redis fact data from bytes (Issue #398: extracted)."""

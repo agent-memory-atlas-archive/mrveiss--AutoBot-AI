@@ -26,9 +26,12 @@ logger = get_logger(__name__)
 INTERNAL_SERVICE_ACTOR = "internal-service"
 
 
-async def request_actor(request: Request | None) -> str:
-    """Who the admin request is: the human's username/id, else the internal service."""
-    user = await resolve_human_user(request) if request is not None else None
+async def request_actor(request: Request) -> str:
+    """Who the admin request is: the human's username/id, else the internal service key's holder.
+
+    The request is required: an absent one must not read as an anonymous internal service (#19163).
+    """
+    user = await resolve_human_user(request)
     if not user:
         return INTERNAL_SERVICE_ACTOR
     return str(user.get("username") or user.get("user_id") or user.get("id") or INTERNAL_SERVICE_ACTOR)
@@ -39,6 +42,6 @@ def quarantined_row_ids(ids: Iterable[str], metadatas: Iterable[Mapping[str, Any
     return [i for i, md in zip(ids, metadatas) if md and is_quarantined({"metadata": md})]
 
 
-async def audit_admin_quarantine_read(request: Request | None, surface: str, ids: list[str]) -> bool:
+async def audit_admin_quarantine_read(request: Request, surface: str, ids: list[str]) -> bool:
     """Write the audit entry for an admin read that returned quarantined rows."""
     return await audit_quarantine_read(await request_actor(request), surface, ids)

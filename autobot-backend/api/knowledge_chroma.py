@@ -168,10 +168,10 @@ async def get_collection_detail(
 )
 async def list_documents(
     name: str,
+    request: Request,
     limit: int = Query(100, ge=1, le=1000, description="Maximum results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     _: bool = Depends(check_admin_permission),
-    request: Request = None,
 ) -> DocumentListResponse:
     """
     List documents in a collection with pagination.
@@ -230,6 +230,8 @@ async def list_documents(
             total=total,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         # ChromaDB signals a genuinely missing collection differently across
         # versions (ValueError in <1.0, NotFoundError in 1.x) — detect by
@@ -256,8 +258,8 @@ async def list_documents(
 async def search_collection(
     name: str,
     request: ChromaSearchRequest,
+    http_request: Request,
     _: bool = Depends(check_admin_permission),
-    http_request: Request = None,
 ) -> ChromaSearchResponse:
     """
     Perform similarity search on a collection using query text.

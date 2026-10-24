@@ -23,7 +23,7 @@ from pathlib import Path as PathLib
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request
 
 from api.knowledge_lint_chunks import _fetch_all_chunks  # noqa: F401 -- stays importable from here (#16707)
-from api.quarantine_read_audit import audit_admin_quarantine_read
+from api.quarantine_read_audit import audit_admin_quarantine_read, request_actor
 from api.schemas_knowledge import (
     BackupRequest,
     BulkCategoryUpdateRequest,
@@ -1260,7 +1260,8 @@ async def export_knowledge(
 
     logger.info(f"Export request: format={request.format.value}, include_metadata={request.include_metadata}")
 
-    result = await kb.export_facts(
+    return await kb.export_facts(
+        audit_actor=await request_actor(req),
         format=request.format.value,
         categories=categories,
         tags=tags,
@@ -1271,8 +1272,6 @@ async def export_knowledge(
         include_tags=request.include_tags,
         include_embeddings=request.include_embeddings,
     )
-
-    return result
 
 
 @router.post("/import", response_model=ImportKnowledgeResponse)
@@ -1714,14 +1713,13 @@ async def create_backup(
 
     logger.info(f"Backup request: embeddings={request.include_embeddings}, " f"compression={request.compression}")
 
-    result = await kb.create_backup(
+    return await kb.create_backup(
+        audit_actor=await request_actor(req),
         include_embeddings=request.include_embeddings,
         include_metadata=request.include_metadata,
         compression=request.compression,
         description=request.description,
     )
-
-    return result
 
 
 @router.post("/restore", response_model=RestoreBackupResponse)
@@ -1895,8 +1893,8 @@ async def _run_lint_scan(job_id: str, chunks: list[dict]) -> None:
 )
 async def start_lint(
     background_tasks: BackgroundTasks,
+    req: Request,
     admin_check: bool = Depends(check_admin_permission),
-    req: Request = None,
 ):
     """Trigger a background contradiction scan of the knowledge base (Issue #4566).
 

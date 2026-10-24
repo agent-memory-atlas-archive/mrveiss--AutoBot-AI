@@ -24,7 +24,7 @@ from knowledge.vector_search_engine import VectorSearchResult
 
 _ENGINE = "knowledge.search_components.basic_vector_search.get_vector_search_engine"
 _SEARCH_AUDIT = "knowledge.quarantine.audit_quarantine_read"
-_FACTS_AUDIT = "knowledge.facts.audit_quarantine_read"
+_FACTS_AUDIT = "knowledge.quarantine.audit_quarantine_read"
 _RESEARCH = config.research_quarantine_collection
 
 _METADATA = {

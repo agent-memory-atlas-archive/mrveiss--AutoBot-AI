@@ -145,9 +145,10 @@ class BulkOperationsMixin:
         tags: List[str] | None,
         date_from: str | None,
         date_to: str | None,
+        audit_actor: str,
     ) -> List[Dict[str, Any]]:
         """Get and filter facts for export (Issue #398: extracted)."""
-        facts = await self._get_facts_by_ids(fact_ids) if fact_ids else await read_every_fact(self, EXPORT_AUDIT_ACTOR)
+        facts = await self._get_facts_by_ids(fact_ids) if fact_ids else await read_every_fact(self, audit_actor)
         facts = self._apply_category_filter(facts, category)
         facts = self._apply_categories_filter(facts, categories)
         facts = self._apply_tags_filter(facts, tags)
@@ -166,10 +167,11 @@ class BulkOperationsMixin:
         include_embeddings: bool = False,
         include_metadata: bool = True,
         include_tags: bool = True,
+        audit_actor: str = EXPORT_AUDIT_ACTOR,
     ) -> Dict[str, Any]:
-        """Export facts with optional filtering (Issue #398: refactored)."""
+        """Export facts with optional filtering; ``audit_actor`` is the human who asked (#19163)."""
         try:
-            facts = await self._get_export_facts(fact_ids, category, categories, tags, date_from, date_to)
+            facts = await self._get_export_facts(fact_ids, category, categories, tags, date_from, date_to, audit_actor)
 
             if include_embeddings:
                 facts = await self._add_embeddings_to_facts(facts)
@@ -218,12 +220,8 @@ class BulkOperationsMixin:
         """Filter facts by tags (match any)."""
         if not tags:
             return facts
-        filtered = []
-        for fact in facts:
-            fact_tags = set(fact.get("metadata", {}).get("tags", []))
-            if any(tag in fact_tags for tag in tags):
-                filtered.append(fact)
-        return filtered
+        wanted = set(tags)
+        return [f for f in facts if wanted & set(f.get("metadata", {}).get("tags", []))]
 
     def _apply_date_filter(
         self,
@@ -1410,8 +1408,9 @@ class BulkOperationsMixin:
         include_metadata: bool = True,
         compression: bool = True,
         description: str = "",
+        audit_actor: str = BACKUP_AUDIT_ACTOR,
     ) -> Dict[str, Any]:
-        """Create a full backup of the knowledge base (Issue #398: refactored)."""
+        """Create a full backup; ``audit_actor`` is the human who asked, the scheduler's default is a job (#19163)."""
         try:
             backup_dir = self._get_backup_dir(backup_dir)
             os.makedirs(backup_dir, exist_ok=True)
@@ -1419,7 +1418,7 @@ class BulkOperationsMixin:
             backup_name, backup_file = self._generate_backup_path(backup_dir, compression)
             logger.info("Creating backup: %s", backup_file)
 
-            facts = await read_every_fact(self, BACKUP_AUDIT_ACTOR)
+            facts = await read_every_fact(self, audit_actor)
             if include_embeddings:
                 facts = await self._add_embeddings_to_facts(facts)
 

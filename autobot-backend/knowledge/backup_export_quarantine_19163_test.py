@@ -24,7 +24,7 @@ from knowledge.documents import DocumentsMixin
 from knowledge.facts import FactsMixin
 from knowledge.quarantine import BACKUP_AUDIT_ACTOR, EXPORT_AUDIT_ACTOR
 
-_AUDIT = "knowledge.facts.audit_quarantine_read"
+_AUDIT = "knowledge.quarantine.audit_quarantine_read"
 _RESEARCH = config.research_quarantine_collection
 
 

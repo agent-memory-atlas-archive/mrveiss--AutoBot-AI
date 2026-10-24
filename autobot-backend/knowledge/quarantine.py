@@ -37,12 +37,26 @@ call site that already excludes quarantined facts also excludes rejected ones.
 import copy
 from typing import Any, Dict, Iterable
 
+from fastapi import HTTPException
+
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.ssot_config import config
 from knowledge.serving import SERVING_TRUST_WHERE, _fact_field, is_servable, servable_response
 from knowledge.where_combine import and_where
 
 logger = get_logger(__name__)
+
+
+class QuarantineAuditFailed(HTTPException):
+    """The audit entry an opt-out read owes was not written, so the read is refused (#19163).
+
+    Fail closed: a privileged read nobody can account for is not served. It is an ``HTTPException``
+    (503) so every route, and ``with_error_handling``, passes it through as the answer.
+    """
+
+    def __init__(self, surface: str) -> None:
+        super().__init__(status_code=503, detail=f"Quarantine read audit unavailable on {surface}; nothing served")
+
 
 #: Actors recorded by the backup and export paths, which must carry every fact (#19163).
 BACKUP_AUDIT_ACTOR = "system:backup"
@@ -102,17 +116,36 @@ async def audit_quarantine_read(actor: str | None, surface: str, ids: Iterable[s
     """Write the one audit entry an opt-out read owes: who, which surface, how many, which ids (#19163).
 
     Goes through the canonical ``services.audit_logger.audit_log``; there is no second audit path.
+    Raises :class:`QuarantineAuditFailed` when the entry is not written -- the caller then serves nothing.
     """
     from services.audit.taxonomy import AuditAction
     from services.audit_logger import audit_log
 
     id_list = list(ids)
-    return await audit_log(
-        AuditAction.KNOWLEDGE_QUARANTINE_READ.value,
-        user_id=actor,
-        resource=surface,
-        details={"surface": surface, "count": len(id_list), "ids": id_list},
-    )
+    try:
+        written = await audit_log(
+            AuditAction.KNOWLEDGE_QUARANTINE_READ.value,
+            user_id=actor,
+            resource=surface,
+            details={"surface": surface, "count": len(id_list), "ids": id_list},
+        )
+    except Exception as exc:
+        raise QuarantineAuditFailed(surface) from exc
+    if not written:
+        raise QuarantineAuditFailed(surface)
+    return True
+
+
+async def apply_quarantine(facts: list, include_quarantined: bool, audit_actor: str | None) -> list:
+    """``get_all_facts``' last step: drop quarantined facts, or audit the read that keeps them (#19163).
+
+    The audit comes first; if it cannot be written :class:`QuarantineAuditFailed` propagates and no fact
+    is returned.
+    """
+    if include_quarantined:
+        await audit_quarantine_read(audit_actor, "kb.get_all_facts", quarantined_ids(facts))
+        return facts
+    return [f for f in facts if not_quarantined(f)]
 
 
 def store_side_where(filters: Dict[str, Any] | None, include_unservable: bool, include_quarantined: bool):
