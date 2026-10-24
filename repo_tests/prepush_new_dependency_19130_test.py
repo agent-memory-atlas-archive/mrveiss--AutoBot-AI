@@ -507,6 +507,12 @@ class TestAStaleInstallIsCouldNotRun:
         done = self._run(tmp_path, _UNRESOLVED + _ASSERTION, "vue", "vitest")
         assert "BLAMED" in done.stdout
 
+    def test_a_non_stale_import_error_is_not_reclassified(self, tmp_path: Path) -> None:
+        # dompurify IS stale, but the failed file cannot resolve lodash: that failure is the change's.
+        done = self._run(tmp_path, _collect_error("src/a.test.ts", "lodash"), "vue", "vitest")
+        assert "stale=[dompurify]" in done.stdout and "BLAMED" in done.stdout
+        assert "COULD NOT RUN" not in done.stderr
+
     def test_a_complete_install_is_not_stale(self, tmp_path: Path) -> None:
         done = self._run(tmp_path, _UNRESOLVED, "vue", "vitest", "dompurify")
         assert "stale=[]" in done.stdout and "BLAMED" in done.stdout

@@ -169,10 +169,36 @@ fail()  { printf "${RED}[pre-push FAIL]${CLR} %s\n" "$*" >&2; }
 # Only a PASS is cached, keyed by stage name + the content of its inputs at the pushed
 # sha (tree hashes of the dirs it reads, its selection, this hook's own dir), under the
 # git COMMON dir -- never in the tree. A matching key skips the stage with one line.
-# AUTOBOT_PREPUSH_CACHE=0 disables both lookup and recording.
+# The key describes $local_sha while the stages run on the WORKING TREE, so the cache is
+# neither read nor written unless the two are the same thing: a clean tree whose HEAD is
+# the pushed sha (stage_cache_usable, decided once per ref). AUTOBOT_PREPUSH_CACHE=0
+# disables both lookup and recording.
 # ---------------------------------------------------------------------------
 STAGE_CLEAN=1
+STAGE_CACHE_OK=0
 STAGE_PIDS=(); STAGE_LOGS=(); STAGE_NAMES=(); STAGE_KEYS=()
+# 0 when the working tree IS $local_sha: HEAD is it and nothing is modified or untracked.
+stage_cache_usable() {
+  [ "${AUTOBOT_PREPUSH_CACHE:-1}" = "1" ] || return 1
+  [ "$(git rev-parse HEAD 2>/dev/null)" = "$local_sha" ] || return 1
+  local dirty
+  dirty=$(git status --porcelain 2>/dev/null) || return 1
+  [ -z "$dirty" ]
+}
+# A process and every descendant (vitest/tsc sit under timeout under a subshell).
+stage_kill_tree() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do stage_kill_tree "$child"; done
+  kill "$1" 2>/dev/null
+}
+# INT/TERM: no stage outlives the hook, and no temp log is left behind.
+stage_abort() {
+  local pid
+  for pid in "${STAGE_PIDS[@]}"; do stage_kill_tree "$pid"; done
+  rm -f "${STAGE_LOGS[@]}"
+  exit 130
+}
+trap stage_abort INT TERM
 stage_cache_dir() {
   local common
   common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
@@ -190,10 +216,6 @@ stage_key() {
     done
   } | sha256sum | cut -c1-64
 }
-# The top-level entries pytest can import from: everything but the two app trees and docs.
-python_key_paths() {
-  git ls-tree --name-only "$local_sha" 2>/dev/null | grep -vxE 'autobot-frontend|autobot-slm-frontend|docs'
-}
 stage_marker() {
   local dir
   dir=$(stage_cache_dir) || return 1
@@ -202,7 +224,7 @@ stage_marker() {
 # 0 (and one OK line) when <name> passed before on exactly <key>.
 stage_cached() {
   local marker
-  [ "${AUTOBOT_PREPUSH_CACHE:-1}" = "1" ] || return 1
+  [ "$STAGE_CACHE_OK" = "1" ] || return 1
   marker=$(stage_marker "$1" "$2") && [ -f "$marker" ] || return 1
   ok "$1: unchanged since a recorded pass @ ${2:0:10}, skipped"
 }
@@ -240,7 +262,7 @@ stage_wait_all() {
 }
 stage_record() {
   local marker
-  [ "${AUTOBOT_PREPUSH_CACHE:-1}" = "1" ] && [ -n "$2" ] || return 0
+  [ "$STAGE_CACHE_OK" = "1" ] && [ -n "$2" ] || return 0
   marker=$(stage_marker "$1" "$2") || return 0
   mkdir -p "$(dirname "$marker")" && printf '%s\n%s\n' "$1" "$2" > "$marker"
 }
@@ -341,8 +363,15 @@ node_modules_usable() {
 # failures that cost a merged train a CI round. The open-PR cap and PR-body checks still
 # run; commit-msg and the protected-branch refusal live in other hooks and are untouched.
 # ---------------------------------------------------------------------------
+# Args: <local ref> <remote ref> <base> <local sha>. BOTH refs must be train-* (so
+# `git push origin issue-x:train-x` is a full run), and the range must hold at least one
+# merge commit: a train is --no-ff merges of members plus in-train fix commits, so a rule
+# of "every first-parent commit is a merge" would reject the fixes; a range with no merge
+# at all is not a train, whatever it is called.
 train_mode_ref() {
-  [[ "$1" == refs/heads/train-* ]]
+  [[ "$1" == refs/heads/train-* ]] && [[ "$2" == refs/heads/train-* ]] || return 1
+  [ -n "$3" ] || return 1
+  [ "$(git rev-list --merges --count "$3..$4" 2>/dev/null || echo 0)" -gt 0 ]
 }
 # The guard set, one repo path per line. A listed file that is gone fails the run: a
 # stale list would otherwise shrink the set with no word said.
@@ -364,8 +393,9 @@ repo_tests/threat_model_anchors_resolve_test.py
 scripts/check_nosec_format_test.py
 EOF
 }
-# The guard tests, then the reach-floor pins (`repin_reach_floors.py --check` exits 2 when
-# some guard modules cannot import locally, so its verdict is its STALE/PIN lines).
+# The guard tests, then the reach-floor pins (`repin_reach_floors.py --check`: 0 clean, 2 when
+# some guard modules cannot import locally -- both still judged by their STALE/PIN lines;
+# 124 is a timeout; any other exit is a crash and fails, never reads as clean).
 run_train_guards() {
   local guards missing guard_output out rc=0
   guards=$(train_guard_tests)
@@ -381,8 +411,15 @@ run_train_guards() {
   if [ "$rc" = "124" ]; then did_not_run "train guards" "$MAX_BUDGET"
   elif [ "$rc" != "0" ]; then fail "train guards failed:"; failure_excerpt "$guard_output" >&2; EXIT_CODE=1
   else ok "train guards: $(printf '%s\n' "$guards" | grep -c .) guard file(s) pass"; fi
-  out=$(cd "$REPO_ROOT" && timeout "$MAX_BUDGET" "$PYTEST_PYTHON" scripts/repin_reach_floors.py --check 2>&1)
-  if printf '%s\n' "$out" | grep -qE '^(STALE|PIN)'; then
+  rc=0
+  out=$(cd "$REPO_ROOT" && timeout "$MAX_BUDGET" "$PYTEST_PYTHON" scripts/repin_reach_floors.py --check 2>&1) || rc=$?
+  if [ "$rc" = "124" ]; then
+    did_not_run "repin_reach_floors.py --check" "$MAX_BUDGET"
+  elif [ "$rc" != "0" ] && [ "$rc" != "2" ]; then
+    fail "repin_reach_floors.py --check crashed (exit ${rc}), so the reach-floor pins are NOT verified:"
+    printf '%s\n' "$out" | tail -20 >&2
+    EXIT_CODE=1
+  elif printf '%s\n' "$out" | grep -qE '^(STALE|PIN)'; then
     fail "reach floors are stale -- run scripts/repin_reach_floors.py and commit:"
     printf '%s\n' "$out" | grep -E '^(STALE|PIN)' | head -20 >&2
     EXIT_CODE=1
@@ -776,7 +813,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     continue
   fi
 
-  if train_mode_ref "$remote_ref"; then
+  STAGE_CACHE_OK=0
+  if stage_cache_usable; then
+    STAGE_CACHE_OK=1
+  elif [ "${AUTOBOT_PREPUSH_CACHE:-1}" = "1" ]; then
+    log "pass cache off for this push: the working tree is not exactly ${local_sha:0:10} (dirty, or HEAD differs) -- a full run"
+  fi
+  if train_mode_ref "$local_ref" "$remote_ref" "$base" "$local_sha"; then
     log "train mode: ${remote_ref#refs/heads/} runs only the fast guard set — every member passed its own pre-push; the train's CI runs the full suite (#19472)"
     train_key=$(stage_key "train guards|${PYTEST_PYTHON}" "")
     if ! stage_cached "train guards" "$train_key"; then
@@ -786,6 +829,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
     stage_wait_all
     continue
+  elif [[ "$remote_ref" == refs/heads/train-* ]]; then
+    log "train mode OFF: needs a train-* local AND remote ref and at least one merge commit in the range -- a full run (#19472)"
   fi
 
   # ----- Frontend (TypeScript / Vue) --------------------------------------
@@ -852,8 +897,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     stale_reason="${project}/node_modules is stale — missing $(echo $stale_deps); the owner refreshes it with: npm ci (in ${project})"
     [ -n "$stale_deps" ] && warn "$stale_reason"
 
-    # #19472: keyed on the app and kit trees plus the changed paths its verdict filters on.
-    tsc_key=$(stage_key "vue-tsc|${project_changed}|${kit_changed}" "$project" "$KIT_TREE")
+    # #19472: keyed on the app and kit trees, the changed paths its verdict filters on, the
+    # install's stale set and the node version -- a pass under one toolchain is not another's.
+    fe_env="node=$(node --version 2>/dev/null || echo none)|stale=$(echo $stale_deps)"
+    tsc_key=$(stage_key "vue-tsc|${fe_env}|${project_changed}|${kit_changed}" "$project" "$KIT_TREE")
     if ! stage_cached "vue-tsc ${project}" "$tsc_key"; then
     stage_begin "vue-tsc ${project}" "$tsc_key"
     (
@@ -970,7 +1017,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     all_tests=$(printf "%s\n%s" "$test_files" "$composable_tests" \
       | sort -u | grep -v '^$' || true)
 
-    vitest_key=$(stage_key "vitest|${all_tests}" "$project" "$KIT_TREE")
+    vitest_key=$(stage_key "vitest|${fe_env}|${all_tests}" "$project" "$KIT_TREE")
     if [ -n "$all_tests" ] && ! stage_cached "vitest ${project}" "$vitest_key"; then
     stage_begin "vitest ${project}" "$vitest_key"
     (
@@ -1017,7 +1064,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # #17959: kit change -> this app's tests that depend on it. `vitest related`
     # walks the module graph, which reaches the kit through the in-tree alias, so
     # the selection is exactly the tests that import a changed kit file.
-    kit_key=$(stage_key "vitest related|${kit_changed}" "$project" "$KIT_TREE")
+    kit_key=$(stage_key "vitest related|${fe_env}|${kit_changed}" "$project" "$KIT_TREE")
     if [ -n "$kit_changed" ] && ! stage_cached "vitest related ${project}" "$kit_key"; then
     stage_begin "vitest related ${project}" "$kit_key"
     (
@@ -1108,9 +1155,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
   rm -f "$sel_err"
   all_py_tests=$(printf '%s\n' "$selection" | cut -f1 | grep -v '^$' || true)
-  # #19472: keyed on the selection (and why), the interpreter, and every non-app top-level tree.
-  # shellcheck disable=SC2046 # one path per word is intended
-  pytest_key=$(stage_key "pytest|${PYTEST_PYTHON}|${selection}" $(python_key_paths))
+  # #19472: keyed on the selection (and why), the interpreter, and the WHOLE root tree: the
+  # whole-tree guards read the app trees and docs/ too, so no subtree is safe to leave out.
+  pytest_key=$(stage_key "pytest|${PYTEST_PYTHON}|${selection}" "")
   if [ -n "$all_py_tests" ] && ! stage_cached "pytest" "$pytest_key"; then
   stage_begin "pytest" "$pytest_key"
   (

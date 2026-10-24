@@ -36,6 +36,7 @@ _STAGE_FNS = (
     "stage_track",
     "stage_wait_all",
     "stage_record",
+    "stage_cache_usable",
     "train_mode_ref",
 )
 _STUBS = (
@@ -62,13 +63,15 @@ def _stage(name: str, body: str) -> str:
     )
 
 
-def _run(repo: Path, *stages: str, **env: str) -> subprocess.CompletedProcess[str]:
-    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+def _run(repo: Path, *stages: str, sha: str = "", **env: str) -> subprocess.CompletedProcess[str]:
+    """The stages against `sha` (default HEAD), the cache decided as the hook decides it."""
+    head = sha or git(repo, "rev-parse", "HEAD").stdout.strip()
     script = "\n".join(
         [
             _STUBS,
             f"local_sha={head}",
             *(_fn(n) for n in _STAGE_FNS),
+            "STAGE_CACHE_OK=0; stage_cache_usable && STAGE_CACHE_OK=1",
             *stages,
             "stage_wait_all",
             'echo "exit=$EXIT_CODE"',
@@ -151,6 +154,37 @@ class TestContentKeyedPassCache:
         _run(repo, _UNRUNNABLE)
         assert _markers(repo) == []
 
+    def test_a_dirty_tree_neither_writes_nor_uses_the_cache(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        (repo / "src" / "scratch.txt").write_text("untracked", encoding="utf-8")
+        _run(repo, _PASS)
+        assert _markers(repo) == [], "a pass on a dirty tree describes no commit"
+        (repo / "src" / "scratch.txt").unlink()
+        _run(repo, _PASS)
+        assert len(_markers(repo)) == 1
+        (repo / "src" / "a.txt").write_text("edited", encoding="utf-8")
+        assert "A1" in _run(repo, _PASS).stderr, "a recorded pass must not answer for a modified tree"
+
+    def test_a_head_other_than_the_pushed_sha_does_not_use_the_cache(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _run(repo, _PASS)
+        pushed = git(repo, "rev-parse", "HEAD").stdout.strip()
+        (repo / "src" / "b.txt").write_text("b", encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "later")
+        assert "A1" in _run(repo, _PASS, sha=pushed).stderr
+
+    def test_a_docs_change_invalidates_the_pytest_key(self, tmp_path: Path) -> None:
+        assert 'pytest_key=$(stage_key "pytest|${PYTEST_PYTHON}|${selection}" "")' in _SOURCE
+        repo = _repo(tmp_path)
+        key = 'stage_key "pytest|py|sel" ""'
+        first = _run(repo, f'echo "key=$({key})"').stdout
+        (repo / "docs").mkdir()
+        (repo / "docs" / "x.md").write_text("doc", encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "docs")
+        assert first != _run(repo, f'echo "key=$({key})"').stdout
+
     def test_the_cache_can_be_switched_off(self, tmp_path: Path) -> None:
         repo = _repo(tmp_path)
         _run(repo, _PASS)
@@ -185,7 +219,8 @@ def _shim(tmp_path: Path) -> str:
     return f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
-def _push(tmp_path: Path, branch: str) -> subprocess.CompletedProcess[str]:
+def _train_repo(tmp_path: Path, *, merge: bool = True) -> tuple[Path, str, str]:
+    """base on main, then the change -- as a --no-ff merge (a train) or a plain commit."""
     repo = make_repo(tmp_path / "repo")
     for guard in _guard_list():
         (repo / guard).parent.mkdir(parents=True, exist_ok=True)
@@ -195,14 +230,23 @@ def _push(tmp_path: Path, branch: str) -> subprocess.CompletedProcess[str]:
     git(repo, "commit", "-qm", "base")
     base = git(repo, "rev-parse", "HEAD").stdout.strip()
     git(repo, "update-ref", "refs/remotes/origin/main", base)
+    if merge:
+        git(repo, "switch", "-qc", "member")
     (repo / "mod.py").write_text("X = 1\n", encoding="utf-8")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "change")
-    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    if merge:
+        git(repo, "switch", "-q", "-")
+        git(repo, "merge", "-q", "--no-ff", "-m", "merge member", "member")
+    return repo, base, git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def _push(tmp_path: Path, local: str, remote: str, *, merge: bool = True) -> subprocess.CompletedProcess[str]:
+    repo, base, head = _train_repo(tmp_path, merge=merge)
     env = {**isolated_git_env(), "PATH": _shim(tmp_path), "AUTOBOT_PREPUSH_CACHE": "0"}
     return subprocess.run(
         ["bash", str(_HOOK)],
-        input=f"refs/heads/{branch} {head} refs/heads/{branch} {base}\n",
+        input=f"refs/heads/{local} {head} refs/heads/{remote} {base}\n",
         cwd=repo,
         capture_output=True,
         text=True,
@@ -212,19 +256,59 @@ def _push(tmp_path: Path, branch: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-class TestTrainMode:
-    def test_only_train_refs_are_train_mode(self, tmp_path: Path) -> None:
-        script = f"{_fn('train_mode_ref')}\n" + "".join(
-            f"train_mode_ref {ref} && echo {ref}=train || echo {ref}=full\n"
-            for ref in ("refs/heads/train-x", "refs/heads/issue-x", "refs/heads/x-train-y", "refs/tags/train-x")
-        )
-        out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False).stdout
-        assert out.split() == [
-            "refs/heads/train-x=train",
-            "refs/heads/issue-x=full",
-            "refs/heads/x-train-y=full",
-            "refs/tags/train-x=full",
+def _guards(tmp_path: Path, *, guard: str = "pass", repin: str = "print('OK')") -> subprocess.CompletedProcess[str]:
+    """The hook's own run_train_guards; `timeout` answers 124 for a repin given `raise TimeoutError`."""
+    repo, _, _ = _train_repo(tmp_path)
+    (repo / _guard_list()[0]).write_text(f"def test_x():\n    {guard}\n", encoding="utf-8")
+    (repo / "scripts" / "repin_reach_floors.py").write_text(repin + "\n", encoding="utf-8")
+    script = "\n".join(
+        [
+            _STUBS,
+            f"REPO_ROOT={repo}; PYTEST_PYTHON={sys.executable}; MAX_BUDGET=60",
+            "pytest_xdist_args() { :; }; failure_excerpt() { printf '%s\\n' \"$1\" | tail -5; }",
+            'timeout() { shift; if [[ "$*" == *repin* ]] && grep -q TimeoutError scripts/repin_reach_floors.py; '
+            'then return 124; fi; "$@"; }',
+            _fn("did_not_run"),
+            _fn("could_not_run"),
+            _fn("train_guard_tests"),
+            _fn("run_train_guards"),
+            "run_train_guards",
+            'echo "exit=$EXIT_CODE clean=$STAGE_CLEAN"',
         ]
+    )
+    return subprocess.run(
+        ["bash", "-c", script], cwd=repo, capture_output=True, text=True, check=False, env=isolated_git_env()
+    )
+
+
+class TestTrainMode:
+    def test_both_refs_must_be_train_and_the_range_must_hold_a_merge(self, tmp_path: Path) -> None:
+        repo, base, head = _train_repo(tmp_path)
+        cases = (
+            ("refs/heads/train-x", "refs/heads/train-x", base, "train"),
+            ("refs/heads/issue-x", "refs/heads/train-x", base, "full"),
+            ("refs/heads/train-x", "refs/heads/issue-x", base, "full"),
+            ("refs/heads/x-train-y", "refs/heads/x-train-y", base, "full"),
+            ("refs/tags/train-x", "refs/tags/train-x", base, "full"),
+            ("refs/heads/train-x", "refs/heads/train-x", "", "full"),
+        )
+        script = f"{_fn('train_mode_ref')}\n" + "".join(
+            f'train_mode_ref {lr} {rr} "{b}" {head} && echo train || echo full\n' for lr, rr, b, _ in cases
+        )
+        out = subprocess.run(
+            ["bash", "-c", script], cwd=repo, capture_output=True, text=True, check=False, env=isolated_git_env()
+        ).stdout.split()
+        assert out == [c[3] for c in cases]
+
+    def test_a_range_with_no_merge_is_not_a_train(self, tmp_path: Path) -> None:
+        repo, base, head = _train_repo(tmp_path, merge=False)
+        script = (
+            f'{_fn("train_mode_ref")}\ntrain_mode_ref refs/heads/train-x refs/heads/train-x {base} {head} || echo full'
+        )
+        done = subprocess.run(
+            ["bash", "-c", script], cwd=repo, capture_output=True, text=True, check=False, env=isolated_git_env()
+        )
+        assert done.stdout.strip() == "full"
 
     def test_the_guard_set_is_the_fourteen_preflight_guards_and_each_exists(self) -> None:
         guards = _guard_list()
@@ -233,14 +317,39 @@ class TestTrainMode:
         assert "scripts/repin_reach_floors.py --check" in _SOURCE
 
     def test_a_train_push_runs_only_the_guard_set(self, tmp_path: Path) -> None:
-        done = _push(tmp_path, "train-x")
+        done = _push(tmp_path, "train-x", "train-x")
         assert "train mode: train-x runs only the fast guard set" in done.stderr
         assert "train guards: 14 guard file(s) pass" in done.stderr, done.stderr[-3000:]
         assert "pytest selection" not in done.stderr and "pytest selected" not in done.stderr
         assert done.returncode == 0, done.stderr[-3000:]
 
     def test_an_issue_push_runs_the_full_pre_push(self, tmp_path: Path) -> None:
-        done = _push(tmp_path, "issue-x")
+        done = _push(tmp_path, "issue-x", "issue-x")
         assert "train mode" not in done.stderr
         # The fixture carries no tools/lint, so Phase 0c's selection reports itself; it RAN.
         assert "pytest selection" in done.stderr or "pytest selected" in done.stderr, done.stderr[-3000:]
+
+    def test_an_issue_branch_pushed_to_a_train_ref_runs_the_full_pre_push(self, tmp_path: Path) -> None:
+        done = _push(tmp_path, "issue-x", "train-x")
+        assert "train mode OFF" in done.stderr and "train guards" not in done.stderr
+        assert "pytest selection" in done.stderr or "pytest selected" in done.stderr, done.stderr[-3000:]
+
+    def test_a_failing_train_guard_blocks(self, tmp_path: Path) -> None:
+        done = _guards(tmp_path, guard="assert False")
+        assert "exit=1" in done.stdout and "FAIL train guards failed" in done.stderr
+
+    def test_a_repin_crash_blocks(self, tmp_path: Path) -> None:
+        done = _guards(tmp_path, repin="raise SystemExit(1)")
+        assert "exit=1" in done.stdout and "crashed (exit 1)" in done.stderr
+
+    def test_a_repin_exit_2_without_stale_lines_is_clean(self, tmp_path: Path) -> None:
+        done = _guards(tmp_path, repin="raise SystemExit(2)")
+        assert "exit=0 clean=1" in done.stdout, done.stderr
+
+    def test_a_repin_stale_line_blocks(self, tmp_path: Path) -> None:
+        done = _guards(tmp_path, repin="print('STALE x')")
+        assert "exit=1" in done.stdout and "reach floors are stale" in done.stderr
+
+    def test_a_repin_timeout_is_did_not_run(self, tmp_path: Path) -> None:
+        done = _guards(tmp_path, repin="raise TimeoutError")
+        assert "exit=1 clean=0" in done.stdout and "DID NOT RUN" in done.stderr
