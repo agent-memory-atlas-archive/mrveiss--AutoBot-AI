@@ -121,21 +121,56 @@ def llc_mentions(text: str) -> list[str]:
     return [m.group(0) for m in re.finditer(r"(?<![\w/.-])LLC(?![\w/.-])", _FENCE.sub("", text))]
 
 
+_LOCALE_GLOBS = ("autobot-frontend/src/i18n/locales/*.json", "autobot-slm-frontend/src/locales/*.json")
+
+# Public docs outside the user trees that name the product (#19184): the glossary and indexes a
+# reader lands on, and the pages the wiki publishes from docs/.
+_COMPANY_OS_DOCS = (
+    "docs/GLOSSARY.md",
+    "docs/INDEX.md",
+    "docs/architecture/PLATFORM_MODEL.md",
+    "docs/features/CATALOG.md",
+    "docs/llc/_index.md",
+)
+
+
 def _locale_files() -> list[Path]:
-    files = sorted(_ROOT.glob("autobot-frontend/src/i18n/locales/*.json")) + sorted(
-        _ROOT.glob("autobot-slm-frontend/src/i18n/locales/*.json")
-    )
-    assert files, "no locale files found -- the LLC check would cover nothing"
+    """Every UI locale. Each glob must match on its own: one wrong path (the SLM's was
+    ``src/i18n/locales``, which does not exist) must not hide behind the other (#19184)."""
+    files: list[Path] = []
+    for pattern in _LOCALE_GLOBS:
+        matched = sorted(_ROOT.glob(pattern))
+        assert matched, f"{pattern} matches no locale file -- that UI's strings would go unchecked"
+        files += matched
     return files
+
+
+def _company_os_docs() -> list[Path]:
+    docs = [_ROOT / rel for rel in _COMPANY_OS_DOCS]
+    missing = [str(d.relative_to(_ROOT)) for d in docs if not d.is_file()]
+    assert not missing, f"named docs no longer exist: {missing}"
+    return docs
 
 
 def test_no_user_doc_or_ui_string_says_llc() -> None:
     """#19184 AC2."""
     found = {
-        str(f.relative_to(_ROOT)): llc_mentions(f.read_text(encoding="utf-8")) for f in _user_docs() + _locale_files()
+        str(f.relative_to(_ROOT)): llc_mentions(f.read_text(encoding="utf-8"))
+        for f in _user_docs() + _company_os_docs() + _locale_files()
     }
     found = {k: v for k, v in found.items() if v}
     assert not found, f"'LLC' where users should read 'Company OS': {found}"
+
+
+_BACKEND_ON_8001 = re.compile(r"localhost:8001/(?:api|health)")
+
+
+def test_no_user_doc_health_checks_the_backend_on_8001() -> None:
+    """#19183 AC2: the backend is reached through nginx (Docker ``http://localhost/api``, native
+    ``https://<server>/api``); in Docker 8001 is RedisInsight, so a check there never reaches it."""
+    found = {str(f.relative_to(_ROOT)): _BACKEND_ON_8001.findall(f.read_text(encoding="utf-8")) for f in _user_docs()}
+    found = {k: v for k, v in found.items() if v}
+    assert not found, f"backend health checked on RedisInsight's port: {found}"
 
 
 def test_contrast_reference_links_are_checked(tmp_path: Path) -> None:
@@ -160,4 +195,7 @@ def test_contrast_each_detector_fires() -> None:
         "```bash\ndocker compose --env-file docker/.env.docker \\\n  --env-file docker/.env.secrets up -d\n```\n"
     )
     assert llc_mentions("Run AutoBot LLC today") == ["LLC"]
+    assert llc_mentions("| [LLC Module PRD](../planning/PRD_AutoBot_LLC_Module.md) |") == ["LLC"]
+    assert _BACKEND_ON_8001.findall("curl http://localhost:8001/health")
+    assert not _BACKEND_ON_8001.findall("RedisInsight on 127.0.0.1:8001; curl http://localhost/api/health")
     assert llc_mentions("the llc_agents module and LLC_MODE flag, docs/llc/x.md") == []
