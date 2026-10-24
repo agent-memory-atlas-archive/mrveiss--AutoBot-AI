@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Every route an AutoBot app really registers, read from the real router objects (#17325, #19033).
 
-Run as ``python repo_tests/_dump_real_routes.py backend|slm`` it prints one JSON document on stdout:
+Run as ``python repo_tests/_dump_real_routes.py backend|slm <repo-root>`` it prints one JSON document on stdout:
 ``{"registrations": N, "routes": [[method, path, site], ...], "unrecoverable": [...]}``.
 
 It is a script, not an import, because the two apps cannot share a process: both ship top-level ``api``,
 ``config`` and ``services`` packages. The caller (``no_duplicate_route_registration_16908_test.py``) runs it
-once per app in a child interpreter, so importing a backend leaves nothing behind in the test process.
+once per app in a child interpreter, so importing a backend leaves nothing behind in the test process. The caller
+passes the root it got from ``repo_tests._paths.repo_root()``; the script never re-derives it (#15925).
 
 * backend: the two loader calls ``app_factory.py`` mounts from, at ``/api{prefix}`` as it mounts them.
 * slm: the ``app`` ``main.py`` builds, whose ``include_router`` calls run at import.
@@ -24,8 +25,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-
-_ROOT = Path(__file__).resolve().parents[1]
 
 
 def registered_routes(entries: list[tuple[Any, str, Any, str]]) -> tuple[list[list[str]], list[str]]:
@@ -53,8 +52,8 @@ def _rows(mounted: Any, full_path: str, name: str) -> list[list[str]]:
     return [[method, full_path, site] for method in sorted(mounted.methods or {"WEBSOCKET"})]
 
 
-def _dump_backend() -> dict[str, Any]:
-    sys.path.insert(0, str(_ROOT / "autobot-backend"))
+def _dump_backend(root: Path) -> dict[str, Any]:
+    sys.path.insert(0, str(root / "autobot-backend"))
     from initialization.router_registry.core_routers import load_core_routers
     from initialization.routers import load_optional_routers
 
@@ -63,13 +62,13 @@ def _dump_backend() -> dict[str, Any]:
     return {"registrations": len(entries), "routes": routes, "unrecoverable": unrecoverable}
 
 
-def _dump_slm() -> dict[str, Any]:
+def _dump_slm(root: Path) -> dict[str, Any]:
     from autobot_shared.api_routing.router_routes import effective_routes
 
     # Throwaway keys: config.py would otherwise write data/.slm_keys into the checkout at import.
     os.environ.setdefault("SLM_SECRET_KEY", "route-dump-not-a-secret")
     os.environ.setdefault("SLM_ENCRYPTION_KEY", "route-dump-not-a-secret")
-    os.chdir(_ROOT / "autobot-slm-backend")
+    os.chdir(root / "autobot-slm-backend")
     sys.path.insert(0, os.getcwd())
     import main
 
@@ -84,9 +83,10 @@ def _dump_slm() -> dict[str, Any]:
 
 
 def main_cli(argv: list[str]) -> int:
-    sys.path.insert(0, str(_ROOT))
+    root = Path(argv[2])
+    sys.path.insert(0, str(root))
     logging.disable(logging.CRITICAL)
-    dump = {"backend": _dump_backend, "slm": _dump_slm}[argv[1]]()
+    dump = {"backend": _dump_backend, "slm": _dump_slm}[argv[1]](root)
     sys.stdout.write("\n" + json.dumps(dump) + "\n")  # the last line is the document; imports may print before it
     return 0
 

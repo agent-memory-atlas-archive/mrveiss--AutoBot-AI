@@ -73,7 +73,11 @@ def _dumps(root: Path) -> dict[str, dict[str, Any]]:
     kinds = {_BACKEND: "backend", _SLM: "slm"}
     procs = {
         app: subprocess.Popen(
-            [sys.executable, script, kind], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8"
+            [sys.executable, script, kind, str(root)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
         for app, kind in kinds.items()
     }
