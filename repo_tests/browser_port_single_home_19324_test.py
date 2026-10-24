@@ -72,7 +72,9 @@ _DEFINITION = re.compile(
     r"(?:[\"']?\s*(?:[:=]|\|\||,)\s*[\"']?|\s*\|\s*default\(\s*)(\d{2,5})\b"
 )
 _NAME_HINT = re.compile(_NAMES)
-_PORT_3000 = re.compile(r":3000\b|port\W{0,6}3000\b|\b3000/tcp|\[3000\]|['\"]3000['\"]|--port[ =]3000\b", re.I)
+_PORT_3000 = re.compile(
+    r":3000\b|port\W{0,6}3000\b|\b3000/tcp|\[3000\]|['\"]3000['\"]|--port[ =]3000\b|[\[,]\s*3000\s*[,\]]", re.I
+)
 _BROWSER_CONTEXT = re.compile(r"browser|playwright", re.I)
 #: A line that names Grafana or calls 3000 legacy is explaining the port, not using it.
 _EXPLAINS_3000 = re.compile(r"grafana|legacy", re.I)
@@ -145,7 +147,18 @@ _PINNED: dict[str, tuple[str, ...]] = {
     "autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml": (
         r"playwright_port \| default\((\d+)\)",
     ),  # #19418
-    "autobot-slm-backend/ansible/playbooks/health-check.yml": (r"browser_port \| default\((\d+)\)",),
+    "autobot-slm-backend/ansible/playbooks/health-check.yml": (
+        r"browser_port \| default\((\d+)\)",
+        r"127\.0\.0\.1:\{\{ browser_port \| default\((\d+)\) \}\}/health",  # #19432: the probe task
+    ),
+    "autobot-slm-backend/ansible/playbooks/enroll-node.yml": (r"ports: \[(\d+), 5900\]",),
+    "autobot-slm-backend/ansible/roles/dependency_patching/vars/main.yml": (
+        r"service_name: \"autobot-playwright\"\n\s+health_endpoint: \"/health\"\n\s+health_port: (\d+)",
+    ),
+    "autobot-infrastructure/shared/config/deployment/distributed.yml": (r"playwright-vnc:\n.*\n\s+port: (\d+)\n",),
+    "autobot-infrastructure/shared/config/deployment/kubernetes.yml": (r"playwright-vnc:\n.*\n\s+port: (\d+)\n",),
+    "autobot-infrastructure/shared/config/deployment/local.yml": (r"playwright-vnc:\n.*\n\s+port: (\d+)\n",),
+    "autobot-infrastructure/shared/config/distributed.yaml": (r"    browser:\n.*\n\s+port: (\d+)\n",),
 }
 
 #: Files whose 3000 or browser-port literal is a test input or a rule ABOUT the port.
@@ -163,6 +176,7 @@ _NOT_A_COPY = frozenset(
         "autobot-backend/tests/unit/api/test_browser_url_guard.py",  # an arbitrary localhost URL
         "autobot-frontend/src/components/__tests__/VisualBrowserPanel.test.ts",  # URL normalisation input
         "autobot-infrastructure/shared/config/.eslintrc.js",  # the rule that bans the literal
+        "autobot-frontend/src/config/__tests__/ssot-config.spec.ts",  # lines 60/72: asserts 3000 is absent
         "autobot-slm-backend/ansible/roles/browser/defaults/main.yml",  # playwright_ports_legacy cleanup list (#19419)
     }
 )
@@ -216,6 +230,26 @@ def unpinned_definitions(root: Path, paths: list[str], pinned: set[str], home: s
     return found
 
 
+#: How far up a YAML/INI block the context search looks for the task name or parent key.
+_CONTEXT_LOOKBACK = 12
+
+
+def _ancestor_lines(lines: list[str], index: int) -> list[str]:
+    """The task ``name:`` and parent keys above *index*: each strictly less indented than the last."""
+    indent = len(lines[index]) - len(lines[index].lstrip())
+    found = []
+    for back in range(index - 1, max(index - 1 - _CONTEXT_LOOKBACK, -1), -1):
+        line = lines[back]
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        lead = len(line) - len(stripped)
+        if lead < indent:
+            found.append(stripped)
+            indent = lead
+    return found
+
+
 def browser_3000(root: Path, paths: list[str]) -> list[str]:
     """3000 in a browser/Playwright port context, outside the Docker 3000 paths."""
     found = []
@@ -225,11 +259,17 @@ def browser_3000(root: Path, paths: list[str]) -> list[str]:
         text = _read(root, rel)
         if "3000" not in text:
             continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        for lineno, line in enumerate(lines, start=1):
             if not _PORT_3000.search(line) or _EXPLAINS_3000.search(line):
                 continue
             if _BROWSER_CONTEXT.search(rel) or _BROWSER_CONTEXT.search(line):
                 found.append(f"{rel}:{lineno}: {line.strip()[:120]}")
+            elif rel.endswith((".yml", ".yaml", ".j2")):
+                # An Ansible task names its browser context on `- name:`, not on the url/port line.
+                above = _ancestor_lines(lines, lineno - 1)
+                if any(_BROWSER_CONTEXT.search(a) and not _EXPLAINS_3000.search(a) for a in above):
+                    found.append(f"{rel}:{lineno}: {line.strip()[:100]}  [under: {above[-1][:60]}]")
     return found
 
 
@@ -288,6 +328,22 @@ def test_a_deliberate_copy_fails_every_rule(tmp_path: Path) -> None:
     assert len(unpinned_definitions(root, paths, set(), "9001")) == 2
     assert len(browser_3000(root, paths)) == 2
     assert pinned_drift(root, {".env.pinned": (r"^VITE_BROWSER_PORT=(\d+)$",)}, "9001")
+
+
+def test_a_3000_named_only_by_its_ansible_task_fails(tmp_path: Path) -> None:
+    root = _tree(
+        tmp_path,
+        {
+            "pb/health.yml": (
+                "- name: Test Playwright API health (Browser)\n  uri:\n"
+                '    url: "http://127.0.0.1:3000/health"\n'
+                "- name: Test Grafana\n  uri:\n"
+                '    url: "http://127.0.0.1:3000/api/health"\n'
+            ),
+            "pb/roles.yml": "browser:\n  services: [x]\n  ports: [3000, 5900]\n",
+        },
+    )
+    assert len(browser_3000(root, ["pb/health.yml", "pb/roles.yml"])) == 2
 
 
 def test_the_same_tree_passes_once_the_copy_follows_the_home(tmp_path: Path) -> None:
