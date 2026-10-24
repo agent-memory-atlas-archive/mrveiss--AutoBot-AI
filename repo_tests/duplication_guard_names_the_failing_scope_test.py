@@ -76,6 +76,12 @@ def _run_explain(main_outcome: str, slm_outcome: str, **extra_env: str) -> str:
             "SLM_OUTCOME": slm_outcome,
             "MAX_DUP_LINES": "11723",
             "SLM_MAX_DUP_LINES": "4729",
+            "TOOLING_OUTCOME": "success",
+            "CROSS_GUI_OUTCOME": "success",
+            "CROSS_BACKEND_OUTCOME": "success",
+            "TOOLING_MAX_DUP_LINES": "230",
+            "CROSS_GUI_MAX_DUP_LINES": "9616",
+            "CROSS_BACKEND_MAX_DUP_LINES": "4107",
             **extra_env,
         },
     )
@@ -135,6 +141,44 @@ def test_the_failing_scope_names_its_own_env_var(main_outcome, slm_outcome, name
     output = _run_explain(main_outcome=main_outcome, slm_outcome=slm_outcome)
     assert named in output, f"the failing scope did not name {named}"
     assert unnamed not in output, f"named {unnamed}, the passing scope's knob"
+
+
+@pytest.mark.parametrize(
+    ("outcome_var", "label", "scope", "pin"),
+    [
+        (
+            "TOOLING_OUTCOME",
+            "The tooling duplication scope",
+            "scripts + tools + pipeline-scripts",
+            "TOOLING_MAX_DUP_LINES",
+        ),
+        (
+            "CROSS_GUI_OUTCOME",
+            "The cross-GUI duplication scope",
+            "autobot-frontend/src + autobot-slm-frontend/src + autobot-plugins + libs/autobot-ui",
+            "CROSS_GUI_MAX_DUP_LINES",
+        ),
+        (
+            "CROSS_BACKEND_OUTCOME",
+            "The cross-backend duplication scope",
+            "autobot-backend + autobot-slm-backend + autobot_shared + plugins",
+            "CROSS_BACKEND_MAX_DUP_LINES",
+        ),
+    ],
+)
+def test_each_18559_scope_names_itself_and_its_own_env_var(outcome_var, label, scope, pin) -> None:
+    """#18559: the three added scopes are attributed like the first two.
+
+    Each fails alone; its label, tree list and ``(env NAME)`` token must appear,
+    and the two original scopes must not be blamed.
+    """
+    output = _run_explain("success", "success", **{outcome_var: "failure"})
+
+    assert label in output
+    assert scope in output
+    assert f"(env {pin})" in output
+    assert "outside every duplication gate" not in output
+    assert MAIN_SCOPE not in output and SLM_SCOPE not in output
 
 
 def test_both_are_named_when_both_fail() -> None:

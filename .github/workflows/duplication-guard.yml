@@ -342,17 +342,17 @@ jobs:
           fi
           if [ "${TOOLING_OUTCOME}" = "failure" ]; then
             failed=1
-            report "The tooling duplication scope" "/tmp/tooling-gate.log" "${TOOLING_MAX_DUP_LINES}" \
+            report "The tooling duplication scope" "${TOOLING_LOG:-/tmp/tooling-gate.log}" "${TOOLING_MAX_DUP_LINES}" \
               "scripts + tools + pipeline-scripts" TOOLING_MAX_DUP_LINES
           fi
           if [ "${CROSS_GUI_OUTCOME}" = "failure" ]; then
             failed=1
-            report "The cross-GUI duplication scope" "/tmp/cross-gui-gate.log" "${CROSS_GUI_MAX_DUP_LINES}" \
+            report "The cross-GUI duplication scope" "${CROSS_GUI_LOG:-/tmp/cross-gui-gate.log}" "${CROSS_GUI_MAX_DUP_LINES}" \
               "autobot-frontend/src + autobot-slm-frontend/src + autobot-plugins + libs/autobot-ui" CROSS_GUI_MAX_DUP_LINES
           fi
           if [ "${CROSS_BACKEND_OUTCOME}" = "failure" ]; then
             failed=1
-            report "The cross-backend duplication scope" "/tmp/cross-backend-gate.log" "${CROSS_BACKEND_MAX_DUP_LINES}" \
+            report "The cross-backend duplication scope" "${CROSS_BACKEND_LOG:-/tmp/cross-backend-gate.log}" "${CROSS_BACKEND_MAX_DUP_LINES}" \
               "autobot-backend + autobot-slm-backend + autobot_shared + plugins" CROSS_BACKEND_MAX_DUP_LINES
           fi
           if [ "${failed}" = "0" ]; then
