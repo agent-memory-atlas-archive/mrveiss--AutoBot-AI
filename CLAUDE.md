@@ -50,7 +50,8 @@ symbol, on extraction PRs · 8 Outbound HTTP goes through the guarded fetch (egr
 - **No agent cleans up data or credentials on its own.** Deleting, rewriting or rotating stored data or credentials is only *proposed* by an agent. A human approves it through an always-available review queue (the approval gates), it is never auto-approved, and it always leaves a durable paper trail — [#17038](https://github.com/mrveiss/AutoBot-AI/issues/17038).
 - **Security reviews are findings-first** — one-line verdict, then a severity/`file:line`/issue/fix table, within 3 tool calls. Verify *after*; never explore before the verdict lands. Skill: `secreview`.
 - **Nothing internal in outward artifacts** — no IPs, hostnames, secrets, tokens, or internal filesystem paths in issues, PRs, comments or logs. Redact to a generic role or node reference.
-- **Open-PR cap:** `AUTOBOT_OPEN_PR_CAP` (default 40), enforced at pre-push for new branches — at the cap, finish, merge, or close before starting new work; every PR still gets a `code-reviewer` pass before merge.
+- **No cap on open PRs** — finished local work is pushed, never held local-only ([#19397](https://github.com/mrveiss/AutoBot-AI/issues/19397)); landing throughput is governed by merge trains and the CI slots.
+- **Every PR gets a `code-reviewer` pass before merge.**
 - **Same file ⇒ ONE PR, ONE agent** — check the open PRs touching a file before editing it; batching, append-before-open and the sweep point → [`CLAUDE_REVIEW.md`](docs/developer/CLAUDE_REVIEW.md#pr-granularity).
 
 ## When rules conflict
