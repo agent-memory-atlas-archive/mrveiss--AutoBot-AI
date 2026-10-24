@@ -23,7 +23,7 @@ from typing_extensions import Annotated
 
 from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.fleet_constants import FLEET_INSTALL_ROOT
-from services.ansible_utils import _extract_failure_summary
+from services.ansible_utils import _extract_failure_summary, ansible_run_failure
 from services.auth import get_current_user
 from services.playbook_output_stream import PIPE_LINE_LIMIT, iter_pipe_lines
 
@@ -651,7 +651,6 @@ async def _run_playbook(
         # `playbook_path = self.ansible_dir / playbook_name`.
         playbook_path = str(_ansible_dir() / playbook.playbook_file)
 
-        # Check if playbook exists
         if not os.path.exists(playbook_path):
             execution.status = PlaybookStatus.FAILED
             execution.completed_at = datetime.now(timezone.utc)
@@ -704,13 +703,14 @@ async def _run_playbook(
 
         await process.wait()
 
-        if process.returncode == 0:
+        text = "\n".join(execution.output)
+        failure = ansible_run_failure(text, None, process.returncode)
+        if not failure:
             execution.status = PlaybookStatus.COMPLETED
             execution.output.append("[SUCCESS] Playbook completed successfully")
         else:
             execution.status = PlaybookStatus.FAILED
-            _summary = _extract_failure_summary("\n".join(execution.output))
-            execution.error = _summary or f"Playbook failed with exit code {process.returncode}"
+            execution.error = _extract_failure_summary(text) or f"Playbook failed: {failure[-300:]}"
             execution.output.append(f"[FAILED] Exit code: {process.returncode}")
 
     except Exception:

@@ -31,7 +31,7 @@ from autobot_shared.time_utils import utc_timestamp
 from config import settings
 from models.database import BlueGreenDeployment, BlueGreenStatus, Node, NodeStatus
 from models.schemas import BlueGreenCreate, BlueGreenResponse, EligibleNodeResponse
-from services.ansible_utils import ansible_run_failure
+from services.ansible_utils import ansible_run_failure, ansible_subprocess_env
 from services.purge_playbook import PURGE_PLAYBOOK_TEMPLATE as _PURGE_PLAYBOOK_TEMPLATE
 
 # The purge playbook lives in its own module because this file is at its
@@ -1068,7 +1068,6 @@ class BlueGreenService:
                 logger.error("Deploy playbook not found: %s", playbook_path)
                 return False
 
-            # Validate roles before using in command
             self._validate_roles(roles)
             roles_str = ",".join(roles)
 
@@ -1094,6 +1093,7 @@ class BlueGreenService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(self.ansible_dir),
+                env=ansible_subprocess_env(self.ansible_dir),
             )
 
             stdout, _ = await asyncio.wait_for(process.communicate(), timeout=600.0)
@@ -1208,7 +1208,6 @@ class BlueGreenService:
             if not playbook_path.exists():
                 await self._create_purge_playbook(playbook_path)
 
-            # Validate roles before using in command
             self._validate_roles(roles)
             roles_str = ",".join(roles)
 
@@ -1232,6 +1231,7 @@ class BlueGreenService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(self.ansible_dir),
+                env=ansible_subprocess_env(self.ansible_dir),
             )
 
             stdout, _ = await asyncio.wait_for(process.communicate(), timeout=300.0)

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Tuple
@@ -24,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from autobot_shared.ssot_config import config as ssot_config
 from config import settings
 from models.database import Node, Replication, ReplicationStatus
-from services.ansible_utils import ansible_run_failure
+from services.ansible_utils import ansible_run_failure, ansible_subprocess_env
 from services.redis_cli_auth import RedisCliAuth, redis_cli_auth
 from services.ssh_utils import ssh_destination_args, ssh_options
 
@@ -515,7 +514,6 @@ class ReplicationService:
         redis_password: "{auth}"
 """
 
-        # Write temporary playbook (contains no secrets)
         playbook_path = self.ansible_dir / "temp_replication.yml"
         await asyncio.to_thread(playbook_path.write_text, playbook_content, encoding="utf-8")
 
@@ -534,7 +532,7 @@ class ReplicationService:
             ]
 
             # Pass the credential via the environment (never persisted to disk).
-            playbook_env = {**os.environ, "AUTOBOT_REDIS_REPL_AUTH": redis_password}
+            playbook_env = ansible_subprocess_env(self.ansible_dir, AUTOBOT_REDIS_REPL_AUTH=redis_password)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -597,6 +595,7 @@ class ReplicationService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(self.ansible_dir),
+                env=ansible_subprocess_env(self.ansible_dir),
             )
 
             stdout, _ = await asyncio.wait_for(process.communicate(), timeout=120)

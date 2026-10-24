@@ -26,6 +26,7 @@ from autobot_shared.fleet_constants import FLEET_INSTALL_ROOT
 from autobot_shared.git_probe import start_git
 from services.ansible_secrets import fetch_deploy_secrets
 from services.ansible_utils import _find_ansible_playbook as _resolve_ansible_playbook
+from services.ansible_utils import ansible_config_env, ansible_exit_code
 from services.inventory_builder import (
     build_registry_inventory,
     validate_inventory,
@@ -99,15 +100,15 @@ SYSTEMD_RUN_ENV_ALLOWLIST_EXACT = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "SS
 # Invariant: no ANSIBLE_* var may carry a secret (e.g. ANSIBLE_VAULT_PASSWORD)
 # through this allowlist — secrets ride via `-e @file` (#11735), never env.
 # Enumerated exactly (not a prefix match) to the keys this module itself sets
-# — _build_ansible_env's fixed set plus ANSIBLE_INVENTORY (execute_playbook)
-# — so a caller-supplied or inherited ANSIBLE_VAULT_PASSWORD/-style var can
-# never slip through just by starting with "ANSIBLE_".
+# (_build_ansible_env's set plus ANSIBLE_INVENTORY), so an inherited
+# ANSIBLE_VAULT_PASSWORD/-style var never slips through by starting with "ANSIBLE_".
 ANSIBLE_ENV_ALLOWLIST_EXACT = (
     "ANSIBLE_FORCE_COLOR",
     "ANSIBLE_NOCOLOR",
     "ANSIBLE_HOST_KEY_CHECKING",
     "ANSIBLE_SSH_RETRIES",
     "ANSIBLE_LOCAL_TEMP",
+    "ANSIBLE_CONFIG",
     "ANSIBLE_INVENTORY",
 )
 
@@ -703,11 +704,7 @@ class PlaybookExecutor:
             return False
 
     def _build_ansible_env(self) -> Dict[str, str]:
-        """
-        Build the environment dict for ansible-playbook subprocess. Ref: #1088.
-
-        Helper for execute_playbook.
-        """
+        """Build the ansible-playbook subprocess environment (#1088); helper for execute_playbook."""
         self._ensure_ansible_temp_dirs()
         return {
             **os.environ,
@@ -716,6 +713,7 @@ class PlaybookExecutor:
             "ANSIBLE_HOST_KEY_CHECKING": "False",
             "ANSIBLE_SSH_RETRIES": "3",
             "ANSIBLE_LOCAL_TEMP": ANSIBLE_LOCAL_TMP,
+            **ansible_config_env(self.ansible_dir),
         }
 
     @staticmethod
@@ -989,7 +987,9 @@ class PlaybookExecutor:
     @staticmethod
     def _run_result(output_lines: List[str], returncode: int | None, detached: bool) -> dict:
         """#19139: ``detached`` says a -SIGTERM hit the systemd-run waiter, not ansible itself."""
-        return {"output": "\n".join(output_lines), "returncode": returncode, "timed_out": False, "detached": detached}
+        output = "\n".join(output_lines)
+        returncode = ansible_exit_code(output, None, returncode)
+        return {"output": output, "returncode": returncode, "timed_out": False, "detached": detached}
 
     async def _handle_playbook_timeout(
         self, process: asyncio.subprocess.Process, cmd: List[str], timeout_s: float

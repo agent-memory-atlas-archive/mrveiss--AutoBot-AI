@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+from pathlib import Path
 
 from autobot_shared.env_utils import env_int
 
@@ -47,13 +48,32 @@ _NO_HOSTS_MARKERS = (
 )
 
 
-def ansible_run_failure(output: str, host: str, returncode: int) -> str | None:
-    """Why a single-host run did not prove success on ``host``, or None if it did (#19475).
+_RECAP_LINE_RE = re.compile(r"^\s*(\S+)\s*:\s*ok=(\d+)\s+changed=\d+\s+unreachable=(\d+)\s+failed=(\d+)", re.MULTILINE)
 
-    ``ansible-playbook`` exits 0 when the inventory is unparsable and the play matches
-    no hosts, so the exit code alone cannot prove the target ran. A run counts only if
-    it exited 0, no no-hosts marker was printed, and the PLAY RECAP lists ``host`` with
-    unreachable=0 and failed=0. One shared check for every SLM runner using ``-i "<host>,"``.
+
+def ansible_config_env(ansible_dir) -> dict:
+    """``ANSIBLE_CONFIG`` naming the repo's ansible.cfg, so its inventory settings always apply (#19475)."""
+    return {"ANSIBLE_CONFIG": str(Path(ansible_dir) / "ansible.cfg")}
+
+
+def ansible_subprocess_env(ansible_dir, **extra: str) -> dict:
+    """The process environment plus ``ANSIBLE_CONFIG`` (and ``extra``) for an ansible-playbook child (#19475)."""
+    return {**os.environ, **ansible_config_env(ansible_dir), **extra}
+
+
+def ansible_exit_code(output: str, host: str | None, returncode: int | None) -> int | None:
+    """``returncode``, except an exit-0 run that ``ansible_run_failure`` rejects reports 1 (#19475)."""
+    return 1 if returncode == 0 and ansible_run_failure(output, host, returncode) else returncode
+
+
+def ansible_run_failure(output: str, host: str | None, returncode: int | None) -> str | None:
+    """Why an ansible run did not prove success, or None if it did (#19475).
+
+    ``ansible-playbook`` exits 0 when the inventory is unparsable and the play matches no
+    hosts, so the exit code alone cannot prove anything ran. A run counts only if it exited
+    0, printed no no-hosts marker, and the LAST PLAY RECAP shows no unreachable/failed host.
+    With ``host`` (a single-target run) that host must also be listed with ok>=1; with
+    ``host=None`` (multi-host or inventory-file play) there is no single target to demand.
     Returns the text to report: the raw output on a non-zero exit, else the reason.
     """
     if returncode != 0:
@@ -61,15 +81,15 @@ def ansible_run_failure(output: str, host: str, returncode: int) -> str | None:
     for marker in _NO_HOSTS_MARKERS:
         if marker in output:
             return f"ansible matched no hosts ({marker!r})"
-    recap = re.search(
-        rf"^{re.escape(host)}\s*:\s*ok=\d+.*?unreachable=(\d+)\s+failed=(\d+)",
-        output,
-        re.MULTILINE,
-    )
-    if not recap:
+    tail = output[max(output.rfind("PLAY RECAP"), 0) :]
+    recap = {m[1]: tuple(int(n) for n in m.groups()[1:]) for m in _RECAP_LINE_RE.finditer(tail)}
+    if host is not None and host not in recap:
         return f"target host {host} is absent from the PLAY RECAP"
-    if int(recap.group(1)) or int(recap.group(2)):
-        return f"target host {host} reported unreachable={recap.group(1)} failed={recap.group(2)}"
+    if host is not None and recap[host][0] < 1:
+        return f"target host {host} ran no task (ok=0)"
+    for name, (_ok, unreachable, failed) in recap.items():
+        if unreachable or failed:
+            return f"host {name} reported unreachable={unreachable} failed={failed}"
     return None
 
 
