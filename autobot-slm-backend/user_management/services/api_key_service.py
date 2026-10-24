@@ -39,6 +39,10 @@ class APIKeyServiceError(Exception):
     """Base exception for API key service errors."""
 
 
+class APIKeyPepperNotConfiguredError(APIKeyServiceError):
+    """The API-key pepper is unset, so a new key cannot be hashed (#19120)."""
+
+
 class APIKeyNotFoundError(APIKeyServiceError):
     """Raised when API key is not found."""
 
@@ -87,7 +91,7 @@ class APIKeyService(BaseService):
         Order: current secret -> legacy public-pepper HMAC -> bare SHA-256.
         A legacy match is re-hashed with the current secret when one is set.
         """
-        pepper = await resolve_hmac_api_key_secret(self.session)
+        pepper = await resolve_hmac_api_key_secret()
         api_key = None
         if pepper:
             api_key = await self._find_by_hash(self._hash_key(plaintext_key, pepper))
@@ -108,9 +112,9 @@ class APIKeyService(BaseService):
 
     async def _require_pepper(self) -> str:
         """Pepper for a NEW hash, or fail closed (#16299, #19120)."""
-        pepper = await resolve_hmac_api_key_secret(self.session)
+        pepper = await resolve_hmac_api_key_secret()
         if not pepper:
-            raise RuntimeError(
+            raise APIKeyPepperNotConfiguredError(
                 f"API-key pepper is not configured: add the secret '{HMAC_PEPPER_KEY}' on "
                 f"the SLM page {SECRETS_PAGE_PATH}. Refusing to hash with a built-in default."
             )

@@ -27,6 +27,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const secrets = ref<SecretResponse[]>([])
+const secretsLoaded = ref(false)
 
 // Apply-secrets propagation (#11719): which keys have a dependent-role
 // mapping, and the outcome of the last "Apply to services" run.
@@ -55,7 +56,9 @@ const EXPECTED_SECRETS = [
 ]
 
 const missingExpected = computed(() =>
-  EXPECTED_SECRETS.filter((e) => !secrets.value.some((s) => s.key === e.key))
+  secretsLoaded.value
+    ? EXPECTED_SECRETS.filter((e) => !secrets.value.some((s) => s.key === e.key))
+    : []
 )
 
 function setExpected(entry: (typeof EXPECTED_SECRETS)[number]): void {
@@ -82,7 +85,9 @@ async function fetchSecrets(): Promise<void> {
   error.value = null
   try {
     secrets.value = await api.listSecrets()
+    secretsLoaded.value = true
   } catch (e: unknown) {
+    secretsLoaded.value = false
     const err = e as { response?: { data?: { detail?: string } } }
     error.value =
       err.response?.data?.detail || t('settings.admin.secretsSettings.failedToLoadSecrets')
