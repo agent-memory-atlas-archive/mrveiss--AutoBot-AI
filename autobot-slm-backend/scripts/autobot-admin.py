@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import time
+from pathlib import Path
 
 # Stdlib logging, as in the other SLM code: the SLM test conftest mocks config, which
 # autobot_shared.logging_manager reads at import (CLAUDE.md's stated exception). This CLI also runs
@@ -32,26 +33,19 @@ logger = logging.getLogger("autobot-admin")
 #: here, and repo_tests/defined_twice_18094_test.py holds the two equal (#18094).
 _INSTALL_ROOT = "/opt/autobot"  # noqa: ssot-path -- the pinned standalone copy described above
 
+# The slm_manager role syncs autobot_shared under the install root on this host, so putting the root on
+# the path lets the one .env parser be imported instead of copied (#19232). Appended: never shadows stdlib.
+if _INSTALL_ROOT not in sys.path:
+    sys.path.append(_INSTALL_ROOT)
+
+from autobot_shared.env_file import parse_env_file  # noqa: E402 -- needs the path entry above
+
 
 def load_env_file(path: str) -> dict:
-    """Load key=value pairs from an env file, ignoring comments and blanks.
-
-    A recorded copy of ``autobot_shared.env_file.parse_env_text`` (#19232): installed as
-    ``/usr/local/bin/autobot-admin`` and run by the system interpreter, which has the install
-    root on no import path, so ``autobot_shared`` cannot be imported -- see
-    ARCHITECTURE_EXCEPTIONS.md ("autobot-admin CLI").
-    """
-    env: dict = {}
+    """Key=value pairs of *path* via ``autobot_shared.env_file.parse_env_file``; a missing file is ``{}``."""
     if not os.path.exists(path):
-        return env
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            env[key.strip()] = val.strip().strip('"').strip("'")
-    return env
+        return {}
+    return parse_env_file(Path(path))
 
 
 def get_db_url() -> str:

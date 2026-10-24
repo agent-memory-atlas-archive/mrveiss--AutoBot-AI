@@ -52,10 +52,6 @@ _ANSIBLE = "autobot-slm-backend/ansible"
 KNOWN_INSTALL_ROOT_LITERALS: dict[str, tuple[int, str]] = {
     "autobot-slm-backend/services/code_distributor.py": (1, "#15708 (SLM_REPO_PATH, two modules disagree)"),
     "autobot-slm-backend/services/git_tracker.py": (1, "#15708 (SLM_REPO_PATH, two modules disagree)"),
-    "autobot_shared/redis_management/types.py": (
-        1,
-        "owned by #19232 (rewrites this YAML resolver; one file, one PR)",
-    ),
     "autobot-backend/security/enterprise/compliance_manager.py": (
         1,
         "historical: the literal junk-directory NAME the unexpanded #13658 placeholder created, matched "
