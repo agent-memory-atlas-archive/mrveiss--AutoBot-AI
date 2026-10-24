@@ -37,7 +37,7 @@ from typing import Any, Dict, List
 import numpy as np
 
 from autobot_shared.logging_manager import get_llm_logger
-from autobot_shared.pinned_model_registry import get_pinned_revision
+from autobot_shared.pinned_model_registry import get_pinned_revision, load_verified
 
 logger = get_llm_logger("semantic_chunker_base")
 
@@ -48,10 +48,17 @@ SENTENCE_EMBEDDING_FALLBACKS = ("sentence-transformers/all-mpnet-base-v2", "sent
 
 
 def load_sentence_transformer(model_name: str, **kwargs: Any):
-    """*model_name* at its pinned revision; an unregistered name raises KeyError (#19430)."""
+    """*model_name* at its pinned revision, its cached weights checked against the pinned digests
+    before it is returned (#19430). An unregistered name raises KeyError, a digest mismatch
+    ModelIntegrityError -- never a model that was not verified.
+
+    The first load after this pin downloads the pinned snapshot once, even where the Hub's moving
+    default is already cached; an offline host needs that snapshot cached first.
+    """
     from sentence_transformers import SentenceTransformer
 
-    return SentenceTransformer(model_name, revision=get_pinned_revision(model_name), **kwargs)
+    (model,) = load_verified(model_name, lambda revision: SentenceTransformer(model_name, revision=revision, **kwargs))
+    return model
 
 
 # Issue #380: Pre-compiled regex patterns for sentence splitting

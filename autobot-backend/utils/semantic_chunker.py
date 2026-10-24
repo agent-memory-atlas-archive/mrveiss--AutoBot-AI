@@ -244,7 +244,10 @@ class AutoBotSemanticChunker(SemanticChunkerBase):
             except Exception as fallback_error:
                 logger.error("Failed to load fallback model %s: %s", model_name, fallback_error)
 
-        raise RuntimeError("Could not initialize any embedding model")
+        raise RuntimeError(
+            "Could not initialize any embedding model: each loads at its pinned revision and is "
+            "verified against its digest, so an offline host needs the pinned snapshots cached once (#19430)"
+        )
 
     async def _initialize_model(self) -> None:
         """Lazy initialize the sentence-transformer model on first use (async, thread-pool)."""

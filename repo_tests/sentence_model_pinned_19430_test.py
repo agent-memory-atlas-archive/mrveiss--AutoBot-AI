@@ -82,22 +82,67 @@ def test_each_model_name_is_written_once() -> None:
     assert len(hits) == 3 and all(h.startswith("autobot-backend/utils/semantic_chunker_base.py") for h in hits), hits
 
 
+def _is_pin(revision: str) -> bool:
+    """A full lowercase commit SHA -- never a branch, a tag, or a short or upper-case id."""
+    return re.fullmatch(r"[0-9a-f]{40}", revision) is not None
+
+
+def _loader_is_verified(source: str) -> bool:
+    """``load_sentence_transformer`` loads through ``load_verified(model_name, lambda revision: ...)``
+    and passes that ``revision`` on, so the pin is used and the digests are checked before return."""
+    loader = next(
+        (n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "load_sentence_transformer"),
+        None,
+    )
+    if loader is None:
+        return False
+    for call in (
+        n for n in ast.walk(loader) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "load_verified"
+    ):
+        if len(call.args) != 2 or ast.unparse(call.args[0]) != "model_name" or not isinstance(call.args[1], ast.Lambda):
+            continue
+        fn = call.args[1]
+        body = fn.body
+        if [a.arg for a in fn.args.args] == ["revision"] and isinstance(body, ast.Call):
+            if getattr(body.func, "id", "") == "SentenceTransformer":
+                return any(k.arg == "revision" and ast.unparse(k.value) == "revision" for k in body.keywords)
+    return False
+
+
+def test_the_pin_detector_refuses_anything_but_a_full_sha() -> None:
+    sha = "ab" * 20  # commit-shaped, low entropy: a real-looking hex literal trips detect-secrets
+    assert _is_pin(sha)
+    for bad in ("main", "", sha[:-1], sha.upper(), sha + "c", "v1.0"):
+        assert not _is_pin(bad), bad
+
+
+def test_the_loader_detector_refuses_an_unverified_or_unpinned_loader() -> None:
+    head = "def load_sentence_transformer(model_name, **kwargs):\n"
+    good = (
+        head
+        + "    (m,) = load_verified(model_name, lambda revision: SentenceTransformer(model_name, revision=revision))\n"
+    )
+    assert _loader_is_verified(good)
+    for bad in (
+        head
+        + "    return SentenceTransformer(model_name, revision=get_pinned_revision(model_name))\n",  # no digest check
+        head
+        + "    (m,) = load_verified(model_name, lambda revision: SentenceTransformer(model_name))\n",  # pin dropped
+        head
+        + "    (m,) = load_verified(model_name, lambda revision: SentenceTransformer(model_name, revision=None))\n",
+        head + "    (m,) = load_verified('x', lambda revision: SentenceTransformer(model_name, revision=revision))\n",
+        "def other(model_name):\n    return None\n",
+    ):
+        assert not _loader_is_verified(bad), bad
+
+
 def test_every_sentence_model_has_a_pinned_revision() -> None:
     constants = _base_constants()
     names = [constants["SENTENCE_EMBEDDING_MODEL"], *constants["SENTENCE_EMBEDDING_FALLBACKS"]]
     assert len(names) == 3
     for name in names:
-        assert re.fullmatch(r"[0-9a-f]{40}", get_pinned_revision(name)), name
+        assert _is_pin(get_pinned_revision(name)), name
 
 
-def test_the_loader_passes_the_pin() -> None:
-    loader = next(
-        node
-        for node in ast.parse(_BASE.read_text(encoding="utf-8")).body
-        if isinstance(node, ast.FunctionDef) and node.name == "load_sentence_transformer"
-    )
-    call = next(
-        n for n in ast.walk(loader) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "SentenceTransformer"
-    )
-    revision = next(k.value for k in call.keywords if k.arg == "revision")
-    assert ast.unparse(revision) == "get_pinned_revision(model_name)"
+def test_the_loader_loads_at_the_pin_and_verifies_the_digests() -> None:
+    assert _loader_is_verified(_BASE.read_text(encoding="utf-8"))
