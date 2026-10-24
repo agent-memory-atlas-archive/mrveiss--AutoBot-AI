@@ -78,6 +78,13 @@ _register(
     "slm",
 )
 _register(
+    "SLM_AUTH_LOOKUP_CACHE_TTL",
+    float,
+    60.0,
+    "Seconds an SLM process reuses its resolved API-key hashing setting (#19120); other workers follow within it.",
+    "slm",
+)
+_register(
     "SLM_HMAC_API_KEY_SECRET",
     str,
     "",

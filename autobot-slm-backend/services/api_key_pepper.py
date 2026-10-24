@@ -25,7 +25,7 @@ database, while ``APIKeyService`` runs on the ``slm_users`` session. The resolve
 therefore opens its own session on the main DB (``db_service.session()``, as SCIM's
 ``_load_scim_token`` does) and never takes the caller's.
 
-The result is cached per process for ``SLM_API_KEY_PEPPER_CACHE_TTL`` seconds and
+The result is cached per process for ``SLM_AUTH_LOOKUP_CACHE_TTL`` seconds and
 dropped at once when the secret is written through the secrets page
 (``invalidate_pepper_cache``); other workers pick a change up within the TTL. The
 "unset" WARNING is emitted at most once per TTL.
@@ -50,7 +50,7 @@ HMAC_PEPPER_DESCRIPTION = "Pepper for API-key hashing (#19120). Required to crea
 SECRETS_PAGE_PATH = "/slm/settings/admin/secrets"
 
 #: Seconds a resolved (or unset) pepper is reused by this process.
-PEPPER_CACHE_TTL_SECONDS = float(os.getenv("SLM_API_KEY_PEPPER_CACHE_TTL", "60"))
+PEPPER_CACHE_TTL_SECONDS = float(os.getenv("SLM_AUTH_LOOKUP_CACHE_TTL", "60"))
 
 WARN_UNCONFIGURED = (
     "API-key pepper is not configured: add the secret '%s' on the SLM page %s "
