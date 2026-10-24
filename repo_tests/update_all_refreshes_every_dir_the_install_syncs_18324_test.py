@@ -30,7 +30,9 @@ def _fresh_install_dirs() -> set[str]:
     """Top-level code_source dirs synced by main.yml and the files it includes."""
     main = (_ROLE_TASKS / "main.yml").read_text(encoding="utf-8")
     texts = [main] + [
-        (_ROLE_TASKS / name).read_text(encoding="utf-8") for name in _INCLUDE_LOCAL.findall(main) if (_ROLE_TASKS / name).is_file()
+        (_ROLE_TASKS / name).read_text(encoding="utf-8")
+        for name in _INCLUDE_LOCAL.findall(main)
+        if (_ROLE_TASKS / name).is_file()
     ]
     return {d for text in texts for d in _SRC.findall(text)}
 
