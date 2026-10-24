@@ -185,6 +185,22 @@ class TestContentKeyedPassCache:
         git(repo, "commit", "-qm", "docs")
         assert first != _run(repo, f'echo "key=$({key})"').stdout
 
+    def test_a_frontend_key_follows_the_install_and_is_empty_without_one(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        lock = repo / "app" / "node_modules" / ".package-lock.json"
+        probe = (
+            f"{_fn('fe_key')}\nproject=app; KIT_TREE=libs/autobot-ui; project_dir={repo}/app\n"
+            'fe_install=$(sha256sum "$project_dir/node_modules/.package-lock.json" 2>/dev/null | cut -c1-64)\n'
+            'fe_env="install=${fe_install}"; key=$(fe_key vitest sel); echo "key=[$key]"\n'
+            'stage_cached vitest "$key" || echo MISS'
+        )
+        assert "key=[]" in _run(repo, probe).stdout and "MISS" in _run(repo, probe).stdout
+        lock.parent.mkdir(parents=True)
+        lock.write_text('{"v": 1}', encoding="utf-8")
+        first = _run(repo, probe).stdout
+        lock.write_text('{"v": 2}', encoding="utf-8")
+        assert "key=[]" not in first and first != _run(repo, probe).stdout
+
     def test_the_cache_can_be_switched_off(self, tmp_path: Path) -> None:
         repo = _repo(tmp_path)
         _run(repo, _PASS)

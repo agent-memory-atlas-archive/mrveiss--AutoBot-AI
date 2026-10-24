@@ -220,15 +220,22 @@ stage_key() {
     done
   } | sha256sum | cut -c1-64
 }
+# A frontend stage's key: <stage> <selection>, over the app and kit trees and $fe_env; empty
+# (never cached) when the app's install has no hidden lockfile ($fe_install) to describe it.
+fe_key() {
+  [ -n "$fe_install" ] || return 0
+  stage_key "$1|${fe_env}|$2" "$project" "$KIT_TREE"
+}
 stage_marker() {
   local dir
   dir=$(stage_cache_dir) || return 1
   printf '%s/%s-%s' "$dir" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_')" "$2"
 }
-# 0 (and one OK line) when <name> passed before on exactly <key>.
+# 0 (and one OK line) when <name> passed before on exactly <key>. An EMPTY key means "the
+# inputs could not be described" -- never a hit, and stage_record never stores one.
 stage_cached() {
   local marker
-  [ "$STAGE_CACHE_OK" = "1" ] || return 1
+  [ "$STAGE_CACHE_OK" = "1" ] && [ -n "$2" ] || return 1
   marker=$(stage_marker "$1" "$2") && [ -f "$marker" ] || return 1
   ok "$1: unchanged since a recorded pass @ ${2:0:10}, skipped"
 }
@@ -927,9 +934,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     [ -n "$stale_deps" ] && warn "$stale_reason"
 
     # #19472: keyed on the app and kit trees, the changed paths its verdict filters on, the
-    # install's stale set and the node version -- a pass under one toolchain is not another's.
-    fe_env="node=$(node --version 2>/dev/null || echo none)|stale=$(echo $stale_deps)"
-    tsc_key=$(stage_key "vue-tsc|${fe_env}|${project_changed}|${kit_changed}" "$project" "$KIT_TREE")
+    # install's stale set, the node version and the INSTALL itself (npm's hidden lockfile,
+    # node_modules/.package-lock.json): a linked install upgraded in the main checkout under an
+    # unchanged tree is a different toolchain. No hidden lockfile -> no key -> no caching.
+    fe_install=$(sha256sum "$project_dir/node_modules/.package-lock.json" 2>/dev/null | cut -c1-64)
+    fe_env="node=$(node --version 2>/dev/null || echo none)|install=${fe_install}|stale=$(echo $stale_deps)"
+    tsc_key=$(fe_key vue-tsc "${project_changed}|${kit_changed}")
     if ! stage_cached "vue-tsc ${project}" "$tsc_key"; then
     stage_begin "vue-tsc ${project}" "$tsc_key"
     (
@@ -1046,7 +1056,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     all_tests=$(printf "%s\n%s" "$test_files" "$composable_tests" \
       | sort -u | grep -v '^$' || true)
 
-    vitest_key=$(stage_key "vitest|${fe_env}|${all_tests}" "$project" "$KIT_TREE")
+    vitest_key=$(fe_key vitest "${all_tests}")
     if [ -n "$all_tests" ] && ! stage_cached "vitest ${project}" "$vitest_key"; then
     stage_begin "vitest ${project}" "$vitest_key"
     (
@@ -1093,7 +1103,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # #17959: kit change -> this app's tests that depend on it. `vitest related`
     # walks the module graph, which reaches the kit through the in-tree alias, so
     # the selection is exactly the tests that import a changed kit file.
-    kit_key=$(stage_key "vitest related|${fe_env}|${kit_changed}" "$project" "$KIT_TREE")
+    kit_key=$(fe_key "vitest related" "${kit_changed}")
     if [ -n "$kit_changed" ] && ! stage_cached "vitest related ${project}" "$kit_key"; then
     stage_begin "vitest related ${project}" "$kit_key"
     (

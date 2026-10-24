@@ -76,14 +76,17 @@ def added_deps(base: str, head: str) -> list[tuple[str, str]]:
 
 
 def _required(manifest_dir: Path, keys: tuple[str, ...]) -> set[str]:
-    """Names one on-disk manifest declares under `keys`, minus peers marked optional."""
+    """Names one on-disk manifest declares under `keys`; a peer marked optional counts only
+    when another required key (dependencies, devDependencies) also declares it."""
     try:
         data = _parse((manifest_dir / _MANIFEST).read_text(encoding="utf-8"))
     except OSError:
         return set()
     meta = data.get("peerDependenciesMeta") or {}
     optional = {n for n, m in meta.items() if isinstance(m, dict) and m.get("optional")}
-    return {n for key in keys for n in (data.get(key) or {})} - optional
+    direct = {n for key in keys if key != "peerDependencies" for n in (data.get(key) or {})}
+    peers = set(data.get("peerDependencies") or {}) if "peerDependencies" in keys else set()
+    return direct | (peers - optional)
 
 
 def _installed(name: str, *starts: Path) -> bool:

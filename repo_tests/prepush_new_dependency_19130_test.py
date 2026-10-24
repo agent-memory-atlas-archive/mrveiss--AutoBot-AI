@@ -524,6 +524,16 @@ class TestAStaleInstallIsCouldNotRun:
         head = _git(root, "rev-parse", "HEAD")
         assert "stale=[dompurify]" in _stale(root, head, head).stdout
 
+    def test_an_optional_peer_that_is_also_a_direct_dependency_still_counts(self, tmp_path: Path) -> None:
+        app = {
+            "dependencies": {"foo": "1"},
+            "peerDependencies": {"foo": "1", "bar": "1"},
+            "peerDependenciesMeta": {"foo": {"optional": True}, "bar": {"optional": True}},
+        }
+        root = _stale_repo(tmp_path, app=app, kit={})
+        head = _git(root, "rev-parse", "HEAD")
+        assert "stale=[foo]" in _stale(root, head, head).stdout, "bar is only an optional peer; foo is direct"
+
     def test_a_dependency_the_push_adds_stays_with_the_19130_classifier(self, tmp_path: Path) -> None:
         root, base, head = _repo(tmp_path)
         _stage_tool(root)
