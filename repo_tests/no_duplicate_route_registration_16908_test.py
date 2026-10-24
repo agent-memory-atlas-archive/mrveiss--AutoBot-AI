@@ -64,15 +64,29 @@ def registered_routes(entries: list[tuple[Any, str, Any, str]]) -> tuple[list[Or
 
 
 @functools.lru_cache(maxsize=4)
+def _dumps(root: Path) -> dict[str, dict[str, Any]]:
+    """Both apps' JSON, dumped by two child interpreters running at once (the backend import dominates).
+
+    A failed child fails the guard loudly; it never reads as an empty app.
+    """
+    script = str(root / "repo_tests" / "_dump_real_routes.py")
+    kinds = {_BACKEND: "backend", _SLM: "slm"}
+    procs = {
+        app: subprocess.Popen(
+            [sys.executable, script, kind], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8"
+        )
+        for app, kind in kinds.items()
+    }
+    out: dict[str, dict[str, Any]] = {}
+    for app, proc in procs.items():
+        stdout, stderr = proc.communicate()
+        assert proc.returncode == 0, f"{app}: route dump failed rc={proc.returncode}\n{stderr[-2000:]}"
+        out[app] = json.loads(stdout.strip().splitlines()[-1])
+    return out
+
+
 def _dump(root: Path, app: str) -> dict[str, Any]:
-    """The child interpreter's JSON for *app*; a failed child fails the guard loudly, never reads as empty."""
-    script = root / "repo_tests" / "_dump_real_routes.py"
-    short = "backend" if app == _BACKEND else "slm"
-    done = subprocess.run(
-        [sys.executable, str(script), short], capture_output=True, text=True, encoding="utf-8", check=False
-    )
-    assert done.returncode == 0, f"{app}: route dump failed rc={done.returncode}\n{done.stderr[-2000:]}"
-    return json.loads(done.stdout.strip().splitlines()[-1])
+    return _dumps(root)[app]
 
 
 def _read(root: Path) -> dict[str, tuple[list[OrderedRoute], list[str]]]:
