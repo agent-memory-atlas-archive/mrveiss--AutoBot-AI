@@ -27,10 +27,12 @@ const props = withDefaults(
   { title: undefined, subtitle: undefined, level: 1, size: 'lg' },
 )
 
+// useSlots() is not reactive, so these are plain functions the render calls each time;
+// a computed would cache a slot the parent adds or removes later.
 const slots = useSlots()
 const heading = computed(() => `h${props.level}`)
-const hasTitle = computed(() => !!(props.title || slots.title))
-const hasSubtitle = computed(() => !!(props.subtitle || slots.subtitle))
+const hasTitle = () => !!(props.title || slots.title)
+const hasSubtitle = () => !!(props.subtitle || slots.subtitle)
 </script>
 
 <template>
@@ -38,14 +40,14 @@ const hasSubtitle = computed(() => !!(props.subtitle || slots.subtitle))
     <div v-if="$slots.breadcrumb" class="aui-page-header__breadcrumb">
       <slot name="breadcrumb" />
     </div>
-    <div v-if="hasTitle || $slots.leading || $slots.actions" class="aui-page-header__row">
+    <div v-if="hasTitle() || $slots.leading || $slots.actions" class="aui-page-header__row">
       <div class="aui-page-header__start">
         <slot name="leading" />
-        <div v-if="hasTitle" class="aui-page-header__text">
+        <div v-if="hasTitle()" class="aui-page-header__text">
           <component :is="heading" class="aui-page-header__title" :class="`aui-page-header__title--${size}`">
-            <slot name="title">{{ title }}</slot>
+            <span class="aui-page-header__title-text"><slot name="title">{{ title }}</slot></span>
           </component>
-          <p v-if="hasSubtitle" class="aui-page-header__subtitle">
+          <p v-if="hasSubtitle()" class="aui-page-header__subtitle">
             <slot name="subtitle">{{ subtitle }}</slot>
           </p>
         </div>
@@ -96,6 +98,11 @@ const hasSubtitle = computed(() => !!(props.subtitle || slots.subtitle))
   margin: 0;
   color: var(--aui-page-header-title-color, var(--aui-color-text));
   font-weight: var(--aui-font-weight-semibold);
+}
+
+/* text-overflow applies to this flex item (blockified), not to the flex row around it */
+.aui-page-header__title-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

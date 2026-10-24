@@ -276,7 +276,8 @@ function handleSourceChange(event: Event) {
   min-width: 0;
 }
 
-.selected-source-bar > i {
+/* Icon renders an <svg> with the class `icon`; target that, not the <i> it replaced */
+.selected-source-bar > .icon {
   color: var(--color-info);
   flex-shrink: 0;
 }

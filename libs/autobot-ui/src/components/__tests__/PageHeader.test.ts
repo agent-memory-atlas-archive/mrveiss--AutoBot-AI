@@ -6,6 +6,7 @@
 // when supplied.
 
 import { describe, it, expect } from 'vitest'
+import { defineComponent, h, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import PageHeader from '../PageHeader.vue'
 
@@ -60,5 +61,34 @@ describe('PageHeader', () => {
     expect(mount(PageHeader, { props: { title: 'A' } }).find('h1').classes()).toContain('aui-page-header__title--lg')
     const w = mount(PageHeader, { props: { title: 'Terminal', level: 2, size: 'sm' } })
     expect(w.find('h2').classes()).toContain('aui-page-header__title--sm')
+  })
+
+  it('follows a title or subtitle slot that a parent adds or removes later', async () => {
+    const shown = ref(false)
+    const Parent = defineComponent({
+      setup: () => () =>
+        h(PageHeader, null, shown.value
+          ? { title: () => 'Late title', subtitle: () => 'Late subtitle' }
+          : { default: () => 'toolbar' }),
+    })
+    const w = mount(Parent)
+    expect(w.find('h1').exists()).toBe(false)
+
+    shown.value = true
+    await nextTick()
+    expect(w.find('h1').text()).toBe('Late title')
+    expect(w.find('.aui-page-header__subtitle').text()).toBe('Late subtitle')
+
+    shown.value = false
+    await nextTick()
+    expect(w.find('h1').exists()).toBe(false)
+    expect(w.find('.aui-page-header__subtitle').exists()).toBe(false)
+  })
+
+  it('puts the title text in the element that truncates, not in the flex row', () => {
+    const w = mount(PageHeader, { props: { title: 'A very long chat session title' } })
+    const text = w.find('h1 .aui-page-header__title-text')
+    expect(text.exists()).toBe(true)
+    expect(text.text()).toBe('A very long chat session title')
   })
 })
