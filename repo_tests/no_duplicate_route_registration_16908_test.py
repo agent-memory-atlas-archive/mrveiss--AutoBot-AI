@@ -6,38 +6,35 @@ Starlette answers a request from the FIRST route that matches, so a second regis
 (method, path) is unreachable -- dead code that reads as a live endpoint, and a duplicate OpenAPI operation.
 Which copy won was decided by the order of two lists in two files, and nothing checked it.
 
-This guard reads the routes the way the running app registers them: ``autobot_shared/api_routing/route_order.py``
-flattens each app in registration order, ``include_router`` composition and ``@router.api_route`` included
-(the same read the #18720 shadow guard uses). It replaces the earlier AST guard, which had two blind spots
-this one closes:
+The BACKEND is read from the real router objects: ``load_core_routers()`` and ``load_optional_routers()`` are the
+two calls ``app_factory.py`` mounts from, and ``autobot_shared/api_routing/router_routes.effective_routes()``
+resolves nested ``include_router`` with its prefix. The design is the one commit ``f4e2d6badb`` (#16908) built and
+never landed; this revives it against the current loaders and replaces the AST guard, because two guards for one
+property is a fork. The AST read it replaces was blind to ``add_api_route``, loop-built routes and computed
+prefixes, and counted a router mounted twice as one entry. Here every occurrence is counted.
 
-* it keyed ``module:var`` into a SET, so a router mounted twice under the same name collapsed to one entry
-  (``chat_embed``, ``admin_retention_policies``, ``voice_bundle_user``, llc ``agent_hires``);
-* it could not see ``include_router`` at all (``chat_sessions``, ``knowledge_boards``,
-  ``knowledge_search_aggregator``, ``voice_bundle_admin``).
+The SLM backend is still read with ``autobot_shared/api_routing/route_order.py`` (source, ``ast``): it has no
+router-loader pair to call, so the real-object read is not available for it (tracked by #19033).
 
-Here every occurrence is counted, so a repeat is a repeat whatever module or router object produced it.
-
-What it cannot see, stated so a green run reads correctly: routes added by ``add_api_route`` or a loop, a
-router mounted with a computed ``prefix=``, and anything outside the ``/api`` mounts. Source it could not
-resolve is asserted empty, never counted as "no routes".
+What it cannot see, stated so a green run reads correctly: the three routers ``app_factory.py`` mounts
+directly (``/v1`` OpenAI and Anthropic compat, ``/.well-known`` JWKS), the SLM's runtime-only routes, and any
+route a router adds after import. A route whose mount path cannot be recovered is asserted empty, never skipped.
 """
 
 from __future__ import annotations
 
 import collections
 import functools
+import logging
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from repo_tests._paths import repo_root
 
-from autobot_shared.api_routing.route_order import (
-    OrderedRoute,
-    RouteOrder,
-    backend_routes,
-    slm_routes,
-)
+from autobot_shared.api_routing.route_order import OrderedRoute, RouteOrder, slm_routes
+from autobot_shared.api_routing.router_routes import effective_routes
 
 _BACKEND = "autobot-backend"
 _SLM = "autobot-slm-backend"
@@ -47,8 +44,10 @@ _ROOT = repo_root()
 #: Resolving them is a judgement (they differ in declared auth and capability), owned by #18721 -- decision
 #: pending. SHRINK-ONLY: entries leave when #18721 lands, and none may be added; a new duplicate is what
 #: this guard is for.
-#: Measured 2026-10-21: 364 backend and 53 SLM source files parsed; floors leave ~20% headroom.
-BACKEND_PARSED_FLOOR = 290
+#: Population floors, measured 2026-10-24 under Python 3.14.6 / fastapi 0.141.1: 276 registry entries and
+#: 2567 backend routes; 53 SLM source files parsed. Each floor leaves ~20% headroom.
+BACKEND_REGISTRATIONS_FLOOR = 220
+BACKEND_ROUTES_FLOOR = 2000
 SLM_PARSED_FLOOR = 42
 KNOWN_DUPLICATES = {
     ("POST", "/api/voice/realtime/tools/call"): "#18721",
@@ -56,18 +55,55 @@ KNOWN_DUPLICATES = {
 }
 
 
-#: app name -> source files the read parsed (the reach of the sweep), filled by ``_read``.
+#: app name -> source files the SLM read parsed (the reach of that sweep), filled by ``_read``.
 _PARSED: dict[str, int] = {}
+#: Registry entries ``load_core_routers()`` + ``load_optional_routers()`` returned (the backend's reach).
+_REGISTRATIONS: list[int] = []
+
+
+def registered_routes(entries: list[tuple[Any, str, Any, str]]) -> tuple[list[OrderedRoute], list[str]]:
+    """``(routes, unrecoverable)`` for registry tuples ``(router, prefix, tags, name)``, mounted at ``/api``.
+
+    ``app_factory.py`` does ``app.include_router(router, prefix=f"/api{prefix}")``; this applies the same prefix to
+    ``effective_routes(router)``. A route whose full path could not be recovered is listed, never dropped.
+    """
+    routes: list[OrderedRoute] = []
+    unrecoverable: list[str] = []
+    for router, prefix, _tags, name in entries:
+        for mounted in effective_routes(router):
+            if not mounted.prefix_complete:
+                unrecoverable.append(f"{name}:{mounted.path}")
+                continue
+            endpoint = getattr(mounted.route, "endpoint", None)
+            site = f"{name}:{getattr(endpoint, '__module__', '?')}.{getattr(endpoint, '__qualname__', '?')}"
+            for method in mounted.methods or {"WEBSOCKET"}:
+                routes.append(OrderedRoute(method, f"/api{prefix}{mounted.path}", site))
+    return routes, unrecoverable
+
+
+def _backend_entries() -> list[tuple[Any, str, Any, str]]:
+    """The same two loader calls ``app_factory.py`` makes, in the same order."""
+    backend = str(_ROOT / _BACKEND)
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    from initialization.router_registry.core_routers import load_core_routers
+    from initialization.routers import load_optional_routers
+
+    logging.disable(logging.INFO)  # the loaders log one line per router
+    try:
+        return [*load_core_routers(), *load_optional_routers()]
+    finally:
+        logging.disable(logging.NOTSET)
 
 
 @functools.lru_cache(maxsize=4)
 def _read(root: Path) -> dict[str, tuple[list[OrderedRoute], list[str]]]:
-    out = {}
-    for name, reader in ((_BACKEND, backend_routes), (_SLM, slm_routes)):
-        order = RouteOrder(root / name)
-        out[name] = (reader(order), list(order.unresolved))
-        _PARSED[name] = len(order.parsed)
-    return out
+    entries = _backend_entries()
+    _REGISTRATIONS[:] = [len(entries)]
+    order = RouteOrder(root / _SLM)
+    slm = slm_routes(order)  # parses lazily: the reach is only known after the read
+    _PARSED[_SLM] = len(order.parsed)
+    return {_BACKEND: registered_routes(entries), _SLM: (slm, list(order.unresolved))}
 
 
 def duplicates(routes: list[OrderedRoute]) -> dict[tuple[str, str], list[str]]:
@@ -102,10 +138,12 @@ def test_the_allowlist_names_its_owning_issue() -> None:
 
 def test_the_reader_reached_both_apps() -> None:
     apps = _read(_ROOT)
-    # Reach is the source files parsed, not the routes found: a route count can stay high while whole
-    # modules silently stop being read. The route floors stay as a second, independent instrument.
-    assert _PARSED[_BACKEND] > BACKEND_PARSED_FLOOR and _PARSED[_SLM] > SLM_PARSED_FLOOR, dict(_PARSED)
-    assert len(apps[_BACKEND][0]) > 1500 and len(apps[_SLM][0]) > 200, "the route read has drifted and is blind"
+    # Reach first, routes second: registry entries (backend) and source files parsed (SLM) say whether whole
+    # modules silently stopped being read; the route counts stay as a second, independent instrument. A broken
+    # import must not let the guard pass by finding nothing.
+    assert _REGISTRATIONS[0] > BACKEND_REGISTRATIONS_FLOOR, _REGISTRATIONS
+    assert _PARSED[_SLM] > SLM_PARSED_FLOOR, dict(_PARSED)
+    assert len(apps[_BACKEND][0]) > BACKEND_ROUTES_FLOOR and len(apps[_SLM][0]) > 200, "the route read has drifted"
 
 
 # -- the guard proved by plant --------------------------------------------------------------------------
@@ -201,3 +239,43 @@ def test_a_duplicate_websocket_route_is_caught(tmp_path: Path) -> None:
     )
     dupes = duplicates(slm_routes(RouteOrder(tmp_path)))
     assert set(dupes) == {("WEBSOCKET", "/api/ws"), ("GET", "/api/ws")}
+
+
+# -- the real-router read proved by plant (#17325) -------------------------------------------------------
+
+
+def _router_with(path: str, prefix: str = "") -> Any:
+    from fastapi import APIRouter
+
+    router = APIRouter(prefix=prefix)
+    router.add_api_route(path, lambda: None, methods=["GET"])
+    return router
+
+
+def _nested(child: Any) -> Any:
+    from fastapi import APIRouter
+
+    parent = APIRouter()
+    parent.include_router(child, prefix="/inner")
+    return parent
+
+
+def test_a_duplicate_inside_an_included_sub_router_is_caught() -> None:
+    """The case the AST guard missed: one route reached through ``include_router`` with its own prefix."""
+    flat = _router_with("/inner/dup")
+    nested = _nested(_router_with("/dup"))
+    routes, unrecoverable = registered_routes([(flat, "/x", [], "flat"), (nested, "/x", [], "nested")])
+    assert not unrecoverable
+    assert set(duplicates(routes)) == {("GET", "/api/x/inner/dup")}
+
+
+def test_a_two_level_include_prefix_is_recovered_whole() -> None:
+    routes, unrecoverable = registered_routes([(_nested(_nested(_router_with("/leaf", "/own"))), "/p", [], "deep")])
+    assert not unrecoverable
+    assert [r.path for r in routes] == ["/api/p/inner/inner/own/leaf"]
+
+
+def test_the_same_router_registered_twice_by_the_registry_is_caught() -> None:
+    router = _router_with("/dup")
+    routes, _ = registered_routes([(router, "/x", [], "a"), (router, "/x", [], "a")])
+    assert len(duplicates(routes)[("GET", "/api/x/dup")]) == 2
