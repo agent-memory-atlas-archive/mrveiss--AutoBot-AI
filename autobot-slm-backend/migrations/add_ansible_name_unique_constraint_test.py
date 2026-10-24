@@ -12,51 +12,37 @@ migration error fatal (#19371) that stopped the container from starting.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from migrations import add_ansible_name_unique_constraint as migration
 from migrations import utils as migration_utils
 
 
-class _Cursor:
-    """Answers the two existence probes the migration issues and records DDL."""
+def _cursor(has_nodes: bool, has_unique: bool) -> MagicMock:
+    """A MagicMock cursor answering the two existence probes; DDL lands in ``.ddl``."""
+    cursor = MagicMock()
+    cursor.ddl = []
+    state = {"row": None}
 
-    def __init__(self, has_nodes: bool, has_unique: bool):
-        self._has_nodes = has_nodes
-        self._has_unique = has_unique
-        self._row = None
-        self.ddl: list = []
-
-    def execute(self, sql, params=None):
+    def execute(sql, params=None):
         if "information_schema.tables" in sql:
-            self._row = (self._has_nodes and params == ("nodes",),)
+            state["row"] = (has_nodes and params == ("nodes",),)
         elif "pg_index" in sql:
-            self._row = (self._has_unique,)
+            state["row"] = (has_unique,)
         else:
-            self.ddl.append(sql)
-            self._row = None
+            cursor.ddl.append(sql)
+            state["row"] = None
 
-    def fetchone(self):
-        return self._row
-
-
-class _Connection:
-    def __init__(self, cursor: _Cursor):
-        self._cursor = cursor
-        self.committed = False
-        self.closed = False
-
-    def cursor(self):
-        return self._cursor
-
-    def commit(self):
-        self.committed = True
-
-    def close(self):
-        self.closed = True
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: state["row"]
+    return cursor
 
 
 def _run(monkeypatch, has_nodes: bool, has_unique: bool):
-    cursor = _Cursor(has_nodes, has_unique)
-    conn = _Connection(cursor)
+    cursor = _cursor(has_nodes, has_unique)
+    # A sync psycopg connection: a MagicMock records commit()/close() calls.
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
     monkeypatch.setattr(migration, "get_connection", lambda db_url: conn)
     migration_utils.reset_deferrals()
     migration.migrate("postgresql://unused")
@@ -67,7 +53,7 @@ def test_fresh_db_defers_instead_of_failing(monkeypatch):
     cursor, conn = _run(monkeypatch, has_nodes=False, has_unique=False)
     assert cursor.ddl == []
     assert migration_utils.deferrals() == ["nodes.uq_nodes_ansible_name"]
-    assert conn.closed
+    conn.close.assert_called_once()
 
 
 def test_existing_db_without_unique_index_creates_it(monkeypatch):
@@ -75,7 +61,8 @@ def test_existing_db_without_unique_index_creates_it(monkeypatch):
     assert len(cursor.ddl) == 1
     assert cursor.ddl[0].startswith("CREATE UNIQUE INDEX uq_nodes_ansible_name ON nodes (ansible_name)")
     assert migration_utils.deferrals() == []
-    assert conn.committed and conn.closed
+    conn.commit.assert_called_once()
+    conn.close.assert_called_once()
 
 
 def test_existing_unique_index_is_not_duplicated(monkeypatch):
@@ -83,4 +70,5 @@ def test_existing_unique_index_is_not_duplicated(monkeypatch):
     cursor, conn = _run(monkeypatch, has_nodes=True, has_unique=True)
     assert cursor.ddl == []
     assert migration_utils.deferrals() == []
-    assert conn.committed and conn.closed
+    conn.commit.assert_called_once()
+    conn.close.assert_called_once()
