@@ -82,8 +82,9 @@ _register(
     str,
     "",
     (
-        "Pepper for SLM API-key hashing (#16299). No default: unset makes creating a key "
-        "fail closed; existing keys still verify through the legacy path with a WARNING."
+        "One-time import source for the API-key pepper (#16299, #19120). The pepper lives in "
+        "the SLM secrets store (secret slm_hmac_api_key_secret); this value is imported into it "
+        "when the store has none. No default: with neither set, creating a key fails closed."
     ),
     "slm",
 )

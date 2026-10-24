@@ -17,7 +17,11 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from config import settings
+from services.api_key_pepper import (
+    HMAC_PEPPER_KEY,
+    SECRETS_PAGE_PATH,
+    resolve_hmac_api_key_secret,
+)
 from user_management.models.api_key import APIKey
 from user_management.services.base_service import BaseService
 
@@ -27,14 +31,8 @@ logger = logging.getLogger(__name__)
 # SUNSET (#16299): this literal was the in-repo default of SLM_HMAC_API_KEY_SECRET
 # and is public. It exists ONLY to verify rows hashed before the default was
 # removed; it must never hash a new key. Remove once every install has set
-# SLM_HMAC_API_KEY_SECRET and its keys have been re-hashed on use or reissued.
+# the pepper (secrets page) and its keys have been re-hashed on use or reissued.
 _LEGACY_PUBLIC_PEPPER = "autobot-api-key-v1"
-
-_WARN_PEPPER_UNCONFIGURED = (
-    "SLM_HMAC_API_KEY_SECRET is not set: API keys verify only through the "
-    "legacy public-pepper path and are not re-hashed. Set the variable in "
-    "/etc/autobot/slm-secrets.env."
-)
 
 
 class APIKeyServiceError(Exception):
@@ -57,8 +55,9 @@ class APIKeyService(BaseService):
         expires_days: int | None = None,
     ) -> tuple:
         """Create a new API key."""
+        pepper = await self._require_pepper()
         plaintext_key = self._generate_key()
-        key_hash = self._hash_key(plaintext_key)
+        key_hash = self._hash_key(plaintext_key, pepper)
         key_prefix = plaintext_key[:12]
 
         expires_at = self._calculate_expiration(expires_days)
@@ -88,13 +87,12 @@ class APIKeyService(BaseService):
         Order: current secret -> legacy public-pepper HMAC -> bare SHA-256.
         A legacy match is re-hashed with the current secret when one is set.
         """
+        pepper = await resolve_hmac_api_key_secret(self.session)
         api_key = None
-        if settings.hmac_api_key_secret:
-            api_key = await self._find_by_hash(self._hash_key(plaintext_key))
-        else:
-            logger.warning(_WARN_PEPPER_UNCONFIGURED)
+        if pepper:
+            api_key = await self._find_by_hash(self._hash_key(plaintext_key, pepper))
         if api_key is None:
-            api_key = await self._try_legacy_hash(plaintext_key)
+            api_key = await self._try_legacy_hash(plaintext_key, pepper)
 
         if not api_key or not api_key.is_valid:
             return None
@@ -108,7 +106,17 @@ class APIKeyService(BaseService):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def _try_legacy_hash(self, plaintext_key: str) -> APIKey | None:
+    async def _require_pepper(self) -> str:
+        """Pepper for a NEW hash, or fail closed (#16299, #19120)."""
+        pepper = await resolve_hmac_api_key_secret(self.session)
+        if not pepper:
+            raise RuntimeError(
+                f"API-key pepper is not configured: add the secret '{HMAC_PEPPER_KEY}' on "
+                f"the SLM page {SECRETS_PAGE_PATH}. Refusing to hash with a built-in default."
+            )
+        return pepper
+
+    async def _try_legacy_hash(self, plaintext_key: str, pepper: str | None) -> APIKey | None:
         """Verify read-only against legacy hashes; re-hash on match (#2083, #16299)."""
         for legacy_hash in (
             self._hash_key_public_pepper(plaintext_key),
@@ -116,14 +124,14 @@ class APIKeyService(BaseService):
         ):
             api_key = await self._find_by_hash(legacy_hash)
             if api_key is not None:
-                await self._rehash_if_configured(api_key, plaintext_key)
+                await self._rehash_if_configured(api_key, plaintext_key, pepper)
                 return api_key
         return None
 
-    async def _rehash_if_configured(self, api_key: APIKey, plaintext_key: str) -> None:
-        if not settings.hmac_api_key_secret:
+    async def _rehash_if_configured(self, api_key: APIKey, plaintext_key: str, pepper: str | None) -> None:
+        if not pepper:
             return
-        api_key.key_hash = self._hash_key(plaintext_key)
+        api_key.key_hash = self._hash_key(plaintext_key, pepper)
         await self.session.flush()
         logger.info("Migrated API key %s to the configured HMAC secret", api_key.id)
 
@@ -172,13 +180,14 @@ class APIKeyService(BaseService):
         ).hexdigest()
 
     @staticmethod
-    def _hash_key(key: str) -> str:
-        """Hash an API key with the configured secret (#1721, #2083, #16299).
+    def _hash_key(key: str, pepper: str) -> str:
+        """Hash an API key with the resolved pepper (#1721, #2083, #16299, #19120).
 
-        Used for every NEW hash. SLM_HMAC_API_KEY_SECRET unset raises
-        RuntimeError; the legacy pepper is never used here.
+        Used for every NEW hash; the legacy pepper is never used here.
         """
-        return APIKeyService._hmac_hex(settings.require_hmac_api_key_secret(), key)
+        if not pepper:
+            raise RuntimeError("API-key pepper is empty: refusing to hash")
+        return APIKeyService._hmac_hex(pepper, key)
 
     @staticmethod
     def _hash_key_public_pepper(key: str) -> str:
