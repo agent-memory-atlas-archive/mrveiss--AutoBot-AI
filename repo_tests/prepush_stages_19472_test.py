@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""pre-push stages run in parallel, a pass is cached by content, and train-* runs the guard set (#19472).
+
+The stage helpers are the hook's OWN functions, extracted verbatim and driven in a throwaway
+repo; train mode is driven through the whole hook. A reimplementation here would agree with
+itself and prove nothing.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+from repo_tests._paths import repo_root
+
+from autobot_shared.isolated_git import git, isolated_git_env, make_repo
+
+_HOOK = repo_root() / "tools" / "git-hooks" / "pre-push"
+_SOURCE = _HOOK.read_text(encoding="utf-8")
+_STAGE_FNS = (
+    "did_not_run",
+    "could_not_run",
+    "stage_cache_dir",
+    "stage_key",
+    "stage_marker",
+    "stage_cached",
+    "stage_begin",
+    "stage_exit",
+    "stage_track",
+    "stage_wait_all",
+    "stage_record",
+    "train_mode_ref",
+)
+_STUBS = (
+    "RED=; CLR=; EXIT_CODE=0; ALLOW_UNRUNNABLE=0; ALLOW_TIMEOUT=0; STAGE_CLEAN=1\n"
+    "STAGE_PIDS=(); STAGE_LOGS=(); STAGE_NAMES=(); STAGE_KEYS=()\n"
+    'ok() { echo "OK $*" >&2; }; fail() { echo "FAIL $*" >&2; }; warn() { echo "WARN $*" >&2; }\n'
+)
+
+
+def _fn(name: str) -> str:
+    match = re.search(rf"^{name}\(\) \{{\n(?:.*\n)*?\}}$", _SOURCE, re.MULTILINE)
+    assert match, f"the hook no longer defines {name} — move this test with it, do not delete it"
+    return match.group(0)
+
+
+def _stage(name: str, body: str) -> str:
+    """One stage, shaped exactly as the hook launches one."""
+    return (
+        f'key=$(stage_key "{name}" src)\n'
+        f'if ! stage_cached "{name}" "$key"; then\n'
+        f'stage_begin "{name}" "$key"\n'
+        f'( EXIT_CODE=0; STAGE_CLEAN=1\n{body}\nstage_exit ) </dev/null >"$STAGE_LOG" 2>&1 &\n'
+        "stage_track $!\nfi\n"
+    )
+
+
+def _run(repo: Path, *stages: str, **env: str) -> subprocess.CompletedProcess[str]:
+    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    script = "\n".join(
+        [
+            _STUBS,
+            f"local_sha={head}",
+            *(_fn(n) for n in _STAGE_FNS),
+            *stages,
+            "stage_wait_all",
+            'echo "exit=$EXIT_CODE"',
+        ]
+    )
+    full_env = {**isolated_git_env(), **env}
+    return subprocess.run(["bash", "-c", script], cwd=repo, capture_output=True, text=True, check=False, env=full_env)
+
+
+def _repo(tmp_path: Path, content: str = "one") -> Path:
+    repo = make_repo(tmp_path / "repo")
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "a.txt").write_text(content, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", content)
+    return repo
+
+
+_PASS = _stage("A", 'echo A1 >&2; sleep 0.3; echo A2 >&2; ok "A"')
+_FAIL = _stage("B", 'echo B1 >&2; sleep 0.1; echo B2 >&2; fail "B"; EXIT_CODE=1')
+_UNRUNNABLE = _stage("C", 'ALLOW_UNRUNNABLE=1; could_not_run "C" "no install"')
+
+
+class TestParallelStages:
+    def test_one_failing_stage_blocks_the_push(self, tmp_path: Path) -> None:
+        done = _run(_repo(tmp_path), _PASS, _FAIL)
+        assert "exit=1" in done.stdout
+
+    def test_all_passing_stages_pass(self, tmp_path: Path) -> None:
+        done = _run(_repo(tmp_path), _PASS, _stage("D", 'ok "D"'))
+        assert "exit=0" in done.stdout
+
+    def test_each_stage_prints_as_one_block(self, tmp_path: Path) -> None:
+        lines = _run(_repo(tmp_path), _PASS, _FAIL).stderr.splitlines()
+        assert lines[lines.index("A1") + 1] == "A2"
+        assert lines[lines.index("B1") + 1] == "B2"
+
+    def test_a_stage_failure_survives_an_earlier_parent_failure_reset(self, tmp_path: Path) -> None:
+        # The subshell resets EXIT_CODE; the parent's own earlier failure must still stand.
+        done = _run(_repo(tmp_path), "EXIT_CODE=1", _PASS)
+        assert "exit=1" in done.stdout
+
+    def test_serial_mode_reaches_the_same_verdict(self, tmp_path: Path) -> None:
+        done = _run(_repo(tmp_path), _PASS, _FAIL, AUTOBOT_PREPUSH_PARALLEL="0")
+        assert "exit=1" in done.stdout
+
+    def test_an_allowed_could_not_run_does_not_block(self, tmp_path: Path) -> None:
+        assert "exit=0" in _run(_repo(tmp_path), _UNRUNNABLE).stdout
+
+
+def _markers(repo: Path) -> list[Path]:
+    return sorted((repo / ".git" / "autobot-prepush-cache").glob("*"))
+
+
+class TestContentKeyedPassCache:
+    def test_a_pass_is_recorded_under_the_git_dir_and_a_hit_skips(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        assert "OK A" in _run(repo, _PASS).stderr
+        assert len(_markers(repo)) == 1
+        assert git(repo, "status", "--porcelain").stdout == "", "the cache must never land in the tree"
+        again = _run(repo, _PASS)
+        assert "A1" not in again.stderr
+        assert re.search(r"OK A: unchanged since a recorded pass @ [0-9a-f]{10}, skipped", again.stderr)
+
+    def test_a_changed_input_runs_again(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _run(repo, _PASS)
+        (repo / "src" / "a.txt").write_text("two", encoding="utf-8")
+        git(repo, "commit", "-qam", "two")
+        assert "A1" in _run(repo, _PASS).stderr
+
+    def test_a_fail_is_never_cached(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _run(repo, _FAIL)
+        assert _markers(repo) == []
+        assert "B1" in _run(repo, _FAIL).stderr
+
+    def test_an_allowed_could_not_run_is_never_cached(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _run(repo, _UNRUNNABLE)
+        assert _markers(repo) == []
+
+    def test_the_cache_can_be_switched_off(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _run(repo, _PASS)
+        assert "A1" in _run(repo, _PASS, AUTOBOT_PREPUSH_CACHE="0").stderr
+
+    def test_every_heavy_run_is_a_stage(self) -> None:
+        for name in ("vue-tsc ${project}", "vitest ${project}", "vitest related ${project}", "pytest", "train guards"):
+            assert f'stage_begin "{name}"' in _SOURCE, name
+        assert _SOURCE.count("stage_exit\n") >= 4
+        assert "  stage_wait_all\ndone\n" in _SOURCE, "every ref's stages are collected before the next ref"
+
+
+_GUARDS = re.search(r"train_guard_tests\(\) \{\n  cat <<'EOF'\n((?:.*\n)*?)EOF\n\}", _SOURCE)
+
+
+def _guard_list() -> list[str]:
+    assert _GUARDS, "the hook no longer lists the train guards — move this test with it"
+    return [line for line in _GUARDS.group(1).splitlines() if line]
+
+
+def _shim(tmp_path: Path) -> str:
+    """`python3` -> this interpreter (it has pytest); `gh` -> a no-PR answer, never the network."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    shims = {
+        "python3": f'#!/bin/sh\nexec "{sys.executable}" "$@"\n',
+        "gh": "#!/bin/sh\necho 'no pull requests found for branch' >&2\nexit 1\n",
+    }
+    for name, text in shims.items():
+        (bin_dir / name).write_text(text, encoding="utf-8")
+        (bin_dir / name).chmod(0o755)
+    return f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
+def _push(tmp_path: Path, branch: str) -> subprocess.CompletedProcess[str]:
+    repo = make_repo(tmp_path / "repo")
+    for guard in _guard_list():
+        (repo / guard).parent.mkdir(parents=True, exist_ok=True)
+        (repo / guard).write_text("def test_ok():\n    pass\n", encoding="utf-8")
+    (repo / "scripts" / "repin_reach_floors.py").write_text("print('OK nothing stale')\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "base")
+    base = git(repo, "rev-parse", "HEAD").stdout.strip()
+    git(repo, "update-ref", "refs/remotes/origin/main", base)
+    (repo / "mod.py").write_text("X = 1\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "change")
+    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    env = {**isolated_git_env(), "PATH": _shim(tmp_path), "AUTOBOT_PREPUSH_CACHE": "0"}
+    return subprocess.run(
+        ["bash", str(_HOOK)],
+        input=f"refs/heads/{branch} {head} refs/heads/{branch} {base}\n",
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=300,
+    )
+
+
+class TestTrainMode:
+    def test_only_train_refs_are_train_mode(self, tmp_path: Path) -> None:
+        script = f"{_fn('train_mode_ref')}\n" + "".join(
+            f"train_mode_ref {ref} && echo {ref}=train || echo {ref}=full\n"
+            for ref in ("refs/heads/train-x", "refs/heads/issue-x", "refs/heads/x-train-y", "refs/tags/train-x")
+        )
+        out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False).stdout
+        assert out.split() == [
+            "refs/heads/train-x=train",
+            "refs/heads/issue-x=full",
+            "refs/heads/x-train-y=full",
+            "refs/tags/train-x=full",
+        ]
+
+    def test_the_guard_set_is_the_fourteen_preflight_guards_and_each_exists(self) -> None:
+        guards = _guard_list()
+        assert len(guards) == len(set(guards)) == 14
+        assert [g for g in guards if not (repo_root() / g).is_file()] == []
+        assert "scripts/repin_reach_floors.py --check" in _SOURCE
+
+    def test_a_train_push_runs_only_the_guard_set(self, tmp_path: Path) -> None:
+        done = _push(tmp_path, "train-x")
+        assert "train mode: train-x runs only the fast guard set" in done.stderr
+        assert "train guards: 14 guard file(s) pass" in done.stderr, done.stderr[-3000:]
+        assert "pytest selection" not in done.stderr and "pytest selected" not in done.stderr
+        assert done.returncode == 0, done.stderr[-3000:]
+
+    def test_an_issue_push_runs_the_full_pre_push(self, tmp_path: Path) -> None:
+        done = _push(tmp_path, "issue-x")
+        assert "train mode" not in done.stderr
+        # The fixture carries no tools/lint, so Phase 0c's selection reports itself; it RAN.
+        assert "pytest selection" in done.stderr or "pytest selected" in done.stderr, done.stderr[-3000:]
