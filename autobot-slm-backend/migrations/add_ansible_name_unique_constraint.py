@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 INDEX_NAME = "uq_nodes_ansible_name"
 
+# A fixed DDL statement: no value reaches it at run time, so it is built once
+# here rather than formatted at the execute call.
+_CREATE_INDEX_SQL = "CREATE UNIQUE INDEX " + INDEX_NAME + " ON nodes (ansible_name) WHERE ansible_name IS NOT NULL"
+
 # Any single-column unique index on nodes.ansible_name: this migration's own
 # partial index, or the ``nodes_ansible_name_key`` constraint create_all builds
 # from the model's ``unique=True``. Either one already enforces #2011, so a
@@ -58,7 +62,7 @@ def _apply(cursor) -> None:
     if _has_unique_ansible_name(cursor):
         logger.info("Migration: nodes.ansible_name already has a unique index, skipping")
         return
-    cursor.execute(f"CREATE UNIQUE INDEX {INDEX_NAME} ON nodes (ansible_name) WHERE ansible_name IS NOT NULL")
+    cursor.execute(_CREATE_INDEX_SQL)
     logger.info("Migration: created unique index %s on nodes.ansible_name", INDEX_NAME)
 
 
