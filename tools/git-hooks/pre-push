@@ -188,14 +188,18 @@ stage_cache_usable() {
 # A process and every descendant (vitest/tsc sit under timeout under a subshell).
 stage_kill_tree() {
   local child
-  for child in $(pgrep -P "$1" 2>/dev/null); do stage_kill_tree "$child"; done
+  # pgrep where present; procps `ps --ppid` otherwise (a minimal image may lack pgrep).
+  for child in $(pgrep -P "$1" 2>/dev/null || ps -o pid= --ppid "$1" 2>/dev/null); do
+    stage_kill_tree "$child"
+  done
   kill "$1" 2>/dev/null
 }
 # INT/TERM: no stage outlives the hook, and no temp log is left behind.
 stage_abort() {
   local pid
-  for pid in "${STAGE_PIDS[@]}"; do stage_kill_tree "$pid"; done
-  rm -f "${STAGE_LOGS[@]}"
+  for pid in ${STAGE_PIDS[@]+"${STAGE_PIDS[@]}"}; do stage_kill_tree "$pid"; done
+  # ${a[@]+...}: an empty array under `set -u` aborts the trap on bash < 4.4.
+  rm -f ${STAGE_LOGS[@]+"${STAGE_LOGS[@]}"}
   exit 130
 }
 trap stage_abort INT TERM
@@ -363,15 +367,36 @@ node_modules_usable() {
 # failures that cost a merged train a CI round. The open-PR cap and PR-body checks still
 # run; commit-msg and the protected-branch refusal live in other hooks and are untouched.
 # ---------------------------------------------------------------------------
-# Args: <local ref> <remote ref> <base> <local sha>. BOTH refs must be train-* (so
-# `git push origin issue-x:train-x` is a full run), and the range must hold at least one
-# merge commit: a train is --no-ff merges of members plus in-train fix commits, so a rule
-# of "every first-parent commit is a merge" would reject the fixes; a range with no merge
-# at all is not a train, whatever it is called.
+# Args: <local ref> <remote ref> <base> <local sha>. 0 = train mode; otherwise TRAIN_OFF says why.
+# BOTH refs must be train-* (so `git push origin issue-x:train-x` is a full run), and the
+# range must be shaped like a train (train_range_ok).
 train_mode_ref() {
-  [[ "$1" == refs/heads/train-* ]] && [[ "$2" == refs/heads/train-* ]] || return 1
-  [ -n "$3" ] || return 1
-  [ "$(git rev-list --merges --count "$3..$4" 2>/dev/null || echo 0)" -gt 0 ]
+  TRAIN_OFF=""
+  if ! [[ "$1" == refs/heads/train-* && "$2" == refs/heads/train-* ]]; then
+    TRAIN_OFF="the local and the remote ref must both be refs/heads/train-*"
+  elif [ -z "$3" ]; then
+    TRAIN_OFF="no merge base with origin/main"
+  else
+    train_range_ok "$3" "$4"
+  fi
+  [ -z "$TRAIN_OFF" ]
+}
+# The FIRST-PARENT line of <base>..<sha> must be merges or `fix(train):` commits (the
+# trainmaster's in-train fix convention; CI stays their control), and at least one merge must
+# bring in something other than the base branch: a second parent outside <base>'s history.
+# Commits reached only through a merge's second parent are members' own work, which passed
+# their own pre-push. Sets TRAIN_OFF on a violation.
+train_range_ok() {
+  local base_for_train="$1" sha_for_train="$2" sha p1 p2 members=0
+  while read -r sha p1 p2 _; do
+    if [ -z "$p2" ]; then
+      [[ "$(git log -1 --format=%s "$sha")" == "fix(train):"* ]] && continue
+      TRAIN_OFF="first-parent commit ${sha:0:10} is neither a merge nor a fix(train): commit"
+      return
+    fi
+    git merge-base --is-ancestor "$p2" "$base_for_train" 2>/dev/null || members=$((members + 1))
+  done < <(git log --first-parent --format='%H %P' "$base_for_train..$sha_for_train" 2>/dev/null)
+  [ "$members" -gt 0 ] || TRAIN_OFF="no first-parent merge brings in anything but the base branch"
 }
 # The guard set, one repo path per line. A listed file that is gone fails the run: a
 # stale list would otherwise shrink the set with no word said.
@@ -415,14 +440,18 @@ run_train_guards() {
   out=$(cd "$REPO_ROOT" && timeout "$MAX_BUDGET" "$PYTEST_PYTHON" scripts/repin_reach_floors.py --check 2>&1) || rc=$?
   if [ "$rc" = "124" ]; then
     did_not_run "repin_reach_floors.py --check" "$MAX_BUDGET"
-  elif [ "$rc" != "0" ] && [ "$rc" != "2" ]; then
-    fail "repin_reach_floors.py --check crashed (exit ${rc}), so the reach-floor pins are NOT verified:"
-    printf '%s\n' "$out" | tail -20 >&2
-    EXIT_CODE=1
   elif printf '%s\n' "$out" | grep -qE '^(STALE|PIN)'; then
     fail "reach floors are stale -- run scripts/repin_reach_floors.py and commit:"
     printf '%s\n' "$out" | grep -E '^(STALE|PIN)' | head -20 >&2
     EXIT_CODE=1
+  elif [ "$rc" != "0" ] && [ "$rc" != "2" ]; then
+    fail "repin_reach_floors.py --check crashed (exit ${rc}), so the reach-floor pins are NOT verified:"
+    printf '%s\n' "$out" | tail -20 >&2
+    EXIT_CODE=1
+  elif [ "$rc" = "2" ]; then
+    # Not a failure (the modules need CI's deps), but those floors went unmeasured: say which.
+    warn "reach floors NOT measured for some guards: $(printf '%s\n' "$out" | grep -m1 '^ERROR:' || echo 'exit 2 without its ERROR line')"
+    ok "reach floors: nothing stale among the guards that imported"
   else ok "reach floors: repin_reach_floors.py --check reports nothing stale"; fi
 }
 # #18406: vitest prints a "Test Files" summary whenever it ran at least one test file,
@@ -829,8 +858,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
     stage_wait_all
     continue
-  elif [[ "$remote_ref" == refs/heads/train-* ]]; then
-    log "train mode OFF: needs a train-* local AND remote ref and at least one merge commit in the range -- a full run (#19472)"
+  elif [[ "$local_ref" == refs/heads/train-* || "$remote_ref" == refs/heads/train-* ]]; then
+    log "train mode OFF: ${TRAIN_OFF} -- a full run (#19472)"
   fi
 
   # ----- Frontend (TypeScript / Vue) --------------------------------------

@@ -219,8 +219,25 @@ def _shim(tmp_path: Path) -> str:
     return f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
-def _train_repo(tmp_path: Path, *, merge: bool = True) -> tuple[Path, str, str]:
-    """base on main, then the change -- as a --no-ff merge (a train) or a plain commit."""
+#: Train shapes: what lands on the train's first-parent line after the base.
+_SHAPES = {
+    "member": ("merge member",),
+    "plain": ("plain",),
+    "member+fix": ("merge member", "fix(train): train-x repair"),
+    "member+plain": ("merge member", "plain"),
+    "main+plain": ("merge main", "plain"),
+    "main+fix": ("merge main", "fix(train): train-x repair"),
+}
+
+
+def _commit(repo: Path, name: str, message: str) -> None:
+    (repo / name).write_text(f"{message}\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", message)
+
+
+def _train_repo(tmp_path: Path, shape: str = "member") -> tuple[Path, str, str]:
+    """base on main, then a `train` branch shaped per _SHAPES. Returns (repo, merge base with main, head)."""
     repo = make_repo(tmp_path / "repo")
     for guard in _guard_list():
         (repo / guard).parent.mkdir(parents=True, exist_ok=True)
@@ -228,21 +245,24 @@ def _train_repo(tmp_path: Path, *, merge: bool = True) -> tuple[Path, str, str]:
     (repo / "scripts" / "repin_reach_floors.py").write_text("print('OK nothing stale')\n", encoding="utf-8")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "base")
-    base = git(repo, "rev-parse", "HEAD").stdout.strip()
-    git(repo, "update-ref", "refs/remotes/origin/main", base)
-    if merge:
-        git(repo, "switch", "-qc", "member")
-    (repo / "mod.py").write_text("X = 1\n", encoding="utf-8")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-qm", "change")
-    if merge:
-        git(repo, "switch", "-q", "-")
-        git(repo, "merge", "-q", "--no-ff", "-m", "merge member", "member")
-    return repo, base, git(repo, "rev-parse", "HEAD").stdout.strip()
+    main = git(repo, "branch", "--show-current").stdout.strip()
+    git(repo, "switch", "-qc", "member")
+    _commit(repo, "mod.py", "member work")
+    git(repo, "switch", "-q", main)
+    _commit(repo, "main.txt", "main moves on")
+    git(repo, "switch", "-qc", "train", "HEAD~1")
+    for step in _SHAPES[shape]:
+        if step.startswith("merge "):
+            git(repo, "merge", "-q", "--no-ff", "-m", step, main if step == "merge main" else "member")
+        else:
+            _commit(repo, f"{len(step)}.txt", step)
+    git(repo, "update-ref", "refs/remotes/origin/main", main)
+    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    return repo, git(repo, "merge-base", head, main).stdout.strip(), head
 
 
-def _push(tmp_path: Path, local: str, remote: str, *, merge: bool = True) -> subprocess.CompletedProcess[str]:
-    repo, base, head = _train_repo(tmp_path, merge=merge)
+def _push(tmp_path: Path, local: str, remote: str, *, shape: str = "member") -> subprocess.CompletedProcess[str]:
+    repo, base, head = _train_repo(tmp_path, shape)
     env = {**isolated_git_env(), "PATH": _shim(tmp_path), "AUTOBOT_PREPUSH_CACHE": "0"}
     return subprocess.run(
         ["bash", str(_HOOK)],
@@ -292,7 +312,7 @@ class TestTrainMode:
             ("refs/tags/train-x", "refs/tags/train-x", base, "full"),
             ("refs/heads/train-x", "refs/heads/train-x", "", "full"),
         )
-        script = f"{_fn('train_mode_ref')}\n" + "".join(
+        script = f"{_fn('train_mode_ref')}\n{_fn('train_range_ok')}\n" + "".join(
             f'train_mode_ref {lr} {rr} "{b}" {head} && echo train || echo full\n' for lr, rr, b, _ in cases
         )
         out = subprocess.run(
@@ -300,15 +320,32 @@ class TestTrainMode:
         ).stdout.split()
         assert out == [c[3] for c in cases]
 
-    def test_a_range_with_no_merge_is_not_a_train(self, tmp_path: Path) -> None:
-        repo, base, head = _train_repo(tmp_path, merge=False)
+    @staticmethod
+    def _mode(tmp_path: Path, shape: str) -> str:
+        repo, base, head = _train_repo(tmp_path, shape)
         script = (
-            f'{_fn("train_mode_ref")}\ntrain_mode_ref refs/heads/train-x refs/heads/train-x {base} {head} || echo full'
+            f'{_fn("train_mode_ref")}\n{_fn("train_range_ok")}\n'
+            f'train_mode_ref refs/heads/train-x refs/heads/train-x {base} {head} && echo train || echo "full: $TRAIN_OFF"'
         )
         done = subprocess.run(
             ["bash", "-c", script], cwd=repo, capture_output=True, text=True, check=False, env=isolated_git_env()
         )
-        assert done.stdout.strip() == "full"
+        return done.stdout.strip()
+
+    def test_a_merged_member_plus_a_fix_train_commit_is_a_train(self, tmp_path: Path) -> None:
+        assert self._mode(tmp_path, "member+fix") == "train"
+
+    def test_a_merged_member_plus_an_unprefixed_commit_is_a_full_run(self, tmp_path: Path) -> None:
+        assert self._mode(tmp_path, "member+plain").startswith("full: first-parent commit ")
+
+    def test_merge_main_plus_a_plain_commit_is_a_full_run(self, tmp_path: Path) -> None:
+        assert self._mode(tmp_path, "main+plain").startswith("full: first-parent commit ")
+
+    def test_merging_only_the_base_branch_is_not_a_train(self, tmp_path: Path) -> None:
+        assert self._mode(tmp_path, "main+fix") == "full: no first-parent merge brings in anything but the base branch"
+
+    def test_a_range_with_no_merge_is_not_a_train(self, tmp_path: Path) -> None:
+        assert self._mode(tmp_path, "plain").startswith("full: ")
 
     def test_the_guard_set_is_the_fourteen_preflight_guards_and_each_exists(self) -> None:
         guards = _guard_list()
@@ -331,7 +368,8 @@ class TestTrainMode:
 
     def test_an_issue_branch_pushed_to_a_train_ref_runs_the_full_pre_push(self, tmp_path: Path) -> None:
         done = _push(tmp_path, "issue-x", "train-x")
-        assert "train mode OFF" in done.stderr and "train guards" not in done.stderr
+        assert "train mode OFF: the local and the remote ref must both be" in done.stderr
+        assert "train guards" not in done.stderr
         assert "pytest selection" in done.stderr or "pytest selected" in done.stderr, done.stderr[-3000:]
 
     def test_a_failing_train_guard_blocks(self, tmp_path: Path) -> None:
@@ -342,9 +380,18 @@ class TestTrainMode:
         done = _guards(tmp_path, repin="raise SystemExit(1)")
         assert "exit=1" in done.stdout and "crashed (exit 1)" in done.stderr
 
-    def test_a_repin_exit_2_without_stale_lines_is_clean(self, tmp_path: Path) -> None:
-        done = _guards(tmp_path, repin="raise SystemExit(2)")
+    def test_a_repin_exit_2_without_stale_lines_is_clean_but_names_the_unmeasured(self, tmp_path: Path) -> None:
+        repin = "import sys; print('ERROR: 1 guard module(s) failed to import: g', file=sys.stderr); sys.exit(2)"
+        done = _guards(tmp_path, repin=repin)
         assert "exit=0 clean=1" in done.stdout, done.stderr
+        assert (
+            "WARN reach floors NOT measured for some guards: ERROR: 1 guard module(s) failed to import: g"
+            in done.stderr
+        )
+
+    def test_a_repin_exit_1_with_stale_lines_is_stale_not_a_crash(self, tmp_path: Path) -> None:
+        done = _guards(tmp_path, repin="print('STALE x'); raise SystemExit(1)")
+        assert "reach floors are stale" in done.stderr and "crashed" not in done.stderr
 
     def test_a_repin_stale_line_blocks(self, tmp_path: Path) -> None:
         done = _guards(tmp_path, repin="print('STALE x')")
