@@ -236,8 +236,10 @@ def _configured_log_file(log_type: str) -> str | None:
     if value is None or (isinstance(value, str) and not value):
         return None
     path = _as_str_path(value)
-    if path is None:
+    if path is None or "\x00" in path:
+        # A NUL byte makes every filesystem call on the path raise ValueError (#19288).
         _warn_config_fallback(key, value, None)
+        return None
     return path
 
 
@@ -425,9 +427,13 @@ class LoggingManager:
         log_format = _get_config_manager().get_nested(key, _DEFAULT_FORMAT)
         if isinstance(log_format, str):
             try:
-                return logging.Formatter(log_format)
-            except ValueError:
-                pass  # an invalid %-style template; reported below and replaced by the default
+                formatter = logging.Formatter(log_format)
+                # Probe one record: a template naming a field a LogRecord lacks constructs fine
+                # and then fails on every record it formats (#19288).
+                formatter.format(logging.makeLogRecord({"msg": "probe"}))
+                return formatter
+            except (ValueError, KeyError, TypeError):
+                pass  # an unusable %-style template; reported below and replaced by the default
         _warn_config_fallback(key, log_format, _DEFAULT_FORMAT)
         return logging.Formatter(_DEFAULT_FORMAT)
 

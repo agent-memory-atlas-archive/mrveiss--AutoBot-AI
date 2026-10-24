@@ -94,7 +94,13 @@ def resolve_ws_token(websocket) -> str | None:
         route = websocket.url.path
         cooldown_key = _route_cooldown_key(route)
         if _fallback_cooldown.should_send(cooldown_key, AlertTier.ROUTINE):
-            logger.warning("WS auth via ?token= fallback, not subprotocol | path=%s", route)
+            # flood_exempt: _fallback_cooldown already bounds this to one line per route per window.
+            # The flood guard keys on the template, so it would drop the sixth DIFFERENT route.
+            logger.warning(
+                "WS auth via ?token= fallback, not subprotocol | path=%s",
+                route,
+                extra={"flood_exempt": True},
+            )
             _fallback_cooldown.record_sent(cooldown_key, AlertTier.ROUTINE)
     return token
 

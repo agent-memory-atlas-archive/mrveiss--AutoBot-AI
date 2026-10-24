@@ -86,6 +86,8 @@ def test_get_logger_succeeds_when_every_config_value_is_a_magicmock(tmp_path: Pa
         {"logging.file_handlers.backend": 42, "logging.format": 7, "logging.log_level": "LOUD"},
         {"logging.format": "%(unclosed", "logging.log_level": 7},
         {"logging.log_level": True},
+        {"logging.file_handlers.backend": "logs/a\x00b.log"},  # NUL: every filesystem call raises
+        {"logging.format": "%(missing)s"},  # constructs fine, then fails on every record
     ],
 )
 def test_get_logger_uses_defaults_for_wrong_typed_values(tmp_path: Path, bad: dict[str, object]) -> None:

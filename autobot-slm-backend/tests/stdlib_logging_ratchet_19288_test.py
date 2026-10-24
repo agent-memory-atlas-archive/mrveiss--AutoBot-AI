@@ -43,7 +43,8 @@ _SLM_MOVED = (
     "services.token_denylist",
 )
 
-_DETECTOR = re.compile(r"^[A-Za-z_]\w* = logging\.getLogger\(", re.MULTILINE)
+#: A plain or annotated (``logger: logging.Logger = ...``) module-level assignment.
+_DETECTOR = re.compile(r"^[A-Za-z_]\w*(?:\s*:\s*[^=\n]+)?\s*=\s*logging\.getLogger\(", re.MULTILINE)
 
 
 def _sources() -> list[Path]:
@@ -64,8 +65,15 @@ def _by_regex(paths: list[Path]) -> set[str]:
     return {str(p.relative_to(_SLM_ROOT)) for p in paths if _DETECTOR.search(p.read_text(encoding="utf-8"))}
 
 
+def _is_named_assignment(node: ast.stmt) -> bool:
+    """``name = value`` or ``name: T = value``; a bare annotation (no value) is not an assignment."""
+    if isinstance(node, ast.Assign):
+        return len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+    return isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None
+
+
 def _is_stdlib_logger(node: ast.stmt) -> bool:
-    if not (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
+    if not _is_named_assignment(node):
         return False
     call = node.value
     return (
@@ -107,6 +115,30 @@ def test_no_new_module_level_stdlib_logger_in_the_slm_backend() -> None:
     assert not new, f"new stdlib logger(s), use get_logger (#19288): {new}"
     stale = sorted(_baseline() - found)
     assert not stale, f"no longer stdlib, delete from {_BASELINE.name}: {stale}"
+
+
+_POSITIVE_FIXTURES = (
+    "logger = logging.getLogger(__name__)\n",
+    "logger: logging.Logger = logging.getLogger(__name__)\n",
+    "log:logging.Logger=logging.getLogger('x')\n",
+)
+_NEGATIVE_FIXTURES = (
+    "logger = get_logger(__name__)\n",
+    "logger: logging.Logger = get_logger(__name__)\n",
+    "logger: logging.Logger\n",
+    "def f():\n    logger = logging.getLogger(__name__)\n",
+)
+
+
+def test_both_detectors_agree_on_plain_and_annotated_fixtures() -> None:
+    for source in _POSITIVE_FIXTURES:
+        tree = ast.parse(source)
+        assert _DETECTOR.search(source), source
+        assert any(_is_stdlib_logger(node) for node in tree.body), source
+    for source in _NEGATIVE_FIXTURES:
+        tree = ast.parse(source)
+        assert not _DETECTOR.search(source), source
+        assert not any(_is_stdlib_logger(node) for node in tree.body), source
 
 
 def test_no_moved_module_is_back_on_the_baseline() -> None:

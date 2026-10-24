@@ -63,7 +63,7 @@ def run_sweep(
     pythonpath = os.pathsep.join(str(p) for p in (*roots, REPO_ROOT))
     env = {**os.environ, "PYTHONPATH": pythonpath, "AUTOBOT_LOGS_DIR": str(cwd / "logs")}
     spec = json.dumps({"modules": list(modules), "excluded": sorted(excluded)})
-    result = subprocess.run(  # noqa: S603 -- fixed interpreter and inline script, no user input
+    result = subprocess.run(  # noqa: S603  # nosec B603  # fixed interpreter and inline script, no user input
         [sys.executable, "-c", _SWEEP, spec],
         cwd=cwd,
         env=env,
