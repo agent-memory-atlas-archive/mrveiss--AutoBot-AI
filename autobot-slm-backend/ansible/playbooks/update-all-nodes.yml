@@ -1226,6 +1226,25 @@
       when: "'backend' in group_names"
       tags: [backend, systemd, unit]
 
+    # #18324: the deployed docs/ (read by the knowledge import) was synced only by
+    # the role's main.yml, which this playbook never runs, so it froze at the last
+    # provision. `tasks_from` the SAME file main.yml includes -- never a second
+    # rsync -- and it ends with a recorded-commit vs code_source check.
+    - name: "[PLAY 2] Backend | Refresh the deployed docs/ from code_source (#18324, #4100)"
+      ansible.builtin.include_role:
+        name: backend
+        tasks_from: docs_sync
+      when: "'backend' in group_names"
+      tags: [backend, docs]
+
+    # #18324: same class as docs/ -- the core plugins/ sync lived only in main.yml.
+    - name: "[PLAY 2] Backend | Refresh the core plugins/ from code_source (#18324, #10294)"
+      ansible.builtin.include_role:
+        name: backend
+        tasks_from: plugins_sync
+      when: "'backend' in group_names"
+      tags: [backend, plugins]
+
     # #14866: seed the access control enforcement posture on every update.
     # Provisioning alone is not enough: every host in the fleet was provisioned
     # before the seeder existed and nothing re-provisions a working box, so
