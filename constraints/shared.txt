@@ -23,3 +23,9 @@ openvino>=2026.4.1
 # croniter: the cron engine behind the shared 5-field validator, the backend triggers, the LLC
 # routine scheduler and the SLM schedule executor (#18449). Was declared in two files.
 croniter>=6.2.4
+
+# chromadb: the vector store client in the backend, the ai-stack container and code_analysis,
+# plus the standalone server venvs the ansible redis role and install-bare-metal.sh build.
+# Was declared in 6 places with 4 specs, one a live conflict (>=0.5) (#19478). The cap
+# guards against breaking API changes; 1.5.5+ regenerated its protos for protobuf 5.x (#4053).
+chromadb>=1.5.9,<2.0.0
