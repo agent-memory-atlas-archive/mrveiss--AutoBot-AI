@@ -359,7 +359,8 @@ jobs:
   lower-pins:
     name: Lower pins that main has moved under
     needs: duplication-guard
-    if: ${{ github.event_name == 'push' && needs.duplication-guard.result == 'success' }}
+    # The draft clause mirrors the dependency's own gate (#17957); on a push it is vacuous.
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && github.event_name == 'push' && needs.duplication-guard.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
