@@ -270,6 +270,17 @@ absent_added_deps() {
         printf '%s\n' "$name"
       done
 }
+# #19472: worktrees link node_modules to the main checkout's install (#16912) and nothing
+# refreshes it, so a dependency already declared on main can be missing from it -- dompurify
+# (#19118) read as 50+ vitest suites failing. Args: <diff-range base> <head> <project-dir>.
+# Prints the declared names (project + kit manifests, added_js_deps.py --stale) the install
+# lacks, minus those the push range adds: absent_added_deps' classifier (#19130) owns those.
+stale_installed_deps() {
+  local added
+  added=$(absent_added_deps "$1" "$2" "$3")
+  "$PYTEST_PYTHON" -I "$REPO_ROOT/tools/git-hooks/added_js_deps.py" --stale "$3" "$REPO_ROOT/$KIT_TREE" 2>/dev/null \
+    | grep -vxF -f <(printf '%s\n' "$added") || true
+}
 # Per FAILED TEST FILE, not per run (#19130): 0 only when every failed file in vitest's
 # output ($1) is a collection error -- vitest's `FAIL <file> [ <file> ]` header, a file that
 # never loaded -- whose only unresolved import is an added-and-absent dependency ($2,
@@ -672,6 +683,18 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     vitest_exit=0
     project_dir="$REPO_ROOT/$project"
 
+    # #19472: a declared dependency missing from the install is a stale node_modules, not a
+    # test verdict. Said up front; a run that then fails ONLY on those imports is COULD NOT
+    # RUN with that reason (never 50 blamed suites), and anything else is still judged. The
+    # runs are kept: a stale devDependency no test loads (a linter) must not cost the check.
+    # Owner ruling 2026-10-24: detect it and say so; nothing here installs.
+    stale_deps=""
+    if node_modules_usable "$project_dir"; then
+      stale_deps=$(stale_installed_deps "${base:-$remote_sha}" "$local_sha" "$project_dir")
+    fi
+    stale_reason="${project}/node_modules is stale — missing $(echo $stale_deps); the owner refreshes it with: npm ci (in ${project})"
+    [ -n "$stale_deps" ] && warn "$stale_reason"
+
     log "${project}: frontend files changed — running vue-tsc (timeout ${TYPE_CHECK_TIMEOUT}s)"
     if node_modules_usable "$project_dir"; then
       tsc_output=$(
@@ -718,6 +741,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
             echo "$relevant" | head -20 >&2
             could_not_run "vue-tsc (${project})" \
               "ran; only TS2307 for the new dependency (CI's npm ci verifies): $(echo $new_dep_absent)"
+          elif [ -n "$relevant" ] && [ -n "$stale_deps" ] \
+               && tsc_failed_on_new_dep_only "$relevant" "$stale_deps $new_dep_absent"; then
+            echo "$relevant" | head -20 >&2
+            could_not_run "vue-tsc (${project})" "ran; only TS2307 for a stale install: $stale_reason"
           elif [ -n "$relevant" ]; then
             fail "vue-tsc errors in CHANGED files (${project}, #5142):"
             echo "$relevant" | head -20 >&2
@@ -793,6 +820,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
            && vitest_failed_on_new_dep_only "$vitest_output" "$new_dep_absent"; then
         could_not_run "vitest (${project})" \
           "could not run (new dependency; CI's npm ci verifies): $(echo $new_dep_absent)"
+      elif [ "$vitest_exit" != "0" ] && [ -n "$stale_deps" ] \
+           && vitest_failed_on_new_dep_only "$vitest_output" "$stale_deps $new_dep_absent"; then
+        could_not_run "vitest (${project})" "$stale_reason"
       elif [ "$vitest_exit" != "0" ]; then
         fail "vitest failures (${project}, #5142):"
         failure_excerpt "$vitest_output" >&2
@@ -826,6 +856,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
            && vitest_failed_on_new_dep_only "$kit_output" "$new_dep_absent"; then
         could_not_run "vitest related (${project})" \
           "could not run (new dependency; CI's npm ci verifies): $(echo $new_dep_absent)"
+      elif [ "$kit_exit" != "0" ] && [ -n "$stale_deps" ] \
+           && vitest_failed_on_new_dep_only "$kit_output" "$stale_deps $new_dep_absent"; then
+        could_not_run "vitest related (${project})" "$stale_reason"
       elif [ "$kit_exit" != "0" ]; then
         fail "vitest failures after a ${KIT_TREE} change (${project}, #17959):"
         failure_excerpt "$kit_output" >&2
