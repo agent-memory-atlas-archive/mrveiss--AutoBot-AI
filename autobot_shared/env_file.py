@@ -26,7 +26,8 @@ def parse_env_text(text: str) -> Dict[str, str]:
     Handles:
     - Blank lines and comment lines (# ...)
     - KEY=value and KEY="value" and KEY='value'
-    - Inline comments stripped with care (only unquoted)
+    - Inline comments stripped with care: after a closing quote (``"2" # note``), or after
+      `` #`` in an unquoted value; a ``#`` inside quotes is data
 
     Callers that must keep their own file read next to a path guard (CodeQL
     py/path-injection wants the guard and the read in one scope, #16229) read the
@@ -39,16 +40,31 @@ def parse_env_text(text: str) -> Dict[str, str]:
             continue
         key, _, raw_val = line.partition("=")
         key = key.strip()
-        raw_val = raw_val.strip()
-        if len(raw_val) >= 2 and raw_val[0] in ('"', "'") and raw_val[-1] == raw_val[0]:
-            raw_val = raw_val[1:-1]  # surrounding quotes
-        else:
-            comment_idx = raw_val.find(" #")  # inline comment, unquoted values only
-            if comment_idx != -1:
-                raw_val = raw_val[:comment_idx].strip()
         if key:
-            result[key] = raw_val
+            result[key] = _value(raw_val.strip())
     return result
+
+
+def _quoted_value(raw_val: str) -> str | None:
+    """The text inside *raw_val*'s opening quote and its match, when only blank or a ``#`` comment follows."""
+    if raw_val[:1] not in ('"', "'"):
+        return None
+    end = raw_val.find(raw_val[0], 1)
+    if end == -1:
+        return None
+    rest = raw_val[end + 1 :].strip()
+    return raw_val[1:end] if not rest or rest.startswith("#") else None
+
+
+def _value(raw_val: str) -> str:
+    """One stripped value: ``"2" # note`` -> ``2``, ``"a # b"`` -> ``a # b``, ``2 # note`` -> ``2``."""
+    quoted = _quoted_value(raw_val)
+    if quoted is not None:
+        return quoted
+    if len(raw_val) >= 2 and raw_val[0] in ('"', "'") and raw_val[-1] == raw_val[0]:
+        return raw_val[1:-1]  # surrounding quotes with the same quote inside, as before
+    comment_idx = raw_val.find(" #")  # inline comment, unquoted values only
+    return raw_val[:comment_idx].strip() if comment_idx != -1 else raw_val
 
 
 def parse_env_file(env_path: Path) -> Dict[str, str]:

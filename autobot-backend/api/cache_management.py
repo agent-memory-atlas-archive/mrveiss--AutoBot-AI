@@ -44,11 +44,10 @@ router = APIRouter(tags=["cache_management"])
 _ESSENTIAL_CACHE_DATA_TYPES = ("templates", "system_status", "project_status")
 
 
-# The databases this API reports on and clears. Numbers come from the one name -> number
-# table (#19232); REDIS_DATABASES used to be a hand-kept copy that disagreed with it
-# (sessions 4, analytics 9). A name nothing declares maps to None; get_redis_client refuses it.
-_CACHE_DATABASE_NAMES = ("main", "knowledge", "prompts", "conversations", "sessions", "cache", "locks")
-_CACHE_DATABASE_NAMES += ("monitoring", "rate_limiting", "analytics", "websockets", "config")
+# The databases this API reports on and clears, numbers from the one name -> number table (#19232).
+# Only declared names: monitoring, rate_limiting, websockets and config are declared nowhere and
+# could only fail. A name the YAML later drops maps to None and is refused with a 400.
+_CACHE_DATABASE_NAMES = ("main", "knowledge", "prompts", "conversations", "sessions", "cache", "locks", "analytics")
 
 
 def redis_databases() -> Dict[str, int | None]:
@@ -180,10 +179,11 @@ async def clear_redis_cache(database: str):
             cleared_databases.append(result)
     else:
         databases = redis_databases()
-        if database not in databases:
+        if databases.get(database) is None:  # unknown here, or not declared by the YAML
+            available = [name for name, number in databases.items() if number is not None]
             raise HTTPException(
                 status_code=400,
-                detail=(f"Unknown database '{database}'. " f"Available: {list(databases.keys())}"),
+                detail=f"Unknown database '{database}'. Available: {available}",
             )
         db_number = databases[database]
         redis_conn = get_cache_redis_connection(database)

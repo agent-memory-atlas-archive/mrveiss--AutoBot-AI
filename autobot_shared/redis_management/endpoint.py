@@ -120,6 +120,45 @@ def _first_env(*names: str) -> str | None:
     return None
 
 
+#: The highest TCP port; an env port outside 1.._MAX_PORT is refused, not passed to the client.
+_MAX_PORT = 65535
+#: Port warnings already given (by env var name), so each is logged once per process, not per client.
+_warned_env_ports: set[str] = set()
+
+
+def _warn_once(name: str, message: str, *args: Any) -> None:
+    """Log *message* at WARNING the first time *name* is reported in this process."""
+    if name not in _warned_env_ports:
+        _warned_env_ports.add(name)
+        logger.warning(message, *args)
+
+
+def _env_port(name: str) -> int | None:
+    """``$name`` as a TCP port: trimmed ASCII digits within 1..65535, else None (a bad value warns).
+
+    A bare ``int()`` raised for every client on ``REDIS_PORT=abc``; a refused value now falls
+    through to the next tier instead.
+    """
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return None
+    if raw.isascii() and raw.isdigit() and 1 <= int(raw) <= _MAX_PORT:
+        return int(raw)
+    _warn_once(name, "Ignoring %s=%r: not a TCP port (1-%d); the next tier answers", name, raw, _MAX_PORT)
+    return None
+
+
+def _default_tls_port() -> int:
+    """The registered default for ``AUTOBOT_REDIS_TLS_PORT`` (env_registry, stdlib-only).
+
+    Not ``ssot_tls.TLSConfig``: this runs exactly when the SSOT config cannot load, which
+    includes a venv without pydantic (the SLM agent).
+    """
+    from autobot_shared.env_registry import REGISTRY
+
+    return int(REGISTRY["AUTOBOT_REDIS_TLS_PORT"].default)
+
+
 def redis_host_from_env() -> str | None:
     """``REDIS_HOST`` / ``AUTOBOT_REDIS_HOST`` if either is set (#12778)."""
     return _first_env("REDIS_HOST", "AUTOBOT_REDIS_HOST")
@@ -151,12 +190,18 @@ def redis_tls_port(ssot: AutoBotConfig | None = None) -> int | None:
     enabled = flag.lower() == "true" if flag is not None else bool(cfg and cfg.tls.redis_tls_enabled)
     if not enabled:
         return None
-    explicit = _first_env("AUTOBOT_REDIS_TLS_PORT")
+    explicit = _env_port("AUTOBOT_REDIS_TLS_PORT")
     if explicit is not None:
-        return int(explicit)
+        return explicit
     cfg = _ssot(ssot)
     if cfg is None:
-        raise ValueError("AUTOBOT_REDIS_TLS_ENABLED=true but no AUTOBOT_REDIS_TLS_PORT and no SSOT config")
+        default = _default_tls_port()
+        _warn_once(
+            "tls-port-default",  # its own key: a refused AUTOBOT_REDIS_TLS_PORT has already warned
+            "Redis TLS is on but no usable AUTOBOT_REDIS_TLS_PORT and no SSOT config; using %d",
+            default,
+        )
+        return default
     return int(cfg.tls.redis_tls_port)
 
 
@@ -189,7 +234,9 @@ def resolve_redis_endpoint(ssot: AutoBotConfig | None = None) -> RedisEndpoint:
     """
     cm = config_manager_redis()
     tls_port = redis_tls_port(ssot)
-    plain_port = cm.get("port") or _first_env("REDIS_PORT", "AUTOBOT_REDIS_PORT") or NetworkConstants.REDIS_PORT
+    plain_port = (
+        cm.get("port") or _env_port("REDIS_PORT") or _env_port("AUTOBOT_REDIS_PORT") or NetworkConstants.REDIS_PORT
+    )
     return RedisEndpoint(
         host=_resolve_host(cm, ssot),
         port=int(tls_port if tls_port is not None else plain_port),

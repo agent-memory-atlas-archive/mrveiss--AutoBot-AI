@@ -137,10 +137,8 @@ def _build_unmeasured_arm_recommendation() -> Dict[str, Any]:
         "recommendation": "INCONCLUSIVE_MODERN_ARM_NOT_MEASURED",
         "confidence": "NONE",
         "reasoning": [
-            "The modern langchain-redis arm was NOT measured - the package is "
-            "not importable on this machine",
-            "This run therefore compared ONE library, not two; no conclusion "
-            "about LangChain can be drawn from it",
+            "The modern langchain-redis arm was NOT measured - the package is not importable on this machine",
+            "This run therefore compared ONE library, not two; no conclusion about LangChain can be drawn from it",
         ],
         "next_step": "Install the analysis dependencies and re-run: " + INSTALL_HINT,
         "compatibility_issues_resolved": [],

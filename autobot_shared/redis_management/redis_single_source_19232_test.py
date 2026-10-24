@@ -12,6 +12,7 @@ one table and every reader follows it, and a URL names the client's host/port/db
 
 from __future__ import annotations
 
+import json
 import os
 from urllib.parse import unquote, urlparse
 
@@ -144,6 +145,41 @@ def test_url_and_client_agree_on_tls(monkeypatch, _reset_after):
     _assert_url_matches_client(fresh, "main")
 
 
+@pytest.fixture
+def _bare_env(monkeypatch):
+    """No config-manager tier and no Redis port/TLS env, so each test names exactly what it sets."""
+    monkeypatch.setattr(_endpoint, "config_manager_redis", lambda: {})
+    monkeypatch.setattr(_endpoint, "_warned_env_ports", set())
+    for var in ("REDIS_PORT", "AUTOBOT_REDIS_PORT", "AUTOBOT_REDIS_TLS_ENABLED", "AUTOBOT_REDIS_TLS_PORT"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.mark.parametrize("bad", ["abc", "0", "65536", "+6390", "63_90", "\u0666\u0663\u0669\u0660"])
+def test_an_unusable_env_port_warns_and_the_next_tier_answers(bad, monkeypatch, caplog, _bare_env):
+    """#19232 review: a bare int() raised for every client; a refused port now falls through."""
+    monkeypatch.setenv("REDIS_PORT", bad)
+    monkeypatch.setenv("AUTOBOT_REDIS_PORT", "6391")
+    monkeypatch.setenv("AUTOBOT_REDIS_TLS_ENABLED", "false")
+    assert _endpoint.resolve_redis_endpoint().port == 6391
+    monkeypatch.delenv("AUTOBOT_REDIS_PORT")
+    assert _endpoint.resolve_redis_endpoint().port == int(_endpoint.NetworkConstants.REDIS_PORT)
+    assert sum("REDIS_PORT" in r.getMessage() for r in caplog.records) == 1, "warned once, not per client"
+
+
+def test_tls_without_a_port_or_ssot_uses_the_registered_default(monkeypatch, caplog, _bare_env):
+    """main defaulted to the TLS port; the shared resolver raised there instead."""
+    from autobot_shared.env_registry import REGISTRY
+    from autobot_shared.ssot_tls import TLSConfig
+
+    monkeypatch.setenv("AUTOBOT_REDIS_TLS_ENABLED", "true")
+    monkeypatch.setenv("AUTOBOT_REDIS_TLS_PORT", "not-a-port")
+    monkeypatch.setattr(_endpoint, "_ssot", lambda ssot=None: None)
+    endpoint = _endpoint.resolve_redis_endpoint()
+    assert (endpoint.tls, endpoint.port) == (True, REGISTRY["AUTOBOT_REDIS_TLS_PORT"].default)
+    assert REGISTRY["AUTOBOT_REDIS_TLS_PORT"].default == TLSConfig.model_fields["redis_tls_port"].default
+    assert any("no SSOT config" in r.getMessage() for r in caplog.records)
+
+
 def test_url_follows_a_moved_database(overridden, manager):
     _assert_url_matches_client(manager, "knowledge")
     _assert_url_matches_client(manager, "main")
@@ -208,6 +244,11 @@ def _shell_answers(overrides: dict) -> dict:
         {"AUTOBOT_REDIS_DB_MAIN": "-1"},  # negative: refused
         {"AUTOBOT_REDIS_DB_MAIN": "1_2"},  # int() would take it: refused
         {"AUTOBOT_REDIS_DB_MAIN": "\u0661\u0662"},  # non-ASCII digits: refused
+        {"AUTOBOT_REDIS_DB_MAIN": ""},  # blank: no request, so no refusal either
+        {"AUTOBOT_REDIS_DB_MAIN": "  "},  # whitespace only: no request
+        {"AUTOBOT_REDIS_DB_WORKFLOWS": "", "AUTOBOT_REDIS_DB_TASKS": "12"},  # blank main name: legacy moves it
+        {"AUTOBOT_REDIS_DB_WORKFLOWS": " ", "AUTOBOT_REDIS_DB_TASKS": "12"},
+        {"AUTOBOT_REDIS_DB_TASKS": ""},  # blank legacy: no request
     ],
 )
 def test_python_shell_and_inventory_agree(overrides, monkeypatch):
@@ -287,10 +328,24 @@ def test_import_survives_an_undeterminable_project_root_and_finds_app_config():
 
 
 def test_the_standalone_ansible_inventory_fails_closed_without_the_yaml(monkeypatch, capsys):
-    """No YAML, no inventory: it exits 1 and says why rather than guess a number."""
+    """No YAML: Redis is never queried with a guessed number, and the static fallback still answers."""
     module = _inventory_module()
     monkeypatch.setattr(module, "_DATABASES_YAML", module._DATABASES_YAML.with_name("absent.yaml"))
-    with pytest.raises(SystemExit) as exited:
+    with pytest.raises(module.DatabasesUnreadable):
         module.resolved_databases()
-    assert exited.value.code == 1
+
+    def _never_dialled(**kwargs):
+        raise AssertionError(f"Redis dialled without a database table: {kwargs}")
+
+    monkeypatch.setattr(module.redis, "Redis", _never_dialled)
+    inventory = module.AutoBotInventory()  # constructing it must not exit (#19232 review)
+    assert json.loads(inventory.list_inventory()) == inventory.build_fallback_inventory()
     assert "cannot read Redis databases" in capsys.readouterr().err
+
+
+def test_a_blank_override_is_no_request_and_no_warning():
+    """``AUTOBOT_REDIS_DB_MAIN=`` in a .env is unset, not refused on every start (#19232 review)."""
+    from autobot_shared.redis_management.database_overrides import override_problems
+
+    blanks = {"AUTOBOT_REDIS_DB_MAIN": "", "AUTOBOT_REDIS_DB_KNOWLEDGE": "  ", "AUTOBOT_REDIS_DB_TASKS": ""}
+    assert override_problems(_types.DECLARED_DATABASES, blanks) == []

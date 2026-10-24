@@ -68,11 +68,16 @@ def override_source() -> Dict[str, str]:
     return {**_env_file_values(), **os.environ}
 
 
+def _set(source: Mapping[str, str], var: str) -> bool:
+    """Whether *source* sets *var* to a non-blank value; a blank one (``VAR=``) is no request."""
+    return bool((source.get(var) or "").strip())
+
+
 def _requested(base: Mapping[str, int], source: Mapping[str, str]) -> Dict[str, str]:
-    """``{database: raw value}`` for every override *source* sets on a database *base* declares."""
-    requested = {name: source[env_var_name(name)] for name in base if env_var_name(name) in source}
+    """``{database: raw value}`` for every non-blank override *source* sets on a database *base* declares."""
+    requested = {name: source[env_var_name(name)] for name in base if _set(source, env_var_name(name))}
     for legacy, name in LEGACY_ENV_NAMES.items():
-        if legacy in source and name in base and name not in requested:
+        if _set(source, legacy) and name in base and name not in requested:
             requested[name] = source[legacy]
     return requested
 

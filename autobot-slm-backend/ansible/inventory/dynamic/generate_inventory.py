@@ -43,15 +43,22 @@ _MAX_DATABASE_INDEX = 15
 _LEGACY_ENV_NAMES = {"AUTOBOT_REDIS_DB_TASKS": "workflows"}
 
 
+class DatabasesUnreadable(Exception):
+    """redis-databases.yaml is missing or malformed, so no Redis database number is known."""
+
+
 def _declared_databases() -> Dict[str, int]:
-    """Every database redis-databases.yaml declares. Fail-closed: no YAML, no inventory."""
+    """Every database redis-databases.yaml declares; :class:`DatabasesUnreadable` when it cannot be read.
+
+    Fail-closed for Redis: no YAML, no Redis query -- never a guessed number. The caller
+    (:meth:`AutoBotInventory.connect_redis`) turns that into the static fallback inventory.
+    """
     try:
         with open(_DATABASES_YAML, encoding="utf-8") as f:
             declared = yaml.safe_load(f)["redis_databases"]
         return {name: int(cfg["db"]) for name, cfg in declared.items() if "db" in cfg}
-    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
-        sys.stderr.write(f"ERROR: cannot read Redis databases from {_DATABASES_YAML}: {exc}\n")
-        sys.exit(1)
+    except (OSError, KeyError, TypeError, ValueError, AttributeError, yaml.YAMLError) as exc:
+        raise DatabasesUnreadable(f"cannot read Redis databases from {_DATABASES_YAML}: {exc}") from exc
 
 
 def _override_number(raw: str) -> Optional[int]:
@@ -66,9 +73,10 @@ def _accepted_overrides(declared: Dict[str, int]) -> Dict[str, int]:
     """The valid AUTOBOT_REDIS_DB_* overrides (legacy TASKS included); a refusal goes to stderr."""
     accepted: Dict[str, int] = {}
     names = {f"AUTOBOT_REDIS_DB_{n.upper()}": n for n in declared}
-    requested = {name: os.environ[var] for var, name in names.items() if var in os.environ}
+    # A blank value (VAR=) is no request, as in database_overrides._requested.
+    requested = {name: os.environ[var] for var, name in names.items() if os.environ.get(var, "").strip()}
     for legacy, name in _LEGACY_ENV_NAMES.items():
-        if legacy in os.environ and name in declared and name not in requested:
+        if os.environ.get(legacy, "").strip() and name in declared and name not in requested:
             requested[name] = os.environ[legacy]
     for name, raw in requested.items():
         number = _override_number(raw)
@@ -99,15 +107,24 @@ class AutoBotInventory:
     def __init__(self):
         self.redis_host = os.getenv("REDIS_HOST", os.getenv("AUTOBOT_REDIS_HOST", "localhost"))
         self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        self.redis_db = resolved_databases()["main"]
+        self.redis_db: Optional[int] = None  # resolved by connect_redis, from the YAML
         self.inventory = {"_meta": {"hostvars": {}}}
 
     def connect_redis(self):
-        """Connect to Redis server.
+        """Connect to Redis server, or None -- the static fallback inventory then answers.
+
+        The database is resolved here, not in ``__init__`` (#19232): without
+        redis-databases.yaml the Redis path is skipped (fail-closed, no guessed number)
+        and the static fallback still runs.
 
         Issue #1086: Direct redis.Redis() required — Ansible dynamic inventory
         script runs standalone without access to autobot_shared.
         """
+        try:
+            self.redis_db = resolved_databases()["main"]
+        except DatabasesUnreadable as exc:
+            sys.stderr.write(f"ERROR: {exc}; skipping Redis, using the static fallback inventory\n")
+            return None
         try:
             client = redis.Redis(
                 host=self.redis_host,

@@ -143,11 +143,12 @@ _autobot_redis_yaml_table() {
 
 # _autobot_redis_override NAME -- the raw AUTOBOT_REDIS_DB_<NAME> value; workflows also
 # answers to the legacy AUTOBOT_REDIS_DB_TASKS (database_overrides.LEGACY_ENV_NAMES).
+# A blank or whitespace-only value is no request, as in database_overrides._requested.
 _autobot_redis_override() {
     local var="AUTOBOT_REDIS_DB_${1^^}"
-    if [ -n "${!var:-}" ]; then
+    if [[ "${!var:-}" =~ [^[:space:]] ]]; then
         echo "${var}=${!var}"
-    elif [ "$1" = "workflows" ] && [ -n "${AUTOBOT_REDIS_DB_TASKS:-}" ]; then
+    elif [ "$1" = "workflows" ] && [[ "${AUTOBOT_REDIS_DB_TASKS:-}" =~ [^[:space:]] ]]; then
         echo "AUTOBOT_REDIS_DB_TASKS=${AUTOBOT_REDIS_DB_TASKS}"
     fi
 }

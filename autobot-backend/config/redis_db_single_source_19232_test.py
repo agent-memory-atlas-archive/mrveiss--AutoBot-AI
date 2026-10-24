@@ -51,7 +51,23 @@ def test_the_cache_api_reports_the_moved_numbers(overridden):
 
     databases = redis_databases()
     assert (databases["main"], databases["knowledge"]) == (12, 0)
-    assert databases["websockets"] is None, "a name nothing declares has no number"
+    assert "websockets" not in databases, "a name nothing declares is not offered"
+    assert None not in databases.values()
+
+
+@pytest.mark.parametrize("database", ["websockets", "monitoring", "nonexistent"])
+def test_clearing_an_undeclared_database_is_a_400_not_a_500(database):
+    """#19232 review: an undeclared name used to reach get_redis_client, which refused it (500)."""
+    import asyncio
+
+    from fastapi import HTTPException
+
+    from api.cache_management import clear_redis_cache
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(clear_redis_cache(database))
+    assert raised.value.status_code == 400
+    assert "Available:" in raised.value.detail and "'main'" in raised.value.detail
 
 
 def test_the_service_registry_reports_the_resolved_redis_endpoint():
