@@ -463,7 +463,7 @@
 
     - name: Test Playwright API health (Browser)
       uri:
-        url: "http://127.0.0.1:3000/health"
+        url: "http://127.0.0.1:{{ browser_port | default(9001) }}/health"
         method: GET
         timeout: 15
       register: playwright_health_test
