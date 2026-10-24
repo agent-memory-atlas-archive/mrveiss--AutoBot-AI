@@ -137,9 +137,9 @@ KNOWN: dict[int, dict[str, tuple[int, str]]] = {
 
 _TEXT_SUFFIXES = (".ts", ".js", ".vue", ".sh", ".yml", ".yaml", ".j2", ".ps1", ".iss")
 _SCAN_ROOTS = (*scan_mod.SCAN_ROOTS, "autobot-frontend")
-_NOT_PRODUCTION = re.compile(
-    r"(_test\.py$|(^|/)test_[^/]*\.py$|/tests?/|/__tests__/|\.spec\.|\.test\.|\.stories\.|/generated/)"
-)
+_NOT_PRODUCTION = re.compile(r"(_test\.py$|(^|/)test_[^/]*\.py$|/tests?/|/__tests__/|\.spec\.|\.test\.|/generated/)")
+#: Stories are sample data, so a live number may stand in one -- but a RETIRED number may not (#19429).
+_STORY = re.compile(r"\.stories\.")
 _COMMENT = re.compile(r"(^|[ \t])(#|//).*$|^[ \t]*(/\*|\*).*$", re.MULTILINE)
 #: A port as a whole number: not part of a longer one, a version (1.6081) or an issue ref (#6081).
 _WORD = r"(?<![\d.#]){}(?!\d)"
@@ -232,8 +232,10 @@ def _homes(number: int) -> set[str]:
 def forbidden_sites(number: int, sources: dict[str, str]) -> list[str]:
     """Every statement of a FORBIDDEN number outside its homes and pins, beyond its KNOWN count."""
     homes, known, out = _homes(number) | _DETECTOR_TABLES, KNOWN.get(number, {}), []
+    retired = not _homes(number)
     for rel, text in sorted(sources.items()):
-        lines = [] if rel in homes else sites(rel, text, number)
+        skip = rel in homes or (bool(_STORY.search(rel)) and not retired)
+        lines = [] if skip else sites(rel, text, number)
         if len(lines) > known.get(rel, (0, ""))[0]:
             out += [f"{rel}:{line}: {number} -- read PortConfig.{FORBIDDEN[number]}" for line in lines]
     return out
@@ -299,3 +301,9 @@ def test_a_retired_number_has_no_home() -> None:
     assert _homes(6081) == set(), "6081 is served by no host; nothing may state it"
     found = forbidden_sites(6081, {"autobot-frontend/src/config/x.ts": "port: getEnvNumber('P', 6081),\n"})
     assert found == ["autobot-frontend/src/config/x.ts:1: 6081 -- read PortConfig.vnc"]
+
+
+def test_a_retired_number_is_caught_in_a_story_but_a_live_one_is_not() -> None:
+    story = "autobot-frontend/src/components/x.stories.ts"
+    assert forbidden_sites(6081, {story: "vnc_port: 6081,\n"}) == [f"{story}:1: 6081 -- read PortConfig.vnc"]
+    assert forbidden_sites(8082, {story: "port: 8082,\n"}) == []
