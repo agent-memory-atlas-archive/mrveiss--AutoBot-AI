@@ -15,17 +15,23 @@ cannot be read are all left alone: raising a ratchet is a reviewed, declared sco
 
 Usage:
 
-    python3 scripts/duplication_pin_lowering.py WORKFLOW LOGDIR [--sha SHA]
+    python3 scripts/duplication_pin_lowering.py PINS LOGDIR
+    python3 scripts/duplication_pin_lowering.py --export PINS
 
-Prints one ``VAR OLD -> NEW`` line per pin it lowered, rewrites WORKFLOW in place, and exits 0
-whether or not anything changed (the caller tests ``git diff``). Exit 2: a log is missing or
+PINS is ``.github/duplication-pins.json``, the one home of every pin: the workflow reads it
+(``--export`` prints ``VAR=value`` lines for ``$GITHUB_ENV``) and this rewrites it. Only that
+data file changes, so the bot's push never touches a workflow file (which GITHUB_TOKEN cannot
+push).
+
+The first form prints one ``VAR OLD -> NEW`` line per pin it lowered, rewrites PINS in place,
+and exits 0 whether or not anything changed. Exit 2: a log or the pins file is missing or
 unreadable, so no pin is touched.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import re
+import json
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -52,8 +58,6 @@ SCOPES: tuple[Scope, ...] = (
     Scope("CROSS_BACKEND_MAX_DUP_LINES", "cross-backend-gate.log"),
 )
 
-_PIN_LINE = "^(?P<indent>[ ]+){var}: '(?P<value>[0-9]+)'[ ]*$"
-
 
 def measure(logdir: Path) -> dict[str, int]:
     """Duplicated lines per pin variable; raises OSError/ValueError on an unreadable log."""
@@ -64,43 +68,49 @@ def measure(logdir: Path) -> dict[str, int]:
     return counts
 
 
-def lower_pins(workflow: str, counts: dict[str, int], sha: str = "") -> tuple[str, list[tuple[str, int, int]]]:
-    """Return the workflow text with every pin above its count lowered, and the changes."""
+def lower_pins(pins: dict[str, int], counts: dict[str, int]) -> tuple[dict[str, int], list[tuple[str, int, int]]]:
+    """Return *pins* with every pin above its count lowered, and the changes made.
+
+    A pin that is not a plain count (UNMEASURED, a string, a bool) is left alone, and a count
+    at or over its pin never raises it.
+    """
+    lowered = dict(pins)
     changes: list[tuple[str, int, int]] = []
-    where = f" on main {sha}" if sha else " on main"
     for var, measured in counts.items():
-        pattern = re.compile(_PIN_LINE.format(var=re.escape(var)), re.MULTILINE)
-        match = pattern.search(workflow)
-        if match is None:
+        old = pins.get(var)
+        if not isinstance(old, int) or isinstance(old, bool) or measured >= old:
             continue
-        old = int(match["value"])
-        if measured >= old:
-            continue
-        indent = match["indent"]
-        note = f"{indent}# {old} -> {measured} (#16324): lowered automatically to the count measured{where}.\n"
-        replacement = f"{note}{indent}{var}: '{measured}'"
-        workflow = workflow[: match.start()] + replacement + workflow[match.end() :]
+        lowered[var] = measured
         changes.append((var, old, measured))
-    return workflow, changes
+    return lowered, changes
+
+
+def load_pins(path: Path) -> dict[str, int]:
+    """Read the pins file; raises OSError/ValueError when it is not a JSON object."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    return data
 
 
 def main(argv: list[str]) -> int:
-    sha = ""
-    if "--sha" in argv:
-        index = argv.index("--sha")
-        sha, argv = argv[index + 1], argv[:index] + argv[index + 2 :]
-    if len(argv) != 2:
-        print(__doc__, file=sys.stderr)
-        return 2
-    workflow_path, logdir = Path(argv[0]), Path(argv[1])
     try:
+        if len(argv) == 2 and argv[0] == "--export":
+            for var, pin in load_pins(Path(argv[1])).items():
+                print(f"{var}={pin}")
+            return 0
+        if len(argv) != 2:
+            print(__doc__, file=sys.stderr)
+            return 2
+        pins_path, logdir = Path(argv[0]), Path(argv[1])
+        pins = load_pins(pins_path)
         counts = measure(logdir)
     except (OSError, ValueError) as exc:
-        print(f"could not read a scope's jscpd totals: {exc}. No pin was touched.", file=sys.stderr)
+        print(f"could not read the pins or a scope's jscpd totals: {exc}. No pin was touched.", file=sys.stderr)
         return 2
-    text, changes = lower_pins(workflow_path.read_text(encoding="utf-8"), counts, sha)
+    lowered, changes = lower_pins(pins, counts)
     if changes:
-        workflow_path.write_text(text, encoding="utf-8")
+        pins_path.write_text(json.dumps(lowered, indent=2) + "\n", encoding="utf-8")
     for var, old, new in changes:
         print(f"{var} {old} -> {new}")
     return 0

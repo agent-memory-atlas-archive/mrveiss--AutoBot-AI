@@ -11,6 +11,7 @@ ratchet's roots are held the same way, because #18559 widened them for the same 
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import subprocess
 import sys
@@ -20,6 +21,7 @@ import pytest
 import yaml
 from repo_tests._paths import repo_root
 
+from autobot_shared.paths import scrubbed_git_env
 from autobot_shared.symbol_forks import FORK_ROOTS
 
 WORKFLOW = Path(".github/workflows/duplication-guard.yml")
@@ -109,19 +111,77 @@ def test_every_scope_uses_the_same_jscpd_flags() -> None:
         assert _flags(steps[step_id]["run"]) == reference, f"{step_id} has different jscpd flags"
 
 
-def test_every_pin_is_a_measured_count() -> None:
-    env = _document()["jobs"]["duplication-guard"]["env"]
-    for _trees, pin_var, _log in EXPECTED_SCOPES.values():
-        assert re.fullmatch(r"[0-9]+", str(env[pin_var])), f"{pin_var}={env[pin_var]!r} is not a count"
+PINS = Path(".github/duplication-pins.json")
 
 
-def test_a_change_under_every_scanned_tree_triggers_the_guard() -> None:
-    on = _document()[True]  # PyYAML reads the key `on` as a boolean
+def test_every_pin_is_a_measured_count_in_the_data_file() -> None:
+    pins = json.loads((repo_root() / PINS).read_text(encoding="utf-8"))
+    assert set(pins) == {pin for _t, pin, _l in EXPECTED_SCOPES.values()}
+    for var, value in pins.items():
+        assert isinstance(value, int) and not isinstance(value, bool) and value >= 0, f"{var}={value!r}"
+
+
+def test_no_numeric_pin_is_restated_in_the_workflow() -> None:
+    """One home: the data file. A pin back in the yml is a second source that can disagree."""
+    text = (repo_root() / WORKFLOW).read_text(encoding="utf-8")
+    assert not re.search(r"^\s*[A-Z_]*MAX_DUP_LINES:\s*['\"]?[0-9]+", text, re.MULTILINE)
+    env = _document()["jobs"]["duplication-guard"].get("env", {})
+    assert not [k for k in env if k.endswith("MAX_DUP_LINES")], "a pin is declared in the job env"
+
+
+def test_the_workflow_loads_the_pins_before_the_first_gate() -> None:
+    steps = _document()["jobs"]["duplication-guard"]["steps"]
+    names = [s.get("name") for s in steps]
+    load = names.index("Load the pins")
+    assert "duplication-pins.json" in steps[load]["run"] and "GITHUB_ENV" in steps[load]["run"]
+    assert load < next(i for i, s in enumerate(steps) if s.get("id") == "main_scope")
+
+
+_SCANNED = {"py", "ts", "js", "vue"}
+#: What the scopes' `-i` list excludes, as path regexes (the workflow's list, kept in step by hand).
+_IGNORED = re.compile(
+    r"(node_modules|__pycache__|/tests/|/__tests__/|/generated/|/migrations/|/mocks/|/i18n/)"
+    r"|/test_[^/]*$|_test\.py$|\.test\.ts$|\.stories\."
+)
+
+
+def _glob_matches(pattern: str, path: str) -> bool:
+    regex = re.escape(pattern).replace(r"\*\*/", "(?:.*/)?").replace(r"\*\*", ".*").replace(r"\*", "[^/]*")
+    return re.fullmatch(regex, path) is not None
+
+
+def _tracked(tree: str) -> list[str]:
+    out = subprocess.run(  # nosec B603 B607  # fixed argv, no shell
+        ["git", "ls-files", "--", tree],
+        cwd=repo_root(),
+        env=scrubbed_git_env(),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    ).stdout
+    return [f for f in out.splitlines() if f.rsplit(".", 1)[-1] in _SCANNED and not _IGNORED.search("/" + f)]
+
+
+def _uncovered(paths: list[str], trigger_paths: list[str]) -> list[str]:
+    return [f for f in paths if not any(_glob_matches(g, f) for g in trigger_paths)]
+
+
+def test_every_file_a_scope_scans_is_covered_by_a_trigger_glob() -> None:
+    """Per scanned extension, not per tree: a tree can be scanned for .ts yet only trigger on .py."""
+    on = _document()[True]
     for event in ("pull_request", "push"):
-        paths = on[event]["paths"]
-        for step_id, (trees, _pin, _log) in EXPECTED_SCOPES.items():
+        for _id, (trees, _pin, _log) in EXPECTED_SCOPES.items():
             for tree in trees:
-                assert any(p.startswith(tree.rstrip("/") + "/") for p in paths), f"{event}: nothing triggers on {tree}"
+                missing = _uncovered(_tracked(tree), on[event]["paths"])
+                assert not missing, f"{event}: {tree} has scanned files no trigger covers, e.g. {missing[:3]}"
+
+
+def test_the_coverage_check_fails_when_a_glob_is_removed() -> None:
+    """Negative control: the check above must be able to fail."""
+    on = _document()[True]
+    trimmed = [g for g in on["pull_request"]["paths"] if g != "autobot-plugins/**/*.ts"]
+    assert _uncovered(_tracked("autobot-plugins"), trimmed), "removing a glob went unnoticed"
 
 
 def test_the_lowering_table_matches_the_workflow() -> None:
@@ -133,6 +193,13 @@ def test_the_fork_ratchet_still_reads_every_widened_root() -> None:
     assert set(REQUIRED_FORK_ROOTS) <= set(FORK_ROOTS), sorted(set(REQUIRED_FORK_ROOTS) - set(FORK_ROOTS))
 
 
+@pytest.mark.parametrize("root", REQUIRED_FORK_ROOTS)
+def test_the_roots_contract_fails_for_any_single_root_removed(root: str) -> None:
+    """Negative control: FORK_ROOTS minus one required root must be rejected by the contract."""
+    reduced = tuple(r for r in FORK_ROOTS if r != root)
+    assert not set(REQUIRED_FORK_ROOTS) <= set(reduced)
+
+
 def test_the_stale_deferral_comment_is_gone() -> None:
     text = (repo_root() / WORKFLOW).read_text(encoding="utf-8")
     assert "deferred" not in text.split("name: duplication-guard", 1)[0]
@@ -142,34 +209,58 @@ def test_the_stale_deferral_comment_is_gone() -> None:
 # --- the pin-lowering job (#16324) ---------------------------------------------------------
 
 _ROW = "│ Total: │ 100 │ 5000 │ 40000 │ 7 │ {dup} (1%) │ 0 │"
-_ENV = "    env:\n      MAX_DUP_LINES: '500'\n      SLM_MAX_DUP_LINES: '100'\n"
+
+
+def _lower_job() -> dict:
+    return _document()["jobs"]["lower-pins"]
 
 
 def test_the_job_runs_only_on_a_green_push_and_never_pushes_main() -> None:
-    job = _document()["jobs"]["lower-pins"]
+    job = _lower_job()
     assert job["needs"] == "duplication-guard"
     assert "github.event_name == 'push'" in job["if"] and "result == 'success'" in job["if"]
     assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
     run = "\n".join(step.get("run", "") for step in job["steps"])
-    assert "git push --force-with-lease" in run and 'origin "$BRANCH"' in run
+    assert "git push --force-with-lease" in run
     assert not re.search(r"git push[^\n]*\bmain\b", run), "the job must open a PR, never push main"
 
 
+def test_the_job_stages_only_the_pins_file_so_no_workflow_file_is_pushed() -> None:
+    run = "\n".join(step.get("run", "") for step in _lower_job()["steps"])
+    adds = re.findall(r"git add (\S+)", run)
+    assert adds == ['"${PINS}"'], adds
+    assert "PINS: .github/duplication-pins.json" in (repo_root() / WORKFLOW).read_text(encoding="utf-8")
+    assert "git add -A" not in run and "git commit -a" not in run
+
+
+def test_the_job_has_no_persisted_credentials_and_serialises_runs() -> None:
+    job = _lower_job()
+    checkout = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout"))
+    assert checkout["with"]["persist-credentials"] is False
+    assert job["concurrency"] == "duplication-pins"
+
+
+def test_the_job_uses_the_pat_alone_and_fails_loudly_without_it() -> None:
+    step = next(s for s in _lower_job()["steps"] if s.get("name", "").startswith("Open or update"))
+    assert step["env"]["GH_TOKEN"] == "${{ secrets.AUTOBOT_PUSH_TOKEN }}", "no GITHUB_TOKEN fallback: its PR runs no CI"
+    run = step["run"]
+    assert "AUTOBOT_PUSH_TOKEN not set -- bot PR would never trigger CI" in run
+    assert run.index("AUTOBOT_PUSH_TOKEN not set") < run.index("git push"), "the check must come before any push"
+
+
 def test_a_pin_above_its_count_is_lowered_to_it() -> None:
-    text, changes = lowering.lower_pins(_ENV, {"MAX_DUP_LINES": 480, "SLM_MAX_DUP_LINES": 100}, "the-merge-commit")
-    assert changes == [("MAX_DUP_LINES", 500, 480)]
-    assert "      MAX_DUP_LINES: '480'\n" in text and "SLM_MAX_DUP_LINES: '100'" in text
-    assert "# 500 -> 480 (#16324)" in text and "the-merge-commit" in text
+    pins, changes = lowering.lower_pins({"A": 500, "B": 100}, {"A": 480, "B": 100})
+    assert changes == [("A", 500, 480)] and pins == {"A": 480, "B": 100}
 
 
 def test_a_pin_is_never_raised() -> None:
-    text, changes = lowering.lower_pins(_ENV, {"MAX_DUP_LINES": 501, "SLM_MAX_DUP_LINES": 100})
-    assert changes == [] and text == _ENV
+    pins, changes = lowering.lower_pins({"A": 500}, {"A": 501})
+    assert changes == [] and pins == {"A": 500}
 
 
-def test_the_two_names_that_share_a_suffix_are_not_confused() -> None:
-    text, _ = lowering.lower_pins(_ENV, {"SLM_MAX_DUP_LINES": 90})
-    assert "      MAX_DUP_LINES: '500'\n" in text and "      SLM_MAX_DUP_LINES: '90'\n" in text
+@pytest.mark.parametrize("pin", ["UNMEASURED", "12.5", "", True, None])
+def test_a_pin_that_is_not_a_count_is_left_alone(pin: object) -> None:
+    assert lowering.lower_pins({"A": pin}, {"A": 1}) == ({"A": pin}, [])
 
 
 def _write_logs(directory: Path, dup: int) -> None:
@@ -177,39 +268,36 @@ def _write_logs(directory: Path, dup: int) -> None:
         (directory / scope.log_name).write_text(_ROW.format(dup=dup), encoding="utf-8")
 
 
-def test_the_cli_lowers_the_real_workflow_from_real_logs(tmp_path: Path) -> None:
-    workflow = tmp_path / "wf.yml"
-    workflow.write_text((repo_root() / WORKFLOW).read_text(encoding="utf-8"), encoding="utf-8")
-    _write_logs(tmp_path, 7)
-    done = subprocess.run(  # nosec B603  # fixed argv, no shell
-        [
-            sys.executable,
-            "-I",
-            str(repo_root() / "scripts" / "duplication_pin_lowering.py"),
-            str(workflow),
-            str(tmp_path),
-        ],
+def _run_cli(*argv: str) -> subprocess.CompletedProcess:
+    return subprocess.run(  # nosec B603  # fixed argv, no shell
+        [sys.executable, "-I", str(repo_root() / "scripts" / "duplication_pin_lowering.py"), *argv],
         capture_output=True,
         text=True,
         check=False,
         timeout=60,
     )
+
+
+def test_the_cli_lowers_the_real_pins_file_from_real_logs(tmp_path: Path) -> None:
+    pins = tmp_path / "pins.json"
+    pins.write_text((repo_root() / PINS).read_text(encoding="utf-8"), encoding="utf-8")
+    _write_logs(tmp_path, 7)
+    done = _run_cli(str(pins), str(tmp_path))
     assert done.returncode == 0, done.stderr
     assert len(done.stdout.splitlines()) == len(lowering.SCOPES)
-    env = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]["duplication-guard"]["env"]
-    assert all(str(env[scope.pin_var]) == "7" for scope in lowering.SCOPES)
+    assert set(json.loads(pins.read_text(encoding="utf-8")).values()) == {7}
+
+
+def test_export_prints_every_pin_for_github_env() -> None:
+    done = _run_cli("--export", str(repo_root() / PINS))
+    pins = json.loads((repo_root() / PINS).read_text(encoding="utf-8"))
+    assert done.stdout.splitlines() == [f"{k}={v}" for k, v in pins.items()]
 
 
 def test_an_unreadable_log_touches_no_pin(tmp_path: Path) -> None:
-    workflow = tmp_path / "wf.yml"
-    workflow.write_text(_ENV, encoding="utf-8")
+    pins = tmp_path / "pins.json"
+    pins.write_text('{"MAX_DUP_LINES": 500}\n', encoding="utf-8")
     _write_logs(tmp_path, 1)
     (tmp_path / lowering.SCOPES[1].log_name).unlink()
-    assert lowering.main([str(workflow), str(tmp_path)]) == 2
-    assert workflow.read_text(encoding="utf-8") == _ENV
-
-
-@pytest.mark.parametrize("pin", ["UNMEASURED", "12.5", ""])
-def test_a_pin_that_is_not_a_count_is_left_alone(pin: str) -> None:
-    text = f"      MAX_DUP_LINES: '{pin}'\n"
-    assert lowering.lower_pins(text, {"MAX_DUP_LINES": 1}) == (text, [])
+    assert lowering.main([str(pins), str(tmp_path)]) == 2
+    assert pins.read_text(encoding="utf-8") == '{"MAX_DUP_LINES": 500}\n'

@@ -19,6 +19,7 @@ this step read jscpd's report through one parser, ``scripts/duplication_gate.py`
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -240,7 +241,9 @@ def test_each_gate_scans_its_declared_scope_and_applies_its_own_pin(step_id, tre
 
 
 def test_the_pins_are_duplicated_line_counts_not_percentages() -> None:
+    # The pins moved to .github/duplication-pins.json (#16324); the job env carries none.
     env = _job()["env"]
+    pins = json.loads((repo_root() / ".github" / "duplication-pins.json").read_text(encoding="utf-8"))
 
-    assert env["MAX_DUP_LINES"].isdigit() and env["SLM_MAX_DUP_LINES"].isdigit()
+    assert isinstance(pins["MAX_DUP_LINES"], int) and isinstance(pins["SLM_MAX_DUP_LINES"], int)
     assert "THRESHOLD" not in env and "SLM_THRESHOLD" not in env

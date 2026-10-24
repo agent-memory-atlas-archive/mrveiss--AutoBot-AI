@@ -31,8 +31,8 @@
 #
 # #16324: a PR that lands UNDER its pin stays advisory, so two dedup PRs never
 # conflict on a pin line. After a merge to main, the `lower-pins` job below lowers
-# every pin that sits above its measured count, in ONE bot PR
-# (scripts/duplication_pin_lowering.py). It only ever lowers; a raise is a
+# every pin that sits above its measured count, in ONE bot PR that edits only
+# .github/duplication-pins.json (scripts/duplication_pin_lowering.py). It only ever lowers; a raise is a
 # declared, reviewed scope change.
 #
 # scripts/duplication_gate.py reads jscpd's Total row and applies the pin. It is
@@ -58,6 +58,7 @@ on:
       # `autobot_shared/` did not trigger this workflow at all, so the
       # guard reported nothing rather than reporting clean.
       - 'autobot_shared/**/*.py'
+      - 'autobot_shared/**/*.vue'
       - 'autobot-slm-backend/**/*.py'
       - 'autobot-slm-frontend/src/**/*.ts'
       - 'autobot-slm-frontend/src/**/*.js'
@@ -73,6 +74,12 @@ on:
       - 'autobot-plugins/**/*.vue'
       - 'libs/autobot-ui/**/*.ts'
       - 'libs/autobot-ui/**/*.vue'
+      - 'scripts/**/*.ts'
+      - 'scripts/**/*.js'
+      - 'pipeline-scripts/**/*.ts'
+      - 'pipeline-scripts/**/*.js'
+      - 'autobot-plugins/**/*.js'
+      - '.github/duplication-pins.json'
       - '.github/workflows/duplication-guard.yml'
   push:
     branches: [main]
@@ -82,6 +89,7 @@ on:
       - 'autobot-frontend/src/**/*.js'
       - 'autobot-frontend/src/**/*.vue'
       - 'autobot_shared/**/*.py'
+      - 'autobot_shared/**/*.vue'
       - 'autobot-slm-backend/**/*.py'
       - 'autobot-slm-frontend/src/**/*.ts'
       - 'autobot-slm-frontend/src/**/*.js'
@@ -97,6 +105,12 @@ on:
       - 'autobot-plugins/**/*.vue'
       - 'libs/autobot-ui/**/*.ts'
       - 'libs/autobot-ui/**/*.vue'
+      - 'scripts/**/*.ts'
+      - 'scripts/**/*.js'
+      - 'pipeline-scripts/**/*.ts'
+      - 'pipeline-scripts/**/*.js'
+      - 'autobot-plugins/**/*.js'
+      - '.github/duplication-pins.json'
 
 # #14434: without this, every push left its predecessors queued. 42 of a 271-run
 # sample were for commits no longer at their branch tip - work nothing would ever
@@ -121,6 +135,8 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     env:
+      # Pins live in .github/duplication-pins.json, the ONE home of every pin (the
+      # "Load the pins" step exports them). The history below is why each moved.
       # Pins: duplicated lines per scope, measured on main run 34581036896
       # (2026-09-11, base d5a0c6dcb, jscpd 5.0.6). Ratchet DOWN only (#16319).
       #
@@ -141,7 +157,6 @@ jobs:
       # 11231 -> 11197 (#18819): measured on the #18819 branch with this workflow's flags
       # and jscpd 5.0.6 (654 clones, 4464 files); the main GUI's ErrorBanner and
       # ui/BaseAlert are retired into the kit's BaseAlert.
-      MAX_DUP_LINES: '11197'
       # #13044: the three trees this guard used to skip get their OWN pin rather
       # than being folded into the one above. When first scanned they carried
       # 2.4x the duplication ratio of the gated trees, and averaging would hide
@@ -169,7 +184,6 @@ jobs:
       # 2617 -> 1964 (#18819): measured on the #18819 branch at its final head, same
       # flags (105 clones, 918 files); every hand-rolled SLM error banner is now the
       # kit's BaseAlert.
-      SLM_MAX_DUP_LINES: '1964'
       # #18559, #18461, #16324: three scopes added, each pinned at the count jscpd 5.0.6
       # measured on main 7f3ee47071 with this workflow's exact flags, run from a
       # `git archive` copy of that commit (the same file population as CI's checkout).
@@ -180,17 +194,19 @@ jobs:
       # scripts + tools + pipeline-scripts: 230 duplicated lines, 12 clones, 36,478
       # lines in 151 files. A NEW scope (#18461), so the rise is exactly these files:
       # the old two scopes total 10910 + 1832 = 12742, the three together 12972.
-      TOOLING_MAX_DUP_LINES: '230'
       # autobot-frontend/src + autobot-slm-frontend/src + autobot-plugins + libs/autobot-ui:
       # 9,616 duplicated lines, 487 clones, 966,016 lines in 2,641 files. Counts the
       # clones BETWEEN the GUIs and the kit as well as the ones inside each (#18559).
-      CROSS_GUI_MAX_DUP_LINES: '9616'
       # autobot-backend + autobot-slm-backend + autobot_shared + plugins: 4,107 duplicated
       # lines, 274 clones, 933,488 lines in 3,003 files (#18559).
-      CROSS_BACKEND_MAX_DUP_LINES: '4107'
       JSCPD_VERSION: '5.0.6'
     steps:
       - uses: actions/checkout@v7
+
+      # #16324: the pins are data, so the bot that lowers them edits only that file (a
+      # workflow-file push needs a `workflows` scope no GITHUB_TOKEN has).
+      - name: Load the pins
+        run: python3 scripts/duplication_pin_lowering.py --export .github/duplication-pins.json >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v7
         with:
@@ -362,13 +378,16 @@ jobs:
     # The draft clause mirrors the dependency's own gate (#17957); on a push it is vacuous.
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && github.event_name == 'push' && needs.duplication-guard.result == 'success' }}
     runs-on: ubuntu-latest
+    # One bot branch, one PR: two pushes to main must not race on it.
+    concurrency: duplication-pins
     permissions:
       contents: write
       pull-requests: write
     steps:
+      # No credentials are left in .git/config: the push below passes its token explicitly.
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.AUTOBOT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/download-artifact@v8
         with:
@@ -377,27 +396,35 @@ jobs:
 
       - name: Open or update the pin-lowering PR
         env:
-          GH_TOKEN: ${{ secrets.AUTOBOT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          # A PAT, deliberately not GITHUB_TOKEN: a PR opened with GITHUB_TOKEN triggers no
+          # workflow run, so its required checks would never report and it could never merge.
+          GH_TOKEN: ${{ secrets.AUTOBOT_PUSH_TOKEN }}
           BRANCH: automation/duplication-pins
+          PINS: .github/duplication-pins.json
         run: |
           set -euo pipefail
           SHORT_SHA="$(git rev-parse --short=10 HEAD)"
-          CHANGES="$(python3 scripts/duplication_pin_lowering.py .github/workflows/duplication-guard.yml dup-logs --sha "${SHORT_SHA}")"
+          CHANGES="$(python3 scripts/duplication_pin_lowering.py "${PINS}" dup-logs)"
           if [ -z "${CHANGES}" ]; then
             echo "::notice::no pin sits above its measured count -- nothing to lower"
             exit 0
           fi
           echo "${CHANGES}"
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::AUTOBOT_PUSH_TOKEN not set -- bot PR would never trigger CI. A pin is above its measured count (above), so the ratchet is leaking slack until an owner adds the secret (Settings > Secrets and variables > Actions) or lowers the pin by hand."
+            exit 1
+          fi
 
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add .github/workflows/duplication-guard.yml
+          git add "${PINS}"
           git commit -m "ci(duplication-guard): lower the pins main has moved under (#16324)"
           # The bot branch is regenerated from main every time, so an update replaces it.
           # The lease names what the remote holds right now (empty when it does not exist).
-          REMOTE_HEAD="$(git ls-remote origin "refs/heads/${BRANCH}" | cut -f1)"
-          git push --force-with-lease="${BRANCH}:${REMOTE_HEAD}" origin "$BRANCH"
+          REMOTE_HEAD="$(git ls-remote "${REMOTE}" "refs/heads/${BRANCH}" | cut -f1)"
+          git push --force-with-lease="${BRANCH}:${REMOTE_HEAD}" "${REMOTE}" "$BRANCH"
 
           if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
             echo "::notice::updated the existing pin-lowering PR"
@@ -410,7 +437,7 @@ jobs:
               echo
               echo "## What Changed"
               echo
-              echo "Pin lines in \`.github/workflows/duplication-guard.yml\` only:"
+              echo "\`.github/duplication-pins.json\` only:"
               echo
               echo '```'
               echo "${CHANGES}"
