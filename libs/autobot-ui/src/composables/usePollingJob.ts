@@ -96,6 +96,9 @@ export function usePollingJob<T>(
   let timer: ReturnType<typeof setInterval> | null = null
   let currentTaskId: string | null = null
   let consecutiveErrors = 0
+  // Bumped by every start() and stop(), so a tick from an earlier run is dropped even
+  // when it was started with the same taskId (#19482: a Refresh that restarts with '').
+  let run = 0
 
   function stop(): void {
     if (timer !== null) {
@@ -104,16 +107,18 @@ export function usePollingJob<T>(
     }
     isPolling.value = false
     currentTaskId = null
+    run += 1
   }
 
-  async function poll(taskId: string): Promise<void> {
-    // Race guard — if a newer start() replaced this taskId, abandon the tick
-    if (taskId !== currentTaskId) return
+  async function poll(taskId: string, myRun: number): Promise<void> {
+    // Race guard — if a newer start() (or a stop()) replaced this run, abandon the tick
+    const stale = () => myRun !== run || taskId !== currentTaskId
+    if (stale()) return
 
     attempts.value += 1
     try {
       const result = await fetcher(taskId)
-      if (taskId !== currentTaskId) return
+      if (stale()) return
       consecutiveErrors = 0
       data.value = result
       if (isComplete?.(result) ?? false) {
@@ -122,7 +127,7 @@ export function usePollingJob<T>(
         return
       }
     } catch (err) {
-      if (taskId !== currentTaskId) return
+      if (stale()) return
       consecutiveErrors += 1
       error.value = err instanceof Error ? err : new Error(String(err))
       logger.warn(`polling attempt ${attempts.value} failed: ${error.value.message}`)
@@ -149,10 +154,11 @@ export function usePollingJob<T>(
     error.value = null
     data.value = null
     isPolling.value = true
+    const myRun = run
     // Fire immediately so callers don't wait `intervalMs` before the first tick
-    void poll(taskId)
+    void poll(taskId, myRun)
     const ms = isRef(options.intervalMs) ? options.intervalMs.value : (options.intervalMs ?? 2000)
-    timer = setInterval(() => void poll(taskId), ms)
+    timer = setInterval(() => void poll(taskId, myRun), ms)
   }
 
   // Auto-cleanup when owning scope (component / effectScope) disposes

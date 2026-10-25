@@ -24,7 +24,7 @@ import { useSlmApi } from '@/composables/useSlmApi'
 import type { NodeService, ServiceActionResponse } from '@/types/slm'
 import ServiceLogsModal from '@/components/fleet/ServiceLogsModal.vue'
 import { BaseAlert, BaseModal, PollingPausedAlert } from '@autobot/ui'
-import { throwIfFailed, useDashboardPoller } from '@/composables/useDashboardPoller'
+import { useDashboardPoller } from '@/composables/useDashboardPoller'
 
 type RedisServiceAction = 'start' | 'stop' | 'restart'
 
@@ -112,7 +112,11 @@ function statusTextClass(status: string | undefined): string {
 // API calls
 // -----------------------------------------------------------------------
 
+/** Whether the last status read failed; the poller counts this, not the shared errorMessage. */
+const statusFailed = ref(false)
+
 async function fetchStatus(): Promise<void> {
+  statusFailed.value = false
   if (!props.nodeId || !props.serviceName) {
     service.value = null
     return
@@ -127,6 +131,7 @@ async function fetchStatus(): Promise<void> {
     logger.error('Failed to fetch Redis status:', err)
     // A failed read says nothing about the unit now, so drop the last value
     service.value = null
+    statusFailed.value = true
     errorMessage.value = t('redisServicePanel.fetchStatusFailed')
   } finally {
     isLoading.value = false
@@ -135,7 +140,11 @@ async function fetchStatus(): Promise<void> {
 }
 
 // #19482: the shared dashboard policy (stop on unmount and after repeated failures, paused alert)
-const statusPoller = useDashboardPoller(throwIfFailed(fetchStatus, errorMessage), POLL_INTERVAL_MS)
+// errorMessage is shared with performAction, so the tick reads its own statusFailed flag.
+const statusPoller = useDashboardPoller(async () => {
+  await fetchStatus()
+  if (statusFailed.value) throw new Error(errorMessage.value ?? 'status read failed')
+}, POLL_INTERVAL_MS)
 
 async function performAction(action: RedisServiceAction): Promise<void> {
   if (isActionInProgress.value || !props.nodeId || !props.serviceName) return
@@ -234,7 +243,7 @@ watch(
 
       <!-- Refresh button -->
       <button
-        @click="fetchStatus"
+        @click="statusPoller.start(`${props.nodeId}:${props.serviceName}`)"
         :disabled="!hasTarget || isLoading || isActionInProgress"
         class="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-40 transition-colors"
         :title="$t('redisServicePanel.refreshStatus')"

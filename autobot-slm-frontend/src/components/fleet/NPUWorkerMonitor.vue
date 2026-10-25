@@ -13,7 +13,7 @@
  * Related to Issue #590 (NPU Dashboard Improvements).
  */
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { BaseAlert, PollingPausedAlert } from '@autobot/ui'
 import { useDashboardPoller } from '@/composables/useDashboardPoller'
@@ -142,13 +142,14 @@ async function fetchMetrics(): Promise<void> {
   }
 }
 
+/** Reload the node lists, then (re)start the metrics poller: its first tick is the metrics fetch. */
 async function refresh(): Promise<void> {
   loading.value = true
   error.value = null
   try {
     await fleetStore.fetchNodes()
     await fleetStore.fetchNpuNodes()
-    await fetchMetrics()
+    metricsPoller.start('')
   } catch (e) {
     logger.error('Refresh failed', e)
     error.value = e instanceof Error ? e.message : 'Refresh failed'
@@ -160,10 +161,12 @@ async function refresh(): Promise<void> {
 // #19482: the shared dashboard policy (stop on unmount and after repeated failures, paused alert)
 const metricsPoller = useDashboardPoller(fetchMetrics, REFRESH_INTERVAL_MS)
 
-onMounted(async () => {
-  await refresh()
-  metricsPoller.start('')
+// Each failed tick shows, as the old interval did; after the limit the paused alert takes over.
+watch(metricsPoller.error, (e) => {
+  if (e) error.value = e.message
 })
+
+onMounted(() => refresh())
 </script>
 
 <template>

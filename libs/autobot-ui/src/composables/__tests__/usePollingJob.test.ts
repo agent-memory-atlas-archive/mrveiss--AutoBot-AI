@@ -287,6 +287,21 @@ describe('usePollingJob', () => {
     expect(fetcher).toHaveBeenCalledTimes(3)
   })
 
+  it('a restart with the same taskId drops the tick still in flight (#19482)', async () => {
+    let release: (v: string) => void = () => {}
+    const fetcher = vi.fn()
+      .mockImplementationOnce(() => new Promise<string>((res) => { release = res }))
+      .mockResolvedValue('fresh')
+    const { start, data } = usePollingJob(fetcher, { intervalMs: 1000 })
+
+    start('')
+    start('') // e.g. a Refresh while the first tick is still running
+    await vi.advanceTimersByTimeAsync(0)
+    release('stale')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(data.value).toBe('fresh')
+  })
+
   it('flags pausedOnErrors only for an errors stop, and start() clears it (#19482)', async () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('down'))
     const { start, stop, pausedOnErrors } = usePollingJob(fetcher, { intervalMs: 100, consecutiveErrorLimit: 2 })
