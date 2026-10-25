@@ -9,11 +9,19 @@ Consolidates all cache-related endpoints (Issue #1286).
 """
 
 import asyncio
-import json
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from api.cache_redis_databases import (
+    clear_single_redis_database,
+    clearable_database,
+    distinct_redis_databases,
+    get_cache_redis_connection,
+    load_config,
+    redis_databases,
+    save_config,
+)
 from api.schemas_system import (
     CacheClearAllResponse,
     CacheClearTypeResponse,
@@ -33,7 +41,6 @@ from api.system_health import ComponentHealth, register_health_probe
 from auth_middleware import check_admin_permission, get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.redis_client import DATABASE_MAPPING, get_redis_client
 from type_defs.common import Metadata
 from utils.advanced_cache_manager import advanced_cache
 
@@ -42,61 +49,6 @@ router = APIRouter(tags=["cache_management"])
 
 # Issue #380: Module-level tuple for essential cache data types
 _ESSENTIAL_CACHE_DATA_TYPES = ("templates", "system_status", "project_status")
-
-
-# The databases this API reports on and clears, numbers from the one name -> number table (#19232).
-# Only declared names: monitoring, rate_limiting, websockets and config are declared nowhere and
-# could only fail. A name the YAML later drops maps to None and is refused with a 400.
-_CACHE_DATABASE_NAMES = ("main", "knowledge", "prompts", "conversations", "sessions", "cache", "locks", "analytics")
-
-
-def redis_databases() -> Dict[str, int | None]:
-    """``{name: number}`` for the databases this API covers, read from the one table at call time."""
-    return {name: DATABASE_MAPPING.get(name) for name in _CACHE_DATABASE_NAMES}
-
-
-def get_cache_redis_connection(database: str = "main"):
-    """Get Redis connection for specified database using canonical client."""
-    try:
-        client = get_redis_client(async_client=False, database=database)
-        if client is None:
-            raise ConnectionError(f"Failed to get Redis client for database '{database}'")
-        return client
-    except Exception as e:
-        logger.error("Failed to connect to Redis database '%s': %s", database, str(e))
-        raise
-
-
-def _clear_single_redis_database(db_name: str, db_number: int | None) -> dict:
-    """Clear a single Redis database and return result."""
-    try:
-        redis_conn = get_cache_redis_connection(db_name)
-        keys_before = redis_conn.dbsize()
-        redis_conn.flushdb()
-        logger.info(
-            "Cleared Redis database %s (%s) - %s keys removed",
-            db_name,
-            db_number,
-            keys_before,
-        )
-        return {
-            "name": db_name,
-            "database": db_number,
-            "keys_cleared": keys_before,
-        }
-    except Exception:
-        logger.error(
-            "Failed to clear Redis database %s (%s): %s",
-            db_name,
-            db_number,
-            "Internal server error",
-        )
-        return {
-            "name": db_name,
-            "database": db_number,
-            "error": "Internal server error",
-            "keys_cleared": 0,
-        }
 
 
 def _process_data_type_stats_results(data_types: List[str], stats_results: list) -> Dict[str, Dict]:
@@ -170,32 +122,14 @@ async def get_cache_stats():
     error_code_prefix="CACHE_MANAGEMENT",
 )
 async def clear_redis_cache(database: str):
-    """Clear Redis cache for specific database or all databases."""
-    cleared_databases = []
-
+    """Clear one database, or each distinct database once for ``all``; an alias is a 400 (#19497)."""
     if database == "all":
-        for db_name, db_number in redis_databases().items():
-            result = await asyncio.to_thread(_clear_single_redis_database, db_name, db_number)
-            cleared_databases.append(result)
+        targets = distinct_redis_databases()
     else:
-        databases = redis_databases()
-        if databases.get(database) is None:  # unknown here, or not declared by the YAML
-            available = [name for name, number in databases.items() if number is not None]
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown database '{database}'. Available: {available}",
-            )
-        db_number = databases[database]
-        redis_conn = get_cache_redis_connection(database)
-        keys_before = await asyncio.to_thread(redis_conn.dbsize)
-        await asyncio.to_thread(redis_conn.flushdb)
-        cleared_databases.append({"name": database, "database": db_number, "keys_cleared": keys_before})
-        logger.info(
-            "Cleared Redis database %s (%s) - %s keys removed",
-            database,
-            db_number,
-            keys_before,
-        )
+        targets = {database: clearable_database(database)}
+    cleared_databases = []
+    for db_name, db_number in targets.items():
+        cleared_databases.append(await asyncio.to_thread(clear_single_redis_database, db_name, db_number))
 
     return {
         "status": "success",
@@ -251,12 +185,8 @@ async def save_cache_config(config_data: Metadata):
         if field not in config_data:
             raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
 
-    try:
-        redis_conn = get_cache_redis_connection("config")
-        await asyncio.to_thread(redis_conn.set, "cache_config", json.dumps(config_data))
-        logger.info("Cache configuration saved to Redis")
-    except Exception as e:
-        logger.warning("Could not save cache config to Redis: %s", str(e))
+    await asyncio.to_thread(save_config, config_data)
+    logger.info("Cache configuration saved to Redis")
 
     return {
         "status": "success",
@@ -273,17 +203,9 @@ async def save_cache_config(config_data: Metadata):
 )
 async def get_cache_config():
     """Get current cache configuration."""
-    try:
-        redis_conn = get_cache_redis_connection("config")
-        config_data = await asyncio.to_thread(redis_conn.get, "cache_config")
-        if config_data:
-            return {
-                "status": "success",
-                "config": json.loads(config_data),
-                "source": "redis",
-            }
-    except Exception as e:
-        logger.warning("Could not load cache config from Redis: %s", str(e))
+    saved = await asyncio.to_thread(load_config)
+    if saved is not None:
+        return {"status": "success", "config": saved, "source": "redis"}
 
     default_config = {
         "defaultTTLMinutes": 5,

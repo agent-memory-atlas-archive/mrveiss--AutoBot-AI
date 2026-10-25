@@ -77,7 +77,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/auth.py": 684,
     "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
-    "autobot-backend/api/cache_management.py": 775,
+    "autobot-backend/api/cache_management.py": 697,
     "autobot-backend/api/chat.py": 2686,  # #18316: delete delegates to the canonical path
     "autobot-backend/api/chat_sessions.py": 1859,  # #18293: legacy transcripts only ever proposed
     "autobot-backend/api/code_intelligence.py": 2151,

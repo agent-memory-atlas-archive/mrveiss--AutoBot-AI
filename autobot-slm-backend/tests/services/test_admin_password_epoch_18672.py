@@ -209,3 +209,14 @@ def test_cli_reads_env_files_with_the_one_shared_parser(monkeypatch, tmp_path) -
     env.write_text('A="2" # note\nB=a#b\nC=x # c\nD="q\n\n# skip\n', encoding="utf-8")
     assert module.load_env_file(str(env)) == env_file.parse_env_text(env.read_text(encoding="utf-8"))
     assert module.load_env_file(str(tmp_path / "absent.env")) == {}
+
+
+def test_cli_without_autobot_shared_exits_with_the_install_root_not_a_traceback(monkeypatch) -> None:
+    """#19232 review: a host the slm_manager role has not synced gets a message, not an ImportError."""
+    from autobot_shared.fleet_constants import FLEET_INSTALL_ROOT
+
+    monkeypatch.setitem(sys.modules, "autobot_shared.env_file", None)  # import of it now raises ImportError
+    with pytest.raises(SystemExit) as exited:
+        _admin_module(monkeypatch, [])
+    message = str(exited.value.code)
+    assert str(FLEET_INSTALL_ROOT) in message and "slm_manager role" in message and "builtin updater" in message

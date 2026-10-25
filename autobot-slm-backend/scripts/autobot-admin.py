@@ -38,7 +38,14 @@ _INSTALL_ROOT = "/opt/autobot"  # noqa: ssot-path -- the pinned standalone copy 
 if _INSTALL_ROOT not in sys.path:
     sys.path.append(_INSTALL_ROOT)
 
-from autobot_shared.env_file import parse_env_file  # noqa: E402 -- needs the path entry above
+try:
+    from autobot_shared.env_file import parse_env_file  # noqa: E402 -- needs the path entry above
+except ImportError as missing:
+    # Not a traceback: name where it looked and the two sanctioned ways to put autobot_shared there.
+    sys.exit(
+        f"autobot-admin: cannot import autobot_shared from the install root {_INSTALL_ROOT} ({missing}). "
+        "Sync it onto this host with the slm_manager role or the builtin updater, then re-run."
+    )
 
 
 def load_env_file(path: str) -> dict:
