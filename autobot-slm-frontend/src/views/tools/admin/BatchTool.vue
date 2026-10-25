@@ -17,7 +17,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutobotApi } from '@/composables/useAutobotApi'
 import { formatDateTime } from '@/composables/useTimezone'
-import { BaseAlert, BaseModal, PollingPausedAlert, usePollingJob } from '@autobot/ui'
+import { BaseAlert, BaseModal, PollingPausedAlert } from '@autobot/ui'
+import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { POLL_CONSECUTIVE_ERROR_LIMIT } from '@/constants/api-timeouts'
 
 const api = useAutobotApi()
 
@@ -63,10 +65,9 @@ const newJob = ref({
 
 const { t } = useI18n()
 
+// Issue #1092: polling stops after repeated failures. Since #19482 that is the shared SLM
+// dashboard policy (useDashboardPoller, POLL_CONSECUTIVE_ERROR_LIMIT); Retry restarts it.
 const POLL_INTERVAL_MS = 10_000
-// Issue #1092: stop polling after repeated failures, now usePollingJob's
-// consecutiveErrorLimit (#19482); Retry restarts it.
-const MAX_CONSECUTIVE_ERRORS = 3
 
 /** Message of a thrown value, or the translated fallback. */
 function errorText(e: unknown, fallbackKey: string): string {
@@ -159,11 +160,7 @@ async function pollTick(): Promise<void> {
   }
 }
 
-const poller = usePollingJob(() => pollTick(), {
-  intervalMs: POLL_INTERVAL_MS,
-  maxAttempts: Infinity,
-  consecutiveErrorLimit: MAX_CONSECUTIVE_ERRORS,
-})
+const poller = useDashboardPoller(pollTick, POLL_INTERVAL_MS)
 
 watch(poller.error, (e) => {
   if (e) error.value = errorText(e, 'tools.admin.batchTool.failedToLoadJobs')
@@ -172,7 +169,7 @@ watch(poller.error, (e) => {
 watch(poller.pausedOnErrors, (paused) => {
   if (!paused) return
   error.value = null
-  logger.warn('Batch polling stopped after %d consecutive errors', MAX_CONSECUTIVE_ERRORS)
+  logger.warn('Batch polling stopped after %d consecutive errors', POLL_CONSECUTIVE_ERROR_LIMIT)
 })
 
 /** Refresh now, and restart polling if it had paused (Refresh and Retry both). */
