@@ -17,7 +17,8 @@ from scripts import sync_builtin_skills as sync
 def _same_named(root: Path) -> set[str]:
     """Builtin skill directories that also exist under .claude/skills (hyphen or underscore)."""
     dev = {p.name.replace("-", "_") for p in (root / sync.DEV_SKILLS).iterdir() if p.is_dir()}
-    return {p.name for p in (root / sync.BUILTIN).iterdir() if (p / "SKILL.md").is_file() and p.name in dev}
+    builtin = (p for p in (root / sync.BUILTIN).iterdir() if (p / "SKILL.md").is_file())
+    return {p.name for p in builtin if p.name.replace("-", "_") in dev}
 
 
 def test_every_generated_copy_matches_its_canonical_skill() -> None:
@@ -32,6 +33,17 @@ def test_every_same_named_pair_is_mirrored_or_a_recorded_homonym() -> None:
         f"{unrecorded}: a built-in skill and a .claude/skills copy share a name. Add it to MIRRORED "
         "in scripts/sync_builtin_skills.py (and run it), or to HOMONYMS with the reason the texts differ."
     )
+
+
+def test_every_recorded_entry_still_exists() -> None:
+    stale = sorted((set(sync.MIRRORED) | set(sync.HOMONYMS)) - _same_named(sync.REPO_ROOT))
+    assert not stale, f"{stale}: recorded in scripts/sync_builtin_skills.py but no longer a same-named pair"
+
+
+def test_a_crlf_checkout_is_not_drift(tree: Path) -> None:
+    copy = tree / sync.DEV_SKILLS / "bugfix" / "SKILL.md"
+    copy.write_bytes(copy.read_bytes().replace(b"\n", b"\r\n"))
+    assert sync.drifted(tree) == []
 
 
 def test_no_entry_is_both_mirrored_and_a_homonym() -> None:

@@ -50,12 +50,17 @@ def pairs(root: Path = REPO_ROOT) -> list[tuple[Path, Path]]:
     return [(root / BUILTIN / src / "SKILL.md", root / DEV_SKILLS / dst / "SKILL.md") for src, dst in MIRRORED.items()]
 
 
+def _text(path: Path) -> bytes:
+    """File bytes with CRLF folded to LF, so a Windows autocrlf checkout is not drift."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def drifted(root: Path = REPO_ROOT) -> list[str]:
     """Generated copies that are missing or differ from their canonical text."""
     return [
         f"{dst.relative_to(root)} != {src.relative_to(root)}"
         for src, dst in pairs(root)
-        if not dst.is_file() or dst.read_bytes() != src.read_bytes()
+        if not dst.is_file() or _text(dst) != _text(src)
     ]
 
 
