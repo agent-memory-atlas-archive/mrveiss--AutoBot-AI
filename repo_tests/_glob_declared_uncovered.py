@@ -65,6 +65,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
             "repo_tests/documented_playbook_invocations_test.py",
             "repo_tests/redis_config_path_is_canonical_17434_test.py",
             "repo_tests/sdk_docs_paths_test.py",
+            "repo_tests/user_docs_stay_consistent_19178_test.py",
         },
         "root-relative `*.md` sweep; the matching files live outside the python filter's trees",
     ),
@@ -100,7 +101,10 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
         "root-relative `*.sh` sweep; the matching files live outside the python filter's trees",
     ),
     "*.ts": (
-        {"repo_tests/slm_frontend_calls_reach_served_routes_test.py"},
+        {
+            "repo_tests/slm_frontend_calls_reach_served_routes_test.py",
+            "repo_tests/v_html_sanitiser_guard_19118_test.py",
+        },
         "root-relative `*.ts` sweep; the matching files live outside the python filter's trees",
     ),
     "*.vue": (
@@ -110,6 +114,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
             "repo_tests/_raw_palette_detect.py",
             "repo_tests/slm_frontend_bare_ui_literals_test.py",
             "repo_tests/slm_frontend_calls_reach_served_routes_test.py",
+            "repo_tests/v_html_sanitiser_guard_19118_test.py",
         },
         "root-relative `*.vue` sweep; the matching files live outside the python filter's trees",
     ),
@@ -120,6 +125,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
             "repo_tests/hook_suites_run_in_ci_test.py",
             "repo_tests/hooks_path_override_15961_test.py",
             "repo_tests/infra_libs_test_wiring_guard_15051_test.py",
+            "repo_tests/one_static_data_copy_18556_test.py",
             "repo_tests/slm_frontend_publish_contract_test.py",
         },
         "root-relative `*.yaml` sweep; the matching files live outside the python filter's trees",
@@ -146,6 +152,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
             "repo_tests/job_name_names_what_it_runs_test.py",
             "repo_tests/nginx_sites_enabled_link_enforced_16979_test.py",
             "repo_tests/no_private_copy_of_a_shared_helper_test.py",
+            "repo_tests/one_static_data_copy_18556_test.py",
             "repo_tests/pip_relative_editable_needs_chdir_test.py",
             "repo_tests/postgres_listen_not_wildcard_19239_test.py",
             "repo_tests/pull_request_workflows_cannot_push_15362_test.py",
