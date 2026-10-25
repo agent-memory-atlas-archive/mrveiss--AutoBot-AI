@@ -29,11 +29,11 @@ def _modules(root: Path) -> list[Path]:
     return sorted(p for p in (root / _LLC).rglob("*.py") if "tests" not in p.parts and not p.name.endswith("_test.py"))
 
 
-#: 216 non-test LLC modules measured at #19340.
+#: 216 non-test LLC modules measured at #19340; repinned by scripts/repin_reach_floors.py.
 REACH = declare(
     "llc-sigterm-grace-copies",
     discover=_modules,
-    floor=180,
+    floor=216,  # mid-window: population 216, window (216, 216)
     what="non-test LLC modules",
     roots=(_LLC,),
 )

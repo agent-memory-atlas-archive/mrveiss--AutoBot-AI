@@ -267,6 +267,7 @@ REACH_ROOTS = {
         "autobot_shared",
     ),
     "repo_tests/shadowed_literal_routes_18720_test.py": ("autobot-backend", "autobot-slm-backend"),
+    "repo_tests/sigterm_grace_one_home_19340_test.py": ("autobot-backend/llc",),
     "repo_tests/single_attribute_writer_18240_test.py": ("autobot-frontend/src",),
     "repo_tests/slm_backend_no_embedded_playbook_18606_test.py": ("autobot-slm-backend",),
     "repo_tests/slm_node_enum_members_exist_test.py": ("autobot-slm-backend",),
