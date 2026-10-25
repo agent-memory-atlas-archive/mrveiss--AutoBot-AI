@@ -10,7 +10,12 @@ import pytest
 
 from autobot_shared.status_enums import CommandRisk
 from secure_command_executor import SecureCommandExecutor
-from security.command_segments import command_line_pattern, command_segments, split_command_line
+from security.command_segments import (
+    UNTERMINATED_HEREDOC,
+    command_line_pattern,
+    command_segments,
+    split_command_line,
+)
 from services.command_approval_manager import SUBCOMMAND_TOOLS, CommandApprovalManager
 
 
@@ -43,6 +48,15 @@ def executor() -> SecureCommandExecutor:
         ("{ ls; }", ["ls"]),
         ("time ! sh", ["sh"]),
         ("timeout 5 ls", ["timeout 5 ls"]),
+        ("time -p sh", ["sh"]),
+        ("time -p -- sh", ["sh"]),
+        ("time", ["time"]),
+        ('echo $"a;b" ; sh', ['echo $"a;b"', "sh"]),
+        ("ls\rsh", ["ls\rsh"]),
+        ("cat x\r\nsh", ["cat x", "sh"]),
+        ("ls \\\nsh", ["ls \\\nsh"]),
+        ("cat <<< 'a;b' && sh", ["cat <<< 'a;b'", "sh"]),
+        ("cat <<<x\nsh", ["cat <<<x", "sh"]),
     ],
 )
 def test_the_splitter_separates_commands_outside_quotes_and_redirections(command: str, segments: list) -> None:
@@ -57,6 +71,43 @@ def test_a_quote_inside_a_comment_cannot_hide_the_next_line() -> None:
     """To the shell `#'` is a comment, so the following line runs."""
     assert command_segments("ls #'\nsh\n'") == ["ls #'", "sh", "'"]
     assert command_segments("echo a#b 'c;d'") == ["echo a#b 'c;d'"]
+
+
+@pytest.mark.parametrize(
+    "command, segments",
+    [
+        ("cat <<E\n'\nE\nsh", ["cat <<E", "sh"]),
+        ("cat <<'E'\na; b'\nE\nsh", ["cat <<'E'", "sh"]),
+        ('cat <<"E" | sh\nbody\nE', ['cat <<"E"', "sh"]),
+        ("cat <<\\E\n'\nE\nsh", ["cat <<\\E", "sh"]),
+        ("cat <<-E\n\t'\n\tE\nsh", ["cat <<-E", "sh"]),
+        ("cat <<A <<B\n'\nA\n'\nB\nsh", ["cat <<A <<B", "sh"]),
+        ("cat <<E\nx\nE", ["cat <<E"]),
+        ("cat <<E", ["cat <<E"]),
+    ],
+)
+def test_a_here_doc_body_is_data_and_the_commands_after_its_terminator_split(command: str, segments: list) -> None:
+    assert command_segments(command) == segments
+
+
+def test_an_apostrophe_in_a_here_doc_cannot_hide_the_command_after_it(executor: SecureCommandExecutor) -> None:
+    """The trainmaster's reproducer: the body's `'` used to swallow the next command into a quote.
+
+    `sudo ls` rates HIGH; swallowed, the line took the unknown-command default.
+    """
+    command = "cat <<E\n'\nE\nsudo ls"
+    risk, reasons = executor.assess_command_risk(command)
+    assert risk == executor.assess_command_risk("sudo ls")[0] == CommandRisk.HIGH, reasons
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["cat <<E\n'\nsh", "cat <<E\n", "cat <<E\n\tE\nsh", "cat <<A <<B\nA\nsh", "cat << ;\nsh"],
+)
+def test_a_here_doc_without_its_terminator_fails_closed(executor: SecureCommandExecutor, command: str) -> None:
+    """Plain `<<` does not strip tabs, and `<<` needs a word: no terminator, so FORBIDDEN."""
+    assert command_segments(command)[-1] == UNTERMINATED_HEREDOC
+    assert executor.assess_command_risk(command)[0] == CommandRisk.FORBIDDEN
 
 
 def test_operators_are_kept_with_the_segment_they_follow() -> None:
@@ -78,7 +129,10 @@ def test_a_redirection_does_not_turn_one_command_into_a_chain(executor: SecureCo
     assert executor.assess_command_risk("ls -la 2>&1")[0] == executor.assess_command_risk("ls -la")[0]
 
 
-@pytest.mark.parametrize("wrapped, bare", [("(sudo rm x)", "sudo rm x"), ("time sudo ls", "sudo ls"), ("ls;", "ls")])
+@pytest.mark.parametrize(
+    "wrapped, bare",
+    [("(sudo rm x)", "sudo rm x"), ("time sudo ls", "sudo ls"), ("time -p sh", "sh"), ("ls;", "ls")],
+)
 def test_a_wrapped_command_is_judged_as_the_command_it_wraps(
     executor: SecureCommandExecutor, wrapped: str, bare: str
 ) -> None:
@@ -107,6 +161,14 @@ def test_a_plain_command_keeps_its_historical_pattern() -> None:
 def test_a_chain_pattern_names_every_segment_and_operator() -> None:
     assert command_line_pattern("cat a && sh", SUBCOMMAND_TOOLS) == "cat * && sh"
     assert command_line_pattern("cat a &", SUBCOMMAND_TOOLS) == "cat * &"
+
+
+def test_a_newline_renders_as_the_semicolon_it_is_equivalent_to() -> None:
+    assert command_line_pattern("ls\nsh", SUBCOMMAND_TOOLS) == command_line_pattern("ls; sh", SUBCOMMAND_TOOLS)
+    assert command_line_pattern("ls\nsh", SUBCOMMAND_TOOLS) == "ls ; sh"
+    assert command_line_pattern("npm\ninstall x", SUBCOMMAND_TOOLS) != command_line_pattern(
+        "npm install x", SUBCOMMAND_TOOLS
+    )
 
 
 def _approved(stored: str, candidate: str, risk: str = "safe") -> bool:

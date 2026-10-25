@@ -30,7 +30,7 @@ from security.command_patterns import (
     SYSTEM_PATHS,
     check_dangerous_patterns,
 )
-from security.command_segments import command_segments
+from security.command_segments import command_segments, unparsed_segment_reasons
 from services.tool_output_filter import get_tool_output_filter
 from utils.command_utils import execute_shell_command
 
@@ -646,9 +646,9 @@ class SecureCommandExecutor:
         Whole-line patterns run first: some (a fork bomb) span the separators
         the split removes.
         """
-        dangerous_patterns = self._check_dangerous_patterns(command)
-        if dangerous_patterns:
-            return CommandRisk.FORBIDDEN, [f"Dangerous pattern: {p}" for p in dangerous_patterns]
+        dangerous = self._check_dangerous_patterns(command) + unparsed_segment_reasons(segments)
+        if dangerous:
+            return CommandRisk.FORBIDDEN, [f"Dangerous pattern: {p}" for p in dangerous]
         assessed = [(segment, *self.assess_command_risk(segment)) for segment in segments]
         risk = max((seg_risk for _seg, seg_risk, _r in assessed), key=lambda r: r.rank)
         label = "Chained command" if len(segments) > 1 else "Command"
