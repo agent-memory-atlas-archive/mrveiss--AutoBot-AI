@@ -116,6 +116,21 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_EMBEDDING_SPACE_CHECK_SECONDS",
+        type=float,
+        default=5.0,
+        description=(
+            "Seconds between a knowledge-base process's checks for an embedding-model switch made "
+            "in another process; on a newer generation it rebinds its collection, write buffer and "
+            "embed model (knowledge/embedding_space_binding.py, #19379)."
+        ),
+        component="knowledge",
+        range=(0.0, 300.0),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_EMBEDDING_PROBE_TIMEOUT_SECONDS",
         type=int,
         default=60,

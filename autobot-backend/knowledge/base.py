@@ -34,6 +34,7 @@ from autobot_shared.redis_management.types import DATABASE_MAPPING
 from autobot_shared.ssot_config import config as ssot_config
 from config.manager import get_config_manager
 from knowledge.backends import BaseCollection, get_async_default_client, get_default_client
+from knowledge.embedding_space_binding import initial_collection
 from services.provider_key_vault import resolve_provider_key
 from utils.knowledge_base_timeouts import kb_timeouts
 
@@ -87,7 +88,8 @@ class KnowledgeBaseCore:
     def _init_chromadb_config(self) -> None:
         """Initialize ChromaDB configuration (Issue #398: extracted)."""
         self.chromadb_path = self.config_manager.get("memory.chromadb.path", "data/chromadb")
-        self.chromadb_collection = self.config_manager.get("memory.chromadb.collection_name", "autobot_memory")
+        configured = self.config_manager.get("memory.chromadb.collection_name", "autobot_memory")
+        self.chromadb_collection = initial_collection(self, configured)  # a switched space wins (#19379)
         # Issue #72: HNSW parameters optimized for 545K+ vectors
         self.hnsw_space = self.config_manager.get("memory.chromadb.hnsw.space", "cosine")
         self.hnsw_construction_ef = self.config_manager.get("memory.chromadb.hnsw.construction_ef", 300)
@@ -415,10 +417,7 @@ class KnowledgeBaseCore:
             on_flush_error=_on_write_buffer_flush_error,
         )
 
-        logger.info(
-            "ChromaDB vector store initialized: collection='%s'",
-            self.chromadb_collection,
-        )
+        logger.info("ChromaDB vector store initialized: collection='%s'", self.chromadb_collection)
 
         try:
             collection_count = await asyncio.to_thread(abc_collection.count)

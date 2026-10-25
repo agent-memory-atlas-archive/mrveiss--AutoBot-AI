@@ -219,7 +219,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/judges/multi_agent_arbitrator.py": 611,
     "autobot-backend/judges/security_risk_judge.py": 842,
     "autobot-backend/knowledge/adapters/okf_adapter.py": 770,
-    "autobot-backend/knowledge/base.py": 704,
+    "autobot-backend/knowledge/base.py": 703,
     "autobot-backend/knowledge/bulk.py": 1983,
     "autobot-backend/knowledge/categories.py": 965,
     "autobot-backend/knowledge/collections.py": 728,
