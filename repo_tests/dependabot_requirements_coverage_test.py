@@ -102,9 +102,24 @@ def _population(root: Path = _REPO_ROOT) -> set[Path]:
     return {p for p in files if not any(part in _SKIP_PARTS for part in p.relative_to(root).parts)}
 
 
+def dependabot_directories(ecosystem: str, config: Path = _CONFIG) -> list[str]:
+    """Every ``directory`` (or ``directories`` entry) configured for *ecosystem*.
+
+    The one reader of ``dependabot.yml`` for the coverage guards: this pip guard and
+    its sibling for the other ecosystems (#19523) share it, so the two cannot parse
+    the config differently.
+    """
+    document = yaml.safe_load(config.read_text(encoding="utf-8"))
+    found: list[str] = []
+    for update in document["updates"]:
+        if update.get("package-ecosystem") != ecosystem:
+            continue
+        found.extend([update["directory"]] if "directory" in update else update.get("directories", []))
+    return found
+
+
 def _pip_directories() -> list[str]:
-    config = yaml.safe_load(_CONFIG.read_text(encoding="utf-8"))
-    return [u["directory"] for u in config["updates"] if u.get("package-ecosystem") == "pip"]
+    return dependabot_directories("pip")
 
 
 def _reach(directories: list[str], root: Path = _REPO_ROOT) -> set[Path]:
