@@ -1102,13 +1102,6 @@
   "8dae3e12",
   "efbd2d46"
  ],
- "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": [
-  "5efbc653",
-  "68f32bac",
-  "7d5f448a",
-  "afa93d13",
-  "c5c7f0b4"
- ],
  "autobot-slm-frontend/src/views/monitoring/AlertsMonitor.vue": [
   "ee2d5e5c"
  ],
@@ -1188,11 +1181,6 @@
   "cf8fd361",
   "ed433e7a",
   "f8fa0eeb"
- ],
- "autobot-slm-frontend/src/views/tools/admin/BatchTool.vue": [
-  "0cc5cc88",
-  "375d6f32",
-  "8717ffe7"
  ],
  "autobot-slm-frontend/src/views/tools/admin/MCPTool.vue": [
   "742ddc50"
