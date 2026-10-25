@@ -9,6 +9,9 @@ import type { App } from 'vue'
 import rumAgent from '../utils/RumAgent'
 import { createLogger } from '@/utils/debugUtils'
 import { isChunkLoadError } from '@/utils/chunkLoadError'
+import { isBenignBrowserNotice } from '@/utils/benignBrowserNotice'
+import i18n from '@/i18n'
+import { useAppStore } from '@/stores/useAppStore'
 
 // Create scoped logger for errorHandler
 const logger = createLogger('errorHandler')
@@ -49,6 +52,9 @@ class GlobalErrorHandler {
     // Catch unhandled promise rejections
     window.addEventListener('unhandledrejection', (event) => {
       logger.error('Unhandled promise rejection:', event.reason)
+      if (!isBenignBrowserNotice(event.reason)) {
+        this.notifyUser(event.reason)
+      }
 
       this.addNotification({
         message: this.getUnhandledRejectionMessage(event.reason),
@@ -70,17 +76,15 @@ class GlobalErrorHandler {
 
     // Catch JavaScript errors
     window.addEventListener('error', (event) => {
-      // ResizeObserver loop notices are benign browser warnings — both the old
-      // "loop limit exceeded" and the newer Chromium "loop completed with
-      // undelivered notifications" variants. Never surface them as an Application
-      // Error notification (they fire during normal responsive layout).
-      const rawMessage = event.message || event.error?.message || ''
-      if (typeof rawMessage === 'string' && rawMessage.includes('ResizeObserver loop')) {
+      // Benign browser notices (ResizeObserver loop, both wordings) fire during
+      // normal responsive layout — never surface them as an Application Error.
+      if (isBenignBrowserNotice(event.message, event.error)) {
         event.preventDefault()
         return
       }
 
       logger.error('Global JavaScript error:', event.error)
+      this.notifyUser(event.error || event)
 
       this.addNotification({
         message: this.getJavaScriptErrorMessage(event.error, event.filename, event.lineno),
@@ -102,6 +106,24 @@ class GlobalErrorHandler {
 
     // Catch network errors (fetch failures)
     this.interceptFetch()
+  }
+
+  /**
+   * The user-visible channel: the app store's system notification (what the
+   * notification centre renders). This plugin is the single owner of the window
+   * `error` / `unhandledrejection` registration (#19458), so App.vue no longer
+   * registers its own listeners and the benign filter above cannot be bypassed.
+   */
+  private notifyUser(error: unknown) {
+    const appStore = useAppStore()
+    if (typeof appStore?.addSystemNotification !== 'function') return
+    const { t } = i18n.global
+    const message = error instanceof Error ? error.message : (error as { message?: string } | null)?.message
+    appStore.addSystemNotification({
+      severity: 'error',
+      title: t('nav.applicationError'),
+      message: message || t('nav.unexpectedError')
+    })
   }
 
   private interceptFetch() {
@@ -248,7 +270,7 @@ class GlobalErrorHandler {
       if (isChunkLoadError(error)) {
         return 'Application files failed to load. Please reload the page.'
       }
-      if (error.message.includes('ResizeObserver loop limit exceeded')) {
+      if (isBenignBrowserNotice(error)) {
         return 'Display refresh needed. This is usually harmless.'
       }
       if (error.message.includes('Cannot read properties')) {
@@ -334,21 +356,40 @@ class GlobalErrorHandler {
 
 const globalErrorHandler = new GlobalErrorHandler()
 
+function recoverFromChunkLoadError(error: Error, componentName: string) {
+  logger.warn('Chunk loading error detected, initiating cache clear...')
+  import('@/utils/cacheManagement')
+    .then(({ handleChunkLoadingError }) => {
+      handleChunkLoadingError(error, componentName)
+    })
+    .catch((cacheError) => {
+      logger.error('Failed to handle chunk error:', cacheError)
+      // Fallback to hard reload
+      window.location.reload()
+    })
+}
+
 // Plugin installation
 export default {
   install(app: App) {
-    // Enhanced Vue error handler
-    const originalErrorHandler = app.config.errorHandler
-
+    // The ONE app.config.errorHandler (#19458). It chains: log -> RUM report ->
+    // chunk-load recovery -> user notification. rum.ts and main.ts used to assign
+    // their own and overwrite each other; neither assigns one any more.
     app.config.errorHandler = (error, instance, info) => {
+      const err = error as Error
       logger.error('Vue Error:', { error, info })
 
-      // Call original handler (RUM plugin)
-      if (originalErrorHandler) {
-        originalErrorHandler(error, instance, info)
+      rumAgent.trackError('vue_error', {
+        message: err?.message,
+        stack: err?.stack,
+        componentInfo: info,
+        component: instance?.$options?.name || 'unknown'
+      })
+
+      if (isChunkLoadError(err)) {
+        recoverFromChunkLoadError(err, instance?.$?.type?.name || 'Unknown')
       }
 
-      // Show user-friendly notification
       globalErrorHandler.addManualNotification(
         'Component error occurred. Some features may not work correctly.',
         'error'
