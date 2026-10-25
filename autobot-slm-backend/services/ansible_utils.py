@@ -73,7 +73,11 @@ def ansible_run_failure(output: str, host: str | None, returncode: int | None) -
     hosts, so the exit code alone cannot prove anything ran. A run counts only if it exited
     0, printed no no-hosts marker, and the LAST PLAY RECAP shows no unreachable/failed host.
     With ``host`` (a single-target run) that host must also be listed with ok>=1; with
-    ``host=None`` (multi-host or inventory-file play) there is no single target to demand.
+    ``host=None`` (multi-host or inventory-file play) there is no single target, but the
+    recap must still be non-empty and list at least one host with ok>=1. The no-hosts
+    markers are matched across the WHOLE output, every play of a multi-play run, not only the
+    last recap: a "skipping: no hosts matched" in an early play fails the run even if a later
+    play succeeded (the conservative limit).
     Returns the text to report: the raw output on a non-zero exit, else the reason.
     """
     if returncode != 0:
@@ -87,6 +91,8 @@ def ansible_run_failure(output: str, host: str | None, returncode: int | None) -
         return f"target host {host} is absent from the PLAY RECAP"
     if host is not None and recap[host][0] < 1:
         return f"target host {host} ran no task (ok=0)"
+    if host is None and not any(counts[0] >= 1 for counts in recap.values()):
+        return "no host in the PLAY RECAP ran a task (recap empty or all ok=0)"
     for name, (_ok, unreachable, failed) in recap.items():
         if unreachable or failed:
             return f"host {name} reported unreachable={unreachable} failed={failed}"

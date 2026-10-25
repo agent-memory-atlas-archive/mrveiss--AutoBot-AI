@@ -72,7 +72,6 @@ def test_multi_host_check_fails_on_any_bad_recap_line_or_marker_but_needs_no_tar
     assert utils.ansible_run_failure(both + "c : ok=0 changed=0 unreachable=1 failed=0 skipped=0\n", None, 0)
     assert utils.ansible_run_failure(both + "d : ok=2 changed=0 unreachable=0 failed=1 skipped=0\n", None, 0)
     assert utils.ansible_run_failure(_NO_HOSTS, None, 0)
-    assert utils.ansible_run_failure("no recap at all", None, 0) is None
     assert utils.ansible_run_failure("anything", None, 2) == "anything"
 
 
@@ -195,3 +194,23 @@ def test_infrastructure_run_playbook_fails_a_no_hosts_run_that_exits_zero(load, 
 def test_infrastructure_run_playbook_completes_a_run_whose_recap_is_clean(load, monkeypatch, tmp_path) -> None:
     infra, execution = _infra_run(load, monkeypatch, tmp_path, _recap(_HOST))
     assert execution.status == infra.PlaybookStatus.COMPLETED
+
+
+def test_multi_host_mode_treats_an_empty_recap_as_failure(utils) -> None:
+    """HIGH: rc=0, no marker and no PLAY RECAP at all proves nothing ran."""
+    assert utils.ansible_run_failure("TASK [x] ok\nno recap at all", None, 0)
+    assert utils.ansible_run_failure("PLAY RECAP ****\n", None, 0)
+
+
+def test_multi_host_mode_requires_a_host_that_ran_a_task(utils) -> None:
+    """MED: every recap host at ok=0 is not a play that did anything."""
+    zeros = _recap("a", ok=0) + "b  : ok=0  changed=0  unreachable=0  failed=0  skipped=2\n"
+    assert utils.ansible_run_failure(zeros, None, 0)
+    assert utils.ansible_run_failure(zeros + "c : ok=1 changed=0 unreachable=0 failed=0 skipped=0\n", None, 0) is None
+
+
+def test_a_no_hosts_marker_in_an_early_play_fails_a_multi_play_run(utils) -> None:
+    """LOW (documented limit): markers are matched over the whole output, not just the last recap."""
+    output = "skipping: no hosts matched\n" + _recap(_HOST)
+    assert utils.ansible_run_failure(output, None, 0)
+    assert utils.ansible_run_failure(output, _HOST, 0)
