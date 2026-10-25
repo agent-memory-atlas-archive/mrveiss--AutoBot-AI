@@ -109,6 +109,16 @@ jobs:
           for unit in autobot-slm-backend nginx; do
             echo "== ${unit}"; sudo journalctl -u "${unit}" -n 80 --no-pager 2>&1 | bash scripts/ci/mask_install_summary.sh || true
           done
+          # #19503: where a world-writable bit on the code tree comes from -- modes, ACLs, and the umask
+          # each account actually gets here (Ansible ignores an ansible.cfg in a world-writable dir).
+          echo "== code tree modes"
+          for d in /opt /opt/autobot /opt/autobot/code_source /opt/autobot/code_source/autobot-slm-backend \
+                   /opt/autobot/code_source/autobot-slm-backend/ansible; do
+            sudo stat -c '%a %U:%G %n' "${d}" 2>&1 || true
+            sudo getfacl -p "${d}" 2>/dev/null | grep -vE '^(#|$)' | sed 's/^/    /' || true
+          done
+          echo "umask: runner=$(umask) root=$(sudo sh -c umask) autobot=$(sudo -u autobot sh -c umask 2>&1 || true)"
+          sudo grep -rhE '^\s*Defaults.*umask' /etc/sudoers /etc/sudoers.d 2>/dev/null || echo "sudoers: no umask default"
           # #19493: the console shows only the filtered Ansible progress; the error is in the install log.
           for log in /var/log/autobot/install-*.log; do
             [ -e "${log}" ] || continue
