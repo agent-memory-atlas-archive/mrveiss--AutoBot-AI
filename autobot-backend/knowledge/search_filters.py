@@ -426,16 +426,19 @@ def _authenticated_principal(user_id, org_id, group_ids) -> Principal:
     return Principal(user_id=user_id, company_id=org_id, group_ids=frozenset(group_ids), is_authenticated=True)
 
 
-def kb_principal_from_tenant(tenant) -> Principal:
-    """The visibility principal of a verified ``TenantContext`` (#16664, #18825).
+async def kb_principal_from_tenant(tenant, session) -> Principal:
+    """The visibility principal of a verified ``TenantContext`` (#16664, #18825, #19007).
 
     For routes that take ``get_tenant_context`` and no user dict. Same ``Principal`` as
-    :func:`kb_principal`: user and org come from the verified context; a tenant context carries
-    no team memberships, so ``group_ids`` is empty (as for dict-based auth). No admin bypass.
+    :func:`kb_principal`: user and org come from the verified context, the team memberships from
+    the canonical team service via *session* (cached; a failed lookup gives no groups). No admin bypass.
     """
+    from knowledge.tenant_groups import tenant_group_ids  # noqa: PLC0415 -- keeps the ORM off this import
+
     user_id = str(tenant.user_id) if getattr(tenant, "user_id", None) else None
     org_id = str(tenant.org_id) if getattr(tenant, "org_id", None) else None
-    return _authenticated_principal(user_id, org_id, [])
+    group_ids = await tenant_group_ids(tenant, session) if user_id else []
+    return _authenticated_principal(user_id, org_id, group_ids)
 
 
 def principal_for_identity(user_id: str | None, org_id: str | None = None) -> KbPrincipal:
