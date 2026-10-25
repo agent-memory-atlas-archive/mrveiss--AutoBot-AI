@@ -457,7 +457,7 @@ function formatStatus(status: string): string {
   gap: var(--spacing-3);
 }
 
-.no-data-content i {
+.no-data-content .icon {
   font-size: var(--text-3xl);
   color: var(--color-info);
 }
@@ -623,7 +623,7 @@ function formatStatus(status: string): string {
   font-size: var(--text-sm);
 }
 
-.loading-spinner i {
+.loading-spinner .icon {
   font-size: var(--text-3xl);
 }
 

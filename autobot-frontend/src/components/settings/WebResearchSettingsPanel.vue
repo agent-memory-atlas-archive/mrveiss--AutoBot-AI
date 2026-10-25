@@ -278,7 +278,7 @@ function clamp(value: number, min: number, max: number): number {
   margin: var(--spacing-0);
 }
 
-.panel-title i {
+.panel-title .icon {
   color: var(--color-primary);
 }
 
@@ -309,7 +309,7 @@ function clamp(value: number, min: number, max: number): number {
   letter-spacing: 0.05em;
 }
 
-.preference-label i {
+.preference-label .icon {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
 }

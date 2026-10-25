@@ -322,9 +322,9 @@ const cleanupOrphans = async () => {
   color: var(--text-secondary);
 }
 
-.scanning-state i,
-.error-state i,
-.initial-state i {
+.scanning-state .icon,
+.error-state .icon,
+.initial-state .icon {
   font-size: var(--text-5xl);
   margin-bottom: var(--spacing-4);
   display: block;
@@ -470,7 +470,7 @@ const cleanupOrphans = async () => {
   color: var(--color-success);
 }
 
-.kept-fact i {
+.kept-fact .icon {
   color: var(--color-success);
 }
 
