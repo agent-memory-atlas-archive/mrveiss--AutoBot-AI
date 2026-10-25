@@ -79,7 +79,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/components/knowledge/GraphConnectionPath.vue": 701,
     "autobot-frontend/src/components/knowledge/GraphRAGQuery.vue": 713,
     "autobot-frontend/src/components/knowledge/KBSearchResultPanel.vue": 630,
-    "autobot-frontend/src/components/knowledge/KnowledgeBrowser.vue": 1785,
+    "autobot-frontend/src/components/knowledge/KnowledgeBrowser.vue": 1772,  # #17563: 1785 -> 1772 (kit Breadcrumb)
     "autobot-frontend/src/components/knowledge/KnowledgeEntries.vue": 1358,  # #19118: 1359 -> 1358
     "autobot-frontend/src/components/knowledge/KnowledgeGraph.vue": 2073,
     "autobot-frontend/src/components/knowledge/KnowledgeHealth.vue": 925,
@@ -104,7 +104,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/components/terminal/AdvancedStepConfirmationModal.vue": 615,  # #18849: 616 -> 615
     "autobot-frontend/src/components/terminal/BaseXTerminal.vue": 825,
     "autobot-frontend/src/components/terminal/TerminalModals.vue": 742,  # #18849: 743 -> 742
-    "autobot-frontend/src/components/terminal/TerminalWindow.vue": 1726,
+    "autobot-frontend/src/components/terminal/TerminalWindow.vue": 1612,
     "autobot-frontend/src/components/ui/HostSelectionDialog.vue": 965,
     "autobot-frontend/src/components/vision/GUIAutomationControls.vue": 793,
     "autobot-frontend/src/components/vision/MediaGallery.vue": 843,
