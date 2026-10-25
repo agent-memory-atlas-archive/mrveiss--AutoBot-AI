@@ -147,6 +147,8 @@ export type { LogLevel } from './src/utils/logger'
 
 // The one exponential-backoff formula for reconnects and retries (#15402).
 export { backoffDelay, RETRY_BACKOFF } from './src/utils/backoff'
+// What a canonical API client throws for a non-2xx response: status and details kept (#12363).
+export { HttpError, isHttpError } from './src/utils/httpError'
 export type { BackoffOptions } from './src/utils/backoff'
 
 export { default as SchedulePicker } from './src/components/SchedulePicker.vue'
