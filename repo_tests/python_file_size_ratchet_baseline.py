@@ -97,7 +97,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/enterprise_features.py": 700,
     "autobot-backend/api/envelope_secrets.py": 615,
     "autobot-backend/api/files.py": 1241,
-    "autobot-backend/api/filesystem_mcp.py": 1968,
+    "autobot-backend/api/filesystem_mcp.py": 1954,
     "autobot-backend/api/git_mcp.py": 1336,
     "autobot-backend/api/http_client_mcp.py": 941,
     "autobot-backend/api/ide_integration.py": 928,
@@ -130,7 +130,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/schemas_agent.py": 2223,
     "autobot-backend/api/schemas_analytics.py": 3533,
     "autobot-backend/api/schemas_chat.py": 702,
-    "autobot-backend/api/schemas_code.py": 3265,
+    "autobot-backend/api/schemas_code.py": 3257,
     "autobot-backend/api/schemas_knowledge.py": 5127,
     "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
     "autobot-backend/api/schemas_workflows.py": 2824,
