@@ -23,6 +23,8 @@ The rules, each kept in exactly one place:
 * **Dispatch after commit.** The adapter task starts only once the caller's transaction
   commits, so its RUNNING update can see the run row; a rollback (including of the
   savepoint the wake was made in) drops the dispatch with the row.
+* **A wake never fails the write.** The comment, assignment or approval is the user's
+  work; a wake that cannot be created or dispatched is logged, never raised into it.
 """
 
 import uuid
@@ -37,7 +39,7 @@ from autobot_shared.logging_manager import get_logger
 from models.agent_org import AgentOrgNode
 
 from ..models.enums import HeartbeatInvocationSource, LLCAgentStatus
-from .run_status import ACTIVE_RUN_STATUSES, latest_run_in
+from .run_status import active_run
 
 logger = get_logger(__name__)
 
@@ -99,7 +101,7 @@ async def _wakeable_slug(session: AsyncSession, company_id: Any, agent_ref: Any)
     if (row.status or "") in UNWAKEABLE_STATUSES:
         logger.info("Event wake skipped: agent %s is %s", row.agent_id, row.status)
         return None
-    active = await latest_run_in(session, row.agent_id, ACTIVE_RUN_STATUSES)
+    active = await active_run(session, row.agent_id)  # a stale (crashed) run does not count
     if active is not None:
         logger.info("Event wake skipped: agent %s already has run %s (%s)", row.agent_id, active.id, active.status)
         return None
@@ -126,7 +128,11 @@ async def wake_agent(
         return None
     from .heartbeat_scheduler import get_heartbeat_scheduler
 
-    run, agent = await get_heartbeat_scheduler().trigger_manual(session, slug, source=reason)
+    try:
+        run, agent = await get_heartbeat_scheduler().trigger_manual(session, slug, source=reason)
+    except ValueError as exc:  # unconfigured agent: the user's write still stands
+        logger.warning("Event wake skipped: agent %s (%s) could not be woken: %s", slug, reason.value, exc)
+        return None
     wake_context = {**(context or {}), "wake_reason": reason.value}
     run.context_snapshot = dict(wake_context)
     await session.flush()
@@ -147,10 +153,21 @@ def _dispatch_after_commit(session: AsyncSession, agent: Dict[str, Any], run_id:
 
 
 def _on_commit(sync: Session) -> None:
+    """Dispatch every queued wake; a dispatch that raises is logged, never raised.
+
+    This runs inside ``commit()`` after the data is durable, so an exception here
+    would make the caller's write look failed when it succeeded. ``dispatch_run``
+    cannot write a FAILED status from this synchronous hook; the run stays QUEUED,
+    stops counting as busy once it is stale, and the stalled-run sweep (#16817)
+    closes it out.
+    """
     from .heartbeat_scheduler import get_heartbeat_scheduler
 
     for wake in sync.info.pop(_PENDING_KEY, []):
-        get_heartbeat_scheduler().dispatch_run(wake.agent, wake.run_id, wake.context)
+        try:
+            get_heartbeat_scheduler().dispatch_run(wake.agent, wake.run_id, wake.context)
+        except Exception:
+            logger.exception("Event wake: dispatch of run %s failed after commit", wake.run_id)
 
 
 def _within(txn: Optional[SessionTransaction], ancestor: SessionTransaction) -> bool:

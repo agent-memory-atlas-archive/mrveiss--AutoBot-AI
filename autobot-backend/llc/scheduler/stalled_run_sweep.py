@@ -99,8 +99,21 @@ def run_stalled_run_sweep(self: object) -> dict:  # type: ignore[type-arg]
     return {"stalled": stalled}
 
 
-def _cutoff(now: datetime | None = None) -> datetime:
+def stall_cutoff(now: datetime | None = None) -> datetime:
+    """The instant before which a non-terminal run counts as stalled.
+
+    Public because ``run_status`` asks the same question (#19582 review): a run this
+    sweep would close out no longer counts as the agent being busy.
+    """
     return (now or datetime.now(timezone.utc)) - timedelta(seconds=STALL_TIMEOUT_SECONDS)
+
+
+def run_age_anchor(entity=LLCHeartbeatRun):  # noqa: ANN001,ANN201 - an ORM entity or alias
+    """How old a run is: ``started_at``, else ``created_at`` for one never picked up.
+
+    One definition for this sweep and ``run_status``'s busy check (#19582 review).
+    """
+    return func.coalesce(entity.started_at, entity.created_at)
 
 
 def _stalled_candidates(cutoff: datetime):
@@ -117,7 +130,7 @@ def _stalled_candidates(cutoff: datetime):
     # #16817: that reasoning was right and the implementation did not follow it --
     # the comparison ran in Python over EVERY non-terminal row, so each sweep scanned
     # the whole live population to act on a few. COALESCE puts the same rule in SQL.
-    age_anchor = func.coalesce(LLCHeartbeatRun.started_at, LLCHeartbeatRun.created_at)
+    age_anchor = run_age_anchor()
     return (
         select(LLCHeartbeatRun).where(
             LLCHeartbeatRun.status.in_(NON_TERMINAL_STATUSES),
@@ -139,7 +152,7 @@ def _stalled_candidates(cutoff: datetime):
 async def _async_sweep() -> int:
     """Select non-terminal runs older than the cutoff and close them out."""
     factory = get_async_session_factory()
-    cutoff = _cutoff()
+    cutoff = stall_cutoff()
     stalled = 0
     released = 0
     async with factory() as session:
@@ -181,4 +194,6 @@ __all__ = [
     "STALL_ERROR",
     "STALL_RELEASE_REASON",
     "NON_TERMINAL_STATUSES",
+    "run_age_anchor",
+    "stall_cutoff",
 ]
