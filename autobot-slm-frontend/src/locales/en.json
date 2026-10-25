@@ -3122,7 +3122,12 @@
     "upgradeSelectedValue0": "Upgrade Selected ({value0})",
     "value0Value1Nodes": "{value0} / {value1} nodes",
     "version": "Version",
-    "discoveryCompleted": "Discovery completed"
+    "discoveryCompleted": "Discovery completed",
+    "upgradeJobsStarted": "Upgrade jobs started",
+    "confirmCancelJob": "Cancel this update job?",
+    "jobCancelled": "Job cancelled",
+    "confirmUpgradeAllOnNode": "Upgrade ALL packages on {nodeId}?",
+    "upgradeAllStartedOnNode": "Upgrade all started for {nodeId}"
   },
   "tools": {
     "admin": {

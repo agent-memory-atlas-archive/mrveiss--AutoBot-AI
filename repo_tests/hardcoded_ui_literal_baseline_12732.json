@@ -1109,13 +1109,6 @@
   "8dae3e12",
   "efbd2d46"
  ],
- "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": [
-  "5efbc653",
-  "68f32bac",
-  "7d5f448a",
-  "afa93d13",
-  "c5c7f0b4"
- ],
  "autobot-slm-frontend/src/views/monitoring/AlertsMonitor.vue": [
   "ee2d5e5c"
  ],

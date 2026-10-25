@@ -91,7 +91,7 @@ async function onDiscoverDone(status: DiscoverStatus): Promise<void> {
     systemUpdates.fetchPackages(),
     systemUpdates.fetchSummary(),
     systemUpdates.fetchJobs(),
-  ])
+  ]).catch(() => undefined) // each fetch reports its own failure; never unhandled out of onDone
   if (status?.status === 'completed') {
     successMessage.value = status.message || t('systemUpdatesTab.discoveryCompleted')
     setTimeout(() => {
@@ -156,17 +156,17 @@ async function handleUpgradeSelected(): Promise<void> {
     await systemUpdates.applyUpdates(nodeId, updateIds)
   }
   selectedPackages.value.clear()
-  successMessage.value = 'Upgrade jobs started'
+  successMessage.value = t('systemUpdatesTab.upgradeJobsStarted')
   setTimeout(() => {
     successMessage.value = null
   }, 3000)
 }
 
 async function handleUpgradeAllForNode(nodeId: string): Promise<void> {
-  if (!confirm(`Upgrade ALL packages on ${nodeId}?`)) return
+  if (!confirm(t('systemUpdatesTab.confirmUpgradeAllOnNode', { nodeId }))) return
   const ok = await systemUpdates.upgradeAll(nodeId)
   if (ok) {
-    successMessage.value = `Upgrade all started for ${nodeId}`
+    successMessage.value = t('systemUpdatesTab.upgradeAllStartedOnNode', { nodeId })
     setTimeout(() => {
       successMessage.value = null
     }, 3000)
@@ -174,11 +174,11 @@ async function handleUpgradeAllForNode(nodeId: string): Promise<void> {
 }
 
 async function handleCancelJob(jobId: string): Promise<void> {
-  if (!confirm('Cancel this update job?')) return
+  if (!confirm(t('systemUpdatesTab.confirmCancelJob'))) return
   cancellingJobId.value = jobId
   const ok = await systemUpdates.cancelJob(jobId)
   if (ok) {
-    successMessage.value = 'Job cancelled'
+    successMessage.value = t('systemUpdatesTab.jobCancelled')
     setTimeout(() => {
       successMessage.value = null
     }, 3000)

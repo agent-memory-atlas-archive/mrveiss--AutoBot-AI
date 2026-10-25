@@ -47,7 +47,8 @@ FLOOR = 3
 def count_raw_setinterval(root: Path) -> int:
     total = 0
     for path in sorted(root.rglob("*")):
-        if path.suffix not in (".ts", ".vue") or _EXCLUDED.search(path.as_posix()):
+        # Matched inside the scanned root, so a checkout path cannot exclude everything.
+        if path.suffix not in (".ts", ".vue") or _EXCLUDED.search("/" + path.relative_to(root).as_posix()):
             continue
         for line in path.read_text(encoding="utf-8").splitlines():
             if not _COMMENT.match(line):
@@ -72,6 +73,11 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         self._w(tmp_path, "views/__tests__/B.ts", "setInterval(x, 1)\n")
         self._w(tmp_path, "views/C.vue", "// was setInterval(x, 1) before #19482\n * setInterval(y)\n")
         assert count_raw_setinterval(tmp_path) == 0
+
+    def test_a_checkout_path_that_looks_like_a_test_excludes_nothing(self, tmp_path: Path) -> None:
+        root = tmp_path / "x.test.y" / "src"
+        self._w(root, "views/A.vue", "setInterval(load, 1)\n")
+        assert count_raw_setinterval(root) == 1
 
     def test_clear_interval_is_not_a_call(self, tmp_path: Path) -> None:
         self._w(tmp_path, "views/A.vue", "clearInterval(timer)\n")

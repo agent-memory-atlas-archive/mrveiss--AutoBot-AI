@@ -177,10 +177,13 @@ watch(backendAvailable, (available) => {
   logger.warn('Batch polling stopped after %d consecutive errors', MAX_CONSECUTIVE_ERRORS)
 })
 
+// A fresh key per restart lets usePollingJob's race guard drop a tick still in flight.
+let pollRun = 0
+
 /** Refresh now, and restart polling if it had paused (Refresh and Retry both). */
 function refreshData(): void {
   error.value = null
-  poller.start('')
+  poller.start(String(++pollRun))
 }
 
 async function createJob(): Promise<void> {
@@ -242,7 +245,7 @@ async function deleteJob(jobId: string): Promise<void> {
 }
 
 // usePollingJob stops itself when the component's scope is disposed.
-onMounted(() => poller.start(''))
+onMounted(() => poller.start(String(++pollRun)))
 </script>
 
 <template>
