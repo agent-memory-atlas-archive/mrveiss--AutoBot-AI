@@ -4,7 +4,7 @@
  * ThemePresetPicker: a fresh install highlights no preset (#18252), and the preset
  * names and header come from i18n keys (#18255).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import en from '@/i18n/locales/en.json'
@@ -33,6 +33,17 @@ async function mountPicker() {
     global: { plugins: [i18n], stubs: { AdditionalThemesGroup: true } },
   })
 }
+
+/**
+ * Each test resets modules and re-imports the picker. The first import pays the cold
+ * transform of the whole graph, which under a loaded pre-push outran the default 10 s
+ * timeout. Warm it once here with its own budget, as usePreferences.account.test.ts
+ * does (#18254), so each test measures only its own work.
+ */
+const COLD_IMPORT_MS = 60_000
+beforeAll(async () => {
+  await Promise.all([import('@/composables/useTheme'), import('../ThemePresetPicker.vue')])
+}, COLD_IMPORT_MS)
 
 describe('ThemePresetPicker', () => {
   beforeEach(() => {
