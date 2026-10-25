@@ -103,10 +103,11 @@ def test_a_body_asserted_owner_cannot_override_the_authenticated_one() -> None:
     assert stamped.owner_id == "u-1"
 
 
-def test_no_user_leaves_the_request_unchanged() -> None:
+def test_no_user_clears_body_asserted_ownership() -> None:
     from api.secrets_ownership import stamp_owner
 
-    assert stamp_owner(_request(owner_id="x"), None).owner_id == "x"
+    stamped = stamp_owner(_request(owner_id="x", org_id="o-x"), None)
+    assert (stamped.owner_id, stamped.org_id) == (None, None), "ownership is never taken from the body"
 
 
 @pytest.mark.asyncio

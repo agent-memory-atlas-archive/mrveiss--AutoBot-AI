@@ -15,14 +15,11 @@ def stamp_owner(request: SecretCreateRequest, user: Dict[str, Any] | None) -> Se
     """Return ``request`` owned by ``user`` (from ``get_user_from_request``).
 
     The authenticated principal wins over a body-asserted ``owner_id``/``org_id``:
-    the body is self-asserted, the principal is not. With no resolvable user the
-    request is returned unchanged.
+    the body is self-asserted, the principal is not. Ownership is never taken from the
+    body: with no resolvable user, or a user without an org, those fields are cleared.
     """
     user_id = (user or {}).get("user_id")
-    if not user_id:
-        return request
-    update: Dict[str, Any] = {"owner_id": str(user_id)}
     org_id = (user or {}).get("org_id")
-    if org_id:
-        update["org_id"] = str(org_id)
-    return request.model_copy(update=update)
+    return request.model_copy(
+        update={"owner_id": str(user_id) if user_id else None, "org_id": str(org_id) if org_id else None}
+    )

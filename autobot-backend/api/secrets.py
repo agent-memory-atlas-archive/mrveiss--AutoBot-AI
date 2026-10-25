@@ -974,14 +974,8 @@ async def update_secret(
         # Issue #666: Wrap blocking file I/O in asyncio.to_thread
         secret = await asyncio.to_thread(secrets_manager.update_secret, secret_id, request, chat_id=chat_id)
         if secret:
-            # Convert datetime objects to strings for JSON serialization
-            secret_data = secret.dict()
-            if secret_data.get("created_at"):
-                secret_data["created_at"] = secret_data["created_at"].isoformat()
-            if secret_data.get("updated_at"):
-                secret_data["updated_at"] = secret_data["updated_at"].isoformat()
-            if secret_data.get("expires_at"):
-                secret_data["expires_at"] = secret_data["expires_at"].isoformat()
+            # One serialization for the cache, the file and every response (#19476)
+            secret_data = secret.model_dump(mode="json")
         elif request.credentials:
             # #16428: not a legacy secret; rotate it in ConnectorCredentialStore
             # instead -- #13632's one-store decision, "PUT rotates the credential."
