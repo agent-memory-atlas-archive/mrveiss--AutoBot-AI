@@ -64,6 +64,7 @@ def _load_executor():
         spec = importlib.util.spec_from_file_location("_pe_11492", _BACKEND_ROOT / "services" / "playbook_executor.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        mod.ansible_exit_code = lambda _o, _h, rc: rc  # these tests are about the systemd wrap, not exit proof (#19475)
         return mod
     finally:
         for n, orig in saved.items():
@@ -256,8 +257,7 @@ async def test_run_subprocess_wraps_file_backed_when_systemd_available(tmp_path)
     with patch.object(_pe, "SELF_UPDATE_LOG_PATH", log_path):
         with patch.object(_pe.PlaybookExecutor, "_self_update_detach_available", return_value=True):
             with patch.object(asyncio, "create_subprocess_exec", side_effect=_fake_create_subprocess_exec):
-                with patch.object(_pe, "ansible_exit_code", lambda _o, _h, rc: rc):  # this test is about the wrap
-                    result = await ex._run_subprocess(cmd, env, progress_callback=None, detach=True)
+                result = await ex._run_subprocess(cmd, env, progress_callback=None, detach=True)
 
     assert result["returncode"] == 0
     argv = captured["args"]
