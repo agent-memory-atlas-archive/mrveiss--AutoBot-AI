@@ -1,23 +1,50 @@
+# Issue Triage
+#
+# triage (#13050): area/difficulty labels on opened/edited, decided by
+#   .github/scripts/issue-triage-labels.js.
+# structure (#19522): every open issue needs a goal milestone `M<n> - ...`, a
+#   `phase:M<n>.<k>` label with the same <n>, and a native parent unless it is an
+#   umbrella with sub-issues. `Parent: #N` in the body links an orphan as a native
+#   sub-issue (never re-parents). A gap adds `needs-structure` plus ONE marked
+#   comment, updated in place; the label clears when all three are present. Logic
+#   and fixture tests: pipeline-scripts/issue_structure.py.
+#   Native parent/sub-issue changes emit no workflow event (the `sub_issues`
+#   webhook is not an Actions trigger), so `schedule` re-checks every open issue
+#   labelled `needs-structure`; `workflow_dispatch` re-checks one issue or sweeps.
+
 name: Issue Triage
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, milestoned, demilestoned, labeled, unlabeled]
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Issue number to re-check (empty: sweep every open needs-structure issue)'
+        required: false
+        default: ''
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number }}
-  cancel-in-progress: true
+permissions: {}
 
 jobs:
   triage:
+    if: github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'edited')
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-triage-${{ github.event.issue.number }}
+      cancel-in-progress: true
     permissions:
+      contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Triage issue
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         with:
           script: |
             // #13050: the label decision lives in .github/scripts/issue-triage-labels.js
@@ -53,3 +80,39 @@ jobs:
               labels
             });
             console.log(`Triage complete! Applied labels: ${labels.join(', ')}`);
+
+  structure:
+    name: Issue structure (milestone, phase, parent)
+    if: github.event_name != 'issues' || !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      # Every run re-reads the issue and reconciles to its current state, so the
+      # newest event supersedes an older one safely.
+      group: ${{ github.workflow }}-structure-${{ github.event.issue.number || inputs.issue || 'sweep' }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            pipeline-scripts
+            .github/actions/upsert-pr-comment
+
+      - name: Check one issue
+        if: github.event_name == 'issues' || inputs.issue != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue }}
+        run: python3 pipeline-scripts/issue_structure.py check --number "$ISSUE_NUMBER"
+
+      - name: Sweep open needs-structure issues
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.issue == '')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 pipeline-scripts/issue_structure.py sweep
