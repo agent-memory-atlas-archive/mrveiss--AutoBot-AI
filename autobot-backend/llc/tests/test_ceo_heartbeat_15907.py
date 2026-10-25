@@ -148,6 +148,58 @@ async def test_promoting_back_reuses_the_retired_node(session_factory):  # noqa:
     assert (await _designation(session_factory, company_id)).holder_agent_id == original.id
 
 
+async def _demote(session_factory, company_id: uuid.UUID, parent: uuid.UUID) -> None:  # noqa: ANN001
+    async with session_factory() as session:
+        await CompanyService(session).update(company_id, CompanyUpdate(parent_org_id=parent))
+        await session.commit()
+
+
+async def _set_status(session_factory, company_id: uuid.UUID, status: str) -> None:  # noqa: ANN001
+    async with session_factory() as session:
+        node = (
+            await session.execute(sa.select(AgentOrgNode).where(AgentOrgNode.agent_id == default_ceo_slug(company_id)))
+        ).scalar_one()
+        node.status = status
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_promotion_does_not_lift_a_stop_it_did_not_make(session_factory):  # noqa: ANN001
+    """A node the budget watchdog set inactive is re-designated but stays stopped."""
+    parent = await _create(session_factory, "Parent")
+    company_id = await _create(session_factory, "Acme")
+    await _demote(session_factory, company_id, parent)
+    await _set_status(session_factory, company_id, DORMANT_CEO_STATUS)
+    async with session_factory() as session:
+        node = (
+            await session.execute(sa.select(AgentOrgNode).where(AgentOrgNode.agent_id == default_ceo_slug(company_id)))
+        ).scalar_one()
+        node.pause_reason = None  # as the watchdog / 090 leave it: inactive, no demotion reason
+        await session.commit()
+
+    async with session_factory() as session:
+        await CompanyCEOService().sync_with_parent(session, company_id, None)
+        await session.commit()
+
+    [node] = await _ceo_nodes(session_factory, company_id)
+    assert node.status == DORMANT_CEO_STATUS
+    assert (await _designation(session_factory, company_id)).holder_agent_id == node.id
+
+
+@pytest.mark.asyncio
+async def test_demoting_never_softens_a_termination(session_factory):  # noqa: ANN001
+    parent = await _create(session_factory, "Parent")
+    company_id = await _create(session_factory, "Acme")
+    await _set_status(session_factory, company_id, LLCAgentStatus.TERMINATED.value)
+    await _demote(session_factory, company_id, parent)
+    async with session_factory() as session:
+        await CompanyCEOService().sync_with_parent(session, company_id, None)
+        await session.commit()
+
+    [node] = await _ceo_nodes(session_factory, company_id)
+    assert node.status == LLCAgentStatus.TERMINATED.value
+
+
 @pytest.mark.asyncio
 async def test_an_update_that_does_not_move_the_org_leaves_the_ceo_alone(session_factory):  # noqa: ANN001
     company_id = await _create(session_factory, "Acme")

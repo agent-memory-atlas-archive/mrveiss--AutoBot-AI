@@ -50,6 +50,11 @@ DEFAULT_CEO_ORG_ROLE = OrgRole.MANAGER.value
 #: acquire references, and deleting one turns a wrong row into a dangling one.
 DORMANT_CEO_STATUS = LLCAgentStatus.INACTIVE.value
 
+#: Why a demotion left the node dormant. ``inactive`` alone does not say: the budget
+#: watchdog writes it too, for a node that must stop. A promotion reactivates only a
+#: node carrying this reason, so it never undoes a budget stop or a 090 repair.
+RETIRED_CEO_REASON = "organization is not a company (#15907)"
+
 
 def default_ceo_slug(company_id: uuid.UUID) -> str:
     """The agent slug a provisioned CEO gets.
@@ -211,8 +216,11 @@ class CompanyCEOService(LLCServiceBase):
         node = await self._find_default_agent(session, default_ceo_slug(company_id), company_id)
         if node is None:
             return
-        node.status = DORMANT_CEO_STATUS
         node.heartbeat_enabled = False
+        # Terminated is permanent ("no recovery path"); dormancy must not soften it.
+        if node.status != LLCAgentStatus.TERMINATED.value:
+            node.status = DORMANT_CEO_STATUS
+            node.pause_reason = RETIRED_CEO_REASON
         await session.flush()
 
     async def provision_default(self, session: AsyncSession, company_id: uuid.UUID) -> LLCCompanyCEO:
@@ -246,10 +254,12 @@ class CompanyCEOService(LLCServiceBase):
         agent = await self._find_default_agent(session, slug, company_id)
         if agent is not None:
             # #15907: a node left dormant by a demotion (or by 090) is this
-            # company's CEO again on promotion -- reused, never duplicated. Its
-            # heartbeat stays as it is (off): waking it is the owner's choice.
-            if agent.status == DORMANT_CEO_STATUS:
+            # company's CEO again on promotion -- reused, never duplicated. Only a
+            # demotion's own dormancy is lifted; any other stop stays for the owner
+            # to resume. The heartbeat stays off: waking it is the owner's choice.
+            if agent.status == DORMANT_CEO_STATUS and agent.pause_reason == RETIRED_CEO_REASON:
                 agent.status = LLCAgentStatus.AVAILABLE.value
+                agent.pause_reason = None
             return agent
 
         try:
