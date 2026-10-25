@@ -23,7 +23,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
     exit 1
 fi
 
-set -euo pipefail
+set -euo pipefail; umask 022  # #19503: the root-run code tree must not take a loose caller umask (world-writable)
 
 # =============================================================================
 # Constants
