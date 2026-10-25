@@ -116,15 +116,14 @@ class CompanyService(LLCServiceBase):
         if data.issue_prefix is not None and data.issue_prefix != org.issue_prefix:
             await self._assert_prefix_unique(data.issue_prefix)
 
-        if data.parent_org_id is not None:
-            await self._assert_no_cycle(company_id, data.parent_org_id)
-
         if data.budget_monthly_cents is not None and org.parent_org_id is not None:
             parent = await self._get_or_404(org.parent_org_id)
             await self._assert_budget_fits(parent, data.budget_monthly_cents, exclude_id=company_id)
 
-        was_company = org.parent_org_id is None
-        update_fields = data.model_dump(exclude_none=True)
+        if data.parent_org_id is not None:
+            org = await self.move(company_id, data.parent_org_id)
+
+        update_fields = data.model_dump(exclude_none=True, exclude={"parent_org_id"})
         for field, value in update_fields.items():
             if field == "llc_status":
                 setattr(org, field, value.value if isinstance(value, LLCCompanyStatus) else value)
@@ -132,15 +131,31 @@ class CompanyService(LLCServiceBase):
                 setattr(org, field, value)
 
         await self.session.flush()
-        # #15907: the CEO follows a move between top level and sub-organization.
-        if (org.parent_org_id is None) != was_company:
-            await CompanyCEOService().sync_with_parent(self.session, org.id, org.parent_org_id)
         # #12322: `updated_at` is populated inline by the UPDATE's RETURNING
         # clause (Base sets ``eager_defaults=True``), so it is never expired
         # after flush() and the router's sync response serialization is safe.
         # The previous per-call ``session.refresh(org, ["updated_at"])`` (#12309)
         # is now redundant and removed.
         logger.info("LLC company updated: %s (id=%s)", org.name, org.id)
+        return org
+
+    async def move(self, company_id: uuid.UUID, parent_org_id: Optional[uuid.UUID]) -> Organization:
+        """Re-parent *company_id* (``None`` = top level); the CEO follows the move (#15907).
+
+        The org row is read ``FOR UPDATE`` first, in the caller's transaction, so two
+        concurrent moves serialize: the second reads the first's committed position.
+        Without it both read "top level", one demotes (and retires the CEO), the
+        other promotes and sees nothing to provision, and a top-level company is
+        left with no CEO.
+        """
+        org = await self._get_or_404(company_id, for_update=True)
+        if parent_org_id is not None:
+            await self._assert_no_cycle(company_id, parent_org_id)
+        was_company = org.parent_org_id is None
+        org.parent_org_id = parent_org_id
+        await self.session.flush()
+        if (parent_org_id is None) != was_company:
+            await CompanyCEOService().sync_with_parent(self.session, org.id, parent_org_id)
         return org
 
     async def list_root_companies(self, include_archived: bool = False) -> List[Organization]:
@@ -339,10 +354,13 @@ class CompanyService(LLCServiceBase):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_or_404(self, company_id: uuid.UUID) -> Organization:
-        result = await self.session.execute(
-            select(Organization).where(Organization.id == company_id).where(Organization.deleted_at.is_(None))
-        )
+    async def _get_or_404(self, company_id: uuid.UUID, for_update: bool = False) -> Organization:
+        stmt = select(Organization).where(Organization.id == company_id).where(Organization.deleted_at.is_(None))
+        if for_update:
+            # Re-read under the lock: a row already in the identity map would otherwise
+            # keep the value read before the lock was granted.
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        result = await self.session.execute(stmt)
         org = result.scalar_one_or_none()
         if org is None:
             raise CompanyNotFoundError(f"Company {company_id} not found")
