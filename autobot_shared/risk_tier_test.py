@@ -10,6 +10,7 @@ from autobot_shared.risk_tier import (
     RiskTier,
     parse_risk_tier,
     presented_risk_tier,
+    presented_risk_tier_value,
     risk_tier_from_command_risk,
     risk_tier_from_severity,
 )
@@ -98,3 +99,8 @@ def test_presented_tier_reads_every_gradable_spelling(value, expected):
 @pytest.mark.parametrize("value", ["unknown", "", "pretty risky", None, 3])
 def test_presented_tier_is_none_for_anything_ungradable_instead_of_raising(value):
     assert presented_risk_tier(value) is None
+
+
+def test_presented_value_is_the_wire_string_or_none():
+    assert presented_risk_tier_value("warning") == "medium"
+    assert presented_risk_tier_value("unknown") is None

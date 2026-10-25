@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import List
 
-from autobot_shared.risk_tier import presented_risk_tier
+from autobot_shared.risk_tier import presented_risk_tier_value
 from autobot_shared.status_enums import Severity as CausalSeverity
 from services.root_cause_analyzer import CausalEvent
 
@@ -81,7 +81,7 @@ class CausalAnalysisReport:
                     "cost_level": i.cost_level,
                     "risk_level": i.risk_level,
                     # #13422: the one ladder the frontend badge renders; None when ungradable
-                    "risk_tier": getattr(presented_risk_tier(i.risk_level), "value", None),
+                    "risk_tier": presented_risk_tier_value(i.risk_level),
                     "recommendation_type": i.recommendation_type.value,
                     "impact_rank": i.impact_rank,
                     "confidence": round(i.confidence, 3),

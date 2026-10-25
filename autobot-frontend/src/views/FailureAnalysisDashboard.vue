@@ -727,7 +727,6 @@ const COST_VARIANT: Record<string, BadgeVariant> = { low: 'success', medium: 'wa
   color: var(--text-secondary);
 }
 
-
 .evidence-list {
   margin: 0;
   padding-left: var(--spacing-4);

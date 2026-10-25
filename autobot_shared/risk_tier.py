@@ -118,3 +118,9 @@ def presented_risk_tier(value: Any) -> RiskTier | None:
         except ValueError:
             return None
     return None
+
+
+def presented_risk_tier_value(value: Any) -> str | None:
+    """:func:`presented_risk_tier` as the plain string a response dict carries, or ``None``."""
+    tier = presented_risk_tier(value)
+    return tier.value if tier is not None else None

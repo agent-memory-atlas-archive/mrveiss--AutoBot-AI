@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field, field_validator
 
-from autobot_shared.risk_tier import presented_risk_tier
+from autobot_shared.risk_tier import presented_risk_tier_value
 from type_defs.common import Metadata
 
 
@@ -115,7 +115,7 @@ class PlanApprovalRequest:
                     "description": step.description,
                     "risk_level": step.risk_level,
                     # #13422: the one ladder the frontend badge renders; None when ungradable
-                    "risk_tier": getattr(presented_risk_tier(step.risk_level), "value", None),
+                    "risk_tier": presented_risk_tier_value(step.risk_level),
                     "requires_confirmation": step.requires_confirmation,
                     "estimated_duration": step.estimated_duration,
                 }
@@ -165,7 +165,7 @@ class WorkflowStep:
             "requires_confirmation": self.requires_confirmation,
             # #13422: WorkflowRunner renders the step's risk; this dict never carried it
             "risk_level": self.risk_level,
-            "risk_tier": getattr(presented_risk_tier(self.risk_level), "value", None),
+            "risk_tier": presented_risk_tier_value(self.risk_level),
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": (self.completed_at.isoformat() if self.completed_at else None),
         }
