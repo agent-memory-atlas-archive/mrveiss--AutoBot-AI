@@ -18,10 +18,12 @@ is the git and REST plumbing around them.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import subprocess  # nosec B404 - fixed git argv, validated ref names
 import sys
 import time
+import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -40,6 +42,18 @@ PAGE_SIZE = 100
 LABEL_COLOURS = {core.LABEL_CONFLICT: "d93f0b", core.LABEL_WORKFLOW: "fbca04"}
 
 Runner = Callable[[Sequence[str]], Tuple[int, str]]
+
+#: The ONE marker-comment upsert (#12984): reads every page, matches a Bot author plus the marker.
+UPSERT_SCRIPT = Path(__file__).resolve().parent.parent / ".github/actions/upsert-pr-comment/upsert_pr_comment.py"
+
+
+def load_upsert() -> Callable[..., Tuple[str, int]]:
+    """``upsert_pr_comment.upsert``, loaded by path: a second copy here is what #12984 removed."""
+    spec = importlib.util.spec_from_file_location("upsert_pr_comment", UPSERT_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("upsert_pr_comment", module)
+    spec.loader.exec_module(module)
+    return module.upsert
 
 
 class SyncApiError(WatchdogError):
@@ -113,9 +127,15 @@ def _rate_limited(status: int, headers: Dict[str, str], body: Any) -> bool:
 class SyncApi:
     """REST calls with secondary-rate-limit ``Retry-After`` honoured, and pagination."""
 
-    def __init__(self, api: GitHubApi, sleep: Callable[[float], None] = time.sleep) -> None:
+    def __init__(
+        self,
+        api: GitHubApi,
+        sleep: Callable[[float], None] = time.sleep,
+        upsert: Optional[Callable[..., Tuple[str, int]]] = None,
+    ) -> None:
         self.api, self._sleep, self._labels_ready = api, sleep, set()
         self.repo = api.repository
+        self._upsert = upsert or load_upsert()
 
     def call(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Tuple[int, Any]:
         for _ in range(MAX_RATE_LIMIT_RETRIES):
@@ -158,11 +178,10 @@ class SyncApi:
         self._labels_ready.add(name)
 
     def upsert_comment(self, pr: int, marker: str, body: str) -> None:
-        existing = core.find_marker_comment(self.paginate(f"/repos/{self.repo}/issues/{pr}/comments"), marker)
-        if existing is None:
-            self._expect((201,), "POST", f"/repos/{self.repo}/issues/{pr}/comments", {"body": body})
-        elif existing.get("body") != body:
-            self._expect((200,), "PATCH", f"/repos/{self.repo}/issues/comments/{existing['id']}", {"body": body})
+        try:
+            self._upsert(self.api.api_root, self.repo, pr, self.api.token, marker, body)
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            raise SyncApiError(f"cannot upsert the sync comment on #{pr}: {exc}") from exc
 
     def add_label(self, pr: int, name: str) -> None:
         self._expect((200,), "POST", f"/repos/{self.repo}/issues/{pr}/labels", {"labels": [name]})

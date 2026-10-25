@@ -67,7 +67,7 @@ class Runner:
 class Api:
     """A GitHubApi stand-in: routes by (method, path prefix); every request is recorded."""
 
-    repository = REPO
+    repository, api_root, token = REPO, "https://api.github.com", "t"
 
     def __init__(self, routes: Optional[List[Tuple[str, str, Tuple[int, Any]]]] = None) -> None:
         self.routes, self.calls, self.last_headers = list(routes or []), [], {}
@@ -83,6 +83,15 @@ class Api:
 
     def writes(self) -> List[Tuple[str, str, Any]]:
         return [call for call in self.calls if call[0] != "GET"]
+
+    def upsert(self, api_url: str, repo: str, number: int, token: str, marker: str, body: str) -> Tuple[str, int]:
+        """Stands in for the canonical upsert_pr_comment.upsert; recorded as a comment write."""
+        self.calls.append(("UPSERT", f"/repos/{repo}/issues/{number}/comments", {"marker": marker, "body": body}))
+        return "created", 1
+
+
+def _gh(api: Api, **kwargs: Any) -> Any:
+    return bs.SyncApi(api, sleep=kwargs.pop("sleep", lambda _: None), upsert=api.upsert)
 
 
 def _git(behind: str = "5", merge: Tuple[int, str] = (0, ""), unmerged: str = "", changed: str = "x.py", push=(0, "")):
@@ -106,7 +115,7 @@ def _target(labels: Tuple[str, ...] = (), pr: Optional[int] = 7) -> Any:
 
 
 def _sync(runner: Runner, api: Api, target: Any, dry_run: bool = False) -> Tuple[str, str]:
-    return bs.Syncer(bs.Git(runner), bs.SyncApi(api, sleep=lambda _: None), "main", dry_run).sync(target)
+    return bs.Syncer(bs.Git(runner), _gh(api), "main", dry_run).sync(target)
 
 
 _CONFLICT = (1, "Auto-merging x.py\nCONFLICT (content): Merge conflict in x.py\nAutomatic merge failed")
@@ -122,7 +131,7 @@ def test_a_conflict_aborts_labels_and_comments_and_never_pushes() -> None:
     assert runner.ran("merge", "--abort"), "a conflicted merge must be aborted, never resolved"
     assert not runner.ran("push"), "a conflicted branch must never be pushed"
     assert not runner.ran("checkout", "--ours") and not runner.ran("add"), "never auto-resolve"
-    (comment,) = [p["body"] for m, path, p in api.writes() if path.endswith("/issues/7/comments")]
+    (comment,) = [p["body"] for m, path, p in api.writes() if m == "UPSERT" and path.endswith("/issues/7/comments")]
     assert core.MARKER_CONFLICT in comment and "`x.py`" in comment and "`1234567`" in comment and "#100" in comment
     assert ("POST", f"/repos/{REPO}/issues/7/labels", {"labels": [core.LABEL_CONFLICT]}) in api.writes()
 
@@ -152,7 +161,7 @@ def test_a_merge_that_changes_a_workflow_file_is_labelled_and_never_pushed() -> 
     assert outcome == core.WORKFLOW and ".github/workflows/ci.yml" in detail
     assert runner.ran("diff", "--name-only", HEAD_SHA, "HEAD"), "the delta is head-vs-merge-result"
     assert not runner.ran("push"), "GitHub refuses this push with GITHUB_TOKEN; detect it, do not try it"
-    (comment,) = [p["body"] for m, path, p in api.writes() if path.endswith("/issues/7/comments")]
+    (comment,) = [p["body"] for m, path, p in api.writes() if m == "UPSERT" and path.endswith("/issues/7/comments")]
     assert core.MARKER_WORKFLOW in comment and "`.github/workflows/ci.yml`" in comment
     assert ("POST", f"/repos/{REPO}/issues/7/labels", {"labels": [core.LABEL_WORKFLOW]}) in api.writes()
 
@@ -223,15 +232,26 @@ def test_an_up_to_date_branch_without_sync_labels_costs_no_api_call() -> None:
 # --------------------------------------------------------------- dedupe
 
 
-def test_the_comment_is_deduped_by_its_marker() -> None:
-    old = {"id": 99, "body": f"{core.MARKER_CONFLICT}\nolder text"}
-    api = Api([("GET", f"/repos/{REPO}/issues/7/comments", (200, [{"id": 1, "body": "hi"}, old]))])
-    gh = bs.SyncApi(api, sleep=lambda _: None)
-    gh.upsert_comment(7, core.MARKER_CONFLICT, f"{core.MARKER_CONFLICT}\nnew")
-    assert [(m, p) for m, p, _ in api.writes()] == [("PATCH", f"/repos/{REPO}/issues/comments/99")]
-    api.calls.clear()
-    gh.upsert_comment(7, core.MARKER_CONFLICT, old["body"])
-    assert not api.writes(), "an identical marker comment is left alone"
+def test_the_comment_is_deduped_by_its_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sync calls the ONE upsert (#12984); a bot comment carrying the marker is updated, not added."""
+    upsert = bs.load_upsert()
+    module = sys.modules[upsert.__module__]
+    ours = {"id": 99, "user": {"type": "Bot"}, "body": f"{core.MARKER_CONFLICT}\nolder", "created_at": "2"}
+    quoted = {"id": 5, "user": {"type": "User"}, "body": core.MARKER_CONFLICT, "created_at": "3"}
+    calls: List[Tuple[str, str]] = []
+
+    def fake_call(method: str, url: str, token: str, payload: Any = None) -> Tuple[Any, Optional[str]]:
+        calls.append((method, url))
+        return ([{"id": 1, "body": "hi"}, quoted, ours] if method == "GET" else {"id": 99}), None
+
+    monkeypatch.setattr(module, "_call", fake_call)
+    assert upsert("https://api.github.com", REPO, 7, "t", core.MARKER_CONFLICT, "new") == ("updated", 99)
+    assert [m for m, _ in calls] == ["GET", "PATCH"] and calls[1][1].endswith("/issues/comments/99")
+
+
+def test_the_sync_reuses_the_canonical_upsert() -> None:
+    assert bs.load_upsert().__module__ == "upsert_pr_comment"
+    assert bs.UPSERT_SCRIPT.is_file(), "the canonical upsert moved; the sync would fail at its first comment"
 
 
 def test_an_already_labelled_pr_gets_no_second_comment() -> None:
@@ -302,7 +322,7 @@ def test_a_secondary_rate_limit_honours_retry_after() -> None:
             return 200, []
 
     slept: List[float] = []
-    assert bs.SyncApi(Limited(), sleep=slept.append).call("GET", "/x") == (200, [])
+    assert _gh(Limited(), sleep=slept.append).call("GET", "/x") == (200, [])
     assert slept == [7]
 
 
@@ -310,10 +330,10 @@ def test_open_pulls_paginates_and_fails_closed() -> None:
     page1 = [{"number": n} for n in range(bs.PAGE_SIZE)]
     api = Api([("GET", f"/repos/{REPO}/pulls?state=open&per_page=100&page=1", (200, page1))])
     api.routes.append(("GET", f"/repos/{REPO}/pulls?state=open&per_page=100&page=2", (200, [{"number": 999}])))
-    assert len(bs.SyncApi(api).open_pulls()) == bs.PAGE_SIZE + 1
+    assert len(_gh(api).open_pulls()) == bs.PAGE_SIZE + 1
     broken = Api([("GET", f"/repos/{REPO}/pulls", (502, {"message": "bad gateway"}))])
     with pytest.raises(bs.SyncApiError):
-        bs.run(bs.Git(Runner([])), bs.SyncApi(broken), "main", False)
+        bs.run(bs.Git(Runner([])), _gh(broken), "main", False)
 
 
 def test_the_summary_names_every_outcome() -> None:

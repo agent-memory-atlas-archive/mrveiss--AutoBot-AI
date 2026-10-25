@@ -171,14 +171,6 @@ def labels_to_clear(labels: Iterable[str]) -> List[str]:
     return [label for label in SYNC_LABELS if label in set(labels)]
 
 
-def find_marker_comment(comments: Iterable[Dict[str, Any]], marker: str) -> Optional[Dict[str, Any]]:
-    """The one comment this job owns on a PR, found by its marker, never by its text."""
-    for comment in comments:
-        if marker in (comment.get("body") or ""):
-            return comment
-    return None
-
-
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
