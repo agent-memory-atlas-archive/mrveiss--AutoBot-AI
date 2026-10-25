@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from autobot_shared.time_utils import parse_utc_iso
 from knowledge.search_filters import filter_for_user_id
-from knowledge.suggestion_text import build_snippet, extract_title
+from knowledge.suggestion_text import build_snippet, kb_document_title
 
 if TYPE_CHECKING:
     import aioredis
@@ -561,7 +561,7 @@ class SuggestionsMixin:
 
     def _extract_title(self, content: str, metadata: Dict[str, Any]) -> str:
         """Human-readable title of a KB document (see ``suggestion_text``)."""
-        return extract_title(content, metadata)
+        return kb_document_title(content, metadata)
 
     async def suggest_by_context(
         self,

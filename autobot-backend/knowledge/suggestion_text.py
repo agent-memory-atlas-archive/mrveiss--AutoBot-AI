@@ -32,7 +32,7 @@ def build_snippet(content: str, snippet_length: int, ellipsis: str) -> str:
     return truncated + ellipsis
 
 
-def extract_title(content: str, metadata: Dict[str, Any]) -> str:
+def kb_document_title(content: str, metadata: Dict[str, Any]) -> str:
     """Derive a human-readable title for a KB document.
 
     Priority: metadata["title"] > metadata["source"] > first non-empty line.
