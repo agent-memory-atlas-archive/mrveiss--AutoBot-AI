@@ -88,17 +88,22 @@ class CompanyService(LLCServiceBase):
         self.session.add(org)
         await self.session.flush()
 
-        if data.parent_org_id is not None:
-            await self._assert_no_cycle(org.id, data.parent_org_id)
-
-        # #15770: a company with no CEO is a disconnected forest -- every member
-        # with no explicit reporting line has nothing to default to. Provision
-        # here rather than lazily on first read, so the hierarchy is whole from
-        # the moment the company exists.
-        await CompanyCEOService().provision_default(self.session, org.id)
+        await self._place_in_hierarchy(org)
 
         logger.info("LLC company created: %s (id=%s)", org.name, org.id)
         return org
+
+    async def _place_in_hierarchy(self, org: Organization) -> None:
+        """Cycle-check a sub-organization; give a company -- and only a company -- its CEO.
+
+        #15770: a company with no CEO is a disconnected forest, so it is provisioned
+        here rather than lazily on first read. #15907: a sub-organization gets none
+        (migration 20260907_090, #15892). A soft-deleted org never reaches this:
+        ``deleted_at`` is unset on a row this transaction has just inserted.
+        """
+        if org.parent_org_id is not None:
+            await self._assert_no_cycle(org.id, org.parent_org_id)
+        await CompanyCEOService().sync_with_parent(self.session, org.id, org.parent_org_id)
 
     async def get(self, company_id: uuid.UUID) -> Organization:
         """Return the company or raise CompanyNotFoundError."""
@@ -118,6 +123,7 @@ class CompanyService(LLCServiceBase):
             parent = await self._get_or_404(org.parent_org_id)
             await self._assert_budget_fits(parent, data.budget_monthly_cents, exclude_id=company_id)
 
+        was_company = org.parent_org_id is None
         update_fields = data.model_dump(exclude_none=True)
         for field, value in update_fields.items():
             if field == "llc_status":
@@ -126,6 +132,9 @@ class CompanyService(LLCServiceBase):
                 setattr(org, field, value)
 
         await self.session.flush()
+        # #15907: the CEO follows a move between top level and sub-organization.
+        if (org.parent_org_id is None) != was_company:
+            await CompanyCEOService().sync_with_parent(self.session, org.id, org.parent_org_id)
         # #12322: `updated_at` is populated inline by the UPDATE's RETURNING
         # clause (Base sets ``eager_defaults=True``), so it is never expired
         # after flush() and the router's sync response serialization is safe.
