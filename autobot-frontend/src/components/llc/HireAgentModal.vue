@@ -42,10 +42,10 @@
         <AdapterTypeSelect v-model="adapterType" />
       </label>
 
-      <div class="field field-switch">
+      <div class="flex items-center justify-between gap-3">
         <div>
           <span class="field-label">{{ t('hireAgent.runOnHeartbeat') }}</span>
-          <p class="field-hint">{{ t('hireAgent.runOnHeartbeatHint') }}</p>
+          <p class="text-xs text-autobot-text-muted">{{ t('hireAgent.runOnHeartbeatHint') }}</p>
         </div>
         <BaseSwitch v-model="heartbeatEnabled" :label="t('hireAgent.runOnHeartbeat')" data-testid="hire-heartbeat" />
       </div>
@@ -139,19 +139,6 @@ async function submit(): Promise<void> {
   border: 1px solid var(--border-default, #d1d5db);
   background: var(--bg-surface, #fff);
   color: var(--text-primary, #111827);
-}
-
-.field-switch {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.field-hint {
-  margin: 0.15rem 0 0;
-  font-size: 0.75rem;
-  color: var(--text-secondary, #6b7280);
 }
 
 .form-error {
