@@ -131,6 +131,20 @@ register_env_var(
 
 register_env_var(
     EnvVarSpec(
+        name="AUTOBOT_EMBEDDING_SWITCH_BATCH_SIZE",
+        type=int,
+        default=64,
+        description=(
+            "Facts re-embedded per call to the embedding provider while an embedding-model switch "
+            "rebuilds the knowledge base into a new collection (knowledge/embedding_switch.py, #19379)."
+        ),
+        component="knowledge",
+        range=(1, 1000),
+    )
+)
+
+register_env_var(
+    EnvVarSpec(
         name="AUTOBOT_EMBEDDING_PROBE_TIMEOUT_SECONDS",
         type=int,
         default=60,
