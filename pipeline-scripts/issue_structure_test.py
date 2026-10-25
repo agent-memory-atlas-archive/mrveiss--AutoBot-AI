@@ -24,11 +24,13 @@ def issue(
     subs: int = 0,
     body: str = "",
     state: str = "open",
+    association: str = "OWNER",
 ) -> Dict[str, Any]:
     return {
         "id": 9000 + number,
         "number": number,
         "state": state,
+        "author_association": association,
         "body": body,
         "milestone": {"title": milestone} if milestone else None,
         "labels": [{"name": n} for n in labels],
@@ -44,19 +46,29 @@ def bot_comment(cid: int, body: str) -> Dict[str, Any]:
 class FakeApi:
     """Records every request; answers from the issue fixture and canned statuses."""
 
-    def __init__(self, fixture: Dict[str, Any], link_status: int = 201, label_exists: bool = True) -> None:
+    def __init__(
+        self,
+        fixture: Dict[str, Any],
+        link_status: int = 201,
+        label_exists: bool = True,
+        targets: Optional[Dict[int, Tuple[int, Any]]] = None,
+    ) -> None:
         self.repository = REPO
         self.api_root = API
         self.token = "x"
         self.fixture = fixture
         self.link_status = link_status
         self.label_exists = label_exists
+        self.targets = targets or {}
         self.calls: List[Tuple[str, str, Any]] = []
 
     def request(self, method: str, path: str, payload: Any = None) -> Tuple[int, Any]:
         self.calls.append((method, path, payload))
         if method == "GET" and path == f"/repos/{REPO}/issues/{self.fixture['number']}":
             return 200, self.fixture
+        if method == "GET" and path.startswith(f"/repos/{REPO}/issues/") and path.split("/")[-1].isdigit():
+            number = int(path.split("/")[-1])
+            return self.targets.get(number, (200, {"number": number, "state": "open"}))
         if method == "GET" and "/labels/" in path:
             return (200, {}) if self.label_exists else (404, {"message": "Not Found"})
         if path.endswith("/sub_issues"):
@@ -92,7 +104,7 @@ def run(fixture: Dict[str, Any], comments: Optional[List[Dict[str, Any]]] = None
     api = FakeApi(fixture, **kw)
     api.comments = list(comments or [])
     _CURRENT.append(api)
-    return mod.check_issue_structure(mod.Client(api), fixture["number"]), api
+    return mod.check_issue_structure(mod.StructureClient(api), fixture["number"]), api
 
 
 # ---- parsing ---------------------------------------------------------------------------
@@ -254,9 +266,92 @@ def test_parent_endpoint_used_when_field_absent() -> None:
     api.request = lambda m, p, payload=None: (  # type: ignore[method-assign]
         (200, {"url": f"{API}/repos/{REPO}/issues/77"}) if p.endswith("/parent") else (404, {})
     )
-    assert mod.Client(api).parent_of(fixture) == f"{REPO.lower()}#77"
+    assert mod.StructureClient(api).parent_of(fixture) == f"{REPO.lower()}#77"
 
 
 def test_parent_identity_rejects_unknown_url() -> None:
     with pytest.raises(mod.StructureError):
         mod.parent_identity("https://example.invalid/nope")
+
+
+# ---- review: who may link, and to what (#19569) -----------------------------------------
+
+
+def _links(api: FakeApi) -> List[Tuple[str, str, Any]]:
+    return [c for c in api.writes() if c[1].endswith("/sub_issues")]
+
+
+@pytest.mark.parametrize("association", ["OWNER", "MEMBER", "COLLABORATOR"])
+def test_a_maintainer_author_links_the_parent(association: str) -> None:
+    missing, api = run(issue(parent=None, body="Parent: #42", association=association))
+    assert missing == [] and len(_links(api)) == 1
+
+
+@pytest.mark.parametrize("association", ["CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE", None])
+def test_another_author_gets_no_link_and_is_told_a_maintainer_must(association: Optional[str]) -> None:
+    fixture = issue(parent=None, body="Parent: #42", association=association)  # type: ignore[arg-type]
+    missing, api = run(fixture)
+    assert _links(api) == []
+    assert len(missing) == 1 and "a maintainer needs to link the parent" in missing[0]
+    assert ("POST", f"/repos/{REPO}/issues/10/labels", {"labels": [mod.STRUCTURE_LABEL]}) in api.writes()
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ((200, {"number": 42, "state": "open", "pull_request": {"url": "x"}}), "#42 is a pull request"),
+        ((200, {"number": 42, "state": "closed"}), "#42 is closed"),
+        ((404, {"message": "Not Found"}), "#42 does not exist"),
+    ],
+)
+def test_a_pull_request_closed_or_missing_parent_is_refused(target: Tuple[int, Any], expected: str) -> None:
+    missing, api = run(issue(parent=None, body="Parent: #42"), targets={42: target})
+    assert _links(api) == []
+    assert len(missing) == 1 and expected in missing[0]
+
+
+def test_an_unreadable_parent_target_is_an_error_not_a_refusal() -> None:
+    with pytest.raises(mod.StructureError):
+        run(issue(parent=None, body="Parent: #42"), targets={42: (500, {"message": "boom"})})
+
+
+# ---- review: the sweep covers the backlog (#19569) ---------------------------------------
+
+
+def _listed(number: int, **kw: Any) -> Dict[str, Any]:
+    item = issue(number=number, **kw)
+    if item["parent_issue_url"] is None:
+        del item["parent_issue_url"]  # the list endpoint omits the key when there is no parent
+    return item
+
+
+def test_sweep_targets_mismatches_first_then_maintainer_parent_refs() -> None:
+    items = [
+        _listed(1),  # complete, unlabelled: in line
+        _listed(2, milestone=None),  # missing, unlabelled: mismatch
+        _listed(3, milestone=None, labels=(mod.STRUCTURE_LABEL,)),  # missing, labelled: in line
+        _listed(4, labels=("phase:M5.1", mod.STRUCTURE_LABEL)),  # complete, labelled: mismatch
+        _listed(5, parent=None, subs=2, labels=("phase:M5.1", mod.STRUCTURE_LABEL), body="Parent: #9"),
+        _listed(6, parent=None, labels=("phase:M5.1", mod.STRUCTURE_LABEL), body="Parent: #9"),
+        _listed(7, parent=None, labels=("phase:M5.1", mod.STRUCTURE_LABEL), body="Parent: #9", association="NONE"),
+    ]
+    assert mod.sweep_targets(items) == [2, 4, 5, 6]
+    assert mod.sweep_targets(items, cap=1) == [2]
+
+
+class _PagedApi(FakeApi):
+    def __init__(self, pages: List[List[Dict[str, Any]]]) -> None:
+        super().__init__(issue())
+        self.pages = pages
+
+    def request(self, method: str, path: str, payload: Any = None) -> Tuple[int, Any]:
+        page = int(path.rsplit("page=", 1)[1])
+        assert "labels=" not in path, "the sweep lists every open issue, not only labelled ones"
+        return 200, self.pages[page - 1]
+
+
+def test_open_issues_reads_every_page_and_drops_pull_requests() -> None:
+    full = [_listed(n) for n in range(mod.SWEEP_PAGE_SIZE)]
+    last = [_listed(500), dict(_listed(501), pull_request={"url": "x"})]
+    numbers = [i["number"] for i in mod.open_issues(mod.StructureClient(_PagedApi([full, last])))]
+    assert len(numbers) == mod.SWEEP_PAGE_SIZE + 1 and numbers[-1] == 500

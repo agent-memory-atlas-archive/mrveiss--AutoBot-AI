@@ -9,14 +9,18 @@ Run by the ``structure`` job of `.github/workflows/issue-triage.yml`. Two subcom
 
 ``check --number N``  one issue, on every opened/edited/milestoned/demilestoned/labeled/
   unlabeled event (and on ``workflow_dispatch`` with an issue number).
-``sweep``             every open issue carrying ``needs-structure``, on a schedule. Native
-  parent and sub-issue changes emit no workflow event, so a label raised for a missing
-  parent would otherwise never clear when the parent is added in the UI.
+``sweep``             every open issue, on a schedule (see ``sweep_targets``). Native parent
+  and sub-issue changes emit no workflow event, so a label raised for a missing parent would
+  otherwise never clear when the parent is added in the UI, and the backlog that predates
+  this guard would never be labelled.
 
 For an open issue (pull requests and closed issues are skipped):
 
 1. ``Parent: #N`` (or ``Parent #N``) at the start of a body line links the issue as a native
-   sub-issue of #N when it has NO parent. A different existing parent is never replaced: a
+   sub-issue of #N when it has NO parent, the issue's author is a maintainer (author_association
+   OWNER, MEMBER or COLLABORATOR) and #N is an open issue, not a pull request. Otherwise
+   nothing is linked and the structure comment says why (a maintainer must link it, or #N is
+   a pull request, closed or missing). A different existing parent is never replaced: a
    single comment (marker ``<!-- issue-structure:parent-conflict -->``) names both instead.
    Already the parent: nothing happens. The link call never sends ``replace_parent``.
 2. Structure: (a) a goal milestone ``M<n> - ...`` (any ``n``; ``v0.x`` milestones are history
@@ -35,17 +39,18 @@ comments are read and upserted by the one helper, ``.github/actions/upsert-pr-co
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import logging
+import os
 import re
 import sys
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from github_api import build_api  # noqa: E402
+from github_api import TRUSTED_ASSOCIATIONS, build_api  # noqa: E402
+from issue_api import IssueApiError, IssueClient, ensure_label, load_upsert  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -55,30 +60,19 @@ STRUCTURE_LABEL_DESCRIPTION = "Missing goal milestone, matching phase label or n
 STRUCTURE_MARKER = "<!-- issue-structure:needs-structure -->"
 CONFLICT_MARKER = "<!-- issue-structure:parent-conflict -->"
 SWEEP_PAGE_SIZE = 100
-SWEEP_MAX_PAGES = 5
+SWEEP_MAX_PAGES = 50  # 5,000 open issues; the backlog is about half that
+# Full checks per sweep run: each costs 2-4 API calls against the 1,000/hour GITHUB_TOKEN budget.
+SWEEP_MAX_CHECKS = int(os.environ.get("ISSUE_STRUCTURE_SWEEP_MAX_CHECKS", "100"))
 
 ACTION_NONE = "none"
 ACTION_LINK = "link"
 ACTION_ALREADY = "already"
 ACTION_CONFLICT = "conflict"
 
-_UPSERT_PATH = Path(__file__).resolve().parent.parent / ".github/actions/upsert-pr-comment/upsert_pr_comment.py"
+_UPSERT = load_upsert()
 
 
-def _load_upsert() -> Any:
-    """The one comment reader and bot-marker rule (#12984), loaded by path: its dir has a hyphen."""
-    spec = importlib.util.spec_from_file_location("_upsert_pr_comment_19522", _UPSERT_PATH)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load {_UPSERT_PATH}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_UPSERT = _load_upsert()
-
-
-class StructureError(RuntimeError):
+class StructureError(IssueApiError):
     """The API answered with something this script cannot act on."""
 
 
@@ -251,39 +245,10 @@ def plan_structure(missing: Sequence[str], has_label: bool, existing: Optional[D
 # ---- IO --------------------------------------------------------------------------------
 
 
-class Client:
-    """`GitHubApi.request` plus the one comment reader and upsert (#12984).
+class StructureClient(IssueClient):
+    """The shared issue client, raising ``StructureError``, plus the issue and parent reads."""
 
-    Tests pass a fake ``api`` and, for the comment helper, fake ``comments``/``upsert`` callables.
-    """
-
-    def __init__(
-        self,
-        api: Any,
-        comments: Optional[Callable[[int], List[Dict[str, Any]]]] = None,
-        upsert: Optional[Callable[[int, str, str], Any]] = None,
-    ) -> None:
-        self.api = api
-        self.repo = api.repository
-        self._comments = comments
-        self._upsert = upsert
-
-    def call(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None, ok=(200,)) -> Any:
-        status, body = self.api.request(method, path, payload)
-        if status not in ok:
-            raise StructureError(f"{method} {path}: HTTP {status}: {body}")
-        return body
-
-    def comments(self, number: int) -> List[Dict[str, Any]]:
-        if self._comments is not None:
-            return self._comments(number)
-        return list(_UPSERT.iter_comments(self.api.api_root, self.repo, number, self.api.token))
-
-    def upsert(self, number: int, marker: str, body: str) -> Any:
-        """Update our newest ``marker`` comment, else create one: the shared helper, never a copy."""
-        if self._upsert is not None:
-            return self._upsert(number, marker, body)
-        return _UPSERT.upsert(self.api.api_root, self.repo, number, self.api.token, marker, body)
+    error = StructureError
 
     def issue(self, number: int) -> Dict[str, Any]:
         return self.call("GET", f"/repos/{self.repo}/issues/{number}")
@@ -300,20 +265,10 @@ class Client:
         return parent_identity(body.get("url"))
 
 
-def ensure_label(client: Client) -> None:
-    name = urllib.parse.quote(STRUCTURE_LABEL)
-    status, _ = client.api.request("GET", f"/repos/{client.repo}/labels/{name}", None)
-    if status == 404:
-        payload = {"name": STRUCTURE_LABEL, "color": STRUCTURE_LABEL_COLOR, "description": STRUCTURE_LABEL_DESCRIPTION}
-        client.call("POST", f"/repos/{client.repo}/labels", payload, ok=(201, 422))
-    elif status != 200:
-        raise StructureError(f"cannot read label {STRUCTURE_LABEL}: HTTP {status}")
-
-
-def apply_structure_plan(client: Client, number: int, actions: Sequence[Tuple]) -> None:
+def apply_structure_plan(client: StructureClient, number: int, actions: Sequence[Tuple]) -> None:
     for action in actions:
         if action[0] == "add_label":
-            ensure_label(client)
+            ensure_label(client, STRUCTURE_LABEL, STRUCTURE_LABEL_COLOR, STRUCTURE_LABEL_DESCRIPTION)
             client.call("POST", f"/repos/{client.repo}/issues/{number}/labels", {"labels": [STRUCTURE_LABEL]})
         elif action[0] == "remove_label":
             path = f"/repos/{client.repo}/issues/{number}/labels/{urllib.parse.quote(STRUCTURE_LABEL)}"
@@ -322,7 +277,40 @@ def apply_structure_plan(client: Client, number: int, actions: Sequence[Tuple]) 
             client.upsert(number, action[1], action[2])
 
 
-def link_parent(client: Client, issue: Dict[str, Any], ref: int) -> Tuple[Optional[str], str]:
+def author_refusal(issue: Dict[str, Any], ref: int) -> str:
+    """Why the author may not link ``Parent: #ref``, or '' for a maintainer."""
+    association = issue.get("author_association") or "NONE"
+    if association in TRUSTED_ASSOCIATIONS:
+        return ""
+    return (
+        f"`Parent: #{ref}` was not linked: the author is not a maintainer (author_association "
+        f"{association}), so a maintainer needs to link the parent"
+    )
+
+
+def target_refusal(ref: int, status: int, target: Any) -> str:
+    """Why #ref cannot be a parent (missing, a pull request, closed), or '' for an open issue."""
+    if status == 404:
+        return f"`Parent: #{ref}` was not linked: #{ref} does not exist"
+    if status != 200 or not isinstance(target, dict):
+        raise StructureError(f"cannot read the named parent #{ref}: HTTP {status}: {target}")
+    if target.get("pull_request"):
+        return f"`Parent: #{ref}` was not linked: #{ref} is a pull request, not an issue"
+    if target.get("state") != "open":
+        return f"`Parent: #{ref}` was not linked: #{ref} is closed"
+    return ""
+
+
+def link_refusal(client: StructureClient, issue: Dict[str, Any], ref: int) -> str:
+    """The author gate, then the target check; '' when the link may be made."""
+    refusal = author_refusal(issue, ref)
+    if refusal:
+        return refusal
+    status, target = client.api.request("GET", f"/repos/{client.repo}/issues/{ref}", None)
+    return target_refusal(ref, status, target)
+
+
+def link_parent(client: StructureClient, issue: Dict[str, Any], ref: int) -> Tuple[Optional[str], str]:
     """Add the issue as a sub-issue of #ref. Returns (new parent identity, failure note)."""
     path = f"/repos/{client.repo}/issues/{ref}/sub_issues"
     status, body = client.api.request("POST", path, {"sub_issue_id": issue["id"]})
@@ -334,7 +322,7 @@ def link_parent(client: Client, issue: Dict[str, Any], ref: int) -> Tuple[Option
     return None, f"`Parent: #{ref}` could not be linked (HTTP {status}: {message})"
 
 
-def _conflict(client: Client, number: int, ref: int, current: str, comments: List[Dict[str, Any]]) -> None:
+def _conflict(client: StructureClient, number: int, ref: int, current: str, comments: List[Dict[str, Any]]) -> None:
     body = conflict_comment(ref, current, client.repo)
     existing = ours(comments, CONFLICT_MARKER)
     if existing is None or existing.get("body") != body:
@@ -342,7 +330,7 @@ def _conflict(client: Client, number: int, ref: int, current: str, comments: Lis
 
 
 def reconcile_parent(
-    client: Client, issue: Dict[str, Any], comments: List[Dict[str, Any]]
+    client: StructureClient, issue: Dict[str, Any], comments: List[Dict[str, Any]]
 ) -> Tuple[Optional[str], str]:
     """Apply ``Parent: #N``; returns (parent identity after the step, link failure note)."""
     current = client.parent_of(issue)
@@ -350,13 +338,17 @@ def reconcile_parent(
     action = parent_action(ref, current, client.repo)
     logger.info("#%s parent: current=%s ref=%s action=%s", issue["number"], current, ref, action)
     if action == ACTION_LINK:
+        refusal = link_refusal(client, issue, ref)
+        if refusal:
+            logger.info("#%s not linked under #%s: %s", issue["number"], ref, refusal)
+            return None, refusal
         return link_parent(client, issue, ref)
     if action == ACTION_CONFLICT:
         _conflict(client, issue["number"], ref, current, comments)
     return current, ""
 
 
-def check_issue_structure(client: Client, number: int) -> List[str]:
+def check_issue_structure(client: StructureClient, number: int) -> List[str]:
     """Reconcile one issue. Returns the missing items (empty when the structure is complete)."""
     issue = client.issue(number)
     if issue.get("pull_request") or issue.get("state") != "open":
@@ -373,19 +365,46 @@ def check_issue_structure(client: Client, number: int) -> List[str]:
     return missing
 
 
-def labelled_issues(client: Client) -> List[int]:
-    """Open issues (not PRs) carrying the structure label, up to the sweep cap."""
-    numbers: List[int] = []
+def open_issues(client: StructureClient) -> List[Dict[str, Any]]:
+    """Every open issue (not PRs), paginated up to the page cap."""
+    items: List[Dict[str, Any]] = []
     for page in range(1, SWEEP_MAX_PAGES + 1):
-        query = urllib.parse.urlencode(
-            {"state": "open", "labels": STRUCTURE_LABEL, "per_page": SWEEP_PAGE_SIZE, "page": page}
-        )
+        query = urllib.parse.urlencode({"state": "open", "per_page": SWEEP_PAGE_SIZE, "page": page})
         batch = client.call("GET", f"/repos/{client.repo}/issues?{query}")
-        numbers += [item["number"] for item in batch if not item.get("pull_request")]
+        items += [item for item in batch if not item.get("pull_request")]
         if len(batch) < SWEEP_PAGE_SIZE:
-            return numbers
-    logger.warning("sweep stopped at the %d-page cap; the rest is checked on the next run", SWEEP_MAX_PAGES)
-    return numbers
+            return items
+    logger.warning("sweep stopped at the %d-page cap; later issues wait for an issue event", SWEEP_MAX_PAGES)
+    return items
+
+
+def sweep_priority(item: Dict[str, Any]) -> Optional[int]:
+    """0: label and listed facts disagree; 1: a maintainer's unlinked ``Parent:``; None: in line.
+
+    Judged from the list item alone (it carries milestone, labels, parent and sub-issue
+    summary), so an issue already in line costs no call. Limit: a labelled issue still
+    missing something keeps its comment until its next issue event, even if what is
+    missing changed by a parent edit.
+    """
+    try:
+        parent = parent_identity(item.get("parent_issue_url"))
+    except StructureError:
+        return 0
+    facts = facts_from_issue(item, parent)
+    if bool(missing_items(facts)) != (STRUCTURE_LABEL in facts.labels):
+        return 0
+    ref = parse_parent_ref(item.get("body"), item["number"])
+    if ref is not None and parent is None and not author_refusal(item, ref):
+        return 1
+    return None
+
+
+def sweep_targets(items: Iterable[Dict[str, Any]], cap: int = SWEEP_MAX_CHECKS) -> List[int]:
+    """The issues a sweep fully checks, most urgent first, at most ``cap``; the rest next run."""
+    ranked = sorted((p, item["number"]) for item in items if (p := sweep_priority(item)) is not None)
+    if len(ranked) > cap:
+        logger.warning("sweep: %d issues need a check; %d this run, the rest on the next", len(ranked), cap)
+    return [number for _, number in ranked[:cap]]
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -395,8 +414,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sub.add_parser("sweep")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    client = Client(build_api())
-    numbers = [args.number] if args.command == "check" else labelled_issues(client)
+    client = StructureClient(build_api())
+    numbers = [args.number] if args.command == "check" else sweep_targets(open_issues(client))
     failed = []
     for number in numbers:
         try:

@@ -5,12 +5,17 @@
 # structure (#19522): every open issue needs a goal milestone `M<n> - ...`, a
 #   `phase:M<n>.<k>` label with the same <n>, and a native parent unless it is an
 #   umbrella with sub-issues. `Parent: #N` in the body links an orphan as a native
-#   sub-issue (never re-parents). A gap adds `needs-structure` plus ONE marked
+#   sub-issue (never re-parents) when its author is OWNER/MEMBER/COLLABORATOR and
+#   #N is an open issue; otherwise the comment says why. A gap adds `needs-structure` plus ONE marked
 #   comment, updated in place; the label clears when all three are present. Logic
 #   and fixture tests: pipeline-scripts/issue_structure.py.
 #   Native parent/sub-issue changes emit no workflow event (the `sub_issues`
-#   webhook is not an Actions trigger), so `schedule` re-checks every open issue
-#   labelled `needs-structure`; `workflow_dispatch` re-checks one issue or sweeps.
+#   webhook is not an Actions trigger), so `schedule` lists EVERY open issue
+#   (paginated) and fully checks those whose label disagrees with their listed
+#   facts, or that carry an unlinked maintainer `Parent:`, at most
+#   ISSUE_STRUCTURE_SWEEP_MAX_CHECKS per run (the rest next run), which also
+#   labels the backlog that predates the guard; `workflow_dispatch` re-checks
+#   one issue or sweeps.
 
 name: Issue Triage
 
@@ -22,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       issue:
-        description: 'Issue number to re-check (empty: sweep every open needs-structure issue)'
+        description: 'Issue number to re-check (empty: sweep every open issue)'
         required: false
         default: ''
 
@@ -110,7 +115,7 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue }}
         run: python3 pipeline-scripts/issue_structure.py check --number "$ISSUE_NUMBER"
 
-      - name: Sweep open needs-structure issues
+      - name: Sweep every open issue
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.issue == '')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
