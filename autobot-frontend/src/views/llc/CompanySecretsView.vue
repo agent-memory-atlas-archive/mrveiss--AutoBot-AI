@@ -115,7 +115,7 @@ import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{ companyId?: string }>()
 
-const logger = createLogger('SecretsView')
+const logger = createLogger('CompanySecretsView')
 const api = useApiClient()
 const userStore = useUserStore()
 const { t } = useI18n()

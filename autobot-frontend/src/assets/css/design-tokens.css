@@ -907,7 +907,7 @@
 
   /* ============================================
    * SECRETS VIEW TOKENS
-   * Issue #12005 (umbrella #11515). Scoped to llc/SecretsView.vue.
+   * Issue #12005 (umbrella #11515). Scoped to llc/CompanySecretsView.vue.
    * Hex-only (deliberately NO OKLCH override) so the view renders
    * pixel-identical to its previous hardcoded values across all browsers.
    * These are the literal fallbacks the view rendered because their intended
