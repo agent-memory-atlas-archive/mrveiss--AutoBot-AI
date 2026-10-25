@@ -526,6 +526,15 @@ def caller_reader(current_user) -> KbReader:
     return KbReader(caller_principal(current_user), is_admin_role(_user_field(current_user, "role")))
 
 
+def scoped_reader(current_user) -> KbReader:
+    """A :class:`KbReader` with the caller's org and groups and never the admin input (#16665).
+
+    For routes that run an agent or a grounding pass on the caller's behalf: they read what the
+    caller's normal rules give them, even when the caller is an admin.
+    """
+    return KbReader(caller_principal(current_user), False)
+
+
 def _fact_ids(results: List[Dict]) -> List[str]:
     return [str(r.get("id") or r.get("fact_id") or (r.get("metadata") or {}).get("fact_id") or "") for r in results]
 

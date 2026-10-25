@@ -197,7 +197,9 @@ MIN_READS_FOUND = 40
 #: verifier, the agent KB tools, the KB librarian, the agent diary and the essential story now filter through
 #: ``filter_for_caller`` / ``filter_for_user_id`` (adapters over ``filter_for_principal``, so not a second filter).
 #: 16 entries removed; no detector change beyond adding those two names to FILTER_HELPERS.
-UNFILTERED_READ_CEILING = 71
+#: Then 71 -> 64 (#16665): the agent context/research routes, the knowledge-retrieval agent, chat knowledge search, the
+#: research planner's skip-known read and the KB search task handler filter through ``filter_for_user_id``.
+UNFILTERED_READ_CEILING = 64
 
 _REASON_PREFIXES = ("TRACKED_GAP #", "SCOPED: ", "NOT_USER_FACING: ", "IMPL: ", "ADMIN_ONLY: ")
 _NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)

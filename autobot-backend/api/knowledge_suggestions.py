@@ -37,7 +37,7 @@ from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from knowledge import get_knowledge_base
-from knowledge.search_filters import caller_principal, caller_reader
+from knowledge.search_filters import caller_reader, scoped_reader
 
 logger = get_logger(__name__)
 
@@ -412,7 +412,7 @@ async def auto_apply_suggestions(
     """
     try:
         _validate_fact_id(fact_id)
-        result = await _call_auto_apply_kb(fact_id, request, caller_principal(current_user).user_id)  # #16665
+        result = await _call_auto_apply_kb(fact_id, request, scoped_reader(current_user))  # #16665
         _log_auto_apply_result(fact_id, result)
         return result
     except HTTPException:
