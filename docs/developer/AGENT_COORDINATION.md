@@ -212,10 +212,11 @@ first. Owner rule 17 in [`OWNER_RULES.md`](OWNER_RULES.md). Procedure: #19452.
    2026-10-25 a live session was read as orphaned for exactly that reason.
 3. Orphaned worktrees are handled by the reaper, never swept by a person: clean
    and fully pushed trees are reaped. For dirty or unpushed trees, the reaper
-   saves a snapshot to `$HOME` and raises an orphan event. That part is not live
-   yet (#19452); until it is, the coordinator saves the snapshot by hand. A
-   takeover is an explicit `claim --steal` that names the snapshot. Nothing is
-   discarded or committed on another session's behalf.
+   saves a verified snapshot to `$HOME` and raises an orphan event (live in the
+   coordination tooling since 2026-10-25, #19452). A claim whose owner has made no
+   activity beat for 6 hours no longer protects its tree. A takeover is an
+   explicit `claim --steal` that names the snapshot. Nothing is discarded or
+   committed on another session's behalf.
 4. Monitors and background waits do not survive a restart, so they are re-armed.
    Subagents are gone too; their pushed branch is the record, and the parent
    re-dispatches what is left.
