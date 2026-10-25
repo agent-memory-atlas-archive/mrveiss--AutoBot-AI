@@ -94,7 +94,7 @@ def classify_push(returncode: int, output: str) -> str:
 
 
 @dataclass
-class Target:
+class SyncTarget:
     """One branch to sync. ``pr`` is None for a PR-less (parked) branch."""
 
     branch: str
@@ -110,7 +110,7 @@ class Target:
 
 @dataclass
 class Plan:
-    targets: List[Target] = field(default_factory=list)
+    targets: List[SyncTarget] = field(default_factory=list)
     skipped: Dict[str, List[str]] = field(default_factory=dict)
 
     def skip(self, bucket: str, item: str) -> None:
@@ -122,10 +122,10 @@ def _is_fork(pull: Dict[str, Any], repository: str) -> bool:
     return repo.get("full_name") != repository
 
 
-def _pr_target(pull: Dict[str, Any]) -> Target:
+def _pr_target(pull: Dict[str, Any]) -> SyncTarget:
     head = pull.get("head") or {}
     labels = tuple(sorted(label.get("name", "") for label in pull.get("labels") or []))
-    return Target(head.get("ref", ""), int(pull["number"]), head.get("sha", ""), labels, bool(pull.get("draft")))
+    return SyncTarget(head.get("ref", ""), int(pull["number"]), head.get("sha", ""), labels, bool(pull.get("draft")))
 
 
 def _policy_bucket(branch: str) -> Optional[str]:
@@ -167,7 +167,7 @@ def plan_run(pulls: Sequence[Dict[str, Any]], branches: Iterable[str], repositor
         if bucket:
             plan.skip(bucket, f"{code(branch)} (no PR)")
         else:
-            plan.targets.append(Target(branch))
+            plan.targets.append(SyncTarget(branch))
     return plan
 
 

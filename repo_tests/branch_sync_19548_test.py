@@ -111,7 +111,7 @@ def _git(behind: str = "5", merge: Tuple[int, str] = (0, ""), unmerged: str = ""
 
 
 def _target(labels: Tuple[str, ...] = (), pr: Optional[int] = 7) -> Any:
-    return core.Target("issue-1-x", pr, HEAD_SHA, labels)
+    return core.SyncTarget("issue-1-x", pr, HEAD_SHA, labels)
 
 
 def _sync(runner: Runner, api: Api, target: Any, dry_run: bool = False) -> Tuple[str, str]:
@@ -201,7 +201,7 @@ def test_a_branch_that_moved_is_skipped_never_overwritten() -> None:
     rejected = (1, " ! [rejected]        HEAD -> x (fetch first)\nerror: failed to push some refs")
     runner, api = _git(push=rejected), Api()
     assert _sync(runner, api, _target())[0] == core.HEAD_MOVED and not api.writes()
-    moved = core.Target("issue-1-x", 7, "f" * 40)
+    moved = core.SyncTarget("issue-1-x", 7, "f" * 40)
     runner = _git()
     assert _sync(runner, Api(), moved)[0] == core.HEAD_MOVED and not runner.ran("merge")
 

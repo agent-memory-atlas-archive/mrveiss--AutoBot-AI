@@ -202,7 +202,7 @@ class Syncer:
     def __init__(self, git: Git, gh: SyncApi, base: str = "main", dry_run: bool = False) -> None:
         self.git, self.gh, self.base, self.dry_run = git, gh, base, dry_run
 
-    def flag(self, target: core.Target, outcome: str, body: str) -> None:
+    def flag(self, target: core.SyncTarget, outcome: str, body: str) -> None:
         """One label and one marker-deduped comment; a PR-less branch is reported only."""
         label, marker = MARKERS[outcome]
         if self.dry_run or target.pr is None or label in target.labels:
@@ -211,7 +211,7 @@ class Syncer:
         self.gh.upsert_comment(target.pr, marker, body)
         self.gh.add_label(target.pr, label)
 
-    def clear(self, target: core.Target) -> None:
+    def clear(self, target: core.SyncTarget) -> None:
         if self.dry_run or target.pr is None:
             return
         for label in core.labels_to_clear(target.labels):
@@ -225,18 +225,18 @@ class Syncer:
             for path in files
         ]
 
-    def on_conflict(self, target: core.Target) -> Tuple[str, str]:
+    def on_conflict(self, target: core.SyncTarget) -> Tuple[str, str]:
         files = self.git.unmerged()
         self.git.abort()
         since, histories = self.histories(target.branch, files)
         self.flag(target, core.CONFLICT, core.conflict_comment(target.branch, self.base, since, histories))
         return core.CONFLICT, f"{len(files)} file(s)"
 
-    def on_workflow(self, target: core.Target, paths: Sequence[str]) -> Tuple[str, str]:
+    def on_workflow(self, target: core.SyncTarget, paths: Sequence[str]) -> Tuple[str, str]:
         self.flag(target, core.WORKFLOW, core.workflow_comment(target.branch, self.base, paths))
         return core.WORKFLOW, ", ".join(paths) or "push refused"
 
-    def precheck(self, target: core.Target) -> Tuple[Optional[str], str, str]:
+    def precheck(self, target: core.SyncTarget) -> Tuple[Optional[str], str, str]:
         local = self.git.out("rev-parse", "--verify", "--quiet", f"origin/{target.branch}") or ""
         if not local:
             return core.UNREACHABLE, "not fetched", local
@@ -250,7 +250,7 @@ class Syncer:
             return core.CURRENT, "", local
         return None, f"{behind} behind", local
 
-    def merge(self, target: core.Target, local: str) -> Tuple[str, str]:
+    def merge(self, target: core.SyncTarget, local: str) -> Tuple[str, str]:
         if not self.git.checkout(target.branch):
             return core.UNREACHABLE, "checkout failed"
         returncode, output = self.git.merge(target.branch, self.base)
@@ -266,7 +266,7 @@ class Syncer:
         paths = core.workflow_changes(changed)
         return self.on_workflow(target, paths) if paths else self.push(target)
 
-    def push(self, target: core.Target) -> Tuple[str, str]:
+    def push(self, target: core.SyncTarget) -> Tuple[str, str]:
         if self.dry_run:
             return core.SYNCED, "dry run: not pushed"
         returncode, output = self.git.push(target.branch)
@@ -277,7 +277,7 @@ class Syncer:
             self.clear(target)
         return kind, "" if kind == core.SYNCED else (output.strip().splitlines() or ["no output"])[-1]
 
-    def sync(self, target: core.Target) -> Tuple[str, str]:
+    def sync(self, target: core.SyncTarget) -> Tuple[str, str]:
         try:
             outcome, detail, local = self.precheck(target)
             return (outcome, detail) if outcome else self.merge(target, local)
