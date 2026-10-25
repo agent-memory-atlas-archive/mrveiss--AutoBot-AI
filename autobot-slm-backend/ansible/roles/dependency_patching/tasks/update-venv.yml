@@ -31,22 +31,14 @@
   changed_when: false
 
 # #19428: a floor in constraints/shared.txt reaches a venv here too, not only through a manifest
-# reinstall. Stage the SSOT from the controller (patch-dependencies.yml can reach a node that
-# update-all-nodes.yml never staged it on), name every constrained package this venv already
+# reinstall. Stage the SSOT through the one shared stage (patch-dependencies.yml can reach a node
+# that update-all-nodes.yml never staged it on), name every constrained package this venv already
 # holds, and constrain the install against the file. A package the venv does not hold is never
 # added: the constraints file covers several components' venvs. The install moves a held package
 # to what the file allows -- up to a floor, and down under an upper bound (numpy <3.0.0) too.
-- name: Ensure the constraints directory exists on the node (#19428)
-  ansible.builtin.file:
-    path: "{{ constraints_path | dirname }}"
-    state: directory
-    mode: "0755"
-
-- name: Stage the shared constraints SSOT onto the node (#19428)
-  ansible.builtin.copy:
-    src: "{{ constraints_source }}"
-    dest: "{{ constraints_path }}"
-    mode: "0644"
+- name: Stage the shared constraints SSOT onto the node (#19428, #17331)
+  ansible.builtin.include_tasks: ../../_shared/tasks/stage_shared_manifests.yml
+  when: not (autobot_shared_manifests_staged | default(false))
 
 - name: Read the shared constraints SSOT (#19428)
   ansible.builtin.slurp:

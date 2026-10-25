@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import re
-from pathlib import Path
 
 import jinja2
 import yaml
@@ -20,6 +19,7 @@ from repo_tests._paths import repo_root
 
 _ROLE = repo_root() / "autobot-slm-backend" / "ansible" / "roles" / "dependency_patching"
 _CONSTRAINTS = repo_root() / "constraints" / "shared.txt"
+_SHARED_STAGE = _ROLE.parent / "_shared" / "tasks" / "stage_shared_manifests.yml"
 _UPDATE_ALL = repo_root() / "autobot-slm-backend" / "ansible" / "playbooks" / "update-all-nodes.yml"
 
 
@@ -108,17 +108,23 @@ def test_a_held_package_under_an_upper_bound_is_included_so_pip_can_move_it_down
     assert _constrained_installed("numpy>=2.5.4,<3.0.0\n", ["numpy==3.1.0"]) == ["numpy"]
 
 
-def test_the_role_stages_the_ssot_before_reading_it() -> None:
-    """patch-dependencies.yml can reach a node update-all-nodes.yml never staged the file on."""
-    names = [t.get("name", "") for t in _tasks()]
+def test_the_role_stages_the_ssot_through_the_shared_stage_before_reading_it() -> None:
+    """patch-dependencies.yml can reach a node update-all-nodes.yml never staged the file on.
+
+    The stage is the one in _shared/tasks (owner rule: twice-defined is fixed immediately); a
+    private copy here had already dropped its ``owner: autobot.user``.
+    """
+    tasks = _tasks()
+    names = [t.get("name", "") for t in tasks]
     stage = next(i for i, n in enumerate(names) if "Stage the shared constraints SSOT" in n)
     read = next(i for i, n in enumerate(names) if "Read the shared constraints SSOT" in n)
     assert stage < read
-    copy = _tasks()[stage]["ansible.builtin.copy"]
-    assert copy == {"src": "{{ constraints_source }}", "dest": "{{ constraints_path }}", "mode": "0644"}
+    assert tasks[stage]["ansible.builtin.include_tasks"] == "../../_shared/tasks/stage_shared_manifests.yml"
+    assert not [t for t in tasks if "ansible.builtin.copy" in t], "a private copy of the stage is back"
+    shared = yaml.safe_load((_SHARED_STAGE).read_text(encoding="utf-8"))
+    dests = [t["ansible.builtin.copy"]["dest"] for t in shared if "ansible.builtin.copy" in t]
     defaults = yaml.safe_load((_ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
-    rel = defaults["constraints_source"].replace("{{ role_path }}", str(_ROLE))
-    assert Path(rel).resolve() == _CONSTRAINTS.resolve(), rel
+    assert defaults["constraints_path"] in dests, (defaults["constraints_path"], dests)
 
 
 def test_the_install_constrains_against_the_ssot_read_on_the_node() -> None:
