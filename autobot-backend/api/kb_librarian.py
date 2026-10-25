@@ -44,7 +44,7 @@ from api.schemas_knowledge import (
 from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
-from knowledge.search_filters import caller_reader
+from knowledge.search_filters import scoped_reader
 from knowledge_factory import peek_knowledge_base
 
 router = APIRouter()
@@ -74,7 +74,7 @@ async def query_knowledge_base(
     Returns:
         KBQueryResponse with search results and optional summary.
     """
-    user_id = caller_reader(current_user)  # #16665: 401 before the try below swallows it
+    user_id = scoped_reader(current_user)  # #16665 no admin bypass (LLM path): 401 before the try below swallows it
     try:
         kb_librarian = get_kb_librarian()
 

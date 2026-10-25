@@ -37,7 +37,7 @@ from auth_middleware import get_current_user
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from knowledge import get_knowledge_base
-from knowledge.search_filters import caller_reader, scoped_reader
+from knowledge.search_filters import scoped_reader
 
 logger = get_logger(__name__)
 
@@ -90,7 +90,7 @@ async def suggest_tags(request: SuggestTagsRequest, current_user: dict = Depends
     """
     try:
         kb = await get_knowledge_base()
-        user_id = caller_reader(current_user)  # #16665: 401 when unresolved
+        user_id = scoped_reader(current_user)  # #16665 no admin bypass (LLM path): 401 when unresolved
         result = await kb.suggest_tags(
             user_id=user_id,
             content=request.content,
@@ -160,7 +160,7 @@ async def suggest_categories(request: SuggestCategoriesRequest, current_user: di
     """
     try:
         kb = await get_knowledge_base()
-        user_id = caller_reader(current_user)  # #16665: 401 when unresolved
+        user_id = scoped_reader(current_user)  # #16665 no admin bypass (LLM path): 401 when unresolved
         result = await kb.suggest_categories(
             user_id=user_id,
             content=request.content,
@@ -229,7 +229,7 @@ async def suggest_all(request: SuggestAllRequest, current_user: dict = Depends(g
     Returns: {success, tag_suggestions, category_suggestions, similar_docs_analyzed}
     """
     try:
-        return await _call_kb_suggest_all(request, caller_reader(current_user))  # #16665
+        return await _call_kb_suggest_all(request, scoped_reader(current_user))  # #16665 no admin bypass (LLM path)
     except HTTPException:
         raise
     except Exception as e:
@@ -296,7 +296,7 @@ async def suggest_by_context(request: ContextSuggestionsRequest, current_user: d
     """
     try:
         kb = await get_knowledge_base()
-        user_id = caller_reader(current_user)  # #16665: 401 when unresolved
+        user_id = scoped_reader(current_user)  # #16665 no admin bypass (LLM path): 401 when unresolved
         result = await kb.suggest_by_context(
             user_id=user_id,
             context=request.context,
