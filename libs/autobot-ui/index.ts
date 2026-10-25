@@ -112,7 +112,7 @@ export {
 export type { ToastType, Toast, UseToastReturn } from './src/composables/useToast'
 
 // Shared Prometheus/monitoring metric shapes (#14907) — the eight type names
-// both apps' usePrometheusMetrics.ts declared identically-named. Domain
+// both apps' metrics composables declared identically-named (#14907). Domain
 // logic and domain-only types stay per-app; see the file's own doc comment.
 export type {
   GPUMetrics,

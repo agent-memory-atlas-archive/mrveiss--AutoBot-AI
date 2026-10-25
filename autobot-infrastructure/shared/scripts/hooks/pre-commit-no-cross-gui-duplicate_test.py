@@ -114,6 +114,7 @@ def test_the_former_prometheus_collision_is_no_longer_allowed(tmp_path: Path) ->
     violations, _scanned = guard.collect_composable_violations(repo)
 
     assert violations
+    assert all("usePrometheusMetrics.ts" in str(v) for v in violations), violations
 
 
 def test_composable_no_collision_when_only_one_side_has_the_file(tmp_path: Path) -> None:
