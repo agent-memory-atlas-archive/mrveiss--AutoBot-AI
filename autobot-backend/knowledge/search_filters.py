@@ -68,16 +68,9 @@ async def build_chromadb_permission_filter(
     conditions.append({"visibility": "system"})
     conditions.append({"visibility": "public"})
 
-    # Condition 3: Organization-level
+    # Condition 3: Organization-level (combined through the one ``$and`` builder, #19144)
     if user_org_id:
-        conditions.append(
-            {
-                "$and": [
-                    {"visibility": "organization"},
-                    {"organization_id": user_org_id},
-                ]
-            }
-        )
+        conditions.append(and_where({"visibility": "organization"}, {"organization_id": user_org_id}))
 
     # Conditions 4-6: group-level and shared facts, and facts readable by access level
     # alone, cannot be decided by a ChromaDB where (membership lives in list metadata).
@@ -194,13 +187,8 @@ async def augment_search_request_with_permissions(
         user_id=user_id, user_org_id=user_org_id, user_group_ids=user_group_ids
     )
 
-    # Combine with original filter if provided
-    if original_where:
-        combined_where = {"$and": [original_where, permission_filter]}
-    else:
-        combined_where = permission_filter
-
-    return combined_where
+    # The caller's filter is AND-ed through the one combinator, so it only narrows (#19144)
+    return and_where(original_where, permission_filter)
 
 
 def extract_user_context_from_request(current_user) -> tuple:
