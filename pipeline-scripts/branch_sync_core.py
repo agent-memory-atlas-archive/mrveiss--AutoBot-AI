@@ -26,9 +26,14 @@ from autobot_shared.git_refs import is_safe_ref  # noqa: E402  # the one argv re
 #: Dev_new_gui: temporary mirror of main for the live updater; remove with #16461.
 NEVER_TARGET = frozenset({"main", "release", "master", "develop", "HEAD", "Dev_new_gui"})
 
-#: A ``rescued/stash-*`` branch is a snapshot, not a line of work (#15306):
-#: merging base into it destroys what it records and conflicts forever.
-EXCLUDED_PREFIXES = ("rescued/",)
+#: Never synced, PR or not:
+#: ``rescued/`` -- a stash snapshot, not a line of work (#15306); merging base into it
+#: destroys what it records and conflicts forever.
+#: ``dependabot/`` -- Dependabot rebases its own branches; one foreign commit makes it
+#: stop managing the PR (owner decision on #19568).
+#: ``automation/`` -- bot-owned branches (e.g. ``automation/test-durations``) that their
+#: own workflow regenerates from main; a sync commit there is noise (#19568 review).
+EXCLUDED_PREFIXES = ("rescued/", "dependabot/", "automation/")
 
 LABEL_CONFLICT = "sync-conflict"
 LABEL_WORKFLOW = "sync-needs-workflow-token"
@@ -100,7 +105,7 @@ class Target:
 
     @property
     def name(self) -> str:
-        return f"#{self.pr} `{self.branch}`" if self.pr else f"`{self.branch}` (no PR)"
+        return f"#{self.pr} {code(self.branch)}" if self.pr else f"{code(self.branch)} (no PR)"
 
 
 @dataclass
@@ -160,7 +165,7 @@ def plan_run(pulls: Sequence[Dict[str, Any]], branches: Iterable[str], repositor
     for branch in sorted(set(branches) - claimed):
         bucket = _policy_bucket(branch)
         if bucket:
-            plan.skip(bucket, f"`{branch}` (no PR)")
+            plan.skip(bucket, f"{code(branch)} (no PR)")
         else:
             plan.targets.append(Target(branch))
     return plan
@@ -169,6 +174,13 @@ def plan_run(pulls: Sequence[Dict[str, Any]], branches: Iterable[str], repositor
 def labels_to_clear(labels: Iterable[str]) -> List[str]:
     """The sync labels a branch that is now 0 behind must lose."""
     return [label for label in SYNC_LABELS if label in set(labels)]
+
+
+def code(text: str) -> str:
+    """``text`` as inline code that a backtick inside it cannot break (git allows them in refs)."""
+    if "`" not in text:
+        return f"`{text}`"
+    return f"`` {text.replace('``', '` `')} ``"
 
 
 def _cell(text: str) -> str:
@@ -198,7 +210,7 @@ class FileHistory:
 
 def _file_section(history: FileHistory, base: str) -> List[str]:
     return [
-        f"#### `{history.path}`",
+        f"#### {code(history.path)}",
         "",
         "| side | commit | subject | issue refs |",
         "|---|---|---|---|",
@@ -212,11 +224,11 @@ def conflict_comment(branch: str, base: str, merge_base: str, files: Sequence[Fi
     """The one ``sync-conflict`` comment: both sides' intent for every conflicted file."""
     lines = [
         MARKER_CONFLICT,
-        f"### Auto-sync: merging `{base}` into `{branch}` conflicts",
+        f"### Auto-sync: merging {code(base)} into {code(branch)} conflicts",
         "",
         f"The sync aborted the merge and pushed nothing. Conflicts are information, so it never "
         f"resolves one itself. Below, for each conflicted file, are the commits that touched it on "
-        f"each side since the merge base `{merge_base[:10]}`. Merge `{base}` in yourself and push; "
+        f"each side since the merge base `{merge_base[:10]}`. Merge {code(base)} in yourself and push; "
         f"the label clears on the first run that finds this branch 0 behind.",
         "",
     ]
@@ -229,12 +241,12 @@ def conflict_comment(branch: str, base: str, merge_base: str, files: Sequence[Fi
 
 def workflow_comment(branch: str, base: str, paths: Sequence[str]) -> str:
     """The one ``sync-needs-workflow-token`` comment."""
-    listed = "\n".join(f"- `{path}`" for path in paths) or "- (GitHub refused the push; no path list)"
+    listed = "\n".join(f"- {code(path)}" for path in paths) or "- (GitHub refused the push; no path list)"
     return (
-        f"{MARKER_WORKFLOW}\n### Auto-sync: `{base}` not merged into `{branch}`\n\n"
+        f"{MARKER_WORKFLOW}\n### Auto-sync: {code(base)} not merged into {code(branch)}\n\n"
         f"The merge is clean, but it changes workflow files, and GitHub refuses a `GITHUB_TOKEN` push "
         f"that does. The sync uses `GITHUB_TOKEN` only (#19548), so that a sync never starts CI, and "
         f"so it pushed nothing:\n\n{listed}\n\n"
-        f"This branch catches up on the author's next push (merge `{base}` in first) or in its train. "
+        f"This branch catches up on the author's next push (merge {code(base)} in first) or in its train. "
         f"The label clears on the first run that finds it 0 behind.\n"
     )

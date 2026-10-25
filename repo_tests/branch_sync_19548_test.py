@@ -286,6 +286,30 @@ def test_the_plan_skips_forks_includes_drafts_and_leaves_other_bases_alone() -> 
     assert plan.skipped[core.UNREACHABLE] == ["`-x` (no PR)"]
 
 
+def test_dependabot_and_automation_branches_are_never_synced_pr_or_not() -> None:
+    """Dependabot rebases its own PRs; bot branches regenerate from main (#19568 review)."""
+    pulls = [_pull(7, "dependabot/pip/x-1.2"), _pull(8, "automation/test-durations"), _pull(9, "issue-9")]
+    branches = ["dependabot/npm_and_yarn/y", "automation/other", "parked-2"]
+    plan = core.plan_run(pulls, branches, REPO)
+    assert [(t.branch, t.pr) for t in plan.targets] == [("issue-9", 9), ("parked-2", None)]
+    for skipped in (
+        "#7 `dependabot/pip/x-1.2`",
+        "#8 `automation/test-durations`",
+        "`dependabot/npm_and_yarn/y` (no PR)",
+        "`automation/other` (no PR)",
+    ):
+        assert skipped in plan.skipped[core.POLICY], skipped
+
+
+@pytest.mark.parametrize(
+    "name,rendered",
+    [("issue-1", "`issue-1`"), ("we`ird", "`` we`ird ``"), ("a``b", "`` a` `b ``")],
+)
+def test_a_backtick_in_a_branch_name_cannot_break_the_comment(name: str, rendered: str) -> None:
+    assert core.code(name) == rendered
+    assert f"into {rendered} conflicts" in core.conflict_comment(name, "main", "0" * 40, [])
+
+
 @pytest.mark.parametrize(
     "rc,output,unmerged,expected",
     [
