@@ -29,7 +29,7 @@ For an open issue (pull requests and closed issues are skipped):
 
 Never sets milestones, phase labels or parents beyond the ``Parent:`` link, never closes an
 issue and never edits a body. Stdlib only; HTTP goes through ``github_api.GitHubApi`` and
-comment pages are read by the one comment reader, ``.github/actions/upsert-pr-comment``.
+comments are read and upserted by the one helper, ``.github/actions/upsert-pr-comment`` (#12984).
 """
 
 from __future__ import annotations
@@ -243,10 +243,8 @@ def plan_structure(missing: Sequence[str], has_label: bool, existing: Optional[D
         if existing is None:
             return actions
         body = resolved_comment()
-    if existing is None:
-        actions.append(("create_comment", body))
-    elif existing.get("body") != body:
-        actions.append(("update_comment", existing["id"], body))
+    if existing is None or existing.get("body") != body:
+        actions.append(("upsert_comment", STRUCTURE_MARKER, body))
     return actions
 
 
@@ -254,12 +252,21 @@ def plan_structure(missing: Sequence[str], has_label: bool, existing: Optional[D
 
 
 class Client:
-    """`GitHubApi.request` plus the one comment reader; tests pass a fake ``api``/``comments``."""
+    """`GitHubApi.request` plus the one comment reader and upsert (#12984).
 
-    def __init__(self, api: Any, comments: Optional[Callable[[int], List[Dict[str, Any]]]] = None) -> None:
+    Tests pass a fake ``api`` and, for the comment helper, fake ``comments``/``upsert`` callables.
+    """
+
+    def __init__(
+        self,
+        api: Any,
+        comments: Optional[Callable[[int], List[Dict[str, Any]]]] = None,
+        upsert: Optional[Callable[[int, str, str], Any]] = None,
+    ) -> None:
         self.api = api
         self.repo = api.repository
         self._comments = comments
+        self._upsert = upsert
 
     def call(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None, ok=(200,)) -> Any:
         status, body = self.api.request(method, path, payload)
@@ -271,6 +278,12 @@ class Client:
         if self._comments is not None:
             return self._comments(number)
         return list(_UPSERT.iter_comments(self.api.api_root, self.repo, number, self.api.token))
+
+    def upsert(self, number: int, marker: str, body: str) -> Any:
+        """Update our newest ``marker`` comment, else create one: the shared helper, never a copy."""
+        if self._upsert is not None:
+            return self._upsert(number, marker, body)
+        return _UPSERT.upsert(self.api.api_root, self.repo, number, self.api.token, marker, body)
 
     def issue(self, number: int) -> Dict[str, Any]:
         return self.call("GET", f"/repos/{self.repo}/issues/{number}")
@@ -297,13 +310,6 @@ def ensure_label(client: Client) -> None:
         raise StructureError(f"cannot read label {STRUCTURE_LABEL}: HTTP {status}")
 
 
-def _write_comment(client: Client, number: int, action: Tuple) -> None:
-    if action[0] == "create_comment":
-        client.call("POST", f"/repos/{client.repo}/issues/{number}/comments", {"body": action[1]}, ok=(201,))
-    else:
-        client.call("PATCH", f"/repos/{client.repo}/issues/comments/{action[1]}", {"body": action[2]})
-
-
 def apply_plan(client: Client, number: int, actions: Sequence[Tuple]) -> None:
     for action in actions:
         if action[0] == "add_label":
@@ -313,7 +319,7 @@ def apply_plan(client: Client, number: int, actions: Sequence[Tuple]) -> None:
             path = f"/repos/{client.repo}/issues/{number}/labels/{urllib.parse.quote(STRUCTURE_LABEL)}"
             client.call("DELETE", path, ok=(200, 404))
         else:
-            _write_comment(client, number, action)
+            client.upsert(number, action[1], action[2])
 
 
 def link_parent(client: Client, issue: Dict[str, Any], ref: int) -> Tuple[Optional[str], str]:
@@ -331,10 +337,8 @@ def link_parent(client: Client, issue: Dict[str, Any], ref: int) -> Tuple[Option
 def _conflict(client: Client, number: int, ref: int, current: str, comments: List[Dict[str, Any]]) -> None:
     body = conflict_comment(ref, current, client.repo)
     existing = ours(comments, CONFLICT_MARKER)
-    if existing is None:
-        _write_comment(client, number, ("create_comment", body))
-    elif existing.get("body") != body:
-        _write_comment(client, number, ("update_comment", existing["id"], body))
+    if existing is None or existing.get("body") != body:
+        client.upsert(number, CONFLICT_MARKER, body)
 
 
 def reconcile_parent(

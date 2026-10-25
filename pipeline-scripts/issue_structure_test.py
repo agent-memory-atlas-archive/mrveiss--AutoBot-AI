@@ -65,14 +65,34 @@ class FakeApi:
             return 200, [{"name": mod.STRUCTURE_LABEL}]  # the real endpoint answers 200, not 201
         return {"POST": 201, "PATCH": 200, "DELETE": 200}.get(method, 200), {"id": 1}
 
+    def helper_call(self, method: str, url: str, token: str, payload: Any = None) -> Tuple[Any, Optional[str]]:
+        """Stands in for the shared helper's transport, so the REAL reader and upsert run."""
+        assert url.startswith(API) and token == self.token
+        path = url[len(API) :]
+        self.calls.append((method, path.split("?")[0], payload))
+        if method == "GET":
+            return list(self.comments), None
+        return {"id": 99}, None
+
     def writes(self) -> List[Tuple[str, str, Any]]:
         return [c for c in self.calls if c[0] != "GET"]
 
 
+_CURRENT: List[FakeApi] = []
+
+
+@pytest.fixture(autouse=True)
+def _helper_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shared helper's HTTP goes to the newest FakeApi; nothing leaves the process."""
+    _CURRENT.clear()
+    monkeypatch.setattr(mod._UPSERT, "_call", lambda *a, **k: _CURRENT[-1].helper_call(*a, **k))
+
+
 def run(fixture: Dict[str, Any], comments: Optional[List[Dict[str, Any]]] = None, **kw: Any):
     api = FakeApi(fixture, **kw)
-    client = mod.Client(api, comments=lambda _n: list(comments or []))
-    return mod.run_check(client, fixture["number"]), api
+    api.comments = list(comments or [])
+    _CURRENT.append(api)
+    return mod.run_check(mod.Client(api), fixture["number"]), api
 
 
 # ---- parsing ---------------------------------------------------------------------------
