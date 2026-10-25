@@ -83,7 +83,8 @@ It is not a Vite dev server.
    ```
 
 4. **If nginx runs but the page is blank or 404**, the build is missing or broken. Rebuild it through
-   the builtin updater: the SLM's **System Updates** page, frontend role. Don't build by hand on the node.
+   the builtin updater: the SLM's **Maintenance → Updates → Code Sync** tab, for the frontend node.
+   (**System Updates** on the same page is OS packages, not the AutoBot build.) Don't build by hand on the node.
 
 **Estimated Recovery Time**: 5-15 minutes
 
@@ -102,7 +103,7 @@ It is not a Vite dev server.
 
 1. **Check Redis status**
    ```bash
-   ssh -i ~/.ssh/autobot_key autobot@<database-ip>
+   ssh autobot@<database-ip>
    sudo systemctl status redis-stack-server
    ```
 
@@ -150,7 +151,7 @@ It is not a Vite dev server.
 
 1. **Check Ollama status**
    ```bash
-   ssh -i ~/.ssh/autobot_key autobot@<aiml-ip>
+   ssh autobot@<aiml-ip>
    sudo systemctl status ollama
    ```
 
@@ -188,7 +189,7 @@ It is not a Vite dev server.
 
 1. **Check NPU worker status**
    ```bash
-   ssh -i ~/.ssh/autobot_key autobot@<npu-ip>
+   ssh autobot@<npu-ip>
    sudo systemctl status npu-worker
    ```
 
@@ -220,7 +221,7 @@ It is not a Vite dev server.
 
 1. **Check VM and Playwright**
    ```bash
-   ssh -i ~/.ssh/autobot_key autobot@<browser-ip>
+   ssh autobot@<browser-ip>
    sudo systemctl status playwright-server
    ```
 
@@ -302,8 +303,19 @@ The SLM's **Backups** page (`autobot-slm-frontend/src/views/BackupsView.vue`) an
 **Restoring a `postgres` backup (operator).** The artifact is a gzipped `pg_dumpall --clean --if-exists`.
 On the PostgreSQL node, with the backend and SLM services stopped:
 ```bash
-gunzip -c <backup>.sql.gz | sudo -u postgres psql -X -v ON_ERROR_STOP=1 postgres
+gunzip -c <backup>.sql.gz | sudo -u postgres psql -X postgres 2>&1 | tee restore.log
+grep ERROR restore.log
 ```
+Expect exactly two errors, both harmless: `current user cannot be dropped` and
+`role "postgres" already exists`. The dump drops and recreates every role, including the one
+running the restore. Any other `ERROR` line needs investigating before the services start again.
+
+**Don't add `-v ON_ERROR_STOP=1`.** `--clean` drops each database before recreating it, and the
+dump drops roles after that. Stopping on the first error aborts after the databases are already
+gone, at `DROP ROLE IF EXISTS postgres`, which leaves no data at all. This was checked on a
+PostgreSQL 16 scratch cluster: with the flag the database was dropped and not restored, and
+without it the data came back with the two errors above.
+
 `--clean` drops and recreates every database in the dump, so take a fresh backup of the current state first.
 
 ### Scheduled PostgreSQL dumps (systemd timer)
