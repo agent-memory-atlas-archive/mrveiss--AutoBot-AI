@@ -47,7 +47,8 @@ def _modules(root: Path) -> list[Path]:
 REACH = declare(
     "cache-never-in-repo",
     discover=_modules,
-    floor=3278,  # mid-window: population 3278, window (3278, 3278)
+    floor=3278,
+    growth=300,  # ~9%: ordinary backend growth between repins must not turn an unrelated PR red
     what="non-test backend and shared modules",
     roots=_ROOTS,
 )
