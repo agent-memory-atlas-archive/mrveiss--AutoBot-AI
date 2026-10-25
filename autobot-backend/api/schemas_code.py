@@ -1627,7 +1627,7 @@ class EditFileRequest(BaseModel):
     """Request model for editing files."""
 
     path: str = Field(..., description="Absolute path to file")
-    edits: List[Dict[str, str]] = Field(..., description="List of {old_text, new_text} edits")
+    edits: List[Dict[str, Any]] = Field(..., description="List of {old_text, new_text, expected_replacements?} edits")
     dry_run: bool | None = Field(False, description="Preview changes without applying")
 
 
