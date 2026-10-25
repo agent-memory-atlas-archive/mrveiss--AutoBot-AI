@@ -132,14 +132,10 @@ Options:
 
 ### Service-Specific Deployments
 
-```bash
-# Deploy specific VM type
-ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=frontend
-ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=backend
-ansible-playbook -i inventory/production.yml playbooks/deploy-database.yml
-ansible-playbook -i inventory/production.yml playbooks/deploy-aiml.yml
-ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=browser
-```
+A deployed host is updated through the SLM's builtin updater (**Maintenance → Updates → Code Sync**),
+which runs the role dispatcher `playbooks/deploy_role.yml` with each node's `role_name`
+(frontend, backend, browser, redis, …). Don't run playbooks by hand against a deployed host; a role
+the updater cannot deploy is a gap to fix there.
 
 ## File Structure
 
@@ -235,8 +231,8 @@ install and are never hardcoded):
 
 2. **Transfer to VMs**:
    ```bash
-   # Automated by Ansible data-migration playbook
-   ansible-playbook -i inventory/production.yml playbooks/data-migration.yml
+   # Automated by the data-migration playbook, through this directory's script
+   ./deploy.sh --data-migration
    ```
 
 3. **Import to the role machines**:

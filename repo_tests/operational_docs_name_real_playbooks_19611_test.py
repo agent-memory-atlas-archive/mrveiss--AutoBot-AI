@@ -19,18 +19,19 @@ from repo_tests._paths import repo_root
 from tools.lint._scan_helpers import tracked_paths
 
 _ANSIBLE = "autobot-slm-backend/ansible"
-_SCOPE = (
-    ".claude/*.md",
-    "docs/runbooks/*.md",
-    "docs/developer/*.md",
-    "docs/infrastructure/*.md",
-    "docs/deployment/*.md",
-    "docs/guides/*.md",
-    "docs/operations/*.md",
-    f"{_ANSIBLE}/*.md",
-    "autobot-slm-backend/docs/*.md",
-    "*.sh",
-    f"{_ANSIBLE}/*.j2",
+#: Globs declared to the enumeration helper (recorded in _glob_declared_uncovered.py); the
+#: markdown is narrowed to the operational trees below in code.
+_SCOPE = ("*.md", "*.sh", "*.j2")
+_OPERATIONAL_MD = (
+    ".claude/",
+    "docs/runbooks/",
+    "docs/developer/",
+    "docs/infrastructure/",
+    "docs/deployment/",
+    "docs/guides/",
+    "docs/operations/",
+    f"{_ANSIBLE}/",
+    "autobot-slm-backend/docs/",
 )
 #: (file, playbook) references that are deliberate, each with its reason.
 _EXEMPT = {
@@ -49,13 +50,19 @@ def _known_playbooks() -> set[str]:
     return names | {p.name for p in root.glob("*.y*ml")}
 
 
+def _in_scope(path: str) -> bool:
+    if path.endswith(".md"):
+        return path.startswith(_OPERATIONAL_MD)
+    return path.endswith(".sh") or (path.endswith(".j2") and path.startswith(_ANSIBLE))
+
+
 def _missing(text: str, known: set[str]) -> set[str]:
     return {m.group(1) for rx in _REFS for m in rx.finditer(text) if m.group(1) not in known}
 
 
 def test_every_operational_reference_names_a_real_playbook() -> None:
     known, offenders = _known_playbooks(), []
-    paths = tracked_paths(repo_root(), *_SCOPE)
+    paths = [p for p in tracked_paths(repo_root(), *_SCOPE) if _in_scope(p)]
     assert len(paths) > 200, f"only {len(paths)} operational files enumerated"
     for path in paths:
         text = (repo_root() / path).read_text(encoding="utf-8", errors="replace")
