@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import re
 import sys
 import urllib.parse
@@ -62,7 +61,7 @@ CONFLICT_MARKER = "<!-- issue-structure:parent-conflict -->"
 SWEEP_PAGE_SIZE = 100
 SWEEP_MAX_PAGES = 50  # 5,000 open issues; the backlog is about half that
 # Full checks per sweep run: each costs 2-4 API calls against the 1,000/hour GITHUB_TOKEN budget.
-SWEEP_MAX_CHECKS = int(os.environ.get("ISSUE_STRUCTURE_SWEEP_MAX_CHECKS", "100"))
+SWEEP_MAX_CHECKS = 100
 
 ACTION_NONE = "none"
 ACTION_LINK = "link"

@@ -13,7 +13,7 @@
 #   webhook is not an Actions trigger), so `schedule` lists EVERY open issue
 #   (paginated) and fully checks those whose label disagrees with their listed
 #   facts, or that carry an unlinked maintainer `Parent:`, at most
-#   ISSUE_STRUCTURE_SWEEP_MAX_CHECKS per run (the rest next run), which also
+#   SWEEP_MAX_CHECKS (issue_structure.py) per run (the rest next run), which also
 #   labels the backlog that predates the guard; `workflow_dispatch` re-checks
 #   one issue or sweeps.
 

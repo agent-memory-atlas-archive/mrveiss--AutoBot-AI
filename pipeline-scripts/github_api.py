@@ -36,8 +36,8 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 # Rate-limit backoff (#19522): a 429, or a 403 that is a primary or secondary rate limit, is
 # retried after the wait GitHub names (Retry-After, else x-ratelimit-reset, else the documented
 # one minute for a secondary limit), at most RATE_LIMIT_RETRIES times, each wait capped.
-RATE_LIMIT_RETRIES = int(os.environ.get("AUTOBOT_GITHUB_RATE_LIMIT_RETRIES", "2"))
-RATE_LIMIT_MAX_WAIT_SECONDS = float(os.environ.get("AUTOBOT_GITHUB_RATE_LIMIT_MAX_WAIT_SECONDS", "90"))
+RATE_LIMIT_RETRIES = 2
+RATE_LIMIT_MAX_WAIT_SECONDS = 90.0
 SECONDARY_LIMIT_WAIT_SECONDS = 60.0
 
 # The author_association values that mean a maintainer of the repository (#19520, #19522).
