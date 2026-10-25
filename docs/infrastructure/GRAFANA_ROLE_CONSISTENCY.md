@@ -107,7 +107,7 @@ ansible-playbook playbooks/deploy-slm-manager.yml -i inventory.ini \
 **Test 2: monitoring Role**
 ```bash
 cd autobot-slm-backend/ansible
-ansible-playbook playbooks/deploy-monitoring.yml -i inventory.ini \
+ansible-playbook deploy-monitoring.yml -i inventory.ini \
   -e monitoring_install_grafana=true --check
 ```
 

@@ -1724,9 +1724,9 @@ If SSH fails, check:
 All changes must follow the local-edit-then-sync pattern. See CLAUDE.md for details:
 
 ```bash
-# CORRECT - edit locally, sync via Ansible
+# CORRECT - edit locally, commit, then update the host through the builtin updater
 vim autobot-slm-backend/ansible/deploy-container.yml
-ansible-playbook ansible/playbooks/deploy-infrastructure.yml
+# SLM: Maintenance -> Updates -> Code Sync (runs playbooks/deploy_role.yml for the node's roles)
 
 # WRONG - direct editing on VM
 ssh autobot@<slm-manager-ip> "vim /opt/autobot/.../deploy-container.yml"

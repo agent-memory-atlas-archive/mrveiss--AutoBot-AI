@@ -160,7 +160,7 @@ If the Redis service config has drifted (wrong bind address, wrong port, missing
 
 ```bash
 # From the AutoBot control node / SLM manager
-ansible-playbook playbooks/deploy-redis.yml -i inventory/production.yml
+ansible-playbook playbooks/deploy_role.yml -i inventory/production.yml -e role_name=redis
 ```
 
 This re-renders the Redis config from Ansible templates and restarts the service.
@@ -294,6 +294,6 @@ After service is restored:
 4. **Consider Ansible remediation** — if config drift caused the outage, run the deploy playbook
    immediately and verify idempotent re-runs do not break the loopback alias or service:
    ```bash
-   ansible-playbook playbooks/deploy-redis.yml -i inventory/production.yml --check
-   ansible-playbook playbooks/deploy-redis.yml -i inventory/production.yml
+   ansible-playbook playbooks/deploy_role.yml -i inventory/production.yml -e role_name=redis --check
+   ansible-playbook playbooks/deploy_role.yml -i inventory/production.yml -e role_name=redis
    ```
