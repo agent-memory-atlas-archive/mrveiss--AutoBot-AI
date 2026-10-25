@@ -150,13 +150,13 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/views/DevSpeedupView.vue": 658,
     "autobot-frontend/src/views/ErrorMonitoringView.vue": 872,
     "autobot-frontend/src/views/EvolutionView.vue": 781,
-    "autobot-frontend/src/views/FailureAnalysisDashboard.vue": 799,
+    "autobot-frontend/src/views/FailureAnalysisDashboard.vue": 783,  # #13422: 799 -> 783 (kit badges)
     "autobot-frontend/src/views/MarketplaceView.vue": 711,
     "autobot-frontend/src/views/OnboardingWizard.vue": 884,
     "autobot-frontend/src/views/PluginsView.vue": 1094,
     "autobot-frontend/src/views/SettingsView.vue": 739,
     "autobot-frontend/src/views/VisionAutomationView.vue": 873,
-    "autobot-frontend/src/views/WorkflowBuilderView.vue": 2300,
+    "autobot-frontend/src/views/WorkflowBuilderView.vue": 2267,  # #13422: 2300 -> 2267 (kit RiskBadge)
     "autobot-frontend/src/views/llc/BacklogView.vue": 823,
     "autobot-frontend/src/views/llc/CompanyCreationWizard.vue": 909,
     "autobot-frontend/src/views/llc/CompanyPortabilityView.vue": 867,
