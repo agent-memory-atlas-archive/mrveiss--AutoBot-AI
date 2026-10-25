@@ -28,19 +28,7 @@ const isTelemetryUrl = (url: unknown): boolean =>
 // most one per this window so a transient outage can't spam the console.
 const NETWORK_ERROR_THROTTLE_MS = 10000
 
-interface ErrorNotification {
-  id: string
-  message: string
-  type: 'error' | 'warning' | 'info'
-  timestamp: number
-  stack?: string
-  dismissible: boolean
-}
-
 class GlobalErrorHandler {
-  private notifications: ErrorNotification[] = []
-  private listeners: Set<(notifications: ErrorNotification[]) => void> = new Set()
-  private maxNotifications = 5
   // Timestamp of the last surfaced connectivity failure — see NETWORK_ERROR_THROTTLE_MS.
   private lastNetworkErrorAt = 0
 
@@ -55,20 +43,6 @@ class GlobalErrorHandler {
       if (!isBenignBrowserNotice(event.reason)) {
         this.notifyUser(event.reason)
       }
-
-      this.addNotification({
-        message: this.getUnhandledRejectionMessage(event.reason),
-        type: 'error',
-        dismissible: true,
-        stack: event.reason?.stack
-      })
-
-      // Track with RUM
-      rumAgent.trackError('unhandled_promise_rejection', {
-        message: event.reason?.message || 'Unknown promise rejection',
-        stack: event.reason?.stack,
-        source: 'global_error_handler'
-      })
 
       // Prevent the default browser error logging
       event.preventDefault()
@@ -85,23 +59,6 @@ class GlobalErrorHandler {
 
       logger.error('Global JavaScript error:', event.error)
       this.notifyUser(event.error || event)
-
-      this.addNotification({
-        message: this.getJavaScriptErrorMessage(event.error, event.filename, event.lineno),
-        type: 'error',
-        dismissible: true,
-        stack: event.error?.stack
-      })
-
-      // Track with RUM
-      rumAgent.trackError('javascript_error', {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        stack: event.error?.stack,
-        source: 'global_error_handler'
-      })
     })
 
     // Catch network errors (fetch failures)
@@ -114,7 +71,7 @@ class GlobalErrorHandler {
    * `error` / `unhandledrejection` registration (#19458), so App.vue no longer
    * registers its own listeners and the benign filter above cannot be bypassed.
    */
-  private notifyUser(error: unknown) {
+  notifyUser(error: unknown) {
     const appStore = useAppStore()
     if (typeof appStore?.addSystemNotification !== 'function') return
     const { t } = i18n.global
@@ -162,32 +119,6 @@ class GlobalErrorHandler {
           } else if (response.status >= 500) {
             logger.error(`[HTTP ${response.status}] Server error: ${requestUrl} - ${response.statusText}`)
           }
-
-          if (response.status >= 500) {
-            this.addNotification({
-              message: `Server error (${response.status}). Please try again later.`,
-              type: 'error',
-              dismissible: true
-            })
-          } else if (response.status === 401) {
-            this.addNotification({
-              message: 'Authentication required. Please log in again.',
-              type: 'warning',
-              dismissible: true
-            })
-          } else if (response.status === 403) {
-            this.addNotification({
-              message: 'Access denied. You may not have permission for this action.',
-              type: 'warning',
-              dismissible: true
-            })
-          } else if (response.status === 404) {
-            this.addNotification({
-              message: 'Requested resource not found.',
-              type: 'warning',
-              dismissible: true
-            })
-          }
         }
 
         return response
@@ -231,126 +162,9 @@ class GlobalErrorHandler {
           })
         }
 
-        // Only show notification for non-health-check, non-throttled failures
-        if (!isHealthCheck && !throttled) {
-          this.addNotification({
-            message: 'Network connection failed. Please check your internet connection.',
-            type: 'error',
-            dismissible: true,
-            stack: err.stack
-          })
-        }
-
         throw error
       }
     }
-  }
-
-  private getUnhandledRejectionMessage(reason: unknown): string {
-    const message = (reason as { message?: unknown })?.message
-    if (typeof message === 'string') {
-      // Check chunk failures first: a stale-deploy dynamic-import error also
-      // contains "Failed to fetch", so this must precede that generic branch.
-      if (isChunkLoadError(message)) {
-        return 'Application update detected. Please reload the page.'
-      }
-      if (message.includes('Failed to fetch')) {
-        return 'Connection failed. Please check your internet connection and try again.'
-      }
-      if (message.includes('NetworkError')) {
-        return 'Network error occurred. Please try again.'
-      }
-    }
-
-    return 'An unexpected error occurred. Please try refreshing the page.'
-  }
-
-  private getJavaScriptErrorMessage(error: Error, _filename?: string, _lineno?: number): string {
-    if (error?.message) {
-      if (isChunkLoadError(error)) {
-        return 'Application files failed to load. Please reload the page.'
-      }
-      if (isBenignBrowserNotice(error)) {
-        return 'Display refresh needed. This is usually harmless.'
-      }
-      if (error.message.includes('Cannot read properties')) {
-        return 'Data loading issue. Please try refreshing the page.'
-      }
-    }
-
-    return 'A JavaScript error occurred. Please try refreshing the page.'
-  }
-
-  private addNotification(notification: Omit<ErrorNotification, 'id' | 'timestamp'>) {
-    // Defensive programming: ensure notifications array is initialized
-    if (!Array.isArray(this.notifications)) {
-      this.notifications = []
-    }
-
-    const id = `error_${crypto.randomUUID()}`
-    const fullNotification: ErrorNotification = {
-      ...notification,
-      id,
-      timestamp: Date.now()
-    }
-
-    // Prevent duplicate notifications
-    const isDuplicate = this.notifications.some(n =>
-      n.message === notification.message &&
-      Date.now() - n.timestamp < 5000 // Within 5 seconds
-    )
-
-    if (!isDuplicate) {
-      this.notifications.unshift(fullNotification)
-
-      // Keep only the most recent notifications
-      if (this.notifications.length > this.maxNotifications) {
-        this.notifications = this.notifications.slice(0, this.maxNotifications)
-      }
-
-      this.notifyListeners()
-
-      // Auto-dismiss info notifications after 5 seconds
-      if (notification.type === 'info') {
-        setTimeout(() => {
-          this.dismissNotification(id)
-        }, 5000)
-      }
-    }
-  }
-
-  public dismissNotification(id: string) {
-    this.notifications = this.notifications.filter(n => n.id !== id)
-    this.notifyListeners()
-  }
-
-  public clearAllNotifications() {
-    this.notifications = []
-    this.notifyListeners()
-  }
-
-  public subscribe(listener: (notifications: ErrorNotification[]) => void) {
-    this.listeners.add(listener)
-    // Immediately call with current notifications
-    listener([...this.notifications])
-
-    return () => {
-      this.listeners.delete(listener)
-    }
-  }
-
-  private notifyListeners() {
-    this.listeners.forEach(listener => {
-      listener([...this.notifications])
-    })
-  }
-
-  public getNotifications(): ErrorNotification[] {
-    return [...this.notifications]
-  }
-
-  public addManualNotification(message: string, type: ErrorNotification['type'] = 'info', dismissible = true) {
-    this.addNotification({ message, type, dismissible })
   }
 }
 
@@ -390,10 +204,9 @@ export default {
         recoverFromChunkLoadError(err, instance?.$?.type?.name || 'Unknown')
       }
 
-      globalErrorHandler.addManualNotification(
-        'Component error occurred. Some features may not work correctly.',
-        'error'
-      )
+      if (!isBenignBrowserNotice(err)) {
+        globalErrorHandler.notifyUser(error)
+      }
     }
 
     // Add error handler to global properties

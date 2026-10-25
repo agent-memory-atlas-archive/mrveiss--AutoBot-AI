@@ -36,17 +36,16 @@ describe('window error listener (#19458)', () => {
   it.each(WORDINGS)('raises no system notification for "%s"', (message) => {
     window.dispatchEvent(new ErrorEvent('error', { message, cancelable: true }))
     expect(addSystemNotification).not.toHaveBeenCalled()
-    expect(trackError).not.toHaveBeenCalled()
   })
 
-  it('still notifies and reaches RUM for a real error', () => {
+  it('still notifies for a real error (RUM reporting is RumAgent\'s single path)', () => {
     const error = new Error('boom')
     window.dispatchEvent(new ErrorEvent('error', { message: 'boom', error }))
     expect(addSystemNotification).toHaveBeenCalledTimes(1)
     expect(addSystemNotification).toHaveBeenCalledWith(
       expect.objectContaining({ severity: 'error', title: 'nav.applicationError', message: 'boom' })
     )
-    expect(trackError).toHaveBeenCalledWith('javascript_error', expect.objectContaining({ message: 'boom' }))
+    expect(trackError).not.toHaveBeenCalledWith('javascript_error', expect.anything())
   })
 
   it('raises no system notification for a benign unhandled rejection, but does for a real one', () => {
@@ -73,6 +72,29 @@ describe('the single app.config.errorHandler (#19458)', () => {
       'vue_error',
       expect.objectContaining({ message: 'vue boom', component: 'Widget', componentInfo: 'render' })
     )
+  })
+})
+
+describe('Vue errors reach the user (#19458)', () => {
+  const install = () => {
+    const app = { config: { globalProperties: {} } as Record<string, unknown>, provide: vi.fn() }
+    errorHandlerPlugin.install(app as never)
+    return app.config.errorHandler as (e: unknown, i: unknown, info: string) => void
+  }
+
+  it('raises a visible system notification for a Vue error', () => {
+    addSystemNotification.mockClear()
+    install()(new Error('vue boom'), null, 'render')
+    expect(addSystemNotification).toHaveBeenCalledTimes(1)
+    expect(addSystemNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: 'error', title: 'nav.applicationError', message: 'vue boom' })
+    )
+  })
+
+  it.each(WORDINGS)('raises none for a benign Vue-reported "%s"', (message) => {
+    addSystemNotification.mockClear()
+    install()(new Error(message), null, 'render')
+    expect(addSystemNotification).not.toHaveBeenCalled()
   })
 })
 
