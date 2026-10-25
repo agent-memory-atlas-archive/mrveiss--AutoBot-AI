@@ -53,7 +53,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/agent_config.py": 1371,
     "autobot-backend/api/agent_terminal.py": 773,
     "autobot-backend/api/analytics.py": 1277,
-    "autobot-backend/api/analytics_architecture.py": 1264,
+    "autobot-backend/api/analytics_architecture.py": 1260,
     "autobot-backend/api/analytics_bug_prediction.py": 1430,
     "autobot-backend/api/analytics_cfg.py": 1331,
     "autobot-backend/api/analytics_code_generation.py": 992,
@@ -190,7 +190,6 @@ RATCHET_BASELINE: dict[str, int] = {
     # live violation, not #5060 backlog -- see #14630.
     "autobot-backend/code_intelligence/testing_pattern_analyzer.py": 1159,
     "autobot-backend/code_intelligence/typescript_analyzer.py": 609,
-    "autobot-backend/code_intelligence/vue_analyzer.py": 613,
     "autobot-backend/command_manual_manager.py": 908,
     "autobot-backend/computer_vision/screen_analyzer.py": 662,
     "autobot-backend/conftest.py": 1498,  # #16483: _make_pkg_stub/_real_load_and_bind moved to testkit/module_stubs.py
