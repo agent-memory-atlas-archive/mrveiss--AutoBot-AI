@@ -80,7 +80,7 @@ export interface GetOptions extends RequestOptions {
   responseType?: 'json' | 'text'
 }
 
-/** Append `params` to `endpoint`, skipping null/undefined; keeps an existing `?query`. */
+/** Append `params` to `endpoint`, skipping null/undefined; keeps an existing `?query`. Scalars only (no arrays). */
 export function withQuery(endpoint: string, params: RequestOptions['params']): string {
   if (!params) return endpoint
   const query = new URLSearchParams()

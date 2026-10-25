@@ -42,6 +42,30 @@ describe('SlmApiClient #12363 options', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('still retries a 5xx GET, the text form included, then succeeds', async () => {
+    vi.useFakeTimers()
+    try {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ detail: 'busy' }, 500))
+        .mockResolvedValueOnce(new Response('ok', { status: 200, headers: { 'content-type': 'text/plain' } }))
+      const pending = client.get<string>('/metrics', { responseType: 'text', maxRetries: 2 })
+      await vi.runAllTimersAsync()
+      await expect(pending).resolves.toBe('ok')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['put', 'patch', 'delete'] as const)('throws an HttpError from %s too', async (verb) => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'denied' }, 403))
+    const call = verb === 'delete' ? client.delete('/x') : client[verb]('/x', { a: 1 })
+    const err = await call.catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(HttpError)
+    expect((err as HttpError).status).toBe(403)
+    expect((err as HttpError).detail).toBe('denied')
+  })
+
   it('appends params URL-encoded and leaves out null and undefined', async () => {
     fetchMock.mockResolvedValue(jsonResponse({}))
     await client.put('/mcp/servers/a b/toggle', null, { params: { enabled: true, host: undefined, note: null } })
