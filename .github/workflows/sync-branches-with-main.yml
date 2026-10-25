@@ -87,6 +87,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
+          # The shared git runner's per-call timeout (default 30s, sized for probes).
+          # A merge or push on a full clone of this repository needs more.
+          AUTOBOT_GIT_PROBE_TIMEOUT_SECONDS: '600'
         run: |
           set -uo pipefail
           # The merge commits need an identity; the runner has none (#15306).

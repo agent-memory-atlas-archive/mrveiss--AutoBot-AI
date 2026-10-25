@@ -14,8 +14,13 @@ whether a merge would change a workflow file, and what the one PR comment says.
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from autobot_shared.git_refs import is_safe_ref  # noqa: E402  # the one argv ref validator (#18125)
 
 #: Never a target, whatever else changes: the base and the protected trunks.
 #: Dev_new_gui: temporary mirror of main for the live updater; remove with #16461.
@@ -37,9 +42,8 @@ WORKFLOW_DIR = ".github/workflows/"
 MAX_FILES_LISTED = 40
 MAX_COMMITS_PER_SIDE = 15
 
-# A branch name is interpolated into git argv and API paths: same charset the
-# retired #14022 workflow enforced, and never a leading '-' or a '..' segment.
-_SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
+# A branch name is interpolated into git argv and API paths, so it must pass the
+# shared validator: no leading '-', no '..' (the retired #14022 workflow's rule).
 _ISSUE_REF = re.compile(r"#\d+")
 
 # Outcome names. The summary rows and the tests use these, never literals.
@@ -51,10 +55,6 @@ OTHER_BASE, POLICY = "other-base", "excluded-by-policy"
 def merge_message(branch: str, base: str = "main") -> str:
     """The exact merge-commit subject, so a reviewer can tell a delta is merge-only."""
     return f"Merge {base} into {branch} (auto-sync)"
-
-
-def is_safe_ref(name: str) -> bool:
-    return bool(name) and not name.startswith("-") and ".." not in name and bool(_SAFE_REF.match(name))
 
 
 def classify_merge(returncode: int, output: str, unmerged: Sequence[str]) -> str:

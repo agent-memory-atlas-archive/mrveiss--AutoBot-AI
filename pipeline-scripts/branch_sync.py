@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
-import subprocess  # nosec B404 - fixed git argv, validated ref names
+import subprocess  # nosec B404 - TimeoutExpired only; git runs through git_probe
 import sys
 import time
 import urllib.error
@@ -33,7 +33,7 @@ sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
 import branch_sync_core as core  # noqa: E402
 from github_api import GitHubApi, WatchdogError, build_api  # noqa: E402
 
-from autobot_shared.paths import scrubbed_git_env  # noqa: E402  # stdlib-only module (#15783)
+from autobot_shared.git_probe import run_git  # noqa: E402  # scrubbed-env git (#15783)
 
 WORK_BRANCH = "__sync_work"
 DEFAULT_RETRY_AFTER_SECONDS = 60
@@ -60,24 +60,23 @@ class SyncApiError(WatchdogError):
     """A REST call this run needed did not succeed."""
 
 
-def run_git(args: Sequence[str]) -> Tuple[int, str]:
-    """``git <args>`` with stdin closed, so no command can swallow input meant for another."""
-    proc = subprocess.run(  # nosec B603 B607 - git from PATH, argv list
-        ["git", *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        stdin=subprocess.DEVNULL,
-        env=scrubbed_git_env(),
-        check=False,
-    )
+def git_output(args: Sequence[str]) -> Tuple[int, str]:
+    """``git <args>`` via the shared runner, stdin closed so no command eats another's input.
+
+    The per-call timeout is ``AUTOBOT_GIT_PROBE_TIMEOUT_SECONDS``, raised by the workflow
+    for merges and pushes on a full clone. A timeout is a failed call, not a crash.
+    """
+    try:
+        proc = run_git(list(args), strict=False, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as exc:
+        return 124, f"git {' '.join(args[:2])} timed out after {exc.timeout}s"
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
 class Git:
     """The git commands the sync runs. ``run`` is injected so tests record the argv."""
 
-    def __init__(self, run: Runner = run_git) -> None:
+    def __init__(self, run: Runner = git_output) -> None:
         self._run = run
 
     def out(self, *args: str) -> Optional[str]:
