@@ -303,8 +303,8 @@ The SLM's **Backups** page (`autobot-slm-frontend/src/views/BackupsView.vue`) an
 **Restoring a `postgres` backup (operator).** The artifact is a gzipped `pg_dumpall --clean --if-exists`.
 On the PostgreSQL node, with the backend and SLM services stopped:
 ```bash
-gunzip -c <backup>.sql.gz | sudo -u postgres psql -X postgres 2>&1 | tee restore.log
-grep ERROR restore.log
+gunzip -c <backup>.sql.gz | sudo -u postgres psql -X postgres 2>&1 | tee /tmp/autobot-restore.log
+grep ERROR /tmp/autobot-restore.log
 ```
 Expect exactly two errors, both harmless: `current user cannot be dropped` and
 `role "postgres" already exists`. The dump drops and recreates every role, including the one

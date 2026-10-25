@@ -193,18 +193,22 @@ export default {
       const err = error as Error
       logger.error('Vue Error:', { error, info })
 
-      rumAgent.trackError('vue_error', {
-        message: err?.message,
-        stack: err?.stack,
-        componentInfo: info,
-        component: instance?.$options?.name || 'unknown'
-      })
-
-      if (isChunkLoadError(err)) {
-        recoverFromChunkLoadError(err, instance?.$?.type?.name || 'Unknown')
+      // A RUM failure must not stop recovery or the user notice below (#19458 review)
+      try {
+        rumAgent.trackError('vue_error', {
+          message: err?.message,
+          stack: err?.stack,
+          componentInfo: info,
+          component: instance?.$options?.name || 'unknown'
+        })
+      } catch (rumError) {
+        logger.warn('RUM trackError failed:', rumError)
       }
 
-      if (!isBenignBrowserNotice(err)) {
+      if (isChunkLoadError(err)) {
+        // The page reloads to recover; a toast just before the reload is noise (#19458 review)
+        recoverFromChunkLoadError(err, instance?.$?.type?.name || 'Unknown')
+      } else if (!isBenignBrowserNotice(err)) {
         globalErrorHandler.notifyUser(error)
       }
     }
