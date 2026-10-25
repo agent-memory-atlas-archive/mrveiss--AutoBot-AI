@@ -30,7 +30,13 @@ def _modules(root: Path) -> list[Path]:
 
 
 #: 216 non-test LLC modules measured at #19340.
-REACH = declare("llc-sigterm-grace-copies", discover=_modules, floor=180, what="non-test LLC modules")
+REACH = declare(
+    "llc-sigterm-grace-copies",
+    discover=_modules,
+    floor=180,
+    what="non-test LLC modules",
+    roots=(_LLC,),
+)
 
 
 def _is_number(node: ast.AST | None) -> bool:
