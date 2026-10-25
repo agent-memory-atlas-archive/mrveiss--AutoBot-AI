@@ -38,8 +38,7 @@ from typing import Any
 from autobot_shared.code_graph import ResolvedCall, compute_node_id, module_path_from_rel_path, resolve_call
 from autobot_shared.env_utils import env_int
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.paths import scrubbed_git_env
-from constants.path_constants import PATH
+from autobot_shared.paths import scrubbed_git_env, shared_cache_path
 from utils.file_categorization import (
     ALL_CODE_EXTENSIONS,
     JS_EXTENSIONS,
@@ -431,7 +430,7 @@ UNSUPPORTED_CODE_EXTENSIONS: "frozenset[str]" = frozenset(ext.lower() for ext in
 )
 
 
-_DEFAULT_CACHE = PATH.DATA_DIR / ".code_index_hashes.json"
+_DEFAULT_CACHE = shared_cache_path("autobot-code-index", ".code_index_hashes.json")  # never in the repo (#19553)
 
 
 class CodeIndexer:

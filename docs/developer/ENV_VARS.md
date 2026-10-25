@@ -259,7 +259,7 @@ appears outside the known overlays.
 | `AUTOBOT_OAUTH_REFRESH_POLL_S` | auth | float | `0.2` | Polling interval while waiting on another worker's token refresh. Floored at 0.05s, since zero would busy-loop the executor. |
 | `AUTOBOT_OAUTH_REFRESH_WAIT_S` | auth | float | `0.0` | Seconds a caller waits for another worker's in-flight token refresh before refreshing itself. The effective value is floored at the lock TTL plus five seconds — 95 with the defaults — because a caller that gives up before the lease expires abandons a refresh still in progress. Setting it below that floor therefore has no effect. |
 | `AUTOBOT_OLLAMA_BASE_URL` | ai | str | *(none)* | Base URL of the local Ollama API (e.g. http://localhost:11434). |
-| `AUTOBOT_OPENVINO_CACHE_DIR` | ai | str | `'data/openvino_cache'` | Directory for compiled OpenVINO model artefacts. Relative to the working directory unless given as an absolute path. |
+| `AUTOBOT_OPENVINO_CACHE_DIR` | ai | str | *(none)* | Directory for compiled OpenVINO model artefacts. Unset: shared_cache_path('openvino') in the user cache, never the repo (#19553). |
 | `AUTOBOT_ORCHESTRATOR_MODEL` | ai | str | `'llama3.2:1b'` | Ollama model name used for the main orchestrator/routing loop. |
 | `AUTOBOT_ORPHAN_GRACE_HOURS` | storage | int | `24` | An orphan-storage detector (#17038/#17039) excludes anything younger than this many hours, so a clone or file still being written is never offered for cleanup. Clamped to at least 1 -- 0 would offer data mid-write. Raising it widens the safety window before a genuine orphan is even listed; lowering it surfaces one sooner (services/orphan_storage.py). Range: 1–720. |
 | `AUTOBOT_OTEL_ENABLED` | otel | bool | false | Enable OpenTelemetry tracing when truthy. |

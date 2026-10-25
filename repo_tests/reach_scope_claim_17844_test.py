@@ -339,6 +339,7 @@ _DECLARED_SCOPES = {
         "tools",
     ),
     "llc-actor-id-scan": ("autobot-backend/llc",),
+    "cache-never-in-repo": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "one-system-knowledge-template-tree": ("autobot-backend",),
     "one-static-data-copy-scan": (
         "autobot-backend",

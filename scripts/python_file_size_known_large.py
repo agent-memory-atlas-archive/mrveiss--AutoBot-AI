@@ -330,8 +330,8 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/services/graph_rag_service.py": 647,
     "autobot-backend/services/graph_rag_service_test.py": 890,
     "autobot-backend/services/knowledge/autonomous_loop.py": 798,
-    "autobot-backend/services/knowledge/code_indexer.py": 1179,
-    "autobot-backend/services/knowledge/doc_indexer.py": 1259,
+    "autobot-backend/services/knowledge/code_indexer.py": 1178,
+    "autobot-backend/services/knowledge/doc_indexer.py": 1258,
     "autobot-backend/services/knowledge/service.py": 849,  # train 48: #18935 merged onto #18945
     "autobot-backend/services/knowledge/test_autonomous_loop.py": 708,
     "autobot-backend/services/knowledge/test_doc_indexer.py": 1466,
@@ -400,7 +400,6 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/utils/error_catalog.py": 775,
     "autobot-backend/utils/file_categorization.py": 724,
     "autobot-backend/utils/gpu_vector_search.py": 1227,
-    "autobot-backend/utils/graceful_degradation.py": 704,
     "autobot-backend/utils/hardware_metrics.py": 1267,
     "autobot-backend/utils/monitoring_alerts.py": 858,
     "autobot-backend/utils/operation_timeout_integration.py": 730,

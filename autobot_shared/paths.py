@@ -25,8 +25,10 @@ one implementation rather than two that can drift.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess  # nosec B404  # git plumbing, fixed argv, no shell
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -415,15 +417,45 @@ def git_common_dir(start: Path | str | None = None) -> Path:
     return common_dir.resolve()
 
 
-def shared_cache_path(*parts: str, fallback: Path, start: Path | str | None = None) -> Path:
-    """``git_common_dir()/*parts``, or *fallback* when git is unavailable (#16934).
+#: Points regenerable caches somewhere an operator chose, e.g. a deploy's cache dir (#19553).
+CACHE_DIR_ENV = "AUTOBOT_CACHE_DIR"
 
-    For state that must be ONE location across every worktree of a checkout
-    (a lock, a cache keyed to a collection outside any one worktree) but
-    still has to work somewhere with no ``.git`` at all -- a real production
-    install, which :func:`project_root` resolves by ``.env`` instead.
+
+def _inside_a_checkout(path: Path) -> bool:
+    """True when *path* sits in a git checkout or the project tree -- where a cache must never go."""
+    resolved = path.expanduser().resolve()
+    if any((parent / ".git").exists() for parent in (resolved, *resolved.parents)):
+        return True
+    try:
+        return resolved.is_relative_to(project_root())
+    except ProjectRootUndeterminable:
+        return False
+
+
+def cache_root() -> Path:
+    """Where regenerable caches live: never inside a checkout or the deployed code (#19553).
+
+    ``AUTOBOT_CACHE_DIR``, else ``$XDG_CACHE_HOME/autobot``, else ``~/.cache/autobot``;
+    a candidate that resolves inside a checkout is skipped, and the last resort is a
+    temp directory. A cache can be rebuilt, so it has no place in the repository.
+    """
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    candidates = (os.environ.get(CACHE_DIR_ENV), xdg and os.path.join(xdg, "autobot"), "~/.cache/autobot")
+    for candidate in candidates:
+        if candidate and not _inside_a_checkout(Path(candidate)):
+            return Path(candidate).expanduser()
+    return Path(tempfile.gettempdir()) / "autobot-cache"
+
+
+def shared_cache_path(*parts: str, start: Path | str | None = None) -> Path:
+    """``cache_root()/<checkout key>/*parts``: one location per checkout, shared by its worktrees (#16934).
+
+    The key is a hash of :func:`git_common_dir`, so every worktree of one checkout
+    shares a cache while two checkouts never do; an install with no ``.git`` uses
+    ``install``. Nothing resolves inside the checkout itself (#19553).
     """
     try:
-        return git_common_dir(start).joinpath(*parts)
+        key = hashlib.sha256(str(git_common_dir(start)).encode("utf-8")).hexdigest()[:16]
     except GitRepoRootUnavailable:
-        return fallback
+        key = "install"
+    return cache_root().joinpath(key, *parts)

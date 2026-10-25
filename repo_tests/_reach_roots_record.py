@@ -11,6 +11,7 @@ REACH_ROOTS = {
     ),
     "repo_tests/audit_action_vocabulary_18716_test.py": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "repo_tests/audit_writer_single_source_17225_test.py": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "repo_tests/cache_never_in_repo_19553_test.py": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "repo_tests/captcha_type_fork_guard_18131_test.py": ("autobot-backend", "autobot_shared"),
     "repo_tests/chat_history_async_calls_awaited_18316_test.py": ("autobot-backend/api",),
     "repo_tests/chat_single_delete_implementation_18316_test.py": ("autobot-backend/api",),

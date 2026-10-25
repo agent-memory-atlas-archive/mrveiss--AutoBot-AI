@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 from autobot_shared.logging_manager import get_llm_logger
+from autobot_shared.paths import shared_cache_path
 from knowledge.embedding_cache import get_embedding_cache
 from worker_node import WorkerNode
 
@@ -33,7 +34,8 @@ CODEBERT_EMBEDDING_DIM = 768
 # Persistent OpenVINO compiled-model cache (#10601): without CACHE_DIR the model
 # is re-converted + recompiled on every cold start (slow on NPU/GPU). Caching the
 # compiled blob lets subsequent starts skip recompilation.
-OPENVINO_CACHE_DIR = os.getenv("AUTOBOT_OPENVINO_CACHE_DIR", "data/openvino_cache")
+# Regenerable, so in the user cache, never the repo or a cwd-relative data/ (#19553).
+OPENVINO_CACHE_DIR = os.getenv("AUTOBOT_OPENVINO_CACHE_DIR") or str(shared_cache_path("openvino"))
 
 
 @dataclass

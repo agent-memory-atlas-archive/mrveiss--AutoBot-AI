@@ -377,9 +377,8 @@ def _discover_files(root_dir: Path, tier: int | None = None) -> List[Tuple[str, 
 # HASH CACHE for incremental indexing
 # ============================================================================
 
-# #16934: shared git-common-dir, not per-checkout PATH.DATA_DIR -- one shared collection.
-_HASH_CACHE_FALLBACK = PATH.DATA_DIR / ".doc_index_hashes.json"
-HASH_CACHE_FILE = shared_cache_path("autobot-doc-index", ".doc_index_hashes.json", fallback=_HASH_CACHE_FALLBACK)
+# #16934: one location per checkout, shared by its worktrees; #19553: in the user cache, never the repo.
+HASH_CACHE_FILE = shared_cache_path("autobot-doc-index", ".doc_index_hashes.json")  # never in the repo (#19553)
 
 
 def _compute_file_hash(file_path: str) -> str:
