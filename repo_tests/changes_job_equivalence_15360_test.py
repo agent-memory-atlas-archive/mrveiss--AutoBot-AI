@@ -214,6 +214,12 @@ ALLOWED_ADDITIONS = {
             "docs/README.md",
             # #18266: social_preview_18266_test.py pins the rendered preview image.
             "docs/assets/social-preview.png",
+            # #19184: the same 19178 guard reads the five Company OS docs (_COMPANY_OS_DOCS).
+            "docs/GLOSSARY.md",
+            "docs/INDEX.md",
+            "docs/architecture/PLATFORM_MODEL.md",
+            "docs/features/CATALOG.md",
+            "docs/llc/_index.md",
             # #18559: both duplication-guard tests read the pins file.
             ".github/duplication-pins.json",
         ]
