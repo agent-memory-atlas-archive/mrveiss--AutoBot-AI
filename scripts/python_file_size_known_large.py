@@ -73,7 +73,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
     "autobot-backend/api/cache_management.py": 779,
-    "autobot-backend/api/chat.py": 2686,  # #18316: delete delegates to the canonical path
+    "autobot-backend/api/chat.py": 2666,  # #18316: delete delegates to the canonical path
     "autobot-backend/api/chat_sessions.py": 1859,  # #18293: legacy transcripts only ever proposed
     "autobot-backend/api/code_intelligence.py": 2151,
     "autobot-backend/api/code_search.py": 828,
@@ -102,7 +102,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/knowledge_collections.py": 726,
     "autobot-backend/api/knowledge_connectors.py": 929,
     "autobot-backend/api/knowledge_maintenance.py": 1970,
-    "autobot-backend/api/knowledge_mcp.py": 1453,
+    "autobot-backend/api/knowledge_mcp.py": 1441,
     "autobot-backend/api/knowledge_population.py": 1425,
     "autobot-backend/api/knowledge_search.py": 819,  # #16665: analytics endpoints moved out
     "autobot-backend/api/knowledge_search_aggregator.py": 951,  # #16665: doc-search moved out
@@ -232,7 +232,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/knowledge/search_quality.py": 931,
     "autobot-backend/knowledge/search_quality_test.py": 667,
     "autobot-backend/knowledge/stats.py": 987,
-    "autobot-backend/knowledge/suggestions.py": 704,
+    "autobot-backend/knowledge/suggestions.py": 680,
     "autobot-backend/knowledge/tags.py": 834,
     "autobot-backend/knowledge_sync_incremental.py": 883,
     "autobot-backend/llc/adapters/tests/test_claude_code_adapter.py": 602,
@@ -318,7 +318,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/services/captcha_human_loop.py": 631,
     "autobot-backend/services/causal_inference_engine.py": 756,
     "autobot-backend/services/chat_knowledge_service_test.py": 773,
-    "autobot-backend/services/claim_verifier.py": 792,
+    "autobot-backend/services/claim_verifier.py": 768,
     "autobot-backend/services/codebase_indexing_service.py": 1010,
     "autobot-backend/services/command_approval_manager.py": 649,
     "autobot-backend/services/config_service.py": 605,
@@ -365,7 +365,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/tasks/knowledge_tasks.py": 862,
     "autobot-backend/tests/agents/test_librarian_assistant_extract.py": 635,
     "autobot-backend/tests/api/test_canvas.py": 676,
-    "autobot-backend/tests/api/test_knowledge_grounding.py": 924,
+    "autobot-backend/tests/api/test_knowledge_grounding.py": 760,
     "autobot-backend/tests/api/test_marketplace.py": 772,
     "autobot-backend/tests/content_reach/test_url_guard.py": 787,
     "autobot-backend/tests/fixtures/mocks.py": 671,
@@ -380,7 +380,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/tests/services/rag_service_events_test.py": 1084,
     "autobot-backend/tests/services/test_causal_inference_engine.py": 807,
     "autobot-backend/tests/services/test_claim_classifier.py": 689,
-    "autobot-backend/tests/services/test_claim_verifier.py": 1053,
+    "autobot-backend/tests/services/test_claim_verifier.py": 954,
     "autobot-backend/tests/services/test_conflict_resolver.py": 962,
     "autobot-backend/tests/services/test_grounded_agent.py": 679,
     "autobot-backend/tests/services/test_tool_output_filter.py": 1060,
@@ -394,7 +394,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/tests/unit/chat_workflow/test_code_exec.py": 1093,
     "autobot-backend/tests/unit/knowledge/connectors/test_web_crawler.py": 655,
     "autobot-backend/tests/utils/gpu_optimization/test_gpu_detection.py": 718,
-    "autobot-backend/tools/tool_registry.py": 959,
+    "autobot-backend/tools/tool_registry.py": 874,
     "autobot-backend/utils/advanced_cache_manager.py": 1213,
     "autobot-backend/utils/claude_api_integration.py": 917,
     "autobot-backend/utils/error_catalog.py": 775,

@@ -241,7 +241,9 @@ async def prepend_memory_context(system_prompt: str, session: Any, message: str,
             # Issue #3787: legacy always-loaded compact memory summary.
             from memory.essential_story import EssentialStoryGenerator
 
-            prefix = await EssentialStoryGenerator().generate(model_name=model_name)
+            prefix = await EssentialStoryGenerator().generate(
+                model_name=model_name, principal=session.kb_principal()
+            )  # #16665
         return prefix + "\n\n" + system_prompt if prefix else system_prompt
     except Exception as ctx_exc:
         logger.warning("Context injection failed: %s", ctx_exc)

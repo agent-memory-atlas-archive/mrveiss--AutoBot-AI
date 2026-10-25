@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from autobot_shared.logging_manager import get_logger
+from knowledge.search_filters import filter_for_user_id
 
 logger = get_logger(__name__)
 
@@ -94,7 +95,7 @@ class AgentDiaryService:
     # Read
     # ------------------------------------------------------------------
 
-    async def read(self, agent_name: str, last_n: int = 10) -> List[Dict[str, Any]]:
+    async def read(self, agent_name: str, last_n: int = 10, user_id: str | None = None) -> List[Dict[str, Any]]:
         """Return the last *last_n* diary entries for *agent_name*, newest first.
 
         Uses a metadata-filtered listing (``get_all_facts``) rather than
@@ -104,6 +105,8 @@ class AgentDiaryService:
         Args:
             agent_name: Agent whose entries to retrieve.
             last_n:     Maximum number of entries to return.
+            user_id:    The user the entries are read for (#16665): only entries that user may
+                        read are returned, and none without a user id.
 
         Returns:
             List of fact dicts sorted newest-first (may be empty on error).
@@ -115,6 +118,7 @@ class AgentDiaryService:
             # still yields enough entries even on large KBs.  The result is then
             # sorted and capped to last_n.
             all_facts = await kb.get_all_facts(limit=self._DIARY_FETCH_LIMIT)
+            all_facts = await filter_for_user_id(all_facts, kb, user_id)  # #16665
             entries = [
                 f
                 for f in all_facts
@@ -134,13 +138,14 @@ class AgentDiaryService:
     # Search
     # ------------------------------------------------------------------
 
-    async def search(self, agent_name: str, query: str, n: int = 5) -> List[Dict[str, Any]]:
+    async def search(self, agent_name: str, query: str, n: int = 5, user_id: str | None = None) -> List[Dict[str, Any]]:
         """Semantic search within one agent's diary.
 
         Args:
             agent_name: Agent whose diary to search.
             query:      Free-text search query.
             n:          Maximum number of results.
+            user_id:    The user the search runs for (#16665); none returns nothing.
 
         Returns:
             List of matching result dicts, or empty list on error.
@@ -149,6 +154,7 @@ class AgentDiaryService:
             kb = await _get_kb()
             filters = {"source": agent_name, "category": self.CATEGORY}
             results = await kb.search(query=query, top_k=n, filters=filters)
+            results = await filter_for_user_id(results, kb, user_id)  # #16665
             return results[:n]
         except Exception as exc:
             logger.warning(
@@ -160,12 +166,15 @@ class AgentDiaryService:
             return []
 
 
-async def list_with_diaries(agent_names: List[str], last_n: int = 3) -> List[Dict[str, Any]]:
+async def list_with_diaries(
+    agent_names: List[str], last_n: int = 3, user_id: str | None = None
+) -> List[Dict[str, Any]]:
     """Return recent diary entries for multiple agents in parallel.
 
     Args:
         agent_names: Agents to include in the summary.
         last_n:      How many recent entries to fetch per agent.
+        user_id:     The user the entries are read for (#16665).
 
     Returns:
         List of dicts ``{agent_name, recent_entries, entry_count}``,
@@ -175,7 +184,7 @@ async def list_with_diaries(agent_names: List[str], last_n: int = 3) -> List[Dic
     diary = AgentDiaryService()
 
     async def _fetch(name: str) -> Dict[str, Any]:
-        entries = await diary.read(name, last_n=last_n)
+        entries = await diary.read(name, last_n=last_n, user_id=user_id)
         return {
             "agent_name": name,
             "recent_entries": entries,

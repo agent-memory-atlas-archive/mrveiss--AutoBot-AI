@@ -485,3 +485,37 @@ async def filter_for_principal(results: List[Dict], principal: KbPrincipal, owne
         list(principal.group_ids),
         ownership_manager=ownership_manager,
     )
+
+
+def caller_principal(current_user) -> Principal:
+    """The principal of an API caller, or a 401 when the caller cannot be resolved (#16665).
+
+    Fails closed: a missing, empty or malformed user is refused, never read as ``SYSTEM_SCOPE``
+    or as an unscoped read. Call it before any ``try`` that swallows errors.
+    """
+    try:
+        return kb_principal(current_user)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(status_code=401, detail="Authentication required") from exc
+
+
+async def filter_for_caller(results: List[Dict], kb, current_user) -> List[Dict]:
+    """*results* the API caller may read: :func:`filter_for_principal` as the caller (#16665).
+
+    No admin bypass (user-facing read paths mirror chat grounding); no ownership manager on
+    *kb* means no results.
+    """
+    return await filter_for_principal(results, caller_principal(current_user), getattr(kb, "ownership_manager", None))
+
+
+async def filter_for_user_id(results: List[Dict], kb, user_id: str | None, org_id: str | None = None) -> List[Dict]:
+    """*results* the identified user may read; no user id means no results (#16665).
+
+    For callers that hold an id, not a user object (a chat turn's ``author_id``). Fails closed:
+    it does not fall back to :data:`SYSTEM_SCOPE`, so an unattributed turn is grounded on nothing.
+    """
+    if not user_id:
+        logger.warning("KB read with no user id; returning no results (#16665)")
+        return []
+    principal = _authenticated_principal(str(user_id), org_id, [])
+    return await filter_for_principal(results, principal, getattr(kb, "ownership_manager", None))
