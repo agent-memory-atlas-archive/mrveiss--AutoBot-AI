@@ -134,11 +134,11 @@ Options:
 
 ```bash
 # Deploy specific VM type
-ansible-playbook -i inventory/production.yml playbooks/deploy-frontend.yml
-ansible-playbook -i inventory/production.yml playbooks/deploy-backend.yml
+ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=frontend
+ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=backend
 ansible-playbook -i inventory/production.yml playbooks/deploy-database.yml
 ansible-playbook -i inventory/production.yml playbooks/deploy-aiml.yml
-ansible-playbook -i inventory/production.yml playbooks/deploy-browser.yml
+ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=browser
 ```
 
 ## File Structure
@@ -162,14 +162,12 @@ ansible/
 ├── playbooks/
 │   ├── deploy-full.yml      # Complete deployment orchestration
 │   ├── deploy-base.yml      # Base system setup
-│   ├── deploy-frontend.yml  # Frontend VM deployment
-│   ├── deploy-backend.yml   # Backend VM deployment
+│   ├── deploy_role.yml      # One role dispatcher: -e role_name=frontend|backend|browser|...
 │   ├── deploy-database.yml  # Database VM deployment
 │   ├── deploy-aiml.yml      # AI/ML VM deployment
-│   ├── deploy-browser.yml   # Browser VM deployment
 │   ├── data-migration.yml   # Data migration from Docker
 │   ├── health-check.yml     # Service health validation
-│   └── rollback.yml         # Rollback procedures
+│   └── rollback-dependencies.yml  # Dependency rollback (no deployment rollback playbook, #17657)
 ├── roles/
 │   ├── base-system/         # Ubuntu base system setup
 │   ├── autobot-frontend/    # Frontend service role

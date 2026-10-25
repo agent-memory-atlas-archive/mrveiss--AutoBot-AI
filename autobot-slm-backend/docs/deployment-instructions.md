@@ -269,7 +269,7 @@ ansible all -m shell -a "netstat -tuln | grep LISTEN"
 ./deploy.sh --stop
 
 # Re-run specific deployment phase
-ansible-playbook -i inventory/production.yml playbooks/deploy-backend.yml
+ansible-playbook -i inventory/production.yml playbooks/deploy_role.yml -e role_name=backend
 
 # Start services again
 ./deploy.sh --start
@@ -399,14 +399,10 @@ ansible all -m apt -a "update_cache=yes upgrade=yes" --become
 
 ### Monthly Tasks
 ```bash
-# Security audit
-ansible-playbook -i inventory/production.yml playbooks/security-audit.yml
-
 # Cleanup old backups
 ./utils/backup.sh --cleanup 30
 
-# System optimization
-ansible-playbook -i inventory/production.yml playbooks/optimize-system.yml
+# (No security-audit or optimize-system playbook exists; earlier versions of this page named both.)
 ```
 
 ## Migration Benefits

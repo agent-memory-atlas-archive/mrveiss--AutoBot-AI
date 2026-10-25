@@ -169,8 +169,7 @@ vim backend/api/chat.py
 
 # Then sync to the AI Stack role
 ./scripts/utilities/sync-to-vm.sh ai-stack backend/api/ /home/autobot/backend/api/
-# OR
-ansible-playbook -i ansible/inventory ansible/playbooks/deploy-backend.yml
+# OR, for a deployed fleet: the builtin updater (SLM Maintenance -> Updates -> Code Sync), never ad-hoc ansible
 ```
 [Code example removed for token optimization]
 ```bash
