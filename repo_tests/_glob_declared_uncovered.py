@@ -166,6 +166,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
             "repo_tests/workflow_action_version_regression_test.py",
             "repo_tests/workflow_closed_reference_guard_test.py",
             "repo_tests/workflow_concurrency_guard_test.py",
+            "repo_tests/workflow_names_say_company_os_19546_test.py",
         },
         "root-relative `*.yml` sweep; the matching files live outside the python filter's trees",
     ),
