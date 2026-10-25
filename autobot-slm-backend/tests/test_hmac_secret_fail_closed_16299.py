@@ -21,6 +21,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from testkit.fake_async_session import FakeAsyncSession
+
 _ROOT = Path(__file__).resolve().parents[1]
 _VAR = "SLM_HMAC_API_KEY_SECRET"
 _LITERAL = "autobot-api-key-v1"
@@ -73,8 +75,11 @@ class _Nested:
         return False
 
 
-class _FakeSession:
+class _FakeSession(FakeAsyncSession):
+    """Canonical fake (#18883) whose ``add`` replays an insert race against ``store``."""
+
     def __init__(self, store):
+        super().__init__()
         self.store = store
 
     def begin_nested(self):
@@ -93,13 +98,19 @@ class _FakeSession:
         self.store.events.append("rollback")
 
 
-class _CallerSession:
-    """The slm_users session APIKeyService is given: any use is a bug (#19117 review)."""
+class _CallerSession(FakeAsyncSession):
+    """The slm_users session APIKeyService is given: any use is a bug (#19117 review).
 
-    async def flush(self):  # the service's own row updates are legitimate
+    Extends the canonical fake (#18883) but refuses every public attribute except ``flush``,
+    so an inherited ``execute``/``add``/``get`` cannot silently serve the service.
+    """
+
+    async def flush(self, objects=None):  # the service's own row updates are legitimate
         return None
 
-    def __getattr__(self, name):
+    def __getattribute__(self, name):
+        if name.startswith("_") or name == "flush":
+            return object.__getattribute__(self, name)
         raise AssertionError(f"caller's slm_users session was used: {name}")
 
 
