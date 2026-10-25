@@ -8,6 +8,7 @@ Numbers come from the one name -> number table at call time (#19232). Aliases ar
 an alias shares its target's number, so clearing ``locks`` flushed every session (#19497).
 """
 
+import asyncio
 import json
 from typing import Dict
 
@@ -16,12 +17,19 @@ from fastapi import HTTPException
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import DATABASE_MAPPING, get_redis_client
 from autobot_shared.redis_management.database_names import alias_target
+from services.audit.taxonomy import AuditAction
+from services.audit_logger import audit_log
 
 logger = get_logger(__name__)
 
-#: Canonical names only -- no alias, and only databases a cache clear may flush (not audit, celery,
-#: logs/vectors). A name the YAML later drops is left out at call time, never offered as a None.
+#: Canonical names only -- no alias. The databases the cache API REPORTS on. A name the YAML later
+#: drops is left out at call time, never offered as a None.
 _CACHE_DATABASE_NAMES = ("main", "knowledge", "prompts", "agents", "sessions", "cache", "analytics")
+
+#: The databases a cache clear may FLUSH: only real caches (owner decision 2026-10-25, #19365). The
+#: other reported databases hold durable or live state; flushing one is a deletion proposal for the
+#: approval queue (#17038), never a button.
+_CLEARABLE_DATABASE_NAMES = ("cache", "analytics")
 
 #: The cache API's settings: one namespaced key in the declared cache DB, not a DB of their own (#19497).
 CACHE_CONFIG_DATABASE = "cache"
@@ -33,10 +41,15 @@ def redis_databases() -> Dict[str, int]:
     return {name: DATABASE_MAPPING[name] for name in _CACHE_DATABASE_NAMES if name in DATABASE_MAPPING}
 
 
-def distinct_redis_databases() -> Dict[str, int]:
-    """:func:`redis_databases` with one name per number, so ``clear/all`` flushes each DB once."""
+def clearable_databases() -> Dict[str, int]:
+    """``{name: number}`` for the declared databases a cache clear may flush."""
+    return {name: DATABASE_MAPPING[name] for name in _CLEARABLE_DATABASE_NAMES if name in DATABASE_MAPPING}
+
+
+def distinct_clearable_databases() -> Dict[str, int]:
+    """:func:`clearable_databases` with one name per number, so ``clear/all`` flushes each DB once."""
     seen: Dict[int, str] = {}
-    for name, number in redis_databases().items():
+    for name, number in clearable_databases().items():
         seen.setdefault(number, name)
     return {name: number for number, name in seen.items()}
 
@@ -44,13 +57,19 @@ def distinct_redis_databases() -> Dict[str, int]:
 def clearable_database(database: str) -> int:
     """The number of *database* if this API may clear it; a 400 naming why otherwise."""
     target = alias_target(database)
-    databases = redis_databases()
+    databases = clearable_databases()
     if target is not None:
         fate = f"clear '{target}' to flush it" if target in databases else "which this API does not clear"
         detail = f"'{database}' is an alias of '{target}', not a database of its own; {fate}"
         raise HTTPException(status_code=400, detail=detail)
+    if database in redis_databases() and database not in databases:
+        detail = (
+            f"'{database}' holds durable data, not a cache; flushing it is a deletion proposal for the "
+            f"approval queue, not a cache clear. Clearable: {list(databases)}"
+        )
+        raise HTTPException(status_code=400, detail=detail)
     if database not in databases:
-        raise HTTPException(status_code=400, detail=f"Unknown database '{database}'. Available: {list(databases)}")
+        raise HTTPException(status_code=400, detail=f"Unknown database '{database}'. Clearable: {list(databases)}")
     return databases[database]
 
 
@@ -96,3 +115,18 @@ def clear_single_redis_database(db_name: str, db_number: int) -> dict:
     except Exception:
         logger.error("Failed to clear Redis database %s (%s): %s", db_name, db_number, "Internal server error")
         return {"name": db_name, "database": db_number, "error": "Internal server error", "keys_cleared": 0}
+
+
+async def clear_and_audit(database: str, actor: str) -> list:
+    """Flush *database* (or every distinct clearable one for ``all``) and record who did it (#19365, #17038)."""
+    targets = distinct_clearable_databases() if database == "all" else {database: clearable_database(database)}
+    cleared = [await asyncio.to_thread(clear_single_redis_database, name, number) for name, number in targets.items()]
+    await audit_log(
+        operation=AuditAction.ADMIN_ACTION.value,
+        result="success",
+        user_id=actor,
+        resource=f"redis-cache:{database}",
+        details={"action": "cache.clear", "requested": database, "flushed": dict(targets)},
+    )
+    logger.info("Redis cache %s cleared by %s: %s", database, actor, sorted(targets))
+    return cleared

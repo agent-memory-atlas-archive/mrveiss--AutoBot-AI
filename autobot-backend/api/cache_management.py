@@ -14,9 +14,7 @@ from typing import Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.cache_redis_databases import (
-    clear_single_redis_database,
-    clearable_database,
-    distinct_redis_databases,
+    clear_and_audit,
     get_cache_redis_connection,
     load_config,
     redis_databases,
@@ -121,16 +119,13 @@ async def get_cache_stats():
     operation="clear_redis_cache",
     error_code_prefix="CACHE_MANAGEMENT",
 )
-async def clear_redis_cache(database: str):
-    """Clear one database, or each distinct database once for ``all``; an alias is a 400 (#19497)."""
-    if database == "all":
-        targets = distinct_redis_databases()
-    else:
-        targets = {database: clearable_database(database)}
-    cleared_databases = []
-    for db_name, db_number in targets.items():
-        cleared_databases.append(await asyncio.to_thread(clear_single_redis_database, db_name, db_number))
-
+async def clear_redis_cache(
+    database: str,
+    admin_check: bool = Depends(check_admin_permission),
+    current_user: dict = Depends(get_current_user),
+):
+    """Clear one cache database, or each distinct one once for ``all``; anything else is a 400 (#19497, #19365)."""
+    cleared_databases = await clear_and_audit(database, current_user.get("username", "unknown"))
     return {
         "status": "success",
         "message": f"Redis cache cleared for {database}",

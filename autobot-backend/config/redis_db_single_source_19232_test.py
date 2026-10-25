@@ -65,9 +65,9 @@ def test_clearing_an_undeclared_database_is_a_400_not_a_500(database):
     from api.cache_management import clear_redis_cache
 
     with pytest.raises(HTTPException) as raised:
-        asyncio.run(clear_redis_cache(database))
+        asyncio.run(clear_redis_cache(database, admin_check=True, current_user={"username": "ops-admin"}))
     assert raised.value.status_code == 400
-    assert "Available:" in raised.value.detail and "'main'" in raised.value.detail
+    assert "Clearable:" in raised.value.detail and "'cache'" in raised.value.detail
 
 
 def test_the_service_registry_reports_the_resolved_redis_endpoint():

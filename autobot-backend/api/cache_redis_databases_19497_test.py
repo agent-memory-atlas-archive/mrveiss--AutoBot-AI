@@ -10,12 +10,14 @@ flushed the sessions DB and ``clear/all`` flushed sessions and agents twice each
 """
 
 import asyncio
+import inspect
 from collections import Counter
 
 import pytest
 from fastapi import HTTPException
 
 from api import cache_management, cache_redis_databases
+from auth_middleware import check_admin_permission, get_current_user
 from autobot_shared.redis_management import types as _types
 from autobot_shared.redis_management.types import DATABASE_MAPPING
 
@@ -53,7 +55,22 @@ def redis(monkeypatch):
         return databases.setdefault(number, _FakeRedis(number, flushes))
 
     monkeypatch.setattr(cache_redis_databases, "get_redis_client", get_redis_client)
+    monkeypatch.setattr(cache_redis_databases, "audit_log", _record_audit)
+    _AUDITED.clear()
     return databases, flushes
+
+
+_ADMIN = {"username": "ops-admin"}
+_AUDITED: list = []
+
+
+async def _record_audit(**entry):
+    _AUDITED.append(entry)
+    return True
+
+
+def _clear(database: str) -> dict:
+    return asyncio.run(cache_management.clear_redis_cache(database, admin_check=True, current_user=_ADMIN))
 
 
 def test_a_saved_config_loads_back_from_the_declared_cache_db(redis):
@@ -89,22 +106,46 @@ def test_no_alias_is_offered_for_clearing_or_stats():
 def test_clearing_an_alias_is_a_400_naming_its_target_and_flushes_nothing(redis, alias):
     _, flushes = redis
     with pytest.raises(HTTPException) as raised:
-        asyncio.run(cache_management.clear_redis_cache(alias))
+        _clear(alias)
     assert raised.value.status_code == 400
     assert f"alias of '{_types._ALIASES[alias]}'" in raised.value.detail
     assert not flushes
 
 
-def test_clearing_one_database_flushes_exactly_that_one(redis):
+def test_clearing_one_cache_flushes_exactly_that_one_and_audits_the_actor(redis):
     _, flushes = redis
-    asyncio.run(cache_management.clear_redis_cache("sessions"))
-    assert flushes == Counter({DATABASE_MAPPING["sessions"]: 1})
+    _clear("cache")
+    assert flushes == Counter({DATABASE_MAPPING["cache"]: 1})
+    assert [(e["user_id"], e["resource"], e["details"]["flushed"]) for e in _AUDITED] == [
+        ("ops-admin", "redis-cache:cache", {"cache": DATABASE_MAPPING["cache"]})
+    ]
 
 
-def test_clear_all_flushes_each_distinct_database_exactly_once(redis):
+@pytest.mark.parametrize("durable", ["main", "knowledge", "prompts", "agents", "sessions"])
+def test_a_durable_database_is_a_400_and_flushes_nothing(redis, durable):
+    """Owner decision 2026-10-25 (#19365): only real caches are clearable; durable data is a deletion proposal."""
     _, flushes = redis
-    result = asyncio.run(cache_management.clear_redis_cache("all"))
-    expected = set(cache_redis_databases.redis_databases().values())
+    with pytest.raises(HTTPException) as raised:
+        _clear(durable)
+    assert raised.value.status_code == 400, "with_error_handling must keep the 400, not turn it into a 500"
+    assert "durable data" in raised.value.detail
+    assert not flushes and not _AUDITED
+
+
+def test_only_real_caches_are_clearable():
+    assert set(cache_redis_databases.clearable_databases()) == {"cache", "analytics"}
+
+
+def test_the_clear_route_requires_an_admin_and_an_authenticated_user():
+    defaults = inspect.signature(cache_management.clear_redis_cache.__wrapped__).parameters
+    assert defaults["admin_check"].default.dependency is check_admin_permission
+    assert defaults["current_user"].default.dependency is get_current_user
+
+
+def test_clear_all_flushes_each_distinct_cache_exactly_once(redis):
+    _, flushes = redis
+    result = _clear("all")
+    expected = set(cache_redis_databases.clearable_databases().values())
     assert flushes == Counter({number: 1 for number in expected})
     assert len(result["cleared_databases"]) == len(expected)
 
@@ -113,6 +154,6 @@ def test_clear_all_flushes_a_shared_number_once(redis, monkeypatch):
     """Two names an override puts on one number are one database: flushed once, reported once."""
     _, flushes = redis
     monkeypatch.setitem(DATABASE_MAPPING, "analytics", DATABASE_MAPPING["cache"])
-    asyncio.run(cache_management.clear_redis_cache("all"))
+    _clear("all")
     assert max(flushes.values()) == 1
     assert flushes[DATABASE_MAPPING["cache"]] == 1
