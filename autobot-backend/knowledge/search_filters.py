@@ -541,6 +541,7 @@ def _fact_ids(results: List[Dict]) -> List[str]:
 
 async def _admin_read(results: List[Dict], reader: KbReader, ownership_manager) -> List[Dict]:
     """An audited admin read through the ownership helper's explicit admin input; no audit, no results."""
+    from services.audit.taxonomy import AuditAction
     from services.audit_logger import audit_log
 
     kept = await filter_search_results_by_permission(
@@ -548,7 +549,7 @@ async def _admin_read(results: List[Dict], reader: KbReader, ownership_manager) 
     )
     try:
         await audit_log(
-            "kb.admin_read",
+            AuditAction.KNOWLEDGE_ADMIN_READ.value,
             user_id=reader.user_id,
             resource="knowledge_base",
             details={"fact_ids": _fact_ids(kept), "count": len(kept)},
