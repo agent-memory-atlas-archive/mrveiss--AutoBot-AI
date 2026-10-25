@@ -5,7 +5,6 @@
 """The summary routes serve only summaries of facts the caller may read (#16665)."""
 
 from unittest.mock import AsyncMock, patch
-from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -15,7 +14,8 @@ from api import knowledge_graph_routes
 from auth_middleware import get_current_user
 from knowledge.read_path_fakes_16665 import FakeKB
 
-DOC_A, DOC_S = str(uuid4()), str(uuid4())
+DOC_A, DOC_S = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+ORPHAN = "33333333-3333-4333-8333-333333333333"
 ALICE, BOB = {"user_id": "alice", "role": "user"}, {"user_id": "bob", "role": "user"}
 
 
@@ -39,7 +39,7 @@ class _Service:
         pass
 
     async def search_summaries(self, **_):
-        return [_summary(DOC_A, "alice summary"), _summary(DOC_S, "platform summary"), _summary(str(uuid4()), "orphan")]
+        return [_summary(DOC_A, "alice summary"), _summary(DOC_S, "platform summary"), _summary(ORPHAN, "orphan")]
 
     async def get_document_overview(self, document_id):
         return {
