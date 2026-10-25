@@ -199,7 +199,9 @@ MIN_READS_FOUND = 40
 #: 16 entries removed; no detector change beyond adding those two names to FILTER_HELPERS.
 #: Then 71 -> 64 (#16665): the agent context/research routes, the knowledge-retrieval agent, chat knowledge search, the
 #: research planner's skip-known read and the KB search task handler filter through ``filter_for_user_id``.
-UNFILTERED_READ_CEILING = 64
+#: Then 64 -> 65 (#16665, train-85f): ``knowledge/summary_visibility._source_metadata`` reads the source fact's
+#: metadata to make the visibility decision itself; classified SCOPED.
+UNFILTERED_READ_CEILING = 65
 
 _REASON_PREFIXES = ("TRACKED_GAP #", "SCOPED: ", "NOT_USER_FACING: ", "IMPL: ", "ADMIN_ONLY: ")
 _NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)

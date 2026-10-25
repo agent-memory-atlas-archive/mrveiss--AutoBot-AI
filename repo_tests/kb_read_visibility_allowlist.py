@@ -257,6 +257,10 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("autobot-backend/knowledge/summary_search.py", "SummarySearchService.search_summaries"): _SUMMARIES,
     ("autobot-backend/knowledge/summary_search.py", "SummarySearchService.get_document_overview"): _SUMMARIES,
     ("autobot-backend/knowledge/summary_search.py", "SummarySearchService.drill_down"): _SUMMARIES,
+    ("autobot-backend/knowledge/summary_visibility.py", "_source_metadata"): (
+        "SCOPED: reads only the source fact's metadata, which visible_summaries hands straight to "
+        "filter_for_user_id; the fact's content never leaves the function (#16665)"
+    ),
     ("autobot-backend/knowledge/vector_repair.py", "scan_poisoned_rows"): _RAW_REPAIR,
     ("autobot-backend/knowledge/vector_repair.py", "has_reachable_vector"): _RAW_REPAIR,
     ("autobot-backend/memory/ownership_reassign.py", "_reassign_kb_facts_chroma"): _RAW_ADMIN,
