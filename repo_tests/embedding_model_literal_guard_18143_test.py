@@ -54,10 +54,7 @@ ALLOWED: dict[str, str] = {
     "autobot-backend/services/knowledge/doc_indexer.py": _DIMS
     + " (_KNOWN_DIMS); the model itself comes from org config / ssot"
     + "; the 'or' default is the org-config fallback (follow-up)",
-    "autobot-backend/utils/entity_resolver.py": "default of a config key for an in-memory sentence-transformer; it stores and queries no vectors",
-    "autobot-backend/utils/semantic_chunker.py": _CHUNKER,
     "autobot-backend/utils/semantic_chunker_base.py": _CHUNKER,
-    "autobot-backend/utils/semantic_chunker_gpu.py": _CHUNKER,
 }
 
 
