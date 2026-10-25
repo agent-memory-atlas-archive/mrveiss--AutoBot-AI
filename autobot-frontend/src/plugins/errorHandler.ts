@@ -220,4 +220,3 @@ export default {
 }
 
 export { globalErrorHandler }
-export type { ErrorNotification }
