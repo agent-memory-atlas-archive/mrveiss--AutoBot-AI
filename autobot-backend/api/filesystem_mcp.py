@@ -153,11 +153,10 @@ async def _get_file_lock(filepath: str) -> asyncio.Lock:
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.filesystem_edit import apply_edits_to_content
+from api.filesystem_edit import apply_edits_off_loop
 from api.schemas_code import (
     CreateDirectoryRequest,
     DirectoryTreeRequest,
-    EditFileRequest,
     FilesystemCreateDirectoryResponse,
     FilesystemDirectoryTreeResponse,
     FilesystemEditFileResponse,
@@ -192,6 +191,7 @@ from api.schemas_code import (
     UnsubscribeResourceResponse,
     WriteFileRequest,
 )
+from api.schemas_filesystem_edit import EditFileRequest
 from auth_middleware import check_admin_permission
 from autobot_shared.error_boundaries import ErrorCategory, with_error_handling
 from autobot_shared.security.path_validator import validate_path
@@ -1111,7 +1111,7 @@ async def edit_file_mcp(
             async with aiofiles.open(safe_path, "r", encoding="utf-8", newline="") as f:
                 original_content = await f.read()
 
-            content, edits_applied = apply_edits_to_content(original_content, request.edits, safe_path)
+            content, edits_applied = await apply_edits_off_loop(original_content, request.edits, safe_path)
 
             if not request.dry_run:
                 async with aiofiles.open(safe_path, "w", encoding="utf-8", newline="") as f:

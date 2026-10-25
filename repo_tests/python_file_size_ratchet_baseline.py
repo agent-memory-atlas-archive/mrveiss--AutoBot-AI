@@ -130,7 +130,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/schemas_agent.py": 2223,
     "autobot-backend/api/schemas_analytics.py": 3533,
     "autobot-backend/api/schemas_chat.py": 702,
-    "autobot-backend/api/schemas_code.py": 3265,
+    "autobot-backend/api/schemas_code.py": 3257,
     "autobot-backend/api/schemas_knowledge.py": 5127,
     "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
     "autobot-backend/api/schemas_workflows.py": 2824,

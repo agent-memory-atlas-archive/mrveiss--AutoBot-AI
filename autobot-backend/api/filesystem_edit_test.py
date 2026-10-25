@@ -11,15 +11,21 @@ what actually lands on disk.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import api.filesystem_edit as fs_edit
 import api.filesystem_mcp as fs_mcp
 from api.filesystem_edit import detect_line_ending, find_closest_span
+
+#: Wall-clock bound for a capped miss on a large file, well above the search budget; uncapped it takes ~60 s.
+_BIG_MISS_SECONDS = fs_edit.EDIT_MISS_SEARCH_BUDGET_SECONDS + 4.0
 
 _SOURCE = "def alpha():\n    return 1\n\n\ndef beta():\n    return 2\n"
 
@@ -128,3 +134,57 @@ def test_mixed_line_endings_are_matched_as_is():
 def test_closest_span_reports_the_best_window():
     span = find_closest_span(_SOURCE, "    return 2")
     assert (span.start_line, span.end_line, span.similarity) == (6, 6, 1.0)
+
+
+def test_a_big_file_miss_returns_within_a_bound_and_reports_the_cap(client, workspace):
+    target = workspace / "big.py"
+    lines = [f"value_{i} = compute({i}, {i * 7})" for i in range(100_000)]
+    target.write_text("\n".join(lines), encoding="utf-8")
+    before = _raw(target)
+    old_text = "\n".join(f"zz_{i} = other({i})" for i in range(40))
+    started = time.monotonic()
+    response = _edit(client, target, [{"old_text": old_text, "new_text": "x"}])
+    elapsed = time.monotonic() - started
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "edit 0: old_text not found" in detail
+    assert "Closest-span search capped (compared only the first " in detail
+    assert elapsed < _BIG_MISS_SECONDS, elapsed
+    assert _raw(target) == before
+
+
+def test_an_over_long_old_text_miss_reports_the_cap_and_no_span(client, workspace):
+    target = workspace / "module.py"
+    old_text = "y" * (fs_edit.EDIT_MISS_OLD_TEXT_MAX_CHARS + 1)
+    response = _edit(client, target, [{"old_text": old_text, "new_text": "x"}])
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "edit 0: old_text not found; closest-span search capped (old_text is longer than" in detail
+    assert "closest span is lines" not in detail
+
+
+def test_the_closest_span_search_runs_off_the_event_loop(client, workspace, monkeypatch):
+    seen = []
+    real = fs_edit.find_closest_span
+
+    def recording(content, old_text):
+        try:
+            asyncio.get_running_loop()
+            seen.append("on-loop")
+        except RuntimeError:
+            seen.append("off-loop")
+        return real(content, old_text)
+
+    monkeypatch.setattr(fs_edit, "find_closest_span", recording)
+    response = _edit(client, workspace / "module.py", [{"old_text": "not in the file", "new_text": "x"}])
+    assert response.status_code == 400
+    assert seen == ["off-loop"]
+
+
+@pytest.mark.parametrize("bad", ["2", True, 1.5])
+def test_a_non_integer_expected_replacements_is_rejected_by_the_typed_spec(client, workspace, bad):
+    target = workspace / "module.py"
+    before = _raw(target)
+    edits = [{"old_text": "return 1", "new_text": "return 10", "expected_replacements": bad}]
+    assert _edit(client, target, edits).status_code == 422
+    assert _raw(target) == before
