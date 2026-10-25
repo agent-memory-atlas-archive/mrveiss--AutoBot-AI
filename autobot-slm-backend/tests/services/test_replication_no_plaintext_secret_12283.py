@@ -58,9 +58,9 @@ async def _run_capture(tmp_path: Path) -> dict:
         captured["content"] = await asyncio.to_thread(playbook_path.read_text, encoding="utf-8")
         captured["env"] = kwargs.get("env")
         proc = MagicMock()
-        proc.communicate = AsyncMock(
-            return_value=(b"PLAY RECAP ***\n10.0.0.5 : ok=1 changed=0 unreachable=0 failed=0\n", None)
-        )
+        # #19475: a run is a success only with a PLAY RECAP showing the target ran (ok>=1)
+        recap = b"PLAY RECAP *****\n10.0.0.5 : ok=3 changed=1 unreachable=0 failed=0 skipped=0\n"
+        proc.communicate = AsyncMock(return_value=(recap, None))
         proc.returncode = 0
         return proc
 
