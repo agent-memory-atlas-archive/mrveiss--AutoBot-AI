@@ -93,7 +93,8 @@ jobs:
           set -euo pipefail
           sudo apt-get install -y -qq expect >/dev/null
           typed="${RUNNER_TEMP}/typed-at-prompt"
-          python3 -c 'import secrets; print(secrets.token_urlsafe(18))' > "${typed}"
+          # #19236 AC2: spaces and both quote kinds, so a green login proves the exact string round-trips.
+          python3 -c 'import secrets; print(secrets.token_urlsafe(12) + " with " + chr(34) + "dq" + chr(34) + " and " + chr(39) + "sq" + chr(39))' > "${typed}"
           echo "::add-mask::$(cat "${typed}")"
           echo "EXPECT_PASSWORD_FILE=${typed}" >> "${GITHUB_ENV}"
           EXPECT_PASSWORD_FILE="${typed}" expect -f scripts/ci/clean_install_tty.exp 2>&1 \
