@@ -310,7 +310,7 @@ def ensure_label(client: Client) -> None:
         raise StructureError(f"cannot read label {STRUCTURE_LABEL}: HTTP {status}")
 
 
-def apply_plan(client: Client, number: int, actions: Sequence[Tuple]) -> None:
+def apply_structure_plan(client: Client, number: int, actions: Sequence[Tuple]) -> None:
     for action in actions:
         if action[0] == "add_label":
             ensure_label(client)
@@ -356,7 +356,7 @@ def reconcile_parent(
     return current, ""
 
 
-def run_check(client: Client, number: int) -> List[str]:
+def check_issue_structure(client: Client, number: int) -> List[str]:
     """Reconcile one issue. Returns the missing items (empty when the structure is complete)."""
     issue = client.issue(number)
     if issue.get("pull_request") or issue.get("state") != "open":
@@ -368,7 +368,7 @@ def run_check(client: Client, number: int) -> List[str]:
     missing = missing_items(facts)
     has_label = STRUCTURE_LABEL in facts.labels
     actions = plan_structure(missing, has_label, ours(comments, STRUCTURE_MARKER))
-    apply_plan(client, number, actions)
+    apply_structure_plan(client, number, actions)
     logger.info("#%s missing=%s actions=%s", number, missing, [a[0] for a in actions])
     return missing
 
@@ -400,7 +400,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     failed = []
     for number in numbers:
         try:
-            run_check(client, number)
+            check_issue_structure(client, number)
         except StructureError as exc:
             logger.error("#%s: %s", number, exc)
             failed.append(number)

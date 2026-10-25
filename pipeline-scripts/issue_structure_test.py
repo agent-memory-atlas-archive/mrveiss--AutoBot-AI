@@ -92,7 +92,7 @@ def run(fixture: Dict[str, Any], comments: Optional[List[Dict[str, Any]]] = None
     api = FakeApi(fixture, **kw)
     api.comments = list(comments or [])
     _CURRENT.append(api)
-    return mod.run_check(mod.Client(api), fixture["number"]), api
+    return mod.check_issue_structure(mod.Client(api), fixture["number"]), api
 
 
 # ---- parsing ---------------------------------------------------------------------------
