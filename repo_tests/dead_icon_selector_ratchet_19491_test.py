@@ -40,10 +40,18 @@ _I_SELECTOR = re.compile(r"(?:^|[\s>+~,(])i(?:\.[\w-]+|(?=\s*[{,:>\s)]|$))")
 # 207 measured on 8731953af6; 7 after the bare-`i` retarget (#19491). Lower it by what a PR fixes.
 PINS = {"dead_icon_selector_rules": 7}
 
+# Non-vacuity: 468 `.vue` files under autobot-frontend/src on 7d26a6ed6c. A moved tree
+# or a broken glob scans nothing and reports the same 0 as a clean one.
+MIN_VUE_FILES_SCANNED = 400
+
+
+def vue_files(root: Path) -> list[Path]:
+    return sorted(root.rglob("*.vue"))
+
 
 def count_dead_icon_rules(root: Path) -> int:
     total = 0
-    for path in sorted(root.rglob("*.vue")):
+    for path in vue_files(root):
         source = path.read_text(encoding="utf-8")
         template = _TEMPLATE.search(source)
         if template is None or _HAS_I_ELEMENT.search(template.group(1)):
@@ -89,6 +97,8 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
 def test_no_more_dead_icon_rules_than_pinned() -> None:
     root = repo_root() / _FRONTEND_SRC
     assert root.is_dir(), f"{_FRONTEND_SRC} has moved; this guard reads it by path"
+    scanned = len(vue_files(root))
+    assert scanned >= MIN_VUE_FILES_SCANNED, f"scanned {scanned} .vue files, floor is {MIN_VUE_FILES_SCANNED}"
     now = count_dead_icon_rules(root)
     pinned = PINS["dead_icon_selector_rules"]
     assert now <= pinned, (
