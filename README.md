@@ -218,8 +218,6 @@ AutoBot keeps your AI and your data on infrastructure you control:
 - **Low latency** — local inference and command execution, no network round-trip
 - **Scale on your terms** — grow within your own infrastructure with the SLM
 
-📚 **Learn more:** [Why Self-Hosted Infrastructure Automation?](docs/self-hosted-advantages.md)
-
 ---
 
 ## Architecture Overview
@@ -519,7 +517,7 @@ the support contact path live in **[FUNDING.md](FUNDING.md)**.
 
 **Current version**: see the [GitHub Releases](https://github.com/mrveiss/AutoBot-AI/releases) page and the [CHANGELOG](CHANGELOG.md) (Active Development)
 
-AutoBot is actively developed and used for self-hosted AI and infrastructure automation.
+AutoBot is actively developed and used for self-hosted AI.
 It's suitable for:
 - ✅ Self-hosted deployments on your infrastructure
 - ✅ Development and testing environments
