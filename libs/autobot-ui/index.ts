@@ -28,6 +28,10 @@ export type { InputSize, InputType } from './src/components/BaseInput.vue'
 
 export { default as BaseBadge } from './src/components/BaseBadge.vue'
 export type { BadgeVariant, BadgeSize } from './src/components/BaseBadge.vue'
+// The one risk-tier badge (#13422): RiskTier is the backend's ladder, sent as risk_tier.
+export { default as RiskBadge } from './src/components/RiskBadge.vue'
+export { RISK_TIERS } from './src/types/riskTier'
+export type { RiskTier } from './src/types/riskTier'
 
 // The one inline alert/banner for both apps (#18819).
 export { default as BaseAlert } from './src/components/BaseAlert.vue'
