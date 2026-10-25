@@ -256,7 +256,8 @@ async def test_run_subprocess_wraps_file_backed_when_systemd_available(tmp_path)
     with patch.object(_pe, "SELF_UPDATE_LOG_PATH", log_path):
         with patch.object(_pe.PlaybookExecutor, "_self_update_detach_available", return_value=True):
             with patch.object(asyncio, "create_subprocess_exec", side_effect=_fake_create_subprocess_exec):
-                result = await ex._run_subprocess(cmd, env, progress_callback=None, detach=True)
+                with patch.object(_pe, "ansible_exit_code", lambda _o, _h, rc: rc):  # this test is about the wrap
+                    result = await ex._run_subprocess(cmd, env, progress_callback=None, detach=True)
 
     assert result["returncode"] == 0
     argv = captured["args"]
@@ -270,8 +271,7 @@ async def test_run_subprocess_wraps_file_backed_when_systemd_available(tmp_path)
     assert str(log_path) in tail[2]
     assert tail[3:] == cmd
 
-    # Never the backend's pipe: a dead backend must not be able to
-    # BrokenPipe-crash the detached process (#11492 crux).
+    # Never the backend's pipe: a dead backend must not BrokenPipe-crash the detached process (#11492).
     assert captured["kwargs"]["stdout"] == asyncio.subprocess.DEVNULL
     assert captured["kwargs"]["stderr"] == asyncio.subprocess.DEVNULL
     # The log file was truncated fresh for this run and locked to 0600.
