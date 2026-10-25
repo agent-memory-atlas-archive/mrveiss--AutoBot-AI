@@ -15,6 +15,12 @@ names an ``i`` element (``.x i``, ``.x > i``, ``i.fa-…``). Comments and ``@``-
 are skipped. A rule for an ``<i>`` that a child component renders would be a false
 positive; none was found in the 207.
 
+**The blind spot.** A file whose template still renders any ``<i>`` is skipped whole, so a
+dead ``i`` rule beside a live one is not counted (121 ``i`` rules sit in such files on
+7d26a6ed6c; at least 8 of those files also render ``Icon``, e.g. ``FileBrowser.vue``). Telling
+those apart needs each rule matched against the template's structure, which this textual
+detector does not do. It is a known under-count, not a clean result.
+
 **The pin.** 200 bare ``i`` rules were retargeted to ``.icon``, Icon's root class (#19491).
 The 7 left are ``i.fa-<name>`` rules that pick one icon among several in a container, so
 each needs a class on its ``Icon`` rather than a blanket ``.icon``. The pin is exact and
@@ -35,7 +41,10 @@ _HAS_I_ELEMENT = re.compile(r"<i[\s>/]")
 _STYLE = re.compile(r"<style[^>]*>(.*?)</style>", re.S)
 _COMMENT = re.compile(r"/\*.*?\*/", re.S)
 _RULE = re.compile(r"([^{}]+)\{")
-_I_SELECTOR = re.compile(r"(?:^|[\s>+~,(])i(?:\.[\w-]+|(?=\s*[{,:>\s)]|$))")
+# An `i` element: after a combinator or at the start, then a class/id/attribute or the end
+# of the compound. Functional pseudo-classes are stripped first, so `:not(i)` is not one.
+_I_SELECTOR = re.compile(r"(?:^|[\s>+~,])i(?:[.#\[]|(?=\s*[{,:>\s]|$))")
+_FUNCTIONAL_PSEUDO = re.compile(r":(?:not|is|where|has)\([^)]*\)")
 
 # 207 measured on 8731953af6; 7 after the bare-`i` retarget (#19491). Lower it by what a PR fixes.
 PINS = {"dead_icon_selector_rules": 7}
@@ -58,7 +67,7 @@ def count_dead_icon_rules(root: Path) -> int:
             continue
         for css in _STYLE.findall(source):
             for selector in _RULE.findall(_COMMENT.sub("", css)):
-                if "@" not in selector and _I_SELECTOR.search(" " + selector):
+                if "@" not in selector and _I_SELECTOR.search(" " + _FUNCTIONAL_PSEUDO.sub("", selector)):
                     total += 1
     return total
 
@@ -77,6 +86,15 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
             ".b > i { margin: 0; }\n.c i.fa-x { color: blue; }\n.d .icon { color: green; }\n</style>\n",
         )
         assert count_dead_icon_rules(tmp_path) == 3
+
+    def test_attribute_and_id_forms_count_and_functional_pseudos_do_not(self, tmp_path: Path) -> None:
+        self._w(
+            tmp_path,
+            "D.vue",
+            "<template><Icon name='x' /></template>\n<style>\n.a i[class*=fa] { color: red; }\n"
+            ".b i#x { color: red; }\n.c :not(i) { color: red; }\n.d :is(i, b) { color: red; }\n</style>\n",
+        )
+        assert count_dead_icon_rules(tmp_path) == 2
 
     def test_a_template_that_still_renders_i_is_not_counted(self, tmp_path: Path) -> None:
         self._w(
