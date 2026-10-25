@@ -20,7 +20,10 @@ class KnowledgeReadToolsMixin:
     """``search_knowledge_base`` and ``get_fact``; needs ``self.logger`` and ``self._resolve_knowledge_base``."""
 
     async def search_knowledge_base(self, query: str, n_results: int = 5, user_id: str | None = None) -> Dict[str, Any]:
-        """Search the knowledge base."""
+        """Agent tool: top-``n_results`` facts visible to ``user_id``, research quarantine excluded.
+
+        No ``user_id`` returns no facts (#16665); an unavailable KB returns an error envelope.
+        """
         kb = await self._resolve_knowledge_base()
         if not kb:
             return {
