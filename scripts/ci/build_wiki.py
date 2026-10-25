@@ -42,7 +42,8 @@ _API_PATH = re.compile(r'^    "(/api/[^"]*)": \{', re.MULTILINE)
 _LINK = re.compile(r"(\]\()([^)\s#]+)(#[^)\s]*)?(\))")
 _REF_DEF = re.compile(r"^(\s{0,3}\[[^\]]+\]:\s+)(\S+?)(#\S*)?(\s.*)?$", re.MULTILINE)
 _FENCE = re.compile(r"^(```|~~~).*?^\1", re.MULTILINE | re.DOTALL)
-_PRIVATE_IP = re.compile(r"\b(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b")
+# Lookarounds, not \b: an address glued to a word ("host10.0.0.1") has no word boundary before it.
+_PRIVATE_IP = re.compile(r"(?<![\d.])(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}(?![\d.])")
 _HOME = re.compile(r"/home/[\w.-]+")
 
 

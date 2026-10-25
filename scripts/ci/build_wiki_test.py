@@ -77,3 +77,9 @@ def test_the_repo_url_comes_from_actions_env_or_the_origin_remote(monkeypatch):
     assert bw.repo_url() == "https://forge.example/org/repo"
     monkeypatch.delenv("GITHUB_SERVER_URL")
     assert bw.repo_url().startswith("https://") and not bw.repo_url().endswith(".git")
+
+
+def test_an_address_glued_to_a_word_is_still_redacted():
+    private = ".".join(["10", "0", "0", "7"])  # built at runtime: no address literal in source
+    assert bw.redact(f"host{private}:8443") == "host<private-ip>:8443"
+    assert bw.redact("v1.10.0.0.1") == "v1.10.0.0.1"  # a longer dotted run is not an address

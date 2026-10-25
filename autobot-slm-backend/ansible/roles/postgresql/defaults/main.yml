@@ -33,6 +33,9 @@ postgresql_serves_fleet: "{{ group_names | intersect(postgresql_fleet_groups) | 
 # This host's own address: the first of slm_host / ansible_host actually assigned here (on the DB
 # VM slm_host names ANOTHER host; a missing SLM_HOST defaults slm_host to loopback), else the
 # default-route address. Empty means unknown -- configure.yml fails a fleet host on that.
+# One fleet address only: a multi-NIC host serving clients on several interfaces, or an ansible_host
+# given as a hostname (never matched against all_ipv4_addresses, so default_ipv4 is used), needs
+# SLM_HOST/ansible_host set to the serving IP.
 _postgresql_own_addresses: "{{ ansible_facts['all_ipv4_addresses'] | default([]) | reject('match', '^127[.]') | list }}"
 postgresql_fleet_address: >-
   {{ ([slm_host | default(''), ansible_host | default('')] | select('in', _postgresql_own_addresses) | list

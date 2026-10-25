@@ -8,7 +8,9 @@ name: Wiki from docs
 # creates it and stores it as the WIKI_TOKEN Actions secret -- no agent does. Until it exists the
 # pages are still built and checked here, and the publish step says it was skipped.
 #
-# A pull request touching the pipeline gets a build-only run: no secret, no publish.
+# A pull request touching the pipeline gets a build-only run: no secret, no publish. A manual run
+# publishes only from main. The wiki repository exists only after the owner creates its first page
+# in the GitHub UI; until then the push to it fails.
 
 on:
   push:
@@ -45,7 +47,7 @@ jobs:
           python3 scripts/ci/build_wiki.py "${RUNNER_TEMP}/wiki" --sha "${GITHUB_SHA}"
 
       - name: Publish to the wiki
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
         run: |
