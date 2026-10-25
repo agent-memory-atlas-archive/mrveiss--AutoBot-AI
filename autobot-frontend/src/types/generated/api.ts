@@ -53602,6 +53602,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/llc/companies/{company_id}/controls/agents/{agent_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Agent Heartbeat
+         * @description Switch one agent's periodic heartbeat on or off (#15907).
+         *
+         *     The heartbeat is the optional periodic schedule; event wakes are separate
+         *     (#19582). Board-only and audited like the other agent controls, and scoped
+         *     to *company_id* in both the role check and the UPDATE's WHERE clause.
+         */
+        put: operations["set_agent_heartbeat_api_llc_companies__company_id__controls_agents__agent_id__heartbeat_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llc/companies/{company_id}/controls/sprints/{sprint_id}/pause": {
         parameters: {
             query?: never;
@@ -78273,6 +78297,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** HeartbeatToggleRequest */
+        HeartbeatToggleRequest: {
+            /** Heartbeat Enabled */
+            heartbeat_enabled: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * HeartbeatTriggerResponse
          * @description Response for POST /{agent_id}/trigger in heartbeat.py.
@@ -87795,6 +87826,8 @@ export interface components {
             is_human: boolean;
             /** Is Active */
             is_active?: boolean | null;
+            /** Heartbeat Enabled */
+            heartbeat_enabled?: boolean | null;
             /** Last Heartbeat */
             last_heartbeat: string | null;
             /** Budget Spent */
@@ -179739,6 +179772,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TerminateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_agent_heartbeat_api_llc_companies__company_id__controls_agents__agent_id__heartbeat_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatToggleRequest"];
             };
         };
         responses: {
