@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
-import subprocess  # nosec B404 - TimeoutExpired only; git runs through git_probe
+import subprocess  # nosec B404  # TimeoutExpired only; git runs through git_probe
 import sys
 import time
 import urllib.error
