@@ -200,7 +200,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-frontend/src/views/SecurityView.vue": 1374,  # #14780 BasePagination: 1386 -> 1374
     "autobot-slm-frontend/src/views/SetupWizardView.vue": 1834,
     "autobot-slm-frontend/src/views/SkillsView.vue": 633,  # #18819 + #14777: 645 -> 633
-    "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 635,  # #18819: 638 -> 635
+    "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 632,  # #18819: 638 -> 635; #19482: -> 632
     "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": 609,  # #14780 BasePagination: 617 -> 609
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
     "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 773,  # #18819 + #14777: 807 -> 773
