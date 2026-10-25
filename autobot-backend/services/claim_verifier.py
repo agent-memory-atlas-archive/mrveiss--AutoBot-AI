@@ -303,7 +303,7 @@ class ClaimVerifier:
     def _build_cache_key(self, claim: Claim, user_id: str | None = None) -> str:
         """Build cache key for a claim (claim text hash, partitioned by the user it was verified for, #16665)."""
         claim_hash = hashlib.sha256(claim.claim_text.encode("utf-8")).hexdigest()
-        user_hash = hashlib.sha256((user_id or "").encode("utf-8")).hexdigest()[:16]
+        user_hash = hashlib.sha256(str(getattr(user_id, "key", user_id) or "").encode("utf-8")).hexdigest()[:16]
         return f"{_CACHE_KEY_PREFIX}:{user_hash}:{claim_hash}"
 
     async def _get_from_cache(self, cache_key: str) -> VerifiedClaim | None:

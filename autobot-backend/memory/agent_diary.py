@@ -55,14 +55,17 @@ class AgentDiaryService:
         session_id: str,
         entry: str,
         topic: str = "general",
+        user_id: str | None = None,
     ) -> str:
-        """Write a journal entry as a KB fact.
+        """Write a journal entry as a KB fact, owned by the writing session's user (#16665).
 
         Args:
             agent_name: Logical name of the agent (used as fact source).
             session_id:  Current processing session identifier.
             entry:       Free-text diary content to persist.
             topic:       Optional topic tag for grouping entries.
+            user_id:     The writing session's user; stamped as ``owner_id`` with private visibility.
+                         Without one the entry is ownerless, which no read path serves.
 
         Returns:
             fact_id of the created (or duplicate) KB fact, or ``""`` on error.
@@ -77,6 +80,8 @@ class AgentDiaryService:
                 "topic": topic,
                 "diary_timestamp": datetime.now(tz=timezone.utc).isoformat(),
             }
+            if user_id:
+                metadata.update(owner_id=str(user_id), visibility="private")
             result = await kb.store_fact(content=entry, metadata=metadata)
             fact_id: str = result.get("fact_id", "")
             logger.debug(

@@ -11,6 +11,7 @@ Integrates with ChromaDB metadata and ownership system.
 
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import Dict, List
 
 from fastapi import HTTPException
@@ -499,21 +500,83 @@ def caller_principal(current_user) -> Principal:
         raise HTTPException(status_code=401, detail="Authentication required") from exc
 
 
-async def filter_for_caller(results: List[Dict], kb, current_user) -> List[Dict]:
-    """*results* the API caller may read: :func:`filter_for_principal` as the caller (#16665).
+@dataclass(frozen=True)
+class KbReader:
+    """Who an explicit read API reads for: the caller's principal and whether they are an admin (#16665).
 
-    No admin bypass (user-facing read paths mirror chat grounding); no ownership manager on
-    *kb* means no results.
+    Only explicit read APIs build one with ``is_admin`` (see :func:`caller_reader`); chat and agent
+    grounding pass a bare user id, which never carries the admin input.
     """
-    return await filter_for_principal(results, caller_principal(current_user), getattr(kb, "ownership_manager", None))
+
+    principal: Principal
+    is_admin: bool = False
+
+    @property
+    def user_id(self) -> str:
+        return self.principal.user_id
+
+    @property
+    def key(self) -> str:
+        """A stable cache partition: an admin's reads never share one with the same user's scoped reads."""
+        return f"{self.principal.user_id}|admin" if self.is_admin else self.principal.user_id
 
 
-async def filter_for_user_id(results: List[Dict], kb, user_id: str | None, org_id: str | None = None) -> List[Dict]:
+def caller_reader(current_user) -> KbReader:
+    """The :class:`KbReader` of an API caller; 401 when unresolvable. Admin role -> ``is_admin`` (#16662)."""
+    return KbReader(caller_principal(current_user), is_admin_role(_user_field(current_user, "role")))
+
+
+def _fact_ids(results: List[Dict]) -> List[str]:
+    return [str(r.get("id") or r.get("fact_id") or (r.get("metadata") or {}).get("fact_id") or "") for r in results]
+
+
+async def _admin_read(results: List[Dict], reader: KbReader, ownership_manager) -> List[Dict]:
+    """An audited admin read through the ownership helper's explicit admin input; no audit, no results."""
+    from services.audit_logger import audit_log
+
+    kept = await filter_search_results_by_permission(
+        results, reader.user_id, reader.principal.company_id, [], ownership_manager=ownership_manager, is_admin=True
+    )
+    try:
+        await audit_log(
+            "kb.admin_read",
+            user_id=reader.user_id,
+            resource="knowledge_base",
+            details={"fact_ids": _fact_ids(kept), "count": len(kept)},
+        )
+    except Exception:
+        logger.error("kb.admin_read audit failed; withholding the admin read (#16665)", exc_info=True)
+        return []
+    return kept
+
+
+async def _filter_reader(results: List[Dict], kb, reader: KbReader) -> List[Dict]:
+    manager = getattr(kb, "ownership_manager", None)
+    if reader.is_admin:
+        return await _admin_read(results, reader, manager)
+    return await filter_for_principal(results, reader.principal, manager)
+
+
+async def filter_for_caller(results: List[Dict], kb, current_user) -> List[Dict]:
+    """*results* the API caller may read: the canonical filter as the caller (#16665).
+
+    An admin reads any fact on these explicit read APIs, audited; everyone else gets the scoped view.
+    No ownership manager on *kb* means no results.
+    """
+    return await _filter_reader(results, kb, caller_reader(current_user))
+
+
+async def filter_for_user_id(
+    results: List[Dict], kb, user_id: "str | KbReader | None", org_id: str | None = None
+) -> List[Dict]:
     """*results* the identified user may read; no user id means no results (#16665).
 
     For callers that hold an id, not a user object (a chat turn's ``author_id``). Fails closed:
-    it does not fall back to :data:`SYSTEM_SCOPE`, so an unattributed turn is grounded on nothing.
+    it does not fall back to :data:`SYSTEM_SCOPE`. A bare id is always the scoped view (chat and agent
+    grounding never bypass); only an explicit read API's :class:`KbReader` can carry the admin input.
     """
+    if isinstance(user_id, KbReader):
+        return await _filter_reader(results, kb, user_id)
     if not user_id:
         logger.warning("KB read with no user id; returning no results (#16665)")
         return []
