@@ -69,6 +69,9 @@ class FakeApi:
         if path.endswith("/labels") and payload.get("name"):
             self.data["labels"].append(payload["name"])
             return 201, {}
+        if path.endswith("/labels"):
+            issue = self.data["issues"][path.split("/")[-2]]
+            issue.setdefault("labels", []).extend({"name": n} for n in payload["labels"])
         return 200, {}
 
 
@@ -141,6 +144,42 @@ def test_a_rerun_with_the_marker_present_posts_nothing() -> None:
     assert set(outcomes.values()) == {"skipped (note present)", "skipped (a pull request)"}
 
 
+def _rerun_after_label_failed(evidence: dict | None = None) -> tuple[dict, list]:
+    """First run posts every note; #101's label is then lost, as if its POST had failed."""
+    data = _train()
+    client, fake = _client(data)
+    landing = ln.landing_from_pr(data["event_pr"])
+    ln.run_merged(client, landing)
+    data["issues"]["101"]["labels"] = []
+    if evidence is not None:
+        fake.comments(101).append(evidence)
+    first = len(fake.writes)
+    outcomes = ln.run_merged(client, landing)
+    return outcomes, fake.writes[first:]
+
+
+def test_a_rerun_re_applies_a_missing_label_without_a_second_note() -> None:
+    outcomes, writes = _rerun_after_label_failed()
+    assert outcomes[101] == "label re-applied (note present)"
+    assert outcomes[102] == "skipped (note present)"
+    assert [p for m, p, b in writes] == [f"/repos/{REPO}/issues/101/labels"]
+
+
+def test_a_rerun_does_not_re_apply_a_label_trusted_evidence_cleared() -> None:
+    evidence = {"user": {"login": "mrveiss", "type": "User"}, "author_association": "OWNER", "body": _TABLE}
+    outcomes, writes = _rerun_after_label_failed(evidence)
+    assert outcomes[101] == "skipped (note present)"
+    assert writes == []
+
+
+def test_the_label_is_applied_before_the_note() -> None:
+    data = _plain()
+    client, fake = _client(data)
+    ln.run_merged(client, ln.landing_from_pr(data["event_pr"]))
+    paths = [p for m, p, b in fake.writes if "/issues/120/" in p]
+    assert paths == [f"/repos/{REPO}/issues/120/labels", f"/repos/{REPO}/issues/120/comments"]
+
+
 def test_a_person_quoting_the_marker_does_not_suppress_the_note() -> None:
     marker = "<!-- landing-note:abc -->"
     assert ln.has_note([{"user": BOT, "body": f"{marker}\nLanded"}], marker)
@@ -155,6 +194,15 @@ def test_an_unresolved_merge_commit_falls_back_to_the_body_table() -> None:
     members = ln.resolve_members(client, ln.landing_from_pr(data["event_pr"]))
     assert [(m.number, m.source) for m in members][-1] == (903, ln.SOURCE_BODY_TABLE)
     assert len(members) == 3
+
+
+def test_the_body_table_fallback_skips_an_unmerged_member() -> None:
+    data = _train()
+    data["search"].pop("cccccccccccccccccccccccccccccccccccccccc")
+    del data["pulls"]["903"]["merged_at"]
+    client, _ = _client(data)
+    members = ln.resolve_members(client, ln.landing_from_pr(data["event_pr"]))
+    assert [m.number for m in members] == [901, 902]
 
 
 def test_a_member_pr_that_landed_in_a_train_defers_to_the_train_run() -> None:
@@ -240,6 +288,7 @@ def test_every_closing_keyword_form_is_closing(keyword: str) -> None:
         ("the `Closes #14` form", {}),
         ("Closes #15abc", {}),
         ("see #16", {}),
+        ("Part of #17", {}),
     ],
 )
 def test_reference_parsing(body: str, expected: dict) -> None:
@@ -286,16 +335,27 @@ def test_a_non_table_is_not_evidence(body: str) -> None:
     assert not ln.has_evidence_table(body)
 
 
-def _comment_event(body: str = _TABLE, user: dict | None = None, labels=(ln.EVIDENCE_LABEL,), pr: bool = False) -> dict:
+_MISSING = object()
+
+
+def _comment_event(
+    body: str = _TABLE, user: dict | None = None, labels=(ln.EVIDENCE_LABEL,), pr: bool = False, assoc=_MISSING
+) -> dict:
     issue = {"number": 101, "labels": [{"name": n} for n in labels]}
     if pr:
         issue["pull_request"] = {"url": "x"}
-    return {"issue": issue, "comment": {"body": body, "user": user or {"login": "mrveiss", "type": "User"}}}
+    comment = {"body": body, "user": user or {"login": "mrveiss", "type": "User"}, "author_association": "OWNER"}
+    if assoc is None:
+        del comment["author_association"]
+    elif assoc is not _MISSING:
+        comment["author_association"] = assoc
+    return {"issue": issue, "comment": comment}
 
 
-def test_an_evidence_comment_removes_the_label() -> None:
+@pytest.mark.parametrize("assoc", ["OWNER", "MEMBER", "COLLABORATOR"])
+def test_an_evidence_comment_removes_the_label(assoc: str) -> None:
     client, fake = _client(_train())
-    assert ln.run_evidence(client, _comment_event())
+    assert ln.run_evidence(client, _comment_event(assoc=assoc))
     assert fake.writes == [("DELETE", f"/repos/{REPO}/issues/101/labels/{ln.EVIDENCE_LABEL}", None)]
 
 
@@ -307,8 +367,22 @@ def test_an_evidence_comment_removes_the_label() -> None:
         _comment_event(labels=()),
         _comment_event(pr=True),
         _comment_event(body="looks done"),
+        _comment_event(assoc="NONE"),
+        _comment_event(assoc="CONTRIBUTOR"),
+        _comment_event(assoc="FIRST_TIME_CONTRIBUTOR"),
+        _comment_event(assoc=None),
     ],
-    ids=["landing-note bot", "bot by login", "no label", "a PR comment", "no table"],
+    ids=[
+        "landing-note bot",
+        "bot by login",
+        "no label",
+        "a PR comment",
+        "no table",
+        "association NONE",
+        "association CONTRIBUTOR",
+        "association FIRST_TIME_CONTRIBUTOR",
+        "association missing",
+    ],
 )
 def test_the_label_stays_when_the_comment_does_not_qualify(event: dict) -> None:
     client, fake = _client(_train())

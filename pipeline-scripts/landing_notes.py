@@ -14,19 +14,27 @@ Run by `.github/workflows/issue-landing-notes.yml`. Two subcommands:
     the candidate's head SHA. Once the train is on the default branch the first endpoint
     returns only the train itself, so the search is what usually answers. The ``| #N |``
     table in the train body is the fallback, used only when a merge commit stays unresolved.
-    The source of every member is logged. A plain PR is its own single member; a plain PR
-    that landed inside a train defers to the train's run, which posts for it.
+    A table member whose PR is not merged is skipped: a train body can list a member it
+    dropped. The source of every member is logged. A plain PR is its own single member; a
+    plain PR that landed inside a train defers to the train's run, which posts for it.
   * References. ``Closes/Fixes/Resolves #N`` (every form GitHub accepts) and ``Refs #N`` in
-    each member's body and the train's own body, deduplicated per issue.
+    each member's body and the train's own body, deduplicated per issue. ``Part of #N`` is
+    NOT a reference: #19520 scopes the note to Closes/Fixes/Resolves and Refs, and ``Part
+    of`` names an umbrella, whose own children carry the Closes/Refs lines that land.
   * One comment per issue, carrying ``<!-- landing-note:<merge sha> -->``. An existing
-    bot comment with that marker means the issue is skipped (note and label alike).
-  * A CLOSED issue referenced with a closing keyword gets ``needs-ac-evidence``.
+    bot comment with that marker means no second note.
+  * A CLOSED issue referenced with a closing keyword gets ``needs-ac-evidence``, applied
+    BEFORE the note, so a failed label never leaves a note behind. A rerun that finds the
+    note but not the label re-applies the label, unless a trusted AC evidence comment
+    already cleared it: every step is retry-safe.
 
-``evidence`` on ``issue_comment: created``: a non-bot comment holding an AC evidence table
-removes ``needs-ac-evidence``. An AC evidence table is a markdown table whose header row has
-a cell reading ``AC``/``ACs``/``AC #``/``Acceptance criterion``/``Acceptance criteria`` and a
-cell starting with ``Evidence`` (both case-insensitive), followed by a delimiter row and at
-least one body row. Tables inside code are not tables.
+``evidence`` on ``issue_comment: created``: a comment holding an AC evidence table, by a
+non-bot whose ``author_association`` is OWNER, MEMBER or COLLABORATOR, removes
+``needs-ac-evidence``. The workflow's ``if:`` gates on the same set; the script re-checks it.
+An AC evidence table is a markdown table whose header row has a cell reading ``AC``/``ACs``/
+``AC #``/``Acceptance criterion``/``Acceptance criteria`` and a cell starting with ``Evidence``
+(both case-insensitive), followed by a delimiter row and at least one body row. Tables inside
+code are not tables.
 
 Never ticks a checkbox, closes, reopens or edits an issue body: evidence stays a person's or
 agent's job. Stdlib only; HTTP goes through ``github_api.GitHubApi`` and comment pages are
@@ -62,6 +70,7 @@ SOURCE_COMMIT_PULLS = "commit-pulls"
 SOURCE_COMMIT_SEARCH = "commit-search"
 SOURCE_BODY_TABLE = "body-table"
 SOURCE_SELF = "self"
+TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 
 _UPSERT_PATH = Path(__file__).resolve().parent.parent / ".github/actions/upsert-pr-comment/upsert_pr_comment.py"
 
@@ -236,12 +245,23 @@ def has_evidence_table(body: str) -> bool:
     return False
 
 
-def should_clear_label(event: Dict[str, Any]) -> bool:
-    issue, comment = event.get("issue") or {}, event.get("comment") or {}
-    labels = {label.get("name") for label in issue.get("labels") or []}
-    if issue.get("pull_request") or is_bot(comment.get("user")) or EVIDENCE_LABEL not in labels:
+def has_evidence_label(issue: Dict[str, Any]) -> bool:
+    return EVIDENCE_LABEL in {label.get("name") for label in issue.get("labels") or []}
+
+
+def is_trusted_evidence(comment: Dict[str, Any]) -> bool:
+    """An AC evidence table from a non-bot OWNER/MEMBER/COLLABORATOR; anyone else is ignored."""
+    if is_bot(comment.get("user")) or comment.get("author_association") not in TRUSTED_ASSOCIATIONS:
         return False
     return has_evidence_table(comment.get("body") or "")
+
+
+def should_clear_label(event: Dict[str, Any]) -> bool:
+    """Re-checks the workflow's ``if:``: the script never trusts the gate alone."""
+    issue, comment = event.get("issue") or {}, event.get("comment") or {}
+    if issue.get("pull_request") or not has_evidence_label(issue):
+        return False
+    return is_trusted_evidence(comment)
 
 
 # ---- the thin API layer ---------------------------------------------------------------------
@@ -318,6 +338,9 @@ def _table_fallback(client: Client, landing: Landing, known: Dict[int, Member]) 
     for number in table_members(landing.body):
         if number not in known and number != landing.pr_number:
             pr = client.call("GET", f"/repos/{client.repo}/pulls/{number}")
+            if not pr.get("merged_at") and not pr.get("merged"):
+                logger.warning("table member #%s is not merged; skipped", number)
+                continue
             extra.append(Member(number, pr.get("body") or "", SOURCE_BODY_TABLE))
     return extra
 
@@ -379,20 +402,36 @@ def ensure_label(client: Client) -> None:
         raise LandingNoteError(f"cannot read label {EVIDENCE_LABEL}: HTTP {status}")
 
 
+def apply_label(client: Client, number: int) -> None:
+    ensure_label(client)
+    client.call("POST", f"/repos/{client.repo}/issues/{number}/labels", {"labels": [EVIDENCE_LABEL]})
+
+
+def _note_present(client: Client, number: int, label: bool, comments: List[Dict[str, Any]], dry_run: bool) -> str:
+    """The note landed earlier; a label that failed then is re-applied unless evidence cleared it."""
+    if not label or any(is_trusted_evidence(c) for c in comments):
+        return "skipped (note present)"
+    if dry_run:
+        return "would re-apply label (note present)"
+    apply_label(client, number)
+    return "label re-applied (note present)"
+
+
 def land_issue(client: Client, landing: Landing, number: int, target: Target, dry_run: bool) -> str:
+    """Label first, then note: each step is safe to retry, and a rerun repairs a missing label."""
     issue = client.call("GET", f"/repos/{client.repo}/issues/{number}")
     if issue.get("pull_request"):
         return "skipped (a pull request)"
-    if has_note(client.comments(number), landing.marker):
-        return "skipped (note present)"
-    label = needs_evidence_label(issue, target.closing)
+    comments = client.comments(number)
+    label = needs_evidence_label(issue, target.closing) and not has_evidence_label(issue)
+    if has_note(comments, landing.marker):
+        return _note_present(client, number, label, comments, dry_run)
     if dry_run:
         return f"would post{' + label' if label else ''}: {note_text(landing, target.via).splitlines()[1]}"
+    if label:
+        apply_label(client, number)
     body = {"body": note_text(landing, target.via)}
     client.call("POST", f"/repos/{client.repo}/issues/{number}/comments", body, ok=(201,))
-    if label:
-        ensure_label(client)
-        client.call("POST", f"/repos/{client.repo}/issues/{number}/labels", {"labels": [EVIDENCE_LABEL]})
     return "posted + label" if label else "posted"
 
 

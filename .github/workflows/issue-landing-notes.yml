@@ -11,8 +11,9 @@
 #   `<!-- landing-note:<merge sha> -->` marker, closed issues included. A closed
 #   issue referenced with a closing keyword gets `needs-ac-evidence`. A member
 #   PR GitHub marks merged when its train lands defers to the train's run.
-# clear-evidence-label: a person's comment holding an AC evidence table (a
-#   markdown table with an `AC` and an `Evidence` header) removes the label.
+# clear-evidence-label: an OWNER/MEMBER/COLLABORATOR's comment holding an AC
+#   evidence table (a markdown table with an `AC` and an `Evidence` header)
+#   removes the label; the script re-checks the author association.
 #
 # Neither job ticks, closes, reopens or edits an issue. The logic and its
 # fixture tests live in pipeline-scripts/landing_notes.py.
@@ -69,6 +70,7 @@ jobs:
       github.event_name == 'issue_comment' &&
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
       contains(github.event.issue.labels.*.name, 'needs-ac-evidence')
     runs-on: ubuntu-latest
     timeout-minutes: 5

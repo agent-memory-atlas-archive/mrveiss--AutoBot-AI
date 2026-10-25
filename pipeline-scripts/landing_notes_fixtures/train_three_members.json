@@ -23,9 +23,9 @@
     "cccccccccccccccccccccccccccccccccccccccc": [903]
   },
   "pulls": {
-    "901": {"number": 901, "head": {"ref": "issue-101", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "body": "Closes #101\n\nRefs #102 #103"},
-    "902": {"number": 902, "head": {"ref": "issue-102", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, "body": "Fixes: #102\nresolved mrveiss/AutoBot-AI#104\nRefs other/repo#999"},
-    "903": {"number": 903, "head": {"ref": "issue-105", "sha": "cccccccccccccccccccccccccccccccccccccccc"}, "body": "Refs #101, #105\n<!-- Closes #106 -->\n```\nCloses #107\n```\nThe `Closes #107` example is code."},
+    "901": {"number": 901, "merged_at": "2026-10-25T10:00:00Z", "head": {"ref": "issue-101", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "body": "Closes #101\n\nRefs #102 #103"},
+    "902": {"number": 902, "merged_at": "2026-10-25T10:00:00Z", "head": {"ref": "issue-102", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, "body": "Fixes: #102\nresolved mrveiss/AutoBot-AI#104\nRefs other/repo#999"},
+    "903": {"number": 903, "merged_at": "2026-10-25T10:00:00Z", "head": {"ref": "issue-105", "sha": "cccccccccccccccccccccccccccccccccccccccc"}, "body": "Refs #101, #105\n<!-- Closes #106 -->\n```\nCloses #107\n```\nThe `Closes #107` example is code."},
     "950": {"number": 950, "head": {"ref": "release", "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}, "body": ""}
   },
   "issues": {
