@@ -76,7 +76,9 @@ def _run(repo: Path, *stages: str, sha: str = "", **env: str) -> subprocess.Comp
             'echo "exit=$EXIT_CODE"',
         ]
     )
-    full_env = {**isolated_git_env(), **env}
+    # The knobs default ON here: a caller's AUTOBOT_PREPUSH_CACHE=0 (a hook run in its env) must not leak in.
+    knobs = {"AUTOBOT_PREPUSH_CACHE": "1", "AUTOBOT_PREPUSH_PARALLEL": "1"}
+    full_env = {**isolated_git_env(), **knobs, **env}
     return subprocess.run(["bash", "-c", script], cwd=repo, capture_output=True, text=True, check=False, env=full_env)
 
 
