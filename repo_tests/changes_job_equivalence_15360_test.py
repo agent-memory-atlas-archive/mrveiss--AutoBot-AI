@@ -156,6 +156,8 @@ ALLOWED_ADDITIONS = {
             f"{WORKFLOWS}/_changes.yml",
             f"{WORKFLOWS}/migration-gate.yml",
             f"{WORKFLOWS}/ai-security-review.yml",
+            # #19523: dependabot_root_coverage_19523_test reads dependabot.yml by concrete literal.
+            ".github/dependabot.yml",
             # #17856: frontend_api_timeout_ssot_17856_test reads both .env.example files.
             ".env.example",
             "autobot-frontend/.env.example",
