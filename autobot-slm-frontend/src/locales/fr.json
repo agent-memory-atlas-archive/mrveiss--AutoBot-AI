@@ -419,6 +419,10 @@
     },
     "app": {
       "mainContentAria": "Main content"
+    },
+    "polling": {
+      "paused": "Updates paused: the backend did not answer several times in a row, so the figures shown may be out of date.",
+      "retry": "Réessayer"
     }
   },
   "deploymentLogViewer": {

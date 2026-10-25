@@ -17,7 +17,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutobotApi } from '@/composables/useAutobotApi'
 import { formatDateTime } from '@/composables/useTimezone'
-import { BaseAlert, BaseModal, usePollingJob } from '@autobot/ui'
+import { BaseAlert, BaseModal, PollingPausedAlert, usePollingJob } from '@autobot/ui'
 
 const api = useAutobotApi()
 
@@ -165,15 +165,13 @@ const poller = usePollingJob(() => pollTick(), {
   consecutiveErrorLimit: MAX_CONSECUTIVE_ERRORS,
 })
 
-// Stopped with an error means the limit was reached: show the paused banner.
-const backendAvailable = computed(() => poller.isPolling.value || !poller.error.value)
-
 watch(poller.error, (e) => {
   if (e) error.value = errorText(e, 'tools.admin.batchTool.failedToLoadJobs')
 })
-watch(backendAvailable, (available) => {
-  if (available) return
-  error.value = t('tools.admin.batchTool.autoBotBackendUnreachablePolling')
+// The shared PollingPausedAlert says it on screen; the per-tick error then steps aside.
+watch(poller.pausedOnErrors, (paused) => {
+  if (!paused) return
+  error.value = null
   logger.warn('Batch polling stopped after %d consecutive errors', MAX_CONSECUTIVE_ERRORS)
 })
 
@@ -349,19 +347,17 @@ onMounted(() => poller.start(String(++pollRun)))
       </div>
     </div>
 
-    <!-- Issue #1092: Backend unavailable banner with retry -->
-    <div v-if="!backendAvailable" class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
-      <span class="text-amber-800">{{ $t('tools.admin.batchTool.autoBotBackendUnreachablePolling') }}</span>
-      <button
-        @click="refreshData"
-        class="px-3 py-1.5 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-      >
-        {{ $t('tools.admin.batchTool.retry') }}
-      </button>
-    </div>
+    <!-- Issue #1092 / #19482: polling paused after repeated failures, with Retry -->
+    <PollingPausedAlert
+      class="mb-6"
+      :poller="poller"
+      :message="$t('tools.admin.batchTool.autoBotBackendUnreachablePolling')"
+      :retry-label="$t('tools.admin.batchTool.retry')"
+      @retry="refreshData"
+    />
 
     <!-- Error Message -->
-    <BaseAlert v-if="error && backendAvailable" variant="error" class="mb-6" :message="error" />
+    <BaseAlert v-if="error" variant="error" class="mb-6" :message="error" />
 
     <!-- Jobs List -->
     <div v-if="loading && !jobs.length" class="text-center py-12">

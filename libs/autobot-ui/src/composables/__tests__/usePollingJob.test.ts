@@ -287,6 +287,28 @@ describe('usePollingJob', () => {
     expect(fetcher).toHaveBeenCalledTimes(3)
   })
 
+  it('flags pausedOnErrors only for an errors stop, and start() clears it (#19482)', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('down'))
+    const { start, stop, pausedOnErrors } = usePollingJob(fetcher, { intervalMs: 100, consecutiveErrorLimit: 2 })
+
+    start('')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pausedOnErrors.value).toBe(false)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(pausedOnErrors.value).toBe(true)
+
+    fetcher.mockResolvedValue({ ok: true })
+    start('')
+    expect(pausedOnErrors.value).toBe(false)
+
+    // A deliberate stop right after a failed tick is not a pause.
+    fetcher.mockRejectedValueOnce(new Error('blip'))
+    start('')
+    await vi.advanceTimersByTimeAsync(0)
+    stop()
+    expect(pausedOnErrors.value).toBe(false)
+  })
+
   it('resets consecutive error count on success (circuit-breaker survives recovery)', async () => {
     const fetcher = vi.fn()
       .mockRejectedValueOnce(new Error('blip'))

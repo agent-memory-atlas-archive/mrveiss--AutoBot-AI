@@ -184,13 +184,13 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-amber-100": 19,
     "slm:bg-amber-200": 4,
     "slm:bg-amber-300": 1,
-    "slm:bg-amber-50": 11,  # #18819: 13 -> 11, hand-rolled notices moved to the kit BaseAlert
+    "slm:bg-amber-50": 10,  # #18819: 13 -> 11, hand-rolled notices moved to the kit BaseAlert; #19482 -1
     "slm:bg-amber-500": 9,
     "slm:bg-amber-500/10": 1,
     "slm:bg-amber-500/15": 1,
     "slm:bg-amber-500/20": 2,
-    "slm:bg-amber-600": 4,
-    "slm:bg-amber-700": 2,
+    "slm:bg-amber-600": 3,  # #19482: BatchTool banner -> kit PollingPausedAlert (-1)
+    "slm:bg-amber-700": 1,  # #19482: BatchTool banner -> kit PollingPausedAlert (-1)
     "slm:bg-amber-900/30": 1,
     "slm:bg-blue-100": 53,
     "slm:bg-blue-200": 4,
@@ -270,7 +270,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:bg-yellow-50": 17,  # #18819: 18 -> 17, hand-rolled notices moved to the kit BaseAlert
     "slm:bg-yellow-50/50": 1,
     "slm:bg-yellow-500": 21,
-    "slm:border-amber-200": 9,  # #18819: 11 -> 9, hand-rolled notices moved to the kit BaseAlert
+    "slm:border-amber-200": 8,  # #18819: 11 -> 9, hand-rolled notices moved to the kit BaseAlert; #19482 -1
     "slm:border-amber-300": 2,  # #18819: 3 -> 2, hand-rolled notices moved to the kit BaseAlert
     "slm:border-amber-500/30": 5,
     "slm:border-blue-100": 1,
@@ -324,7 +324,7 @@ RAW_PALETTE_CLASSES: dict[str, int] = {
     "slm:text-amber-400": 3,
     "slm:text-amber-600": 22,  # #18819: 24 -> 22, hand-rolled notices moved to the kit BaseAlert
     "slm:text-amber-700": 25,  # #18819: 27 -> 25, hand-rolled notices moved to the kit BaseAlert
-    "slm:text-amber-800": 8,  # #18819: 10 -> 8, hand-rolled notices moved to the kit BaseAlert
+    "slm:text-amber-800": 7,  # #18819: 10 -> 8, hand-rolled notices moved to the kit BaseAlert; #19482 -1
     "slm:text-amber-900": 3,
     "slm:text-blue-300": 2,
     "slm:text-blue-400": 4,

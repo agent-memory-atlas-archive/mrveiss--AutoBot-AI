@@ -63,6 +63,11 @@ export interface UsePollingJobReturn<T> {
   error: Readonly<Ref<Error | null>>
   attempts: Readonly<Ref<number>>
   /**
+   * True only when `consecutiveErrorLimit` stopped the poller (#19482); a deliberate
+   * `stop()` or reaching `maxAttempts` leaves it false. Cleared by `start()`.
+   */
+  pausedOnErrors: Readonly<Ref<boolean>>
+  /**
    * Start polling for the given taskId. Any in-flight polling is stopped first.
    * Pass an empty string when the fetcher doesn't need a task key.
    */
@@ -86,6 +91,7 @@ export function usePollingJob<T>(
   const data = ref<T | null>(null) as Ref<T | null>
   const error = ref<Error | null>(null)
   const attempts = ref(0)
+  const pausedOnErrors = ref(false)
 
   let timer: ReturnType<typeof setInterval> | null = null
   let currentTaskId: string | null = null
@@ -123,6 +129,7 @@ export function usePollingJob<T>(
       if (consecutiveErrorLimit !== undefined && consecutiveErrors >= consecutiveErrorLimit) {
         logger.info(`polling stopped after ${consecutiveErrors} consecutive errors (consecutiveErrorLimit=${consecutiveErrorLimit})`)
         stop()
+        pausedOnErrors.value = true
         return
       }
     }
@@ -138,6 +145,7 @@ export function usePollingJob<T>(
     currentTaskId = taskId
     attempts.value = 0
     consecutiveErrors = 0
+    pausedOnErrors.value = false
     error.value = null
     data.value = null
     isPolling.value = true
@@ -157,6 +165,7 @@ export function usePollingJob<T>(
     data: readonly(data) as Readonly<Ref<T | null>>,
     error: readonly(error),
     attempts: readonly(attempts),
+    pausedOnErrors: readonly(pausedOnErrors),
     start,
     stop
   }
