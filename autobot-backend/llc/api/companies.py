@@ -62,6 +62,7 @@ from llc.models.enums import (
     WorkItemStatus,
 )
 from llc.models.membership import LLCCompanyMembership
+from llc.services.authz import NotAuthorisedError, may_attach_under
 from llc.services.backlog import BacklogService
 from llc.services.company import (
     CompanyBudgetError,
@@ -219,12 +220,11 @@ async def create_company(
     surfaces in their tenant-scoped ``list_companies``.
     """
     user_id = _current_user_id(current_user)
-    if body.parent_org_id is not None and not _is_platform_admin_claim(current_user):
-        if not await membership_svc.is_member(svc.session, str(body.parent_org_id), user_id):
-            # 404 (not 403): a cross-tenant caller must not distinguish "not my
-            # company" from "doesn't exist" — identical semantics to
-            # assert_company_access (#12238).
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+    admin = _is_platform_admin_claim(current_user)
+    if body.parent_org_id is not None and not await may_attach_under(
+        svc.session, body.parent_org_id, uuid.UUID(user_id), platform_admin=admin, membership=membership_svc
+    ):  # 404 (not 403): "not my company" reads as "doesn't exist" (#12238); the move path shares the rule (#19634)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     try:
         org = await svc.create(body)
         await membership_svc.add_member(svc.session, str(org.id), user_id, MembershipRole.OWNER)
@@ -245,10 +245,7 @@ async def create_company(
     except CompanyIssuePrefixConflictError:
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Internal server error")
-    except CompanyBudgetError:
-        await svc.session.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
-    except CompanyCycleError:
+    except (CompanyBudgetError, CompanyCycleError):
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
     except CompanyNotFoundError:
@@ -281,13 +278,15 @@ async def update_company(
     company_id: uuid.UUID,
     body: CompanyUpdate,
     svc: CompanyService = Depends(_get_service),
-    _current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     ctx: TenantContext = Depends(require_org_context),
 ) -> CompanyRead:
-    # Issue #12233: tenant authz — caller's org must match company_id unless admin.
+    # Issue #12233: tenant authz — caller's org must match company_id unless admin;
+    # a parent_org_id change is authorized again inside CompanyService.move (#19634).
     assert_company_access(ctx, company_id)  # shared guard (#12238)
+    actor = uuid.UUID(_current_user_id(current_user))
     try:
-        org = await svc.update(company_id, body)
+        org = await svc.update(company_id, body, actor_user_id=actor, platform_admin=ctx.is_platform_admin)
         # GH#12309: serialize BEFORE commit so that if response building ever
         # fails the except handler's rollback still undoes the change — never
         # leave a committed-but-500 state where the DB and caller disagree.
@@ -300,12 +299,12 @@ async def update_company(
     except CompanyIssuePrefixConflictError:
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Internal server error")
-    except CompanyBudgetError:
+    except (CompanyBudgetError, CompanyCycleError):
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
-    except CompanyCycleError:
+    except NotAuthorisedError:  # a move needs owner/admin on the org and the parent it leaves (#19634)
         await svc.session.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorised to move this company")
     except Exception:
         await svc.session.rollback()
         raise

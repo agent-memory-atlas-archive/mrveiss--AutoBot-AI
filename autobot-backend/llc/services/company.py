@@ -24,8 +24,10 @@ from llc.models.contact import LLCContact
 from llc.models.enums import LLCCompanyStatus
 from user_management.models.organization import Organization
 
+from .authz import may_attach_under, require_company_admin
 from .base import LLCServiceBase
 from .company_ceo import CompanyCEOService
+from .membership_service import MembershipService
 
 logger = get_logger(__name__)
 
@@ -109,8 +111,20 @@ class CompanyService(LLCServiceBase):
         """Return the company or raise CompanyNotFoundError."""
         return await self._get_or_404(company_id)
 
-    async def update(self, company_id: uuid.UUID, data: CompanyUpdate) -> Organization:
-        """Apply partial update to a company."""
+    async def update(
+        self,
+        company_id: uuid.UUID,
+        data: CompanyUpdate,
+        *,
+        actor_user_id: Optional[uuid.UUID] = None,
+        platform_admin: bool = False,
+    ) -> Organization:
+        """Apply a partial update; a changed ``parent_org_id`` goes through :meth:`move`.
+
+        ``parent_org_id`` alone distinguishes absent from null (#19589): an explicit
+        ``null`` promotes to top level, an omitted field leaves the parent alone.
+        Every other field keeps "``None`` means unchanged".
+        """
         org = await self._get_or_404(company_id)
 
         if data.issue_prefix is not None and data.issue_prefix != org.issue_prefix:
@@ -120,8 +134,10 @@ class CompanyService(LLCServiceBase):
             parent = await self._get_or_404(org.parent_org_id)
             await self._assert_budget_fits(parent, data.budget_monthly_cents, exclude_id=company_id)
 
-        if data.parent_org_id is not None:
-            org = await self.move(company_id, data.parent_org_id)
+        if "parent_org_id" in data.model_fields_set and data.parent_org_id != org.parent_org_id:
+            org = await self.move(
+                company_id, data.parent_org_id, actor_user_id=actor_user_id, platform_admin=platform_admin
+            )
 
         update_fields = data.model_dump(exclude_none=True, exclude={"parent_org_id"})
         for field, value in update_fields.items():
@@ -139,17 +155,29 @@ class CompanyService(LLCServiceBase):
         logger.info("LLC company updated: %s (id=%s)", org.name, org.id)
         return org
 
-    async def move(self, company_id: uuid.UUID, parent_org_id: Optional[uuid.UUID]) -> Organization:
+    async def move(
+        self,
+        company_id: uuid.UUID,
+        parent_org_id: Optional[uuid.UUID],
+        *,
+        actor_user_id: Optional[uuid.UUID],
+        platform_admin: bool = False,
+    ) -> Organization:
         """Re-parent *company_id* (``None`` = top level); the CEO follows the move (#15907).
 
-        The org row is read ``FOR UPDATE`` first, in the caller's transaction, so two
-        concurrent moves serialize: the second reads the first's committed position.
-        Without it both read "top level", one demotes (and retires the CEO), the
-        other promotes and sees nothing to provision, and a top-level company is
-        left with no CEO.
+        Authorized here so every caller inherits it (#19634): admin on the moved org,
+        a new parent the actor may attach under (else not found), and admin on the
+        parent being left. The moved org and the new parent's ancestor chain are
+        locked first (#19593), so the cycle check and the CEO sync read a tree no
+        concurrent move can change before this transaction ends.
         """
+        await self._authorize_move_target(company_id, parent_org_id, actor_user_id, platform_admin)
+        await self._lock_move_rows(company_id, parent_org_id)
         org = await self._get_or_404(company_id, for_update=True)
+        if org.parent_org_id is not None and org.parent_org_id != parent_org_id:
+            await require_company_admin(self.session, org.parent_org_id, actor_user_id)
         if parent_org_id is not None:
+            await self._get_or_404(parent_org_id)
             await self._assert_no_cycle(company_id, parent_org_id)
         was_company = org.parent_org_id is None
         org.parent_org_id = parent_org_id
@@ -157,6 +185,57 @@ class CompanyService(LLCServiceBase):
         if (parent_org_id is None) != was_company:
             await CompanyCEOService().sync_with_parent(self.session, org.id, parent_org_id)
         return org
+
+    async def _authorize_move_target(
+        self,
+        company_id: uuid.UUID,
+        parent_org_id: Optional[uuid.UUID],
+        actor_user_id: Optional[uuid.UUID],
+        platform_admin: bool,
+    ) -> None:
+        """Admin on the moved org, and a new parent the actor can see (#19634, #12233's rule)."""
+        await require_company_admin(self.session, company_id, actor_user_id)
+        if parent_org_id is None:
+            return
+        allowed = await may_attach_under(
+            self.session, parent_org_id, actor_user_id, platform_admin=platform_admin, membership=MembershipService()
+        )
+        if not allowed:
+            raise CompanyNotFoundError(f"Company {parent_org_id} not found")
+
+    async def _lock_move_rows(self, company_id: uuid.UUID, parent_org_id: Optional[uuid.UUID]) -> None:
+        """Lock the moved org and the new parent's ancestor chain ``FOR UPDATE``, in id order (#19593).
+
+        Two opposite moves (A under B, B under A) both need A and B, and both take
+        them in one id-ordered statement, so one waits for the other instead of
+        each reading a tree the other is about to change -- and neither can hold
+        one row while waiting for the other. The chain is read, locked, then read
+        again; rows it gained in between (a concurrent move committed) are locked
+        on the next pass. Only that rare extension can lock out of order, and
+        Postgres then aborts one mover as a deadlock -- a failed move, never a cycle.
+        """
+        locked: set[uuid.UUID] = set()
+        wanted = {company_id, *await self._chain_ids(parent_org_id)}
+        while not wanted <= locked:
+            await self._lock_ids(wanted - locked)
+            locked |= wanted
+            wanted = {company_id, *await self._chain_ids(parent_org_id)}
+
+    async def _chain_ids(self, start_id: Optional[uuid.UUID]) -> List[uuid.UUID]:
+        """*start_id* and its ancestors, nearest first; :class:`CompanyCycleError` on a loop."""
+        chain: List[uuid.UUID] = []
+        current_id = start_id
+        while current_id is not None:
+            if current_id in chain:
+                raise CompanyCycleError(f"Company {start_id} has a hierarchy cycle above it")
+            chain.append(current_id)
+            result = await self.session.execute(select(Organization.parent_org_id).where(Organization.id == current_id))
+            current_id = result.scalar_one_or_none()
+        return chain
+
+    async def _lock_ids(self, ids: set[uuid.UUID]) -> None:
+        stmt = select(Organization.id).where(Organization.id.in_(ids)).order_by(Organization.id).with_for_update()
+        await self.session.execute(stmt)
 
     async def list_root_companies(self, include_archived: bool = False) -> List[Organization]:
         """Return all top-level companies (parent_org_id IS NULL).
@@ -432,11 +511,5 @@ class CompanyService(LLCServiceBase):
 
     async def _assert_no_cycle(self, target_id: uuid.UUID, new_parent_id: uuid.UUID) -> None:
         """Raise CompanyCycleError if setting new_parent_id would create a cycle."""
-        visited: set[uuid.UUID] = {target_id}
-        current_id: Optional[uuid.UUID] = new_parent_id
-        while current_id is not None:
-            if current_id in visited:
-                raise CompanyCycleError(f"Setting parent_org_id={new_parent_id} would create a hierarchy cycle")
-            visited.add(current_id)
-            result = await self.session.execute(select(Organization.parent_org_id).where(Organization.id == current_id))
-            current_id = result.scalar_one_or_none()
+        if target_id in await self._chain_ids(new_parent_id):
+            raise CompanyCycleError(f"Setting parent_org_id={new_parent_id} would create a hierarchy cycle")

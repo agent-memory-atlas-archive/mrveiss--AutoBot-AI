@@ -29,13 +29,16 @@ identical to one that does.
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.enums import MembershipRole
 from ..models.membership import LLCCompanyMembership
+
+if TYPE_CHECKING:
+    from .membership_service import MembershipService
 
 #: Membership roles permitted to change a company's roles, occupancy,
 #: permissions and workflow attachments.
@@ -88,3 +91,27 @@ async def require_company_admin(
         raise NotAuthorisedError(
             f"membership role {name!r} may not perform this change; " f"one of {sorted(GRANTING_ROLES)} is required"
         )
+
+
+async def may_attach_under(
+    session: AsyncSession,
+    parent_id: uuid.UUID,
+    actor_user_id: Optional[uuid.UUID],
+    *,
+    platform_admin: bool,
+    membership: "MembershipService",
+) -> bool:
+    """Whether the actor may place a company under *parent_id* (#12233, #19634).
+
+    The one rule for both ways a company gains a parent: ``create_company`` with a
+    ``parent_org_id`` and ``CompanyService.move``. A platform admin may; anyone
+    else must hold a membership (any role) in the parent. Callers answer ``False``
+    with a 404, never a 403, so a parent in another tenant is indistinguishable
+    from one that does not exist. *membership* is the caller's service, so the
+    route's dependency override reaches this check too.
+    """
+    if platform_admin:
+        return True
+    if actor_user_id is None:
+        return False
+    return await membership.is_member(session, str(parent_id), str(actor_user_id))
