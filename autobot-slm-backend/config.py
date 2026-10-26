@@ -24,6 +24,7 @@ from pydantic_settings import BaseSettings
 from autobot_shared import postgres_identity as pg
 from autobot_shared.fleet_constants import DEFAULT_HEARTBEAT_INTERVAL
 from autobot_shared.secret_redaction import RedactedReprMixin
+from autobot_shared.service_registry_core import DeploymentMode, resolve_deployment_mode
 from user_management.config import get_autobot_db_config, get_slm_db_config
 
 logger = logging.getLogger(__name__)
@@ -423,6 +424,18 @@ class Settings(RedactedReprMixin, BaseSettings):
 
     # Reconciliation
     reconcile_interval: int = 60  # seconds
+
+    # Compose fleet nodes (#9761): surface each compose container as a fleet node. The one
+    # default (#19323): unset follows the deployment mode -- on in a container (docker_local,
+    # the compose stack), off on a bare-metal/VM fleet and in a dev checkout.
+    # SLM_COMPOSE_NODES=true|false overrides it; compose passes it through, never restates it.
+    compose_nodes: bool | None = None
+
+    @property
+    def compose_nodes_enabled(self) -> bool:
+        if self.compose_nodes is not None:
+            return self.compose_nodes
+        return resolve_deployment_mode() is DeploymentMode.DOCKER_LOCAL
 
     # CORS settings
     cors_origins: list = _get_cors_origins()

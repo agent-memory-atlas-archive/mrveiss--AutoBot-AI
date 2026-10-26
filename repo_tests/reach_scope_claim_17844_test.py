@@ -236,6 +236,7 @@ _DECLARED_SCOPES = {
     "paths-filter-workflow-sweep": (".github/workflows",),
     "anti-pattern-type-emitters": ("autobot-backend/code_analysis", "autobot-backend/code_intelligence"),
     "compat-module-needs-importer": ("autobot-backend",),
+    "compose-nodes-restated-default": ("autobot-slm-backend", "autobot-infrastructure", "docker", "docker-compose.yml"),
     "chat-history-async-calls-awaited": ("autobot-backend/api",),
     "chat-single-delete-implementation": ("autobot-backend/api",),
     "ai-line-single-policy": ("autobot-backend", "autobot_shared"),
