@@ -236,6 +236,11 @@ REACH_ROOTS = {
         "autobot_shared",
         "plugins",
     ),
+    "repo_tests/redaction_placeholder_one_home_19337_test.py": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+    ),
     "repo_tests/redis_direct_constructor_18553_test.py": (
         "autobot-backend",
         "autobot-browser-worker",
