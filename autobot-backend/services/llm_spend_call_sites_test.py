@@ -36,6 +36,9 @@ _PROVIDER_METHODS = frozenset({"stream_completion", "chat_completion", "stream_c
 _NOT_SCANNED = ("docs",)
 
 # Sites that record, or reference a method without invoking it: path::function -> (count, where).
+# A DECLARATION, not proof: the count check verifies only that each site still holds exactly
+# this many references. That the site records is asserted by the "where" text and by the
+# behavioural tests, not by this scan.
 _RECORDED = {
     "autobot-backend/services/llm_usage_recording.py::recorded_stream": (1, "the recorder itself"),
     "autobot-backend/services/llm_service.py::LLMService._attempt_chat_once": (1, "awaits _track_usage (#16845)"),

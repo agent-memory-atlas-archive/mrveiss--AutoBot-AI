@@ -321,3 +321,17 @@ async def test_an_attributed_endpoint_with_no_user_warns(tracker) -> None:
     logger.warning.assert_called_once()
     assert "/x" in logger.warning.call_args.args
     assert _recorded(tracker)["user_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_failure_preparing_the_record_cannot_mask_the_streams_own_error(tracker) -> None:
+    provider = _StreamingProvider(chunks=("partial",), fail_after=RuntimeError("connection reset"))
+    with (
+        patch("services.llm_usage_recording._prompt_text", side_effect=ValueError("unreadable message")),
+        patch("services.llm_usage_recording.logger") as logger,
+        pytest.raises(RuntimeError, match="connection reset"),
+    ):
+        await _drain(recorded_stream(provider, _hi()))
+
+    logger.exception.assert_called_once()
+    tracker.track_usage.assert_not_awaited()

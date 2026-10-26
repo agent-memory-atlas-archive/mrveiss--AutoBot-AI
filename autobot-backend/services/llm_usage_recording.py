@@ -235,26 +235,41 @@ def _stream_outcome(completed: bool, error: Exception | None) -> tuple[bool, str
     return (True, None) if completed else (False, STREAM_ABANDONED)
 
 
-async def _record_streamed(
-    provider: Any, request: LLMRequest, chunks: List[str], session_id: str | None, outcome: tuple[bool, str | None]
-) -> None:
-    """Record one ended stream's estimated tokens against whoever the request names."""
+def _streamed_usage(provider: Any, request: LLMRequest, chunks: List[str]) -> Dict[str, Any]:
+    """The ``record_token_usage`` fields for one ended stream: who it is for, and its estimated tokens."""
     attribution = dict(request.metadata.get(SPEND_ATTRIBUTION_KEY) or {})
     user_id, endpoint = attribution.pop("user_id", None), attribution.pop("endpoint", None)
     if endpoint and user_id is None:
         logger.warning("Spend on %s recorded with no user: the caller attributed no identity", endpoint)
-    await record_token_usage(
-        provider=getattr(provider, "provider_name", "") or "",
-        model=_model_of(provider, request),
-        input_tokens=estimate_fast(_prompt_text(request)),
-        output_tokens=estimate_fast("".join(chunks)),
-        session_id=session_id,
-        user_id=user_id,
-        endpoint=endpoint,
-        metadata={**ESTIMATED_TOKENS, **attribution},
-        success=outcome[0],
-        error_message=outcome[1],
-    )
+    return {
+        "provider": getattr(provider, "provider_name", "") or "",
+        "model": _model_of(provider, request),
+        "input_tokens": estimate_fast(_prompt_text(request)),
+        "output_tokens": estimate_fast("".join(chunks)),
+        "user_id": user_id,
+        "endpoint": endpoint,
+        "metadata": {**ESTIMATED_TOKENS, **attribution},
+    }
+
+
+async def _record_streamed(
+    provider: Any, request: LLMRequest, chunks: List[str], session_id: str | None, outcome: tuple[bool, str | None]
+) -> None:
+    """Record one ended stream's estimated tokens against whoever the request names.
+
+    Runs in ``recorded_stream``'s ``finally``, where an exception would replace
+    the stream's own error, so a failure preparing the record is logged and
+    contained here; ``record_token_usage`` contains its own.
+    """
+    try:
+        usage = _streamed_usage(provider, request, chunks)
+    except Exception:
+        logger.exception(
+            "Could not prepare the spend record for a %s stream; its tokens are unrecorded",
+            getattr(provider, "provider_name", "") or "unknown",
+        )
+        return
+    await record_token_usage(**usage, session_id=session_id, success=outcome[0], error_message=outcome[1])
 
 
 async def _record_despite_cancellation(record: Awaitable[None]) -> None:
