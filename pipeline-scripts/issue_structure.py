@@ -210,7 +210,7 @@ def resolved_comment() -> str:
     )
 
 
-def conflict_comment(ref: int, current: str, repo: str) -> str:
+def parent_conflict_comment(ref: int, current: str, repo: str) -> str:
     return (
         f"{CONFLICT_MARKER}\nThe body names `Parent: #{ref}`, but this issue's native parent is already "
         f"{display_ref(current, repo)}. It was not re-parented; fix the body or move the issue by hand (#19522)."
@@ -322,7 +322,7 @@ def link_parent(client: StructureClient, issue: Dict[str, Any], ref: int) -> Tup
 
 
 def _conflict(client: StructureClient, number: int, ref: int, current: str, comments: List[Dict[str, Any]]) -> None:
-    body = conflict_comment(ref, current, client.repo)
+    body = parent_conflict_comment(ref, current, client.repo)
     existing = ours(comments, CONFLICT_MARKER)
     if existing is None or existing.get("body") != body:
         client.upsert(number, CONFLICT_MARKER, body)
