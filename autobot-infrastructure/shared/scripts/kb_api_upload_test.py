@@ -4,9 +4,24 @@
 # Author: mrveiss
 """The one KB uploader (#19339): payload, rendering, failures -- with the real egress check."""
 
+import importlib.util
+import pathlib
+import sys
 from unittest.mock import MagicMock, patch
 
-import kb_api_upload
+_MODULE_PATH = pathlib.Path(__file__).with_name("kb_api_upload.py")
+
+
+def _load_module():
+    """Import kb_api_upload by path -- its directory is not a package (as create_kb_index_test does)."""
+    spec = importlib.util.spec_from_file_location("kb_api_upload", _MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["kb_api_upload"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+kb_api_upload = _load_module()
 
 
 def _ok():

@@ -18,6 +18,7 @@ other than the home spells out a pattern list holding ``docs/**/*.md``.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,11 @@ _ROOT = repo_root()
 _HOME = "autobot-infrastructure/shared/scripts/populate_knowledge_base.py"
 _ROOTS = ("autobot-infrastructure",)
 _MARKER = "docs/**/*.md"
+#: A documentation glob however it is spelled: "docs/**/*.md", "docs/*.md", "docs/guides/**/*.md" ...
+_DOC_GLOB = re.compile(r"^docs/.*\*.*\.md$")
+_GLOB_CALLS = frozenset({"glob", "rglob", "iglob"})
+#: Known copies left for their own issue (path -> the issue that retires them).
+_KNOWN = {"autobot-infrastructure/shared/scripts/utilities/sync_documentation_kb.py": "#19701"}
 
 
 def _sources(root: Path) -> list[Path]:
@@ -47,9 +53,24 @@ REACH = declare(
 )
 
 
+def _is_md_glob_call(node: ast.AST) -> bool:
+    """``docs_dir.rglob("*.md")``: a documentation set built by hand. The receiver must name a docs
+    directory -- an agents/ or prompts/ directory of .md files is a different concept."""
+    if not (isinstance(node, ast.Call) and node.args and isinstance(node.func, ast.Attribute)):
+        return False
+    first = node.args[0]
+    receiver = ast.unparse(node.func.value).lower()
+    return (
+        node.func.attr in _GLOB_CALLS
+        and isinstance(first, ast.Constant)
+        and str(first.value).endswith(".md")
+        and "doc" in receiver
+    )
+
+
 def pattern_lists(source: str, rel: str) -> list[str]:
-    """Each list/tuple/set literal in *source* that holds the documentation glob."""
-    if rel == _HOME:
+    """Each documentation glob in *source*: a ``docs/...*.md`` string, or a glob call over ``*.md``."""
+    if rel == _HOME or rel in _KNOWN:
         return []
     try:
         tree = ast.parse(source)
@@ -58,8 +79,8 @@ def pattern_lists(source: str, rel: str) -> list[str]:
     return [
         f"{rel}:{node.lineno}"
         for node in ast.walk(tree)
-        if isinstance(node, ast.List | ast.Tuple | ast.Set)
-        and any(isinstance(e, ast.Constant) and e.value == _MARKER for e in node.elts)
+        if (isinstance(node, ast.Constant) and isinstance(node.value, str) and _DOC_GLOB.match(node.value))
+        or _is_md_glob_call(node)
     ]
 
 
@@ -72,10 +93,20 @@ def test_no_module_restates_the_documentation_set() -> None:
 
 @pytest.mark.parametrize(
     "source",
-    ['doc_patterns = ["README.md", "CLAUDE.md", "docs/**/*.md"]\n', 'for p in ("docs/**/*.md",):\n    pass\n'],
+    [
+        'doc_patterns = ["README.md", "CLAUDE.md", "docs/**/*.md"]\n',
+        'for p in ("docs/**/*.md",):\n    pass\n',
+        'PATTERN = "docs/*.md"\n',
+        'files = self.docs_dir.rglob("*.md")\n',
+        'files = Path(docs_root).glob("**/*.md")\n',
+    ],
 )
 def test_a_restated_documentation_set_is_flagged(source: str) -> None:
     assert pattern_lists(source, "x.py")
+
+
+def test_an_agents_dir_of_md_files_is_a_different_concept() -> None:
+    assert not pattern_lists('files = agents_dir.glob("*.md")\n', "x.py")
 
 
 def test_the_home_and_an_import_are_not_flagged() -> None:

@@ -60,6 +60,7 @@ EXCLUDE_PATTERNS = [
     "**/test-results/**",
     "**/playwright-report/**",
     "**/.pytest_cache/**",
+    "**/system-state.md",  # generated run state, not documentation (kept from populate_docs_knowledge, #19339)
 ]
 
 # Queries used to smoke-test retrieval once the base has been populated.
@@ -110,7 +111,7 @@ def collect_documentation_files(root: Path, patterns: List[str] | None = None) -
     for pattern in patterns or DOC_PATTERNS:
         all_files.extend(glob.glob(str(root / pattern), recursive=True))
 
-    unique_files = set(all_files)
+    unique_files = sorted(set(all_files))  # sorted: a caller that takes the first N gets the same N every run
     return [fp for fp in unique_files if os.path.isfile(fp) and not should_exclude_file(fp, EXCLUDE_PATTERNS)]
 
 
