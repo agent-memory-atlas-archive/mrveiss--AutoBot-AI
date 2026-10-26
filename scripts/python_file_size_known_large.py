@@ -441,17 +441,17 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,
     "autobot-slm-backend/monitoring/performance_optimizer.py": 773,
     "autobot-slm-backend/services/backup.py": 774,
-    "autobot-slm-backend/services/blue_green.py": 1279,
-    "autobot-slm-backend/services/deployment.py": 705,
+    "autobot-slm-backend/services/blue_green.py": 1243,
+    "autobot-slm-backend/services/deployment.py": 703,
     "autobot-slm-backend/services/drift_checker.py": 838,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,
-    "autobot-slm-backend/services/playbook_executor.py": 1399,  # #17150: ansible_dir self-heal, re-detect before sync
+    "autobot-slm-backend/services/playbook_executor.py": 1321,  # #17150: ansible_dir self-heal, re-detect before sync
     "autobot-slm-backend/services/reconciler.py": 2193,
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
-    "autobot-slm-backend/services/replication.py": 823,
+    "autobot-slm-backend/services/replication.py": 785,
     "autobot-slm-backend/services/role_registry.py": 712,
     "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,
