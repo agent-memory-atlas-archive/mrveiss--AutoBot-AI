@@ -14,10 +14,10 @@ The library already imports backend modules (``knowledge.serving``), so this sta
 ``services/rag_single_definition_19280_test`` fails if a literal default is re-added.
 """
 
-from autobot_shared.env_utils import env_float
+from autobot_shared.env_utils import env_float, env_float_clamped
 
 # Weight of the graph signal in the pre-rerank blend (0.0 = vector score only).
-RAG_GRAPH_WEIGHT: float = env_float("AUTOBOT_RAG_GRAPH_WEIGHT", 0.3)
+RAG_GRAPH_WEIGHT: float = env_float_clamped("AUTOBOT_RAG_GRAPH_WEIGHT", 0.3, 0.0, 1.0)  # a weight: 0-1
 # Default neighbourhood depth, in hops, for graph expansion requests.
 RAG_GRAPH_TRAVERSAL_DEPTH: int = 2
 # Deadline for a graph-RAG search when the caller sets none (the pre-#18141 private budget).
@@ -30,4 +30,4 @@ RAG_GRAPH_PATH_DEPTH: int = 6
 RAG_RELATION_DEPTH: int = 1
 # Minimum relevance score a knowledge-retrieval result needs to be kept (#1532 aligned it, #1526 lowered
 # it from 0.7; #19354 gave it this one home). Every retrieval signature and caller reads it.
-RAG_SCORE_THRESHOLD: float = env_float("AUTOBOT_RAG_SCORE_THRESHOLD", 0.3)
+RAG_SCORE_THRESHOLD: float = env_float_clamped("AUTOBOT_RAG_SCORE_THRESHOLD", 0.3, 0.0, 1.0)  # a score: 0-1

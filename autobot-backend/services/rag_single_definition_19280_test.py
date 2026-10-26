@@ -214,3 +214,17 @@ def test_a_literal_score_threshold_is_flagged(source):
 def test_the_home_and_no_filtering_are_not_flagged():
     assert not _literal_score_thresholds("def f(q, score_threshold: float = RAG_SCORE_THRESHOLD):\n    pass\n")
     assert not _literal_score_thresholds("class C:\n    score_threshold: float = 0.0\n")
+
+
+def test_the_unit_interval_rag_knobs_are_clamped_at_runtime():
+    """#19354 review: the registry's 0-1 range is enforced where the value is read, not only documented."""
+    source = (BACKEND / "constants" / "rag_graph_constants.py").read_text(encoding="utf-8")
+    calls = {
+        node.args[0].value: node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant)
+    }
+    for name in ("AUTOBOT_RAG_SCORE_THRESHOLD", "AUTOBOT_RAG_GRAPH_WEIGHT"):
+        call = calls[name]
+        assert getattr(call.func, "id", "") == "env_float_clamped", f"{name} must be read clamped"
+        assert [a.value for a in call.args[1:4]] == [0.3, 0.0, 1.0], f"{name}: default 0.3, clamped to 0..1"
