@@ -16,7 +16,7 @@ from typing import Any, Literal
 from autobot_shared.logging_manager import get_llm_logger
 from constants.model_constants import model_config
 from constants.rag_graph_constants import RAG_GRAPH_TIMEOUT_SECONDS, RAG_GRAPH_TRAVERSAL_DEPTH, RAG_GRAPH_WEIGHT
-from knowledge.search_components.reranking import RerankWeights
+from knowledge.search_components.reranking import RerankWeights, ResultReranker
 from type_defs.common import Metadata
 
 logger = get_llm_logger("rag_config")
@@ -45,7 +45,7 @@ class RAGConfig:
 
     # Reranking
     enable_reranking: bool = True
-    reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranking_model: str = ResultReranker.MODEL_NAME  # #19280: declared once; loader wiring is #19355
     # Issue #2004: Configurable blend weights; defaults preserve legacy 0.8/0.2 behaviour.
     rerank_weights: RerankWeights = field(default_factory=RerankWeights)
     # Issue #2090: MMR diversity pass lambda (0.0 = disabled, backward-compatible).
@@ -62,7 +62,7 @@ class RAGConfig:
     # Issue #18141: weight of the graph signal in the one pre-rerank blend
     # (knowledge.rag.graph_weight); read by graph-RAG and the Neural Mesh retriever.
     graph_weight: float = RAG_GRAPH_WEIGHT
-    # Issue #18141: default graph expansion depth, declared once.
+    # Issue #18141: graph expansion depth when a caller passes none (graph_aware_search, KAG).
     graph_traversal_depth: int = RAG_GRAPH_TRAVERSAL_DEPTH
     # Issue #18141: graph-RAG search deadline; the one named override of timeout_seconds.
     graph_timeout_seconds: float = RAG_GRAPH_TIMEOUT_SECONDS

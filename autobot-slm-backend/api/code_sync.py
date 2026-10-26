@@ -64,6 +64,7 @@ from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.cron_expression import INVALID_CRON_ERROR_CODE, validate_cron_expression
 from autobot_shared.db_url import assemble_postgres_url
 from autobot_shared.env_utils import env_float, env_int, env_int_clamped
+from autobot_shared.fleet_constants import FLEET_INSTALL_ROOT
 from autobot_shared.secret_redaction import redact_mapping
 from autobot_shared.ssot_config import config
 from autobot_shared.time_utils import utc_timestamp
@@ -114,6 +115,7 @@ from services.drift_checker import (
 from services.fleet_sync_guard import assert_no_running_sync, fleet_sync_lock
 from services.git_tracker import DEFAULT_BRANCH, DEFAULT_REPO_PATH, get_git_tracker
 from services.playbook_executor import get_playbook_executor
+from services.schedule_executor import get_schedule_target_nodes
 from services.slm_frontend_build import build_slm_frontend as _build_slm_frontend
 from services.slm_frontend_build import write_slm_deployed_commit_marker as _write_slm_deployed_commit_marker
 from services.ssh_utils import _ssh_key_usable, ssh_remote_path
@@ -1401,7 +1403,7 @@ async def _rsync_component(
     ]
     cmd.extend(_rsync_exclude_args(excludes, component))
     remote_source = ssh_remote_path(source_user, source_ip, f"{source_path}/{component}/")
-    cmd.extend(["--", remote_source, f"/opt/autobot/{component}/"])
+    cmd.extend(["--", remote_source, f"{FLEET_INSTALL_ROOT}/{component}/"])
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -1440,7 +1442,7 @@ def _rsync_local_cmd(
     cmd = ["rsync", "-avz", "--delete", "--no-group", "--no-owner"]
     cmd.extend(_rsync_exclude_args(excludes, component))
     cmd.append(f"{source_dir or f'{source_path}/{component}'}/")
-    cmd.append(f"{dest_dir or f'/opt/autobot/{component}'}/")
+    cmd.append(f"{dest_dir or f'{FLEET_INSTALL_ROOT}/{component}'}/")
     return cmd
 
 
@@ -1526,17 +1528,18 @@ async def _rsync_component_local(
 # Per-component post-sync steps (#9982)
 # =============================================================================
 
+
+def _component_pip_paths(component: str, requirements: str = "requirements.txt") -> Tuple[str, str]:
+    """(requirements file, venv pip) of *component* in the deployed layout (#18094)."""
+    base = f"{FLEET_INSTALL_ROOT}/{component}"
+    return f"{base}/{requirements}", f"{base}/venv/bin/pip"
+
+
 # Maps component name → (pip_req_path, pip_bin_path) for Python components.
 # Source of truth for venv/requirements paths per deployment layout.
 _COMPONENT_PIP_PATHS: Dict[str, Tuple[str, str]] = {
-    "autobot-backend": (
-        "/opt/autobot/autobot-backend/requirements.txt",
-        "/opt/autobot/autobot-backend/venv/bin/pip",
-    ),
-    "autobot-slm-backend": (
-        "/opt/autobot/autobot-slm-backend/requirements.txt",
-        "/opt/autobot/autobot-slm-backend/venv/bin/pip",
-    ),
+    "autobot-backend": _component_pip_paths("autobot-backend"),
+    "autobot-slm-backend": _component_pip_paths("autobot-slm-backend"),
 }
 
 # Target CPython interpreter for the components code-sync provisions (#11323).
@@ -1569,8 +1572,8 @@ _ANSIBLE_CONFIG: Path = _ANSIBLE_DIR / "ansible.cfg"
 
 # Maps component name → deployed frontend directory for npm rebuild.
 _COMPONENT_FRONTEND_DIRS: Dict[str, str] = {
-    "autobot-frontend": "/opt/autobot/autobot-frontend",
-    "autobot-slm-frontend": "/opt/autobot/autobot-slm-frontend",
+    "autobot-frontend": f"{FLEET_INSTALL_ROOT}/autobot-frontend",
+    "autobot-slm-frontend": f"{FLEET_INSTALL_ROOT}/autobot-slm-frontend",
 }
 
 # #12450: worker components that now have a per-component resolve path.
@@ -1611,10 +1614,7 @@ _WORKER_COMPONENTS: frozenset = frozenset(
 # For those three a resolve is code-only: rsync + restart the right unit.
 # Dependency changes remain ansible's job (Update-All / per-role redeploy).
 _WORKER_COMPONENT_PIP: Dict[str, Tuple[str, str]] = {
-    "autobot-ai-stack": (
-        "/opt/autobot/autobot-ai-stack/requirements-ai.txt",
-        "/opt/autobot/autobot-ai-stack/venv/bin/pip",
-    ),
+    "autobot-ai-stack": _component_pip_paths("autobot-ai-stack", "requirements-ai.txt"),
 }
 
 # #15063: reconcile_component's lock file is keyed off pip.parents[1] (the
@@ -1920,7 +1920,7 @@ _COMPONENT_MIGRATION_CONFIG: Dict[str, str] = {
 
 # --- #11376: pg_dump before migrations -----------------------------------------
 # Directory where pg_dump backups are stored; override with AUTOBOT_DB_BACKUP_DIR.
-_DB_BACKUP_DIR: str = os.environ.get("AUTOBOT_DB_BACKUP_DIR", "/opt/autobot/db-backups")
+_DB_BACKUP_DIR: str = os.environ.get("AUTOBOT_DB_BACKUP_DIR", f"{FLEET_INSTALL_ROOT}/db-backups")
 # Maximum number of backups to retain per component; older ones are pruned.
 _DB_BACKUP_KEEP: int = env_int("AUTOBOT_DB_BACKUP_KEEP", 5)
 
@@ -2337,7 +2337,7 @@ async def _restart_component_services(component: str, steps: List[str], services
 # =============================================================================
 
 
-_SNAPSHOT_BASE_DIR: str = os.environ.get("AUTOBOT_SNAPSHOT_DIR", "/opt/autobot/snapshots")
+_SNAPSHOT_BASE_DIR: str = os.environ.get("AUTOBOT_SNAPSHOT_DIR", f"{FLEET_INSTALL_ROOT}/snapshots")
 _SNAPSHOT_KEEP: int = env_int("AUTOBOT_SNAPSHOT_KEEP", 3)
 
 
@@ -2569,24 +2569,25 @@ async def _restart_dependents_with_health(component: str, snapshot: Optional[str
 
 # Python backend components that embed an autobot_shared symlink (#10912).
 _BACKEND_COMPONENTS = frozenset(_COMPONENT_PIP_PATHS.keys())
+# Every component whose code imports autobot_shared: a resolve syncs the library first (#11611, #18094).
+_SHARED_IMPORTERS = _BACKEND_COMPONENTS | {"autobot-npu-worker", "autobot-slm-agent"}
 
 
 def _get_deploy_base() -> Path:
-    """Return the installation base directory from config (AUTOBOT_BASE_DIR, default /opt/autobot).
+    """Return the installation base directory from config (AUTOBOT_BASE_DIR, else project_root()).
 
-    Reads the value at call time so that tests can monkeypatch the environment
-    variable or the config object without needing to patch a module-level string.
-    Avoids importing autobot_shared.ssot_config at module load (bootstrap safety).
+    Read at call time so tests can monkeypatch the env var or the config object, not a module string;
+    ssot_config is imported lazily, not at module load (bootstrap safety).
     """
     try:
         from autobot_shared.ssot_config import get_config as _get_config
 
         return Path(_get_config().path.base_dir)
     except Exception:
-        # ssot_config unavailable at bootstrap — fall back to the env var directly.
-        import os
+        # ssot_config unavailable at bootstrap — its own stdlib rule, else the fleet layout (#18094).
+        from autobot_shared.paths import install_base_dir
 
-        return Path(os.environ.get("AUTOBOT_BASE_DIR", "/opt/autobot"))
+        return install_base_dir(when_undeterminable=FLEET_INSTALL_ROOT)
 
 
 def _get_code_source_root() -> Path:
@@ -2660,11 +2661,10 @@ async def _ensure_autobot_shared_synced(component: str, force: bool = False) -> 
     startup and the control plane crash-looped (taking the code-sync API offline —
     a chicken-and-egg that needed a manual recovery).
 
-    Enforce autobot_shared-first ordering at the per-component deploy sites: for a
-    Python backend component, rsync the shared library from code_source ahead of
-    the component's own rsync + restart so every new shared import resolves. No-op
-    (returns success) for autobot_shared itself and for frontends — they either ARE
-    the shared component or do not import it at start.
+    Enforce autobot_shared-first ordering at the per-component deploy sites: for every
+    component in ``_SHARED_IMPORTERS`` (the backends, the NPU worker and the SLM agent, #18094),
+    rsync the shared library from code_source ahead of the component's own rsync + restart so
+    every new shared import resolves. No-op (success) for the rest, which do not import it.
 
     Returns (ok, message, blocked_deletions): on a guard refusal the caller
     must surface ``blocked_deletions`` rather than only prose, and on rsync
@@ -2675,7 +2675,7 @@ async def _ensure_autobot_shared_synced(component: str, force: bool = False) -> 
     file the source tree does not have. (``_deploy_constraints_dir`` and
     ``_sync_slm_from_code_source`` also delete, neither reachable from a resolve.)
     """
-    if component not in _BACKEND_COMPONENTS:
+    if component not in _SHARED_IMPORTERS:
         return True, "", []
     try:
         shared_source = get_default_source_dir("autobot_shared")
@@ -4091,35 +4091,13 @@ async def delete_schedule(
     return {"success": True, "message": f"Schedule '{schedule_name}' deleted"}
 
 
-async def _get_schedule_target_nodes(db: AsyncSession, schedule: UpdateSchedule) -> List[Node]:
-    """
-    Get target nodes based on schedule configuration.
-
-    Helper for run_schedule (Issue #665).
-    """
-    if schedule.target_type == "all":
-        nodes_result = await db.execute(select(Node).where(Node.code_status == CodeStatus.OUTDATED.value))
-    elif schedule.target_type == "specific" and schedule.target_nodes:
-        nodes_result = await db.execute(select(Node).where(Node.node_id.in_(schedule.target_nodes)))
-    else:
-        nodes_result = await db.execute(select(Node).where(Node.code_status == CodeStatus.OUTDATED.value))
-
-    return nodes_result.scalars().all()
-
-
 def _create_fleet_sync_job(nodes: List[Node], schedule: UpdateSchedule) -> FleetSyncJobState:
-    """
-    Create a fleet sync job with target nodes.
-
-    Helper for run_schedule (Issue #665).
-    """
-    job_id = str(uuid.uuid4())[:16]
-
+    """A schedule's fleet sync job; a ``manual`` restart strategy never restarts (#665, #19352)."""
     job = FleetSyncJobState(
-        job_id=job_id,
+        job_id=str(uuid.uuid4())[:16],
         strategy="rolling",
         batch_size=1,
-        restart=schedule.restart_after_sync,
+        restart=bool(schedule.restart_after_sync) and schedule.restart_strategy != "manual",
     )
 
     for node in nodes:
@@ -4131,6 +4109,15 @@ def _create_fleet_sync_job(nodes: List[Node], schedule: UpdateSchedule) -> Fleet
             ssh_port=node.ssh_port or 22,
         )
 
+    return job
+
+
+async def queue_schedule_job(db: AsyncSession, schedule: UpdateSchedule, nodes: List[Node]) -> FleetSyncJobState:
+    """Guard, build and persist a schedule's job: run-now and the schedule executor share it (#1979, #19352)."""
+    async with fleet_sync_lock:
+        await assert_no_running_sync(db)
+        job = _create_fleet_sync_job(nodes, schedule)
+        await _persist_fleet_sync_job(job)
     return job
 
 
@@ -4155,7 +4142,7 @@ async def run_schedule(
         )
 
     # Get target nodes based on schedule configuration
-    nodes = await _get_schedule_target_nodes(db, schedule)
+    nodes = await get_schedule_target_nodes(db, schedule)
 
     if not nodes:
         return ScheduleRunResponse(
@@ -4165,14 +4152,8 @@ async def run_schedule(
             job_id=None,
         )
 
-    # Guard: prevent overlapping fleet sync jobs (#1979)
-    async with fleet_sync_lock:
-        await assert_no_running_sync(db)
-
-        job = _create_fleet_sync_job(nodes, schedule)
-        await _persist_fleet_sync_job(job)
-        task = asyncio.create_task(_run_fleet_sync_job(job))
-        _running_tasks[job.job_id] = task
+    job = await queue_schedule_job(db, schedule, nodes)
+    _running_tasks[job.job_id] = asyncio.create_task(_run_fleet_sync_job(job))
 
     # Update schedule last_run
     schedule.last_run = datetime.now(timezone.utc)
