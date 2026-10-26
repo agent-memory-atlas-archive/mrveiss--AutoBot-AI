@@ -262,6 +262,7 @@ REACH_ROOTS = {
         "tools",
     ),
     "repo_tests/script_module_names_unique_14873_test.py": ("autobot-infrastructure/shared/scripts",),
+    "repo_tests/search_mode_one_home_19335_test.py": ("autobot-backend",),
     "repo_tests/severity_enum_fork_guard_18098_test.py": (
         "autobot-backend",
         "autobot-infrastructure",
