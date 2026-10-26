@@ -142,8 +142,10 @@ export type {
   MetricsSummaryDashboard,
 } from './src/composables/useMetricsSummary'
 
-// Shared duration-formatting vocabulary (#14908).
+// Shared duration, uptime and byte formatting (#14908).
 export type { DurationStyle } from './src/utils/duration'
+export { formatDuration, formatUptime, formatFileSize, formatBytes } from './src/utils/format'
+export type { FormatDurationOptions, FormatUptimeOptions, FormatBytesOptions } from './src/utils/format'
 
 // Scoped console logger (#14908) — canonical LogLevel/log/createLogger; both
 // apps' utils/debugUtils.ts re-export these rather than re-declaring them.
