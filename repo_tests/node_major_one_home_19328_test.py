@@ -39,7 +39,7 @@ _LITERAL = re.compile(
 
 #: (file, pattern whose group 1 is the pinned major) -- each consumer that cannot read .nvmrc.
 _PINNED = (
-    ("install.sh", r"\$\{NODE_MAJOR:=(\d+)\}"),
+    ("install.sh", r'^readonly NODE_MIN_VERSION="(\d+)\.'),  # its NodeSource URL reads the floor's major
     ("autobot-infrastructure/shared/scripts/install-bare-metal.sh", r"\$\{NODE_MAJOR:=(\d+)\}"),
     ("autobot-infrastructure/shared/scripts/install-slm.sh", r"\$\{NODE_MAJOR:=(\d+)\}"),
     ("autobot-slm-backend/ansible/inventory/group_vars/all.yml", r"^node_major:\s*\"(\d+)\"$"),
@@ -143,6 +143,18 @@ def test_the_floor_has_one_value_across_package_lock_and_installer() -> None:
     installer = re.search(r'NODE_MIN_VERSION="([\d.]+)"', (_ROOT / "install.sh").read_text(encoding="utf-8"))
     assert lock["packages"][""]["engines"]["node"] == declared, "package-lock root engines drifted from package.json"
     assert installer and f">={installer.group(1)}" == declared, f"install.sh NODE_MIN_VERSION vs engines {declared}"
+
+
+def test_a_bare_inventory_playbook_that_reads_node_major_loads_its_definition() -> None:
+    """A play run with ``-i "<host>,"`` (it targets ``target_host``) loads no group_vars (#15348)."""
+    missing = [
+        p.relative_to(_ROOT).as_posix()
+        for p in sorted((_ROOT / "autobot-slm-backend/ansible").rglob("*.yml"))
+        if "node_major" in (text := p.read_text(encoding="utf-8"))
+        and "target_host" in text
+        and "inventory/group_vars/all.yml" not in text
+    ]
+    assert not missing, f"load ../inventory/group_vars/all.yml via vars_files (#19328): {missing}"
 
 
 def test_the_browser_worker_engines_floor_is_on_the_home_major() -> None:

@@ -482,7 +482,7 @@ system_setup() {
 
     if ! command -v node &>/dev/null; then
         run_ok "Adding NodeSource repository" \
-            bash -c "curl -fsSL https://${NODESOURCE_HOST}/setup_${NODE_MAJOR:=22}.x | bash -"
+            bash -c "curl -fsSL https://${NODESOURCE_HOST}/setup_${NODE_MIN_VERSION%%.*}.x | bash -"
         apt_install_recorded "Installing Node.js" nodejs; record_install apt_source nodesource
     elif [[ "$(printf '%s\n' "${NODE_MIN_VERSION}" "$(node --version | tr -d v)" | sort -V | head -1)" != "${NODE_MIN_VERSION}" ]]; then
         fatal "Node.js $(node --version) is installed, but AutoBot needs ${NODE_MIN_VERSION} or newer. Upgrade or remove it, then rerun this installer."
