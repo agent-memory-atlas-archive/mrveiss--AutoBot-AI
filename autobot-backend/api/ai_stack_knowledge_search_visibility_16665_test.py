@@ -11,6 +11,7 @@ never does, an admin does, and a research-quarantined fact is never returned.
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from api import ai_stack_integration
 from knowledge.read_path_fakes_16665 import PRIVATE_A, RESEARCH, SHARED, FakeKB, QuarantineGatedKB
 
