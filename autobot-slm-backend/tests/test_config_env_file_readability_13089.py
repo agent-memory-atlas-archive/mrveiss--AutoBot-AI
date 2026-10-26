@@ -137,6 +137,9 @@ def test_readable_env_file_is_kept(tmp_path):
         ("local", "true", "True"),
         ("docker_local", "", "True"),  # an empty pass-through is unset, never an import crash
         ("local", "  ", "False"),
+        ("docker_local", "maybe", "True"),  # a typo follows the mode with a warning, never a crash
+        ("local", "maybe", "False"),
+        ("local", " TRUE ", "True"),
     ],
 )
 def test_the_default_follows_the_deployment_mode_and_an_explicit_value_wins(tmp_path, mode, flag, expected):

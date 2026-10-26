@@ -29,10 +29,10 @@ _TEST = re.compile(r"(^|/)(tests?/|test_[^/]*\.py$|[^/]*_test\.py$|conftest\.py$
 #: of the name by any reader (``getenv``, ``environ.get/setdefault/pop/[...]``, the registry ``env()``),
 #: possibly split across lines.
 _RESTATED = re.compile(
-    r"\bSLM_COMPOSE_NODES['\"]?[ \t]*(?::-|:=|:(?=[ \t])|=|-(?=[^-\s]))"
+    r"\bSLM_COMPOSE_NODES['\"]?[ \t]*(?::-|:=|:(?=[ \t]|$)|=|-(?=[^-\s]))"
     r"|(?:\bgetenv\s*\(|\benviron\.(?:get|setdefault|pop)\s*\(|\benviron\s*\[|(?<![\w.])env\s*\()"
     r"\s*['\"]SLM_COMPOSE_NODES['\"]",
-    re.S,
+    re.S | re.M,
 )
 
 
@@ -86,6 +86,7 @@ def test_no_file_restates_the_compose_nodes_default() -> None:
         "flag = os.environ.get('SLM_COMPOSE_NODES')\n",
         'flag = os.environ["SLM_COMPOSE_NODES"]\n',
         '      SLM_COMPOSE_NODES: "true"\n',
+        "      SLM_COMPOSE_NODES:\n",
         "      - SLM_COMPOSE_NODES=\n",
         "      - SLM_COMPOSE_NODES=${SLM_COMPOSE_NODES-true}\n",
         'os.environ.setdefault("SLM_COMPOSE_NODES", "1")\n',

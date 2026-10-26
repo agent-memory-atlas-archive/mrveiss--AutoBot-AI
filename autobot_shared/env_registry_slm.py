@@ -481,8 +481,9 @@ register_env_var(
         default="",
         description=(
             "Surface each compose container as an SLM fleet node (#9761). Unset follows the deployment "
-            "mode: on for docker_local (the compose stack), off on a bare-metal/VM fleet and in a dev "
-            "checkout; true|false overrides. The one default is autobot-slm-backend/config.py "
+            "mode: on for docker_local (the compose stack, or a dev checkout run inside a container), off "
+            "on a bare-metal/VM fleet and a host dev checkout; true|false overrides, a blank or unrecognised "
+            "value is warned about and treated as unset. The one default is autobot-slm-backend/config.py "
             "Settings.compose_nodes_enabled (#19323); docker-compose.yml passes the name through only."
         ),
         component="slm",
