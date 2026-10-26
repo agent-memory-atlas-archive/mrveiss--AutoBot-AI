@@ -19,9 +19,10 @@ from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _RUNBOOK = repo_root() / "docs" / "operations" / "disaster-recovery.md"
 _ROLES = "autobot-slm-backend/ansible/roles"
-_UNIT_DEST = re.compile(r"/etc/systemd/system/([A-Za-z0-9@_.-]+)\.service")
+# Only a task that WRITES the unit counts: a `path:` line can be a stat or a `state: absent` removal.
+_UNIT_DEST = re.compile(r"^\s*dest:\s*[\"']?/etc/systemd/system/([A-Za-z0-9@_.-]+)\.service[\"']?\s*$", re.MULTILINE)
 _SYSTEMCTL = re.compile(r"systemctl\s+(?:status|start|restart|stop)\s+([^#\n]+)")
-# Units installed by the packages the roles install, not written by a role template.
+# Units the distro packages ship (nginx, redis-stack-server, postgresql); no role writes their main unit file.
 _PACKAGE_UNITS = {"nginx", "redis-stack-server", "postgresql"}
 
 

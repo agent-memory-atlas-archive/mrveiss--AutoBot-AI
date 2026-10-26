@@ -179,9 +179,10 @@ Two services, deployed by different roles. Check both:
    on GPU nodes, both in `autobot-slm-backend/ansible/roles/llm/defaults/main.yml`. That file is
    the list; it is not copied here, so it cannot drift.
 
-4. **If models are missing**, redeploy the LLM node through the builtin updater: the SLM's
-   **Maintenance → Updates → Code Sync** tab. The role pulls the models and then checks that each one
-   it meant to pull is present. Don't pull by hand on the node.
+4. **If models are missing**, re-run the LLM role through the SLM: the **Roles** page, **Redeploy** on
+   **LLM CPU Node** or **LLM GPU Node** for that node. Redeploy re-runs the role's playbook, which pulls
+   the models and then checks that each one it meant to pull is present. **Code Sync does not do
+   this**: it updates code and never runs the `llm` role. Don't pull by hand on the node.
 
 **Estimated Recovery Time**: 5-20 minutes
 
@@ -244,10 +245,11 @@ Two services, deployed by different roles. Check both:
    sudo systemctl restart autobot-playwright
    ```
 
-3. **If Chromium is missing**, redeploy the browser node through **Maintenance → Updates → Code
-   Sync**. The `browser` role installs Chromium into `/var/lib/autobot/playwright-browsers`, the
-   path the service reads. A hand-run `npx playwright install chromium` installs into the
-   invoking user's cache instead, where the service never looks.
+3. **If Chromium is missing**, re-run the browser role through the SLM: the **Roles** page, **Redeploy**
+   on **Browser Automation** for that node. The `browser` role installs Chromium into
+   `/var/lib/autobot/playwright-browsers`, the path the service reads. Code Sync reinstalls it only
+   when the browser worker's Node.js dependencies changed. A hand-run `npx playwright install chromium`
+   installs into the invoking user's cache instead, where the service never looks.
 
 **Estimated Recovery Time**: 5-15 minutes
 
@@ -402,7 +404,7 @@ than `AUTOBOT_SECRETS_BACKUP_MAX_AGE_S` (default one day), and refuses otherwise
 # health_check.sh - Run every 5 minutes via cron
 
 check_service() {
-    if ! curl -s --max-time 5 "$1" > /dev/null 2>&1; then
+    if ! curl -sk --max-time 5 "$1" > /dev/null 2>&1; then  # -k: the frontend's certificate may be self-signed
         echo "ALERT: $2 is DOWN at $(date)" | mail -s "AutoBot Alert: $2" admin@example.com
         return 1
     fi
@@ -410,7 +412,7 @@ check_service() {
 }
 
 check_service "http://localhost:8001/api/health" "Backend API"
-check_service "http://<frontend-ip>:5173" "Frontend"
+check_service "https://<frontend-ip>/" "Frontend"   # nginx, frontend_port 443 (roles/frontend)
 check_service "http://<llm-ip>:11434/api/version" "Ollama"
 check_service "http://<aiml-ip>:8080/health" "AI Stack"
 
