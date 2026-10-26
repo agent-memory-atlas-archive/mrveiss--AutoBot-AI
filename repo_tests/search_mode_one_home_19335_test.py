@@ -11,6 +11,10 @@ auto -- the one the API validates with) and an unread ``knowledge_search.VALID_S
 A copy comes back in two shapes, both flagged in non-test backend modules: a collection literal
 naming two or more search modes, and a ``mode``/``*search_mode*`` binding or default set to a
 mode literal. ``"auto"`` alone is not read as a search mode -- the word is too common.
+
+Accepted blind spots (the tree is clean of them today; a reviewer reads the diff for them): an
+``Enum`` body such as ``HYBRID = "hybrid"``, a single-member ``Literal["hybrid"]``, and a
+``Field``/``Query(default="hybrid")`` on a parameter not named ``mode``/``*search_mode*``.
 """
 
 from __future__ import annotations

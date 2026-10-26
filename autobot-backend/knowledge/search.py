@@ -227,7 +227,7 @@ class SearchMixin(BasicVectorSearchMixin):
         top_k: int = 10,
         similarity_top_k: int = None,
         filters: Dict[str, Any] | None = None,
-        mode: str = "auto",
+        mode: str = CategoryDefaults.SEARCH_MODE_AUTO,
         # ---- Enhanced params (formerly enhanced_search) ----
         limit: int | None = None,
         offset: int = 0,
@@ -286,7 +286,7 @@ class SearchMixin(BasicVectorSearchMixin):
 
         if advanced or enhanced:
             eff_limit = limit if limit is not None else top_k
-            eff_mode = mode if mode != "auto" else CategoryDefaults.SEARCH_MODE_HYBRID
+            eff_mode = mode if mode != CategoryDefaults.SEARCH_MODE_AUTO else CategoryDefaults.SEARCH_MODE_HYBRID
             ctx = SearchContext.from_params(
                 query=query,
                 limit=eff_limit,

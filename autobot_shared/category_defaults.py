@@ -21,7 +21,12 @@ class CategoryDefaults:
     SEARCH_MODE_KEYWORD: str = "keyword"
     SEARCH_MODE_AUTO: str = "auto"
     #: Every mode the knowledge search API accepts -- the ONE allow-list (#19335).
-    SEARCH_MODES: tuple = (SEARCH_MODE_SEMANTIC, SEARCH_MODE_KEYWORD, SEARCH_MODE_HYBRID, SEARCH_MODE_AUTO)
+    SEARCH_MODES: tuple[str, ...] = (
+        SEARCH_MODE_SEMANTIC,
+        SEARCH_MODE_KEYWORD,
+        SEARCH_MODE_HYBRID,
+        SEARCH_MODE_AUTO,
+    )
     QUERY_TYPE_GENERAL: str = "general"
     QUERY_TYPE_TECHNICAL: str = "technical"
     QUERY_TYPE_CODE: str = "code"
