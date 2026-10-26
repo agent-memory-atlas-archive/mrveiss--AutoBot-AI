@@ -22,8 +22,8 @@ _STATUS = {"state": "building", "model": "bge-m3:latest", "collection": "kb_bge"
 def switch(monkeypatch):
     calls = []
 
-    async def _start(kb, model):
-        calls.append(("start", kb, model))
+    async def _start(kb, model, actor="unknown"):
+        calls.append(("start", kb, model, actor))
         if model == "phi3:mini":
             raise embedding_switch.SwitchRefused("'phi3:mini' is not an embedding model")
         if model == "busy":
@@ -45,15 +45,17 @@ def switch(monkeypatch):
 
 
 async def test_start_runs_the_switch_against_the_app_kb(switch):
-    result = await embeddings.start_embedding_switch(EmbeddingSwitchRequest(model="bge-m3:latest"), request=None)
-    assert switch == [("start", "the-kb", "bge-m3:latest")]
+    result = await embeddings.start_embedding_switch(
+        EmbeddingSwitchRequest(model="bge-m3:latest"), request=None, current_user={"user_id": "admin-1"}
+    )
+    assert switch == [("start", "the-kb", "bge-m3:latest", "admin-1")], "the actor reaches the audit"
     assert result.data.state == "building" and (result.data.done, result.data.total) == (3, 9)
 
 
 @pytest.mark.parametrize("model, code", [("phi3:mini", 400), ("busy", 409)])
 async def test_a_refused_start_is_a_client_error(switch, model, code):
     with pytest.raises(HTTPException) as exc:
-        await embeddings.start_embedding_switch(EmbeddingSwitchRequest(model=model), request=None)
+        await embeddings.start_embedding_switch(EmbeddingSwitchRequest(model=model), request=None, current_user={})
     assert exc.value.status_code == code
 
 
@@ -63,17 +65,27 @@ async def test_status_reports_progress(switch):
 
 
 async def test_cancel_without_a_running_switch_is_409(switch, monkeypatch):
-    async def _no():
-        return False
+    async def _none(actor="unknown"):
+        return "none"
 
-    monkeypatch.setattr(embedding_switch, "request_switch_cancel", _no)
+    monkeypatch.setattr(embedding_switch, "request_switch_cancel", _none)
     with pytest.raises(HTTPException) as exc:
-        await embeddings.cancel_embedding_switch()
+        await embeddings.cancel_embedding_switch(current_user={})
     assert exc.value.status_code == 409
 
 
+@pytest.mark.parametrize("outcome", ["cancel_requested", "force_closed"])
+async def test_cancel_or_force_close_returns_the_status(switch, monkeypatch, outcome):
+    async def _done(actor="unknown"):
+        return outcome
+
+    monkeypatch.setattr(embedding_switch, "request_switch_cancel", _done)
+    result = await embeddings.cancel_embedding_switch(current_user={"user_id": "admin-1"})
+    assert result.data.state == "building"
+
+
 def test_start_and_cancel_require_admin_status_does_not():
-    """Owner decision 2026-10-25: only admins start or cancel a switch."""
+    """Maintainer decision (2026-10-25): only admins start or cancel a switch."""
     for handler in (embeddings.start_embedding_switch, embeddings.cancel_embedding_switch):
         assert "check_admin_permission" in inspect.getsource(handler)
     assert "get_current_user" in inspect.getsource(embeddings.get_embedding_switch_status)

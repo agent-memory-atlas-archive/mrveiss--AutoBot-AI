@@ -13,35 +13,34 @@ pytestmark = pytest.mark.asyncio
 
 
 class _Buffer:
-    def __init__(self, log, name):
-        self.log, self.name = log, name
+    def __init__(self, kb, name):
+        self.kb, self.name = kb, name
 
     async def stop(self):
-        self.log.append(f"stop:{self.name}")
+        # taken after the swap: the KB must already pair the new model with the new store
+        self.kb.log.append(("stop", self.name, binding.snapshot(self.kb)))
 
     async def start(self):
-        self.log.append(f"start:{self.name}")
+        self.kb.log.append(("start", self.name))
 
 
 class _KB:
-    def __init__(self, log):
-        self.log = log
+    def __init__(self):
+        self.log = []
         self.chromadb_path = "/tmp/chroma"
         self.chromadb_collection = "autobot_memory"
-        self._write_buffer = _Buffer(log, "autobot_memory")
+        self.vector_store = "store:autobot_memory"
+        self._write_buffer = _Buffer(self, "autobot_memory")
         self.vector_index = object()
+        self.embedding_model_name = "nomic-embed-text:latest"
         self._bound_generation = 0
         self._space_checked_at = 0.0
 
     def _build_hnsw_metadata(self):
         return {"hnsw:space": "cosine"}
 
-    async def _create_chroma_collection(self, client, meta):
-        self.log.append(f"collection:{self.chromadb_collection}")
-        self._write_buffer = _Buffer(self.log, self.chromadb_collection)
-
     def _configure_embedding_provider(self, provider, model, endpoint, cfg):
-        self.log.append(f"embed:{model}")
+        self.log.append(("embed", model))
         return 1024
 
 
@@ -51,20 +50,31 @@ def kb(monkeypatch):
     import knowledge.backends as backends
 
     monkeypatch.setattr(backends, "get_default_client", lambda **kw: object())
-    return _KB([])
+
+    async def _build(kb, client, collection, meta):
+        # taken while building off to the side: the KB must still be wholly on the old space
+        kb.log.append(("build", collection, binding.snapshot(kb)))
+        return f"abc:{collection}", f"store:{collection}", _Buffer(kb, collection)
+
+    monkeypatch.setattr(binding, "build_binding", _build)
+    return _KB()
 
 
 def _space(monkeypatch, space):
     monkeypatch.setattr(binding, "active_embedding_space", lambda: space)
 
 
-async def test_a_newer_generation_rebinds_collection_buffer_index_and_model(monkeypatch, kb):
+async def test_a_rebind_builds_aside_swaps_once_then_drains_the_old_buffer(monkeypatch, kb):
     _space(monkeypatch, EmbeddingSpace("bge-m3:latest", "kb_bge", 1))
     assert await binding.ensure_current_space(kb) is True
-    # the old buffer drains into the OLD collection before anything else moves
-    assert kb.log == ["stop:autobot_memory", "collection:kb_bge", "embed:bge-m3:latest", "start:kb_bge"]
+    steps = [entry[0] for entry in kb.log]
+    assert steps == ["build", "start", "embed", "stop"], kb.log
+    during_build, after_swap = kb.log[0][2], kb.log[3][2]
+    assert (during_build.model, during_build.vector_store) == ("nomic-embed-text:latest", "store:autobot_memory")
+    assert (after_swap.model, after_swap.vector_store) == ("bge-m3:latest", "store:kb_bge")
+    assert kb.log[3][1] == "autobot_memory", "the OLD buffer is drained, into the store it was made for"
     assert (kb.chromadb_collection, kb.vector_index, kb._bound_generation) == ("kb_bge", None, 1)
-    assert (kb.embedding_model_name, kb.embedding_dimensions) == ("bge-m3:latest", 1024)
+    assert kb.embedding_dimensions == 1024
 
 
 async def test_the_bound_generation_does_not_rebind_again(monkeypatch, kb):
@@ -73,6 +83,16 @@ async def test_the_bound_generation_does_not_rebind_again(monkeypatch, kb):
     kb.log.clear()
     assert await binding.ensure_current_space(kb) is False
     assert kb.log == []
+
+
+async def test_an_operation_snapshot_is_the_bound_model_not_the_record(monkeypatch, kb):
+    """#19379 review: the record can name a new model before this KB has rebound."""
+    monkeypatch.setattr(binding, "SPACE_CHECK_INTERVAL_S", 60.0)
+    kb._space_checked_at = binding.time.monotonic()
+    _space(monkeypatch, EmbeddingSpace("bge-m3:latest", "kb_bge", 1))
+    monkeypatch.setattr(binding, "active_embedding_model", lambda: "bge-m3:latest")
+    space = await binding.current_space(kb)
+    assert (space.model, space.vector_store) == ("nomic-embed-text:latest", "store:autobot_memory")
 
 
 @pytest.mark.parametrize("space", [None, EmbeddingSpace("bge-m3:latest", None, 0)])

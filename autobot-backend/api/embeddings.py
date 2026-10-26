@@ -266,6 +266,7 @@ async def start_embedding_switch(
     body: EmbeddingSwitchRequest,
     request: Request,
     admin_check: bool = Depends(check_admin_permission),
+    current_user: dict = Depends(get_current_user),
 ):
     """Rebuild the knowledge base with another embedding model, then cut over (#19379, admins only).
 
@@ -278,7 +279,7 @@ async def start_embedding_switch(
 
     kb = await provide_knowledge_base(request)
     try:
-        status = await start_switch(kb, body.model)
+        status = await start_switch(kb, body.model, actor=_actor(current_user))
     except SwitchRefused as exc:
         code = 400 if "not an embedding model" in str(exc) else 409
         raise HTTPException(status_code=code, detail=str(exc)) from exc
@@ -304,10 +305,17 @@ async def get_embedding_switch_status(current_user: dict = Depends(get_current_u
     operation="cancel_embedding_switch",
     error_code_prefix="EMBEDDINGS",
 )
-async def cancel_embedding_switch(admin_check: bool = Depends(check_admin_permission)):
-    """Stop a running switch at its next batch; the active model and collection stay (#19379)."""
+async def cancel_embedding_switch(
+    admin_check: bool = Depends(check_admin_permission),
+    current_user: dict = Depends(get_current_user),
+):
+    """Stop a running switch at its next batch, or force-close a stale one; the active space stays (#19379)."""
     from knowledge.embedding_switch import request_switch_cancel, switch_status
 
-    if not await request_switch_cancel():
+    if await request_switch_cancel(actor=_actor(current_user)) == "none":
         raise HTTPException(status_code=409, detail="no embedding-model switch is running")
     return DataResponse(data=_switch_data(await switch_status()))
+
+
+def _actor(user: dict | None) -> str:
+    return str((user or {}).get("user_id") or (user or {}).get("username") or "unknown")

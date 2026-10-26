@@ -34,7 +34,12 @@ class EmbeddingSwitchRequest(BaseModel):
 
 
 class EmbeddingSwitchData(BaseModel):
-    """The current or last switch: building, settling, completed, failed, cancelled or idle."""
+    """The current or last switch.
+
+    ``state``: idle, building, settling, completed, completed_with_warnings, failed, cancelled, or
+    stale (an active build whose heartbeat stopped). ``previous_vectors`` is the active collection's
+    count when the build started; the rebuild writes one vector per fact.
+    """
 
     state: str
     model: str | None = None
@@ -43,6 +48,8 @@ class EmbeddingSwitchData(BaseModel):
     total: int = 0
     failed: int = 0
     failed_ids: List[str] = Field(default_factory=list)
+    previous_vectors: int | None = None
     reason: str | None = None
     started: str | None = None
+    heartbeat: str | None = None
     finished: str | None = None

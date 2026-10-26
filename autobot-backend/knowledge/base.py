@@ -388,34 +388,14 @@ class KnowledgeBaseCore:
             self.hnsw_m,
         )
 
-        abc_collection = await asyncio.to_thread(
-            chroma_client.get_or_create_collection,
-            name=self.chromadb_collection,
-            metadata=hnsw_metadata,
-        )
+        # #19379: built in one place, shared with the embedding-space rebind. Issue #8391: the
+        # buffer's start() is called in lifespan after KB init succeeds.
+        from knowledge.embedding_space_binding import build_binding
 
+        abc_collection, self.vector_store, self._write_buffer = await build_binding(
+            self, chroma_client, self.chromadb_collection, hnsw_metadata
+        )
         self._async_chroma_collection = abc_collection
-        # LlamaIndex ChromaVectorStore requires the raw chromadb collection.
-        # ChromaDBCollection._raw holds the underlying chromadb object.
-        raw_collection = getattr(abc_collection, "_raw", abc_collection)
-        from llama_index.vector_stores.chroma import ChromaVectorStore
-
-        self.vector_store = ChromaVectorStore(chroma_collection=raw_collection)
-
-        # Issue #8391: Instantiate VectorWriteBuffer backed by this collection.
-        # buffer.start() is called in lifespan after KB init succeeds.
-        from knowledge.write_buffer import VectorWriteBuffer, make_chromadb_flush_fn
-
-        # Issue #8406: Decrement total_vectors counter when a flush batch is dropped so
-        # the optimistic increment made at write time is corrected on failure.
-        async def _on_write_buffer_flush_error(count: int, exc: Exception) -> None:
-            logger.error("VectorWriteBuffer flush lost %d vectors; decrementing total_vectors: %s", count, exc)
-            await self._decrement_stat("total_vectors", count)
-
-        self._write_buffer = VectorWriteBuffer(
-            flush_fn=make_chromadb_flush_fn(self.vector_store),  # Issue #8401: LlamaIndex vs raw collection
-            on_flush_error=_on_write_buffer_flush_error,
-        )
 
         logger.info("ChromaDB vector store initialized: collection='%s'", self.chromadb_collection)
 

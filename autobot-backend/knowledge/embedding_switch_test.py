@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sys
 import types
 
 import pytest
@@ -13,12 +14,24 @@ from knowledge import embedding_switch as sw
 
 pytestmark = pytest.mark.asyncio
 
-MODEL, COLLECTION = "bge-m3:latest", "autobot_memory__bge_m3_latest"
+MODEL = "bge-m3:latest"
 
 
 class _Redis:
     def __init__(self):
-        self.hashes, self.sets = {}, {}
+        self.kv, self.hashes, self.sets = {}, {}, {}
+
+    async def get(self, key):
+        return self.kv.get(key)
+
+    async def set(self, key, value, nx=False, xx=False, ex=None):
+        if (nx and key in self.kv) or (xx and key not in self.kv):
+            return None
+        self.kv[key] = value
+        return True
+
+    async def exists(self, key):
+        return int(key in self.kv)
 
     async def hgetall(self, key):
         return dict(self.hashes.get(key, {}))
@@ -31,8 +44,8 @@ class _Redis:
 
     async def delete(self, *keys):
         for k in keys:
-            self.hashes.pop(k, None)
-            self.sets.pop(k, None)
+            for store in (self.kv, self.hashes, self.sets):
+                store.pop(k, None)
 
     async def sadd(self, key, member):
         self.sets.setdefault(key, set()).add(member)
@@ -40,6 +53,9 @@ class _Redis:
     async def spop(self, key):
         members = self.sets.get(key)
         return members.pop() if members else None
+
+    async def scard(self, key):
+        return len(self.sets.get(key, ()))
 
 
 class _Collection:
@@ -65,18 +81,33 @@ def _vector_store():
     return types.SimpleNamespace(add=add, _collection=collection)
 
 
+def _async(fn):
+    async def wrapper(*a, **kw):
+        return fn(*a, **kw)
+
+    return wrapper
+
+
+async def _batches(facts, size):
+    ids = list(facts)
+    for i in range(0, len(ids), size):
+        yield [{"fact_id": f, **facts[f]} for f in ids[i : i + size]]
+
+
 @pytest.fixture
 def env(monkeypatch):
-    redis, store, log = _Redis(), _vector_store(), []
+    redis, store, log, audits = _Redis(), _vector_store(), [], []
     facts = {f"f{i}": {"content": f"fact {i}", "metadata": {"k": i}} for i in range(5)}
+    env = types.SimpleNamespace(redis=redis, store=store, log=log, facts=facts, fail=set(), audits=audits)
+    env.walk = None  # facts the build's walk sees; defaults to all of them
     fake_fs = types.SimpleNamespace(
         count_facts=_async(lambda *a: len(facts)),
         load_fact=_async(lambda fid: facts.get(fid)),
-        iter_facts=lambda batch_size: _batches(facts, batch_size, redis),
+        iter_facts=lambda batch_size: _batches(env.walk if env.walk is not None else facts, batch_size),
     )
 
     async def _open(kb, collection, model, dim):
-        log.append(("open", collection, model, dim))
+        log.append(("open", collection, dim))
         return store
 
     async def _rebind(kb, space):
@@ -86,107 +117,165 @@ def env(monkeypatch):
         log.append(("override", model, collection, store._collection.count()))
         return EmbeddingSpace(model, collection, 7)
 
+    async def _embed_batch(texts, model_name=None):
+        assert model_name == MODEL, "the rebuild embeds with the TARGET model, never the active one"
+        return [None if t in env.fail else [0.1, 0.2] for t in texts]
+
+    import knowledge
+    import knowledge.embedding_space_binding as binding
+    import services.npu_client as npu
+
     monkeypatch.setattr(sw, "_redis", _async(lambda: redis))
     monkeypatch.setattr(sw, "_open_collection", _open)
     monkeypatch.setattr(sw, "set_embedding_model_override", _override)
     monkeypatch.setattr(sw, "SWITCH_BATCH_SIZE", 2)
     monkeypatch.setattr(sw, "_settle_seconds", lambda: 0.0)
     monkeypatch.setattr(sw, "active_embedding_model", lambda: "nomic-embed-text:latest")
-    import knowledge
-    import knowledge.embedding_space_binding as binding
-    import services.npu_client as npu
-
+    monkeypatch.setattr(sw, "_audit", lambda actor, phase, model, coll: audits.append((actor, phase, model)))
     monkeypatch.setattr(knowledge, "fact_store", fake_fs, raising=False)
-    monkeypatch.setitem(__import__("sys").modules, "knowledge.fact_store", fake_fs)
+    monkeypatch.setitem(sys.modules, "knowledge.fact_store", fake_fs)
     monkeypatch.setattr(binding, "rebind", _rebind)
-    env = types.SimpleNamespace(redis=redis, store=store, log=log, facts=facts, fail=set())
-
-    async def _embed(texts, model_name=None):
-        assert model_name == MODEL, "the rebuild embeds with the TARGET model, never the active one"
-        return [None if t in env.fail else [0.1, 0.2] for t in texts]
-
-    monkeypatch.setattr(npu, "generate_embeddings_batch_with_fallback", _embed)
+    monkeypatch.setattr(npu, "generate_embeddings_batch_with_fallback", _embed_batch)
     return env
 
 
-def _async(fn):
-    async def wrapper(*a, **kw):
-        return fn(*a, **kw)
-
-    return wrapper
+def _kb():
+    return types.SimpleNamespace(chromadb_collection="autobot_memory", chromadb_path="/tmp", vector_store=None)
 
 
-async def _batches(facts, size, redis):
-    ids = list(facts)
-    for i in range(0, len(ids), size):
-        yield [{"fact_id": f, **facts[f]} for f in ids[i : i + size]]
-
-
-async def _start(env, kb=None):
-    kb = kb or types.SimpleNamespace(chromadb_collection="autobot_memory", chromadb_path="/tmp")
-    await sw._set_state(state="building", model=MODEL, collection=COLLECTION, done=0, total=0, failed=0)
-    await sw.run_switch(kb, MODEL, COLLECTION)
+async def _run(env, run=None):
+    """Drive one build the way start_switch does, but awaited."""
+    run = run or sw._Run("owner-1", MODEL, "autobot_memory__bge_m3_latest__abcd1234", sw.time.monotonic())
+    await env.redis.set(sw.LOCK_KEY, run.owner)
+    await sw._set_state(
+        state="building", owner=run.owner, model=MODEL, collection=run.collection, done=0, total=0, failed=0
+    )
+    await sw.run_switch(_kb(), run)
     return await sw.switch_status()
 
 
+def _overrides(env):
+    return [e for e in env.log if e[0] == "override"]
+
+
 async def test_a_complete_build_cuts_over_after_every_fact_is_in(env):
-    status = await _start(env)
+    status = await _run(env)
     assert status["state"] == "completed" and status["done"] == 5
-    overrides = [e for e in env.log if e[0] == "override"]
-    assert overrides == [("override", MODEL, COLLECTION, 5)], "cutover only once all 5 vectors are held"
-    assert ("rebind", COLLECTION, 7) in env.log
+    assert _overrides(env) == [("override", MODEL, "autobot_memory__bge_m3_latest__abcd1234", 5)]
+    assert ("rebind", "autobot_memory__bge_m3_latest__abcd1234", 7) in env.log
+    assert not await env.redis.exists(sw.LOCK_KEY), "a finished build releases its lock"
 
 
 async def test_the_active_space_is_untouched_until_the_build_completes(env):
-    """Search keeps the old collection during the build: nothing switches before the last batch."""
-    seen = []
-    original = env.store.add
+    seen, original = [], env.store.add
 
     def _add(nodes):
-        seen.append(any(e[0] == "override" for e in env.log))
+        seen.append(bool(_overrides(env)))
         original(nodes)
 
     env.store.add = _add
-    await _start(env)
+    await _run(env)
     assert seen and not any(seen), "the override was written while vectors were still being added"
 
 
 async def test_one_failed_fact_blocks_the_cutover(env):
     env.fail.add("fact 3")
-    status = await _start(env)
+    status = await _run(env)
     assert status["state"] == "failed" and status["failed"] == 1 and status["failed_ids"] == ["f3"]
-    assert not [e for e in env.log if e[0] in ("override", "rebind")]
+    assert "failed to embed" in status["reason"], "the operator is told it was a failure, not a count"
+    assert not _overrides(env)
 
 
 async def test_a_cancel_stops_before_cutover(env):
     await sw._set_state(cancel="1")
-    status = await _start(env)
-    assert status["state"] == "cancelled"
-    assert not [e for e in env.log if e[0] == "override"]
+    status = await _run(env)
+    assert status["state"] == "cancelled" and not _overrides(env)
 
 
-async def test_a_vector_count_that_does_not_match_the_facts_blocks_the_cutover(env, monkeypatch):
-    env.facts["late"] = {"content": "never embedded", "metadata": {}}  # counted, but the walk misses it
-    monkeypatch.setattr(sw, "note_write", _async(lambda fid: None))
-    walk = dict(env.facts)
-    walk.pop("late")
-    import sys
-
-    sys.modules["knowledge.fact_store"].iter_facts = lambda batch_size: _batches(walk, batch_size, env.redis)
-    status = await _start(env)
-    assert status["state"] == "failed" and "6 facts" in status["reason"]
-    assert not [e for e in env.log if e[0] == "override"]
-
-
-async def test_writes_during_the_build_are_replayed_and_deletes_removed(env):
+async def test_writes_that_keep_arriving_are_replayed_until_the_counts_match(env):
+    """code review on PR #19641: a write after the first replay must not fail the build."""
+    env.walk = dict(env.facts)
+    env.facts["late"] = {"content": "written during the build", "metadata": {}}
     await sw._set_state(state="building")
-    env.facts["new"] = {"content": "written during the build", "metadata": {}}
-    await sw.note_write("new")
+    await sw.note_write("late")
     env.facts.pop("f0")
     await sw.note_write("f0")  # deleted during the build
-    status = await _start(env)
+    status = await _run(env)
     assert status["state"] == "completed"
-    assert "new" in env.store._collection.ids and "f0" not in env.store._collection.ids
+    assert "late" in env.store._collection.ids and "f0" not in env.store._collection.ids
+
+
+async def test_counts_that_never_match_fail_after_the_replay_rounds(env, monkeypatch):
+    monkeypatch.setattr(sw, "SWITCH_REPLAY_ROUNDS", 2)
+    env.walk = dict(env.facts)
+    env.facts["unnoted"] = {"content": "never embedded", "metadata": {}}  # counted, never noted
+    status = await _run(env)
+    assert status["state"] == "failed" and "6 facts" in status["reason"]
+    assert not _overrides(env)
+
+
+async def test_a_failure_after_the_record_is_written_reports_a_warning_not_a_failure(env, monkeypatch):
+    import knowledge.embedding_space_binding as binding
+
+    async def _boom(kb, space):
+        raise RuntimeError("rebind blew up")
+
+    monkeypatch.setattr(binding, "rebind", _boom)
+    status = await _run(env)
+    assert len(_overrides(env)) == 1
+    assert status["state"] == "completed_with_warnings" and "rebind blew up" in status["reason"]
+
+
+async def test_a_build_past_its_deadline_fails_without_switching(env, monkeypatch):
+    monkeypatch.setattr(sw, "SWITCH_DEADLINE_S", 60.0)
+    run = sw._Run("owner-1", MODEL, "autobot_memory__bge_m3_latest__abcd1234", sw.time.monotonic() - 120)
+    status = await _run(env, run)
+    assert status["state"] == "failed" and "deadline" in status["reason"]
+    assert not _overrides(env)
+
+
+async def test_a_build_whose_lock_expired_reads_stale_and_can_be_force_closed(env):
+    await sw._set_state(state="building", model=MODEL, collection="c")  # no lock: the owner is gone
+    assert (await sw.switch_status())["state"] == "stale"
+    assert await sw.request_switch_cancel(actor="admin") == "force_closed"
+    status = await sw.switch_status()
+    assert status["state"] == "failed" and "force-closed" in status["reason"]
+    assert ("admin", "switch_force_close", MODEL) in env.audits
+
+
+async def test_a_running_build_holds_the_lock_so_a_second_start_is_refused(env, monkeypatch):
+    monkeypatch.setattr(sw, "fire_and_forget", lambda coro, name: coro.close())
+    first = await sw.start_switch(_kb(), MODEL, actor="admin")
+    assert first["state"] == "building"
+    with pytest.raises(sw.SwitchRefused, match="already running"):
+        await sw.start_switch(_kb(), "mxbai-embed-large:latest", actor="admin")
+    assert ("admin", "switch_start", MODEL) in env.audits
+
+
+async def test_a_stale_build_does_not_block_a_new_start(env, monkeypatch):
+    monkeypatch.setattr(sw, "fire_and_forget", lambda coro, name: coro.close())
+    await sw._set_state(state="building", model="old", collection="c")  # stale: no lock
+    assert (await sw.start_switch(_kb(), MODEL))["state"] == "building"
+
+
+async def test_each_attempt_writes_a_new_collection(env, monkeypatch):
+    """A→B→A must not reopen the abandoned A collection."""
+    monkeypatch.setattr(sw, "fire_and_forget", lambda coro, name: coro.close())
+    first = (await sw.start_switch(_kb(), MODEL))["collection"]
+    await env.redis.delete(sw.LOCK_KEY)
+    second = (await sw.start_switch(_kb(), MODEL))["collection"]
+    assert first != second and first.startswith("autobot_memory__bge_m3_latest__")
+
+
+async def test_a_quarantined_or_private_fact_keeps_its_filter_fields(env):
+    """The search filters read metadata.collection (quarantine) and the ownership fields."""
+    env.facts["q"] = {
+        "content": "research finding",
+        "metadata": {"collection": "research_quarantine", "owner_id": "u1"},
+    }
+    await _run(env)
+    meta = env.store._collection.ids["q"].metadata
+    assert meta["collection"] == "research_quarantine" and meta["owner_id"] == "u1"
 
 
 async def test_a_write_is_not_noted_when_no_switch_runs(env):
@@ -195,21 +284,14 @@ async def test_a_write_is_not_noted_when_no_switch_runs(env):
 
 
 @pytest.mark.parametrize(
-    "model, state, message",
-    [
-        ("phi3:mini", "idle", "not an embedding model"),
-        (MODEL, "building", "already running"),
-        ("nomic-embed-text:latest", "idle", "already the active"),
-    ],
+    "model, message", [("phi3:mini", "not an embedding model"), ("nomic-embed-text:latest", "already the active")]
 )
-async def test_start_refuses(env, model, state, message):
-    await sw._set_state(state=state)
-    kb = types.SimpleNamespace(chromadb_collection="autobot_memory", chromadb_path="/tmp")
+async def test_start_refuses(env, model, message):
     with pytest.raises(sw.SwitchRefused, match=message):
-        await sw.start_switch(kb, model)
+        await sw.start_switch(_kb(), model)
 
 
 def test_the_target_collection_name_fits_chromadb():
-    name = sw.target_collection("autobot_memory", "BAAI/bge-small-en-v1.5:latest")
-    assert name == "autobot_memory__baai_bge_small_en_v1_5_latest"
+    name = sw.target_collection("autobot_memory", "BAAI/bge-small-en-v1.5:latest", "0123456789abcdef")
+    assert name == "autobot_memory__baai_bge_small_en_v1_5_lates__01234567"
     assert 3 <= len(name) <= 63 and name[0].isalnum() and name[-1].isalnum()

@@ -33500,7 +33500,7 @@ export interface paths {
         post: operations["start_embedding_switch_api_embeddings_switch_post"];
         /**
          * Cancel Embedding Switch
-         * @description Stop a running switch at its next batch; the active model and collection stay (#19379).
+         * @description Stop a running switch at its next batch, or force-close a stale one; the active space stays (#19379).
          */
         delete: operations["cancel_embedding_switch_api_embeddings_switch_delete"];
         options?: never;
@@ -74260,7 +74260,11 @@ export interface components {
         };
         /**
          * EmbeddingSwitchData
-         * @description The current or last switch: building, settling, completed, failed, cancelled or idle.
+         * @description The current or last switch.
+         *
+         *     ``state``: idle, building, settling, completed, completed_with_warnings, failed, cancelled, or
+         *     stale (an active build whose heartbeat stopped). ``previous_vectors`` is the active collection's
+         *     count when the build started; the rebuild writes one vector per fact.
          */
         EmbeddingSwitchData: {
             /** State */
@@ -74286,10 +74290,14 @@ export interface components {
             failed: number;
             /** Failed Ids */
             failed_ids?: string[];
+            /** Previous Vectors */
+            previous_vectors?: number | null;
             /** Reason */
             reason?: string | null;
             /** Started */
             started?: string | null;
+            /** Heartbeat */
+            heartbeat?: string | null;
             /** Finished */
             finished?: string | null;
         } & {
