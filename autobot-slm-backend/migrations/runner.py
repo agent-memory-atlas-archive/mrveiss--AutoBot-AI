@@ -176,19 +176,8 @@ def _resolve_migration_db_url(module, default_db_url: str) -> str:
 
 
 def _parse_db_url(url: str) -> dict:
-    """Parse PostgreSQL URL into connection parameters (#786)."""
-    # postgresql://user:pass@host:port/database
-    # postgresql://user@host:port/database (no password)
-    from urllib.parse import urlparse
-
-    parsed = urlparse(url)
-    return {
-        "host": parsed.hostname or "localhost",
-        "port": parsed.port or 5432,
-        "database": parsed.path.lstrip("/") if parsed.path else "slm",
-        "user": parsed.username or "slm_app",
-        "password": parsed.password,
-    }
+    """Parse PostgreSQL URL into connection parameters (#786; one parser, #19320)."""
+    return _migration_utils.parse_db_url(url)
 
 
 def get_connection(db_url: str = None, timeout: int = 10) -> psycopg2.extensions.connection:
@@ -245,17 +234,22 @@ def ensure_migrations_table(conn: psycopg2.extensions.connection) -> None:
         # migrate() this issue added. Guarded on the 'agents' table and a
         # known roster member so it never re-fires once seeding has run,
         # and never errors on a fresh DB where 'agents' doesn't exist yet.
+        # The 'agents' read sits in its own nested IF: PL/pgSQL plans an IF
+        # condition as one expression, so an AND-ed `SELECT ... FROM agents`
+        # fails with 'relation "agents" does not exist' on a fresh DB even
+        # behind the to_regclass guard (#19238 made that failure fatal).
         cur.execute("""
             DO $$
             BEGIN
                 IF EXISTS (
                     SELECT 1 FROM migrations_applied WHERE name = 'seed_agents'
                 )
-                AND to_regclass('public.agents') IS NOT NULL
-                AND NOT EXISTS (
-                    SELECT 1 FROM agents WHERE agent_id = 'chat'
-                ) THEN
-                    DELETE FROM migrations_applied WHERE name = 'seed_agents';
+                AND to_regclass('public.agents') IS NOT NULL THEN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM agents WHERE agent_id = 'chat'
+                    ) THEN
+                        DELETE FROM migrations_applied WHERE name = 'seed_agents';
+                    END IF;
                 END IF;
             END
             $$;
