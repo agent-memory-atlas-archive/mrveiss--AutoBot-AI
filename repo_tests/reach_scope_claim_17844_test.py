@@ -339,6 +339,12 @@ _DECLARED_SCOPES = {
         "tools",
     ),
     "llc-actor-id-scan": ("autobot-backend/llc",),
+    "node-major-literals": (
+        ".github",
+        "autobot-slm-backend/ansible",
+        "autobot-infrastructure/shared/scripts",
+        "install.sh",
+    ),
     "one-system-knowledge-template-tree": ("autobot-backend",),
     "one-static-data-copy-scan": (
         "autobot-backend",
