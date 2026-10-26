@@ -27,14 +27,16 @@ from outward_wording import LABEL, MARKER, find_hits, issue_comment, issue_decis
 
 COMPLETE = "## Thinking Path\nwhy\n## What Changed\nwhat\n## Verification\nhow\n## Model Used\nmodel\n## Issue Link\nCloses #1\n"
 
-# (text, the exact match it must produce) -- one per rule, in RULES order.
+# (text, the exact match it must produce) -- at least one per rule, in RULES order.
 FLAGGED = [
     ("Picked up from autobot-ai-4d last night (#19645)", "autobot-ai-4d"),
-    ("Reviewed (a0, 2026-10-24) and landed (#19645)", "(a0,"),
-    ("Handed over a0 → reviewer (#19645)", "a0 →"),
-    ("Handed over from review → 4d (#19645)", "→ 4d"),
+    ("Reviewed (a0, 2026-10-24) and landed (#19645)", "(a0, 2026-10-24"),
+    ("Reviewed (27, 2026-10-24) and landed (#19645)", "(27, 2026-10-24"),
+    ("Handed over a0 → reviewer (#19645)", "Handed over a0 →"),
+    ("Handed over from review → 4d (#19645)", "Handed over from review → 4d"),
     ("Asked the Trainmaster to queue it (#19645)", "Trainmaster"),
     ("Lands with train 85l tonight (#19645)", "train 85l"),
+    ("Lands with train 91 next week (#19645)", "train 91"),
     ("The M3 owner decided it (#19645)", "M3 owner"),
 ]
 CLEAN = [
@@ -46,6 +48,11 @@ CLEAN = [
     "The `M2 owner` wording and `autobot-ai-4d` are quoted as examples (#19645)",
     "Maintainer decision (2026-10-26), tracked in #19526 (#19645)",
     "Mapped M1 → M2 milestones (#19645)",
+    "Called f(10, 20) twice (#19645)",
+    "Split the store (db, cache) in two (#19645)",
+    "Moved db → redis and ui → api (#19645)",
+    "Bumped the schema v2 → v3 (#19645)",
+    "Passed the db → redis migration (#19645)",
 ]
 
 
@@ -141,3 +148,17 @@ def test_label_transitions(body: str, labels: list[str], expected: tuple[str, st
 def test_the_resolved_comment_says_so_without_listing_matches() -> None:
     comment = issue_comment([])
     assert comment.startswith(MARKER) and "passes" in comment and LABEL in comment
+
+
+def test_raw_lines_are_never_echoed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Only the rule and the match leave the detector: no @mention, link or workflow command replays."""
+    body = "::warning::@someone see https://example.invalid the trainmaster said so\n"
+    with caplog.at_level("INFO", logger="outward_wording"):
+        outputs, comment = _run_issue(tmp_path, monkeypatch, body, [])
+    assert outputs["hit"] == "true" and "`trainmaster`" in comment
+    for text in (comment, caplog.text):
+        assert "@someone" not in text and "example.invalid" not in text and "::warning::" not in text
+    ok, lines = report(COMPLETE + body)
+    assert not ok and not any("@someone" in line for line in lines), lines

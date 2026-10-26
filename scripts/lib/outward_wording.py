@@ -42,15 +42,19 @@ _FENCE = re.compile(r"^\s*(```|~~~)")
 _INLINE_CODE = re.compile(r"`[^`]*`")
 
 # (what it is, pattern). Bare two-character tokens are too common alone (hex SHAs,
-# `a0` inside identifiers), so session ids match only in attribution `(a0,` or
-# arrow `a0 →` / `→ 4d` positions.
+# `a0` inside identifiers, `(10, 20)`, `db → redis`), so a session id needs a second
+# signal: an attribution date `(a0, 2026-10-24` or a handoff word before an arrow.
+_HANDOFF = r"(?i:handed|handoff|hand-off|handover|passed|reassigned)"
+# Merge trains are numbered by series plus an optional letter (`85l`); match the
+# shape, not the current series, so the next one is caught too.
+_TRAIN_NUMBER = r"\d{2,3}[a-z]?"
 RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("automation session name", re.compile(r"autobot-ai-[0-9a-z]{2}\b")),
-    ("session id in an attribution", re.compile(r"\(([0-9a-f]{2}|a0|0d),")),
-    ("session id before an arrow", re.compile(r"\b[0-9a-z]{2} ?→")),
-    ("session id after an arrow", re.compile(r"→ ?[0-9a-z]{2}\b")),
+    ("session id in an attribution", re.compile(r"\([0-9a-z]{2},\s*20\d\d-\d\d-\d\d")),
+    ("session id before an arrow", re.compile(rf"\b{_HANDOFF}(?: over)?(?: from)? [0-9a-z]{{2}} ?→")),
+    ("session id after an arrow", re.compile(rf"\b{_HANDOFF}\b[^→\n]{{0,40}}→ ?[0-9a-z]{{2}}\b")),
     ("internal process role", re.compile(r"\btrainmaster\b", re.IGNORECASE)),
-    ("internal merge-train name", re.compile(r"\btrain 8\d[a-z]?\b")),
+    ("internal merge-train name", re.compile(rf"\btrain {_TRAIN_NUMBER}\b")),
     ("internal process role", re.compile(r"\bM\d owner\b")),
 )
 REPLACEMENTS = (
@@ -65,11 +69,15 @@ MARKER = "<!-- outward-wording-19645 -->"
 
 @dataclass(frozen=True)
 class Hit:
-    """One flagged match: which rule, the matched text, and the line it sits on."""
+    """One flagged match: which rule and the matched text.
+
+    The surrounding line is deliberately not kept: callers print hits to CI logs and
+    post them as comments, and echoing an author's raw line would replay workflow
+    commands, @mentions and links (#19645 review).
+    """
 
     rule: str
     match: str
-    line: str
 
 
 def prose_lines(text: str) -> Iterator[tuple[str, str]]:
@@ -90,15 +98,15 @@ def prose_lines(text: str) -> Iterator[tuple[str, str]]:
 def find_hits(text: str) -> list[Hit]:
     """Every rule match in the prose of ``text``, in line order."""
     hits = []
-    for raw, prose in prose_lines(text):
+    for _raw, prose in prose_lines(text):
         for rule, pattern in RULES:
-            hits.extend(Hit(rule, m.group(0), raw.strip()) for m in pattern.finditer(prose))
+            hits.extend(Hit(rule, m.group(0)) for m in pattern.finditer(prose))
     return hits
 
 
 def describe(hits: list[Hit]) -> list[str]:
     """One line per hit plus the replacement wording; plain text, no CI markup."""
-    lines = [f'{hit.rule} "{hit.match}" in: {hit.line}' for hit in hits]
+    lines = [f'{hit.rule}: "{hit.match}"' for hit in hits]
     return lines + [replacement_hint()]
 
 
@@ -115,7 +123,7 @@ def issue_comment(hits: list[Hit]) -> str:
     """The marker-identified issue comment: the matches when flagged, a note when clean."""
     if not hits:
         return f"{MARKER}\nThe wording check now passes; the `{LABEL}` label has been removed."
-    rows = "\n".join(f"- {hit.rule}: `{hit.match}` in: {hit.line}" for hit in hits)
+    rows = "\n".join(f"- {hit.rule}: `{hit.match}`" for hit in hits)
     return (
         f"{MARKER}\nThis issue body names an automation session or an internal process role:\n\n"
         f"{rows}\n\n{replacement_hint()}\n\nEdit the body and this check re-runs; the "
