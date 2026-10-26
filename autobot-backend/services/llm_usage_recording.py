@@ -35,7 +35,8 @@ the original defect stayed invisible for five months:
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, List
+import asyncio
+from typing import Any, AsyncIterator, Awaitable, Dict, List, Set
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.token_count import estimate_fast
@@ -59,6 +60,13 @@ MEASURED_TOKENS = {"token_source": "provider_reported"}  # nosec B105  # provena
 # which builds the request itself -- attribute spend the same way as callers
 # holding a provider directly.
 SPEND_ATTRIBUTION_KEY = "spend_attribution"
+
+# The error_message on a stream whose consumer went away before it ended.
+STREAM_ABANDONED = "stream abandoned before completion"
+
+# Recording tasks still running after their stream was cancelled; see
+# ``_record_despite_cancellation``.
+_PENDING_RECORDS: Set[asyncio.Task] = set()
 
 
 def token_counts(usage: Dict[str, Any]) -> tuple[int, int] | None:
@@ -203,24 +211,63 @@ def _model_of(provider: Any, request: LLMRequest) -> str:
     return str(default or "")
 
 
+def _prompt_text(request: LLMRequest) -> str:
+    """The request's message text for token estimation; list-form parts contribute only their text.
+
+    ``message_text`` is the shared reader (#14335): a vision or multi-part message
+    would otherwise be stringified into its Python repr and inflate the count.
+    Imported here because the ``chat_history`` package import is heavy.
+    """
+    from chat_history.message_schema import message_text
+
+    return "\n".join(message_text(message) for message in request.messages if isinstance(message, dict))
+
+
+def _stream_outcome(completed: bool, error: Exception | None) -> tuple[bool, str | None]:
+    """``(success, error_message)``: only a stream that ran to its end succeeded.
+
+    An abandoned stream -- client gone, task cancelled -- raises ``GeneratorExit``
+    or ``CancelledError``, which are not ``Exception``, so it is told apart by
+    never having completed rather than by a caught error.
+    """
+    if error is not None:
+        return False, str(error)
+    return (True, None) if completed else (False, STREAM_ABANDONED)
+
+
 async def _record_streamed(
-    provider: Any, request: LLMRequest, chunks: List[str], session_id: str | None, error: Exception | None
+    provider: Any, request: LLMRequest, chunks: List[str], session_id: str | None, outcome: tuple[bool, str | None]
 ) -> None:
-    """Record one finished stream's estimated tokens against whoever the request names."""
+    """Record one ended stream's estimated tokens against whoever the request names."""
     attribution = dict(request.metadata.get(SPEND_ATTRIBUTION_KEY) or {})
-    prompt = "\n".join(str(message.get("content") or "") for message in request.messages)
+    user_id, endpoint = attribution.pop("user_id", None), attribution.pop("endpoint", None)
+    if endpoint and user_id is None:
+        logger.warning("Spend on %s recorded with no user: the caller attributed no identity", endpoint)
     await record_token_usage(
         provider=getattr(provider, "provider_name", "") or "",
         model=_model_of(provider, request),
-        input_tokens=estimate_fast(prompt),
+        input_tokens=estimate_fast(_prompt_text(request)),
         output_tokens=estimate_fast("".join(chunks)),
         session_id=session_id,
-        user_id=attribution.pop("user_id", None),
-        endpoint=attribution.pop("endpoint", None),
+        user_id=user_id,
+        endpoint=endpoint,
         metadata={**ESTIMATED_TOKENS, **attribution},
-        success=error is None,
-        error_message=str(error) if error is not None else None,
+        success=outcome[0],
+        error_message=outcome[1],
     )
+
+
+async def _record_despite_cancellation(record: Awaitable[None]) -> None:
+    """Await ``record`` so that a second cancellation cannot drop it.
+
+    ``asyncio.shield`` lets the recording task finish when the waiting stream is
+    cancelled again; the task is held in ``_PENDING_RECORDS`` until done, since
+    the event loop keeps only weak references to tasks.
+    """
+    task = asyncio.ensure_future(record)
+    _PENDING_RECORDS.add(task)
+    task.add_done_callback(_PENDING_RECORDS.discard)
+    await asyncio.shield(task)
 
 
 async def recorded_stream(provider: Any, request: LLMRequest, *, session_id: str | None = None) -> AsyncIterator[str]:
@@ -231,21 +278,24 @@ async def recorded_stream(provider: Any, request: LLMRequest, *, session_id: str
 
     ``stream_completion`` yields text only -- no provider reports usage on it --
     so tokens are estimated with the canonical ``estimate_fast`` and marked
-    ``ESTIMATED_TOKENS``. Recorded on every exit once a chunk has arrived:
-    normal end, a provider error mid-stream (``success=False``), or the
-    consumer going away -- each spent the tokens already generated. A stream
-    that yielded nothing records nothing: a rejected or rate-limited attempt
-    is not spend, and ``LLMService.stream()`` retries those on another model.
+    ``ESTIMATED_TOKENS``. Recorded on every exit once a chunk has arrived, each
+    of which spent the tokens already generated: normal end (``success=True``),
+    a provider error mid-stream, or the consumer going away (both
+    ``success=False``). A stream that yielded nothing records nothing: a
+    rejected or rate-limited attempt is not spend, and ``LLMService.stream()``
+    retries those on another model.
     """
     chunks: List[str] = []
-    error: Exception | None = None
+    completed, error = False, None
     try:
         async for chunk in provider.stream_completion(request):
             chunks.append(chunk)
             yield chunk
+        completed = True
     except Exception as exc:
         error = exc
         raise
     finally:
         if chunks:
-            await _record_streamed(provider, request, chunks, session_id, error)
+            outcome = _stream_outcome(completed, error)
+            await _record_despite_cancellation(_record_streamed(provider, request, chunks, session_id, outcome))
