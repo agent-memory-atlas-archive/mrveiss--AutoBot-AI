@@ -25,10 +25,12 @@ one implementation rather than two that can drift.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 import subprocess  # nosec B404  # git plumbing, fixed argv, no shell
 import tempfile
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -419,43 +421,68 @@ def git_common_dir(start: Path | str | None = None) -> Path:
 
 #: Points regenerable caches somewhere an operator chose, e.g. a deploy's cache dir (#19553).
 CACHE_DIR_ENV = "AUTOBOT_CACHE_DIR"
+_HERE = Path(__file__).resolve().parent
 
 
-def _inside_a_checkout(path: Path) -> bool:
-    """True when *path* sits in a git checkout or the project tree -- where a cache must never go."""
-    resolved = path.expanduser().resolve()
-    if any((parent / ".git").exists() for parent in (resolved, *resolved.parents)):
-        return True
+@functools.lru_cache(maxsize=1)
+def _this_checkout() -> Path | None:
+    """The working tree this code runs from, or None for an install with no ``.git``."""
     try:
-        return resolved.is_relative_to(project_root())
+        return git_repo_root(_HERE).resolve()
+    except GitRepoRootUnavailable:
+        return None
+
+
+def _inside_the_code(path: Path) -> bool:
+    """True when *path* sits in this code's checkout or project tree -- where a cache must never go."""
+    homes = [_this_checkout()]
+    try:
+        homes.append(project_root().resolve())
     except ProjectRootUndeterminable:
-        return False
+        pass
+    return any(home is not None and path.is_relative_to(home) for home in homes)
+
+
+def _cache_candidates() -> list[Path]:
+    """Absolute candidates in precedence order; a relative value is ignored, as the XDG spec requires."""
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    raw = [os.environ.get(CACHE_DIR_ENV), xdg and os.path.join(xdg, "autobot"), "~/.cache/autobot"]
+    expanded = [Path(value).expanduser() for value in raw if value]
+    return [path.resolve() for path in expanded if path.is_absolute()]
 
 
 def cache_root() -> Path:
     """Where regenerable caches live: never inside a checkout or the deployed code (#19553).
 
     ``AUTOBOT_CACHE_DIR``, else ``$XDG_CACHE_HOME/autobot``, else ``~/.cache/autobot``;
-    a candidate that resolves inside a checkout is skipped, and the last resort is a
-    temp directory. A cache can be rebuilt, so it has no place in the repository.
+    a candidate inside this code's checkout or project tree is skipped. The last resort is a
+    temp directory, with a warning: a reboot empties it, so a deploy should set the variable.
     """
-    xdg = os.environ.get("XDG_CACHE_HOME")
-    candidates = (os.environ.get(CACHE_DIR_ENV), xdg and os.path.join(xdg, "autobot"), "~/.cache/autobot")
-    for candidate in candidates:
-        if candidate and not _inside_a_checkout(Path(candidate)):
-            return Path(candidate).expanduser()
-    return Path(tempfile.gettempdir()) / "autobot-cache"
+    for candidate in _cache_candidates():
+        if not _inside_the_code(candidate):
+            return candidate
+    fallback = Path(tempfile.gettempdir()) / "autobot-cache"
+    warnings.warn(f"no cache dir outside the code tree; using {fallback} -- set {CACHE_DIR_ENV}", RuntimeWarning)
+    return fallback
+
+
+@functools.lru_cache(maxsize=None)
+def _checkout_key(start: str) -> str:
+    """One key per checkout (shared by its worktrees) or per install, computed once per process."""
+    try:
+        anchor = git_common_dir(start)
+    except GitRepoRootUnavailable:
+        try:
+            anchor = project_root()
+        except ProjectRootUndeterminable:
+            return "install"
+    return hashlib.sha256(str(anchor.resolve()).encode("utf-8")).hexdigest()[:16]
 
 
 def shared_cache_path(*parts: str, start: Path | str | None = None) -> Path:
     """``cache_root()/<checkout key>/*parts``: one location per checkout, shared by its worktrees (#16934).
 
-    The key is a hash of :func:`git_common_dir`, so every worktree of one checkout
-    shares a cache while two checkouts never do; an install with no ``.git`` uses
-    ``install``. Nothing resolves inside the checkout itself (#19553).
+    The key comes from where THIS CODE lives (or *start*), never the process cwd, so a service
+    started from ``/`` and a shell in the checkout agree. Nothing resolves inside the code (#19553).
     """
-    try:
-        key = hashlib.sha256(str(git_common_dir(start)).encode("utf-8")).hexdigest()[:16]
-    except GitRepoRootUnavailable:
-        key = "install"
-    return cache_root().joinpath(key, *parts)
+    return cache_root().joinpath(_checkout_key(str(start or _HERE)), *parts)

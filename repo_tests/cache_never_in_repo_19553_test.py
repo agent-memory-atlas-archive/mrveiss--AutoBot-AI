@@ -55,20 +55,57 @@ REACH = declare(
 
 
 def _is_repo_anchor(node: ast.AST) -> bool:
-    return isinstance(node, ast.Attribute) and node.attr in _REPO_ANCHORS
+    """``PATH.DATA_DIR`` / ``DATA_DIR`` / ``PROJECT_ROOT``, or ``Path("data")`` -- a base inside the checkout."""
+    if isinstance(node, ast.Attribute | ast.Name):
+        return getattr(node, "attr", getattr(node, "id", "")) in _REPO_ANCHORS
+    is_path_call = isinstance(node, ast.Call) and getattr(node.func, "id", "") in {"Path", "PurePath"}
+    return is_path_call and bool(node.args) and _text(node.args[0]) in {"data", "./data"}
+
+
+def _text(node: ast.AST) -> str:
+    """The literal text of a string or f-string node (formatted parts become ``{}``)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(_text(v) if isinstance(v, ast.Constant) else "{}" for v in node.values)
+    return ""
+
+
+def _path_operands(node: ast.AST) -> list[ast.AST]:
+    """``a / b / c`` flattened to ``[a, b, c]``; ``os.path.join(a, b)`` to its args; else ``[node]``."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return _path_operands(node.left) + [node.right]
+    if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in {"join", "joinpath"} and node.args:
+        base = [node.func.value] if getattr(node.func, "attr", "") == "joinpath" else []
+        return base + list(node.args)
+    return [node]
+
+
+def _hit(node: ast.AST) -> str | None:
+    """Why *node* puts a cache under the checkout, or None."""
+    text = _text(node)
+    if text and _RELATIVE_DATA.match(text) and _CACHE_NAME.search(text):
+        return f"relative cache path {text!r}"
+    if isinstance(node, ast.JoinedStr) and any(
+        isinstance(v, ast.FormattedValue) and _is_repo_anchor(v.value) for v in node.values
+    ):
+        return f"f-string under a repo anchor: {text!r}" if _CACHE_NAME.search(text) else None
+    operands = _path_operands(node)
+    if len(operands) > 1 and _is_repo_anchor(operands[0]) and any(_CACHE_NAME.search(_text(o)) for o in operands[1:]):
+        return "cache path joined under a repo anchor"
+    return None
 
 
 def repo_caches(source: str, rel: str) -> list[str]:
-    """Each place *source* puts a cache under the checkout."""
-    found = []
+    """Each place *source* puts a cache under the checkout (outermost expression only, no double count)."""
+    found, seen = [], set()
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if _RELATIVE_DATA.match(node.value) and _CACHE_NAME.search(node.value):
-                found.append(f"{rel}:{node.lineno}: relative cache path {node.value!r}")
-        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and _is_repo_anchor(node.left):
-            right = node.right
-            if isinstance(right, ast.Constant) and isinstance(right.value, str) and _CACHE_NAME.search(right.value):
-                found.append(f"{rel}:{node.lineno}: {node.left.attr} / {right.value!r}")
+        if id(node) in seen or not isinstance(node, ast.expr):
+            continue
+        reason = _hit(node)
+        if reason:
+            found.append(f"{rel}:{node.lineno}: {reason}")
+            seen.update(id(child) for child in ast.walk(node))
     return found
 
 
@@ -93,6 +130,12 @@ def test_the_shared_cache_path_is_outside_this_checkout() -> None:
         'def f(cache_dir: str = "data/openvino_cache"): ...\n',
         'CACHE = PATH.DATA_DIR / ".code_index_hashes.json"\n',
         'CACHE = PATH.PROJECT_ROOT / "embeddings_cache"\n',
+        'CACHE = os.path.join(PATH.DATA_DIR, "cache")\n',
+        'CACHE = Path("data") / "cache"\n',
+        'CACHE = PATH.DATA_DIR / "models" / "cache"\n',
+        'CACHE = f"{PATH.DATA_DIR}/cache"\n',
+        'CACHE = DATA_DIR / "cache"\n',
+        'CACHE = PATH.DATA_DIR.joinpath("x", "cache")\n',
     ],
 )
 def test_each_repo_cache_shape_is_flagged(source: str) -> None:
@@ -103,14 +146,43 @@ def test_data_that_is_not_a_cache_and_the_helper_are_not_flagged() -> None:
     assert not repo_caches('DB = PATH.DATA_DIR / "chromadb"\nC = shared_cache_path("x", "cache.json")\n', "x.py")
 
 
-def test_a_cache_dir_inside_a_checkout_is_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    checkout = tmp_path / "checkout"
-    subprocess.run(["git", "init", "-q", str(checkout)], check=True, env=paths.scrubbed_git_env())  # nosec B603 B607
-    monkeypatch.setenv(paths.CACHE_DIR_ENV, str(checkout / "data" / "cache"))
+def test_a_cache_dir_inside_this_checkout_is_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(paths.CACHE_DIR_ENV, str(repo_root() / "data" / "cache"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    assert paths.cache_root() == tmp_path / "xdg" / "autobot"
+    assert paths.cache_root() == (tmp_path / "xdg" / "autobot").resolve()
+
+
+def test_an_unrelated_git_repo_above_the_cache_is_not_this_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dotfiles ``~/.git`` must not push the cache into a temp dir a reboot empties."""
+    home = tmp_path / "home"
+    subprocess.run(["git", "init", "-q", str(home)], check=True, env=paths.scrubbed_git_env())  # nosec B603 B607
+    monkeypatch.setenv(paths.CACHE_DIR_ENV, str(home / ".cache" / "autobot"))
+    assert paths.cache_root() == (home / ".cache" / "autobot").resolve()
+
+
+def test_a_relative_cache_dir_is_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(paths.CACHE_DIR_ENV, "data/cache")
+    monkeypatch.setenv("XDG_CACHE_HOME", "relative-xdg")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert paths.cache_root() == (tmp_path / ".cache" / "autobot").resolve()
+
+
+def test_no_candidate_outside_the_code_falls_back_to_temp_with_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(paths.CACHE_DIR_ENV, str(repo_root() / "c1"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(repo_root() / "c2"))
+    monkeypatch.setenv("HOME", str(repo_root()))
+    with pytest.warns(RuntimeWarning, match="AUTOBOT_CACHE_DIR"):
+        assert paths.cache_root().name == "autobot-cache"
+
+
+def test_the_key_does_not_depend_on_the_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    here = paths.shared_cache_path("probe")
+    monkeypatch.chdir(tmp_path)
+    assert paths.shared_cache_path("probe") == here
 
 
 def test_an_operator_cache_dir_outside_any_checkout_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(paths.CACHE_DIR_ENV, str(tmp_path / "var-cache"))
-    assert paths.cache_root() == tmp_path / "var-cache"
+    assert paths.cache_root() == (tmp_path / "var-cache").resolve()
