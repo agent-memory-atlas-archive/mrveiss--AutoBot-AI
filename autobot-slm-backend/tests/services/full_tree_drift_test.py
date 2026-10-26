@@ -188,19 +188,50 @@ async def test_never_tracked_file_gets_a_named_host_state_exclusion(tmp_path, mo
     assert result.exclusions.get("host_state:data") == 1
 
 
-async def test_build_bundle_is_excluded_and_named(tmp_path, monkeypatch) -> None:
+async def _host_generated_drift(tmp_path, monkeypatch, component: str, generated: list[str]):
+    """A component whose deployed tree holds *generated* top-level paths next to one tracked file."""
     repo = tmp_path / "repo"
     _init_repo(repo)
-    _write(repo / "comp" / "keep.py")
+    _write(repo / component / "keep.py")
     _commit_all(repo, "seed")
+    _write(tmp_path / "deployed" / component / "keep.py")
+    for rel in generated:
+        _write(tmp_path / "deployed" / component / rel)
+    return await _drift_for(tmp_path, monkeypatch, component, repo)
 
-    _write(tmp_path / "deployed" / "comp" / "keep.py")
-    _write(tmp_path / "deployed" / "comp" / "dist-20260101T000000000Z" / "index.html")
 
-    result = await _drift_for(tmp_path, monkeypatch, "comp", repo)
+async def test_build_bundle_is_excluded_and_named(tmp_path, monkeypatch) -> None:
+    result = await _host_generated_drift(
+        tmp_path, monkeypatch, "autobot-slm-frontend", ["dist-20260101T000000000Z/index.html"]
+    )
 
     assert not any(entry.path.startswith("dist-") for entry in result.drifted)
     assert result.exclusions.get("build_bundle") == 1
+
+
+async def test_the_user_frontends_release_bundles_are_build_bundles_too(tmp_path, monkeypatch) -> None:
+    """#19453: the walk read only the SLM frontend's layout, so the user frontend's fell through."""
+    bundles = ["dist-20260101T000000000Z/index.html", "current/index.html", "previous/index.html"]
+    result = await _host_generated_drift(tmp_path, monkeypatch, "autobot-frontend", bundles)
+
+    assert result.drifted == [], [entry.path for entry in result.drifted]
+    assert result.exclusions.get("build_bundle") == 3
+
+
+async def test_the_backends_rendered_files_get_a_named_verdict(tmp_path, monkeypatch) -> None:
+    """#19453: .validation_vars and filtered-requirements.txt were host_state:unclassified."""
+    rendered = [".validation_vars", "filtered-requirements.txt"]
+    result = await _host_generated_drift(tmp_path, monkeypatch, "autobot-backend", rendered)
+
+    assert result.drifted == [], [entry.path for entry in result.drifted]
+    assert "host_state:unclassified" not in result.exclusions, result.exclusions
+
+
+async def test_a_component_without_host_generated_paths_does_not_borrow_anothers(tmp_path, monkeypatch) -> None:
+    """The bundle layout is per component: a dist-* under a component that publishes none is reported."""
+    result = await _host_generated_drift(tmp_path, monkeypatch, "comp", ["dist-20260101T000000000Z/index.html"])
+
+    assert "build_bundle" not in result.exclusions, result.exclusions
 
 
 async def test_an_empty_deployed_tree_fails_loudly(tmp_path, monkeypatch) -> None:
