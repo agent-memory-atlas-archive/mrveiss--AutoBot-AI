@@ -217,6 +217,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "llc-sigterm-grace-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test LLC modules, against all tracked .py under autobot-backend/llc; the test-file share drifts.",
+    ),
     "llc-actor-id-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
