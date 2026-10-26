@@ -955,9 +955,9 @@ class HybridVectorSearch(AsyncInitializable):
         # Try FAISS first for speed
         if self.gpu_index.index is not None and self.gpu_index.index.ntotal > 0:
             results, metrics = await self.gpu_index.search(query_embedding, top_k)
-
             # Enrich from ChromaDB; a filter is checked there, and one that cannot be checked serves nothing (#19144)
             if metadata_filter and self.chromadb is None:
+                logger.warning("GPU search with a metadata filter but no ChromaDB client; serving no results (#19144)")
                 results = []
             elif (include_documents or metadata_filter) and self.chromadb is not None and results:
                 results = await self._enrich_from_chromadb(results, collection_name, metadata_filter)
