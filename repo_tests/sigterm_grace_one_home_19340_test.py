@@ -65,11 +65,14 @@ def _target_names(target: ast.AST) -> list[str]:
 
 
 def _bound_pairs(target: ast.AST, value: ast.AST | None) -> list[tuple[str, ast.AST | None]]:
-    """``(name, value)`` for each name *target* writes; an unpacked tuple pairs element by element."""
-    if isinstance(target, ast.Tuple | ast.List):
-        if isinstance(value, ast.Tuple | ast.List) and len(value.elts) == len(target.elts):
-            return [pair for t, v in zip(target.elts, value.elts) for pair in _bound_pairs(t, v)]
-        return [(name, value) for name in _target_names(target)]
+    """``(name, value)`` for each name *target* writes; an unpacked tuple pairs element by element.
+
+    When the lengths differ (a starred target), every name keeps the whole value, so any literal in it
+    counts: an unpairable binding errs towards a report.
+    """
+    sequences = isinstance(target, ast.Tuple | ast.List) and isinstance(value, ast.Tuple | ast.List)
+    if sequences and len(value.elts) == len(target.elts):
+        return [pair for t, v in zip(target.elts, value.elts) for pair in _bound_pairs(t, v)]
     return [(name, value) for name in _target_names(target)]
 
 
@@ -144,6 +147,7 @@ def test_the_keyword_this_guard_reads_is_terminate_pids_real_parameter() -> None
         "A_SIGTERM_GRACE, B = 5, 10\n",
         "B, A_SIGTERM_GRACE = SIGTERM_GRACE_SECONDS, 5\n",
         "A_SIGTERM_GRACE, B = pair = 5, 10\n",
+        "A_SIGTERM_GRACE, *rest = 5, 6, 7\n",
         "self.sigterm_grace_seconds = 5\n",
         "LOCAL_SIGTERM_GRACE: int = 5\n",
     ],
