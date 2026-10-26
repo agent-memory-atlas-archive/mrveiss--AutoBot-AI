@@ -4763,10 +4763,12 @@
       "channelSlack": "Slack",
       "channelWebhook": "Webhook",
       "channelInApp": "In-App",
+      "channelTelegram": "Telegram",
       "eventCompleted": "Workflow Completed",
       "eventFailed": "Workflow Failed",
       "eventStepFailed": "Step Failed",
       "eventApprovalNeeded": "Approval Needed",
+      "eventServiceFailed": "Service Failed",
       "save": "Save",
       "saving": "Saving...",
       "saved": "Saved successfully"
