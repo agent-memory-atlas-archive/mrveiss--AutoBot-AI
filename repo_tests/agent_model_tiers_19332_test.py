@@ -1,0 +1,106 @@
+# Copyright 2025-2026 mrveiss
+# SPDX-License-Identifier: Apache-2.0
+# AutoBot - AI-Powered Automation Platform
+# Author: mrveiss
+"""Every per-agent model default derives from ONE tier assignment (#19332).
+
+Maintainer decision 2026-10-26: per-agent models derive from the tier map. The tier models are
+the constants in ``autobot_shared/ssot_config.py``; which tier each agent runs is
+``autobot_shared/agent_model_tiers.AGENT_TIERS``. The four planes that name a per-agent model
+cannot import Python, so each states the model and this guard holds it to the assignment:
+
+* ``docker/.env.docker`` -- ``AUTOBOT_<AGENT>_MODEL=<model>``;
+* the ai-stack role defaults -- ``ai_<agent>_model: "<model>"``;
+* ``agents.yaml`` -- ``llm.models.<agent>``;
+* the backend env template -- ``AUTOBOT_<AGENT>_MODEL={{ backend_<tier>_model ... }}``.
+
+Before, the same agent ran a 3.8B model on a Docker host and a 7B one on a VM fleet, and the
+failsafe differed between the backend and the ai-stack role of one fleet. An agent named in any
+plane but missing from the assignment also fails here: a new agent picks its tier first.
+"""
+
+from __future__ import annotations
+
+import re
+
+import pytest
+import yaml
+from repo_tests._paths import repo_root
+
+from autobot_shared.agent_model_tiers import AGENT_TIERS, TIER_MODELS
+
+_ROOT = repo_root()
+_DOCKER = "docker/.env.docker"
+_AI_STACK = "autobot-slm-backend/ansible/roles/ai-stack/defaults/main.yml"
+_AGENTS = "autobot-infrastructure/shared/config/agents.yaml"
+_BACKEND = "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2"
+#: The backend role's tier variables -> the tier each one carries.
+_BACKEND_VAR_TIER = {
+    "llm": "default_llm",
+    "routing": "routing",
+    "classification": "classification",
+    "light": "light",
+    "embedding": "embedding",
+    "instruction": "instruction",
+    "system": "system",
+}
+
+
+def _read(rel: str) -> str:
+    return (_ROOT / rel).read_text(encoding="utf-8")
+
+
+def stated_models() -> dict[str, dict[str, str]]:
+    """Plane -> {agent id: model it states}."""
+    backend = {}
+    for agent, var in re.findall(r"^AUTOBOT_(\w+)_MODEL=\{\{\s*backend_(\w+)_model\b", _read(_BACKEND), re.M):
+        backend[agent.lower()] = TIER_MODELS[_BACKEND_VAR_TIER[var]]
+    return {
+        _DOCKER: {a.lower(): m for a, m in re.findall(r"^AUTOBOT_(\w+)_MODEL=(\S+)", _read(_DOCKER), re.M)},
+        _AI_STACK: dict(re.findall(r"^ai_(\w+)_model:\s*\"([^\"]+)\"", _read(_AI_STACK), re.M)),
+        _AGENTS: dict(yaml.safe_load(_read(_AGENTS))["llm"]["models"]),
+        _BACKEND: backend,
+    }
+
+
+def mismatches(planes: dict[str, dict[str, str]]) -> list[str]:
+    found = []
+    for plane, models in planes.items():
+        for agent, model in sorted(models.items()):
+            tier = AGENT_TIERS.get(agent)
+            if tier is None:
+                found.append(f"{plane}: {agent} has no tier in agent_model_tiers.AGENT_TIERS")
+            elif model != TIER_MODELS[tier]:
+                found.append(f"{plane}: {agent} = {model}, its {tier} tier is {TIER_MODELS[tier]}")
+    return found
+
+
+def test_every_plane_states_the_model_of_the_agents_tier() -> None:
+    planes = stated_models()
+    assert all(planes.values()), f"a plane parsed to nothing -- the reader no longer fits it: {planes}"
+    assert not mismatches(planes), "derive from autobot_shared/agent_model_tiers.py (#19332):\n" + "\n".join(
+        mismatches(planes)
+    )
+
+
+def test_the_backend_template_inline_defaults_are_their_tiers_models() -> None:
+    pairs = re.findall(r"backend_(\w+)_model\s*\|\s*default\('([^']+)'\)", _read(_BACKEND))
+    assert pairs, "the backend template carries no inline defaults any more -- the reader no longer fits it"
+    assert all(TIER_MODELS[_BACKEND_VAR_TIER[v]] == m for v, m in pairs), pairs
+
+
+def test_every_tier_is_an_ssot_constant() -> None:
+    assert set(AGENT_TIERS.values()) <= set(TIER_MODELS), set(AGENT_TIERS.values()) - set(TIER_MODELS)
+
+
+@pytest.mark.parametrize(
+    "plane,agent,model",
+    [
+        (_DOCKER, "kb_librarian", "phi3:mini"),
+        (_AI_STACK, "llm_failsafe", "phi3:mini"),
+        (_DOCKER, "sentiment_analysis", "qwen3.5:9b"),
+        (_AGENTS, "brand_new_agent", "qwen3.5:9b"),
+    ],
+)
+def test_each_pre_fix_value_or_an_unassigned_agent_is_flagged(plane: str, agent: str, model: str) -> None:
+    assert mismatches({plane: {agent: model}})
