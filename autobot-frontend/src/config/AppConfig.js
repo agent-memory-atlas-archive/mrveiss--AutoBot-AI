@@ -76,7 +76,7 @@ export class AppConfigService {
         },
         playwright: {
           host: import.meta.env.VITE_PLAYWRIGHT_HOST,
-          port: import.meta.env.VITE_PLAYWRIGHT_PORT || '3000',
+          port: import.meta.env.VITE_PLAYWRIGHT_PORT || String(PORT_DEFAULTS.browser), // #19324: was 3000 (Grafana)
           protocol: 'http'
         }
       },

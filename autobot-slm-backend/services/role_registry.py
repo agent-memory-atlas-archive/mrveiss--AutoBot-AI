@@ -360,7 +360,7 @@ _OPTIONAL_ROLES = [
         "target_path": f"{_BASE_DIR}/autobot-browser-worker",
         "systemd_service": "autobot-playwright",
         "auto_restart": True,
-        "health_check_port": 9001,  # #16025: was 3000/status -- browser ansible role defaults declare 9001 (#4662)
+        "health_check_port": config.port.browser,  # #16025/#19324: SSOT port the browser role binds (#4662)
         "health_check_path": "/health",
         "post_sync_cmd": (f"cd {_BASE_DIR}/autobot-browser-worker && npm install"),
         "required": False,
@@ -507,8 +507,7 @@ ROLE_ANSIBLE_GROUPS: Dict[str, str] = {
     "postgres": "database",
     "npu-worker": "npu_worker",
     # #14460: was "browser_automation". `role_browser_active` gates on
-    # `browser`/`browser_worker`; group_vars/browser.yml exists, none for the
-    # old spelling.
+    # `browser`/`browser_worker`; group_vars/browser.yml exists, none for the old spelling.
     "browser-service": "browser",
     "autobot-llm-cpu": "llm_nodes",
     "autobot-llm-gpu": "llm_nodes",
