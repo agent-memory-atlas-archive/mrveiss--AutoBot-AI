@@ -18,6 +18,11 @@ N_TO_Z: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test backend modules, against all tracked .py under autobot-backend; the test-file share drifts.",
     ),
+    "redaction-placeholder-literals": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .py under both backends and autobot_shared, against all tracked .py; the test share drifts.",
+    ),
     "shadowed-literal-routes": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
