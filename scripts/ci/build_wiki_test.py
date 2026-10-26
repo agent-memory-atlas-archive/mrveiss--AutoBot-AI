@@ -39,12 +39,13 @@ def test_reference_links_are_rewritten_and_fenced_code_is_left_alone():
 def test_private_addresses_and_home_paths_are_redacted_and_scanned():
     private = ".".join(["192", "168", "1", "20"])  # built at runtime: no address literal in source
     public = ".".join(["8", "8", "8", "8"])
-    text = f"host {private} and {public}; see /home/someone/x and /opt/autobot/y"
+    home = "/".join(["", "home", "someone"])  # built at runtime: no developer path literal in source
+    text = f"host {private} and {public}; see {home}/x and /opt/autobot/y"
     out = bw.redact(text)
     assert private not in out and "<private-ip>" in out and public in out
-    assert "/home/someone" not in out and "/opt/autobot/y" in out
+    assert home not in out and "/opt/autobot/y" in out
     assert bw.scan_output("P", out) == []
-    assert bw.scan_output("P", text) == [f"P: {private}", "P: /home/someone"]
+    assert bw.scan_output("P", text) == [f"P: {private}", f"P: {home}"]
 
 
 def test_the_api_page_check_is_self_consistent_with_its_path_list():

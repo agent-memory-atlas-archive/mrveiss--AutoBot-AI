@@ -40,9 +40,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # #13517: the shared composite action. pytest-asyncio: pytest.ini sets
+      # --asyncio-mode=auto, so the plugin is required even though this test is synchronous.
+      - uses: ./.github/actions/setup-python-ci
+        with:
+          extra-packages: pyyaml pytest pytest-asyncio
+
       - name: Build the wiki pages (#19278)
         run: |
-          python3 -m pip install --quiet pyyaml pytest
           python3 -m pytest -q scripts/ci/build_wiki_test.py
           python3 scripts/ci/build_wiki.py "${RUNNER_TEMP}/wiki" --sha "${GITHUB_SHA}"
 
