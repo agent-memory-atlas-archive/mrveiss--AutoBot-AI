@@ -13,6 +13,11 @@ ABSOLUTE = "ABSOLUTE"
 CONVERTIBLE = "CONVERTIBLE"
 
 N_TO_Z: dict[str, tuple[str, str, str]] = {
+    "search-mode-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test backend modules, against all tracked .py under autobot-backend; the test-file share drifts.",
+    ),
     "shadowed-literal-routes": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

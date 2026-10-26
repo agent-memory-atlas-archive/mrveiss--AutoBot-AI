@@ -491,9 +491,9 @@ class SearchMixin(BasicVectorSearchMixin):
         if filter_parts:
             base_filters = filter_parts
 
-        if mode == "keyword":
+        if mode == CategoryDefaults.SEARCH_MODE_KEYWORD:
             return await self._keyword_search(processed_query, fetch_limit, category)
-        elif mode == "semantic":
+        elif mode == CategoryDefaults.SEARCH_MODE_SEMANTIC:
             return await self._dispatch_search(
                 processed_query,
                 top_k=fetch_limit,
@@ -578,7 +578,7 @@ class SearchMixin(BasicVectorSearchMixin):
         category: str | None = None,
         tags: List[str] | None = None,
         tags_match_any: bool = False,
-        mode: str = "hybrid",
+        mode: str = CategoryDefaults.SEARCH_MODE_HYBRID,
         enable_reranking: bool = False,
         min_score: float = 0.0,
         board_id: str | None = None,

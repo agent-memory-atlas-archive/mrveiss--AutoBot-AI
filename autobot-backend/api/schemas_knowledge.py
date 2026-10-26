@@ -992,7 +992,7 @@ _ALNUM_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")  # Mixed case: IDs, categories, c
 _LOWERCASE_TAG_RE = re.compile(r"^[a-z0-9_-]+$")  # Lowercase: tags
 
 # Issue #380: Module-level tuples for search mode and sort validation
-_VALID_SEARCH_MODES = ("semantic", "keyword", "hybrid", "auto")
+_VALID_SEARCH_MODES = CategoryDefaults.SEARCH_MODES  # one allow-list (#19335)
 _VALID_SORT_OPTIONS = ("newest", "oldest", "longest")
 
 

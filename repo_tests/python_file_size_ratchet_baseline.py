@@ -108,7 +108,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/knowledge_maintenance.py": 1960,
     "autobot-backend/api/knowledge_mcp.py": 1441,
     "autobot-backend/api/knowledge_population.py": 1425,
-    "autobot-backend/api/knowledge_search.py": 819,  # #16665: analytics endpoints moved out
+    "autobot-backend/api/knowledge_search.py": 815,  # #16665: analytics endpoints moved out
     "autobot-backend/api/knowledge_search_aggregator.py": 951,  # #16665: doc-search moved out
     "autobot-backend/api/knowledge_tags.py": 887,
     "autobot-backend/api/knowledge_vectorization.py": 1690,
@@ -484,7 +484,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot_shared/security/ssrf_guard_test.py": 633,
     "autobot_shared/ssot_config.py": 3260,  # #16375: AUTOBOT_PROMETHEUS_SCRAPE_TOKEN
     "autobot_shared/ssot_config_test.py": 782,
-    "autobot_shared/ssot_constants.py": 896,
+    "autobot_shared/ssot_constants.py": 861,
     "autobot_shared/user_management/team_service.py": 724,
     "pipeline-scripts/check-pre-commit-hook-pr_test.py": 747,
     "pipeline-scripts/ci_dispatch_watchdog.py": 1244,  # #13439: supersession split to ci_run_supersession.py
