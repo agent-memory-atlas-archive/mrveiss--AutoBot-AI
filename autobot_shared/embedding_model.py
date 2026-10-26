@@ -24,7 +24,7 @@ import time
 from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.logging_manager import get_logger
 
-# get_logger() is safe under a mocked config since #19288, so the stdlib exception is retired.
+# Must import under a fully mocked config: autobot_shared/import_under_mocked_config_19288_test.py.
 logger = get_logger(__name__)
 
 EMBEDDING_OVERRIDE_KEY = "autobot:kb:embedding_model"
