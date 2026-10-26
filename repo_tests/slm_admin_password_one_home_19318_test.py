@@ -29,6 +29,7 @@ copies below instead.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from pathlib import Path
 
@@ -91,12 +92,33 @@ def _code_files(root: Path) -> list[str]:
         return []  # an empty tree: the reach's min_fraction raises the typed refusal instead
 
 
-#: Relative reach: measured 4,810 of 12,318 tracked files (0.39) at declaration; 0.35 fires
-#: once the sweep loses about a tenth of its population.
+def _suffix_matched_count(root: Path) -> int:
+    """The sweep's own population, counted INDEPENDENTLY: every tracked file, filtered in Python.
+
+    ``_code_files`` enumerates with ``tracked_paths``'s glob patterns; matching names here with
+    ``fnmatch`` instead keeps this denominator from failing in lockstep with the glob it checks
+    (the shape of ``hooks_path_override_15961_test._suffix_matched_count``).
+    """
+    try:
+        listed = tracked_paths(root)
+    except EmptyEnumeration:
+        return 0
+    tests = ("*_test.py", "test_*.py")
+    return sum(
+        1
+        for rel in listed
+        if any(fnmatch.fnmatch(rel.rsplit("/", 1)[-1], p) for p in _SUFFIXES)
+        and not any(fnmatch.fnmatch(rel.rsplit("/", 1)[-1], t) for t in tests)
+    )
+
+
+#: Relative reach against its own population: the glob sweep must reach nearly all of what the
+#: independent count finds; 0.95 fires once it loses a twentieth of it.
 REACH = declare(
     "slm-admin-password-one-home-sweep",
     discover=_code_files,
-    min_fraction=0.35,
+    min_fraction=0.95,
+    reference=_suffix_matched_count,
     what="tracked code/config files searched for the SLM admin password",
 )
 
