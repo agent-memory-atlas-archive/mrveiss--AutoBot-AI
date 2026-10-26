@@ -29,6 +29,9 @@
 # Copyright (c) 2025 mrveiss
 # Author: mrveiss
 
+# Secret files keep their host owner and mode inside the container. The SLM runs as
+# uid 999 (docker/slm/Dockerfile), so secrets/slm_*.txt must be readable by it:
+#   chmod 600 secrets/*.txt && sudo chown 999:999 secrets/slm_admin_password.txt secrets/slm_jwt_secret.txt
 secrets:
   slm_admin_password:
     file: ./secrets/slm_admin_password.txt
