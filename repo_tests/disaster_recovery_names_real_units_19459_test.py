@@ -39,6 +39,7 @@ REACH = declare(
     floor=130,  # 138 measured at filing, pinned mid-window
     growth=16,
     what="role task files read for the systemd units they install (#19459)",
+    roots=(_ROLES,),
 )
 
 
