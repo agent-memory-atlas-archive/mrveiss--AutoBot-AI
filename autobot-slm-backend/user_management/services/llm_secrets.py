@@ -25,7 +25,7 @@ import logging
 import re
 from typing import Any
 
-from autobot_shared.secret_redaction import LOG_MASK, REDACTED_PLACEHOLDER
+from autobot_shared.secret_redaction import LEGACY_PLACEHOLDERS, LOG_MASK, REDACTED_PLACEHOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,8 @@ _SECRET_REF_FIELDS = (_SENSITIVE_FIELD, _VAULT_ID_KEY, "api_key_ref")
 _DISPLAY_MASK = re.compile(r"^(\*{4}|.{4}\.\.\..{4})$")
 # ...and the canonical placeholder any redactor now emits (#19337): a client that round-trips a
 # redacted value must not save it as the key either.
-_REDACTED_VALUES = frozenset({REDACTED_PLACEHOLDER, LOG_MASK})
+# The legacy spellings stay refused too: a client loaded before #19337 may still hold one.
+_REDACTED_VALUES = frozenset({REDACTED_PLACEHOLDER, LOG_MASK, *LEGACY_PLACEHOLDERS})
 
 
 class MaskedKeySubmitted(ValueError):
