@@ -464,6 +464,9 @@ python:
   - 'docs/architecture/PLATFORM_MODEL.md'
   - 'docs/features/CATALOG.md'
   - 'docs/llc/_index.md'
+  # #19611: `operational_docs_name_real_playbooks_19611_test.py` reads this guide by concrete
+  # literal for its one declared exemption. One file, not `docs/**`.
+  - 'docs/guides/slm-docker-ansible-deployment.md'
   # #18266: `social_preview_18266_test.py` pins the repository social-preview
   # image's dimensions and size. A change confined to the image -- replacing it
   # with one of the wrong shape -- is exactly what the guard exists to catch.
