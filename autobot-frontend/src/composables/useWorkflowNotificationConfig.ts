@@ -13,6 +13,8 @@ import { ref } from 'vue';
 import { getApiBase } from '@/config/ssot-config';
 import { createLogger } from '@/utils/debugUtils';
 import apiClient from '@/utils/ApiClient';
+import type { NotificationChannel, NotificationEvent } from '@/types/_generated/workflow';
+import { NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS } from '@/composables/useNotificationConfig';
 
 const logger = createLogger('useWorkflowNotificationConfig');
 
@@ -21,9 +23,6 @@ const logger = createLogger('useWorkflowNotificationConfig');
 // ---------------------------------------------------------------------------
 
 /** Notification events and delivery channels, generated from the backend enums (#19334). */
-import type { NotificationChannel, NotificationEvent } from '@/types/_generated/workflow';
-import { NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS } from '@/composables/useNotificationConfig';
-
 export type { NotificationChannel, NotificationEvent };
 
 /** Shape of the notification config as returned by the backend. */

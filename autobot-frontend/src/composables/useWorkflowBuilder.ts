@@ -64,7 +64,6 @@ export type PlanApprovalStatus =
   | 'modified'
   | 'timeout';
 
-
 /**
  * Workflow step definition (#7123).
  *
@@ -77,7 +76,6 @@ export type PlanApprovalStatus =
  * `services/workflow_automation/WorkflowStep.to_status_dict()`.
  */
 export type WorkflowStep = AutomationWorkflowStep;
-
 
 /** State machine info for a workflow (#1380) */
 export interface WorkflowStateInfo {

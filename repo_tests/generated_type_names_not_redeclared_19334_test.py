@@ -29,7 +29,7 @@ _GENERATED = "autobot-frontend/src/types/_generated/workflow.ts"
 #: is a fleet node role, a homonym of the auth ``Role``).
 _APPS = ("autobot-frontend/src",)
 _EXCLUDED = re.compile(r"(/_generated/|\.test\.|\.spec\.|\.stories\.|/__tests__/|/e2e/)")
-_GENERATED_NAME = re.compile(r"^export type (\w+)\b", re.MULTILINE)
+_GENERATED_NAME = re.compile(r"^export (?:type|interface|enum) (\w+)\b", re.MULTILINE)
 _SATISFIED_CONST = re.compile(r"const (\w+)\s*=\s*\[[^\]]*\]\s*as const satisfies readonly", re.DOTALL)
 
 
@@ -66,7 +66,7 @@ def redeclarations(text: str, names: set[str], rel: str) -> list[str]:
     alternatives = "|".join(sorted(names))
     pattern = re.compile(
         rf"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?(?:const[ \t]+)?(?:type|enum|interface)[ \t]+({alternatives})\b"
-        r"\s*(?:<[^>]*>\s*)?(=\s*([^\n;]*)|\{)",
+        r"\s*(?:<.*?>\s*)?(?:extends[^{=]*)?(=\s*([^\n;]*)|\{)",
         re.MULTILINE,
     )
     found = []
@@ -97,11 +97,15 @@ def test_no_gui_redeclares_a_generated_type() -> None:
         "export type NotificationChannel = 'email' | 'slack';\n",
         "type WorkflowPhase =\n  | 'planning'\n  | 'failed';\n",
         "export enum OverseerStepStatus { PENDING = 'pending' }\n",
+        "export interface WorkflowPhase extends Base {\n  x: string\n}\n",
+        "type ExecutionStrategy<T = Array<string>> = T;\n",
         "const XS = ['a'] as const;\nexport type Severity = (typeof XS)[number];\n",
     ],
 )
 def test_each_redeclaration_shape_is_flagged(source: str) -> None:
-    assert redeclarations(source, {"NotificationChannel", "WorkflowPhase", "OverseerStepStatus", "Severity"}, "x.ts")
+    assert redeclarations(
+        source, {"NotificationChannel", "WorkflowPhase", "OverseerStepStatus", "Severity", "ExecutionStrategy"}, "x.ts"
+    )
 
 
 def test_an_import_a_reexport_and_a_checked_subset_are_allowed() -> None:
