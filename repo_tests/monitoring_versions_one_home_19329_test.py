@@ -26,10 +26,17 @@ from repo_tests._reach import declare
 _ROOT = repo_root()
 _HOME = "autobot-slm-backend/ansible/roles/monitoring/defaults/main.yml"
 _ROOTS = ("docker-compose.yml", "autobot-infrastructure", "autobot-slm-backend/ansible")
-_SUFFIXES = (".yml", ".yaml", ".ini")
+_SUFFIXES = (".yml", ".yaml", ".ini", ".sh")
+#: Each shape that states a version. An image may carry a registry prefix, quotes, a digest or a
+#: trailing comment; its tag is read whole (``${X:-10}`` or ``-ubuntu`` stays in and fails equality).
+#: An untagged image, an unpinned ``apt-get install`` and ``latest`` read as ``latest``.
 _SITE = re.compile(
-    r"(?P<tool>prometheus|grafana)_version\s*[:=]\s*[\"']?(?P<v>[\w.{}\s|]+?)[\"']?\s*(?:#.*)?$"
-    r"|image:\s*(?:prom/(?P<itool>prometheus)|grafana/(?P<gtool>grafana))(?::v?(?P<iv>[\w.]+))?\s*$",
+    r"\$\{(?P<stool>PROMETHEUS|GRAFANA)_VERSION:[-=](?P<sv>[^}\s]+)\}"
+    r"|(?P<etool>PROMETHEUS|GRAFANA)_VERSION\s*=\s*[\"']?(?P<ev>[^\s\"'#]+)"
+    r"|(?P<tool>prometheus|grafana)_version\s*[:=]\s*[\"']?(?P<v>[\w.{}\s|]+?)[\"']?\s*(?:#.*)?$"
+    r"|image:\s*[\"']?(?:[\w.-]+(?::\d+)?/)*(?:prom/(?P<itool>prometheus)|grafana/(?P<gtool>grafana)(?:-oss)?)"
+    r"(?::v?(?P<iv>[^\s@\"'#]+))?(?:@\S+?)?[\"']?\s*(?:#.*)?$"
+    r"|apt-get\s+install\b[^\n]*?\s[\"']?(?P<atool>prometheus|grafana)[\"']?(?=\s|$)",
     re.MULTILINE,
 )
 
@@ -40,7 +47,13 @@ _PINNED = {
     "autobot-infrastructure/shared/config/logging/loki/docker-compose-loki.yml": 1,
     "autobot-slm-backend/ansible/roles/slm_manager/defaults/main.yml": 1,
     "autobot-slm-backend/ansible/migrate-grafana-to-vm.yml": 1,
+    "autobot-infrastructure/shared/scripts/install-slm.sh": 2,
 }
+
+#: A statement that may differ from the home, and the issue that owns it. install-slm.sh installs the
+#: distribution's Prometheus package (no version to pin); whether that installer is still supported
+#: is decided on #19262.
+_KNOWN_EXCEPTIONS = {("autobot-infrastructure/shared/scripts/install-slm.sh", "prometheus", "latest"): "#19262"}
 
 
 def _sources(root: Path) -> list[Path]:
@@ -57,9 +70,9 @@ def _sources(root: Path) -> list[Path]:
 REACH = declare(
     "monitoring-version-literals",
     discover=_sources,
-    floor=384,  # mid-window: population 402, window (366, 402)
-    growth=36,  # ~9%: ordinary growth between repins must not turn an unrelated PR red
-    what="compose, infrastructure and Ansible yml/yaml/ini files",
+    floor=523,  # mid-window: population 548, window (498, 548)
+    growth=50,  # ~9%: ordinary growth between repins must not turn an unrelated PR red
+    what="compose, infrastructure and Ansible yml/yaml/ini/sh files",
     roots=_ROOTS,
 )
 
@@ -68,8 +81,9 @@ def sites(text: str) -> list[tuple[str, str]]:
     """(tool, version) for each version statement in *text*; an untagged image reads as ``latest``."""
     found = []
     for m in _SITE.finditer(text):
-        tool = m.group("tool") or m.group("itool") or m.group("gtool")
-        found.append((tool, (m.group("v") or m.group("iv") or "latest").strip()))
+        g = m.groupdict()
+        tool = next(g[k] for k in ("stool", "etool", "tool", "itool", "gtool", "atool") if g[k]).lower()
+        found.append((tool, (g["sv"] or g["ev"] or g["v"] or g["iv"] or "latest").strip()))
     return found
 
 
@@ -87,7 +101,13 @@ def test_every_statement_is_a_pinned_copy_equal_to_the_home() -> None:
     REACH.completed(files)
     stated = {rel: s for rel, s in found.items() if s}
     assert {rel: len(s) for rel, s in stated.items()} == _PINNED, f"a copy outside the pinned set (#19329): {stated}"
-    differ = [f"{rel}: {t} {v}" for rel, s in stated.items() for t, v in s if v != home()[t]]
+    want = home()
+    differ = [
+        f"{rel}: {t} {v}"
+        for rel, s in stated.items()
+        for t, v in s
+        if v != want[t] and (rel, t, v) not in _KNOWN_EXCEPTIONS
+    ]
     assert not differ, f"differs from {_HOME} {home()} (#19329): {differ}"
 
 
@@ -100,6 +120,17 @@ def test_every_statement_is_a_pinned_copy_equal_to_the_home() -> None:
         ("    image: prom/prometheus:v2.53.0\n", [("prometheus", "2.53.0")]),
         ("    image: grafana/grafana\n", [("grafana", "latest")]),
         ('grafana_version: "11.1.0"  # pinned copy\n', [("grafana", "11.1.0")]),
+        ("    image: grafana/grafana:10.2.0@sha256:abc\n", [("grafana", "10.2.0")]),
+        ("    image: docker.io/grafana/grafana:10.2.0\n", [("grafana", "10.2.0")]),
+        ('    image: "grafana/grafana:10.2.0"\n', [("grafana", "10.2.0")]),
+        ("    image: grafana/grafana:10.2.0-ubuntu\n", [("grafana", "10.2.0-ubuntu")]),
+        ("    image: prom/prometheus:v2.48.0 # pinned\n", [("prometheus", "2.48.0")]),
+        ("    image: grafana/grafana:${G:-10}\n", [("grafana", "${G:-10}")]),
+        ("    image: grafana/grafana-oss:10.2.0\n", [("grafana", "10.2.0")]),
+        ("GRAFANA_VERSION=10.2.0\n", [("grafana", "10.2.0")]),
+        ('apt-get install -y "grafana=${GRAFANA_VERSION:=10.2.0}"\n', [("grafana", "10.2.0")]),
+        ("    apt-get install -y -qq grafana\n", [("grafana", "latest")]),
+        ("    apt-get install -y -qq prometheus\n", [("prometheus", "latest")]),
     ],
 )
 def test_each_statement_shape_is_read(text: str, expected: list[tuple[str, str]]) -> None:

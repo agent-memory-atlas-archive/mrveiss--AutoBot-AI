@@ -305,7 +305,7 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
     "monitoring-version-literals": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
-        "Compose, infrastructure and Ansible files (yml/yaml/ini), against all tracked files there; drifts.",
+        "Compose, infrastructure and Ansible files (yml/yaml/ini/sh), against all tracked files there; drifts.",
     ),
     "model-tier-map-scan": (
         ABSOLUTE,

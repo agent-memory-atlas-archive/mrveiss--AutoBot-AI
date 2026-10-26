@@ -270,9 +270,10 @@ DPKG_LIST_CALL_SITES = declare(
     what="`dpkg -l` invocations in shell/YAML lines and Python strings (#17387, #17411)",
 )
 
-#: 6 today: the four rewritten by #17387 (postgresql, grafana, redis,
-#: disable-idle-nginx) plus check-system-updates' ESM version lookup and
-#: decommission-node's `^ii`-anchored check. Floor 4 rather than 3: at 3 the
+#: 8 today: the four rewritten by #17387 (postgresql, grafana, redis,
+#: disable-idle-nginx), check-system-updates' ESM version lookup,
+#: decommission-node's `^ii`-anchored check, and the two Grafana presence checks
+#: #19329 added (slm_manager, migrate-grafana-to-vm). Floor 4 rather than 3: at 3 the
 #: window was exactly the growth allowance, so a single removal reddened it.
 DPKG_REGISTRATIONS = declare(
     "dpkg-ansible-registrations",
