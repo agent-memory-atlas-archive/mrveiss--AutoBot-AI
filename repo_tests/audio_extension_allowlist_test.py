@@ -240,9 +240,10 @@ REACH = declare(
     # exemptions, 1 + 657 files), so population == what the loop can complete. Measured on this tree:
     # tracked python 7254 -> population 6596 (6598 on train 76's tree); unreadable 0, unparseable 0
     # (an unparseable file fails the test outright), so skips=0 and completed() == population.
-    # Window [6196, 6596]; floor=6396 is mid-window: ~200 files of headroom from the bottom and
-    # under completed(), so ordinary growth or shrink no longer forces a re-pin every train.
-    floor=6396,
+    # Re-pinned mid-window by #19634 (its 3 new files tipped 6396 into the bottom 40): population
+    # 6759, window (6359, 6759), ~200 files of headroom so ordinary growth or shrink does not
+    # force a re-pin every train.
+    floor=6559,
     growth=400,
     skips=0,
     what="tracked python files",
