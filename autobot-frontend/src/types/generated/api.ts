@@ -10562,9 +10562,11 @@ export interface paths {
         };
         /**
          * Get Available Embedding Models
-         * @description Get list of available embedding models.
+         * @description Moved to ``GET /api/embeddings/models``, the one embedding-model listing (#19378).
          *
-         *     Issue #744: Requires authenticated user.
+         *     This listing used its own name patterns and fell back to a hard-coded pair, so it could offer a
+         *     chat model or a model that is not installed. The options endpoint filters with the canonical
+         *     ``is_embedding_model_id`` and marks the active model.
          */
         get: operations["get_available_embedding_models_api_llm_embedding_models_get"];
         put?: never;
@@ -11272,26 +11274,6 @@ export interface paths {
         get: operations["voice_realtime_list_tools_api_voice_realtime_tools_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/voice/realtime/tools/call": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Call Realtime Tool
-         * @description Route a Realtime tool call through the MCP bridge (#7343); its AI line is resolved first (#18430).
-         */
-        post: operations["call_realtime_tool_api_voice_realtime_tools_call_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13185,7 +13167,7 @@ export interface paths {
          * Mcp Search Knowledge Base
          * @description MCP tool: Search the knowledge base.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: results are the caller's own visible facts.
          */
         post: operations["mcp_search_knowledge_base_api_knowledge_mcp_search_knowledge_base_post"];
         delete?: never;
@@ -13249,7 +13231,7 @@ export interface paths {
          * Mcp Summarize Knowledge Topic
          * @description MCP tool: Summarize knowledge on a topic.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts are summarised.
          */
         post: operations["mcp_summarize_knowledge_topic_api_knowledge_mcp_summarize_knowledge_topic_post"];
         delete?: never;
@@ -13271,7 +13253,7 @@ export interface paths {
          * Mcp Vector Similarity Search
          * @description MCP tool: Perform vector similarity search in Redis.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts are returned.
          */
         post: operations["mcp_vector_similarity_search_api_knowledge_mcp_vector_similarity_search_post"];
         delete?: never;
@@ -13293,7 +13275,7 @@ export interface paths {
          * Mcp Langchain Qa Chain
          * @description MCP tool: Use LangChain QA chain for comprehensive answers.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts reach the prompt.
          */
         post: operations["mcp_langchain_qa_chain_api_knowledge_mcp_langchain_qa_chain_post"];
         delete?: never;
@@ -33440,9 +33422,10 @@ export interface paths {
         };
         /**
          * Get Available Embedding Models
-         * @description Get available embedding models from all providers.
+         * @description The embedding models the user can switch to right now, with the active one marked (#19378).
          *
-         *     Issue #744: Requires authenticated user.
+         *     This used to return the provider lists saved in settings.json, which nothing keeps current;
+         *     ``GET /api/llm/embedding/models`` (its own name patterns) now redirects here.
          */
         get: operations["get_available_embedding_models_api_embeddings_models_get"];
         put?: never;
@@ -45735,17 +45718,18 @@ export interface paths {
          *     Returns:
          *         JSONResponse with service metrics
          *
-         *     Example Response:
+         *     Example Response (numbers illustrative; live values are RAGConfig.graph_weight,
+         *     timeout_seconds and graph_timeout_seconds):
          *         ```json
          *         {
          *             "service": "GraphRAGService",
-         *             "graph_weight": "<RAGConfig.graph_weight>",
+         *             "graph_weight": 0.5,
          *             "entity_extraction_enabled": true,
          *             "rag_service": {
          *                 "enable_advanced_rag": true,
-         *                 "timeout_seconds": "<RAGConfig.timeout_seconds>"
+         *                 "timeout_seconds": 20.0
          *             },
-         *             "graph_timeout_seconds": "<RAGConfig.graph_timeout_seconds>",
+         *             "graph_timeout_seconds": 15.0,
          *             "graph_initialized": true
          *         }
          *         ```
@@ -47962,7 +47946,7 @@ export interface paths {
         };
         /**
          * Search Summaries
-         * @description Vector search on summary embeddings.
+         * @description Vector search on summary embeddings; only summaries of facts the caller may read (#16665).
          */
         get: operations["search_summaries_api_knowledge_graph_summaries_search_get"];
         put?: never;
@@ -47982,7 +47966,7 @@ export interface paths {
         };
         /**
          * Get Document Overview
-         * @description Get document overview with hierarchical summaries.
+         * @description Get document overview with hierarchical summaries; empty unless the caller may read the document (#16665).
          */
         get: operations["get_document_overview_api_knowledge_graph_documents__document_id__overview_get"];
         put?: never;
@@ -48002,7 +47986,7 @@ export interface paths {
         };
         /**
          * Drill Down Summary
-         * @description Navigate from summary to children or source chunks.
+         * @description Navigate from summary to children or source chunks; nothing unless the caller may read the source (#16665).
          */
         get: operations["drill_down_summary_api_knowledge_graph_summaries__summary_id__drill_down_get"];
         put?: never;
@@ -52937,32 +52921,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Context
-         * @description Get assembled heartbeat context for a work item (GH#8236).
-         *
-         *     Returns rich context with company goals, project/agent KB, and similar
-         *     past work items. Context is compressed with gzip before storage.
-         *
-         *     Args:
-         *         item_id: Work item UUID
-         *         mode: "thin" or "fat" context mode
-         *         session: DB session
-         *         ctx: Tenant context — its ``org_id`` scopes the whole assembled
-         *             context, so another company's item id reads as 404 (#13756)
-         *
-         *     Returns:
-         *         Dict with assembled context:
-         *         - work_item_id, work_item_detail
-         *         - goal_ancestry (parent chain)
-         *         - company_context, project_context, agent_memory (RAG results)
-         *         - similar_past_work (completed items)
-         *         - api_base, agent_api_key (runtime injection)
-         *
-         *     Raises:
-         *         404: Work item not found
-         *         422: Invalid context_mode
+         * Get Item Context
+         * @description Return agent context for a work item, including any human handoff KB notes (GH#8232).
          */
-        get: operations["get_context_api_llc_agent_context__item_id__get"];
+        get: operations["get_item_context_api_llc_agent_context__item_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -53551,6 +53513,48 @@ export interface paths {
         patch: operations["update_review_gate_policy_api_llc_companies__company_id__review_gate_policies__policy_id__patch"];
         trace?: never;
     };
+    "/api/llc/context/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Context
+         * @description Get assembled heartbeat context for a work item (GH#8236).
+         *
+         *     Returns rich context with company goals, project/agent KB, and similar
+         *     past work items. Context is compressed with gzip before storage.
+         *
+         *     Args:
+         *         item_id: Work item UUID
+         *         mode: "thin" or "fat" context mode
+         *         session: DB session
+         *         ctx: Tenant context — its ``org_id`` scopes the whole assembled
+         *             context, so another company's item id reads as 404 (#13756)
+         *
+         *     Returns:
+         *         Dict with assembled context:
+         *         - work_item_id, work_item_detail
+         *         - goal_ancestry (parent chain)
+         *         - company_context, project_context, agent_memory (RAG results)
+         *         - similar_past_work (completed items)
+         *         - api_base, agent_api_key (runtime injection)
+         *
+         *     Raises:
+         *         404: Work item not found
+         *         422: Invalid context_mode
+         */
+        get: operations["get_context_api_llc_context__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llc/companies/{company_id}/controls/agents/{agent_id}/pause": {
         parameters: {
             query?: never;
@@ -53596,6 +53600,30 @@ export interface paths {
         put?: never;
         /** Terminate Agent */
         post: operations["terminate_agent_api_llc_companies__company_id__controls_agents__agent_id__terminate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/companies/{company_id}/controls/agents/{agent_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Agent Heartbeat
+         * @description Switch one agent's periodic heartbeat on or off (#15907).
+         *
+         *     The heartbeat is the optional periodic schedule; event wakes are separate
+         *     (#19582). Board-only and audited like the other agent controls, and scoped
+         *     to *company_id* in both the role check and the UPDATE's WHERE clause.
+         */
+        put: operations["set_agent_heartbeat_api_llc_companies__company_id__controls_agents__agent_id__heartbeat_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -54289,6 +54317,30 @@ export interface paths {
          * @description Ingest a response.done payload and enforce soft-caps.
          */
         post: operations["ingest_response_done_api_voice_realtime_session__session_id__response_done_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/realtime/tools/call": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Call Realtime Tool
+         * @description The one handler for ``POST /api/voice/realtime/tools/call`` (#7343, #18721).
+         *
+         *     Only a tool in the caller's active voice bundle may run (403 otherwise), and the call carries the
+         *     authenticated session, user and company, never the model's (#18430). ``X-Session-Id`` stands in when the
+         *     body names no session.
+         */
+        post: operations["call_realtime_tool_api_voice_realtime_tools_call_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -73852,17 +73904,33 @@ export interface components {
             path: string;
             /**
              * Edits
-             * @description List of {old_text, new_text} edits
+             * @description List of {old_text, new_text, expected_replacements?} edits
              */
-            edits: {
-                [key: string]: string;
-            }[];
+            edits: components["schemas"]["EditSpec"][];
             /**
              * Dry Run
              * @description Preview changes without applying
              * @default false
              */
             dry_run: boolean | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * EditSpec
+         * @description One exact find-and-replace; ``oldText``/``newText`` are the MCP-spec spellings.
+         */
+        EditSpec: {
+            /** Old Text */
+            old_text?: string;
+            /** New Text */
+            new_text?: string;
+            /** Oldtext */
+            oldText?: string;
+            /** Newtext */
+            newText?: string;
+            /** Expected Replacements */
+            expected_replacements?: number;
         } & {
             [key: string]: unknown;
         };
@@ -74011,10 +74079,37 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * EmbeddingModelOption
+         * @description One embedding model the user can switch to.
+         */
+        EmbeddingModelOption: {
+            /** Name */
+            name: string;
+            /** Provider */
+            provider?: string | null;
+            /** Available */
+            available: boolean;
+            /** Active */
+            active: boolean;
+            /** Dimension */
+            dimension?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * EmbeddingModelsData
-         * @description data payload for GET /models.
+         * @description The embedding-model choices, with the active one marked and listed even when no provider reports it.
          */
         EmbeddingModelsData: {
+            /** Active */
+            active: string;
+            /** Models */
+            models: components["schemas"]["EmbeddingModelOption"][];
+            /** Total Count */
+            total_count: number;
+            /** Providers Errored */
+            providers_errored?: string[];
+        } & {
             [key: string]: unknown;
         };
         /**
@@ -78249,6 +78344,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** HeartbeatToggleRequest */
+        HeartbeatToggleRequest: {
+            /** Heartbeat Enabled */
+            heartbeat_enabled: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * HeartbeatTriggerResponse
          * @description Response for POST /{agent_id}/trigger in heartbeat.py.
@@ -82173,18 +82275,6 @@ export interface components {
             detail: string;
             /** Redirect */
             redirect: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * LLMEmbeddingModelsResponse
-         * @description Response for GET /llm/embedding/models.
-         */
-        LLMEmbeddingModelsResponse: {
-            /** Models */
-            models: unknown[];
-            /** Total Count */
-            total_count: number;
         } & {
             [key: string]: unknown;
         };
@@ -87771,6 +87861,8 @@ export interface components {
             is_human: boolean;
             /** Is Active */
             is_active?: boolean | null;
+            /** Heartbeat Enabled */
+            heartbeat_enabled?: boolean | null;
             /** Last Heartbeat */
             last_heartbeat: string | null;
             /** Budget Spent */
@@ -106263,20 +106355,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** _RealtimeToolCallRequest */
-        _RealtimeToolCallRequest: {
-            /** Name */
-            name: string;
-            /**
-             * Arguments
-             * @default {}
-             */
-            arguments: {
-                [key: string]: unknown;
-            };
-        } & {
-            [key: string]: unknown;
-        };
     };
     responses: never;
     parameters: never;
@@ -119838,7 +119916,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LLMEmbeddingModelsResponse"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -120666,41 +120744,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    call_realtime_tool_api_voice_realtime_tools_call_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolCallRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -178316,11 +178359,9 @@ export interface operations {
             };
         };
     };
-    get_context_api_llc_agent_context__item_id__get: {
+    get_item_context_api_llc_agent_context__item_id__get: {
         parameters: {
-            query?: {
-                mode?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 item_id: string;
@@ -179646,6 +179687,41 @@ export interface operations {
             };
         };
     };
+    get_context_api_llc_context__item_id__get: {
+        parameters: {
+            query?: {
+                mode?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     pause_agent_api_llc_companies__company_id__controls_agents__agent_id__pause_post: {
         parameters: {
             query?: never;
@@ -179731,6 +179807,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TerminateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_agent_heartbeat_api_llc_companies__company_id__controls_agents__agent_id__heartbeat_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatToggleRequest"];
             };
         };
         responses: {
@@ -181327,6 +181441,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResponseDoneRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    call_realtime_tool_api_voice_realtime_tools_call_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolCallRequest"];
             };
         };
         responses: {
