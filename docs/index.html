@@ -790,13 +790,15 @@
           <div class="terminal-body">
             <div><span class="t-comment"># Step 1 — clone</span></div>
             <div><span class="t-cmd">$ git clone</span> <span class="t-out">https://github.com/mrveiss/AutoBot-AI &amp;&amp; cd AutoBot-AI</span></div>
-            <div style="margin-top:6px"><span class="t-comment"># Step 2 — per-host secrets, then start (add --profile ollama for local models)</span></div>
+            <div style="margin-top:6px"><span class="t-comment"># Step 2 — per-host secrets, start with local models, pull the default chat and embedding models</span></div>
             <div><span class="t-cmd">$ bash docker/generate-secrets.sh</span></div>
-            <div><span class="t-cmd">$ docker compose --env-file docker/.env.docker --env-file docker/.env.secrets up -d --build</span></div>
+            <div><span class="t-cmd">$ docker compose --env-file docker/.env.docker --env-file docker/.env.secrets --profile ollama up -d --build</span></div>
+            <div><span class="t-cmd">$ docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull qwen3.5:9b</span></div>
+            <div><span class="t-cmd">$ docker compose --env-file docker/.env.docker --env-file docker/.env.secrets exec autobot-ollama ollama pull nomic-embed-text:latest</span></div>
             <div style="margin-top:6px"><span class="t-comment"># Step 3 — open dashboard, add your docs and fleet nodes</span></div>
             <div><span class="t-highlight">→ Dashboard</span> <span class="t-out">http://localhost/</span> <span class="t-cursor"></span></div>
-            <div><span class="t-highlight">→ Service Lifecycle Manager</span> <span class="t-out">http://localhost/slm</span></div>
-            <div style="margin-top:8px"><span class="t-success">✓ FastAPI backend</span> <span class="t-comment">· Redis · ChromaDB · Ollama with --profile ollama (pull its models), or a cloud provider</span></div>
+            <div><span class="t-highlight">→ Service Lifecycle Manager</span> <span class="t-out">http://localhost/slm/</span></div>
+            <div style="margin-top:8px"><span class="t-success">✓ FastAPI backend</span> <span class="t-comment">· Redis · ChromaDB · Ollama, or a cloud provider instead (without --profile ollama and no provider, there is no model to answer with)</span></div>
             <div><span class="t-success">✓ Ask:</span> <span class="t-out">"Summarise last week's Ansible failures and suggest fixes"</span></div>
             <div style="margin-top:8px"><span class="t-comment"># Native Ubuntu 22.04+ instead: installs the SLM control plane; its Setup Wizard provisions the rest</span></div>
             <div><span class="t-cmd">$ curl -fsSL https://raw.githubusercontent.com/mrveiss/AutoBot-AI/main/install.sh | sudo bash</span></div>
@@ -946,7 +948,7 @@
           <h3><span class="arch-num">1</span> FastAPI Backend + SLM</h3>
           <p><strong>SLM</strong> (Service Lifecycle Manager) is the admin control plane — it handles deployments, health checks, config, and user management separately from chat traffic, so a heavy inference job never blocks an operator command.</p>
           <ul>
-            <li>FastAPI · up to 4 uvicorn workers (fleet backend, tuned to RAM; 1 in Docker)</li>
+            <li>FastAPI · 4 uvicorn workers on a dedicated backend node (1 on a co-located SLM host and in Docker)</li>
             <li>Multi-provider LLM gateway (Ollama, vLLM, Anthropic, OpenAI)</li>
             <li>Redis session cache · WebSocket streaming</li>
             <li>PostgreSQL or SQLite for persistence</li>
@@ -1028,7 +1030,7 @@
           </div>
           <div class="scale-tile">
             <div class="scale-tile-num">≤4</div>
-            <div class="scale-tile-label">Backend workers per node (RAM-tuned)</div>
+            <div class="scale-tile-label">Backend workers per node</div>
           </div>
           <div class="scale-tile">
             <div class="scale-tile-num">8+</div>
