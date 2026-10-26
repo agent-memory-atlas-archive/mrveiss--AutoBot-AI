@@ -19,6 +19,8 @@ from ``@/utils/ApiClient`` (both apps); for a non-JSON response use ``ApiClient.
 ``repo_tests`` module and make ``python_filter_covers_its_guards_test.py`` run the python suite
 on every frontend change (see ``_hardcoded_colour_baseline.py``). Each #12363 phase-2 PR lowers
 its app's pin by exactly what it removed; the pin may never rise against the base (#19283).
+The price of one number per app: a PR that adds one transport and removes another nets zero
+and passes -- a reviewer reads the diff for that, the guard does not.
 """
 
 from __future__ import annotations
@@ -35,29 +37,36 @@ _CANONICAL = "src/utils/ApiClient.ts"
 _SUFFIXES = (".ts", ".js", ".vue")
 _EXCLUDED = re.compile(r"(\.test\.|\.spec\.|\.stories\.|/__tests__/|/e2e/|/src/test/mocks/)")
 _TRANSPORT = re.compile(
-    r"(?:(?<![\w.])|\bwindow\.|\bglobalThis\.)fetch\s*\("
-    r"|\bfrom\s+['\"]axios['\"]|\brequire\(\s*['\"]axios['\"]"
+    r"(?:(?<![\w.])|\b(?:window|globalThis|self)\.)fetch\s*(?:<[^>()]*>\s*)?(?:\?\.)?\("
+    r"|\bfrom\s+['\"]axios['\"]|\bimport\s+['\"]axios['\"]|\bimport\s*\(\s*['\"]axios['\"]"
+    r"|\brequire\(\s*['\"]axios['\"]"
     r"|\bnew\s+XMLHttpRequest\s*\("
 )
 _COMMENT = re.compile(r"^\s*(//|\*|/\*|<!--)")
 #: The existing per-site exemption (eslint's raw-fetch ban): it must follow a comment giving the reason.
 _EXEMPT = re.compile(r"eslint-disable-next-line\s+no-restricted-syntax")
+#: A reason is prose: a comment of at least four words that is not itself a lint directive.
+_REASON = re.compile(r"^\s*(?://|\*|/\*)\s*(?!eslint|@ts-|prettier)(?:\S+\s+){3,}\S")
+#: A trailing ``// ...`` or an inline ``/* ... */`` is not code.
+_TRAILING_COMMENT = re.compile(r"/\*.*?\*/|(?<![:'\"\w])//.*$")
 
 # Measured on b07673947b; the SLM's Prometheus/Grafana probes are eslint-exempted with a reason. Lower an app's pin by exactly what a PR removes (#12363 phase 2).
 PINS = {"autobot-frontend": 14, "autobot-slm-frontend": 1}
 
 
+def _countable(app: Path, path: Path) -> bool:
+    """A non-canonical, non-test source file of *app*."""
+    rel = path.relative_to(app).as_posix()
+    return path.suffix in _SUFFIXES and rel != _CANONICAL and not _EXCLUDED.search("/" + rel)
+
+
 def _sources(root: Path) -> list[Path]:
-    """Every non-canonical, non-test source file of both GUIs."""
+    """Every countable source file of both GUIs."""
     found = []
     for app in PINS:
         src = root / app / "src"
-        if not src.is_dir():
-            continue
-        for path in sorted(src.rglob("*")):
-            rel = path.relative_to(root / app).as_posix()
-            if path.suffix in _SUFFIXES and rel != _CANONICAL and not _EXCLUDED.search("/" + rel):
-                found.append(path)
+        if src.is_dir():
+            found += [p for p in sorted(src.rglob("*")) if p.is_file() and _countable(root / app, p)]
     return found
 
 
@@ -65,35 +74,31 @@ def _sources(root: Path) -> list[Path]:
 REACH = declare(
     "frontend-http-transports",
     discover=_sources,
-    floor=1088,  # mid-window: population 1088, window (1088, 1088)
+    floor=1088,
+    growth=100,  # ~9%: ordinary GUI growth between repins must not turn an unrelated PR red
     what="non-test GUI source files",
     roots=tuple(f"{app}/src" for app in PINS),
 )
 
 
 def _transports(text: str) -> int:
-    """Transports in one file; one under a reasoned ``eslint-disable-next-line no-restricted-syntax`` is exempt."""
+    """Transports in one file; one directly under a REASONED eslint raw-fetch exemption is exempt."""
     lines, total = text.splitlines(), 0
     for i, line in enumerate(lines):
-        if _COMMENT.match(line) or not _TRANSPORT.search(line):
-            continue
-        if i >= 2 and _EXEMPT.search(lines[i - 1]) and _COMMENT.match(lines[i - 2]):
-            continue
-        total += len(_TRANSPORT.findall(line))
+        code = "" if _COMMENT.match(line) else _TRAILING_COMMENT.sub("", line)
+        hits = len(_TRANSPORT.findall(code))
+        if hits and i >= 2 and _EXEMPT.search(lines[i - 1]) and _REASON.match(lines[i - 2]):
+            hits -= 1  # the exemption covers one call, not the whole line
+        total += hits
     return total
 
 
 def count_transports(app: Path, files: list[Path] | None = None) -> int:
     """Non-canonical HTTP transports under *app*/src (from *files* when the caller already enumerated them)."""
     if files is None:
-        files = _sources(app.parent) if app.name in PINS else [p for p in (app / "src").rglob("*") if p.is_file()]
-    total = 0
-    for path in files:
-        rel = path.relative_to(app).as_posix() if path.is_relative_to(app) else None
-        if rel is None or path.suffix not in _SUFFIXES or rel == _CANONICAL or _EXCLUDED.search("/" + rel):
-            continue
-        total += _transports(path.read_text(encoding="utf-8"))
-    return total
+        files = [p for p in (app / "src").rglob("*") if p.is_file()]
+    mine = [p for p in files if p.is_relative_to(app) and _countable(app, p)]
+    return sum(_transports(p.read_text(encoding="utf-8")) for p in mine)
 
 
 class TestTheDetectorWorksBeforeItsOutputIsRead:
@@ -124,6 +129,29 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         self._w(tmp_path, "src/B.vue", bare)
         assert count_transports(tmp_path) == 1
 
+    def test_it_counts_generic_optional_dynamic_and_bare_import_shapes(self, tmp_path: Path) -> None:
+        body = (
+            "const r = await fetch<Row[]>(u)\nfetch?.(v)\nself.fetch(w)\n"
+            "const ax = await import('axios')\nimport 'axios'\n"
+        )
+        self._w(tmp_path, "src/a.ts", body)
+        assert count_transports(tmp_path) == 5
+
+    def test_a_trailing_or_inline_comment_is_not_code(self, tmp_path: Path) -> None:
+        self._w(tmp_path, "src/a.ts", "load() // was fetch(u)\nrun(/* fetch(v) */ x)\n")
+        assert count_transports(tmp_path) == 0
+
+    def test_a_directive_or_a_one_word_comment_is_not_a_reason(self, tmp_path: Path) -> None:
+        for name, above in (("a", "// eslint-disable-next-line max-len"), ("b", "// TODO")):
+            body = f"{above}\n// eslint-disable-next-line no-restricted-syntax\nawait fetch(u)\n"
+            self._w(tmp_path, f"src/{name}.ts", body)
+        assert count_transports(tmp_path) == 2
+
+    def test_an_exemption_covers_one_call_not_the_whole_line(self, tmp_path: Path) -> None:
+        body = "// Grafana is a separate service on its own origin.\n// eslint-disable-next-line no-restricted-syntax\nfetch(a); fetch(b)\n"
+        self._w(tmp_path, "src/a.ts", body)
+        assert count_transports(tmp_path) == 1
+
     def test_a_method_named_fetch_is_not_a_transport(self, tmp_path: Path) -> None:
         self._w(tmp_path, "src/a.ts", "store.fetch(id)\nawait this.fetch()\nprefetch(x)\nrefetch()\n")
         assert count_transports(tmp_path) == 0
@@ -146,6 +174,9 @@ def test_each_gui_has_no_more_transports_than_pinned() -> None:
 def test_no_pin_was_raised_against_the_base() -> None:
     base = base_table(repo_root(), (_THIS,), "PINS")
     if not base:
-        return  # the guard is new at this base; nothing to compare against yet
+        return  # the guard is new at this base (an unreadable base raises BaseUnavailable instead)
+    assert set(base) <= set(
+        PINS
+    ), f"apps dropped from PINS: {sorted(set(base) - set(PINS))}; an app's pin only goes down"
     raised = {app: (base[app], pin) for app, pin in PINS.items() if app in base and pin > base[app]}
     assert not raised, f"pins rose against the base (base, now): {raised}; a pin only goes down (#12363)."
