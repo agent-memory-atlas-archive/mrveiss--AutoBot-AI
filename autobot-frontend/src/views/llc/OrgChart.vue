@@ -858,9 +858,8 @@ async function toggleAgentPause(node: OrgNode) {
     } else {
       await api.post(`/api/llc/companies/${cid}/controls/agents/${node.id}/resume`, {})
     }
-    // #13996: mutate the tree node itself — the drawer reads through
-    // `selectedNode`, so replacing it with a detached copy left a second
-    // toggle updating the copy while the canvas kept the stale status.
+    // #13996: mutate the tree node itself — the drawer reads through `selectedNode`, so a detached
+    // copy left a second toggle updating the copy while the canvas kept the stale status.
     node.status = willPause ? 'paused' : 'idle'
     if (selectedNode.value?.id === node.id) selectedNode.value = node
   } catch (err: unknown) {
@@ -1511,6 +1510,7 @@ onMounted(() => {
         :terminating="terminating"
         @pause="toggleAgentPause"
         @terminate="terminateAgent"
+        @heartbeat="(n: OrgNode, on: boolean) => { n.heartbeat_enabled = on }"
       />
     </BaseDrawer>
   </div>
