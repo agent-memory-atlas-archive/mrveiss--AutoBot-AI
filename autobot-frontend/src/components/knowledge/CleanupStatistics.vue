@@ -103,6 +103,8 @@
       <BaseAlert
         v-if="statusMessage"
         :key="statusMessage.id"
+        class="mt-4"
+        bordered
         :variant="statusMessage.type"
         :message="statusMessage.text"
         :auto-dismiss="statusAutoDismiss"

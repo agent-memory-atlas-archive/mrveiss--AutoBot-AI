@@ -107,6 +107,8 @@
       <BaseAlert
         v-if="statusMessage"
         :key="statusMessage.id"
+        class="mt-6"
+        bordered
         :variant="statusMessage.type"
         :message="statusMessage.text"
         :auto-dismiss="statusAutoDismiss"
@@ -309,5 +311,4 @@ const cleanupSessionOrphans = async () => {
   margin: var(--spacing-0) var(--spacing-0) var(--spacing-4) var(--spacing-0);
   line-height: 1.5;
 }
-
 </style>
