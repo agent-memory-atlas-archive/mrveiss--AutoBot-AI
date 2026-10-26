@@ -142,9 +142,14 @@ def _policy_bucket(branch: str) -> Optional[str]:
     return None
 
 
+def oldest_first(pulls: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """PRs by ``created_at`` ascending, then number: a run cut short still caught up the oldest (owner rule)."""
+    return sorted(pulls, key=lambda pull: (pull.get("created_at") or "", int(pull["number"])))
+
+
 def _plan_pulls(plan: Plan, pulls: Sequence[Dict[str, Any]], repository: str, base: str) -> set:
     claimed = set()
-    for pull in pulls:
+    for pull in oldest_first(pulls):
         target = _pr_target(pull)
         if _is_fork(pull, repository):
             plan.skip(FORK, f"#{target.pr}")
@@ -161,7 +166,7 @@ def _plan_pulls(plan: Plan, pulls: Sequence[Dict[str, Any]], repository: str, ba
 
 
 def plan_run(pulls: Sequence[Dict[str, Any]], branches: Iterable[str], repository: str, base: str = "main") -> Plan:
-    """Every target for one run: same-repo PRs into ``base`` first, then PR-less branches.
+    """Every target for one run: same-repo PRs into ``base`` oldest first, then PR-less branches.
 
     A same-repo PR into another base is never merged into AND never treated as
     parked: either would put main into a branch whose PR says it belongs elsewhere.

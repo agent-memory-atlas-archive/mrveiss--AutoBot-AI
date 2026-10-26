@@ -352,6 +352,18 @@ def test_dependabot_and_automation_branches_are_never_synced_pr_or_not() -> None
         assert skipped in plan.skipped[core.POLICY], skipped
 
 
+def test_prs_are_synced_oldest_first_then_parked_branches() -> None:
+    """A run cut short by a timeout or a moved head still caught up the oldest PRs (owner rule 2026-10-26)."""
+    pulls = [_pull(30, "issue-30"), _pull(10, "issue-10"), _pull(20, "issue-20")]
+    pulls[0]["created_at"], pulls[1]["created_at"], pulls[2]["created_at"] = (
+        "2026-10-21T08:00:00Z",
+        "2026-10-25T08:00:00Z",
+        "2026-10-21T08:00:00Z",
+    )
+    plan = core.plan_run(pulls, ["parked-b", "parked-a"], REPO)
+    assert [t.branch for t in plan.targets] == ["issue-20", "issue-30", "issue-10", "parked-a", "parked-b"]
+
+
 @pytest.mark.parametrize(
     "name,rendered",
     [("issue-1", "`issue-1`"), ("we`ird", "`` we`ird ``"), ("a``b", "`` a` `b ``")],
@@ -403,8 +415,14 @@ def test_a_secondary_rate_limit_honours_retry_after() -> None:
 
 def test_open_pulls_paginates_and_fails_closed() -> None:
     page1 = [{"number": n} for n in range(bs.PAGE_SIZE)]
-    api = Api([("GET", f"/repos/{REPO}/pulls?state=open&per_page=100&page=1", (200, page1))])
-    api.routes.append(("GET", f"/repos/{REPO}/pulls?state=open&per_page=100&page=2", (200, [{"number": 999}])))
+    api = Api([("GET", f"/repos/{REPO}/pulls?state=open&sort=created&direction=asc&per_page=100&page=1", (200, page1))])
+    api.routes.append(
+        (
+            "GET",
+            f"/repos/{REPO}/pulls?state=open&sort=created&direction=asc&per_page=100&page=2",
+            (200, [{"number": 999}]),
+        )
+    )
     assert len(_gh(api).open_pulls()) == bs.PAGE_SIZE + 1
     broken = Api([("GET", f"/repos/{REPO}/pulls", (502, {"message": "bad gateway"}))])
     with pytest.raises(bs.SyncApiError):

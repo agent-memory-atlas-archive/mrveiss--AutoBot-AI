@@ -192,7 +192,7 @@ class SyncApi:
         raise SyncApiError(f"{path}: more than 1000 pages")
 
     def open_pulls(self) -> List[Dict[str, Any]]:
-        return self.paginate(f"/repos/{self.repo}/pulls?state=open")
+        return self.paginate(f"/repos/{self.repo}/pulls?state=open&sort=created&direction=asc")
 
     def _expect(self, ok: Sequence[int], method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Any:
         status, body = self.call(method, path, payload)
