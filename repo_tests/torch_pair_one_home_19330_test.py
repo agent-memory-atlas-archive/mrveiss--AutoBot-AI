@@ -27,7 +27,7 @@ _ROOT = repo_root()
 _HOME = "constraints/shared.txt"
 _ROOTS = (".github", "docker", "autobot-infrastructure", "autobot-slm-backend/ansible", "scripts", "install.sh")
 _SUFFIXES = (".yml", ".yaml", ".sh", ".j2", ".py")
-_LITERAL = re.compile(r"\btorch(?:vision)?\s*(?:==|>=|~=|<=)\s*v?\d")
+_LITERAL = re.compile(r"\btorch(?:vision)?\s*(?:===|==|~=|!=|<=|>=|<|>)\s*v?\d|\btorch(?:vision)?-\d+\.\d+[^\s]*\.whl")
 _COMMENT = re.compile(r"^\s*#")
 
 
@@ -96,6 +96,9 @@ def test_no_torch_literal_outside_the_constraints_file() -> None:
         "               torch==2.12.1 torchvision==0.27.1 \\\n",
         "    pip install torch>=2.6.0\n",
         '      name: "torchvision==0.29.1"\n',
+        "    pip install 'torch>2' 'torchvision<1'\n",
+        "    pip install torch!=2.13.0\n",
+        "    pip install https://example.invalid/torch-2.14.1-cp314-cp314-linux_x86_64.whl\n",
     ],
 )
 def test_each_literal_shape_is_flagged(text: str) -> None:
