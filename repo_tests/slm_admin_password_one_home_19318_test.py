@@ -35,7 +35,7 @@ from pathlib import Path
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _CANONICAL = "SLM_ADMIN_PASSWORD"  # pragma: allowlist secret
 _ALIAS = "AUTOBOT_" + _CANONICAL
@@ -85,7 +85,10 @@ _SUFFIXES = ("*.py", "*.sh", "*.yml", "*.yaml", "*.j2", "*.env*", "Dockerfile*")
 
 def _code_files(root: Path) -> list[str]:
     """Tracked code and config files, test files excluded (they plant the old shapes)."""
-    return sorted(tracked_paths(root, *_SUFFIXES, exclude=("*_test.py", "test_*.py", "**/test_*.py")))
+    try:
+        return sorted(tracked_paths(root, *_SUFFIXES, exclude=("*_test.py", "test_*.py", "**/test_*.py")))
+    except EmptyEnumeration:
+        return []  # an empty tree: the reach's min_fraction raises the typed refusal instead
 
 
 #: Relative reach: measured 4,810 of 12,318 tracked files (0.39) at declaration; 0.35 fires
