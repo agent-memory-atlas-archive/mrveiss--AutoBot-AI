@@ -72,7 +72,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/analytics_precommit.py": 788,
     "autobot-backend/api/analytics_quality.py": 1729,
     "autobot-backend/api/analytics_root_cause_test.py": 628,
-    "autobot-backend/api/api_endpoint_migrations_test.py": 31020,
+    "autobot-backend/api/api_endpoint_migrations_test.py": 31017,
     "autobot-backend/api/auth.py": 684,
     "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
@@ -113,7 +113,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/knowledge_tags.py": 887,
     "autobot-backend/api/knowledge_vectorization.py": 1690,
     "autobot-backend/api/knowledge_vectorization_test.py": 601,
-    "autobot-backend/api/llm.py": 1060,
+    "autobot-backend/api/llm.py": 1016,
     "autobot-backend/api/llm_optimization.py": 725,
     "autobot-backend/api/log_forwarding.py": 761,  # #18734: one served-destination helper (777 -> 761)
     "autobot-backend/api/logs.py": 1027,
@@ -126,11 +126,11 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/orchestration.py": 610,
     "autobot-backend/api/playwright.py": 877,
     "autobot-backend/api/redis_mcp/tools.py": 658,
-    "autobot-backend/api/schemas_agent.py": 2223,
+    "autobot-backend/api/schemas_agent.py": 2216,
     "autobot-backend/api/schemas_analytics.py": 3533,
     "autobot-backend/api/schemas_chat.py": 702,
     "autobot-backend/api/schemas_code.py": 3257,
-    "autobot-backend/api/schemas_knowledge.py": 5127,
+    "autobot-backend/api/schemas_knowledge.py": 5121,
     "autobot-backend/api/schemas_system.py": 4176,  # #18734: log-forwarding schemas moved out (4345 -> 4176)
     "autobot-backend/api/schemas_workflows.py": 2824,
     "autobot-backend/api/secrets.py": 1172,  # #19476 one model_dump serialization (was 1178, #16444)
