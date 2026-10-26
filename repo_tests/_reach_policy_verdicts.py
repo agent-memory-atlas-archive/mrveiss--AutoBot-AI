@@ -232,6 +232,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Both GUIs' non-test .ts/.js/.vue under src, against all tracked frontend source; the test-file share drifts.",
     ),
+    "feature-routers-strict-one-home-19319": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked files minus vendored/build parts, against the whole tracked tree; the skipped share drifts.",
+    ),
     "llc-actor-id-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
