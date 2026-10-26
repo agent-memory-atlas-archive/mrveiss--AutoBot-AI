@@ -154,19 +154,31 @@ async def _revoke(session, org_id: uuid.UUID) -> None:  # noqa: ANN001
     await session.execute(stmt)
 
 
-async def test_a_revoke_waits_for_the_moves_membership_lock(maker):  # noqa: ANN001
-    """#19634 review: the under-lock role check holds the actor's membership row, so a
-    concurrent revoke of that role serializes behind the move instead of racing it."""
+#: (tree, moved org, new parent, the org whose membership is revoked mid-move).
+_REVOKES = {
+    "top_level_authority": ({"p": None, "o": None}, "o", "p", "o"),
+    "top_level_new_parent": ({"p": None, "o": None}, "o", "p", "p"),
+    "sideways_new_parent": ({"q": None, "p": None, "o": "q"}, "o", "p", "p"),
+    "sideways_authority": ({"q": None, "p": None, "o": "q"}, "o", "p", "q"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_REVOKES))
+async def test_a_revoke_waits_for_the_moves_membership_lock(maker, case):  # noqa: ANN001
+    """#19634 review: under the lock the move holds BOTH deciding membership rows (the
+    authority's and the new parent's), so a concurrent revoke of either role serializes
+    behind the move instead of racing it."""
     from llc.services.company import CompanyService
 
-    ids = await _seed(maker, {"p": None, "o": None})
+    tree, moved, new_parent, revoked = _REVOKES[case]
+    ids = await _seed(maker, tree)
     async with maker() as a, maker() as b:
-        await CompanyService(a).move(ids["o"], ids["p"], actor_user_id=_ACTOR)
-        revoke = asyncio.create_task(_revoke(b, ids["o"]))
+        await CompanyService(a).move(ids[moved], ids[new_parent], actor_user_id=_ACTOR)
+        revoke = asyncio.create_task(_revoke(b, ids[revoked]))
         done, _ = await asyncio.wait({revoke}, timeout=_BLOCKED_PROBE_SECONDS)
-        assert not done, "the revoke did not wait for the move's membership lock"
+        assert not done, f"the revoke of {revoked!r} did not wait for the move's membership lock"
         await a.commit()
         await revoke
         await b.commit()
     parents = await _assert_acyclic(maker, ids)
-    assert parents[ids["o"]] == ids["p"]
+    assert parents[ids[moved]] == ids[new_parent]

@@ -54,6 +54,7 @@ on:
       - 'autobot_shared/auth/device_capabilities.py'
       - 'autobot_shared/secrets_vault.py'
       - 'autobot_shared/legacy_secret_keys.py'
+      - 'autobot_shared/db_errors.py'
       - '.github/workflows/_changes.yml'
   # NOTE (#11346): no pull_request.paths filter — this workflow ALWAYS runs on PRs
   # so its required-check context ("migration-matrix") always reports a conclusion.
@@ -139,6 +140,7 @@ jobs:
           - 'autobot_shared/auth/device_capabilities.py'
           - 'autobot_shared/secrets_vault.py'
           - 'autobot_shared/legacy_secret_keys.py'
+          - 'autobot_shared/db_errors.py'
 
   migration-tests:
     needs: changes

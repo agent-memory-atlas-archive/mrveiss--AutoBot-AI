@@ -246,8 +246,10 @@ class CompanyService(CompanyMoveLockMixin, LLCServiceBase):
 
         The authority: an org with a parent is moved from that parent (promotion or
         sideways), needing no role in the sub-org; a top-level org decides itself.
-        Then the new parent, if any. A platform admin skips both. The pre-check keeps
-        this order (403 before 404); the under-lock check sorts it into lock order.
+        Then the new parent, if any. A platform admin skips both. "403 before 404"
+        holds for the unlocked pre-check, which keeps this order. The under-lock check
+        sorts it into lock order, so if a role changes in between, a caller can get
+        404 where the pre-check would have said 403: still a refusal, never a pass.
         """
         leaving = org.parent_org_id is not None and org.parent_org_id != parent_org_id
         authority = org.parent_org_id if leaving else org.id

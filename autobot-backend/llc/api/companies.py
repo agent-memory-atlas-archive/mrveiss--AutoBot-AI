@@ -305,7 +305,7 @@ async def update_company(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
     except NotAuthorisedError as exc:  # fixed public text only; the ids/roles are logged by the service (#19634)
         await svc.session.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=getattr(exc, "public_detail", "Forbidden"))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.public_detail)
     except Exception:
         await svc.session.rollback()
         raise

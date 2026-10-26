@@ -48,7 +48,12 @@ class NotAuthorisedError(Exception):
     Distinct from ``ValueError`` on purpose: "you may not do this" and "what you
     asked for makes no sense" map to different HTTP statuses, and collapsing
     them would make a 403 indistinguishable from a 400 at the route layer.
+
+    ``public_detail`` is the only text a route may show; the message itself can
+    carry ids and roles and is for logs. Subclasses override it with a fixed text.
     """
+
+    public_detail = "Forbidden"
 
 
 async def require_company_admin(
