@@ -152,8 +152,9 @@ register_env_var(
         description=(
             "Seconds a user's team memberships, resolved for the KB visibility principal of a "
             "tenant-context route, are reused before the team service is asked again; a membership "
-            "change takes effect within this window; 0 disables the cache; read by "
-            "knowledge/tenant_groups.py (#19007)."
+            "write bumps the KB access-control epoch and drops every worker's entries at once, so "
+            "this window bounds only an epoch that cannot be read; 0 disables the cache; read by "
+            "knowledge/tenant_groups.py (#19007, #19630)."
         ),
         component="knowledge",
         range=(0, 3600),

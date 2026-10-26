@@ -12,7 +12,7 @@ db_session_context() in user_management.database, which passes that service's ow
 session maker (each service binds its own engine).
 """
 
-from collections.abc import AsyncGenerator, Callable, Generator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -36,6 +36,22 @@ class PostCommitCallbackError(Exception):
     def __init__(self, errors: list[Exception]) -> None:
         super().__init__(f"{len(errors)} post-commit callback(s) failed after the transaction committed: {errors!r}")
         self.errors = errors
+
+
+async def run_after_commit(session: AsyncSession, hook: Callable[[], Awaitable[object]] | None) -> None:
+    """Run *hook* once the session's transaction commits; at once when it has no commit scope.
+
+    Inside ``async_session_scope`` the hook is queued (once, however many writes ask for it) so
+    nothing observes the effect before the data is durable. ``None`` is a no-op. A failing hook
+    raises: an invalidation that did not happen must not look done.
+    """
+    if hook is None:
+        return
+    queued = session.info.get(POST_COMMIT_CALLBACKS)
+    if queued is None:
+        await hook()
+    elif hook not in queued:
+        queued.append(hook)
 
 
 def _rollback_sync(session: Session) -> None:

@@ -40,7 +40,9 @@ _TEAM_FACT = {"id": "f-team", "metadata": {"owner_id": "carol", "visibility": "g
 @pytest.fixture(autouse=True)
 def _fresh_cache():
     tenant_groups._cache.clear()
-    yield
+    # A readable, unchanging ACL epoch (#19630); the epoch behaviour has its own test file.
+    with patch.object(tenant_groups, "read_acl_epoch", AsyncMock(return_value="0")):
+        yield
     tenant_groups._cache.clear()
 
 

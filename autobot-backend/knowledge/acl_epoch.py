@@ -52,6 +52,18 @@ async def bump_acl_epoch_async(redis_client) -> int:
     return epoch
 
 
+async def bump_acl_epoch_now() -> int:
+    """INCR the epoch through the knowledge-database client; failure raises ``AclEpochBumpError``.
+
+    For a writer that holds no client of its own (a team-membership change, #19630).
+    """
+    try:
+        client = await get_async_redis_client(database=ACL_EPOCH_DATABASE)
+    except Exception as exc:
+        raise AclEpochBumpError(f"KB access-control epoch not bumped: {exc}") from exc
+    return await bump_acl_epoch_async(client)
+
+
 async def read_acl_epoch() -> str | None:
     """The current epoch as text, ``"0"`` before the first bump, or ``None`` if it cannot be read.
 

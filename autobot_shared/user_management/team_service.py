@@ -28,12 +28,14 @@ untouched — the fork is removed, not the callers.
 """
 
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any, List
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from autobot_shared.db_session import run_after_commit
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import now_utc
 from autobot_shared.user_management.audit_rows import audit_row
@@ -43,27 +45,18 @@ from autobot_shared.user_management.models.audit import (
     IdentityAuditAction,
 )
 from autobot_shared.user_management.models.team import Team, TeamMembership
+from autobot_shared.user_management.team_membership_requests import (  # noqa: F401 -- the errors are re-exported
+    DuplicateTeamError,
+    MembershipError,
+    TeamMembershipRequestMixin,
+    TeamNotFoundError,
+    TeamServiceError,
+)
 
 logger = get_logger(__name__)
 
 
-class TeamServiceError(Exception):
-    """Base exception for team service errors."""
-
-
-class TeamNotFoundError(TeamServiceError):
-    """Raised when team is not found."""
-
-
-class DuplicateTeamError(TeamServiceError):
-    """Raised when attempting to create a duplicate team."""
-
-
-class MembershipError(TeamServiceError):
-    """Raised for membership-related errors."""
-
-
-class TeamService(BaseService):
+class TeamService(TeamMembershipRequestMixin, BaseService):
     """
     Team management service.
 
@@ -78,9 +71,20 @@ class TeamService(BaseService):
 
     VALID_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MEMBER}
 
-    def __init__(self, session: AsyncSession, context: TenantContext | None = None):
-        """Initialize team service."""
+    def __init__(
+        self,
+        session: AsyncSession,
+        context: TenantContext | None = None,
+        on_membership_change: Callable[[], Awaitable[object]] | None = None,
+    ):
+        """Initialize team service.
+
+        ``on_membership_change`` is awaited once a write has changed who belongs to a team (add,
+        remove, team delete), so a cached membership elsewhere can be dropped (#19630). The
+        caller supplies it because this package cannot import the KB layer that owns the cache.
+        """
         super().__init__(session, context)
+        self._on_membership_change = on_membership_change
 
     # -------------------------------------------------------------------------
     # Team CRUD Operations
@@ -358,6 +362,7 @@ class TeamService(BaseService):
             resource_id=team_id,
             details={"hard_delete": hard_delete, "name": team.name},
         )
+        await run_after_commit(self.session, self._on_membership_change)
 
         logger.info("Deleted team: %s (hard=%s)", team_id, hard_delete)
         return True
@@ -365,69 +370,6 @@ class TeamService(BaseService):
     # -------------------------------------------------------------------------
     # Membership Management
     # -------------------------------------------------------------------------
-
-    async def _validate_membership_request(
-        self,
-        team_id: uuid.UUID,
-        user_id: uuid.UUID,
-        role: str,
-    ) -> Team:
-        """
-        Validate a membership request before adding a member.
-
-        Checks role validity, team existence, and existing membership. Issue #620.
-
-        Args:
-            team_id: Team ID
-            user_id: User ID to add
-            role: Requested role
-
-        Returns:
-            Team instance if validation passes
-
-        Raises:
-            MembershipError: If role invalid or user already a member
-            TeamNotFoundError: If team not found
-        """
-        if role not in self.VALID_ROLES:
-            raise MembershipError(f"Invalid role '{role}'. Must be one of: {self.VALID_ROLES}")
-
-        team = await self.get_team(team_id)
-        if not team:
-            raise TeamNotFoundError(f"Team {team_id} not found")
-
-        existing = await self._get_membership(team_id, user_id)
-        if existing:
-            raise MembershipError(f"User {user_id} is already a member of team {team_id}")
-
-        return team
-
-    def _create_membership_instance(
-        self,
-        team_id: uuid.UUID,
-        user_id: uuid.UUID,
-        role: str,
-    ) -> TeamMembership:
-        """
-        Create a new TeamMembership instance.
-
-        Issue #620.
-
-        Args:
-            team_id: Team ID
-            user_id: User ID
-            role: Membership role
-
-        Returns:
-            New TeamMembership instance
-        """
-        return TeamMembership(
-            id=uuid.uuid4(),
-            team_id=team_id,
-            user_id=user_id,
-            role=role,
-            joined_at=now_utc(),
-        )
 
     async def add_member(
         self,
@@ -462,6 +404,7 @@ class TeamService(BaseService):
             resource_id=team_id,
             details={"user_id": str(user_id), "role": role},
         )
+        await run_after_commit(self.session, self._on_membership_change)
 
         logger.info("Added user %s to team %s with role %s", user_id, team_id, role)
         return membership
@@ -499,6 +442,7 @@ class TeamService(BaseService):
             resource_id=team_id,
             details={"user_id": str(user_id), "previous_role": membership.role},
         )
+        await run_after_commit(self.session, self._on_membership_change)
 
         logger.info("Removed user %s from team %s", user_id, team_id)
         return True
