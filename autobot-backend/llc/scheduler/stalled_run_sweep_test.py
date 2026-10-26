@@ -15,6 +15,7 @@ import importlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import fakeredis
 import pytest
 from sqlalchemy.dialects import postgresql
 
@@ -229,15 +230,30 @@ class _Recorder:
         self.entries.append(entry)
 
 
-class _Fences:
-    def __init__(self, keys=None):
-        self.keys = dict(keys or {})
+class _CheckoutLandsMidRelease:
+    """Redis in which a newer checkout lands right after the sweep's first command.
 
-    async def get(self, key):
-        return self.keys.get(key)
+    Models the window the fence's TTL opens: the released fence expires and another
+    agent's ``SET NX`` takes the key. A client-side GET -> compare -> DEL has its gap
+    exactly there; one atomic compare-and-delete has none.
+    """
 
-    async def delete(self, key):
-        self.keys.pop(key, None)
+    def __init__(self, inner, key: str, newer: str):
+        self._inner, self._key, self._newer, self._landed = inner, key, newer, False
+
+    def __getattr__(self, name):
+        command = getattr(self._inner, name)
+        if name not in ("get", "eval") or self._landed:
+            return command
+
+        async def then_a_checkout_lands(*args, **kwargs):
+            result = await command(*args, **kwargs)
+            self._landed = True
+            await self._inner.delete(self._key)  # the released fence's TTL ran out
+            await self._inner.set(self._key, self._newer, nx=True)
+            return result
+
+        return then_a_checkout_lands
 
 
 @pytest.fixture
@@ -246,7 +262,7 @@ def world(sweep, monkeypatch):
     state = _World()
     state.sessions = []
     state.audit = _Recorder()
-    state.fences = _Fences()
+    state.fences = fakeredis.aioredis.FakeRedis(decode_responses=True)
 
     def factory():
         session = _WorldSession(state)
@@ -257,7 +273,9 @@ def world(sweep, monkeypatch):
     monkeypatch.setattr(sweep, "_activity_log", state.audit)
 
     async def redis():
-        return state.fences
+        return state.redis or state.fences
+
+    state.redis = None
 
     monkeypatch.setattr(sweep, "get_async_redis_client", redis)
     return state
@@ -341,7 +359,7 @@ async def test_a_stalled_run_releases_its_checkout_and_its_lease_and_is_marked_s
     world.leases.append(lease)
     world.items.append(item)
     fence = f"llc:checkout:{item.id}"
-    world.fences.keys[fence] = str(item.assignee_agent_id)
+    await world.fences.set(fence, str(item.assignee_agent_id))
 
     report = await sweep._async_sweep()
 
@@ -350,7 +368,7 @@ async def test_a_stalled_run_releases_its_checkout_and_its_lease_and_is_marked_s
     assert lease.released_at is not None
     assert item.checkout_run_id is None and item.checkout_locked_at is None
     assert item.version == 2
-    assert fence not in world.fences.keys, "the Redis fence must not outlive the checkout"
+    assert await world.fences.get(fence) is None, "the Redis fence must not outlive the checkout"
     [entry] = world.audit.entries
     assert entry["entity_id"] == str(item.id)
     assert entry["metadata"]["reason"] == "stalled"
@@ -413,13 +431,13 @@ async def test_a_checkout_the_stalled_run_did_not_make_is_untouched(sweep, world
     mine, theirs, unclaimed = _Item(run.id), _Item(other.id), _Item()
     world.runs.extend([run, other])
     world.items.extend([mine, theirs, unclaimed])
-    world.fences.keys[f"llc:checkout:{theirs.id}"] = str(theirs.assignee_agent_id)
+    await world.fences.set(f"llc:checkout:{theirs.id}", str(theirs.assignee_agent_id))
 
     assert (await sweep._async_sweep())["checkouts"] == 1
     assert mine.checkout_run_id is None
     assert theirs.checkout_run_id == str(other.id) and theirs.version == 1
     assert unclaimed.checkout_run_id is None and unclaimed.version == 1
-    assert f"llc:checkout:{theirs.id}" in world.fences.keys
+    assert await world.fences.get(f"llc:checkout:{theirs.id}") == str(theirs.assignee_agent_id)
 
 
 @pytest.mark.asyncio
@@ -430,11 +448,11 @@ async def test_a_fence_naming_a_newer_holder_is_left_alone(sweep, world):
     world.runs.append(run)
     world.items.append(item)
     fence = f"llc:checkout:{item.id}"
-    world.fences.keys[fence] = "someone-newer"
+    await world.fences.set(fence, "someone-newer")
 
     await sweep._async_sweep()
 
-    assert world.fences.keys[fence] == "someone-newer"
+    assert await world.fences.get(fence) == "someone-newer"
 
 
 def test_the_checkout_lookup_is_keyed_by_the_run_and_row_locked(sweep):
@@ -443,3 +461,65 @@ def test_the_checkout_lookup_is_keyed_by_the_run_and_row_locked(sweep):
     sql = str(sweep._checkouts_held_by(uuid.uuid4()).compile(dialect=postgresql.dialect()))
     assert "checkout_run_id" in sql
     assert "FOR UPDATE" in sql and "SKIP LOCKED" not in sql
+
+
+@pytest.mark.asyncio
+async def test_a_checkout_landing_mid_release_keeps_its_fence(sweep, world):
+    """The fence check and the delete are one atomic step (#19607 review).
+
+    Fail demo: a client-side GET -> compare -> DEL reads the released holder, the newer
+    checkout lands in the gap, and the DEL removes the newer holder's fence.
+    """
+    run = _Run()
+    item = _Item(run.id)
+    world.runs.append(run)
+    world.items.append(item)
+    fence = f"llc:checkout:{item.id}"
+    await world.fences.set(fence, str(item.assignee_agent_id))
+    world.redis = _CheckoutLandsMidRelease(world.fences, fence, "agent-newer")
+
+    report = await sweep._async_sweep()
+
+    assert report["checkouts"] == 1
+    assert await world.fences.get(fence) == "agent-newer", "a newer checkout's fence must survive the release"
+
+
+@pytest.mark.asyncio
+async def test_a_redis_client_failure_after_commit_does_not_fail_the_sweep(sweep, world, monkeypatch, caplog):
+    """The DB release has committed; a missing Redis client must not turn that into a task failure."""
+    run = _Run()
+    item = _Item(run.id)
+    world.runs.append(run)
+    world.items.append(item)
+
+    async def broken():
+        raise ConnectionError("redis unreachable")
+
+    monkeypatch.setattr(sweep, "get_async_redis_client", broken)
+
+    report = await sweep._async_sweep()
+
+    assert report == {"stalled": 1, "workspace_leases": 0, "checkouts": 1}
+    assert item.checkout_run_id is None
+    assert "redis unreachable" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_one_failing_fence_does_not_stop_the_next(sweep, world, monkeypatch):
+    """A Redis error on one fence is logged; the remaining fences are still dropped."""
+    calls: list[str] = []
+
+    async def flaky(redis, key, expected):
+        calls.append(key)
+        if len(calls) == 1:
+            raise TimeoutError("first fence timed out")
+        await world.fences.delete(key)
+        return True
+
+    monkeypatch.setattr(sweep, "delete_if_value", flaky)
+    await world.fences.set("llc:checkout:b", "agent-b")
+
+    await sweep._drop_checkout_fences([("a", "agent-a"), ("b", "agent-b")])
+
+    assert calls == ["llc:checkout:a", "llc:checkout:b"]
+    assert await world.fences.get("llc:checkout:b") is None

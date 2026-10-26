@@ -62,6 +62,7 @@ from sqlalchemy import func, select
 from autobot_shared.env_utils import env_int
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.redis_client import get_async_redis_client
+from autobot_shared.redis_utils import delete_if_value
 from llc.models.activity import ActorType
 from llc.models.enums import ActivityEventType, LLCRunStatus
 from llc.models.heartbeat_run import LLCHeartbeatRun
@@ -203,22 +204,25 @@ async def _drop_checkout_fences(fences: list[tuple[str, str]]) -> None:
 
     The fence (``llc:checkout:{id}``, value = holder) is a fast path in front of the
     row lock, not the lock itself, and it carries its own TTL. A fence that now names
-    a different holder belongs to a newer checkout and is left alone.
+    a different holder belongs to a newer checkout and is left alone -- decided in one
+    atomic compare-and-delete, so a checkout landing mid-release keeps its fence.
+    Nothing here may fail the task: the DB release is authoritative and has already
+    committed, and a fence left behind expires on its TTL.
     """
     if not fences:
         return
-    redis = await get_async_redis_client()
+    try:
+        redis = await get_async_redis_client()
+    except Exception as exc:
+        logger.warning("Stalled-run sweep has no Redis client for %d checkout fence(s): %s", len(fences), exc)
+        return
     if redis is None:
         return
     for item_id, holder in fences:
         key = f"llc:checkout:{item_id}"
         try:
-            current = await redis.get(key)
-            if isinstance(current, bytes):
-                current = current.decode("utf-8")
-            if current == holder:
-                await redis.delete(key)
-        except Exception as exc:  # the DB release is authoritative; the fence expires on its TTL
+            await delete_if_value(redis, key, holder)
+        except Exception as exc:
             logger.warning("Stalled-run sweep could not drop checkout fence %s: %s", key, exc)
 
 
@@ -234,6 +238,10 @@ async def _release_held(session, run: LLCHeartbeatRun, report: dict, fences: lis
     items = await release_checkouts_for_run(session, run.id)
     report["workspace_leases"] += len(leases)
     report["checkouts"] += len(items)
+    # Source of truth for the holder: checkout() SETs its agent_id as the fence value
+    # (llc/services/work_item_service.py:490) and writes the same agent_id to
+    # assignee_agent_id in that transaction (:513). A later reassignment makes the two
+    # differ; the fence is then left to its TTL, never deleted from under its holder.
     fences.extend((str(item.id), str(item.assignee_agent_id)) for item in items if item.assignee_agent_id)
 
 
