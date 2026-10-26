@@ -54,7 +54,7 @@ _HANDOFF = r"(?i:handed|handoff|hand-off|handover|passed|reassigned)"
 # Merge trains are numbered by series plus a letter (`85l`); match the shape, not the
 # current series, so the next one is caught too. The letter is required: without it
 # "train 100 epochs" and "train 32 models" are ordinary prose.
-_TRAIN_NUMBER = r"\d{2,3}[a-z]"
+_TRAIN_NUMBER = r"\d{2,3}(?![kmb]\b)[a-z]"  # k/m/b are magnitudes: "train 10k samples"
 # A session id holding a digit; component suffixes (`ui`, `db`, `api`) hold none.
 _SESSION_ID_WITH_DIGIT = r"(?:\d[0-9a-f]|[0-9a-f]\d)"
 RULES: tuple[tuple[str, re.Pattern[str]], ...] = (

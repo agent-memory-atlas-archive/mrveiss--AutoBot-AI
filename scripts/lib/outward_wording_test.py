@@ -51,6 +51,7 @@ CLEAN = [
     "Mapped M1 → M2 milestones (#19645)",
     "Called f(10, 20) twice (#19645)",
     "We train 100 epochs, train 32 models and we train 85 classifiers (#19645)",
+    "Then train 10k samples, train 50k, train 2m tokens and train 1b (#19645)",
     "Deployed autobot-ai-ui, autobot-ai-db and autobot-ai-backend (#19645)",
     "Split the store (db, cache) in two (#19645)",
     "Moved db → redis and ui → api (#19645)",
