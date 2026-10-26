@@ -123,7 +123,9 @@ def test_the_cache_dir_variable_is_registered() -> None:
     """``paths`` reads it through ``CACHE_DIR_ENV``, which the literal-scanning registry check cannot see."""
     from autobot_shared.env_registry import REGISTRY
 
-    assert paths.CACHE_DIR_ENV in REGISTRY, f"register {paths.CACHE_DIR_ENV} in autobot_shared/env_registry_ai.py"
+    assert (
+        paths.CACHE_DIR_ENV in REGISTRY
+    ), f"register {paths.CACHE_DIR_ENV} in autobot_shared/env_registry_knowledge.py"
 
 
 def test_the_shared_cache_path_is_outside_this_checkout() -> None:
