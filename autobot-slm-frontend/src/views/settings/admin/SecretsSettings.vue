@@ -3,7 +3,7 @@
 // Author: mrveiss
 
 <script setup lang="ts">
-import { BaseAlert } from '@autobot/ui'
+import { BaseAlert, BaseButton } from '@autobot/ui'
 /**
  * SecretsSettings - System Secrets Management (#1417)
  *
@@ -300,23 +300,20 @@ onMounted(() => {
     </div>
 
     <!-- Known secrets that are not set yet (#19120) -->
-    <div
+    <BaseAlert
       v-for="entry in (loading ? [] : missingExpected)"
       :key="entry.key"
-      class="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between gap-4"
+      variant="warning"
+      :title="entry.key"
     >
-      <div>
-        <p class="text-sm font-mono font-medium text-amber-900">{{ entry.key }}</p>
-        <p class="text-sm text-amber-800">{{ $t(entry.descriptionKey) }}</p>
-        <p class="text-xs text-amber-700 mt-1">{{ $t('settings.admin.secretsSettings.expectedMissing') }}</p>
-      </div>
-      <button
-        class="px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium shrink-0"
-        @click="setExpected(entry)"
-      >
-        {{ $t('settings.admin.secretsSettings.expectedSetValue') }}
-      </button>
-    </div>
+      <p>{{ $t(entry.descriptionKey) }}</p>
+      <p class="text-xs mt-1">{{ $t('settings.admin.secretsSettings.expectedMissing') }}</p>
+      <template #actions>
+        <BaseButton variant="primary" size="sm" @click="setExpected(entry)">
+          {{ $t('settings.admin.secretsSettings.expectedSetValue') }}
+        </BaseButton>
+      </template>
+    </BaseAlert>
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-12">
