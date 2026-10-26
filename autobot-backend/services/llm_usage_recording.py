@@ -35,10 +35,11 @@ the original defect stayed invisible for five months:
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, AsyncIterator, Dict, List
 
 from autobot_shared.logging_manager import get_logger
-from llm_shared.models import LLMResponse
+from autobot_shared.token_count import estimate_fast
+from llm_shared.models import LLMRequest, LLMResponse
 from services.llm_cost_tracker import get_cost_tracker
 
 logger = get_logger(__name__)
@@ -52,6 +53,12 @@ OUTPUT_TOKEN_KEY = "completion_tokens"  # nosec B105  # usage-dict key, not a cr
 # spend indistinguishable in the ledger, so the record says which it is.
 ESTIMATED_TOKENS = {"token_source": "estimated"}  # nosec B105  # provenance marker, not a credential
 MEASURED_TOKENS = {"token_source": "provider_reported"}  # nosec B105  # provenance marker, not a credential
+
+# #16924: where a streamed request carries who the spend belongs to. It rides on
+# ``LLMRequest.metadata`` so callers going through ``LLMService.stream()`` --
+# which builds the request itself -- attribute spend the same way as callers
+# holding a provider directly.
+SPEND_ATTRIBUTION_KEY = "spend_attribution"
 
 
 def token_counts(usage: Dict[str, Any]) -> tuple[int, int] | None:
@@ -172,3 +179,73 @@ async def record_response_usage(
             input_tokens,
             output_tokens,
         )
+
+
+def spend_attribution(*, user_id: str | None, endpoint: str, **context: Any) -> Dict[str, Any]:
+    """``LLMRequest.metadata`` naming who a streamed call's spend belongs to (#16924).
+
+    ``context`` (a recording id, say) is kept on the usage record's metadata so
+    spend can be traced to the object it was spent on, not only to the user.
+    """
+    return {SPEND_ATTRIBUTION_KEY: {"user_id": user_id, "endpoint": endpoint, **context}}
+
+
+def _model_of(provider: Any, request: LLMRequest) -> str:
+    """The model a provider serves ``request`` with: the request's, else the provider's default.
+
+    Mirrors the providers' own ``request.model_name or default_model`` resolution;
+    settings are a dict on most providers and an object on the Ollama one.
+    """
+    if request.model_name:
+        return request.model_name
+    settings = getattr(provider, "settings", None)
+    default = settings.get("default_model") if isinstance(settings, dict) else getattr(settings, "default_model", None)
+    return str(default or "")
+
+
+async def _record_streamed(
+    provider: Any, request: LLMRequest, chunks: List[str], session_id: str | None, error: Exception | None
+) -> None:
+    """Record one finished stream's estimated tokens against whoever the request names."""
+    attribution = dict(request.metadata.get(SPEND_ATTRIBUTION_KEY) or {})
+    prompt = "\n".join(str(message.get("content") or "") for message in request.messages)
+    await record_token_usage(
+        provider=getattr(provider, "provider_name", "") or "",
+        model=_model_of(provider, request),
+        input_tokens=estimate_fast(prompt),
+        output_tokens=estimate_fast("".join(chunks)),
+        session_id=session_id,
+        user_id=attribution.pop("user_id", None),
+        endpoint=attribution.pop("endpoint", None),
+        metadata={**ESTIMATED_TOKENS, **attribution},
+        success=error is None,
+        error_message=str(error) if error is not None else None,
+    )
+
+
+async def recorded_stream(provider: Any, request: LLMRequest, *, session_id: str | None = None) -> AsyncIterator[str]:
+    """``provider.stream_completion(request)``, recording its spend once when the stream ends (#16924).
+
+    The one sanctioned way to stream from a provider object: the spend guard
+    (``services/llm_spend_call_sites_test.py``) fails on a direct call elsewhere.
+
+    ``stream_completion`` yields text only -- no provider reports usage on it --
+    so tokens are estimated with the canonical ``estimate_fast`` and marked
+    ``ESTIMATED_TOKENS``. Recorded on every exit once a chunk has arrived:
+    normal end, a provider error mid-stream (``success=False``), or the
+    consumer going away -- each spent the tokens already generated. A stream
+    that yielded nothing records nothing: a rejected or rate-limited attempt
+    is not spend, and ``LLMService.stream()`` retries those on another model.
+    """
+    chunks: List[str] = []
+    error: Exception | None = None
+    try:
+        async for chunk in provider.stream_completion(request):
+            chunks.append(chunk)
+            yield chunk
+    except Exception as exc:
+        error = exc
+        raise
+    finally:
+        if chunks:
+            await _record_streamed(provider, request, chunks, session_id, error)
