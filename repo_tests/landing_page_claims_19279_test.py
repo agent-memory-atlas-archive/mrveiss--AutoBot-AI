@@ -13,11 +13,11 @@ _CHECKED, and against placeholders.
 from __future__ import annotations
 
 import re
-import subprocess  # nosec B404  # fixed argv, no shell
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from autobot_shared.paths import scrubbed_git_env
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _PAGE = "docs/index.html"
 #: Python libraries a landing page could plausibly claim. The page may name any of them only if
@@ -38,17 +38,27 @@ _CHECKED = (
 _PLACEHOLDER = re.compile(r"TODO\(human\)|TODO:|FIXME|lorem ipsum", re.IGNORECASE)
 
 
-def _declared() -> str:
-    out = subprocess.run(  # nosec B603 B607  # fixed argv, no shell
+def _dependency_files(root) -> list[str]:
+    """Every requirements file and the root pyproject.toml; ``[]`` on an empty tree, so the floor refuses it."""
+    try:
         # Constraint files only pin versions of packages a requirements file already declares.
-        ["git", "ls-files", "*requirements*.txt", "pyproject.toml"],
-        cwd=repo_root(),
-        capture_output=True,
-        text=True,
-        check=True,
-        env=scrubbed_git_env(),
-    ).stdout.split()
-    return "\n".join((repo_root() / p).read_text(encoding="utf-8", errors="replace").lower() for p in out)
+        return tracked_paths(root, "*requirements*.txt", "pyproject.toml")
+    except EmptyEnumeration:
+        return []
+
+
+REACH = declare(
+    "landing-page-declared-dependencies",
+    discover=_dependency_files,
+    floor=33,  # 37 measured at filing, pinned mid-window
+    growth=8,
+    what="requirements files and pyproject.toml read for the libraries they declare (#19279)",
+)
+
+
+def _declared() -> str:
+    root = repo_root()
+    return "\n".join((root / p).read_text(encoding="utf-8", errors="replace").lower() for p in REACH.examined(root))
 
 
 def _undeclared(page: str, declared: str) -> list[str]:
