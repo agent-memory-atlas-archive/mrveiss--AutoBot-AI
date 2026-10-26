@@ -175,8 +175,9 @@ Two services, deployed by different roles. Check both:
    ```bash
    curl http://<llm-ip>:11434/api/tags
    ```
-   The `llm` role pulls `llm_cpu_models` on every LLM node (`nomic-embed-text:latest`,
-   `llama3.2:1b`) and `llm_gpu_models` on GPU nodes (`roles/llm/defaults/main.yml`).
+   Compare with the models the role pulls: `llm_cpu_models` on every LLM node and `llm_gpu_models`
+   on GPU nodes, both in `autobot-slm-backend/ansible/roles/llm/defaults/main.yml`. That file is
+   the list; it is not copied here, so it cannot drift.
 
 4. **If models are missing**, redeploy the LLM node through the builtin updater: the SLM's
    **Maintenance → Updates → Code Sync** tab. The role pulls the models and then checks that each one

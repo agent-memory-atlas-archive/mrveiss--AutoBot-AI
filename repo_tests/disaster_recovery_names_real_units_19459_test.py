@@ -51,9 +51,9 @@ def _deployed_units() -> set[str]:
     return units
 
 
-def _runbook_units() -> set[str]:
+def _runbook_units(text: str | None = None) -> set[str]:
     named = set()
-    for args in _SYSTEMCTL.findall(_RUNBOOK.read_text(encoding="utf-8")):
+    for args in _SYSTEMCTL.findall(_RUNBOOK.read_text(encoding="utf-8") if text is None else text):
         named.update(a for a in args.split() if not a.startswith("-"))
     return named
 
@@ -61,6 +61,12 @@ def _runbook_units() -> set[str]:
 def test_the_runbook_names_units():
     """A control: the parser finds the units the runbook does name."""
     assert {"autobot-backend", "autobot-npu-worker", "autobot-playwright", "ollama"} <= _runbook_units()
+
+
+def test_a_unit_no_role_deploys_is_reported():
+    """A negative control: a planted unknown unit is caught, so a green run is not a blind parser."""
+    planted = _runbook_units("   sudo systemctl restart fake-unit autobot-backend --no-pager\n")
+    assert planted - _deployed_units() == {"fake-unit"}
 
 
 def test_every_unit_the_runbook_names_is_deployed():
