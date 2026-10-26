@@ -948,7 +948,7 @@
           <h3><span class="arch-num">1</span> FastAPI Backend + SLM</h3>
           <p><strong>SLM</strong> (Service Lifecycle Manager) is the admin control plane — it handles deployments, health checks, config, and user management separately from chat traffic, so a heavy inference job never blocks an operator command.</p>
           <ul>
-            <li>FastAPI · 4 uvicorn workers on a dedicated backend node (1 on a co-located SLM host and in Docker)</li>
+            <li>FastAPI backend · shares a host with the other roles or runs on a node of its own</li>
             <li>Multi-provider LLM gateway (Ollama, vLLM, Anthropic, OpenAI)</li>
             <li>Redis session cache · WebSocket streaming</li>
             <li>PostgreSQL or SQLite for persistence</li>
@@ -1012,7 +1012,7 @@
             <div class="sp-icon"><svg class="icon" style="width:16px;height:16px"><use href="#i-mesh"/></svg></div>
             <div>
               <strong>Redis-backed shared state across workers</strong>
-              <p>Backend workers (four on a dedicated backend node; one on a co-located SLM host and in Docker) share session cache and rate-limit counters via Redis Stack. Adding more workers requires zero code change.</p>
+              <p>Run it on Docker, VMs or bare metal; keep roles together on one host or move each onto its own node, sized for that role. Backend workers share session cache and rate-limit counters via Redis Stack, so adding workers needs no code change.</p>
             </div>
           </div>
           <div class="scale-point">
@@ -1029,8 +1029,8 @@
             <div class="scale-tile-label">VMs supported</div>
           </div>
           <div class="scale-tile">
-            <div class="scale-tile-num">≤4</div>
-            <div class="scale-tile-label">Backend workers per node</div>
+            <div class="scale-tile-num">Per role</div>
+            <div class="scale-tile-label">Each role on its own node, sized for it</div>
           </div>
           <div class="scale-tile">
             <div class="scale-tile-num">8+</div>
