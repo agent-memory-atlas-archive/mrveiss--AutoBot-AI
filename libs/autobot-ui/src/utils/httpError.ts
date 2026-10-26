@@ -1,12 +1,10 @@
 // Copyright 2025-2026 mrveiss
 // SPDX-License-Identifier: Apache-2.0
 //
-// HttpError — what a canonical API client throws for a non-2xx response (#12363).
-// Both apps' clients threw a bare `Error('HTTP <status>: <message>')`, so a caller
-// that needed the status or the backend's `detail` had to parse the message, or
-// reached for a second client (axios) whose errors kept them. This keeps the exact
-// message (existing checks such as `message.includes('HTTP 4')` still hold) and adds
-// the parsed fields.
+// HttpError — what both apps' canonical API clients throw for a non-2xx response (#12363).
+// They threw a bare `Error('HTTP <status>: <message>')`, so a caller needing the status or
+// the backend's `detail` parsed the message or reached for axios. The message text is kept
+// for logs and display; read `status` / `detail` instead of parsing it.
 
 export class HttpError extends Error {
   /** The response status, e.g. 404. */
