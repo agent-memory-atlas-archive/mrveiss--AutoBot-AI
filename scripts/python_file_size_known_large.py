@@ -74,7 +74,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/cache_management.py": 779,
     "autobot-backend/api/chat.py": 2666,  # #18316: delete delegates to the canonical path
     "autobot-backend/api/chat_sessions.py": 1859,  # #18293: legacy transcripts only ever proposed
-    "autobot-backend/api/code_intelligence.py": 2151,
+    "autobot-backend/api/code_intelligence.py": 2145,
     "autobot-backend/api/code_search.py": 828,
     "autobot-backend/api/codebase_analytics/analyzers.py": 1684,
     "autobot-backend/api/codebase_analytics/api_endpoint_scanner.py": 1444,
@@ -83,7 +83,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/endpoints/call_graph.py": 756,
     "autobot-backend/api/codebase_analytics/endpoints/environment.py": 698,  # #13602: sanitised traversal log
     "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 817,
-    "autobot-backend/api/codebase_analytics/endpoints/report.py": 2264,
+    "autobot-backend/api/codebase_analytics/endpoints/report.py": 2262,
     "autobot-backend/api/codebase_analytics/endpoints/stats.py": 663,
     "autobot-backend/api/conversation_files.py": 996,
     "autobot-backend/api/database_mcp.py": 1056,

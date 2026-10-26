@@ -267,6 +267,12 @@ REACH_ROOTS = {
         "autobot-infrastructure",
         "autobot_shared",
     ),
+    "repo_tests/severity_order_one_home_19336_test.py": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "pipeline-scripts",
+    ),
     "repo_tests/shadowed_literal_routes_18720_test.py": ("autobot-backend", "autobot-slm-backend"),
     "repo_tests/single_attribute_writer_18240_test.py": ("autobot-frontend/src",),
     "repo_tests/slm_backend_no_embedded_playbook_18606_test.py": ("autobot-slm-backend",),

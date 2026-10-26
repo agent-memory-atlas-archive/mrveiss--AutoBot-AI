@@ -340,6 +340,7 @@ _DECLARED_SCOPES = {
     ),
     "llc-actor-id-scan": ("autobot-backend/llc",),
     "generated-type-redeclarations": ("autobot-frontend/src",),
+    "severity-order-copies": ("autobot-backend", "autobot-slm-backend", "autobot_shared", "pipeline-scripts"),
     "one-system-knowledge-template-tree": ("autobot-backend",),
     "one-static-data-copy-scan": (
         "autobot-backend",
