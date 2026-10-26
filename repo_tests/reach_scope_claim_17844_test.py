@@ -395,6 +395,7 @@ _DECLARED_SCOPES = {
     "severity-enum-fork-scan": ("autobot-backend", "autobot_shared", "autobot-infrastructure"),
     "session-ownership-validator-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "knowledge-metadata-parse-canonical": ("autobot-backend/api",),
+    "monitoring-version-literals": ("docker-compose.yml", "autobot-infrastructure", "autobot-slm-backend/ansible"),
     "model-tier-map-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "embedding-model-render-sites": ("autobot-slm-backend/ansible",),
     "frontend-model-literal-scan": ("autobot-frontend/src",),

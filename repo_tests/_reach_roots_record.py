@@ -124,6 +124,11 @@ REACH_ROOTS = {
         "autobot-slm-backend",
         "autobot_shared",
     ),
+    "repo_tests/monitoring_versions_one_home_19329_test.py": (
+        "autobot-infrastructure",
+        "autobot-slm-backend/ansible",
+        "docker-compose.yml",
+    ),
     "repo_tests/model_tier_single_definition_15502_test.py": (
         "autobot-backend",
         "autobot-frontend/src",
