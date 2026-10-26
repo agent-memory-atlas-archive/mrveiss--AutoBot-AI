@@ -45,8 +45,9 @@ from utils.file_types import DOCX_EXTENSIONS
 
 logger = get_logger(__name__)
 
-# Formats DocumentExtractor delegates to DocumentParser (#14333).
-_WIDE_FORMAT_SUFFIXES = {".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".odg"}
+# Formats DocumentExtractor delegates to DocumentParser (#14333). Legacy .doc goes there too: python-docx
+# cannot read it, DocumentParser's fallback can when textract is installed (#19339).
+_WIDE_FORMAT_SUFFIXES = {".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".odg", ".doc"}
 
 
 # Issue #380: Module-level tuple for numpy numeric type checks
@@ -103,7 +104,7 @@ class DocumentExtractor:
         # what extract_from_file() can actually handle. They disagreed before,
         # and a discovery pass that skips a format the extractor supports is a
         # silently smaller ingest, not an error anyone sees.
-        "office": [".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".odg"],
+        "office": sorted(_WIDE_FORMAT_SUFFIXES),
         # #16785: same divergence as "office" above, for the two structured/markup
         # formats the GUI upload path (api/knowledge.py) already handles specially
         # rather than as plain text.
@@ -254,11 +255,11 @@ class DocumentExtractor:
 
         Supported formats:
         - .pdf: PDF documents
-        - .docx, .doc: Microsoft Word documents
+        - .docx: Microsoft Word documents (python-docx); legacy .doc via DocumentParser (needs textract)
         - .txt, .md, .rst, .markdown, .text, .csv: Plain text
         - .json: re-serialised with indent=2 (#16785)
         - .html: sanitised via api.knowledge._sanitize_html_content (#16785)
-        - .xlsx, .ppt, .pptx, .odt, .ods, .odp, .odg: via DocumentParser
+        - .xlsx, .ppt, .pptx, .odt, .ods, .odp, .odg, .doc: via DocumentParser
 
         Args:
             file_path: Path to file
@@ -326,6 +327,8 @@ class DocumentExtractor:
         text, metadata = await document_parser.extract_text(file_path)
         if not metadata.get("extraction_success", False):
             raise ValueError(f"Failed to parse {file_path.name}: {metadata.get('extraction_error', 'unknown error')}")
+        if not text and metadata.get("warning"):  # e.g. .doc without textract: an error, never an empty ingest
+            raise ValueError(f"Cannot parse {file_path.name}: {metadata['warning']}")
         return text
 
     @staticmethod

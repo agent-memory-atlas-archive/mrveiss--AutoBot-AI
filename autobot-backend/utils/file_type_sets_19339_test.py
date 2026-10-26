@@ -24,8 +24,26 @@ def legacy_doc(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_doc_upload_is_refused_as_an_unsupported_format(legacy_doc) -> None:
-    with pytest.raises(ValueError, match="Unsupported file type: .doc"):
+async def test_a_doc_goes_to_the_parsers_textract_fallback(legacy_doc, monkeypatch) -> None:
+    """Legacy .doc is routed to DocumentParser, which reads it when textract is installed."""
+    from utils.document_parser import document_parser
+
+    async def parsed(path):
+        return "old word text", {"extraction_success": True}
+
+    monkeypatch.setattr(document_parser, "extract_text", parsed)
+    assert await DocumentExtractor.extract_from_file(legacy_doc) == "old word text"
+
+
+@pytest.mark.asyncio
+async def test_a_doc_without_textract_is_an_error_never_an_empty_ingest(legacy_doc, monkeypatch) -> None:
+    from utils.document_parser import document_parser
+
+    async def no_textract(path):
+        return "", {"extraction_success": True, "warning": "textract required for .doc files"}
+
+    monkeypatch.setattr(document_parser, "extract_text", no_textract)
+    with pytest.raises(ValueError, match="textract required"):
         await DocumentExtractor.extract_from_file(legacy_doc)
 
 

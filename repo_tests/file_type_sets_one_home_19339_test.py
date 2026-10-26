@@ -14,6 +14,10 @@ scanners. A scanner that needs more than the canonical set writes ``SKIP_DIRS | 
 Flagged, in any non-test module under ``autobot-backend``: an assignment (plain, annotated or attribute)
 to a name that looks like one of these sets, whose value is a literal set/frozenset/tuple/list of two or
 more strings, or a ``set``/``frozenset``/``tuple``/``list`` call over such a literal.
+
+What it cannot see: the "looks like one of these sets" test is a hand-picked name pattern
+(``*_EXTENSIONS``, ``*SKIP/EXCLUDE/IGNORE*_DIRS``, ``DEFAULT_*_PATTERNS`` ...). A copy under an
+unrelated name escapes it -- widen ``_NAME`` when a sweep finds one, and convert that copy.
 """
 
 from __future__ import annotations
