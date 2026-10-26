@@ -56,11 +56,18 @@ def test_a_reads_their_private_fact_and_b_never_does(method, path, body):
     assert for_bob.status_code == 200 and PRIVATE_A not in for_bob.text and SHARED in for_bob.text
 
 
-@pytest.mark.parametrize("method,path,body", FACT_ROUTES)
+@pytest.mark.parametrize("method,path,body", [r for r in FACT_ROUTES if r[1] != "/multi-source/context"])
 def test_an_admin_reads_another_users_private_fact(method, path, body):
     response = _call(ADMIN, method, path, body, _DictKB())
 
     assert response.status_code == 200 and PRIVATE_A in response.text
+
+
+def test_context_feeds_a_prompt_so_an_admin_gets_no_bypass():
+    body = {"query": "q", "include_documentation": False}
+    response = _call(ADMIN, "post", "/multi-source/context", body, _DictKB())
+
+    assert response.status_code == 200 and PRIVATE_A not in response.text and SHARED in response.text
 
 
 @pytest.mark.parametrize("user", [ALICE, BOB, ADMIN])
