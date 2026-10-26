@@ -46,7 +46,8 @@ services:
     container_name: autobot-redis
     restart: unless-stopped
     ports:
-      - "${AUTOBOT_REDIS_PORT:-6379}:6379"
+      # #17500: loopback only, like Postgres and ChromaDB; containers reach Redis on the network.
+      - "127.0.0.1:${AUTOBOT_REDIS_PORT:-6379}:6379"
       - "127.0.0.1:8001:8001"  # RedisInsight UI (localhost only)
     volumes:
       - redis_data:/data
@@ -90,7 +91,7 @@ services:
       - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     environment:
       - POSTGRES_USER=${AUTOBOT_DB_USER:-autobot}
-      - POSTGRES_PASSWORD=${AUTOBOT_DB_PASSWORD:-autobot}
+      - POSTGRES_PASSWORD=${AUTOBOT_DB_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}
       - POSTGRES_DB=${AUTOBOT_DB_NAME:-autobot_slm}
     healthcheck:
       # -d targets an existing DB; without it pg_isready connects to db=user
@@ -221,8 +222,11 @@ services:
       - autobot_secrets:/secrets:ro
       - ./docker/with-secrets.sh:/usr/local/bin/with-secrets.sh:ro
     environment:
+      # #19316: no AUTOBOT_DEPLOYMENT_MODE -- unset is auto-detect, docker_local in a container.
       - AUTOBOT_ENVIRONMENT=production
-      - AUTOBOT_DEPLOYMENT_MODE=local
+      # #19319: production profile (FEATURE_ROUTERS_STRICT_PRODUCTION, autobot_shared/ssot_role_mirrors.py):
+      # a feature router that fails to import is logged and skipped instead of aborting startup.
+      - AUTOBOT_FEATURE_ROUTERS_STRICT=0
       # #14081/#14110 security review: with no AUTOBOT_BASE_DIR set, the
       # canonical secrets-store/JWT-key/project-state location
       # (ssot_config.path.data_path) resolved to /opt/autobot/data — the
@@ -268,14 +272,14 @@ services:
       # it here keeps the retired value from logging an "invalid mode" warning (#18729).
       - AUTOBOT_USER_MODE=${AUTOBOT_USER_MODE:-single_company}
       # The first platform admin is seeded on startup from this (#10199). generate-secrets.sh
-      # writes it to docker/.env.secrets; unset, no admin is created and nobody can log in.
-      - AUTOBOT_ADMIN_PASSWORD=${AUTOBOT_ADMIN_PASSWORD:-}
+      # writes it to docker/.env.secrets; compose refuses to start without it (#17793).
+      - AUTOBOT_ADMIN_PASSWORD=${AUTOBOT_ADMIN_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}
       - AUTOBOT_ADMIN_USERNAME=${AUTOBOT_ADMIN_USERNAME:-admin}
       - AUTOBOT_POSTGRES_HOST=autobot-postgres
       - AUTOBOT_POSTGRES_PORT=5432
       - AUTOBOT_POSTGRES_DB=${AUTOBOT_USERS_DB_NAME:-autobot_users}
       - AUTOBOT_POSTGRES_USER=${AUTOBOT_DB_USER:-autobot}
-      - AUTOBOT_POSTGRES_PASSWORD=${AUTOBOT_DB_PASSWORD:-autobot}
+      - AUTOBOT_POSTGRES_PASSWORD=${AUTOBOT_DB_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}
       - AUTOBOT_ENCRYPTION_KEY=${AUTOBOT_ENCRYPTION_KEY:-}
       # config.slm_url builds from AUTOBOT_SLM_HOST/PORT. The 127.0.0.1 default
       # left the node unable to reach SLM → connection spam + host shown offline
@@ -294,7 +298,8 @@ services:
       # LLC subprocess agent CLIs (GH#9793): the spawned claude / gh process
       # inherits os.environ from the backend process, so these must be present
       # in the container environment.  All three default to empty so the image
-      # boots without them; set real values in the root .env or host shell.
+      # boots without them; set real values in the host shell or in a copy of
+      # docker/.env.docker passed with --env-file (compose skips the root .env then, #18555).
       - LLC_AGENT_API_BASE_URL=http://localhost:8001/api
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GH_TOKEN=${GH_TOKEN:-}
@@ -380,7 +385,6 @@ services:
       - ./docker/with-secrets.sh:/usr/local/bin/with-secrets.sh:ro
     environment:
       - AUTOBOT_ENVIRONMENT=production
-      - AUTOBOT_DEPLOYMENT_MODE=local
       # #14081/#14110 security review: this service's working_dir differs
       # from autobot-backend's, so its own legacy CWD-relative resolver
       # would disagree with the backend's — pinning canonical here too
@@ -412,7 +416,7 @@ services:
       - AUTOBOT_POSTGRES_PORT=5432
       - AUTOBOT_POSTGRES_DB=${AUTOBOT_USERS_DB_NAME:-autobot_users}
       - AUTOBOT_POSTGRES_USER=${AUTOBOT_DB_USER:-autobot}
-      - AUTOBOT_POSTGRES_PASSWORD=${AUTOBOT_DB_PASSWORD:-autobot}
+      - AUTOBOT_POSTGRES_PASSWORD=${AUTOBOT_DB_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}
       - AUTOBOT_ENCRYPTION_KEY=${AUTOBOT_ENCRYPTION_KEY:-}
       - AUTOBOT_SLM_HOST=autobot-slm
       - AUTOBOT_SLM_PORT=8000
@@ -502,7 +506,6 @@ services:
       - backend_logs:/app/logs
     environment:
       - AUTOBOT_ENVIRONMENT=production
-      - AUTOBOT_DEPLOYMENT_MODE=local
       # #14081/#14110 security review: kept consistent with autobot-backend
       # and autobot-worker so any secrets-store access this process makes
       # (task modules it loads may import services.secrets_service)
@@ -582,10 +585,10 @@ services:
       - AUTOBOT_LOG_LEVEL=${AUTOBOT_LOG_LEVEL:-INFO}
       - AUTOBOT_REDIS_HOST=autobot-redis
       - AUTOBOT_REDIS_PORT=6379
-      - SLM_DATABASE_URL=postgresql+asyncpg://${AUTOBOT_DB_USER:-autobot}:${AUTOBOT_DB_PASSWORD:-autobot}@autobot-postgres:5432/${AUTOBOT_DB_NAME:-autobot_slm}
-      - SLM_USERS_DATABASE_URL=postgresql+asyncpg://${AUTOBOT_DB_USER:-autobot}:${AUTOBOT_DB_PASSWORD:-autobot}@autobot-postgres:5432/slm_users
+      - SLM_DATABASE_URL=postgresql+asyncpg://${AUTOBOT_DB_USER:-autobot}:${AUTOBOT_DB_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}@autobot-postgres:5432/${AUTOBOT_DB_NAME:-autobot_slm}
+      - SLM_USERS_DATABASE_URL=postgresql+asyncpg://${AUTOBOT_DB_USER:-autobot}:${AUTOBOT_DB_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}@autobot-postgres:5432/slm_users
       - SLM_POSTGRES_HOST=autobot-postgres
-      - SLM_ADMIN_PASSWORD=${SLM_ADMIN_PASSWORD:-admin}
+      - SLM_ADMIN_PASSWORD=${SLM_ADMIN_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}
       - SLM_DATA_DIR=/app/data
       # Point LoggingManager at the writable slm_logs volume so read_only: true
       # in the hardened overlay doesn't fail with EROFS when mkdir("logs") is
@@ -869,7 +872,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ./autobot-monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-autobot}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?run docker/generate-secrets.sh and pass --env-file docker/.env.secrets (INSTALL.md)}
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       autobot-prometheus:

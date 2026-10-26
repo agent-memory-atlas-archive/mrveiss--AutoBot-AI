@@ -55,7 +55,7 @@ sudo ./install.sh --unattended # Unattended (CI/automation)
 | `--unattended` | No prompts, use all defaults |
 | `--reinstall` | Force reinstall over existing installation |
 | `--branch=BRANCH` | Git branch to install (default: `main`) |
-| `--admin-pass=PASS` | SLM admin password (auto-generated if not set) |
+| `--admin-pass-file=PATH` | Read the SLM admin password from the first line of PATH (auto-generated if not set). The file must be non-empty and mode `600` or tighter (`chmod 600 PATH`); the installer refuses a group- or world-readable file or an empty first line |
 
 **The installer will:**
 1. Verify root access, systemd, disk space and memory (minimums in INSTALL.md), and internet
@@ -149,7 +149,7 @@ Open `https://<server>/slm/` and accept the self-signed certificate warning. The
 
 ```bash
 docker compose --env-file docker/.env.docker --env-file docker/.env.secrets ps
-curl -s http://localhost/api/health | jq   # backend, via the frontend proxy
+curl -s http://localhost/api/system/health | jq   # backend, via the frontend proxy
 docker compose --env-file docker/.env.docker --env-file docker/.env.secrets logs -f --tail=50
 ```
 

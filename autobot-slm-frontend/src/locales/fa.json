@@ -918,7 +918,9 @@
       "type2": "نوع",
       "value0Critical": "{value0} critical",
       "value0Security": "({value0} security)",
-      "value0UpdatePluralAvailable": "{value0} update{plural} available"
+      "value0UpdatePluralAvailable": "{value0} update{plural} available",
+      "eventsUnavailable": "Lifecycle events could not be loaded.",
+      "retry": "Retry"
     },
     "nodeServicesPanel": {
       "actionFailed": "Failed to {action} {service}",
@@ -1052,7 +1054,8 @@
     "stepValue0Of3": "Step {value0} of 3",
     "targetHosts": "Target Hosts",
     "thisPlaybookWillMake": "This playbook will make changes to your infrastructure. Please review the configuration carefully before proceeding.",
-    "whatHappensNext": "What happens next?"
+    "whatHappensNext": "What happens next?",
+    "failedToExecutePlaybook": "Failed to execute playbook"
   },
   "loginView": {
     "authenticationCode": "Authentication code",
@@ -3332,10 +3335,10 @@
     "version": "Version",
     "discoveryCompleted": "Discovery completed",
     "upgradeJobsStarted": "Upgrade jobs started",
-    "upgradeAllStarted": "Upgrade all started for {nodeId}",
+    "confirmCancelJob": "Cancel this update job?",
     "jobCancelled": "Job cancelled",
-    "upgradeAllPackagesOn": "Upgrade ALL packages on {nodeId}?",
-    "cancelThisUpdateJob": "Cancel this update job?"
+    "confirmUpgradeAllOnNode": "Upgrade ALL packages on {nodeId}?",
+    "upgradeAllStartedOnNode": "Upgrade all started for {nodeId}"
   },
   "tools": {
     "admin": {
@@ -3454,12 +3457,11 @@
         "totalJobs": "Total Jobs",
         "value0Value1ItemsValue2": "{value0} / {value1} items ({value2}%)",
         "failedToLoadJobs": "Failed to load jobs",
-        "pleaseEnterAJobName": "Please enter a job name",
         "failedToCreateJob": "Failed to create job",
         "failedToCancelJob": "Failed to cancel job",
         "failedToRetryJob": "Failed to retry job",
         "failedToDeleteJob": "Failed to delete job",
-        "areYouSureYouWantToDelete": "Are you sure you want to delete this job?"
+        "confirmDeleteJob": "Are you sure you want to delete this job?"
       },
       "browserTool": {
         "back": "برگشت",

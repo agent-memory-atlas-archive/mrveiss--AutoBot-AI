@@ -5,7 +5,6 @@
 <script setup lang="ts">
 import { createLogger } from '@/utils/debugUtils'
 
-const { t } = useI18n()
 const logger = createLogger('BatchTool')
 /**
  * BatchTool - Batch Processing Manager
@@ -14,11 +13,11 @@ const logger = createLogger('BatchTool')
  * Migrated from main AutoBot frontend - Issue #729.
  */
 
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAutobotApi } from '@/composables/useAutobotApi'
 import { formatDateTime } from '@/composables/useTimezone'
-import { BaseAlert, BaseModal } from '@autobot/ui'
-import { useI18n } from 'vue-i18n'
+import { BaseAlert, BaseModal, usePollingJob } from '@autobot/ui'
 
 const api = useAutobotApi()
 
@@ -62,11 +61,17 @@ const newJob = ref({
   options: {}
 })
 
-let refreshInterval: ReturnType<typeof setInterval> | null = null
-// Issue #1092: Stop polling on repeated auth failures
-let consecutiveErrors = 0
+const { t } = useI18n()
+
+const POLL_INTERVAL_MS = 10_000
+// Issue #1092: stop polling after repeated failures, now usePollingJob's
+// consecutiveErrorLimit (#19482); Retry restarts it.
 const MAX_CONSECUTIVE_ERRORS = 3
-const backendAvailable = ref(true)
+
+/** Message of a thrown value, or the translated fallback. */
+function errorText(e: unknown, fallbackKey: string): string {
+  return e instanceof Error && e.message ? e.message : t(fallbackKey)
+}
 
 // Computed
 const filteredJobs = computed(() => {
@@ -111,17 +116,19 @@ function formatDuration(start: string | null, end: string | null): string {
   return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
 }
 
+async function fetchJobs(): Promise<void> {
+  const data = await api.listBatchJobs()
+  jobs.value = (data.jobs as BatchJob[]) || []
+}
+
+/** Reload after an action; the error is shown, not thrown. */
 async function loadJobs(): Promise<void> {
   loading.value = true
   error.value = null
-
   try {
-    const data = await api.listBatchJobs()
-    jobs.value = (data.jobs as BatchJob[]) || []
-    consecutiveErrors = 0
-    backendAvailable.value = true
+    await fetchJobs()
   } catch (e) {
-    handlePollError(e)
+    error.value = errorText(e, 'tools.admin.batchTool.failedToLoadJobs')
   } finally {
     loading.value = false
   }
@@ -141,45 +148,47 @@ async function loadStats(): Promise<void> {
   }
 }
 
-// Issue #1092: Stop polling after repeated failures
-function handlePollError(e: unknown): void {
-  consecutiveErrors++
-  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-    stopPolling()
-    backendAvailable.value = false
-    error.value = t('tools.admin.batchTool.autoBotBackendUnreachablePolling')
-    logger.warn(
-      'Batch polling stopped after %d consecutive errors',
-      consecutiveErrors,
-    )
-  } else {
-    error.value = e instanceof Error ? e.message : t('tools.admin.batchTool.failedToLoadJobs')
+/** One poll tick; a failure throws, so usePollingJob counts it. */
+async function pollTick(): Promise<void> {
+  loading.value = true
+  try {
+    await Promise.all([fetchJobs(), loadStats()])
+    error.value = null
+  } finally {
+    loading.value = false
   }
 }
 
-function stopPolling(): void {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-    refreshInterval = null
-  }
-}
+const poller = usePollingJob(() => pollTick(), {
+  intervalMs: POLL_INTERVAL_MS,
+  maxAttempts: Infinity,
+  consecutiveErrorLimit: MAX_CONSECUTIVE_ERRORS,
+})
 
-function resumePolling(): void {
-  consecutiveErrors = 0
-  backendAvailable.value = true
+// Stopped with an error means the limit was reached: show the paused banner.
+const backendAvailable = computed(() => poller.isPolling.value || !poller.error.value)
+
+watch(poller.error, (e) => {
+  if (e) error.value = errorText(e, 'tools.admin.batchTool.failedToLoadJobs')
+})
+watch(backendAvailable, (available) => {
+  if (available) return
+  error.value = t('tools.admin.batchTool.autoBotBackendUnreachablePolling')
+  logger.warn('Batch polling stopped after %d consecutive errors', MAX_CONSECUTIVE_ERRORS)
+})
+
+// A fresh key per restart lets usePollingJob's race guard drop a tick still in flight.
+let pollRun = 0
+
+/** Refresh now, and restart polling if it had paused (Refresh and Retry both). */
+function refreshData(): void {
   error.value = null
-  refreshData()
-  refreshInterval = setInterval(() => refreshData(), 10000)
-}
-
-async function refreshData(): Promise<void> {
-  if (!backendAvailable.value) return
-  await Promise.all([loadJobs(), loadStats()])
+  poller.start(String(++pollRun))
 }
 
 async function createJob(): Promise<void> {
   if (!newJob.value.name) {
-    error.value = t('tools.admin.batchTool.pleaseEnterAJobName')
+    error.value = t('tools.admin.batchTool.enterJobName')
     return
   }
 
@@ -191,7 +200,7 @@ async function createJob(): Promise<void> {
     newJob.value = { name: '', type: 'file_processing', items: [], options: {} }
     await loadJobs()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : t('tools.admin.batchTool.failedToCreateJob')
+    error.value = errorText(e, 'tools.admin.batchTool.failedToCreateJob')
   } finally {
     loading.value = false
   }
@@ -203,7 +212,7 @@ async function cancelJob(jobId: string): Promise<void> {
     await api.cancelBatchJob(jobId)
     await loadJobs()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : t('tools.admin.batchTool.failedToCancelJob')
+    error.value = errorText(e, 'tools.admin.batchTool.failedToCancelJob')
   }
 }
 
@@ -216,12 +225,12 @@ async function retryJob(jobId: string): Promise<void> {
     }
     await loadJobs()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : t('tools.admin.batchTool.failedToRetryJob')
+    error.value = errorText(e, 'tools.admin.batchTool.failedToRetryJob')
   }
 }
 
 async function deleteJob(jobId: string): Promise<void> {
-  if (!confirm(t('tools.admin.batchTool.areYouSureYouWantToDelete'))) return
+  if (!confirm(t('tools.admin.batchTool.confirmDeleteJob'))) return
 
   try {
     // Issue #835 - use cancelBatchJob (DELETE endpoint)
@@ -231,18 +240,12 @@ async function deleteJob(jobId: string): Promise<void> {
     }
     await loadJobs()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : t('tools.admin.batchTool.failedToDeleteJob')
+    error.value = errorText(e, 'tools.admin.batchTool.failedToDeleteJob')
   }
 }
 
-onMounted(() => {
-  refreshData()
-  refreshInterval = setInterval(() => refreshData(), 10000)
-})
-
-onUnmounted(() => {
-  stopPolling()
-})
+// usePollingJob stops itself when the component's scope is disposed.
+onMounted(() => poller.start(String(++pollRun)))
 </script>
 
 <template>
@@ -355,7 +358,7 @@ onUnmounted(() => {
     >
       <template #actions>
         <button
-          @click="resumePolling"
+          @click="refreshData"
           class="px-3 py-1.5 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700"
         >
           {{ $t('tools.admin.batchTool.retry') }}
