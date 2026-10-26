@@ -227,6 +227,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test LLC modules, against all tracked .py under autobot-backend/llc; the test-file share drifts.",
     ),
+    "frontend-http-transports": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Both GUIs' non-test .ts/.js/.vue under src, against all tracked frontend source; the test-file share drifts.",
+    ),
     "llc-actor-id-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
