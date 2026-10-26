@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Set, Tuple
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
+from api.codebase_analytics.problem_severity import PROBLEM_SEVERITY_ORDER
 from autobot_shared.error_boundaries import ROUTE_DEADLINE_GRACE, ErrorCategory, bounded, with_error_handling
 from autobot_shared.logging_manager import get_logger
 from code_intelligence.bug_predictor import BugPredictor, PredictionResult
@@ -469,8 +470,6 @@ def _generate_bug_risk_section(prediction: PredictionResult) -> List[str]:
 
     return lines
 
-
-from api.codebase_analytics.problem_severity import PROBLEM_SEVERITY_ORDER
 
 # Import from SSOT configuration (Issue #554)
 from constants.threshold_constants import AnalyticsConfig

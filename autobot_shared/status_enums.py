@@ -177,18 +177,19 @@ class Severity(Enum):
         return _SEVERITY_RANK[self]
 
     @classmethod
-    def rank_of(cls, value: str, default: int = -1) -> int:
-        """The rank of a severity *value* (case-insensitive), or *default* outside the vocabulary."""
+    def rank_of(cls, value: "str | Severity", default: int = -1) -> int:
+        """The rank of a severity word or member (case-insensitive), or *default* outside the vocabulary."""
         try:
-            return cls(value.lower()).rank
+            word = value.value if isinstance(value, Severity) else value
+            return cls(str(word).lower()).rank
         except (ValueError, AttributeError):
             return default
 
     @classmethod
     def at_or_above(cls, items: list, min_severity: str) -> list:
-        """*items* whose ``.severity`` ranks at or above *min_severity*; ``ValueError`` outside the vocabulary."""
+        """Objects whose ``.severity`` ranks at or above *min_severity*; ``ValueError`` outside the vocabulary."""
         floor = cls(min_severity.lower()).rank
-        return [i for i in items if cls.rank_of(getattr(i.severity, "value", i.severity)) >= floor]
+        return [i for i in items if cls.rank_of(i.severity) >= floor]
 
     @classmethod
     def from_score(cls, score: float) -> "Severity":

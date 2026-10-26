@@ -531,7 +531,7 @@ async def _fetch_live_env_recommendations(path: str) -> JSONResponse:
 # Export Helpers (Issue #665)
 # =============================================================================
 
-# Module-level constant for severity ordering (Issue #380 pattern)
+# The severities an environment finding may carry (a membership set; ordering is Severity.rank, #19336)
 _VALID_SEVERITIES = {"high", "medium", "low"}
 
 
