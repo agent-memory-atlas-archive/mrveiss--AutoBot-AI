@@ -32,7 +32,7 @@
       <LedgerSectionState :section="ledger.presence.value" :empty="t('llc.ledger.empty.presence')">
         <BaseTable :columns="presenceColumns" :rows="presenceRows" size="compact" :aria-label="t('llc.ledger.col.agent')">
           <template #cell-task="{ row }">
-            <span data-testid="ledger-current-task" class="max-w-xs truncate" :title="String(row.task)">{{ row.task }}</span>
+            <span data-testid="ledger-current-task" class="inline-block max-w-xs truncate align-bottom" :title="row.task ? String(row.task) : undefined">{{ row.task }}</span>
           </template>
         </BaseTable>
       </LedgerSectionState>

@@ -613,7 +613,6 @@ async function onResolve(errorId: string): Promise<void> {
   color: var(--text-tertiary, var(--text-secondary));
 }
 
-
 /* Filters */
 .em-filters {
   display: flex;

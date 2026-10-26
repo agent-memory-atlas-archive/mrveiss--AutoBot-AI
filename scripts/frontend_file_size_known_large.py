@@ -148,7 +148,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/views/BusinessIntelligenceView.vue": 988,
     "autobot-frontend/src/views/CustomDashboard.vue": 878,  # #18242: 1106 -> 884; train-42 review: -5, then -1
     "autobot-frontend/src/views/DevSpeedupView.vue": 658,
-    "autobot-frontend/src/views/ErrorMonitoringView.vue": 844,
+    "autobot-frontend/src/views/ErrorMonitoringView.vue": 843,
     "autobot-frontend/src/views/EvolutionView.vue": 781,
     "autobot-frontend/src/views/FailureAnalysisDashboard.vue": 782,  # #13422: 799 -> 782 (kit badges)
     "autobot-frontend/src/views/MarketplaceView.vue": 711,

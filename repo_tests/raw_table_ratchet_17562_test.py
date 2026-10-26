@@ -5,13 +5,13 @@
 """Data tables in both GUIs move onto the kit's BaseTable (#17562).
 
 **The boundary.** The count is the number of ``.vue`` files under each app's ``src`` that
-hold a raw ``<table`` tag on a line that is not a ``//`` comment, excluding tests, specs and
-stories. Measured on 8c511bf0d6: 36 in ``autobot-frontend``, 34 in ``autobot-slm-frontend``.
+hold a raw ``<table`` tag (then whitespace, ``>`` or line end) on a line that is not a ``//``
+or ``<!--`` comment, excluding tests, specs and stories. Measured on 8c511bf0d6: 36 in ``autobot-frontend``, 34 in ``autobot-slm-frontend``.
 ``BaseTable`` (``@autobot/ui``) gives one header style, sorting, the empty state, the loading
 state and the accessible caption, so a hand-rolled table re-implements each of them.
 
 **What may stay.** A key/value layout (``ChartCell``, ``EntityDetail``) is not a data table
-and may keep ``<table>``; this guard does not exempt it by name, it is simply counted.
+and may keep ``<table>``. The guard has no by-name exemption: such files stay inside the pin.
 
 **One number per app, not a per-file table.** A per-file pin would list frontend paths in a
 ``repo_tests`` module, and ``python_filter_covers_its_guards_test.py`` would then require the
@@ -30,7 +30,7 @@ from repo_tests._ratchet_base import base_table
 
 _EXCLUDED = re.compile(r"(\.test\.|\.spec\.|\.stories\.|/__tests__/)")
 _TAG = re.compile(r"<table(?:[\s>]|$)")
-_COMMENT = re.compile(r"^\s*//")
+_COMMENT = re.compile(r"^\s*(//|<!--)")
 
 # 36 / 34 measured on 8c511bf0d6; 30 after the first batch (ErrorMonitoringView,
 # CompanyPortabilityView, AgentLedgerView, CompanyDashboardWidget, CodeQualityDashboard,
@@ -69,7 +69,11 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         self._w(tmp_path, "views/A.test.vue", "<table>\n")
         self._w(tmp_path, "views/__tests__/B.vue", "<table>\n")
         self._w(tmp_path, "views/C.stories.vue", "<table>\n")
-        self._w(tmp_path, "views/D.vue", '<BaseTable :rows="r" />\n// was a <table> before #17562\n<tablex>\n')
+        self._w(
+            tmp_path,
+            "views/D.vue",
+            '<BaseTable :rows="r" />\n// was a <table> before #17562\n<!-- <table> -->\n<tablex>\n',
+        )
         assert scan_raw_tables(tmp_path) == (0, 1)
 
     def test_a_checkout_path_that_looks_like_a_test_excludes_nothing(self, tmp_path: Path) -> None:
