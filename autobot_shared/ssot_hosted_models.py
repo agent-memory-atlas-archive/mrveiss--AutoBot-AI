@@ -14,9 +14,9 @@ Tiers:
 - ``light``   -- a cheap model of the same vendor for routing and classification, so a
   Full Provider run (#15494) need not spend its quality model on them.
 
-Owner decision 2026-10-23 for the two stale defaults: mirror the direct providers -- OpenRouter
+Maintainer decision (2026-10-23) for the two stale defaults: mirror the direct providers -- OpenRouter
 takes the OpenAI default in OpenRouter's ``vendor/model`` naming, and Bedrock takes Claude
-Sonnet 4 (Bedrock ID ``anthropic.claude-sonnet-4-20250514-v1:0``, supplied by the owner).
+Sonnet 4 (Bedrock ID ``anthropic.claude-sonnet-4-20250514-v1:0``, supplied by the maintainer).
 The user can still switch to any model at any moment; these are out-of-the-box defaults only.
 
 Lives here rather than in ``ssot_constants.py`` because that file is at its size ceiling; the
@@ -24,17 +24,18 @@ model names come from it.
 
 Each provider's ``default`` tier can be overridden by its ``{PROVIDER}_DEFAULT_MODEL``
 environment variable (``VERTEX_AI_DEFAULT_MODEL`` for Vertex AI); a blank value is no override.
-The process environment wins; otherwise the project ``.env`` is read, as the pydantic fields
-these replace did through ``env_file`` -- so a worker or script that never ran ``load_dotenv``
-still sees a value set there (#15501 review).
+The overrides are read the canonical way, a ``RedactedSettings`` model with the project
+``env_file``, like every other SSOT setting: the process environment wins, otherwise the project
+``.env`` applies, so a worker or script that never ran ``load_dotenv`` still sees a value set
+there (#15501 review).
 """
 
 from __future__ import annotations
 
-import os
-from functools import lru_cache
+from pydantic import Field
+from pydantic_settings import SettingsConfigDict
 
-from autobot_shared.env_utils import env_raw
+from autobot_shared import ssot_config
 from autobot_shared.ssot_constants import (
     ANTHROPIC_CLAUDE_HAIKU4_5,
     ANTHROPIC_CLAUDE_SONNET4_6,
@@ -82,29 +83,31 @@ HOSTED_PROVIDER_DEFAULT_MODELS: dict[str, dict[str, str]] = {
     "huggingface": {"default": HUGGINGFACE_LLAMA32_3B_INSTRUCT, "light": HUGGINGFACE_LLAMA32_3B_INSTRUCT},
 }
 
-_ENV_OVERRIDE: dict[str, str] = {
-    provider: ("VERTEX_AI_DEFAULT_MODEL" if provider == "vertexai" else f"{provider.upper()}_DEFAULT_MODEL")
-    for provider in HOSTED_PROVIDER_DEFAULT_MODELS
-}
+
+def _override_field(env: str):
+    return Field(default=None, alias=env)
 
 
-@lru_cache(maxsize=4)
-def _dotenv(path: str, mtime: float) -> dict[str, str]:
-    """The project .env as a dict, re-read when its mtime changes."""
-    from dotenv import dotenv_values
+class _HostedModelOverrides(ssot_config.RedactedSettings):
+    """Each provider's ``{PROVIDER}_DEFAULT_MODEL``; ``None`` or blank is no override."""
 
-    return {k: v for k, v in dotenv_values(path).items() if v is not None}
+    model_config = SettingsConfigDict(
+        env_file=str(ssot_config.PROJECT_ROOT / ".env"), env_file_encoding="utf-8", extra="ignore"
+    )
+
+    openai: str | None = _override_field("OPENAI_DEFAULT_MODEL")
+    anthropic: str | None = _override_field("ANTHROPIC_DEFAULT_MODEL")
+    groq: str | None = _override_field("GROQ_DEFAULT_MODEL")
+    mistral: str | None = _override_field("MISTRAL_DEFAULT_MODEL")
+    vertexai: str | None = _override_field("VERTEX_AI_DEFAULT_MODEL")
+    openrouter: str | None = _override_field("OPENROUTER_DEFAULT_MODEL")
+    bedrock: str | None = _override_field("BEDROCK_DEFAULT_MODEL")
+    huggingface: str | None = _override_field("HUGGINGFACE_DEFAULT_MODEL")
 
 
-def _from_dotenv(name: str) -> str | None:
-    from autobot_shared.ssot_config import PROJECT_ROOT
-
-    path = str(PROJECT_ROOT / ".env")
-    try:
-        mtime = os.path.getmtime(path)
-    except OSError:
-        return None
-    return (_dotenv(path, mtime).get(name) or "").strip() or None
+def _override(provider: str) -> str | None:
+    """*provider*'s override, read now: the environment, then the project ``.env``."""
+    return (getattr(_HostedModelOverrides(), provider) or "").strip() or None
 
 
 def hosted_default_model(provider: str, tier: str = "default") -> str:
@@ -116,7 +119,7 @@ def hosted_default_model(provider: str, tier: str = "default") -> str:
     if tier not in TIERS:
         raise KeyError(f"unknown tier {tier!r}; expected one of {TIERS}")
     if tier == "default":
-        override = (env_raw(_ENV_OVERRIDE[provider]) or "").strip() or _from_dotenv(_ENV_OVERRIDE[provider])
+        override = _override(provider)
         if override:
             return override
     return models[tier]
