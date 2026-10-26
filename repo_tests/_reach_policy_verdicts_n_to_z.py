@@ -13,6 +13,11 @@ ABSOLUTE = "ABSOLUTE"
 CONVERTIBLE = "CONVERTIBLE"
 
 N_TO_Z: dict[str, tuple[str, str, str]] = {
+    "severity-order-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .py under the backends, shared and pipeline-scripts, against all tracked .py; test share drifts.",
+    ),
     "search-mode-copies": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
