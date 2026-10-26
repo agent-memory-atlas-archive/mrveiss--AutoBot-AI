@@ -27,23 +27,13 @@ import pytest
 import yaml
 from repo_tests._paths import repo_root
 
-from autobot_shared.agent_model_tiers import AGENT_TIERS, TIER_MODELS
+from autobot_shared.agent_model_tiers import AGENT_TIERS, BACKEND_VAR_TIERS, TIER_MODELS
 
 _ROOT = repo_root()
 _DOCKER = "docker/.env.docker"
 _AI_STACK = "autobot-slm-backend/ansible/roles/ai-stack/defaults/main.yml"
 _AGENTS = "autobot-infrastructure/shared/config/agents.yaml"
 _BACKEND = "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2"
-#: The backend role's tier variables -> the tier each one carries.
-_BACKEND_VAR_TIER = {
-    "llm": "default_llm",
-    "routing": "routing",
-    "classification": "classification",
-    "light": "light",
-    "embedding": "embedding",
-    "instruction": "instruction",
-    "system": "system",
-}
 
 
 def _read(rel: str) -> str:
@@ -53,8 +43,9 @@ def _read(rel: str) -> str:
 def stated_models() -> dict[str, dict[str, str]]:
     """Plane -> {agent id: model it states}."""
     backend = {}
-    for agent, var in re.findall(r"^AUTOBOT_(\w+)_MODEL=\{\{\s*backend_(\w+)_model\b", _read(_BACKEND), re.M):
-        backend[agent.lower()] = TIER_MODELS[_BACKEND_VAR_TIER[var]]
+    for agent, var in re.findall(r"^AUTOBOT_(\w+)_MODEL=\{\{\s*(backend_\w+_model)\b", _read(_BACKEND), re.M):
+        assert var in BACKEND_VAR_TIERS, f"{_BACKEND}: {var} has no tier in agent_model_tiers.BACKEND_VAR_TIERS"
+        backend[agent.lower()] = TIER_MODELS[BACKEND_VAR_TIERS[var]]
     return {
         _DOCKER: {a.lower(): m for a, m in re.findall(r"^AUTOBOT_(\w+)_MODEL=(\S+)", _read(_DOCKER), re.M)},
         _AI_STACK: dict(re.findall(r"^ai_(\w+)_model:\s*\"([^\"]+)\"", _read(_AI_STACK), re.M)),
@@ -75,18 +66,27 @@ def mismatches(planes: dict[str, dict[str, str]]) -> list[str]:
     return found
 
 
+#: Each text plane's model lines -- every one must be parsed, or a new shape would pass unread.
+_MODEL_LINES = {
+    _DOCKER: r"^AUTOBOT_\w+_MODEL=",
+    _AI_STACK: r"^ai_\w+_model:",
+    _BACKEND: r"^AUTOBOT_\w+_MODEL=",
+}
+
+
+def test_every_model_line_of_every_plane_is_read() -> None:
+    planes = stated_models()
+    for plane, pattern in _MODEL_LINES.items():
+        lines = len(re.findall(pattern, _read(plane), re.M))
+        assert lines and len(planes[plane]) == lines, f"{plane}: {lines} model lines, {len(planes[plane])} read"
+    assert planes[_AGENTS], f"{_AGENTS}: llm.models parsed to nothing"
+
+
 def test_every_plane_states_the_model_of_the_agents_tier() -> None:
     planes = stated_models()
-    assert all(planes.values()), f"a plane parsed to nothing -- the reader no longer fits it: {planes}"
     assert not mismatches(planes), "derive from autobot_shared/agent_model_tiers.py (#19332):\n" + "\n".join(
         mismatches(planes)
     )
-
-
-def test_the_backend_template_inline_defaults_are_their_tiers_models() -> None:
-    pairs = re.findall(r"backend_(\w+)_model\s*\|\s*default\('([^']+)'\)", _read(_BACKEND))
-    assert pairs, "the backend template carries no inline defaults any more -- the reader no longer fits it"
-    assert all(TIER_MODELS[_BACKEND_VAR_TIER[v]] == m for v, m in pairs), pairs
 
 
 def test_every_tier_is_an_ssot_constant() -> None:

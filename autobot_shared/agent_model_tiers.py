@@ -63,3 +63,15 @@ AGENT_TIERS: dict[str, str] = {
     **{a: "system" for a in _SYSTEM.split()},
     **{a: "quality" for a in _QUALITY.split()},
 }
+
+#: The backend role's Ansible tier variables (``backend_<tier>_model``) -> the tier each carries. The
+#: backend env template names per-agent models through these, so they are the backend plane's tiers.
+BACKEND_VAR_TIERS: dict[str, str] = {
+    "backend_llm_model": "default_llm",  # same model as "quality" (QUALITY_MODEL = DEFAULT_LLM_MODEL)
+    "backend_routing_model": "routing",
+    "backend_classification_model": "classification",
+    "backend_light_model": "light",
+    "backend_instruction_model": "instruction",
+    "backend_system_model": "system",
+    "backend_embedding_model": "embedding",
+}
