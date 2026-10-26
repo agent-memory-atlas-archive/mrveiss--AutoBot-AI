@@ -50,8 +50,6 @@ _ANSIBLE = "autobot-slm-backend/ansible"
 #: Counted per occurrence, so a NEW literal in a listed file fails, and shrink-only: a file stating fewer
 #: than its count fails as stale until the count is lowered (or the entry deleted at zero).
 KNOWN_INSTALL_ROOT_LITERALS: dict[str, tuple[int, str]] = {
-    "autobot-slm-backend/services/code_distributor.py": (1, "#15708 (SLM_REPO_PATH, two modules disagree)"),
-    "autobot-slm-backend/services/git_tracker.py": (1, "#15708 (SLM_REPO_PATH, two modules disagree)"),
     "autobot-backend/security/enterprise/compliance_manager.py": (
         1,
         "historical: the literal junk-directory NAME the unexpanded #13658 placeholder created, matched "
@@ -266,6 +264,8 @@ def test_the_ansible_copies_agree_with_fleet_constants() -> None:
     assert base_dir == fleet_constants.FLEET_INSTALL_ROOT
     assert fleet_constants.FLEET_AGENT_DIR == fleet_constants.FLEET_INSTALL_ROOT + agent_suffix
     assert agent["slm_heartbeat_interval"] == fleet_constants.DEFAULT_HEARTBEAT_INTERVAL
+    code_source = _yaml("roles/autobot_shared/defaults/main.yml")["code_source_dir"]
+    assert code_source.replace("{{ autobot.base_dir }}", base_dir) == fleet_constants.FLEET_CODE_SOURCE_DIR  # #15708
 
 
 # --- contrast: each shape #18094 found must be flagged -------------------------------------------
@@ -320,7 +320,7 @@ def test_a_shared_settings_heartbeat_is_allowed() -> None:
 
 
 def test_a_new_literal_in_a_baselined_file_is_flagged_and_a_removed_one_is_stale() -> None:
-    rel = "autobot-slm-backend/services/git_tracker.py"
+    rel = "autobot-backend/security/enterprise/compliance_manager.py"  # any file still on the baseline at a count of 1
     one = 'REPO = "/opt/autobot"\n'
 
     def stale(source: str) -> list[str]:
