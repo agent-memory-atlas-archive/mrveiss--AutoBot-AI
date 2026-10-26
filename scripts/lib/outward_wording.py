@@ -21,6 +21,12 @@ One detector, three callers:
 Fenced code, inline code and single-line HTML comments are skipped, so text may
 quote a flagged form as an example. Standard library only: the commit-msg hook and
 the issue workflow run this with a bare ``python3``.
+
+Session names are ``autobot-ai-`` plus two hex characters, but hex alone cannot tell
+an all-letter id (``cb``) from a component suffix (``db``), so the bare name is
+flagged only when the id holds a digit (``4d``, ``0d``, ``a0``, ``27``); an all-letter
+id needs session context (``session autobot-ai-cb``). Merge-train names need their
+letter suffix (``train 85l``), so ML prose such as "train 100 epochs" stays clean.
 """
 
 from __future__ import annotations
@@ -45,11 +51,15 @@ _INLINE_CODE = re.compile(r"`[^`]*`")
 # `a0` inside identifiers, `(10, 20)`, `db → redis`), so a session id needs a second
 # signal: an attribution date `(a0, 2026-10-24` or a handoff word before an arrow.
 _HANDOFF = r"(?i:handed|handoff|hand-off|handover|passed|reassigned)"
-# Merge trains are numbered by series plus an optional letter (`85l`); match the
-# shape, not the current series, so the next one is caught too.
-_TRAIN_NUMBER = r"\d{2,3}[a-z]?"
+# Merge trains are numbered by series plus a letter (`85l`); match the shape, not the
+# current series, so the next one is caught too. The letter is required: without it
+# "train 100 epochs" and "train 32 models" are ordinary prose.
+_TRAIN_NUMBER = r"\d{2,3}[a-z]"
+# A session id holding a digit; component suffixes (`ui`, `db`, `api`) hold none.
+_SESSION_ID_WITH_DIGIT = r"(?:\d[0-9a-f]|[0-9a-f]\d)"
 RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("automation session name", re.compile(r"autobot-ai-[0-9a-z]{2}\b")),
+    ("automation session name", re.compile(rf"\bautobot-ai-{_SESSION_ID_WITH_DIGIT}\b")),
+    ("automation session name", re.compile(r"(?i:\bsession):? autobot-ai-[a-f]{2}\b")),
     ("session id in an attribution", re.compile(r"\([0-9a-z]{2},\s*20\d\d-\d\d-\d\d")),
     ("session id before an arrow", re.compile(rf"\b{_HANDOFF}(?: over)?(?: from)? [0-9a-z]{{2}} ?→")),
     ("session id after an arrow", re.compile(rf"\b{_HANDOFF}\b[^→\n]{{0,40}}→ ?[0-9a-z]{{2}}\b")),

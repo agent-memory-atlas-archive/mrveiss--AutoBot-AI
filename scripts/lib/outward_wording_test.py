@@ -30,13 +30,14 @@ COMPLETE = "## Thinking Path\nwhy\n## What Changed\nwhat\n## Verification\nhow\n
 # (text, the exact match it must produce) -- at least one per rule, in RULES order.
 FLAGGED = [
     ("Picked up from autobot-ai-4d last night (#19645)", "autobot-ai-4d"),
+    ("Picked up from session autobot-ai-cb last night (#19645)", "session autobot-ai-cb"),
     ("Reviewed (a0, 2026-10-24) and landed (#19645)", "(a0, 2026-10-24"),
     ("Reviewed (27, 2026-10-24) and landed (#19645)", "(27, 2026-10-24"),
     ("Handed over a0 → reviewer (#19645)", "Handed over a0 →"),
     ("Handed over from review → 4d (#19645)", "Handed over from review → 4d"),
     ("Asked the Trainmaster to queue it (#19645)", "Trainmaster"),
     ("Lands with train 85l tonight (#19645)", "train 85l"),
-    ("Lands with train 91 next week (#19645)", "train 91"),
+    ("Lands with train 91a next week (#19645)", "train 91a"),
     ("The M3 owner decided it (#19645)", "M3 owner"),
 ]
 CLEAN = [
@@ -49,6 +50,8 @@ CLEAN = [
     "Maintainer decision (2026-10-26), tracked in #19526 (#19645)",
     "Mapped M1 → M2 milestones (#19645)",
     "Called f(10, 20) twice (#19645)",
+    "We train 100 epochs, train 32 models and we train 85 classifiers (#19645)",
+    "Deployed autobot-ai-ui, autobot-ai-db and autobot-ai-backend (#19645)",
     "Split the store (db, cache) in two (#19645)",
     "Moved db → redis and ui → api (#19645)",
     "Bumped the schema v2 → v3 (#19645)",
