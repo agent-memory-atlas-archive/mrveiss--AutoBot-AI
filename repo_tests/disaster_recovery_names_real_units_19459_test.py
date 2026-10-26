@@ -13,8 +13,9 @@ from __future__ import annotations
 import re
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _RUNBOOK = repo_root() / "docs" / "operations" / "disaster-recovery.md"
 _ROLES = "autobot-slm-backend/ansible/roles"
@@ -24,10 +25,27 @@ _SYSTEMCTL = re.compile(r"systemctl\s+(?:status|start|restart|stop)\s+([^#\n]+)"
 _PACKAGE_UNITS = {"nginx", "redis-stack-server", "postgresql"}
 
 
+def _role_tasks(root) -> list[str]:
+    """The role task files that can install a unit; ``[]`` on an empty tree, so the floor refuses it."""
+    try:
+        return tracked_paths(root, f"{_ROLES}/*/tasks/*.yml")
+    except EmptyEnumeration:
+        return []
+
+
+REACH = declare(
+    "disaster-recovery-deployed-units",
+    discover=_role_tasks,
+    floor=130,  # 138 measured at filing, pinned mid-window
+    growth=16,
+    what="role task files read for the systemd units they install (#19459)",
+)
+
+
 def _deployed_units() -> set[str]:
     root = repo_root()
     units = set(_PACKAGE_UNITS)
-    for rel in tracked_paths(root, f"{_ROLES}/*/tasks/*.yml"):
+    for rel in REACH.examined(root):
         units.update(_UNIT_DEST.findall((root / rel).read_text(encoding="utf-8")))
     return units
 
