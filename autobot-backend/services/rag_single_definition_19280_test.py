@@ -163,3 +163,54 @@ def test_the_rag_guide_restates_no_rag_config_default():
     numeric = sorted(n for n in defaults if re.search(NUMERIC_ASSIGNMENT.format(name=re.escape(n)), text))
     literal = sorted(n for n, v in defaults.items() if isinstance(v, str) and len(v) > 8 and v in text)
     assert (numeric, literal) == ([], [])
+
+
+def _literal_score_thresholds(source: str) -> list[str]:
+    """``score_threshold`` given a non-zero numeric literal as a parameter default or a call keyword.
+
+    0.0 is "no filtering" (e.g. models/task_context.py's generic SearchContext), not a retrieval floor.
+    """
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args.args + node.args.kwonlyargs
+            defaults = [None] * (len(node.args.args) - len(node.args.defaults)) + node.args.defaults
+            pairs = zip(args, defaults + node.args.kw_defaults)
+            found += [f"{node.name}:{a.arg}" for a, d in pairs if a.arg == "score_threshold" and _nonzero(d)]
+        elif isinstance(node, ast.keyword) and node.arg == "score_threshold" and _nonzero(node.value):
+            found.append(f"line {node.value.lineno}: score_threshold=")
+        elif isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "score_threshold":
+            found += ["field score_threshold"] if _nonzero(node.value) else []
+    return found
+
+
+def _nonzero(node) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and node.value != 0
+
+
+def test_the_retrieval_score_threshold_has_one_home():
+    """#19354: every retrieval default reads constants.rag_graph_constants.RAG_SCORE_THRESHOLD."""
+    found = [
+        f"{p.relative_to(BACKEND)}: {hit}"
+        for p in _files_containing("score_threshold")
+        for hit in _literal_score_thresholds(p.read_text(encoding="utf-8"))
+    ]
+    assert not found, f"read RAG_SCORE_THRESHOLD from constants.rag_graph_constants (#19354): {found}"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def f(q, score_threshold: float = 0.3):\n    pass\n",
+        "async def f(q, *, score_threshold=0.5):\n    pass\n",
+        "svc.retrieve(q, score_threshold=0.3)\n",
+        "class C:\n    score_threshold: float = 0.3\n",
+    ],
+)
+def test_a_literal_score_threshold_is_flagged(source):
+    assert _literal_score_thresholds(source)
+
+
+def test_the_home_and_no_filtering_are_not_flagged():
+    assert not _literal_score_thresholds("def f(q, score_threshold: float = RAG_SCORE_THRESHOLD):\n    pass\n")
+    assert not _literal_score_thresholds("class C:\n    score_threshold: float = 0.0\n")
