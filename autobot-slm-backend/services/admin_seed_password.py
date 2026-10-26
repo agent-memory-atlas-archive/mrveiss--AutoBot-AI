@@ -22,13 +22,12 @@ A ``_FILE`` that is set but unreadable or empty raises, so a broken secret mount
 first start with a clear error instead of seeding a password nobody knows.
 """
 
-import logging
 import os
 from pathlib import Path
 
-# Stdlib logging, as in admin_password_sync: the SLM test conftest mocks config, which
-# autobot_shared.logging_manager reads at import (CLAUDE.md's stated exception).
-logger = logging.getLogger(__name__)
+from autobot_shared.logging_manager import get_logger
+
+logger = get_logger(__name__)  # #19288: the stdlib exception is retired; admin_password_sync does the same
 
 
 class AdminPasswordFileError(RuntimeError):
