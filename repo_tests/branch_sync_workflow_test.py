@@ -12,6 +12,8 @@ history must never be rewritten. #19548 adds the token rule (owner decision,
 2026-10-26): ``git push`` uses ``AUTOBOT_PUSH_TOKEN`` and nothing else, the job
 fails at its first step when that secret is empty, and a ``PAT || GITHUB_TOKEN``
 fallback is forbidden (#19542). ``GITHUB_TOKEN`` serves the REST calls only. The
+PAT is never written to ``.git/config`` (no ``set-url``): the script takes it out of
+its environment and hands it to ``git push`` alone (code review on PR #19636). The
 zero-CI property moves to the ``[skip ci]`` merge message (branch_sync_19548_test).
 
 WHY THIS STRIPS COMMENTS FIRST. The workflow's header explains at length why it
@@ -107,7 +109,7 @@ def test_never_rebases_or_forces_in_the_script() -> None:
 
 
 _PAT = "${{ secrets.AUTOBOT_PUSH_TOKEN }}"
-_REQUIRE, _PUSH_URL, _SYNC = "Require AUTOBOT_PUSH_TOKEN", "Push with AUTOBOT_PUSH_TOKEN only", "Merge main"
+_REQUIRE, _SYNC = "Require AUTOBOT_PUSH_TOKEN", "Merge main"
 
 
 def _steps() -> list[dict]:
@@ -132,16 +134,30 @@ def test_no_secret_expression_has_a_fallback() -> None:
 
 
 def test_the_pat_is_the_only_push_credential_and_reaches_nothing_else() -> None:
-    """AUTOBOT_PUSH_TOKEN appears in the check and the push-URL step only; GITHUB_TOKEN only does REST."""
+    """AUTOBOT_PUSH_TOKEN reaches the check and the sync step only, never .git/config; GITHUB_TOKEN does REST.
+
+    Inside the sync step the script pops it before any git call and prepends it to
+    the push argv alone: branch_sync_19548_test pins that by the argv each git call ran.
+    """
     users = {
         step.get("name"): key for step in _steps() for key, value in (step.get("env") or {}).items() if value == _PAT
     }
-    assert users == {_REQUIRE: "PUSH_TOKEN", _PUSH_URL: "PUSH_TOKEN"}, f"the PAT reaches: {users}"
-    set_url = code_text(_step(_PUSH_URL)["run"], name="x.sh")
-    assert "git remote set-url --push origin" in set_url and "${PUSH_TOKEN}@github.com" in set_url
+    assert users == {_REQUIRE: "PUSH_TOKEN", _step(_SYNC)["name"]: "AUTOBOT_PUSH_TOKEN"}, f"the PAT reaches: {users}"
+    joined = "\n".join(_shell_bodies())
+    assert "set-url" not in joined and "@github.com" not in joined, "a token in a remote URL persists in .git/config"
+    assert "extraheader" not in joined and "credential." not in joined, "the shell configures no git credential"
     sync_env = _step(_SYNC)["env"]
     assert sync_env["GITHUB_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}", "REST calls use the run-scoped token"
-    assert not [v for v in sync_env.values() if "AUTOBOT_PUSH_TOKEN" in str(v)], "the script never holds the PAT"
+
+
+def test_the_token_and_its_header_form_are_masked_before_the_script_runs() -> None:
+    body = code_text(_step(_SYNC)["run"], name="x.sh")
+    raw, header = (
+        'echo "::add-mask::${AUTOBOT_PUSH_TOKEN}"',
+        "printf 'x-access-token:%s' \"${AUTOBOT_PUSH_TOKEN}\" | base64 -w0",
+    )
+    assert raw in body and header in body, "both the token and its base64 header must be masked"
+    assert body.index(header) < body.index("branch_sync.py"), "masking after the script starts is too late"
 
 
 def test_a_missing_push_token_fails_the_job_before_anything_runs() -> None:
@@ -154,7 +170,7 @@ def test_a_missing_push_token_fails_the_job_before_anything_runs() -> None:
 
 def test_the_checkout_is_main_and_persists_no_credential() -> None:
     checkout = next(step for step in _steps() if str(step.get("uses", "")).startswith("actions/checkout"))
-    assert checkout["with"].get("persist-credentials") is False, "the PAT goes on the push URL only"
+    assert checkout["with"].get("persist-credentials") is False, "the PAT reaches the push argv only"
     assert checkout["with"].get("ref") == "main", "the default branch, never PR code (untrusted-checkout)"
     assert "token" not in checkout["with"], "the fetch needs no credential beyond the default"
     (job,) = _spec()["jobs"].values()

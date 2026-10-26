@@ -5,9 +5,11 @@
 """Merge main into every open same-repo PR branch and every PR-less branch (#19548).
 
 Run by ``.github/workflows/sync-branches-with-main.yml`` from a full clone of main.
-``git push`` uses ``origin``'s push URL, which the workflow sets to
-``AUTOBOT_PUSH_TOKEN`` and nothing else; the REST calls use ``GITHUB_TOKEN``. Every
-merge commit ends with `` [skip ci]``, so a sync costs zero CI. A merge that changes
+``git push`` authenticates with ``AUTOBOT_PUSH_TOKEN`` and nothing else, as a
+``-c http...extraheader`` on the push argv only: ``main`` takes the token out of
+``os.environ`` before the first git call, so no other git command, and no file in
+``.git/``, ever holds it. The REST calls use ``GITHUB_TOKEN``. Every merge is
+``--no-ff`` and its commit ends with `` [skip ci]``, so a sync costs zero CI. A merge that changes
 ``.github/workflows/*`` is pushed like any other; only a push GitHub refuses for
 lack of the ``workflow`` scope is labelled.
 
@@ -20,6 +22,7 @@ is the git and REST plumbing around them.
 from __future__ import annotations
 
 import argparse
+import base64
 import importlib.util
 import os
 import subprocess  # nosec B404  # TimeoutExpired only; git runs through git_probe
@@ -38,6 +41,8 @@ from github_api import GitHubApi, WatchdogError, build_api  # noqa: E402
 from autobot_shared.git_probe import run_git  # noqa: E402  # scrubbed-env git (#15783)
 
 WORK_BRANCH = "__sync_work"
+PUSH_TOKEN_ENV = "AUTOBOT_PUSH_TOKEN"
+PUSH_HEADER_KEY = "http.https://github.com/.extraheader"
 DEFAULT_RETRY_AFTER_SECONDS = 60
 MAX_RATE_LIMIT_RETRIES = 3
 PAGE_SIZE = 100
@@ -71,15 +76,39 @@ def git_output(args: Sequence[str]) -> Tuple[int, str]:
     try:
         proc = run_git(list(args), strict=False, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as exc:
-        return 124, f"git {' '.join(args[:2])} timed out after {exc.timeout}s"
+        return 124, f"git {_verb(args)} timed out after {exc.timeout}s"
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
-class Git:
-    """The git commands the sync runs. ``run`` is injected so tests record the argv."""
+def _verb(args: Sequence[str]) -> str:
+    """The subcommand words of *args*, past any ``-c key=value`` pair: never a header."""
+    start = 0
+    while start < len(args) and args[start] == "-c":
+        start += 2
+    return " ".join(args[start : start + 2])
 
-    def __init__(self, run: Runner = git_output) -> None:
-        self._run = run
+
+def push_auth(token: str) -> Tuple[str, ...]:
+    """The ``-c`` pair that authenticates ONE ``git push`` with *token*; empty without one."""
+    if not token:
+        return ()
+    basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
+    return ("-c", f"{PUSH_HEADER_KEY}=AUTHORIZATION: basic {basic}")
+
+
+def take_push_token(environ: Dict[str, str]) -> str:
+    """Remove the PAT from *environ*, so no git subprocess inherits it, and return it."""
+    return environ.pop(PUSH_TOKEN_ENV, "").strip()
+
+
+class Git:
+    """The git commands the sync runs. ``run`` is injected so tests record the argv.
+
+    ``auth`` is the ``push_auth`` pair; it is prepended to the push argv and nothing else.
+    """
+
+    def __init__(self, run: Runner = git_output, auth: Sequence[str] = ()) -> None:
+        self._run, self._auth = run, tuple(auth)
 
     def out(self, *args: str) -> Optional[str]:
         returncode, output = self._run(args)
@@ -97,7 +126,9 @@ class Git:
         return self._run(["checkout", "--quiet", "-B", WORK_BRANCH, f"origin/{branch}"])[0] == 0
 
     def merge(self, branch: str, base: str) -> Tuple[int, str]:
-        return self._run(["merge", "--no-edit", "-m", core.merge_message(branch, base), f"origin/{base}"])
+        # --no-ff: a branch with no commits of its own would otherwise fast-forward to
+        # main's head, make no merge commit, carry no [skip ci], and start full CI.
+        return self._run(["merge", "--no-ff", "--no-edit", "-m", core.merge_message(branch, base), f"origin/{base}"])
 
     def unmerged(self) -> List[str]:
         return (self.out("diff", "--name-only", "--diff-filter=U") or "").splitlines()
@@ -111,7 +142,7 @@ class Git:
 
     def push(self, branch: str) -> Tuple[int, str]:
         # Plain push: rejected, never overwritten, if the branch moved since the fetch.
-        return self._run(["push", "origin", f"HEAD:refs/heads/{branch}"])
+        return self._run([*self._auth, "push", "origin", f"HEAD:refs/heads/{branch}"])
 
     def touching(self, since: str, ref: str, path: str) -> List[Tuple[str, str]]:
         listed = self.out("log", "--format=%h%x1f%s", f"{since}..{ref}", "--", path) or ""
@@ -249,7 +280,7 @@ class Syncer:
             return core.UNREACHABLE, "behind-count failed", local
         if behind == 0:
             self.clear(target)
-            return core.CURRENT, "", local
+            return core.CURRENT, "already up to date", local
         return None, f"{behind} behind", local
 
     def merge(self, target: core.SyncTarget, local: str) -> Tuple[str, str]:
@@ -335,9 +366,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--base", default="main")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    token = take_push_token(os.environ)
+    if not token and not args.dry_run:
+        _emit(f"::error::{PUSH_TOKEN_ENV} is empty; the sync pushes with it and nothing else (#19548).")
+        return 1
     gh = SyncApi(build_api())
     try:
-        results = run(Git(), gh, args.base, args.dry_run)
+        results = run(Git(auth=push_auth(token)), gh, args.base, args.dry_run)
     except SyncApiError as exc:
         # Fail closed: an empty PR list would make every PR branch look parked.
         _emit(f"::error::cannot list open pull requests; refusing to run: {exc}")

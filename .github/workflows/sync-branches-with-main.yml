@@ -14,19 +14,31 @@
 #   when its commits change .github/workflows/*, which left every branch behind a
 #   workflow change on main stuck until its author's next push. The job FAILS at
 #   its first step when the secret is missing or empty; there is no
-#   `AUTOBOT_PUSH_TOKEN || GITHUB_TOKEN` fallback (forbidden by #19542). The PAT is
-#   set only as the push URL of `origin` (fetches carry no credential: the checkout
-#   persists none), and it is never in the sync script's environment.
+#   `AUTOBOT_PUSH_TOKEN || GITHUB_TOKEN` fallback (forbidden by #19542). The PAT
+#   reaches each `git push` only, as a `-c http.https://github.com/.extraheader`
+#   on that one command's argv: it is never written to .git/config, never a
+#   remote URL, and the script removes it from its own environment before the
+#   first git call, so no other git command inherits it. Fetches carry no
+#   credential (the checkout persists none). The raw token and its base64 header
+#   form are both `::add-mask::`ed before the script starts.
 # - REST (list PRs, labels, comments): GITHUB_TOKEN, scoped by `permissions:`
 #   below to this repository and this run. The PAT is wider than these calls need.
 #
-# ZERO CI PER SYNC: a PAT push WOULD start workflow runs, so every sync merge
-# commit ends with ` [skip ci]` (branch_sync_core.merge_message). GitHub skips
-# `push` and `pull_request` workflows for such a head commit. CI still runs on the
-# author's next push and on the train, which is the merge gate; a PR's own checks
-# may read "not run" after a sync, and that is expected. #14022's one-per-push
-# serialization and #12823's `approve-refreshed-runs` job stay gone: there is no
-# run to reset mid-flight and none to approve.
+# ZERO CI PER SYNC: a PAT push WOULD start workflow runs, so every sync merge is
+# `--no-ff` (a branch with no commits of its own would otherwise fast-forward to
+# main's head and push a commit without the marker) and its message ends with
+# ` [skip ci]` (branch_sync_core.merge_message). GitHub skips `push` and
+# `pull_request` workflows for such a head commit. A branch already 0 behind is
+# skipped as "already up to date": no merge, no push.
+#
+# WHAT A `[skip ci]` HEAD MEANS FOR A PR. Its required checks are not run, so they
+# stay "expected" (pending), never green or red, until a new head commit runs them.
+# - A merge train runs full CI on its OWN merge commit, so a synced PR that lands
+#   through a train needs nothing more.
+# - A PR merged on its own (not through a train) needs a fresh author push to its
+#   branch, or a re-run of its checks, before the required checks can report.
+# #14022's one-per-push serialization and #12823's `approve-refreshed-runs` job
+# stay gone: there is no run to reset mid-flight and none to approve.
 #
 # WORKFLOW-FILE MERGES ARE PUSHED. The script still diffs the branch head against
 # the merge result and names any .github/workflows/* path in the run log. Only a
@@ -105,19 +117,15 @@ jobs:
           # behind-count needs the ancestry. A shallow clone silently reports
           # wrong behind-counts (#15306).
           fetch-depth: 0
-          # GITHUB_TOKEN is not persisted; the next step sets the PAT as the push URL only.
+          # No credential is persisted; the PAT reaches each `git push` argv only.
           persist-credentials: false
-
-      - name: Push with AUTOBOT_PUSH_TOKEN only
-        env:
-          PUSH_TOKEN: ${{ secrets.AUTOBOT_PUSH_TOKEN }}
-        run: |
-          set -euo pipefail
-          git remote set-url --push origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Merge main into every branch that is behind
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read and removed from the environment by the script before any git call;
+          # it reaches `git push` only, as a per-command extraheader (see header).
+          AUTOBOT_PUSH_TOKEN: ${{ secrets.AUTOBOT_PUSH_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
           # The shared git runner's per-call timeout (default 30s, sized for probes).
@@ -125,6 +133,10 @@ jobs:
           AUTOBOT_GIT_PROBE_TIMEOUT_SECONDS: '600'
         run: |
           set -uo pipefail
+          # Mask the token and the base64 header the script builds from it, so
+          # neither can appear in this log even if git echoed its argv.
+          echo "::add-mask::${AUTOBOT_PUSH_TOKEN}"
+          echo "::add-mask::$(printf 'x-access-token:%s' "${AUTOBOT_PUSH_TOKEN}" | base64 -w0)"
           # The merge commits need an identity; the runner has none (#15306).
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
