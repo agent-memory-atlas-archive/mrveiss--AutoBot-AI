@@ -104,3 +104,29 @@ def test_every_tier_is_an_ssot_constant() -> None:
 )
 def test_each_pre_fix_value_or_an_unassigned_agent_is_flagged(plane: str, agent: str, model: str) -> None:
     assert mismatches({plane: {agent: model}})
+
+
+# --- the Docker plane's models are pulled (code review on #19692) ----------------------------
+#: Docker has no automatic pull: Ollama starts empty and the quick-start docs pull. They read the
+#: model list from docker/.env.docker itself, so every model an agent runs is pulled.
+_DERIVED_PULL = "sed -n 's/^AUTOBOT_[A-Z_]*_MODEL=//p' docker/.env.docker | sort -u"
+_PULL_DOCS = ("README.md", "INSTALL.md")
+_LITERAL_PULL = re.compile(r"exec(?:\s+-T)?\s+autobot-ollama\s+ollama\s+pull\s+[\w.-]+:[\w.-]+")
+
+
+def test_the_docker_quick_start_pulls_every_model_the_docker_env_names() -> None:
+    for doc in _PULL_DOCS:
+        assert _DERIVED_PULL in _read(doc), f"{doc}: pull the models with `{_DERIVED_PULL} | xargs ...` (#19332)"
+    pulled = set(re.findall(r"^AUTOBOT_[A-Z_]*_MODEL=(.*)$", _read(_DOCKER), re.M))
+    assert pulled == set(stated_models()[_DOCKER].values()), "the pull's sed reads other lines than the guard"
+
+
+def test_no_doc_pulls_one_hand_picked_model_into_the_docker_ollama() -> None:
+    docs = [*_PULL_DOCS, *(p.relative_to(_ROOT).as_posix() for p in sorted((_ROOT / "docs").rglob("*.md")))]
+    found = [f"{d}: {m}" for d in docs for m in _LITERAL_PULL.findall(_read(d))]
+    assert not found, f"a hand-picked pull drifts from docker/.env.docker -- use the derived pull: {found}"
+
+
+def test_the_literal_pull_shape_is_flagged_and_the_derived_one_is_not() -> None:
+    assert _LITERAL_PULL.findall("docker compose exec autobot-ollama ollama pull qwen3.5:9b")
+    assert not _LITERAL_PULL.findall(f"{_DERIVED_PULL} | xargs -n1 docker compose exec -T autobot-ollama ollama pull")
