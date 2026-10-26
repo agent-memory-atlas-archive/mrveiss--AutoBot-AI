@@ -4,10 +4,12 @@
 # Author: mrveiss
 """Merge main into every open same-repo PR branch and every PR-less branch (#19548).
 
-Run by ``.github/workflows/sync-branches-with-main.yml`` from a full clone, with
-``GITHUB_TOKEN`` and nothing else. A ``GITHUB_TOKEN`` push starts no workflow run,
-so a sync costs zero CI; the price is that GitHub refuses one whose commits change
-``.github/workflows/*``, which is detected before pushing and labelled instead.
+Run by ``.github/workflows/sync-branches-with-main.yml`` from a full clone of main.
+``git push`` uses ``origin``'s push URL, which the workflow sets to
+``AUTOBOT_PUSH_TOKEN`` and nothing else; the REST calls use ``GITHUB_TOKEN``. Every
+merge commit ends with `` [skip ci]``, so a sync costs zero CI. A merge that changes
+``.github/workflows/*`` is pushed like any other; only a push GitHub refuses for
+lack of the ``workflow`` scope is labelled.
 
 Merge only, never rebase, never force: a plain ``git push`` that fails because the
 branch moved is skipped and retried on the next run. A conflict is aborted and
@@ -234,7 +236,7 @@ class Syncer:
 
     def on_workflow(self, target: core.SyncTarget, paths: Sequence[str]) -> Tuple[str, str]:
         self.flag(target, core.WORKFLOW, core.workflow_comment(target.branch, self.base, paths))
-        return core.WORKFLOW, ", ".join(paths) or "push refused"
+        return core.WORKFLOW, "push refused" + (": " + ", ".join(paths) if paths else "")
 
     def precheck(self, target: core.SyncTarget) -> Tuple[Optional[str], str, str]:
         local = self.git.out("rev-parse", "--verify", "--quiet", f"origin/{target.branch}") or ""
@@ -263,19 +265,21 @@ class Syncer:
         changed = self.git.changed(local, "HEAD")
         if changed is None:
             return core.ERROR, "cannot diff the merge result"
-        paths = core.workflow_changes(changed)
-        return self.on_workflow(target, paths) if paths else self.push(target)
+        return self.push(target, core.workflow_changes(changed))
 
-    def push(self, target: core.SyncTarget) -> Tuple[str, str]:
+    def push(self, target: core.SyncTarget, workflows: Sequence[str] = ()) -> Tuple[str, str]:
+        """Push the merge; a workflow-file delta is named, and labelled only if GitHub refuses it."""
+        note = f"workflow files: {', '.join(workflows)}" if workflows else ""
         if self.dry_run:
-            return core.SYNCED, "dry run: not pushed"
+            return core.SYNCED, "; ".join(filter(None, ("dry run: not pushed", note)))
         returncode, output = self.git.push(target.branch)
         kind = core.classify_push(returncode, output)
         if kind == core.WORKFLOW:
-            return self.on_workflow(target, [])
+            return self.on_workflow(target, workflows)
         if kind == core.SYNCED:
             self.clear(target)
-        return kind, "" if kind == core.SYNCED else (output.strip().splitlines() or ["no output"])[-1]
+            return kind, note
+        return kind, (output.strip().splitlines() or ["no output"])[-1]
 
     def sync(self, target: core.SyncTarget) -> Tuple[str, str]:
         try:

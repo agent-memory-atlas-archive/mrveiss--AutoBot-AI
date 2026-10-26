@@ -2,15 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # AutoBot - AI-Powered Automation Platform
 # Author: mrveiss
-"""#19548 — the branch sync merges main into every branch, and pushes only what GITHUB_TOKEN may push.
+"""#19548 — the branch sync merges main into every branch and pushes each clean merge, ``[skip ci]``.
 
 Drives ``pipeline-scripts/branch_sync.py`` through a recorded git runner and a
 recorded REST client, so each path is pinned by what it RAN, not by what its
 source looks like:
 
 * a conflict is aborted and labelled with one comment, and nothing is pushed;
-* a merge that would change ``.github/workflows/*`` is labelled, never pushed;
-* the merge commit message is exact, and the push is a plain one;
+* a merge that changes ``.github/workflows/*`` is pushed; only a refused push is labelled;
+* the merge commit message is exact and ends ``[skip ci]``, and the push is a plain one;
 * fork PRs are skipped, drafts are not, PRs into another base are left alone;
 * the comment is found by its marker, so a second run never posts a second one;
 * the sync labels clear once the branch is 0 behind;
@@ -155,22 +155,44 @@ def test_the_conflict_comment_shows_both_sides_and_caps_counts_not_text() -> Non
 # ------------------------------------------------------- the workflow-file path
 
 
-def test_a_merge_that_changes_a_workflow_file_is_labelled_and_never_pushed() -> None:
+_PAT_REFUSAL = (
+    1,
+    " ! [remote rejected] HEAD -> issue-1-x (refusing to allow a Personal Access Token to create or update "
+    "workflow `.github/workflows/ci.yml` without `workflow` scope)\nerror: failed to push some refs",
+)
+
+
+def test_a_merge_that_changes_a_workflow_file_is_pushed_and_clears_the_label() -> None:
+    """The PAT can push workflow files (#19548 follow-up): detect the delta, name it, push anyway."""
     runner, api = _git(changed=".github/workflows/ci.yml\nsrc/a.py"), Api()
-    outcome, detail = _sync(runner, api, _target())
-    assert outcome == core.WORKFLOW and ".github/workflows/ci.yml" in detail
+    outcome, detail = _sync(runner, api, _target(labels=(core.LABEL_WORKFLOW,)))
+    assert outcome == core.SYNCED and ".github/workflows/ci.yml" in detail, "the delta is still detected and named"
     assert runner.ran("diff", "--name-only", HEAD_SHA, "HEAD"), "the delta is head-vs-merge-result"
-    assert not runner.ran("push"), "GitHub refuses this push with GITHUB_TOKEN; detect it, do not try it"
+    assert [c for c in runner.calls if c[0] == "push"] == [("push", "origin", "HEAD:refs/heads/issue-1-x")]
+    assert [(m, path.rsplit("/", 1)[-1]) for m, path, _ in api.writes()] == [("DELETE", core.LABEL_WORKFLOW)]
+
+
+def test_only_a_refused_workflow_push_is_labelled_with_the_detected_paths() -> None:
+    runner, api = _git(changed=".github/workflows/ci.yml\nsrc/a.py", push=_PAT_REFUSAL), Api()
+    outcome, detail = _sync(runner, api, _target())
+    assert outcome == core.WORKFLOW and detail == "push refused: .github/workflows/ci.yml"
+    assert runner.ran("push"), "the push is attempted; the label is the fallback for a refusal only"
     (comment,) = [p["body"] for m, path, p in api.writes() if m == "UPSERT" and path.endswith("/issues/7/comments")]
-    assert core.MARKER_WORKFLOW in comment and "`.github/workflows/ci.yml`" in comment
+    assert core.MARKER_WORKFLOW in comment and "`.github/workflows/ci.yml`" in comment and "`workflow` scope" in comment
     assert ("POST", f"/repos/{REPO}/issues/7/labels", {"labels": [core.LABEL_WORKFLOW]}) in api.writes()
 
 
-def test_a_refused_push_is_handled_as_a_workflow_skip() -> None:
-    refusal = (1, "! [remote rejected] HEAD -> x (refusing to allow a GitHub App to create or update workflow)")
-    runner, api = _git(push=refusal), Api()
-    assert _sync(runner, api, _target())[0] == core.WORKFLOW
-    assert any(path.endswith("/issues/7/labels") for _, path, _ in api.writes())
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        _PAT_REFUSAL[1],
+        "! [remote rejected] HEAD -> x (refusing to allow a GitHub App to create or update workflow)",
+        "! [remote rejected] HEAD -> x (refusing to allow an OAuth App to create or update workflow "
+        "`.github/workflows/a.yml` without `workflow` scope)",
+    ],
+)
+def test_every_workflow_refusal_wording_is_classified_as_one(refusal: str) -> None:
+    assert core.classify_push(1, refusal) == core.WORKFLOW
 
 
 def test_workflow_changes_matches_the_directory_only() -> None:
@@ -185,8 +207,10 @@ def test_workflow_changes_matches_the_directory_only() -> None:
 def test_the_merge_message_and_argv_are_exact() -> None:
     runner = Runner([])
     bs.Git(runner).merge("issue-19548-x", "main")
-    assert runner.calls == [("merge", "--no-edit", "-m", "Merge main into issue-19548-x (auto-sync)", "origin/main")]
-    assert core.merge_message("b") == "Merge main into b (auto-sync)"
+    message = "Merge main into issue-19548-x (auto-sync) [skip ci]"
+    assert runner.calls == [("merge", "--no-edit", "-m", message, "origin/main")]
+    assert core.merge_message("b") == "Merge main into b (auto-sync) [skip ci]"
+    assert core.merge_message("b").endswith(" [skip ci]"), "a PAT push without it starts every PR's CI"
 
 
 def test_a_clean_sync_is_one_plain_push_and_clears_the_labels() -> None:
