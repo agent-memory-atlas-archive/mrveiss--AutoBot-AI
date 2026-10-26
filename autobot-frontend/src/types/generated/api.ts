@@ -33480,6 +33480,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/embeddings/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Embedding Switch
+         * @description Rebuild the knowledge base with another embedding model, then cut over (#19379, admins only).
+         *
+         *     The rebuild runs in the background into a new collection; search and writes keep the active
+         *     one until a complete, zero-failure build. 409 when a switch is already running or the model
+         *     is already active; 400 for a model that is not an embedding model.
+         */
+        post: operations["start_embedding_switch_api_embeddings_switch_post"];
+        /**
+         * Cancel Embedding Switch
+         * @description Stop a running switch at its next batch; the active model and collection stay (#19379).
+         */
+        delete: operations["cancel_embedding_switch_api_embeddings_switch_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/embeddings/switch/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Embedding Switch Status
+         * @description Progress of the current or last embedding-model switch: done/total, failures, reason (#19379).
+         */
+        get: operations["get_embedding_switch_status_api_embeddings_switch_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/multimodal/process/image": {
         parameters: {
             query?: never;
@@ -70294,6 +70342,21 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** DataResponse[EmbeddingSwitchData] */
+        DataResponse_EmbeddingSwitchData_: {
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+            data?: components["schemas"]["EmbeddingSwitchData"] | null;
+            /** Message */
+            message?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** DataResponse[EnterpriseBulkEnableResponse] */
         DataResponse_EnterpriseBulkEnableResponse_: {
             /**
@@ -74193,6 +74256,53 @@ export interface components {
          * @description data payload for GET /status.
          */
         EmbeddingStatusData: {
+            [key: string]: unknown;
+        };
+        /**
+         * EmbeddingSwitchData
+         * @description The current or last switch: building, settling, completed, failed, cancelled or idle.
+         */
+        EmbeddingSwitchData: {
+            /** State */
+            state: string;
+            /** Model */
+            model?: string | null;
+            /** Collection */
+            collection?: string | null;
+            /**
+             * Done
+             * @default 0
+             */
+            done: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /** Failed Ids */
+            failed_ids?: string[];
+            /** Reason */
+            reason?: string | null;
+            /** Started */
+            started?: string | null;
+            /** Finished */
+            finished?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * EmbeddingSwitchRequest
+         * @description Start an embedding-model switch (#19379): the model to rebuild the knowledge base with.
+         */
+        EmbeddingSwitchRequest: {
+            /** Model */
+            model: string;
+        } & {
             [key: string]: unknown;
         };
         /**
@@ -150534,6 +150644,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_EmbeddingStatusData_"];
+                };
+            };
+        };
+    };
+    start_embedding_switch_api_embeddings_switch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmbeddingSwitchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EmbeddingSwitchData_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_embedding_switch_api_embeddings_switch_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EmbeddingSwitchData_"];
+                };
+            };
+        };
+    };
+    get_embedding_switch_status_api_embeddings_switch_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EmbeddingSwitchData_"];
                 };
             };
         };
