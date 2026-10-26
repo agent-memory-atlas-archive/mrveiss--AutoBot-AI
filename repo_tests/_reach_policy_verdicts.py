@@ -217,6 +217,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "feature-routers-strict-one-home-19319": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked files minus vendored/build parts, against the whole tracked tree; the skipped share drifts.",
+    ),
     "llc-actor-id-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

@@ -27,6 +27,9 @@ UNSCOPED = frozenset(
         "isolated-git-env",
         # #19076: items are (role, unit) pairs from one registry file, not paths -- no roots= to check.
         "role-registry-installed-units",
+        # #19319: every tracked file repo-wide (minus vendored/build parts), wherever a copy of the
+        # AUTOBOT_FEATURE_ROUTERS_STRICT default could be written -- no prefix describes it.
+        "feature-routers-strict-one-home-19319",
         # #19310: every tracked text file in the repository, so a runtime-dir literal written
         # anywhere is seen; no roots= list could name "wherever someone writes it".
         "system-knowledge-runtime-literal-scan",
