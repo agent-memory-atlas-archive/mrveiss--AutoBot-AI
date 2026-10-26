@@ -84,7 +84,11 @@ _ENV_OVERLAYS = (
     ".env.network-template",
     "docker/.env.docker",
 )
-_API_TIMEOUT_LINE = re.compile(r"^(?:export\s+)?(?:AUTOBOT|VITE)_API_TIMEOUT=([^\s#]+)\s*(?:#.*)?$", re.MULTILINE)
+#: Reads active AND commented-out (``# KEY=...``) assignments, indented or ``export``-prefixed, with
+#: quotes stripped: a commented 10000 in an overlay is a copy that misleads the next reader too.
+_API_TIMEOUT_LINE = re.compile(
+    r"""^\s*(?:#\s*)?(?:export\s+)?(?:AUTOBOT|VITE)_API_TIMEOUT=["']?([^\s#"']+)["']?\s*(?:#.*)?$""", re.MULTILINE
+)
 
 
 def _overlay_values(text: str) -> list[str]:
@@ -102,6 +106,8 @@ def test_no_env_overlay_restates_a_different_api_timeout(rel):
 def test_a_different_overlay_value_is_caught():
     assert _overlay_values("AUTOBOT_API_TIMEOUT=10000\n") == ["10000"]
     assert _overlay_values("export VITE_API_TIMEOUT=10000  # profile\n") == ["10000"]
+    assert _overlay_values("# AUTOBOT_API_TIMEOUT=10000\n") == ["10000"], "a commented copy is still a copy"
+    assert _overlay_values("    AUTOBOT_API_TIMEOUT='10000'\n") == ["10000"], "indented and quoted"
 
 
 def test_a_disagreeing_mirror_is_caught():
