@@ -220,7 +220,7 @@ async def test_the_user_frontends_release_bundles_are_build_bundles_too(tmp_path
 
 async def test_the_backends_rendered_files_get_a_named_verdict(tmp_path, monkeypatch) -> None:
     """#19453: .validation_vars and filtered-requirements.txt were host_state:unclassified."""
-    rendered = [".validation_vars", "filtered-requirements.txt"]
+    rendered = [".validation_vars", "filtered-requirements.txt", "filtered-requirements-gpu-torch.txt"]
     result = await _host_generated_drift(tmp_path, monkeypatch, "autobot-backend", rendered)
 
     assert result.drifted == [], [entry.path for entry in result.drifted]
