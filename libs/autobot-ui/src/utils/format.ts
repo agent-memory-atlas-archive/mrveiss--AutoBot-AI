@@ -6,6 +6,9 @@
  * Each app had its own copy; the SLM one was an exact subset of the user app's, so the
  * shared part lives here once and each app's `utils/formatHelpers.ts` re-exports it.
  * Date/time formatting stays per-app (timezone handling differs).
+ *
+ * The default texts ('—', 'Invalid', the unit names) are English fallbacks. A caller that
+ * shows them to a user passes translated `nullText` / `invalidText` / `zeroText` / `units`.
  */
 import type { DurationStyle } from './duration'
 

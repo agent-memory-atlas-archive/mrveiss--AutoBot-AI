@@ -12,8 +12,7 @@
  * @module formatHelpers
  */
 
-// Shared with autobot-slm-frontend's formatHelpers.ts (#14908) — the type
-// was declared identically in both; formatDuration()'s logic stays per-app.
+// The duration, uptime and byte formatters are the kit's (#14908); see below.
 export type { DurationStyle } from '@autobot/ui'
 
 // ==================== DATE & TIME FORMATTING ====================
