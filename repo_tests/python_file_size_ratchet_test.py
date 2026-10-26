@@ -29,7 +29,8 @@ every entry already in the dict, but had no way to discover a file that had
 grown past the limit and was never added — ``reconciler.py`` reached 2000+
 lines this way, invisible to every audit run that only ever iterated
 ``KNOWN_LARGE.items()``. The fix walks the tracked-file tree instead, which is
-why ``RATCHET_BASELINE`` below grew from 3 entries to hundreds: the walk found
+why ``KNOWN_LARGE`` grew from 3 entries to hundreds (it was then mirrored by a hand-kept
+``RATCHET_BASELINE``, retired in #19544 for the base-commit check): the walk found
 every other file already over the limit with no entry at all, and grandfathering
 all of them at their measured size is what makes turning the walk on possible
 without also triaging 512 files in the same change (that is #5060's campaign).
