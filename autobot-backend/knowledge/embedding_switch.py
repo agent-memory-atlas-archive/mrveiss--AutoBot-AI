@@ -223,6 +223,7 @@ async def _build(kb, run: _Run) -> Tuple[Any, List[str], int]:
         if (await switch_status()).get("cancel") == "1":
             await _finish(run, "cancelled", reason="cancelled by request")
             return None, [], done
+        await _heartbeat(run)  # before the batch too: one batch of embeddings can outlast a short TTL
         nodes, failed = await _embed(run.model, batch)
         if nodes:
             store = store or await _open_collection(kb, run.collection, run.model, len(nodes[0].embedding))
@@ -328,6 +329,7 @@ async def _cut_over(kb, store, run: _Run) -> None:
     try:
         await rebind(kb, space)
         await asyncio.sleep(_settle_seconds())  # every process has noticed the record by now
+        await _heartbeat(run)  # still the owner before the final replay
         converged, late, reason = await _converge(store, run, [])
         held = await asyncio.to_thread(store._collection.count)
         if late or not converged:

@@ -676,16 +676,15 @@ class FactsMixin(FactProjectionMixin, FactSharingMixin):
         logger.info("Vectorized fact %s in ChromaDB", fact_id)
 
     async def _write_vector(self, space, fact_id, embedding, content, metadata, context: str) -> bool:
-        """Into *space*: buffered when the buffer runs (Issue #8391, #8405), else a direct add.
-
-        Issue #12312: the buffer's drop signal is honoured, so the empty-embedding contract
-        self-enforces; False (with the failure recorded) when the vector was not accepted.
-        """
-        if space.write_buffer is not None:
-            if await space.write_buffer.write(fact_id, embedding, content, metadata):
+        """Into *space*, buffered while its buffer runs (#8391, #8405); False + recorded when refused (#12312)."""
+        buffer = space.write_buffer
+        if buffer is not None and buffer.stopped is not True:
+            if await buffer.write(fact_id, embedding, content, metadata):
                 return True
-            await self._record_failed_vectorization(fact_id, f"write buffer rejected the embedding{context}")
-            return False
+            if buffer.stopped is not True:
+                await self._record_failed_vectorization(fact_id, f"write buffer rejected the embedding{context}")
+                return False
+        # Stopped by a rebind mid-operation (#19379): the vector belongs to this snapshot's store.
         from llama_index.core import Document
 
         doc = Document(text=content, doc_id=fact_id, metadata=metadata)
