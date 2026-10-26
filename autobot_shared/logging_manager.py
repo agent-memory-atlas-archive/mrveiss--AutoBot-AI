@@ -427,8 +427,8 @@ class LoggingManager:
         or the MagicMock a config-mocking test harness returns -- falls back to its default with one
         stderr warning instead of raising here, at the import of whichever module asked for a logger.
         """
-        if cls._file_logging_disabled:
-            return None
+        # No _file_logging_disabled short-cut here: a log file configured outside the logs dir may
+        # still be writable, and a failing one is caught per file below (#19628 review).
         log_file = _log_file_path(log_type)
 
         # Use rotating file handler to prevent large log files
@@ -484,6 +484,8 @@ class LoggingManager:
         Args:
             log_type: Specific log type to rotate, or None for all
         """
+        if cls._file_logging_disabled:
+            return  # no logs dir and no backup dir to rotate into (#19628)
         # Issue #380: Use module-level constant
         log_types_to_rotate = list(_LOG_TYPES) if not log_type else [log_type]
 
