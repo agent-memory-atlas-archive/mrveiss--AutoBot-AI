@@ -235,7 +235,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/knowledge/tags.py": 834,
     "autobot-backend/knowledge_sync_incremental.py": 883,
     "autobot-backend/llc/adapters/tests/test_claude_code_adapter.py": 602,
-    "autobot-backend/llc/api/companies.py": 1720,
+    "autobot-backend/llc/api/companies.py": 1719,
     "autobot-backend/llc/api/roles.py": 713,
     "autobot-backend/llc/api/sprints.py": 1223,
     "autobot-backend/llc/api/work_items.py": 1399,  # #19582: comment wake moved into the service
@@ -315,7 +315,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/services/autoresearch/runner_test.py": 1155,
     "autobot-backend/services/autoresearch/store_chromadb_test.py": 664,
     "autobot-backend/services/captcha_human_loop.py": 631,
-    "autobot-backend/services/causal_inference_engine.py": 756,
+    "autobot-backend/services/causal_inference_engine.py": 668,  # #13422: model split out
     "autobot-backend/services/chat_knowledge_service_test.py": 773,
     "autobot-backend/services/claim_verifier.py": 768,
     "autobot-backend/services/codebase_indexing_service.py": 1010,
