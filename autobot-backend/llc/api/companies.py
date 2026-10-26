@@ -69,10 +69,10 @@ from llc.services.company import (
     CompanyCycleError,
     CompanyHasChildrenError,
     CompanyIssuePrefixConflictError,
-    CompanyMoveContendedError,
     CompanyNotFoundError,
     CompanyService,
 )
+from llc.services.company_move_lock import CompanyMoveContendedError
 from llc.services.membership_service import (
     MemberAlreadyExistsError,
     MemberNotFoundError,
@@ -303,9 +303,9 @@ async def update_company(
     except (CompanyBudgetError, CompanyCycleError):
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
-    except NotAuthorisedError as exc:  # the move's own reason, e.g. "must be done by the parent org" (#19634)
+    except NotAuthorisedError as exc:  # fixed public text only; the ids/roles are logged by the service (#19634)
         await svc.session.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=getattr(exc, "public_detail", "Forbidden"))
     except Exception:
         await svc.session.rollback()
         raise

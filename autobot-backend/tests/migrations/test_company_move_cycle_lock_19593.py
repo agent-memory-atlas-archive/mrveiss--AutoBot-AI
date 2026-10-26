@@ -22,6 +22,7 @@ import asyncio
 import uuid
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from tests.migrations.conftest import requires_postgres, run_alembic
@@ -142,3 +143,30 @@ async def test_fully_concurrent_opposite_moves_commit_exactly_one_without_deadlo
 
     assert sorted(outcomes) == ["cycle", "moved"]
     await _assert_acyclic(maker, ids)
+
+
+async def _revoke(session, org_id: uuid.UUID) -> None:  # noqa: ANN001
+    from llc.models.membership import LLCCompanyMembership
+
+    stmt = sa.delete(LLCCompanyMembership).where(
+        LLCCompanyMembership.company_id == org_id, LLCCompanyMembership.user_id == _ACTOR
+    )
+    await session.execute(stmt)
+
+
+async def test_a_revoke_waits_for_the_moves_membership_lock(maker):  # noqa: ANN001
+    """#19634 review: the under-lock role check holds the actor's membership row, so a
+    concurrent revoke of that role serializes behind the move instead of racing it."""
+    from llc.services.company import CompanyService
+
+    ids = await _seed(maker, {"p": None, "o": None})
+    async with maker() as a, maker() as b:
+        await CompanyService(a).move(ids["o"], ids["p"], actor_user_id=_ACTOR)
+        revoke = asyncio.create_task(_revoke(b, ids["o"]))
+        done, _ = await asyncio.wait({revoke}, timeout=_BLOCKED_PROBE_SECONDS)
+        assert not done, "the revoke did not wait for the move's membership lock"
+        await a.commit()
+        await revoke
+        await b.commit()
+    parents = await _assert_acyclic(maker, ids)
+    assert parents[ids["o"]] == ids["p"]

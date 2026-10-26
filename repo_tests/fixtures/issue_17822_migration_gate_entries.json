@@ -2,6 +2,7 @@
  "autobot-backend/llc/services/workspace_lease.py",
  "autobot-backend/llc/services/company.py",
  "autobot-backend/llc/services/company_ceo.py",
+ "autobot-backend/llc/services/company_move_lock.py",
  "autobot-backend/llc/services/authz.py",
  "autobot-backend/llc/services/membership_service.py",
  "autobot-backend/services/*secret*.py",

@@ -99,6 +99,7 @@ async def may_attach_under(
     actor_user_id: Optional[uuid.UUID],
     *,
     platform_admin: bool,
+    for_update: bool = False,
 ) -> bool:
     """Whether the actor may place a company under *parent_id* (#12233, #19634).
 
@@ -109,9 +110,12 @@ async def may_attach_under(
     visibility, so a plain member must not graft an org under it (maintainer
     decision, 2026-10-26). Callers answer ``False`` with a 404, never a 403, so a
     parent the actor cannot administer is indistinguishable from a missing one.
+    *for_update* locks the deciding membership row (the move's under-lock re-check).
     """
     try:
-        await require_company_admin_unless_platform(session, parent_id, actor_user_id, platform_admin=platform_admin)
+        await require_company_admin_unless_platform(
+            session, parent_id, actor_user_id, platform_admin=platform_admin, for_update=for_update
+        )
     except NotAuthorisedError:
         return False
     return True
@@ -123,6 +127,7 @@ async def require_company_admin_unless_platform(
     actor_user_id: Optional[uuid.UUID],
     *,
     platform_admin: bool,
+    for_update: bool = False,
 ) -> None:
     """:func:`require_company_admin`, except that a platform admin passes without a membership.
 
@@ -132,4 +137,4 @@ async def require_company_admin_unless_platform(
     """
     if platform_admin:
         return
-    await require_company_admin(session, company_id, actor_user_id)
+    await require_company_admin(session, company_id, actor_user_id, for_update=for_update)

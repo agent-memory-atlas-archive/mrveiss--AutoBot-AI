@@ -38,13 +38,9 @@ from llc.models.company import CompanyCreate, CompanyUpdate
 from llc.models.enums import MembershipRole
 from llc.models.membership import LLCCompanyMembership
 from llc.services.authz import NotAuthorisedError, may_attach_under
-from llc.services.company import (
-    MOVE_LOCK_MAX_PASSES,
-    CompanyMoveContendedError,
-    CompanyNotFoundError,
-    CompanyService,
-)
+from llc.services.company import CompanyMoveForbiddenError, CompanyNotFoundError, CompanyService
 from llc.services.company_ceo import CompanyCEOService
+from llc.services.company_move_lock import MOVE_LOCK_MAX_PASSES, CompanyMoveContendedError
 from llc.services.membership_service import MembershipService
 from llc.tests import test_llc_org_chart as _org_chart_harness
 from user_management.models.organization import Organization
@@ -192,6 +188,12 @@ async def test_an_owner_who_is_not_an_admin_moves_and_promotes(session_factory):
 
 @pytest.mark.asyncio
 async def test_a_role_revoked_while_the_move_waited_for_its_locks_stops_it(session_factory):  # noqa: ANN001
+    """Proves the role is RE-READ under the lock (same SQLite session, so not serialization).
+
+    That a concurrent revoke actually waits for the move is the Postgres two-session
+    test ``test_a_revoke_waits_for_the_moves_membership_lock`` in
+    ``tests/migrations/test_company_move_cycle_lock_19593.py``.
+    """
     parent = await _org(session_factory, "Parent")
     org = await _org(session_factory, "Acme")
     async with session_factory() as session:
@@ -243,6 +245,54 @@ async def test_a_parent_admin_still_needs_admin_on_the_new_parent_for_a_sideways
     with pytest.raises(CompanyNotFoundError):
         await _update(session_factory, org, CompanyUpdate(parent_org_id=other))
     assert await _parent_of(session_factory, org) == parent
+
+
+@pytest.mark.asyncio
+async def test_a_new_parent_role_revoked_before_the_locks_is_caught_under_them(session_factory):  # noqa: ANN001
+    """The new-parent check is repeated under the lock (a re-read; same session, see above)."""
+    parent = await _org(session_factory, "Parent")
+    org = await _org(session_factory, "Acme")
+    async with session_factory() as session:
+        svc = CompanyService(session)
+        real = svc._lock_move_rows
+
+        async def _revoke_then_lock(company_id, parent_org_id) -> None:  # noqa: ANN001
+            await session.execute(sa.delete(LLCCompanyMembership).where(LLCCompanyMembership.company_id == parent))
+            await real(company_id, parent_org_id)
+
+        svc._lock_move_rows = _revoke_then_lock
+        with pytest.raises(CompanyNotFoundError):
+            await svc.move(org, parent, actor_user_id=_ACTOR)
+
+
+@pytest.mark.asyncio
+async def test_the_under_lock_checks_lock_memberships_in_company_id_order(session_factory, monkeypatch):  # noqa: ANN001
+    from llc.services import authz, company
+
+    parent = await _org(session_factory, "Parent")
+    other = await _org(session_factory, "Other")
+    org = await _org(session_factory, "Acme", parent=parent)
+    locked: list[uuid.UUID] = []
+    real = authz.require_company_admin
+
+    async def _record(session, company_id, actor, *, for_update=False):  # noqa: ANN001, ANN202
+        if for_update:
+            locked.append(company_id)
+        return await real(session, company_id, actor, for_update=for_update)
+
+    monkeypatch.setattr(authz, "require_company_admin", _record)
+    monkeypatch.setattr(company, "require_company_admin", _record)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=other))
+    assert locked == sorted([parent, other])  # the parent being left, and the new parent
+
+
+@pytest.mark.asyncio
+async def test_a_deadlock_on_a_membership_lock_is_a_retryable_refusal():
+    org = SimpleNamespace(id=uuid.uuid4(), parent_org_id=None)
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=DBAPIError("SELECT", {}, _PgError("40P01")))
+    with pytest.raises(CompanyMoveContendedError):
+        await CompanyService(session)._authorize_locked_move(org, uuid.uuid4(), _ACTOR, False)
 
 
 @pytest.mark.asyncio
@@ -429,6 +479,7 @@ async def test_the_route_answers_a_refused_move_with_403_and_rolls_back():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.patch(f"/api/llc/companies/{_ORG_ID}", json={"parent_org_id": None})
     assert resp.status_code == 403
+    assert resp.json()["detail"] == "Forbidden"  # never the exception's internal text
     svc.session.rollback.assert_awaited_once()
     svc.session.commit.assert_not_called()
     _, body = svc.update.await_args.args
@@ -445,3 +496,20 @@ async def test_the_route_answers_a_contended_move_with_409():
     assert resp.status_code == 409
     assert "try again" in resp.json()["detail"]
     svc.session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_route_shows_only_the_fixed_text_of_a_move_refusal(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.MEMBER)
+    org = await _org(session_factory, "Acme", parent=parent)
+    async with session_factory() as session:
+        with pytest.raises(CompanyMoveForbiddenError) as refused:
+            await CompanyService(session).update(org, CompanyUpdate(parent_org_id=None), actor_user_id=_ACTOR)
+    svc = SimpleNamespace(session=AsyncMock(), update=AsyncMock(side_effect=refused.value))
+    transport = httpx.ASGITransport(app=_app(svc))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.patch(f"/api/llc/companies/{_ORG_ID}", json={"parent_org_id": None})
+    detail = resp.json()["detail"]
+    assert resp.status_code == 403
+    assert detail == "Moving this company out of its parent must be done by an owner/admin of the parent org"
+    assert str(org) not in detail and str(parent) not in detail and str(_ACTOR) not in detail
