@@ -33,7 +33,7 @@ _LABEL = re.compile(r"not provision", re.IGNORECASE)
 _LABEL_WINDOW = 3  # a label on the line, or on one of this many lines above it (a block comment)
 #: History and research record what was true then. A doc that holds a grep pattern or a
 #: code-site table rather than advice opts out with ``_OPT_OUT`` in its own text.
-_SKIP = ("docs/archive/", "docs/archives/", "docs/research/", "docs/adr/", "changelog/")
+_SKIP = ("docs/archives/", "docs/research/", "docs/adr/", "changelog/")
 _OPT_OUT = "<!-- doc-model-tags: not advice -->"
 
 

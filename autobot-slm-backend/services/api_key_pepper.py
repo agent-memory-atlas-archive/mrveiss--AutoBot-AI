@@ -30,19 +30,18 @@ dropped at once when the secret is written through the secrets page
 (``invalidate_pepper_cache``); other workers pick a change up within the TTL. The
 "unset" WARNING is emitted at most once per TTL.
 
-Stdlib logging, deliberately: the SLM test harness mocks ``config``
-(see ``generated_system_secrets.py``).
 """
 
 from __future__ import annotations
 
-import logging
-import os
 import time
 
 from sqlalchemy.exc import IntegrityError
 
-logger = logging.getLogger(__name__)
+from autobot_shared.env_utils import env_float_clamped
+from autobot_shared.logging_manager import get_logger
+
+logger = get_logger(__name__)  # #19288: the stdlib exception is retired
 
 #: ``SystemSecret.key`` the operator sets on the secrets page.
 HMAC_PEPPER_KEY = "slm_hmac_api_key_secret"  # nosec B105  # key name, not a credential
@@ -50,7 +49,7 @@ HMAC_PEPPER_DESCRIPTION = "Pepper for API-key hashing (#19120). Required to crea
 SECRETS_PAGE_PATH = "/slm/settings/admin/secrets"
 
 #: Seconds a resolved (or unset) pepper is reused by this process.
-PEPPER_CACHE_TTL_SECONDS = float(os.getenv("SLM_AUTH_LOOKUP_CACHE_TTL", "60"))
+PEPPER_CACHE_TTL_SECONDS = env_float_clamped("SLM_AUTH_LOOKUP_CACHE_TTL", 60.0, positive_finite=True)
 
 WARN_UNCONFIGURED = (
     "API-key pepper is not configured: add the secret '%s' on the SLM page %s "

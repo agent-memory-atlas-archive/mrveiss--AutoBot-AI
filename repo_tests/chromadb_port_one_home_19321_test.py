@@ -34,6 +34,7 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
 from autobot_shared.ssot_config import PortConfig
+from tools.lint._comment_syntax import strip_trailing_comment
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
@@ -88,10 +89,10 @@ def _pinned_values(path: str, pattern: str) -> list[int]:
 
 
 def _strip_comment(line: str) -> str:
-    stripped = line.lstrip()
-    if stripped.startswith(("#", "//")):
+    # A whole-line `//` comment counts; a trailing `//` would cut `http://` URLs, so only `#` trails.
+    if not strip_trailing_comment(line.lstrip(), ("//",)):
         return ""
-    return re.split(r"\s#\s", line, maxsplit=1)[0]
+    return strip_trailing_comment(line, ("#",))
 
 
 def named_definitions(text: str) -> list[int]:

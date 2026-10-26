@@ -32,6 +32,7 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
 from autobot_shared.ssot_config import MiscConfig
+from tools.lint._comment_syntax import strip_trailing_comment
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
@@ -64,7 +65,7 @@ def _values(text: str, pattern: str) -> list[str]:
 
 
 def _code(line: str) -> str:
-    return "" if line.lstrip().startswith("#") else re.split(r"\s#\s", line, maxsplit=1)[0]
+    return strip_trailing_comment(line, ("#",))
 
 
 def literal_defaults(rel: str, text: str) -> list[str]:
