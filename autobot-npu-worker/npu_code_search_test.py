@@ -6,6 +6,10 @@ Test NPU Code Search and Development Speedup
 
 Tests the NPU worker and Redis-based code search capabilities
 for development acceleration.
+
+Not collected by CI: ``autobot-npu-worker`` is in no pytest ``testpaths`` and no workflow
+invocation, so a collection error here fails nothing. Wiring that tree in is #15476.
+The agents are reached through their lazy accessors, not module-level singletons (#19694).
 """
 
 import asyncio
@@ -17,8 +21,8 @@ from pathlib import Path
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agents.development_speedup_agent import analyze_codebase, development_speedup
-from agents.npu_code_search_agent import index_project, npu_code_search, search_codebase
+from agents.development_speedup_agent import analyze_codebase, get_development_speedup_agent
+from agents.npu_code_search_agent import get_npu_code_search, index_project, search_codebase
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -33,7 +37,7 @@ async def test_npu_code_search():
     # Test 1: Check system status
     print("\n1. Checking system status...")
     try:
-        status = await npu_code_search.get_index_status()
+        status = await get_npu_code_search().get_index_status()
         print("   ✅ System operational")
         print(f"   📊 Files indexed: {status.get('total_files_indexed', 0)}")
         print(f"   🔧 NPU available: {status.get('npu_available', False)}")
@@ -89,7 +93,7 @@ async def test_npu_code_search():
         try:
             results = await search_codebase(query=test["query"], search_type=test["type"], max_results=5)
 
-            stats = npu_code_search.get_search_stats()
+            stats = get_npu_code_search().get_search_stats()
             print(f"   {i}. {test['name']}")
             print(f"      🔍 Query: '{test['query']}' ({test['type']})")
             print(f"      📊 Results: {len(results)} found")
@@ -120,7 +124,7 @@ async def test_development_speedup():
     # Test 1: Duplicate detection
     print("\n1. Testing duplicate code detection...")
     try:
-        duplicates = await development_speedup.find_duplicate_code(project_root)
+        duplicates = await get_development_speedup_agent().find_duplicate_code(project_root)
 
         total_duplicates = duplicates.get("total_duplicates", 0)
         potential_savings = duplicates.get("potential_savings", {})
@@ -149,7 +153,7 @@ async def test_development_speedup():
     # Test 2: Pattern analysis
     print("\n2. Testing code pattern analysis...")
     try:
-        patterns = await development_speedup.identify_code_patterns(project_root)
+        patterns = await get_development_speedup_agent().identify_code_patterns(project_root)
 
         total_patterns = patterns.get("total_patterns", 0)
         high_priority = patterns.get("high_priority_issues", 0)
@@ -173,7 +177,7 @@ async def test_development_speedup():
     # Test 3: Import analysis
     print("\n3. Testing import analysis...")
     try:
-        imports = await development_speedup.analyze_imports_and_dependencies(project_root)
+        imports = await get_development_speedup_agent().analyze_imports_and_dependencies(project_root)
 
         most_used = imports.get("most_used_modules", [])
         unused = imports.get("potential_unused_imports", [])
@@ -258,7 +262,7 @@ async def test_performance_comparison():
             results = await search_codebase(query, search_type, max_results=10)
             search_time = time.time() - start_time
 
-            stats = npu_code_search.get_search_stats()
+            stats = get_npu_code_search().get_search_stats()
             total_time += search_time
             if stats.npu_acceleration_used:
                 npu_used_count += 1
@@ -291,7 +295,7 @@ async def test_cache_performance():
 
     # Clear cache first
     try:
-        cache_result = await npu_code_search.clear_cache()
+        cache_result = await get_npu_code_search().clear_cache()
         print(f"   🗑️  Cleared {cache_result.get('keys_deleted', 0)} cache keys")
     except Exception as e:
         print(f"   ⚠️  Cache clear warning: {e}")
@@ -306,7 +310,7 @@ async def test_cache_performance():
     start_time = time.time()
     results1 = await search_codebase(query, search_type, max_results=10)
     time1 = time.time() - start_time
-    stats1 = npu_code_search.get_search_stats()
+    stats1 = get_npu_code_search().get_search_stats()
 
     print(f"   1st search: {time1*1000:.1f}ms, Cache hit: {stats1.redis_cache_hit}")
 
@@ -314,7 +318,7 @@ async def test_cache_performance():
     start_time = time.time()
     results2 = await search_codebase(query, search_type, max_results=10)
     time2 = time.time() - start_time
-    stats2 = npu_code_search.get_search_stats()
+    stats2 = get_npu_code_search().get_search_stats()
 
     print(f"   2nd search: {time2*1000:.1f}ms, Cache hit: {stats2.redis_cache_hit}")
 
@@ -326,9 +330,9 @@ async def test_cache_performance():
     # Verify results are identical
     # #14920: a mismatch printed a warning and still returned True, so the one
     # invariant this test exists to check could not fail it.
-    assert len(results1) == len(results2), (
-        f"cached and uncached searches disagreed: {len(results1)} vs {len(results2)} items"
-    )
+    assert len(results1) == len(
+        results2
+    ), f"cached and uncached searches disagreed: {len(results1)} vs {len(results2)} items"
     print(f"   ✅ Results consistent: {len(results1)} items")
     # The driver sums truthiness (`if result`), so a bare assert would leave a
     # passing test counted as failed. The assert makes it able to fail; this
