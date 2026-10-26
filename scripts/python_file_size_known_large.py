@@ -441,7 +441,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,
     "autobot-slm-backend/monitoring/performance_optimizer.py": 773,
     "autobot-slm-backend/services/backup.py": 774,
-    "autobot-slm-backend/services/blue_green.py": 1279,
+    "autobot-slm-backend/services/blue_green.py": 1243,
     "autobot-slm-backend/services/deployment.py": 703,
     "autobot-slm-backend/services/drift_checker.py": 838,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
@@ -451,7 +451,7 @@ KNOWN_LARGE: dict[str, int] = {
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
-    "autobot-slm-backend/services/replication.py": 822,
+    "autobot-slm-backend/services/replication.py": 785,
     "autobot-slm-backend/services/role_registry.py": 713,
     "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,

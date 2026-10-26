@@ -4,6 +4,7 @@
 # Author: mrveiss
 """Ansible output parsing utilities for slm-backend endpoints."""
 
+import asyncio
 import json
 import os
 import re
@@ -97,6 +98,40 @@ def ansible_run_failure(output: str, host: str | None, returncode: int | None) -
         if unreachable or failed:
             return f"host {name} reported unreachable={unreachable} failed={failed}"
     return None
+
+
+_HOST_KEY_ARGS = "ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'"
+
+
+async def run_single_host_playbook(
+    ansible_dir,
+    playbook_path,
+    host: str,
+    ssh_user: str,
+    ssh_port: int,
+    *,
+    extra_vars: tuple[str, ...] = (),
+    timeout: float,
+    **env: str,
+) -> str | None:
+    """Run *playbook_path* against the one *host*; return why it failed, or None when the recap proved success.
+
+    The single-host callers (blue/green deploy and purge, replication setup and promotion) each
+    built this argv, subprocess and recap check by hand (#19475). *env* reaches the playbook
+    through the subprocess environment only, never argv or disk.
+    """
+    cmd = ["ansible-playbook", str(playbook_path), "-i", f"{host},"]
+    for var in (*extra_vars, f"ansible_user={ssh_user}", f"ansible_port={ssh_port}", _HOST_KEY_ARGS):
+        cmd += ["-e", var]
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=str(ansible_dir),
+        env=ansible_subprocess_env(ansible_dir, **env),
+    )
+    stdout, _ = await asyncio.wait_for(process.communicate(), timeout=timeout)
+    return ansible_run_failure(stdout.decode("utf-8", errors="replace"), host, process.returncode)
 
 
 def _msg_from_result_json(line: str) -> str:
