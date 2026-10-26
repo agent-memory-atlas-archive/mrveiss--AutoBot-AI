@@ -40,14 +40,14 @@ from autobot_shared.logging_manager import get_logger
 from media.document.extraction import DocumentExtractionError, extract_docx, extract_pdf
 from media.document.provenance import TABLE_SECTION_MARKER, render_tables, render_text_and_tables
 from media.document.zip_formats import SUFFIX_BY_FORMAT, sniff_zip_format
+from utils.file_categorization import HTML_EXTENSIONS
+from utils.file_types import DOCX_EXTENSIONS
 
 logger = get_logger(__name__)
 
 # Formats DocumentExtractor delegates to DocumentParser (#14333).
 _WIDE_FORMAT_SUFFIXES = {".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".odg"}
 
-# Module-level constants for O(1) lookups (Issue #326)
-DOCX_EXTENSIONS = {".docx", ".doc"}
 
 # Issue #380: Module-level tuple for numpy numeric type checks
 _NUMPY_NUMERIC_TYPES = (np.integer, np.floating)
@@ -93,7 +93,7 @@ class DocumentExtractor:
     # Supported file types by category
     SUPPORTED_FORMATS = {
         "pdf": [".pdf"],
-        "docx": [".docx", ".doc"],
+        "docx": sorted(DOCX_EXTENSIONS),  # legacy .doc is not docx (#19339)
         # #16785: .csv joins this group -- the GUI upload path (api/knowledge.py
         # _extract_file_content) treats it as plain text too, not a table format.
         "text": [".txt", ".md", ".rst", ".markdown", ".text", ".csv"],
@@ -108,7 +108,7 @@ class DocumentExtractor:
         # formats the GUI upload path (api/knowledge.py) already handles specially
         # rather than as plain text.
         "json": [".json"],
-        "html": [".html"],
+        "html": sorted(HTML_EXTENSIONS),  # extract_from_html sanitises any HTML
     }
 
     @staticmethod

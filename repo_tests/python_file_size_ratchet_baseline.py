@@ -85,7 +85,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/api/codebase_analytics/api_endpoint_scanner.py": 1444,
     "autobot-backend/api/codebase_analytics/chromadb_storage.py": 1389,  # #18055: split to problem_storage.py
     "autobot-backend/api/codebase_analytics/duplicate_detector.py": 1119,
-    "autobot-backend/api/codebase_analytics/endpoints/call_graph.py": 756,
+    "autobot-backend/api/codebase_analytics/endpoints/call_graph.py": 744,
     "autobot-backend/api/codebase_analytics/endpoints/environment.py": 698,  # #13602: sanitised traversal log
     "autobot-backend/api/codebase_analytics/endpoints/pattern_analysis.py": 817,
     "autobot-backend/api/codebase_analytics/endpoints/report.py": 2264,
@@ -168,8 +168,8 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/code_intelligence/code_review_engine_test.py": 1010,
     "autobot-backend/code_intelligence/conversation_analysis/analyzer.py": 906,
     "autobot-backend/code_intelligence/conversation_flow_analyzer_test.py": 900,
-    "autobot-backend/code_intelligence/cross_language_patterns/detector.py": 1212,
-    "autobot-backend/code_intelligence/cross_language_patterns/extractors.py": 903,
+    "autobot-backend/code_intelligence/cross_language_patterns/detector.py": 1199,
+    "autobot-backend/code_intelligence/cross_language_patterns/extractors.py": 891,
     "autobot-backend/code_intelligence/doc_generation/markdown_generator.py": 738,
     "autobot-backend/code_intelligence/fingerprinting/detector.py": 977,
     "autobot-backend/code_intelligence/llm_code_generator_test.py": 960,
@@ -225,7 +225,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/knowledge/connectors/base.py": 663,
     "autobot-backend/knowledge/connectors/credential_store.py": 768,  # #16444: rotate() validates the merged bundle
     "autobot-backend/knowledge/connectors/gdrive.py": 660,
-    "autobot-backend/knowledge/connectors/gitlab.py": 873,
+    "autobot-backend/knowledge/connectors/gitlab.py": 836,
     "autobot-backend/knowledge/connectors/tests/test_credential_store.py": 1021,
     "autobot-backend/knowledge/facts.py": 1729,
     "autobot-backend/knowledge/ownership.py": 757,

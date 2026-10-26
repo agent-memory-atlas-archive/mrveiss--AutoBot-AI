@@ -237,6 +237,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "All tracked files minus vendored/build parts, against the whole tracked tree; the skipped share drifts.",
     ),
+    "file-type-sets-one-home-19339": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test Python under autobot-backend, a subset of all tracked Python; the test-file share drifts.",
+    ),
     "llc-actor-id-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

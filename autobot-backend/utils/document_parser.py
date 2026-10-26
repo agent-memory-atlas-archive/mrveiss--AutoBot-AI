@@ -15,11 +15,11 @@ from autobot_shared.logging_manager import get_logger
 from media.document.extraction import extract_docx, extract_pdf
 from media.document.provenance import render_text_and_tables
 from media.document.zip_formats import SUFFIX_BY_FORMAT, sniff_zip_format
+from utils.file_types import DOCX_EXTENSIONS
 
 logger = get_logger(__name__)
 
 # Performance optimization: O(1) lookup for file extension checks (Issue #326)
-DOCX_EXTENSIONS = {".docx"}
 POWERPOINT_EXTENSIONS = {".ppt", ".pptx"}
 OPENDOCUMENT_GRAPHICS_EXTENSIONS = {".odp", ".odg"}
 

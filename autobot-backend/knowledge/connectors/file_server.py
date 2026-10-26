@@ -27,27 +27,14 @@ from knowledge.connectors.models import (
     SourceInfo,
 )
 from knowledge.connectors.registry import ConnectorRegistry
+from utils.file_types import TEXT_FILE_EXTENSIONS
 from utils.text_chunking import chunk_text
 
 logger = get_logger(__name__)
 
-# File extensions this connector can read as plain text
-_SUPPORTED_EXTENSIONS = {
-    ".txt",
-    ".md",
-    ".json",
-    ".csv",
-    ".py",
-    ".html",
-    ".htm",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".ini",
-    ".cfg",
-    ".rst",
-    ".xml",
-}
+# File extensions this connector can read as plain text: the canonical text set
+# (utils.file_types). Binary office formats are NOT in it; see _SKIP_EXTENSIONS.
+_SUPPORTED_EXTENSIONS = TEXT_FILE_EXTENSIONS
 
 # Extensions we recognise but skip with an explicit warning
 _SKIP_EXTENSIONS = {".pdf", ".docx", ".doc", ".xls", ".xlsx", ".pptx"}

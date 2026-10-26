@@ -338,6 +338,7 @@ _DECLARED_SCOPES = {
         "scripts",
         "tools",
     ),
+    "file-type-sets-one-home-19339": ("autobot-backend",),
     "llc-actor-id-scan": ("autobot-backend/llc",),
     "llc-sigterm-grace-copies": ("autobot-backend/llc",),
     "frontend-http-transports": ("autobot-frontend/src", "autobot-slm-frontend/src"),
