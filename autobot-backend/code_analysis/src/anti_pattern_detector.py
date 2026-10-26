@@ -101,6 +101,8 @@ _DEFAULT_EXCLUDE_PATTERNS = [
     "_test.py",
     "tests/",
     "migrations/",
+    "/.github/",  # the old bare ".git" substring also skipped these
+    "/.gitlab/",
 ]
 
 # Issue #1183: Entry-point suffixes extracted from _detect_dead_code() to reduce function length

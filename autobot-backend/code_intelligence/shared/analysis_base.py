@@ -65,6 +65,9 @@ DEFAULT_EXCLUDE_PATTERNS: List[str] = [
     "*_test.py",
     "/archives/",
     "/migrations/",
+    # The old bare ".git" substring also skipped these CI/config dirs; keep that.
+    "/.github/",
+    "/.gitlab/",
 ]
 
 

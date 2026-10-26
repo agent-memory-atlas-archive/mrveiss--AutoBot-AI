@@ -128,7 +128,8 @@ def _is_private_ip(value: str) -> bool:
 
 # Issue #632: Directories to skip during analysis (aligned with shell script)
 # Canonical skip dirs plus extras: tests, fixtures and static assets hold no deployable config (#632, aligned with the shell script).
-_SKIP_DIRECTORIES = SKIP_DIRS | {
+# bin/ stays scanned: deploy scripts there are where hardcoded IPs hide.
+_SKIP_DIRECTORIES = (SKIP_DIRS - {"bin"}) | {
     ".eggs",
     ".mypy_cache",
     "__tests__",

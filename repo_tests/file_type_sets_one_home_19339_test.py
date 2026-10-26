@@ -33,7 +33,8 @@ _HOMES = frozenset({"autobot-backend/utils/file_categorization.py", "autobot-bac
 ALLOWED_LITERALS: dict[str, str] = {}
 
 _NAME = re.compile(
-    r"(?i)(_?(TEXT|HTML|DOCX|SUPPORTED)_?(FILE_)?EXTENSIONS|_?SKIP_DIR(S|ECTORIES)|_?EXCLUDED_DIRS|_?COCHANGE_SKIP_DIRS)$"
+    r"(?i)(_?(TEXT|HTML|DOCX|SUPPORTED)_?(FILE_)?EXTENSIONS|_?SKIP_DIR(S|ECTORIES)|_?EXCLUDED_DIRS|_?COCHANGE_SKIP_DIRS"
+    r"|(DEFAULT_)?(EXCLUDED?|IGNORED?|SKIP)_(DIRS?|DIRECTORIES)|DEFAULT_(EXCLUDE|IGNORE|SKIP)_PATTERNS)$"
 )
 _WRAPPERS = frozenset({"set", "frozenset", "tuple", "list"})
 
@@ -69,10 +70,16 @@ def _target_names(target: ast.AST) -> list[str]:
 
 
 def _is_string_literal_collection(node: ast.AST | None) -> bool:
-    """A set/tuple/list literal of 2+ string constants, directly or inside ``frozenset(...)`` and kin."""
+    """A set/tuple/list literal of 2+ string constants, directly, inside ``frozenset(...)`` and kin, or a
+    ``|`` union of two such literals (a union with a name, ``SKIP_DIRS | {...}``, is a derivation). A literal that spreads (``[*sorted(SKIP_DIRS), "x"]``) derives from the
+    home and is not a copy."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _is_string_literal_collection(node.left) and _is_string_literal_collection(node.right)
     if isinstance(node, ast.Call) and getattr(node.func, "id", "") in _WRAPPERS and len(node.args) == 1:
         node = node.args[0]
     if not isinstance(node, ast.Set | ast.Tuple | ast.List):
+        return False
+    if any(isinstance(e, ast.Starred) for e in node.elts):
         return False
     strings = [e for e in node.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
     return len(strings) >= 2
@@ -144,6 +151,11 @@ def _targets(node: ast.AST) -> list[ast.AST]:
         "_COCHANGE_SKIP_DIRS: frozenset = frozenset({'vendor', 'dist'})\n",
         "self.skip_dirs = {'a', 'b'}\n",
         "def f():\n    skip_dirs = {'node_modules', 'dist'}\n",
+        "DEFAULT_EXCLUDE_DIRS = frozenset(['a', 'b']) | {'c', 'd'}\n",
+        "_IGNORED_DIRS = frozenset({'node_modules', '.git'})\n",
+        "DEFAULT_IGNORE_PATTERNS = ['__pycache__', '*.pyc']\n",
+        "DEFAULT_SKIP_PATTERNS = ['x', 'y']\n",
+        "EXCLUDE_DIRS = frozenset({'venv', 'dist'})\n",
     ],
 )
 def test_each_restated_literal_shape_is_flagged(source: str) -> None:
@@ -159,6 +171,9 @@ def test_each_restated_literal_shape_is_flagged(source: str) -> None:
         "_HTML_EXTENSIONS = tuple(sorted(HTML_EXTENSIONS))\n",
         "DOCX_EXTENSIONS = {'.docx'}\n",
         "OTHER_NAMES = {'node_modules', '.git'}\n",
+        "DEFAULT_EXCLUDE_PATTERNS = [*sorted(SKIP_DIRS), '*.pyc', '*.pyo']\n",
+        "_SKIP_DIRS = SKIP_DIRS | {'a', 'b'}\n",
+        "EXCLUDE_PATTERNS = ['a', 'b']\n",
     ],
 )
 def test_an_import_a_derivation_or_an_unrelated_name_is_not_flagged(source: str) -> None:

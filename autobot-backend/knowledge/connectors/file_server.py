@@ -27,6 +27,7 @@ from knowledge.connectors.models import (
     SourceInfo,
 )
 from knowledge.connectors.registry import ConnectorRegistry
+from utils.file_categorization import SKIP_DIRS
 from utils.file_types import TEXT_FILE_EXTENSIONS
 from utils.text_chunking import chunk_text
 
@@ -80,10 +81,11 @@ class FileServerConnector(AbstractConnector):
             "include_patterns",
             ["**/*.txt", "**/*.md", "**/*.json", "**/*.csv", "**/*.py", "**/*.html"],
         )
-        self._exclude_patterns: List[str] = cfg.get(
-            "exclude_patterns",
-            ["**/node_modules/**", "**/.git/**", "**/__pycache__/**"],
-        )
+        # Default excludes: the canonical skip dirs (as whole path components, so a
+        # root-level `node_modules/` is caught too) and minified bundles. An explicit
+        # `exclude_patterns` replaces both: the operator then owns the list (#19339).
+        self._exclude_patterns: List[str] = cfg.get("exclude_patterns", ["*.min.*"])
+        self._skip_dirs = frozenset() if "exclude_patterns" in cfg else SKIP_DIRS
         self._max_size_bytes: int = int(cfg.get("max_file_size_mb", 10)) * 1024 * 1024
 
     # ------------------------------------------------------------------
@@ -154,7 +156,9 @@ class FileServerConnector(AbstractConnector):
         return any(fnmatch.fnmatch(rel_path, pat) for pat in self._include_patterns)
 
     def _matches_exclude(self, rel_path: str) -> bool:
-        """Return True if rel_path matches any exclude pattern."""
+        """Return True if rel_path is under a skipped dir or matches any exclude pattern."""
+        if self._skip_dirs.intersection(Path(rel_path).parts[:-1]):
+            return True
         return any(fnmatch.fnmatch(rel_path, pat) for pat in self._exclude_patterns)
 
     def _build_source_id(self, file_path: Path) -> str:
