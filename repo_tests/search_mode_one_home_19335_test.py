@@ -115,10 +115,14 @@ def _binding_hits(node: ast.AST, scope: str = "") -> list[str]:
 def _scopes(tree: ast.AST) -> dict[int, str]:
     """``id(node) -> name of the nearest enclosing function or class``."""
     scope: dict[int, str] = {}
-    for outer in ast.walk(tree):
-        if isinstance(outer, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
-            for child in ast.iter_child_nodes(outer):
-                scope[id(child)] = outer.name
+    stack: list[tuple[ast.AST, str]] = [(tree, "")]
+    while stack:
+        node, name = stack.pop()
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            name = node.name
+        for child in ast.iter_child_nodes(node):
+            scope[id(child)] = name
+            stack.append((child, name))
     return scope
 
 
@@ -164,6 +168,8 @@ def test_the_home_lists_exactly_the_modes_the_api_accepts() -> None:
         'async def hybrid_search(q, mode: str = "auto"): ...\n',
         'class SearchRequest(BaseModel):\n    mode: str = "auto"\n',
         'search_mode = "auto"\n',
+        'def search(q):\n    if q:\n        try:\n            mode = "auto"\n        finally:\n            pass\n',
+        'async def search(q):\n    with ctx():\n        mode: str = "auto"\n',
         'class R(BaseModel):\n    mode: str = Field(default="x", pattern=r"^(semantic|keyword|hybrid|auto)\\z")\n',
         'RX = "keyword|hybrid"\n',
     ],
@@ -178,6 +184,7 @@ def test_the_constants_and_unrelated_words_are_not_copies() -> None:
         "def f(mode=CategoryDefaults.SEARCH_MODE_AUTO): ...\n"
         'def g(engine="auto", fmt="hybrid-car"): ...\n'
         'def get_context(q, mode: str = "auto"): ...\n'
+        'def search(q):\n    def extract(mode="auto"): ...\n    if q:\n        cfg = "auto"\n'
         'class Extractor:\n    def __init__(self, mode: str = "auto"): ...\n'
         'class R(BaseModel):\n    x: str = Field(pattern="^(" + "|".join(MODES) + ")$")\n'
         'PAT = "auto|manual"\n'
