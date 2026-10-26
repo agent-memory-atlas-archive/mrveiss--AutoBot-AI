@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 
 from autobot_shared.env_utils import env_int
+from services.process_group import kill_process_group
 
 # Common install locations checked when ansible-playbook isn't on PATH
 # (Issue #12693 — shared between DeploymentService and PlaybookExecutor).
@@ -117,7 +118,8 @@ async def run_single_host_playbook(
     """Run *playbook_path* against the one *host*; return why it failed, or None when the recap proved success.
 
     The single-host callers (blue/green deploy and purge, replication setup and promotion) each
-    built this argv, subprocess and recap check by hand (#19475). *env* reaches the playbook
+    built this argv, subprocess and recap check by hand (#19475). A timeout or cancellation kills
+    the whole process group before re-raising, so no ansible run outlives its caller. *env* reaches the playbook
     through the subprocess environment only, never argv or disk.
     """
     cmd = ["ansible-playbook", str(playbook_path), "-i", f"{host},"]
@@ -129,8 +131,14 @@ async def run_single_host_playbook(
         stderr=asyncio.subprocess.STDOUT,
         cwd=str(ansible_dir),
         env=ansible_subprocess_env(ansible_dir, **env),
+        start_new_session=True,  # its own process group, so a kill reaches the forked ssh workers too
     )
-    stdout, _ = await asyncio.wait_for(process.communicate(), timeout=timeout)
+    try:
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=timeout)
+    except (asyncio.TimeoutError, asyncio.CancelledError):
+        # wait_for abandons communicate() but leaves ansible and its ssh children running (#19475).
+        await kill_process_group(process)
+        raise
     return ansible_run_failure(stdout.decode("utf-8", errors="replace"), host, process.returncode)
 
 
