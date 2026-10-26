@@ -237,6 +237,11 @@ REACH_ROOTS = {
         "autobot_shared",
         "plugins",
     ),
+    "repo_tests/redaction_placeholder_one_home_19337_test.py": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+    ),
     "repo_tests/redis_direct_constructor_18553_test.py": (
         "autobot-backend",
         "autobot-browser-worker",
@@ -262,6 +267,7 @@ REACH_ROOTS = {
         "tools",
     ),
     "repo_tests/script_module_names_unique_14873_test.py": ("autobot-infrastructure/shared/scripts",),
+    "repo_tests/search_mode_one_home_19335_test.py": ("autobot-backend",),
     "repo_tests/severity_enum_fork_guard_18098_test.py": (
         "autobot-backend",
         "autobot-infrastructure",
