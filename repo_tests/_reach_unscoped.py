@@ -29,6 +29,9 @@ UNSCOPED = frozenset(
         "role-registry-installed-units",
         # #19413: every tracked file, so a ChromaDB heartbeat path written anywhere is seen.
         "chromadb-heartbeat-one-home-sweep",
+        # #19319: every tracked file repo-wide (minus vendored/build parts), wherever a copy of the
+        # AUTOBOT_FEATURE_ROUTERS_STRICT default could be written -- no prefix describes it.
+        "feature-routers-strict-one-home-19319",
         # #19310: every tracked text file in the repository, so a runtime-dir literal written
         # anywhere is seen; no roots= list could name "wherever someone writes it".
         "system-knowledge-runtime-literal-scan",
@@ -47,6 +50,8 @@ UNSCOPED = frozenset(
         "config-router-auth-coverage",
         "conflict-marker-scanned-files",
         "connector-redaction-sweep",
+        # #19315: items are (path, line, var, value) assignments across the whole tree, not paths.
+        "deployment-profile-writers-19315",
         "detect-environment-env-files",
         "docstring-restatement-scan",
         "dpkg-ansible-registrations",
