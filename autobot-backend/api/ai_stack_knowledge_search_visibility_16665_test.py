@@ -11,8 +11,12 @@ never does, an admin does, and a research-quarantined fact is never returned.
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from api import ai_stack_integration
+from auth_middleware import check_admin_permission, get_current_user
+from dependencies import provide_knowledge_base
 from knowledge.read_path_fakes_16665 import PRIVATE_A, RESEARCH, SHARED, FakeKB, QuarantineGatedKB
 
 ALICE = {"user_id": "alice", "role": "user"}
@@ -20,23 +24,31 @@ BOB = {"user_id": "bob", "role": "user"}
 ADMIN = {"user_id": "root", "role": "admin"}
 
 
-async def _search(user, kb) -> str:
-    """The handler's own result, called directly: the route's response_model rejects its payload.
-
-    ``KnowledgeSearchData`` requires ``rag_augmented`` while the handler emits ``aistack``, so a
-    TestClient call fails response validation whatever the caller may read -- a contract defect
-    separate from #16665, so this test reads the handler's return value.
-    """
+def _search_http(user, kb):
+    """Through the real router, so the route's response model is exercised too."""
+    app = FastAPI()
+    app.include_router(ai_stack_integration.router)
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[check_admin_permission] = lambda: True
+    app.dependency_overrides[provide_knowledge_base] = lambda: kb
     client = AsyncMock()
     client.search_knowledge.return_value = {}
     with (
         patch.object(ai_stack_integration, "get_ai_stack_client", AsyncMock(return_value=client)),
         patch("services.audit_logger.audit_log", new=AsyncMock(return_value=True)),
     ):
-        response = await ai_stack_integration.knowledge_search(
-            query="q", admin_check=True, knowledge_base=kb, current_user=user
-        )
-    return repr(response)
+        return TestClient(app).post("/knowledge/search", params={"query": "q"})
+
+
+async def _search(user, kb) -> str:
+    return _search_http(user, kb).text
+
+
+def test_the_response_matches_its_declared_model():
+    response = _search_http(ALICE, FakeKB())
+
+    assert response.status_code == 200
+    assert set(response.json()["data"]) == {"local_kb", "rag_augmented"}
 
 
 @pytest.mark.asyncio

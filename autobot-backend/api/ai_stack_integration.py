@@ -344,10 +344,10 @@ async def knowledge_search(
         aistack_results = await ai_client.search_knowledge(
             query=query, search_type=search_type, max_results=max_results
         )
-        results["aistack"] = aistack_results
+        results["rag_augmented"] = aistack_results
     except AIStackError as e:
         logger.warning("AI Stack search failed: %s", e)
-        results["aistack"] = {}
+        results["rag_augmented"] = {}
 
     return create_success_response(results, "AI Stack knowledge search completed")
 
