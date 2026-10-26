@@ -34,7 +34,9 @@ from repo_tests._ratchet_base import base_table
 _EXCLUDED = re.compile(r"(\.test\.|\.spec\.|\.stories\.|/__tests__/)")
 _TAG = re.compile(r"<table(?:[\s>]|$)")
 _COMMENT = re.compile(r"^\s*//")
-_HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+# Closed comments only: an unclosed ``<!--`` (e.g. inside a JS string) must not swallow the rest of the
+# file and hide a live table after it -- an unclosed opener leaves the text counted, failing closed.
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 # Measured on the live tree: 41 table-opening lines in 30 autobot-frontend files, 53 in 34
 # autobot-slm-frontend files (#19698). Lower an entry by exactly what a PR converts; delete it at 0.
