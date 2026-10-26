@@ -30,7 +30,6 @@ from .authz import (
     NotAuthorisedError,
     may_attach_under,
     require_company_admin,
-    require_company_admin_unless_platform,
 )
 from .base import LLCServiceBase
 from .company_ceo import CompanyCEOService
@@ -187,9 +186,10 @@ class CompanyService(LLCServiceBase):
     ) -> Organization:
         """Re-parent *company_id* (``None`` = top level); the CEO follows the move (#15907).
 
-        Authorized here so every caller inherits it (#19634): admin on the moved org,
-        admin on the new parent (else not found), and admin on the parent being left;
-        a platform admin passes all three. The moved org and the new parent's ancestor chain are
+        Authorized here so every caller inherits it (#19634): an org with a parent is
+        moved by an owner/admin of that parent, a top-level org by its own owner/admin,
+        and a new parent needs owner/admin there (else not found); a platform admin
+        passes every check. The moved org and the new parent's ancestor chain are
         locked first (#19593), so the cycle check and the CEO sync read a tree no
         concurrent move can change before this transaction ends.
         """
@@ -216,13 +216,14 @@ class CompanyService(LLCServiceBase):
         actor_user_id: Optional[uuid.UUID],
         platform_admin: bool,
     ) -> None:
-        """Before any lock: admin on the moved org, and on the new parent (#19634, #12233's rule).
+        """Before any lock: the move's authority, then the new parent (#19634, #12233's rule).
 
-        Checked first so a caller with no rights here never takes a row lock.
+        Checked first so a caller with no rights here never takes a row lock. The
+        org is read unlocked; :meth:`_authorize_locked_move` repeats the authority
+        check once the row is locked and its current parent is certain.
         """
-        await require_company_admin_unless_platform(
-            self.session, company_id, actor_user_id, platform_admin=platform_admin
-        )
+        org = await self._get_or_404(company_id)
+        await self._require_move_authority(org, parent_org_id, actor_user_id, platform_admin, for_update=False)
         if parent_org_id is None:
             return
         if not await may_attach_under(self.session, parent_org_id, actor_user_id, platform_admin=platform_admin):
@@ -235,22 +236,36 @@ class CompanyService(LLCServiceBase):
         actor_user_id: Optional[uuid.UUID],
         platform_admin: bool,
     ) -> None:
-        """Under the lock: the moved-org role again, and the right to leave the current parent.
+        """Under the lock: the authority again, with its membership row locked ``FOR UPDATE``.
 
-        The current parent is only known for certain once the org row is locked. The
-        actor's membership row in the moved org is locked too, so a revoke or role
-        change waits for this move instead of racing it. Moving a sub-org out of its
-        parent (promotion or sideways) is done from the parent org: only an owner/admin
-        of the parent being left, or a platform admin, may do it -- the sub-org's own
-        owner may not (maintainer ruling, 2026-10-26).
+        A revoke or role change of the deciding membership then waits for this move
+        instead of racing it.
+        """
+        await self._require_move_authority(org, parent_org_id, actor_user_id, platform_admin, for_update=True)
+
+    async def _require_move_authority(
+        self,
+        org: Organization,
+        parent_org_id: Optional[uuid.UUID],
+        actor_user_id: Optional[uuid.UUID],
+        platform_admin: bool,
+        *,
+        for_update: bool,
+    ) -> None:
+        """Who decides a move (maintainer ruling, 2026-10-26).
+
+        A platform admin always may. An org WITH a parent is moved from the parent
+        org (promotion or sideways): an owner/admin of that parent decides, with no
+        role needed in the sub-org; the sub-org's own owner may not. A top-level org
+        decides itself to join a parent: owner/admin of the moved org.
         """
         if platform_admin:
             return
-        await require_company_admin(self.session, org.id, actor_user_id, for_update=True)
         if org.parent_org_id is None or org.parent_org_id == parent_org_id:
+            await require_company_admin(self.session, org.id, actor_user_id, for_update=for_update)
             return
         try:
-            await require_company_admin(self.session, org.parent_org_id, actor_user_id)
+            await require_company_admin(self.session, org.parent_org_id, actor_user_id, for_update=for_update)
         except NotAuthorisedError as exc:
             raise NotAuthorisedError(
                 f"moving company {org.id} out of its parent must be done by an owner/admin of the parent "
@@ -260,21 +275,15 @@ class CompanyService(LLCServiceBase):
     async def _lock_move_rows(self, company_id: uuid.UUID, parent_org_id: Optional[uuid.UUID]) -> None:
         """Lock the moved org and the new parent's ancestor chain ``FOR UPDATE``, in id order (#19593).
 
-        Two movers whose sets overlap take them in one id-ordered statement each, so
-        one waits for the other instead of each reading a tree the other is about to
-        change, and neither holds one row while waiting for another. The chain is read,
-        locked, then read again under the lock; if it gained rows (a concurrent move
-        committed in between), the next pass re-locks the FULL set, again in id order,
-        up to MOVE_LOCK_MAX_PASSES, then :class:`CompanyMoveContendedError`.
-
-        Re-locking the full set is the chosen ordering rule. The residual case is a
-        later pass, which still holds the rows earlier passes locked while it waits
-        for the new ones. If that closes a wait cycle, Postgres aborts one mover with
-        ``deadlock_detected``, and :meth:`_lock_ids` turns that into the same retryable
-        :class:`CompanyMoveContendedError`. Retrying inside this transaction (a
-        savepoint) would not help: the rows from earlier passes stay held, so the same
-        cycle would just form again. The retry is a fresh transaction, by the caller.
-        Either way the move fails closed: never a cycle, never a stuck lock.
+        Overlapping movers each take their set in one id-ordered statement, so one
+        waits for the other rather than both reading a tree about to change. The chain
+        is re-read under the lock; if it grew (a concurrent move committed), the next
+        pass re-locks the FULL set in id order, up to MOVE_LOCK_MAX_PASSES, then
+        :class:`CompanyMoveContendedError`. A later pass still holds earlier rows while
+        it waits, so a wait cycle is possible there; Postgres then aborts one mover with
+        ``deadlock_detected``, which :meth:`_lock_ids` turns into the same retryable
+        error. An in-transaction (savepoint) retry would rebuild the same cycle, so the
+        retry is a fresh transaction by the caller. Fails closed: never a cycle.
         """
         wanted = {company_id, *await self._chain_ids(parent_org_id)}
         for _ in range(MOVE_LOCK_MAX_PASSES):

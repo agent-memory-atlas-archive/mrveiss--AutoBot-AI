@@ -86,7 +86,8 @@ async def _parent_of(session_factory, org_id: uuid.UUID) -> uuid.UUID | None:  #
 
 
 @pytest.mark.asyncio
-async def test_a_plain_member_of_the_moved_org_is_refused(session_factory):  # noqa: ANN001
+async def test_a_top_level_orgs_non_admin_cannot_attach_it(session_factory):  # noqa: ANN001
+    """A top-level org decides itself to join a parent: its owner/admin, not a plain member."""
     parent = await _org(session_factory, "Parent")
     org = await _org(session_factory, "Acme", role=MembershipRole.MEMBER)
     with pytest.raises(NotAuthorisedError):
@@ -213,6 +214,34 @@ async def test_a_non_admin_of_the_current_parent_cannot_promote(session_factory)
     org = await _org(session_factory, "Acme", parent=parent)  # _ACTOR owns the sub-org
     with pytest.raises(NotAuthorisedError, match="owner/admin of the parent org"):
         await _update(session_factory, org, CompanyUpdate(parent_org_id=None))
+    assert await _parent_of(session_factory, org) == parent
+
+
+@pytest.mark.asyncio
+async def test_a_parent_admin_with_no_membership_in_the_sub_org_promotes_it(session_factory):  # noqa: ANN001
+    """An org with a parent is moved from the parent org; no role in the sub-org is needed (2026-10-26)."""
+    parent = await _org(session_factory, "Parent", role=MembershipRole.ADMIN)
+    org = await _org(session_factory, "Acme", parent=parent, role=None)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=None))
+    assert await _parent_of(session_factory, org) is None
+
+
+@pytest.mark.asyncio
+async def test_a_parent_admin_moves_the_sub_org_sideways_under_a_parent_it_also_admins(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.ADMIN)
+    other = await _org(session_factory, "Other", role=MembershipRole.ADMIN)
+    org = await _org(session_factory, "Acme", parent=parent, role=None)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=other))
+    assert await _parent_of(session_factory, org) == other
+
+
+@pytest.mark.asyncio
+async def test_a_parent_admin_still_needs_admin_on_the_new_parent_for_a_sideways_move(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.ADMIN)
+    other = await _org(session_factory, "Other", role=MembershipRole.MEMBER)
+    org = await _org(session_factory, "Acme", parent=parent, role=None)
+    with pytest.raises(CompanyNotFoundError):
+        await _update(session_factory, org, CompanyUpdate(parent_org_id=other))
     assert await _parent_of(session_factory, org) == parent
 
 
