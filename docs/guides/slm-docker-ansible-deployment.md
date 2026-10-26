@@ -1,6 +1,9 @@
 # Deploying Docker Containers via SLM Ansible Playbooks
 
 
+
+> **Scope:** the `ansible-playbook` commands in this guide are for writing and testing a playbook. A deployed fleet is updated only through the SLM's builtin updater (Maintenance → Updates → Code Sync), never by hand.
+
 ## Quick Answer
 
 **How do you deploy a Docker container using the SLM and an Ansible playbook?**

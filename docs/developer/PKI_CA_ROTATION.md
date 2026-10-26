@@ -78,10 +78,10 @@ for vm in autobot-backend autobot-frontend nginx; do
 done
 ```
 
-Or trigger a full Ansible deploy which will restart services automatically:
+Or redeploy through the builtin updater, which restarts services:
 
 ```bash
-ansible-playbook deploy.yml  # ansible/deploy.yml, run from autobot-slm-backend/ansible
+# SLM: Maintenance -> Updates -> Code Sync (never a hand-run deploy against the fleet)
 ```
 
 ### 5. Verify
@@ -111,8 +111,7 @@ cp -r certs.bak-<YYYYMMDD>/ certs/
 # Re-distribute old certs
 python3 -m pki.cli distribute
 
-# Restart services
-ansible-playbook deploy.yml  # ansible/deploy.yml, run from autobot-slm-backend/ansible
+# Restart services: from the SLM (node -> Services -> Start), or redeploy through Code Sync
 ```
 
 ---
