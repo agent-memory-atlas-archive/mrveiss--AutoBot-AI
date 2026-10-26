@@ -19,7 +19,7 @@ MODEL = "bge-m3:latest"
 
 class _Redis:
     def __init__(self):
-        self.kv, self.hashes, self.sets = {}, {}, {}
+        self.kv, self.hashes, self.sets, self.ttl = {}, {}, {}, {}
 
     async def get(self, key):
         return self.kv.get(key)
@@ -29,6 +29,16 @@ class _Redis:
             return None
         self.kv[key] = value
         return True
+
+    async def eval(self, script, numkeys, key, expected, *args):
+        """The compare-and-delete / compare-and-pexpire scripts of autobot_shared.redis_utils."""
+        if self.kv.get(key) != expected:
+            return 0
+        if "PEXPIRE" in script:
+            self.ttl[key] = int(args[0])
+        else:
+            self.kv.pop(key)
+        return 1
 
     async def exists(self, key):
         return int(key in self.kv)
@@ -276,6 +286,21 @@ async def test_a_quarantined_or_private_fact_keeps_its_filter_fields(env):
     await _run(env)
     meta = env.store._collection.ids["q"].metadata
     assert meta["collection"] == "research_quarantine" and meta["owner_id"] == "u1"
+
+
+async def test_a_heartbeat_after_the_lock_was_retaken_fails_without_extending_it(env):
+    """code review on PR #19641: the owner check and the TTL reset are one atomic step."""
+    run = sw._Run("owner-1", MODEL, "c", sw.time.monotonic())
+    await env.redis.set(sw.LOCK_KEY, "owner-2")
+    with pytest.raises(RuntimeError, match="lost its lock"):
+        await sw._heartbeat(run)
+    assert env.redis.kv[sw.LOCK_KEY] == "owner-2" and sw.LOCK_KEY not in env.redis.ttl
+
+
+async def test_a_finished_build_leaves_a_newer_owners_lock_alone(env):
+    await env.redis.set(sw.LOCK_KEY, "owner-2")
+    await sw._finish(sw._Run("owner-1", MODEL, "c", sw.time.monotonic()), "failed", reason="x")
+    assert env.redis.kv[sw.LOCK_KEY] == "owner-2"
 
 
 async def test_a_write_is_not_noted_when_no_switch_runs(env):

@@ -40,6 +40,7 @@ from autobot_shared.async_compat import fire_and_forget
 from autobot_shared.embedding_model import active_embedding_model, is_embedding_model_id, set_embedding_model_override
 from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.redis_utils import delete_if_value, expire_if_value
 
 logger = get_logger(__name__)
 
@@ -176,10 +177,8 @@ async def _heartbeat(run: _Run, **fields: Any) -> None:
     """Keep the lock (this owner only), record progress, and enforce the overall deadline."""
     if time.monotonic() - run.started > SWITCH_DEADLINE_S:
         raise _DeadlineExceeded(f"the build exceeded its {SWITCH_DEADLINE_S:.0f}s deadline")
-    client = await _redis()
-    if await client.get(LOCK_KEY) != run.owner:
+    if not await expire_if_value(await _redis(), LOCK_KEY, run.owner, int(SWITCH_STALE_S * 1000)):
         raise RuntimeError("the build lost its lock (force-closed or expired)")
-    await client.set(LOCK_KEY, run.owner, xx=True, ex=int(SWITCH_STALE_S))
     await _set_state(heartbeat=datetime.now(tz=timezone.utc).isoformat(), **fields)
 
 
@@ -209,8 +208,10 @@ async def _finish(run: _Run | None, state: str, *, reason: str = "", failed: int
     fields["failed_ids"] = json.dumps(list(failed_ids)[:_FAILED_IDS_SHOWN])
     await _set_state(**fields)
     client = await _redis()
-    if run is None or await client.get(LOCK_KEY) == run.owner:
-        await client.delete(LOCK_KEY)
+    if run is None:
+        await client.delete(LOCK_KEY)  # force-close: the owner is gone
+    else:
+        await delete_if_value(client, LOCK_KEY, run.owner)
 
 
 async def _build(kb, run: _Run) -> Tuple[Any, List[str], int]:
