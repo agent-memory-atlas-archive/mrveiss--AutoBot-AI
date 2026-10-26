@@ -20,15 +20,11 @@ const logger = createLogger('useWorkflowNotificationConfig');
 // Types
 // ---------------------------------------------------------------------------
 
-/** Notification events that can trigger delivery. */
-export type NotificationEvent =
-  | 'workflow_completed'
-  | 'workflow_failed'
-  | 'step_failed'
-  | 'approval_needed';
+/** Notification events and delivery channels, generated from the backend enums (#19334). */
+import type { NotificationChannel, NotificationEvent } from '@/types/_generated/workflow';
+import { NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS } from '@/composables/useNotificationConfig';
 
-/** Notification delivery channels. */
-export type NotificationChannel = 'email' | 'slack' | 'webhook' | 'in_app';
+export type { NotificationChannel, NotificationEvent };
 
 /** Shape of the notification config as returned by the backend. */
 export interface NotificationConfig {
@@ -55,19 +51,10 @@ export interface NotificationConfigPayload {
 // Constants
 // ---------------------------------------------------------------------------
 
-export const ALL_EVENTS: NotificationEvent[] = [
-  'workflow_completed',
-  'workflow_failed',
-  'step_failed',
-  'approval_needed',
-];
+/** The UI's offered subset -- one list, shared with useNotificationConfig (#19334). */
+export const ALL_EVENTS: NotificationEvent[] = [...NOTIFICATION_EVENTS];
 
-export const ALL_CHANNELS: NotificationChannel[] = [
-  'email',
-  'slack',
-  'webhook',
-  'in_app',
-];
+export const ALL_CHANNELS: NotificationChannel[] = [...NOTIFICATION_CHANNELS];
 
 // ---------------------------------------------------------------------------
 // Composable

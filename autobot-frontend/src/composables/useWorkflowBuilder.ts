@@ -44,6 +44,10 @@ import type {
 } from '@/types/workflowTemplates'
 export type { WorkflowStepStatus, RiskLevel, AutomationWorkflowStep }
 
+// Workflow phase from the state machine (#1380), generated from the backend enum (#19334).
+import type { ExecutionStrategy, WorkflowPhase } from '@/types/_generated/workflow'
+export type { ExecutionStrategy, WorkflowPhase }
+
 /** Automation execution modes */
 export type AutomationMode = 'manual' | 'semi_automatic' | 'automatic';
 
@@ -60,13 +64,6 @@ export type PlanApprovalStatus =
   | 'modified'
   | 'timeout';
 
-/** Execution strategy */
-export type ExecutionStrategy =
-  | 'sequential'
-  | 'parallel'
-  | 'pipeline'
-  | 'collaborative'
-  | 'adaptive';
 
 /**
  * Workflow step definition (#7123).
@@ -81,13 +78,6 @@ export type ExecutionStrategy =
  */
 export type WorkflowStep = AutomationWorkflowStep;
 
-/** Workflow phase from state machine (#1380) */
-export type WorkflowPhase =
-  | 'planning'
-  | 'executing'
-  | 'validating'
-  | 'complete'
-  | 'failed';
 
 /** State machine info for a workflow (#1380) */
 export interface WorkflowStateInfo {
