@@ -561,7 +561,11 @@ def test_host_generated_map_has_one_definition_and_no_component_predicate() -> N
 
 
 def _layout_sets(source: str) -> list[int]:
-    """Lines of set literals built from 2+ release-layout constants: a second declaration (#19453)."""
+    """Lines of set/tuple/list literals built from 2+ release-layout constants: a second declaration (#19453).
+
+    Narrow on purpose: it recognises a copy spelled with the ``SLM_FRONTEND_*`` constants. A copy
+    of the layout written as bare strings ({"dist", "current", ...}) or under other names escapes it.
+    """
     import ast
 
     return [

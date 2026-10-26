@@ -227,6 +227,35 @@ async def test_the_backends_rendered_files_get_a_named_verdict(tmp_path, monkeyp
     assert "host_state:unclassified" not in result.exclusions, result.exclusions
 
 
+async def test_the_ai_stacks_rendered_requirements_are_host_generated(tmp_path, monkeypatch) -> None:
+    """#19453 review: roles/ai-stack renders filtered-requirements-ai.txt into the deployed root."""
+    result = await _host_generated_drift(tmp_path, monkeypatch, "autobot-ai-stack", ["filtered-requirements-ai.txt"])
+
+    # An exact host-generated name is named deploy_only (drift_checker.deploy_only_entries unions the one
+    # map in, #19443); a glob match is build_bundle. Either way a named verdict, never drift or unclassified.
+    assert result.drifted == [], [entry.path for entry in result.drifted]
+    assert result.exclusions == {"deploy_only:filtered-requirements-ai.txt": 1}, result.exclusions
+
+
+async def test_a_retired_dist_like_path_is_removed_from_source_not_a_bundle(tmp_path, monkeypatch) -> None:
+    """#19453 AC2: under a component that lists no release layout, a once-tracked dist-* is drift."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _write(repo / "comp" / "keep.py")
+    _write(repo / "comp" / "dist-legacy" / "index.html")
+    _commit_all(repo, "seed")
+    (repo / "comp" / "dist-legacy" / "index.html").unlink()
+    _commit_all(repo, "retire dist-legacy")
+    _write(tmp_path / "deployed" / "comp" / "keep.py")
+    _write(tmp_path / "deployed" / "comp" / "dist-legacy" / "index.html")
+
+    result = await _drift_for(tmp_path, monkeypatch, "comp", repo)
+
+    entry = _by_path(result, "dist-legacy/index.html")
+    assert entry is not None and entry.verdict == VERDICT_REMOVED_FROM_SOURCE, result.drifted
+    assert "build_bundle" not in result.exclusions, result.exclusions
+
+
 async def test_a_component_without_host_generated_paths_does_not_borrow_anothers(tmp_path, monkeypatch) -> None:
     """The bundle layout is per component: a dist-* under a component that publishes none is reported."""
     result = await _host_generated_drift(tmp_path, monkeypatch, "comp", ["dist-20260101T000000000Z/index.html"])
