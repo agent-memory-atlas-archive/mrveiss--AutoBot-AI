@@ -344,7 +344,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/llm_service.py": 1199,  # #16845: _track_usage delegated to llm_usage_recording
     "autobot-backend/services/load_balancer.py": 685,
     "autobot-backend/services/nl_database_service.py": 775,
-    "autobot-backend/services/notification_service.py": 634,
+    "autobot-backend/services/notification_service.py": 614,
     "autobot-backend/services/npu_worker_manager.py": 1419,
     "autobot-backend/services/rag_service.py": 1076,
     "autobot-backend/services/redis_service_manager_test.py": 839,
