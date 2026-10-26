@@ -10,6 +10,10 @@ for development acceleration.
 Not collected by CI: ``autobot-npu-worker`` is in no pytest ``testpaths`` and no workflow
 invocation, so a collection error here fails nothing. Wiring that tree in is #15476.
 The agents are reached through their lazy accessors, not module-level singletons (#19694).
+
+These tests index into the configured Redis and ``test_cache_performance`` clears the
+code-search cache there. On a machine that also runs an install, that is the user's live
+system, so the module skips unless the run opts in with ``AUTOBOT_LIVE_TESTS=1`` (#19479).
 """
 
 import asyncio
@@ -18,15 +22,25 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from agents.development_speedup_agent import analyze_codebase, get_development_speedup_agent
 from agents.npu_code_search_agent import get_npu_code_search, index_project, search_codebase
+from autobot_shared.live_service_probe import require_live_endpoint
+from autobot_shared.ssot_config import config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True)
+def _live_redis_only() -> None:
+    """Skip unless the run opted into live services: these tests write to and clear Redis."""
+    require_live_endpoint(config.redis_url, what="the code-search Redis")
 
 
 async def test_npu_code_search():
