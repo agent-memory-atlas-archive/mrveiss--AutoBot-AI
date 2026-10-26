@@ -23,6 +23,12 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "Non-test Python under the backend and shared trees, a subset of tracked Python; the test share and "
         "the other trees grow at their own rate, so a share of all Python would sink with nothing wrong.",
     ),
+    "browser-port-single-home-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked code, config and env files by extension, minus docs/ and changelog/; the Markdown and "
+        "asset share grows at its own rate, so a share of all tracked files would sink with nothing wrong.",
+    ),
     "brand-mark-announcer-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -33,6 +39,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "One test directory's Python, against all tracked Python; the rest of the suite grows at its own rate.",
     ),
+    "defined-twice-18094-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Production Python under six sweep roots, test files excluded: a subset of tracked files that drifts.",
+    ),
     "env-fallback-read-sites-18094": (
         ABSOLUTE,
         "NOT_PATHS",
@@ -42,6 +53,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Python files under two of the tracked trees, a subset of all tracked Python; the other trees drift.",
+    ),
+    "deployment-profile-writers-19315": (
+        ABSOLUTE,
+        "NOT_PATHS",
+        "Assignment lines, not paths: one item per literal AUTOBOT_ENVIRONMENT/DEPLOYMENT_MODE/DEBUG write.",
     ),
     "egress-default-outbound-call-sites": (
         ABSOLUTE,
@@ -205,6 +221,21 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
+    ),
+    "llc-sigterm-grace-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test LLC modules, against all tracked .py under autobot-backend/llc; the test-file share drifts.",
+    ),
+    "frontend-http-transports": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Both GUIs' non-test .ts/.js/.vue under src, against all tracked frontend source; the test-file share drifts.",
+    ),
+    "feature-routers-strict-one-home-19319": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked files minus vendored/build parts, against the whole tracked tree; the skipped share drifts.",
     ),
     "llc-actor-id-scan": (
         ABSOLUTE,

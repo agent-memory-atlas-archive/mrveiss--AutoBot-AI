@@ -11,8 +11,9 @@
  * Issue #729 - Migrating admin functionality to SLM.
  */
 
-import type { AxiosRequestConfig } from 'axios'
-import { createAutobotBackendClient } from '@/composables/autobotBackendClient'
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
+import { useAuthStore } from '@/stores/auth'
+import { getBackendUrl } from '@/config/ssot-config'
 import type { SlmUserResponse } from '@/composables/useSlmUserApi'
 import type { components } from '@/types/generated/api'
 import {
@@ -29,6 +30,8 @@ import type * as LF from '@/composables/autobotAdminModels'
 import type { AgentConfigSummary, MCPServer, PermissionRule } from '@/composables/autobotAdminModels'
 export type { AgentConfigSummary, MCPServer, PermissionRule }
 export type { LogForwardingDestination } from '@/composables/autobotAdminModels'
+import type { BudgetPoliciesList, LLMFallbackStatus } from '@/composables/autobotAdminModels'
+export type { BudgetPoliciesList, BudgetPolicy, LLMActiveFallback, LLMFallbackChain, LLMFallbackStatus } from '@/composables/autobotAdminModels'
 
 // Type definitions for AutoBot API responses
 
@@ -116,50 +119,6 @@ export interface VoiceSpeakResponse {
   text?: string
   status?: string
   error?: string
-}
-
-// GH#8998 / #10488: LLM fallback monitoring (moved from main frontend to SLM admin)
-export interface LLMFallbackChain {
-  primary_model: string
-  fallback_chain: string
-  provider: string
-}
-
-export interface LLMActiveFallback {
-  conversation_id: string
-  primary_model: string
-  fallback_model: string
-  primary_provider: string
-  fallback_provider: string
-  timestamp: number
-}
-
-export interface LLMFallbackStatus {
-  configured_chains: LLMFallbackChain[]
-  active_fallbacks: LLMActiveFallback[]
-}
-
-// Budget audit (#10488 Workstream A): read-only operator oversight of
-// agent/project/task/tenant budget policies + hard-stop auto-pause config.
-// Mirrors the backend BudgetPolicyResponse model (api/budget_policies.py).
-export interface BudgetPolicy {
-  id: string
-  scope: string
-  scope_id: string
-  period: string
-  threshold_usd: number
-  warning_pct: number
-  action: string
-  enabled: boolean
-  name: string
-  description: string
-  created_at: string
-  updated_at: string
-}
-
-export interface BudgetPoliciesList {
-  policies: BudgetPolicy[]
-  count: number
 }
 
 // =============================================================================
@@ -634,6 +593,31 @@ export function autobotApiErrorMessage(err: unknown, fallback: string): string {
   if (typeof detail === 'string' && detail.length > 0) return detail
   if (err instanceof Error && err.message.length > 0) return err.message
   return fallback
+}
+
+/**
+ * The SLM's one HTTP client for the MAIN AutoBot backend (#19217). It lives here because
+ * ADR-008 rule 3 names this file as the main-backend transport owner; `useAutobotApi` and
+ * the per-feature admin composables (e.g. `useWebResearchAdminApi`) all build their client
+ * with it, so the base URL, timeout and auth header are declared once.
+ */
+export function createAutobotBackendClient(): AxiosInstance {
+  const authStore = useAuthStore()
+  const client = axios.create({
+    baseURL: getBackendUrl(),
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 30000,
+  })
+  // The SLM session token; nothing writes `autobot_access_token`, so the old
+  // fallback to it is gone (#17856 row 8)
+  client.interceptors.request.use((config) => {
+    const token = authStore.token
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  })
+  return client
 }
 
 export function useAutobotApi() {

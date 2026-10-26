@@ -133,7 +133,6 @@
 1|other|autobot-backend/api/data_storage.py|100
 1|other|autobot-backend/api/documents.py|50
 1|other|autobot-backend/api/error_monitoring.py|10
-1|other|autobot-backend/api/files.py|"/opt/autobot
 1|other|autobot-backend/api/filesystem_mcp.py|"/tmp/autobot/
 1|other|autobot-backend/api/filesystem_mcp.py|"/tmp/autobot/logs
 3|other|autobot-backend/api/filesystem_mcp.py|"user"
@@ -621,7 +620,6 @@
 1|other|autobot-frontend/src/components/workflow/WorkflowCanvas.vue|offset=0
 1|other|autobot-frontend/src/composables/analytics/useCodeIntelScores.ts|'/opt/autobot
 1|other|autobot-frontend/src/composables/analytics/useSourceRegistry.ts|'/opt/autobot
-1|other|autobot-frontend/src/composables/analytics/useTechnicalDebtData.ts|10
 2|other|autobot-frontend/src/composables/chat/useContextOverflowProtection.ts|'system'
 1|other|autobot-frontend/src/composables/collaboration/useCollaborationInvite.ts|offset=0
 1|other|autobot-frontend/src/composables/knowledge/useKnowledgeBrowser.ts|offset=0
@@ -651,8 +649,6 @@
 1|other|autobot-frontend/src/utils/urlUtils.ts|https://duckduckgo.com/?q=${encodeURIComponent(input
 1|other|autobot-frontend/src/views/EvolutionView.vue|"/opt/autobot
 1|other|autobot-frontend/src/views/EvolutionView.vue|'/opt/autobot
-1|other|autobot-frontend/src/views/SettingsView.vue|https://huggingface.co/oauth/device
-1|other|autobot-frontend/src/views/SettingsView.vue|https://huggingface.co/oauth/token
 2|other|autobot-frontend/src/views/SharedChatView.vue|'user'
 1|other|autobot-frontend/src/views/llc/ProjectBrowserView.vue|https://github.com/${p.code_source.repo}
 3|ssot|autobot-frontend/start-frontend-dev.sh|:5173
@@ -728,8 +724,6 @@
 1|other|autobot-infrastructure/shared/config/security/threat_detection.yaml|https://urlhaus.abuse.ch/downloads/text/
 1|other|autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml|/home/autobot
 1|other|autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml|https://github.com/novnc/noVNC/archive/refs/tags/v1.7.0.tar.gz
-1|ssot|autobot-infrastructure/shared/docker/compose/docker-compose.playwright-vnc.yml|:3000
-1|ssot|autobot-infrastructure/shared/docker/compose/docker-compose.playwright.yml|:3000
 1|other|autobot-infrastructure/shared/mcp/tools/knowledge-base-mcp/autobot_knowledge_mcp/embedded.py|10
 1|other|autobot-infrastructure/shared/mcp/tools/knowledge-base-mcp/autobot_knowledge_mcp/server.py|10
 1|other|autobot-infrastructure/shared/mcp/tools/mcp-autobot-tracker/src/real-time-ingestion.ts|'assistant'
@@ -776,7 +770,6 @@
 1|ssot|autobot-infrastructure/shared/scripts/deployment/deploy_hybrid.sh|:5173
 1|ssot|autobot-infrastructure/shared/scripts/deployment/deploy_hybrid.sh|:8001
 3|ssot|autobot-infrastructure/shared/scripts/deployment/deploy_hybrid.sh|:8080
-2|ssot|autobot-infrastructure/shared/scripts/deployment/start_all_containers.sh|:3000
 1|ssot|autobot-infrastructure/shared/scripts/deployment/start_all_containers.sh|:6379
 2|ssot|autobot-infrastructure/shared/scripts/deployment/start_all_containers.sh|:8080
 2|ssot|autobot-infrastructure/shared/scripts/deployment/start_all_containers.sh|:8081
@@ -784,7 +777,6 @@
 1|other|autobot-infrastructure/shared/scripts/deployment_rollback.py|300
 1|ssot|autobot-infrastructure/shared/scripts/environment/set-env-deepseek.sh|:8001
 1|ssot|autobot-infrastructure/shared/scripts/export_service_keys.py|:6379
-1|ssot|autobot-infrastructure/shared/scripts/infrastructure/deploy_browser_vnc_services.sh|:3000
 1|ssot|autobot-infrastructure/shared/scripts/infrastructure/deploy_browser_vnc_services.sh|:6080
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|"/opt/autobot
 2|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|http://backend;
@@ -821,20 +813,16 @@
 1|ssot|autobot-infrastructure/shared/scripts/network/test-dns-resolution.sh|:8001
 1|other|autobot-infrastructure/shared/scripts/performance_dashboard.py|https://cdn.jsdelivr.net/npm/chart.js
 1|ssot|autobot-infrastructure/shared/scripts/security/mtls-migrate.py|:6379
-2|ssot|autobot-infrastructure/shared/scripts/setup/setup_repair.sh|:3000
 2|ssot|autobot-infrastructure/shared/scripts/setup/setup_repair.sh|:8081
 2|other|autobot-infrastructure/shared/scripts/setup/setup_tier2_research.sh|https://playwright.dev/python/docs/browsers#system-requirements
 1|other|autobot-infrastructure/shared/scripts/setup/system/setup_passwordless_sudo.sh|"/opt/autobot/bin/autobot-cleanup-port
-1|ssot|autobot-infrastructure/shared/scripts/setup/verify_installation.sh|:3000
 1|ssot|autobot-infrastructure/shared/scripts/setup/verify_installation.sh|llama3.2-uncensored:1b
 1|ssot|autobot-infrastructure/shared/scripts/setup/verify_installation.sh|llama3.2-uncensored:3b
 4|other|autobot-infrastructure/shared/scripts/setup_browser_vnc.sh|/home/autobot
-1|ssot|autobot-infrastructure/shared/scripts/setup_browser_vnc.sh|:3000
 2|ssot|autobot-infrastructure/shared/scripts/setup_browser_vnc.sh|:6080
 1|ssot|autobot-infrastructure/shared/scripts/simple_populate.py|:8001
 1|other|autobot-infrastructure/shared/scripts/test_startup_coordinator.sh|http://127.0.0.3:8001/api/system/health
 1|ssot|autobot-infrastructure/shared/scripts/test_startup_coordinator.sh|:8001
-5|ssot|autobot-infrastructure/shared/scripts/testing/manage_playwright.sh|:3000
 1|ssot|autobot-infrastructure/shared/scripts/testing/test_desktop_setup.sh|:5173
 1|ssot|autobot-infrastructure/shared/scripts/testing/test_desktop_setup.sh|:6080
 1|other|autobot-infrastructure/shared/scripts/testing/test_file_upload.sh|"/tmp/autobot_upload_test.txt
@@ -888,7 +876,6 @@
 1|ssot|autobot-infrastructure/shared/tests/results/comprehensive_testing_20250909_150149/system_assessment_report.py|:8001
 1|ssot|autobot-infrastructure/shared/tests/run-frontend-test.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/run_phase9_tests.sh|:6080
-2|ssot|autobot-infrastructure/shared/tests/screenshots/test-browser-console-errors.js|:3000
 2|ssot|autobot-infrastructure/shared/tests/screenshots/test-browser-console-errors.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-chat-delete-complete-fix.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-chat-delete-complete-fix.js|:5173
@@ -906,19 +893,16 @@
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-final-security-implementation.js|:8001
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-final-system-status.js|:5173
 4|ssot|autobot-infrastructure/shared/tests/screenshots/test-final-system-status.js|:8001
-2|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-edge-error.js|:3000
 2|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-edge-error.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-edge-simple.js|:3000
 2|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-edge-simple.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-navigation.js|:5173
-1|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-via-docker.js|:3000
 2|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-via-docker.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-frontend-via-docker.js|:8001
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-network-scanning-question.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-network-scanning-question.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-send-network-question.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-send-network-question.js|:5173
-1|ssot|autobot-infrastructure/shared/tests/screenshots/test-silent-chat-deletion.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-silent-chat-deletion.js|:5173
 2|ssot|autobot-infrastructure/shared/tests/screenshots/test-silent-chat-deletion.js|:8001
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-terminal-chat-session.js|:3000
@@ -931,7 +915,6 @@
 2|ssot|autobot-infrastructure/shared/tests/screenshots/test-terminal-fixed.js|:8001
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-terminal-specific.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-terminal-specific.js|:5173
-1|ssot|autobot-infrastructure/shared/tests/screenshots/test-visible-browser.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-visible-browser.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-workflow-approval-ui.js|:3000
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-workflow-approval-ui.js|:5173
@@ -941,11 +924,7 @@
 1|ssot|autobot-infrastructure/shared/tests/screenshots/test-wsl2-compatible.js|:5173
 1|ssot|autobot-infrastructure/shared/tests/test_chat_responses.js|:5173
 3|ssot|autobot-infrastructure/shared/tests/test_workflow_api.js|:8001
-1|other|autobot-slm-backend/ansible/_shared/tasks/pre_migration_backup.yml|"/opt/autobot/backups/pre-migration/backend-$(date +%s).dump
-1|other|autobot-slm-backend/ansible/apply-system-updates.yml|"/opt/autobot/backups/system-updates/sources.list-{{ ansible_facts[
 1|other|autobot-slm-backend/ansible/apply-system-updates.yml|300
-1|other|autobot-slm-backend/ansible/backup-node-data.yml|'/opt/autobot/autobot-db-stack/chromadb/data
-1|other|autobot-slm-backend/ansible/backup-node-data.yml|'/opt/autobot/backups
 1|other|autobot-slm-backend/ansible/backup-node-data.yml|30
 1|ssot|autobot-slm-backend/ansible/backup-node-data.yml|:9090
 1|other|autobot-slm-backend/ansible/deploy-autobot-native.sh|"/tmp/autobot-deployment
@@ -989,7 +968,6 @@
 1|other|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|30
 1|other|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|300
 2|other|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|60
-1|ssot|autobot-slm-backend/ansible/inventory/group_vars/browser.yml|:3000
 1|other|autobot-slm-backend/ansible/inventory/group_vars/database.yml|"/tmp/autobot/models
 1|other|autobot-slm-backend/ansible/inventory/group_vars/database.yml|"/var/lib/autobot/models
 1|other|autobot-slm-backend/ansible/inventory/group_vars/database.yml|"/var/lib/autobot/models/cache
@@ -1038,7 +1016,6 @@
 1|other|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|https://download.docker.com/linux/ubuntu/gpg
 1|other|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|https://github.com/autobot/autobot.git
 1|other|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|https://github.com/docker/compose/releases/download/v{{
-2|ssot|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|:3000
 2|ssot|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|:5173
 2|ssot|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|:8080
 2|ssot|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|:8081
@@ -1062,7 +1039,6 @@
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://repositories.intel.com/graphics/intel-graphics.key
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://repositories.intel.com/graphics/ubuntu
 2|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:11434
-1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:3000
 1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:8080
 1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|:8081
 1|ssot|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|dolphin-llama3:8b
@@ -1087,7 +1063,6 @@
 1|ssot|autobot-slm-backend/ansible/playbooks/fix-backend-symlink.yml|:8443
 2|other|autobot-slm-backend/ansible/playbooks/health-check.yml|"/var/lib/autobot/models
 2|other|autobot-slm-backend/ansible/playbooks/health-check.yml|30
-1|ssot|autobot-slm-backend/ansible/playbooks/health-check.yml|:3000
 1|ssot|autobot-slm-backend/ansible/playbooks/health-check.yml|:8080
 2|ssot|autobot-slm-backend/ansible/playbooks/health-check.yml|:8081
 2|ssot|autobot-slm-backend/ansible/playbooks/health-check.yml|:8443
@@ -1114,14 +1089,8 @@
 1|other|autobot-slm-backend/ansible/playbooks/update-node.yml|60
 1|ssot|autobot-slm-backend/ansible/playbooks/update-node.yml|:8001
 1|ssot|autobot-slm-backend/ansible/playbooks/vars/backend-env.yml|:11434
-1|other|autobot-slm-backend/ansible/pre-migration-check.yml|'/opt/autobot
 1|other|autobot-slm-backend/ansible/reboot-node.yml|300
 1|other|autobot-slm-backend/ansible/requirements.yml|https://github.com/dev-sec/ansible-os-hardening
-1|other|autobot-slm-backend/ansible/roles/_shared/tasks/clean_legacy_dir.yml|"/opt/autobot/{{ _legacy_canonical }}
-3|other|autobot-slm-backend/ansible/roles/_shared/tasks/clean_legacy_dir.yml|"/opt/autobot/{{ _legacy_canonical }}/data
-1|other|autobot-slm-backend/ansible/roles/_shared/tasks/clean_legacy_dir.yml|"/opt/autobot/{{ dir_name }}
-2|other|autobot-slm-backend/ansible/roles/_shared/tasks/clean_legacy_dir.yml|"/opt/autobot/{{ dir_name }}/data
-1|other|autobot-slm-backend/ansible/roles/_shared/tasks/clean_wrong_node_dir.yml|"/opt/autobot/{{ dir_name }}
 1|other|autobot-slm-backend/ansible/roles/access_control/defaults/main.yml|300
 1|other|autobot-slm-backend/ansible/roles/agent_config/defaults/main.yml|"/var/lib/autobot/models
 1|other|autobot-slm-backend/ansible/roles/agent_config/tasks/nodejs.yml|https://deb.nodesource.com/setup_{{
@@ -1202,31 +1171,15 @@
 1|other|autobot-slm-backend/ansible/roles/xrdp/tasks/main.yml|30
 1|other|autobot-slm-backend/ansible/setup-backup-admin.yml|/home/autobot
 1|ssot|autobot-slm-backend/ansible/setup-user-backend.yml|:8001
-1|other|autobot-slm-backend/ansible/utils/backup.sh|"/opt/autobot/backups
 1|other|autobot-slm-backend/ansible/utils/backup.sh|/home/autobot
 1|other|autobot-slm-backend/ansible/verify-backup-restore.yml|"/tmp/autobot-restore-verify-{{ ansible_facts[
-1|other|autobot-slm-backend/api/code_source.py|"/opt/autobot
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-ai-stack/requirements-ai.txt
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-ai-stack/venv/bin/pip
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-backend/requirements.txt
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-backend/venv/bin/pip
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-frontend
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-slm-backend/requirements.txt
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-slm-backend/venv/bin/pip
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/autobot-slm-frontend
-1|other|autobot-slm-backend/api/code_sync.py|"/opt/autobot/{component}/
-1|other|autobot-slm-backend/api/code_sync.py|'/opt/autobot/{component}
 1|other|autobot-slm-backend/api/code_sync.py|100
 5|other|autobot-slm-backend/api/code_sync.py|120
 1|other|autobot-slm-backend/api/code_sync.py|300
 2|other|autobot-slm-backend/api/code_sync.py|60
 1|ssot|autobot-slm-backend/api/code_sync.py|:8001
 1|other|autobot-slm-backend/api/errors.py|50
-1|other|autobot-slm-backend/api/infrastructure.py|"/opt/autobot/.ansible
-1|other|autobot-slm-backend/api/infrastructure.py|"/opt/autobot/.ansible/tmp
-1|other|autobot-slm-backend/api/infrastructure.py|"/opt/autobot/backups
 1|other|autobot-slm-backend/api/infrastructure.py|300
-3|other|autobot-slm-backend/api/nodes.py|"/opt/autobot/backups/
 1|other|autobot-slm-backend/api/scim.py|offset=0
 1|other|autobot-slm-backend/api/secrets.py|https://huggingface.co/settings/tokens
 1|ssot|autobot-slm-backend/api/slm_users.py|:5432
@@ -1240,7 +1193,6 @@
 1|other|autobot-slm-backend/migrations/utils.py|"postgresql://"
 1|ssot|autobot-slm-backend/models/manifest.py|:8443
 1|other|autobot-slm-backend/monitoring/performance_benchmark.py|"/tmp/autobot_disk_benchmark.tmp
-1|other|autobot-slm-backend/scripts/autobot-admin.py|"/opt/autobot/autobot-slm-backend/.env
 1|ssot|autobot-slm-backend/scripts/verify_endpoints.py|:8080
 1|other|autobot-slm-backend/services/agent_seeder.py|30
 3|other|autobot-slm-backend/services/backup.py|30
@@ -1248,21 +1200,12 @@
 1|other|autobot-slm-backend/services/backup.py|60
 1|other|autobot-slm-backend/services/blue_green.py|30
 1|other|autobot-slm-backend/services/blue_green.py|300
-1|other|autobot-slm-backend/services/code_distributor.py|120
-3|other|autobot-slm-backend/services/code_distributor.py|30
-1|other|autobot-slm-backend/services/code_distributor.py|60
 1|other|autobot-slm-backend/services/hf_token_validator.py|https://huggingface.co/api/whoami-v2
 1|other|autobot-slm-backend/services/jwks_verifier.py|"user"
-1|other|autobot-slm-backend/services/playbook_executor.py|"/opt/autobot/autobot-slm-backend/ansible
-1|other|autobot-slm-backend/services/playbook_executor.py|"/opt/autobot/code_source/autobot-slm-backend/ansible
 1|other|autobot-slm-backend/services/replication.py|120
 1|other|autobot-slm-backend/services/replication.py|300
-1|other|autobot-slm-backend/services/service_orchestrator.py|"/opt/autobot/autobot-backend
-1|other|autobot-slm-backend/services/service_orchestrator.py|"/opt/autobot/autobot-browser-worker
-1|other|autobot-slm-backend/services/service_orchestrator.py|"/opt/autobot/autobot-slm-frontend
 2|other|autobot-slm-backend/services/sync_orchestrator.py|120
 1|other|autobot-slm-backend/slm/agent/health_collector.py|30
-1|other|autobot-slm-backend/slm/agent/version.py|"/opt/autobot/autobot-slm-agent
 1|other|autobot-slm-backend/tests/conftest.py|"sqlite:///:memory:"
 1|other|autobot-slm-backend/user_management/services/sso_service.py|https://accounts.google.com/o/oauth2/v2/auth
 1|other|autobot-slm-backend/user_management/services/sso_service.py|https://github.com/login/oauth/access_token
@@ -1310,12 +1253,10 @@
 1|other|autobot_shared/models/pagination.py|offset=0
 1|ssot|autobot_shared/network_utils.py|:8443
 1|other|autobot_shared/repo_path.py|"/opt/autobot/code_source/autobot-backend/services/x.py
-1|other|autobot_shared/security/path_validator.py|"/opt/autobot
 1|other|autobot_shared/security/path_validator.py|"/opt/autobot/data
 1|other|autobot_shared/user_management/organization_service.py|50
 1|other|autobot_shared/user_management/team_service.py|50
 2|ssot|scripts/audit_api_wiring.py|:8001
-1|other|scripts/check_ansible_file_references.py|"/opt/autobot/src/
 1|other|scripts/compile_changelog.py|https://github.com/{GITHUB_REPO}/issues/{f[
 1|other|scripts/compile_changelog.py|https://github.com/{GITHUB_REPO}/pull/{f[
 1|other|scripts/daily_health_check.py|30

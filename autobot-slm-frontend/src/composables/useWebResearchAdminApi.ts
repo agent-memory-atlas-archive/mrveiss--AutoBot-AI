@@ -18,7 +18,7 @@
  * it as a plain success.
  */
 
-import { createAutobotBackendClient } from '@/composables/autobotBackendClient'
+import { createAutobotBackendClient } from '@/composables/useAutobotApi'
 import type {
   WebResearchCacheClearData,
   WebResearchSettings,

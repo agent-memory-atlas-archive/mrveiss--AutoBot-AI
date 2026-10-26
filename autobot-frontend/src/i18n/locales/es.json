@@ -103,7 +103,13 @@
     "exportCsv": "Export as CSV",
     "download": "Download",
     "filterByCategory": "Filter by category",
-    "copied": "Copied"
+    "copied": "Copied",
+    "riskTier": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "critical": "Crítico"
+    }
   },
   "chat": {
     "sendMessage": "Enviar un mensaje...",
@@ -921,8 +927,6 @@
       "noApiKeyRequired": "No se necesita clave de API.",
       "redirecting": "Redirigiendo...",
       "disconnectFailed": "No se pudo desconectar",
-      "redirectNeedsCallback": "El flujo de redirección OAuth en el navegador requiere configurar un callback en el servidor. Usa el código de dispositivo en entornos sin interfaz.",
-      "deviceNotConfigured": "La autenticación por dispositivo no está configurada para este proveedor",
       "deviceInitFailed": "No se pudo iniciar el flujo de dispositivo",
       "stillWaiting": "Aún esperando la aprobación: inténtalo de nuevo en un momento.",
       "pollFailed": "Error al consultar el estado"
@@ -1518,21 +1522,16 @@
       "duplicateCode": "Código duplicado",
       "locations": "{count} ubicaciones",
       "linesSaveable": "{count} líneas ahorrables",
-      "moreLocations": "+{count} más ubicaciones",
-      "showingOfDuplicates": "Mostrando {shown} de {total} patrones duplicados",
       "regexOpportunities": "Oportunidades de regex",
       "current": "Actual",
       "suggested": "Sugerido",
-      "showingOfOpportunities": "Mostrando {shown} de {total} oportunidades",
       "complexityHotspots": "Hotspots de complejidad",
       "location": "Ubicación",
       "cc": "CC",
       "cognitive": "Cognitivo",
       "mi": "MI",
       "nesting": "Anidamiento",
-      "showingOfHotspots": "Mostrando {shown} de {total} hotspots",
       "refactoringSuggestions": "Sugerencias de refactorización",
-      "showingOfSuggestions": "Mostrando {shown} de {total} sugerencias",
       "patternsInChromaDB": "Patrones en ChromaDB",
       "clearStoredPatterns": "Limpiar patrones almacenados",
       "lastScan": "Último escaneo",
@@ -2206,14 +2205,12 @@
       "high": "Alto",
       "medium": "Medio",
       "low": "Bajo",
-      "showingOf": "Mostrando {shown} de {total}",
       "emptyMessage": "No se encontraron code smells"
     },
     "declarations": {
       "title": "Declaraciones",
       "total": "Total",
       "exported": "Exportado",
-      "showingOf": "Mostrando {shown} de {total}",
       "emptyMessage": "No se encontraron declaraciones",
       "types": {
         "function": "Función",
@@ -2236,7 +2233,6 @@
       "totalLines": "Líneas totales",
       "similar": "Similar",
       "lines": "Líneas",
-      "showingOf": "Mostrando {shown} de {total}",
       "emptyMessage": "No se encontraron duplicados",
       "similarityGroups": {
         "high": "Alta similitud",
@@ -2257,7 +2253,6 @@
       "variable": "Variable",
       "value": "Valor",
       "suggestedEnvVar": "Variable de entorno sugerida",
-      "showingOf": "Mostrando {shown} de {total}",
       "emptyMessage": "No se detectaron valores codificados",
       "severityGroups": {
         "high": "Severidad alta",
@@ -2272,7 +2267,6 @@
       "high": "Alto",
       "medium": "Medio",
       "low": "Bajo",
-      "showingOf": "Mostrando {shown} de {total}",
       "emptyMessage": "No se encontraron problemas",
       "exportMarkdown": "Export Markdown",
       "exportJson": "Export JSON"

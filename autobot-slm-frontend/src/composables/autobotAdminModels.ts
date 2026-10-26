@@ -92,3 +92,47 @@ export type WebResearchStatusData = BackendSchemas['WebResearchStatusData']
 export type WebResearchToggleData = BackendSchemas['WebResearchToggleData']
 /** POST /web-research/clear-cache and /reset-circuit-breakers. */
 export type WebResearchCacheClearData = BackendSchemas['WebResearchCacheClearData']
+
+// GH#8998 / #10488: LLM fallback monitoring (moved from main frontend to SLM admin)
+export interface LLMFallbackChain {
+  primary_model: string
+  fallback_chain: string
+  provider: string
+}
+
+export interface LLMActiveFallback {
+  conversation_id: string
+  primary_model: string
+  fallback_model: string
+  primary_provider: string
+  fallback_provider: string
+  timestamp: number
+}
+
+export interface LLMFallbackStatus {
+  configured_chains: LLMFallbackChain[]
+  active_fallbacks: LLMActiveFallback[]
+}
+
+// Budget audit (#10488 Workstream A): read-only operator oversight of
+// agent/project/task/tenant budget policies + hard-stop auto-pause config.
+// Mirrors the backend BudgetPolicyResponse model (api/budget_policies.py).
+export interface BudgetPolicy {
+  id: string
+  scope: string
+  scope_id: string
+  period: string
+  threshold_usd: number
+  warning_pct: number
+  action: string
+  enabled: boolean
+  name: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetPoliciesList {
+  policies: BudgetPolicy[]
+  count: number
+}
