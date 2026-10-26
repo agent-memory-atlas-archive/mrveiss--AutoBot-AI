@@ -12,14 +12,14 @@ Two PostgreSQL databases, both colocated on the SLM server:
 Credentials are injected via /etc/autobot/db-credentials.env (Ansible-managed).
 """
 
-import logging
 import os
 from dataclasses import dataclass
 
 from autobot_shared import postgres_identity as pg
+from autobot_shared.logging_manager import get_logger
 from autobot_shared.secret_redaction import redact_value
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(repr=False)
