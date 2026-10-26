@@ -116,8 +116,8 @@
             <BaseTable
               :columns="collisionColumns"
               :rows="collisionRows"
-              size="compact"
-              :aria-label="t('llc.portability.collisionsDetected')"
+              :row-variant="() => 'warning'"
+              size="compact" :aria-label="t('llc.portability.collisionsDetected')"
             />
           </div>
 
