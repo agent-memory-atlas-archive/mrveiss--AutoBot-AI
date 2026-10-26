@@ -52,6 +52,13 @@ def test_the_response_matches_its_declared_model():
     assert set(response.json()["data"]) == {"local_kb", "rag_augmented"}
 
 
+def test_a_caller_without_a_user_id_gets_401_not_an_empty_result():
+    """The unresolved-caller 401 from filter_for_caller is re-raised, never swallowed into []."""
+    response = _search_http({"role": "user"}, FakeKB())
+
+    assert response.status_code == 401
+
+
 @pytest.mark.asyncio
 async def test_user_a_reads_their_private_fact_and_user_b_never_does():
     for_alice, for_bob = await _search(ALICE, FakeKB()), await _search(BOB, FakeKB())
