@@ -94,6 +94,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+
       - name: Install Claude Code
         if: steps.key.outputs.configured == 'true'
         run: npm install -g @anthropic-ai/claude-code@2

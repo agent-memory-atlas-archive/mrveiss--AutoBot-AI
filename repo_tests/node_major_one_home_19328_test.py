@@ -101,13 +101,18 @@ def _version(text: str) -> tuple[int, int, int]:
 
 def _meets(floor: tuple[int, int, int], comparator: str) -> bool:
     op, ver = re.match(r"^(\^|~|>=|<=|>|<|=)?\s*(.*)$", comparator).groups()
-    if ver in ("", "*", "x"):
+    if ver in ("*", "x", "X") or (ver == "" and not op):
         return True
+    if ver == "":
+        return False  # an operator with no version: fail closed
     want = _version(ver)
+    given = len([p for p in re.sub(r"^[v=]+", "", ver).split(".") if p.isdigit()])
     if op == "^":
         return want <= floor and floor[0] == want[0]
     if op == "~":
         return want <= floor and floor[:2] == want[:2]
+    if not op and given < 3:  # a partial version is a range: 22 = 22.x, 22.22 = 22.22.x
+        return floor[:given] == want[:given]
     return {">=": floor >= want, ">": floor > want, "<=": floor <= want, "<": floor < want}.get(op, floor == want)
 
 
@@ -115,6 +120,7 @@ def satisfies(floor: str, node_range: str) -> bool:
     """True when the *floor* version is inside the npm ``engines.node`` *node_range*."""
     low = _version(floor)
     norm = re.sub(r"(>=|<=|>|<|\^|~)\s+", r"\1", node_range)
+    norm = re.sub(r"(\S+)\s+-\s+(\S+)", r">=\1 <=\2", norm)  # hyphen range a - b
     return any(all(_meets(low, c) for c in alt.split()) for alt in norm.split("||"))
 
 
@@ -131,6 +137,20 @@ def test_the_frontend_engines_floor_satisfies_every_locked_dependency() -> None:
     assert not below, f"engines.node floor {floor} is below these dependencies (#14725): {below}"
 
 
+def test_the_floor_has_one_value_across_package_lock_and_installer() -> None:
+    declared = json.loads((_ROOT / "autobot-frontend/package.json").read_text(encoding="utf-8"))["engines"]["node"]
+    lock = json.loads((_ROOT / "autobot-frontend/package-lock.json").read_text(encoding="utf-8"))
+    installer = re.search(r'NODE_MIN_VERSION="([\d.]+)"', (_ROOT / "install.sh").read_text(encoding="utf-8"))
+    assert lock["packages"][""]["engines"]["node"] == declared, "package-lock root engines drifted from package.json"
+    assert installer and f">={installer.group(1)}" == declared, f"install.sh NODE_MIN_VERSION vs engines {declared}"
+
+
+def test_the_browser_worker_engines_floor_is_on_the_home_major() -> None:
+    path = _ROOT / "autobot-infrastructure/shared/config/browser-package.json"
+    engines = json.loads(path.read_text(encoding="utf-8"))["engines"]["node"]
+    assert int(re.search(r"\d+", engines).group(0)) == node_major(), engines
+
+
 @pytest.mark.parametrize(
     "floor,node_range,ok",
     [
@@ -142,6 +162,16 @@ def test_the_frontend_engines_floor_satisfies_every_locked_dependency() -> None:
         ("22.19.0", ">=14 <22", False),
         ("22.19.0", "^20.19.0 || >=22.12.0", True),
         ("22.19.0", "*", True),
+        ("22.22.2", "22", True),
+        ("22.22.2", "22.x", True),
+        ("22.22.2", "22.22", True),
+        ("22.22.2", "20", False),
+        ("22.22.2", "10.* || >= 12.*", True),
+        ("22.22.2", "18 - 22.22.2", True),
+        ("22.22.2", "18 - 20", False),
+        ("22.22.2", ">=", False),
+        ("22.22.2", "~22.22.0", True),
+        ("22.22.2", "~22.20.0", False),
     ],
 )
 def test_the_range_check(floor: str, node_range: str, ok: bool) -> None:

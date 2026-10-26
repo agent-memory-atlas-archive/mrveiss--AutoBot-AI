@@ -58,7 +58,7 @@ readonly DEFAULT_REPO="https://${REPO_HOST}/${REPO_SLUG}.git"
 readonly NODESOURCE_HOST="deb.nodesource.com"
 # #19239: each pinned to its source of truth by a repo test -- autobot-frontend/package.json
 # engines.node, the slm_manager role's slm_backend_port -- since the installer runs before the code exists.
-readonly NODE_MIN_VERSION="20.19.0" SLM_BACKEND_PORT="8000"
+readonly NODE_MIN_VERSION="22.22.2" SLM_BACKEND_PORT="8000"
 readonly IP_CACHE_FILE="/run/autobot-install-ip"  # root-only, unlike /tmp, which any user can plant a file in
 readonly DEFAULT_BRANCH="main" PINNED_COMMIT=""  # a release build pins both: tag and its commit (#18666)
 # #18586: where this script was started from, resolved before any cd; empty under `curl | bash`
