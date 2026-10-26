@@ -199,7 +199,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/events/types.py": 885,
     "autobot-backend/hardware_acceleration.py": 609,
     "autobot-backend/initialization/lifespan.py": 2316,
-    "autobot-backend/initialization/router_registry/feature_routers.py": 762,
+    "autobot-backend/initialization/router_registry/feature_routers.py": 758,
     "autobot-backend/integrations/cloud_integration.py": 616,
     "autobot-backend/integrations/communication_integration.py": 605,
     "autobot-backend/integrations/microsoft365_integration.py": 632,
@@ -271,7 +271,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/monitoring/alertmanager_webhook_test.py": 782,
     "autobot-backend/multimodal_processor/multimodal_integration_test.py": 633,
     "autobot-backend/multimodal_processor/processor.py": 774,
-    "autobot-backend/npu_semantic_search.py": 1522,
+    "autobot-backend/npu_semantic_search.py": 1518,
     # 984 -> 978 (#14039): the single-use _build_slm_ssl_context wrapper was
     # inlined onto autobot_shared.tls.get_internal_tls_context, its only body.
     "autobot-backend/orchestration/dag_executor.py": 978,
@@ -417,7 +417,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/workflow_scheduler.py": 1070,
     "autobot-npu-worker/npu_worker_pool_test.py": 1010,
     "autobot-slm-backend/api/code_source.py": 701,
-    "autobot-slm-backend/api/code_sync.py": 5785,  # #19352, #19367 (was 5803)
+    "autobot-slm-backend/api/code_sync.py": 5782,  # #19352, #19367 (was 5803)
     "autobot-slm-backend/api/errors.py": 866,
     "autobot-slm-backend/api/infrastructure.py": 723,
     "autobot-slm-backend/api/monitoring.py": 1087,
@@ -466,9 +466,9 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/tests/test_cleanup_never_destroys_data_14856.py": 981,
     "autobot-slm-backend/user_management/services/sso_service.py": 775,
     "autobot_shared/circuit_breaker.py": 689,
-    "autobot_shared/env_registry.py": 1125,  # #13602, #18765: sibling imports; blocks moved to siblings
+    "autobot_shared/env_registry.py": 1061,  # #19320: postgres block -> env_registry_postgres (was 1125)
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
-    "autobot_shared/network_constants.py": 614,
+    "autobot_shared/network_constants.py": 611,  # #19315: env/mode fallbacks moved to deployment_profile
     "autobot_shared/npu/integration.py": 929,
     "autobot_shared/plugin_sdk/loader.py": 690,
     "autobot_shared/plugin_sdk/plugin_load_visibility_test.py": 750,
@@ -477,7 +477,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot_shared/redis_client.py": 674,
     "autobot_shared/redis_management/connection_manager.py": 1387,
     "autobot_shared/security/ssrf_guard_test.py": 633,
-    "autobot_shared/ssot_config.py": 3260,  # #16375: AUTOBOT_PROMETHEUS_SCRAPE_TOKEN
+    "autobot_shared/ssot_config.py": 3242,  # #19319: role-mirrored defaults split to ssot_role_mirrors
     "autobot_shared/ssot_config_test.py": 782,
     "autobot_shared/ssot_constants.py": 896,
     "autobot_shared/user_management/team_service.py": 724,
