@@ -75,8 +75,16 @@ def test_every_mirror_restates_the_ssot(where):
 #: The env overlays and profile files (#19333): each may omit the key -- an overlay carries only
 #: keys that differ from the base -- but never restate a different number. 10000 sat in two of
 #: them with no recorded reason, aborting long LLM-backed calls after 10 s on those profiles.
-_ENV_OVERLAYS = (".env.base", ".env.localhost", ".env.native-vm", ".env.network", "docker/.env.docker")
-_API_TIMEOUT_LINE = re.compile(r"^(?:AUTOBOT|VITE)_API_TIMEOUT=(\S+)$", re.MULTILINE)
+_ENV_OVERLAYS = (
+    ".env.base",
+    ".env.example",
+    ".env.localhost",
+    ".env.native-vm",
+    ".env.network",
+    ".env.network-template",
+    "docker/.env.docker",
+)
+_API_TIMEOUT_LINE = re.compile(r"^(?:export\s+)?(?:AUTOBOT|VITE)_API_TIMEOUT=([^\s#]+)\s*(?:#.*)?$", re.MULTILINE)
 
 
 def _overlay_values(text: str) -> list[str]:
@@ -93,6 +101,7 @@ def test_no_env_overlay_restates_a_different_api_timeout(rel):
 
 def test_a_different_overlay_value_is_caught():
     assert _overlay_values("AUTOBOT_API_TIMEOUT=10000\n") == ["10000"]
+    assert _overlay_values("export VITE_API_TIMEOUT=10000  # profile\n") == ["10000"]
 
 
 def test_a_disagreeing_mirror_is_caught():
