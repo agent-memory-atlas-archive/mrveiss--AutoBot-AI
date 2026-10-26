@@ -23,6 +23,12 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "Non-test Python under the backend and shared trees, a subset of tracked Python; the test share and "
         "the other trees grow at their own rate, so a share of all Python would sink with nothing wrong.",
     ),
+    "browser-port-single-home-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked code, config and env files by extension, minus docs/ and changelog/; the Markdown and "
+        "asset share grows at its own rate, so a share of all tracked files would sink with nothing wrong.",
+    ),
     "brand-mark-announcer-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -32,6 +38,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "One test directory's Python, against all tracked Python; the rest of the suite grows at its own rate.",
+    ),
+    "defined-twice-18094-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Production Python under six sweep roots, test files excluded: a subset of tracked files that drifts.",
     ),
     "env-fallback-read-sites-18094": (
         ABSOLUTE,
