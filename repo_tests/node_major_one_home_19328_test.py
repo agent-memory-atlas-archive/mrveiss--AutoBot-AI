@@ -12,7 +12,8 @@ sandbox ran 18. Now:
   from a ``curl | bash`` pipe), Ansible on a node (``inventory/group_vars/all.yml`` ``node_major``,
   which every role and playbook references), the two Dockerfiles' ``ARG NODE_MAJOR`` and the
   sandbox image -- carry ONE pinned copy each, and this guard fails the moment one disagrees;
-* the frontend ``engines`` floor sits on the same major.
+* the frontend ``engines`` floor sits on the same major and satisfies every locked dependency's
+  ``engines.node`` (#14725: the floor said 20 while dependencies needed 22.22.2).
 
 The sweep also fails on any literal NodeSource ``setup_NN.x`` / ``node_NN.x`` or a hard-coded
 ``nodejs_version`` in the workflows, install scripts and Ansible tree: those read the variable.
@@ -91,6 +92,60 @@ def test_every_pinned_copy_equals_the_home(rel: str, pattern: str) -> None:
 def test_the_frontend_engines_floor_is_on_the_home_major() -> None:
     engines = json.loads((_ROOT / "autobot-frontend/package.json").read_text(encoding="utf-8"))["engines"]["node"]
     assert int(re.search(r"\d+", engines).group(0)) == node_major(), engines
+
+
+def _version(text: str) -> tuple[int, int, int]:
+    parts = [int(p) if p.isdigit() else 0 for p in re.sub(r"^[v=]+", "", text).split(".")[:3]]
+    return tuple(parts + [0] * (3 - len(parts)))  # type: ignore[return-value]
+
+
+def _meets(floor: tuple[int, int, int], comparator: str) -> bool:
+    op, ver = re.match(r"^(\^|~|>=|<=|>|<|=)?\s*(.*)$", comparator).groups()
+    if ver in ("", "*", "x"):
+        return True
+    want = _version(ver)
+    if op == "^":
+        return want <= floor and floor[0] == want[0]
+    if op == "~":
+        return want <= floor and floor[:2] == want[:2]
+    return {">=": floor >= want, ">": floor > want, "<=": floor <= want, "<": floor < want}.get(op, floor == want)
+
+
+def satisfies(floor: str, node_range: str) -> bool:
+    """True when the *floor* version is inside the npm ``engines.node`` *node_range*."""
+    low = _version(floor)
+    norm = re.sub(r"(>=|<=|>|<|\^|~)\s+", r"\1", node_range)
+    return any(all(_meets(low, c) for c in alt.split()) for alt in norm.split("||"))
+
+
+def test_the_frontend_engines_floor_satisfies_every_locked_dependency() -> None:
+    """#14725: a dependency that needs a newer Node than the declared floor fails here, not on a contributor."""
+    lock = json.loads((_ROOT / "autobot-frontend/package-lock.json").read_text(encoding="utf-8"))["packages"]
+    floor = re.search(r"\d+(?:\.\d+)*", lock[""]["engines"]["node"]).group(0)
+    below = [
+        f"{name}: {meta['engines']['node']}"
+        for name, meta in lock.items()
+        if name and isinstance(meta.get("engines"), dict) and "node" in meta["engines"]
+        if not satisfies(floor, meta["engines"]["node"])
+    ]
+    assert not below, f"engines.node floor {floor} is below these dependencies (#14725): {below}"
+
+
+@pytest.mark.parametrize(
+    "floor,node_range,ok",
+    [
+        ("22.22.2", ">=22.19.0", True),
+        ("22.12.0", ">=22.19.0", False),
+        ("22.19.0", "^22.12 || >=24", True),
+        ("22.19.0", ">=23.5.0 || ^22.13.0 || ^20.17.0", True),
+        ("22.19.0", ">= 18", True),
+        ("22.19.0", ">=14 <22", False),
+        ("22.19.0", "^20.19.0 || >=22.12.0", True),
+        ("22.19.0", "*", True),
+    ],
+)
+def test_the_range_check(floor: str, node_range: str, ok: bool) -> None:
+    assert satisfies(floor, node_range) is ok
 
 
 def test_no_literal_node_version_in_workflows_ansible_or_installers() -> None:
