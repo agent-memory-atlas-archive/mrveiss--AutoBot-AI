@@ -123,8 +123,7 @@ AVAILABLE_PLAYBOOKS: list[PlaybookInfo] = [
         id="redis-stack",
         name="Redis Stack Deployment",
         description="Deploy Redis Stack server with RediSearch, RedisJSON, "
-        "RedisGraph, and RedisTimeSeries modules for high-performance "
-        "data operations.",
+        "RedisGraph, and RedisTimeSeries modules for high-performance data operations.",
         category=PlaybookCategory.DATABASE,
         # #12095: deploy-redis-stack.yml never existed; setup-redis-stack.yml is the
         # real Redis Stack provisioning playbook (same file the setup-redis-stack entry uses).
@@ -290,7 +289,7 @@ AVAILABLE_PLAYBOOKS: list[PlaybookInfo] = [
         category=PlaybookCategory.NETWORKING,
         playbook_file="setup-browser-worker.yml",
         target_hosts=["browser_worker"],
-        variables={"browser_port": 3000},
+        variables={"browser_port": config.port.browser},  # #19324: was Grafana's 3000
         estimated_duration="7 minutes",
         requires_confirmation=True,
     ),
