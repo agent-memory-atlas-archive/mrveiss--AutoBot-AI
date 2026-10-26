@@ -77,6 +77,11 @@ jobs:
           sudo systemctl stop docker.socket docker.service containerd.service || true
           sudo ip link delete docker0 2>/dev/null || true
           ip -4 -o addr show | awk '{print $2, $4}'
+          # #19503: the runner image gives /opt a default ACL (other::rwx, user:runner:rwx), which
+          # overrides the umask, so everything the installer creates under it was 777 and Ansible
+          # ignored the world-writable tree's ansible.cfg. A blank host's /opt has no such ACL.
+          sudo setfacl -b -k /opt
+          stat -c '%a %U:%G %n' /opt
 
       # The installer's summary prints a generated credential. The runner is discarded, but the
       # log is public, so that line is masked on its way to the log.
