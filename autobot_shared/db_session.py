@@ -38,19 +38,22 @@ class PostCommitCallbackError(Exception):
         self.errors = errors
 
 
-async def run_after_commit(session: AsyncSession, hook: Callable[[], Awaitable[object]] | None) -> None:
-    """Run *hook* once the session's transaction commits; at once when it has no commit scope.
+class NoCommitScopeError(RuntimeError):
+    """A post-commit hook was requested on a session that has no post-commit callback list."""
 
-    Inside ``async_session_scope`` the hook is queued (once, however many writes ask for it) so
-    nothing observes the effect before the data is durable. ``None`` is a no-op. A failing hook
-    raises: an invalidation that did not happen must not look done.
+
+def run_after_commit(session: AsyncSession, hook: Callable[[], Awaitable[object]]) -> None:
+    """Queue *hook* to run once the session's transaction commits (once, however many writes ask).
+
+    Only ``async_session_scope`` seeds the list. Without it there is no commit point to run
+    after, and running the hook at once would fire it BEFORE the commit, so a reader could
+    re-cache the old state under the new epoch: that raises ``NoCommitScopeError`` instead.
+    A hook queued inside a rolled-back savepoint stays queued: over-invalidation, never under.
     """
-    if hook is None:
-        return
     queued = session.info.get(POST_COMMIT_CALLBACKS)
     if queued is None:
-        await hook()
-    elif hook not in queued:
+        raise NoCommitScopeError("no post-commit callback list: open the session with async_session_scope")
+    if hook not in queued:
         queued.append(hook)
 
 

@@ -12,6 +12,12 @@ A bump therefore orphans every cached result at once; the entries expire on thei
 """
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.membership_epoch import (  # noqa: F401 -- the scoped membership counter lives beside this one
+    MembershipEpochBumpError,
+    bump_membership_epoch,
+    membership_epoch_key,
+    read_membership_epoch,
+)
 from autobot_shared.redis_client import get_async_redis_client
 
 logger = get_logger(__name__)
@@ -50,18 +56,6 @@ async def bump_acl_epoch_async(redis_client) -> int:
         raise AclEpochBumpError(f"KB access-control epoch not bumped: {exc}") from exc
     logger.info("KB access-control epoch bumped to %d", epoch)
     return epoch
-
-
-async def bump_acl_epoch_now() -> int:
-    """INCR the epoch through the knowledge-database client; failure raises ``AclEpochBumpError``.
-
-    For a writer that holds no client of its own (a team-membership change, #19630).
-    """
-    try:
-        client = await get_async_redis_client(database=ACL_EPOCH_DATABASE)
-    except Exception as exc:
-        raise AclEpochBumpError(f"KB access-control epoch not bumped: {exc}") from exc
-    return await bump_acl_epoch_async(client)
 
 
 async def read_acl_epoch() -> str | None:

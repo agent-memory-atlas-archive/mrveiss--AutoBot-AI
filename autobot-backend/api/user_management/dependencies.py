@@ -19,7 +19,6 @@ from auth_middleware import get_current_user as _canonical_get_current_user
 from auth_middleware import resolve_human_user as _canonical_resolve_human_user
 from autobot_shared.auth.permissions import Permission, is_admin_role, role_has_permission
 from autobot_shared.coordination.claim_company import set_company
-from knowledge.acl_epoch import bump_acl_epoch_now
 from user_management.database import get_async_session
 from user_management.services import (
     OrganizationService,
@@ -522,12 +521,8 @@ async def get_team_service(
     session: AsyncSession = Depends(get_db_session),
     context: TenantContext = Depends(get_tenant_context),
 ) -> TeamService:
-    """Get TeamService with session and context.
-
-    A membership write bumps the KB access-control epoch once it commits, so every worker drops
-    its cached team memberships (#19630).
-    """
-    return TeamService(session, context, on_membership_change=bump_acl_epoch_now)
+    """Get TeamService with session and context."""
+    return TeamService(session, context)
 
 
 async def get_organization_service(

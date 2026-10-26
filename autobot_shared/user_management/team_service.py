@@ -28,18 +28,17 @@ untouched — the fork is removed, not the callers.
 """
 
 import uuid
-from collections.abc import Awaitable, Callable
 from typing import Any, List
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from autobot_shared.db_session import run_after_commit
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.membership_epoch import MembershipEpochBump
 from autobot_shared.time_utils import now_utc
 from autobot_shared.user_management.audit_rows import audit_row
-from autobot_shared.user_management.base_service import BaseService, TenantContext
+from autobot_shared.user_management.base_service import BaseService
 from autobot_shared.user_management.models.audit import (
     AuditResourceType,
     IdentityAuditAction,
@@ -62,6 +61,11 @@ class TeamService(TeamMembershipRequestMixin, BaseService):
 
     Provides CRUD operations for teams and team membership management
     with multi-tenancy support.
+
+    ``remove_member`` and ``delete_team`` queue a post-commit bump of the organisation's
+    membership epoch (``autobot_shared.membership_epoch``), so every worker drops its cached
+    team memberships (#19630). Membership changes that bypass this service (user delete and
+    deactivate cascades) are tracked in #19670.
     """
 
     # Team membership roles
@@ -70,21 +74,6 @@ class TeamService(TeamMembershipRequestMixin, BaseService):
     ROLE_MEMBER = "member"
 
     VALID_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MEMBER}
-
-    def __init__(
-        self,
-        session: AsyncSession,
-        context: TenantContext | None = None,
-        on_membership_change: Callable[[], Awaitable[object]] | None = None,
-    ):
-        """Initialize team service.
-
-        ``on_membership_change`` is awaited once a write has changed who belongs to a team (add,
-        remove, team delete), so a cached membership elsewhere can be dropped (#19630). The
-        caller supplies it because this package cannot import the KB layer that owns the cache.
-        """
-        super().__init__(session, context)
-        self._on_membership_change = on_membership_change
 
     # -------------------------------------------------------------------------
     # Team CRUD Operations
@@ -362,7 +351,7 @@ class TeamService(TeamMembershipRequestMixin, BaseService):
             resource_id=team_id,
             details={"hard_delete": hard_delete, "name": team.name},
         )
-        await run_after_commit(self.session, self._on_membership_change)
+        run_after_commit(self.session, MembershipEpochBump(team.org_id))  # a revocation for every member
 
         logger.info("Deleted team: %s (hard=%s)", team_id, hard_delete)
         return True
@@ -404,7 +393,6 @@ class TeamService(TeamMembershipRequestMixin, BaseService):
             resource_id=team_id,
             details={"user_id": str(user_id), "role": role},
         )
-        await run_after_commit(self.session, self._on_membership_change)
 
         logger.info("Added user %s to team %s with role %s", user_id, team_id, role)
         return membership
@@ -426,6 +414,9 @@ class TeamService(TeamMembershipRequestMixin, BaseService):
         membership = await self._get_membership(team_id, user_id)
         if not membership:
             raise MembershipError(f"User {user_id} is not a member of team {team_id}")
+        team = await self.get_team(team_id)
+        if not team:
+            raise TeamNotFoundError(f"Team {team_id} not found")
 
         # Prevent removing the last owner
         if membership.role == self.ROLE_OWNER:
@@ -442,7 +433,7 @@ class TeamService(TeamMembershipRequestMixin, BaseService):
             resource_id=team_id,
             details={"user_id": str(user_id), "previous_role": membership.role},
         )
-        await run_after_commit(self.session, self._on_membership_change)
+        run_after_commit(self.session, MembershipEpochBump(team.org_id))
 
         logger.info("Removed user %s from team %s", user_id, team_id)
         return True
