@@ -47,8 +47,9 @@ _OTHER_TRANSPORT = re.compile(
 #: A type-only import or re-export creates no transport (``import type``, ``export type``, or braces
 #: holding only ``type`` specifiers); it may span lines.
 _TYPE_ONLY_AXIOS = re.compile(
-    r"\b(?:import|export)\s+(?:type\s[^;]*?|\{\s*(?:type\s+[\w$]+(?:\s+as\s+[\w$]+)?\s*,?\s*)+\}\s*)"
-    r"from\s+['\"]axios['\"]",
+    r"\b(?:import|export)\s+(?:type\s+(?:[\w$]+\s*,?\s*)?(?:\{[^{};]*\}|\*\s+as\s+[\w$]+)?\s*"
+    r"|\{\s*(?:type\s+[\w$]+(?:\s+as\s+[\w$]+)?\s*,?\s*)+\}\s*)"
+    r"from\s+['\"]axios['\"]",  # one statement only: the repo writes no semicolons (#19659 review)
     re.DOTALL,
 )
 _COMMENT = re.compile(r"^\s*(//|\*|/\*|<!--)")
@@ -179,6 +180,18 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         self._w(tmp_path, "src/c.ts", "import { type AxiosError, type AxiosResponse as R } from 'axios'\n")
         self._w(tmp_path, "src/d.ts", "export type { AxiosInstance } from 'axios'\n")
         assert count_transports(tmp_path) == 1  # only b.ts's fetch, still found on its own line
+
+    def test_a_type_import_never_hides_a_later_value_import(self, tmp_path: Path) -> None:
+        bodies = (
+            "import type { A } from 'x'\nimport axios from 'axios'\n",
+            "import type { A } from 'x'\nconst y = 1\nimport axios from 'axios'\n",
+            "import type A from 'x'\nimport { create } from 'axios'\n",
+            "export type Foo = { a: 1 }\nimport axios from 'axios'\n",
+            "<script setup lang=\"ts\">\nimport type { Props } from './p'\nimport axios from 'axios'\n</script>\n",
+        )
+        for i, body in enumerate(bodies):
+            self._w(tmp_path, f"src/m{i}.{'vue' if 'script' in body else 'ts'}", body)
+        assert count_transports(tmp_path) == len(bodies)
 
     def test_a_value_import_beside_a_type_is_a_transport(self, tmp_path: Path) -> None:
         self._w(tmp_path, "src/a.ts", "import axios, { type AxiosError } from 'axios'\n")
