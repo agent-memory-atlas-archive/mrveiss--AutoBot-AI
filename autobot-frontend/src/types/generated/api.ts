@@ -13165,7 +13165,7 @@ export interface paths {
          * Mcp Search Knowledge Base
          * @description MCP tool: Search the knowledge base.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: results are the caller's own visible facts.
          */
         post: operations["mcp_search_knowledge_base_api_knowledge_mcp_search_knowledge_base_post"];
         delete?: never;
@@ -13229,7 +13229,7 @@ export interface paths {
          * Mcp Summarize Knowledge Topic
          * @description MCP tool: Summarize knowledge on a topic.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts are summarised.
          */
         post: operations["mcp_summarize_knowledge_topic_api_knowledge_mcp_summarize_knowledge_topic_post"];
         delete?: never;
@@ -13251,7 +13251,7 @@ export interface paths {
          * Mcp Vector Similarity Search
          * @description MCP tool: Perform vector similarity search in Redis.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts are returned.
          */
         post: operations["mcp_vector_similarity_search_api_knowledge_mcp_vector_similarity_search_post"];
         delete?: never;
@@ -13273,7 +13273,7 @@ export interface paths {
          * Mcp Langchain Qa Chain
          * @description MCP tool: Use LangChain QA chain for comprehensive answers.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts reach the prompt.
          */
         post: operations["mcp_langchain_qa_chain_api_knowledge_mcp_langchain_qa_chain_post"];
         delete?: never;
@@ -47942,7 +47942,7 @@ export interface paths {
         };
         /**
          * Search Summaries
-         * @description Vector search on summary embeddings.
+         * @description Vector search on summary embeddings; only summaries of facts the caller may read (#16665).
          */
         get: operations["search_summaries_api_knowledge_graph_summaries_search_get"];
         put?: never;
@@ -47962,7 +47962,7 @@ export interface paths {
         };
         /**
          * Get Document Overview
-         * @description Get document overview with hierarchical summaries.
+         * @description Get document overview with hierarchical summaries; empty unless the caller may read the document (#16665).
          */
         get: operations["get_document_overview_api_knowledge_graph_documents__document_id__overview_get"];
         put?: never;
@@ -47982,7 +47982,7 @@ export interface paths {
         };
         /**
          * Drill Down Summary
-         * @description Navigate from summary to children or source chunks.
+         * @description Navigate from summary to children or source chunks; nothing unless the caller may read the source (#16665).
          */
         get: operations["drill_down_summary_api_knowledge_graph_summaries__summary_id__drill_down_get"];
         put?: never;
@@ -73900,17 +73900,33 @@ export interface components {
             path: string;
             /**
              * Edits
-             * @description List of {old_text, new_text} edits
+             * @description List of {old_text, new_text, expected_replacements?} edits
              */
-            edits: {
-                [key: string]: string;
-            }[];
+            edits: components["schemas"]["EditSpec"][];
             /**
              * Dry Run
              * @description Preview changes without applying
              * @default false
              */
             dry_run: boolean | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * EditSpec
+         * @description One exact find-and-replace; ``oldText``/``newText`` are the MCP-spec spellings.
+         */
+        EditSpec: {
+            /** Old Text */
+            old_text?: string;
+            /** New Text */
+            new_text?: string;
+            /** Oldtext */
+            oldText?: string;
+            /** Newtext */
+            newText?: string;
+            /** Expected Replacements */
+            expected_replacements?: number;
         } & {
             [key: string]: unknown;
         };

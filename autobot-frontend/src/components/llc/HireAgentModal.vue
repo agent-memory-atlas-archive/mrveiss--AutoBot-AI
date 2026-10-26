@@ -130,21 +130,21 @@ async function submit(): Promise<void> {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
 }
 
 .field-input {
   padding: 0.4rem 0.5rem;
   border-radius: 6px;
-  border: 1px solid var(--border-default, #d1d5db);
-  background: var(--bg-surface, #fff);
-  color: var(--text-primary, #111827);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .form-error {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--color-error, #dc2626);
+  color: var(--color-error);
 }
 
 .btn {
@@ -157,13 +157,13 @@ async function submit(): Promise<void> {
 
 .btn-ghost {
   background: transparent;
-  border-color: var(--border-default, #d1d5db);
-  color: var(--text-secondary, #6b7280);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
 }
 
 .btn-primary {
-  background: var(--color-accent, #c4651a);
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 .btn-primary:disabled {
