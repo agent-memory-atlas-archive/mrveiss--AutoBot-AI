@@ -50,9 +50,9 @@ _CONFIG_REL = Path(".github/dependabot.yml")
 #: The follow-up value for a root that pins nothing, so has nothing to update.
 NO_DEPENDENCIES = "no dependencies"
 
-#: dependabot-core's docker fetcher matches ``dockerfile``/``containerfile`` in a file
-#: name, case-insensitively. Anchored on ``.`` here so ``dockerfile_lint.py`` is not a manifest.
-_DOCKERFILE = re.compile(r"(?:^|\.)(?:docker|container)file(?:\.|$)", re.IGNORECASE)
+#: dependabot-core's docker fetcher matches ``dockerfile``/``containerfile`` anywhere in a
+#: file name, case-insensitively, so ``Dockerfile-ci`` and ``app_dockerfile`` are manifests too.
+_DOCKERFILE = re.compile(r"(?:docker|container)file", re.IGNORECASE)
 
 #: Which ecosystems' blocks cover a root of each kind. A ``pyproject.toml`` is read by
 #: a pip block, or by a uv block when the root is a uv project.
@@ -128,6 +128,24 @@ def _normalise(directory: str) -> str:
     return directory.strip("/")
 
 
+def _glob_matches(path: str, pattern: str) -> bool:
+    """Whether ``pattern`` matches ``path`` one segment at a time: ``*`` never crosses ``/``.
+
+    ``fnmatch`` lets ``*`` match ``/``, so ``packages/*`` would also reach
+    ``packages/a/nested``; npm and dependabot globs match one level per ``*``. A ``**``
+    segment matches zero or more whole segments.
+    """
+    return _match_segments(path.split("/") if path else [], pattern.split("/") if pattern else [])
+
+
+def _match_segments(path: list[str], pattern: list[str]) -> bool:
+    if not pattern:
+        return not path
+    if pattern[0] == "**":
+        return any(_match_segments(path[i:], pattern[1:]) for i in range(len(path) + 1))
+    return bool(path) and fnmatch.fnmatchcase(path[0], pattern[0]) and _match_segments(path[1:], pattern[1:])
+
+
 def _workspace_members(root: Path, directory: str, candidates: set[str]) -> set[str]:
     """The npm roots a covered root's ``workspaces`` brings into dependabot's reach."""
     manifest = root / directory / "package.json"
@@ -137,7 +155,7 @@ def _workspace_members(root: Path, directory: str, candidates: set[str]) -> set[
     if isinstance(workspaces, dict):
         workspaces = workspaces.get("packages", [])
     patterns = [posixpath.normpath(posixpath.join(directory, p)) for p in workspaces]
-    return {c for c in candidates if any(fnmatch.fnmatch(c, p) for p in patterns)}
+    return {c for c in candidates if any(_glob_matches(c, p) for p in patterns)}
 
 
 def _covered(root: Path, config: Path, roots: list[tuple[str, str]]) -> set[tuple[str, str]]:
@@ -148,7 +166,11 @@ def _covered(root: Path, config: Path, roots: list[tuple[str, str]]) -> set[tupl
     npm_dirs = {d for kind, d in roots if kind == "npm"}
     for directory in sorted(configured["npm"]):
         configured["npm"] |= _workspace_members(root, directory, npm_dirs)
-    return {(kind, d) for kind, d in roots if any(d in configured[eco] for eco in _COVERED_BY[kind])}
+    return {
+        (kind, d)
+        for kind, d in roots
+        if any(_glob_matches(d, pattern) for eco in _COVERED_BY[kind] for pattern in configured[eco])
+    }
 
 
 @functools.lru_cache(maxsize=1)
@@ -171,7 +193,8 @@ def _pyproject_pins(path: Path) -> bool:
 
     document = tomllib.loads((path / "pyproject.toml").read_text(encoding="utf-8"))
     project = document.get("project", {})
-    return bool(project.get("dependencies") or project.get("optional-dependencies"))
+    groups = document.get("dependency-groups", {})  # PEP 735
+    return bool(project.get("dependencies") or project.get("optional-dependencies") or any(groups.values()))
 
 
 def _docker_pins(path: Path) -> bool:
@@ -210,15 +233,27 @@ def test_the_roots_were_actually_found() -> None:
         assert expected in roots, f"{_label(expected)} is not in the population — FIX THE SWEEP"
 
 
+def _configured_directory_exists(root: Path, directory: str) -> bool:
+    """A literal directory is a directory; a glob must match at least one tracked directory."""
+    pattern = _normalise(directory)
+    if not any(ch in pattern for ch in "*?["):
+        return (root / pattern).is_dir()
+    try:
+        tracked = tracked_paths(root)
+    except EmptyEnumeration:
+        return False
+    return any(_glob_matches(posixpath.dirname(rel), pattern) for rel in tracked)
+
+
 def test_every_configured_directory_exists() -> None:
     """A block on a moved directory scans nothing, and dependabot reports no error."""
     for eco in ("npm", "docker", "uv"):
         directories = dependabot_directories(eco, _REPO_ROOT / _CONFIG_REL)
         assert directories, f"no {eco} blocks parsed from dependabot.yml — FIX THE SWEEP"
         for directory in directories:
-            assert (
-                _REPO_ROOT / _normalise(directory)
-            ).is_dir(), f"dependabot.yml configures {eco} directory {directory!r}, which does not exist"
+            assert _configured_directory_exists(
+                _REPO_ROOT, directory
+            ), f"dependabot.yml configures {eco} directory {directory!r}, which does not exist"
 
 
 def test_every_package_root_is_covered_or_excused() -> None:
@@ -282,3 +317,48 @@ def test_a_workspace_member_is_covered_through_its_workspace_root(tmp_path: Path
     tree = _plant(tmp_path, _BLOCK.format('"/"'))
     (tree / "package.json").write_text('{"workspaces": ["app"]}', encoding="utf-8")
     assert _covered(tree, tree / _CONFIG_REL, [("npm", ""), ("npm", "app")]) == {("npm", ""), ("npm", "app")}
+
+
+def test_a_workspace_glob_does_not_reach_a_nested_package(tmp_path: Path) -> None:
+    """Negative control: ``packages/*`` is one level; ``packages/a/nested`` stays uncovered."""
+    tree = _plant(tmp_path, _BLOCK.format('"/"'))
+    (tree / "package.json").write_text('{"workspaces": ["packages/*"]}', encoding="utf-8")
+    roots = [("npm", ""), ("npm", "packages/a"), ("npm", "packages/a/nested")]
+    assert _covered(tree, tree / _CONFIG_REL, roots) == {("npm", ""), ("npm", "packages/a")}
+
+
+def test_a_double_star_segment_spans_levels() -> None:
+    assert _glob_matches("packages/a/nested", "packages/**")
+    assert _glob_matches("packages", "packages/**")
+    assert not _glob_matches("other/a", "packages/**")
+    assert not _glob_matches("packages/a/nested", "packages/*")
+
+
+_GLOB_BLOCK = (
+    "version: 2\nupdates:\n  - package-ecosystem: npm\n    directories: [{}]\n    schedule: {{interval: weekly}}\n"
+)
+
+
+def test_a_directories_glob_covers_what_it_matches(tmp_path: Path) -> None:
+    """A ``directories`` entry with ``*`` covers a one-level match and nothing deeper."""
+    tree = _plant(tmp_path, _GLOB_BLOCK.format('"/*"'))
+    roots = [("npm", "app"), ("npm", "app/deep")]
+    assert _covered(tree, tree / _CONFIG_REL, roots) == {("npm", "app")}
+    assert _configured_directory_exists(tree, "/*")
+    assert not _configured_directory_exists(tree, "/nomatch*")
+
+
+def test_every_dockerfile_name_dependabot_reads_is_a_docker_root() -> None:
+    """Contrast: ``Dockerfile-ci`` and ``ci.containerfile`` are manifests; ``docker-compose.yml`` is not."""
+    assert _kind("Dockerfile-ci") == _kind("Dockerfile_x") == _kind("ci.containerfile") == "docker"
+    assert _kind("Dockerfile") == _kind("sandbox.Dockerfile") == "docker"
+    assert _kind("docker-compose.yml") is None
+    assert _kind("dockerize.py") is None
+
+
+def test_a_pyproject_with_only_dependency_groups_pins(tmp_path: Path) -> None:
+    """PEP 735: packages declared only under ``[dependency-groups]`` still count as pinned."""
+    (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest>=8"]\n', encoding="utf-8")
+    assert _pins_something(tmp_path, "pip", "")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
+    assert not _pins_something(tmp_path, "pip", "")
