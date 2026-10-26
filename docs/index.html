@@ -1012,7 +1012,7 @@
             <div class="sp-icon"><svg class="icon" style="width:16px;height:16px"><use href="#i-mesh"/></svg></div>
             <div>
               <strong>Redis-backed shared state across workers</strong>
-              <p>Backend workers (up to four on a fleet backend node, tuned to its RAM; one in Docker) share session cache and rate-limit counters via Redis Stack. Adding more workers requires zero code change.</p>
+              <p>Backend workers (four on a dedicated backend node; one on a co-located SLM host and in Docker) share session cache and rate-limit counters via Redis Stack. Adding more workers requires zero code change.</p>
             </div>
           </div>
           <div class="scale-point">
