@@ -288,8 +288,12 @@ def read_sources(root: Path, paths: Sequence[str]) -> dict[str, str]:
     for rel in paths:
         try:
             out[rel] = (root / rel).read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError) as exc:
-            raise AssertionError(f"{rel}: discovered but unreadable ({exc!r})") from exc
+        except UnicodeDecodeError as exc:  # its repr carries the whole byte string; name the spot instead
+            raise AssertionError(
+                f"{rel}: discovered but unreadable (not UTF-8 at byte {exc.start}: {exc.reason})"
+            ) from exc
+        except OSError as exc:
+            raise AssertionError(f"{rel}: discovered but unreadable ({type(exc).__name__}: {exc.strerror})") from exc
     return out
 
 
