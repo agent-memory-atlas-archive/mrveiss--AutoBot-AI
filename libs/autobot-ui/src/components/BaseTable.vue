@@ -19,6 +19,7 @@
 import { computed, ref, useSlots, warn, watch, watchEffect } from 'vue'
 import BaseTooltip from './BaseTooltip.vue'
 import EmptyState from './EmptyState.vue'
+import type { SemanticVariant } from '../types/semantic'
 import { sortRows, type SortOrder } from '../utils/tableSort'
 
 export type { SortOrder }
@@ -26,7 +27,7 @@ export type TableRow = Record<string, unknown>
 export type TableRowKey = string | number
 export type TableSize = 'compact' | 'comfortable'
 /** A row's state, tinted from the status tokens (#19640). */
-export type TableRowVariant = 'success' | 'warning' | 'error' | 'info'
+export type TableRowVariant = Extract<SemanticVariant, 'success' | 'warning' | 'error' | 'info'>
 
 export interface BaseTableColumn {
   key: string
