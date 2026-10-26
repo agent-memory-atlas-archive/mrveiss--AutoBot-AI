@@ -17,6 +17,7 @@ register_env_var(
         name="AUTOBOT_TOOL_CALL_TIMEOUT_MS",
         type=int,
         default=30000,
+        range=(1, None),
         description=(
             "Milliseconds one tool call may run before it is timed out, for both the agent "
             "loop and the parallel tool executor (autobot_shared/tool_timeouts.py, #19729). "
@@ -31,6 +32,7 @@ register_env_var(
         name="AUTOBOT_TOOL_GROUP_TIMEOUT_MS",
         type=int,
         default=60000,
+        range=(1, None),
         description=(
             "Milliseconds one group of tool calls (one agent-loop iteration) may run, for both "
             "the agent loop and the parallel tool executor (autobot_shared/tool_timeouts.py, "

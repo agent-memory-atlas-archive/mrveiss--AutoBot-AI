@@ -405,8 +405,8 @@ appears outside the known overlays.
 | `AUTOBOT_TLS_CERT_DIR` | tls | str | `'/etc/autobot/certs'` | Directory containing TLS certificate and key files. |
 | `AUTOBOT_TLS_CERT_PATH` | tls | str | *(none)* | Path to the TLS client/server certificate file. |
 | `AUTOBOT_TLS_KEY_PATH` | tls | str | *(none)* | Path to the TLS private key file. |
-| `AUTOBOT_TOOL_CALL_TIMEOUT_MS` | agent_loop | int | `30000` | Milliseconds one tool call may run before it is timed out, for both the agent loop and the parallel tool executor (autobot_shared/tool_timeouts.py, #19729). Raising it lets slow tools finish; lowering it fails a hung tool sooner. Minimum 1. |
-| `AUTOBOT_TOOL_GROUP_TIMEOUT_MS` | agent_loop | int | `60000` | Milliseconds one group of tool calls (one agent-loop iteration) may run, for both the agent loop and the parallel tool executor (autobot_shared/tool_timeouts.py, #19729). Keep it at least the per-call budget. Minimum 1. |
+| `AUTOBOT_TOOL_CALL_TIMEOUT_MS` | agent_loop | int | `30000` | Milliseconds one tool call may run before it is timed out, for both the agent loop and the parallel tool executor (autobot_shared/tool_timeouts.py, #19729). Raising it lets slow tools finish; lowering it fails a hung tool sooner. Minimum 1. Range: 1–None. |
+| `AUTOBOT_TOOL_GROUP_TIMEOUT_MS` | agent_loop | int | `60000` | Milliseconds one group of tool calls (one agent-loop iteration) may run, for both the agent loop and the parallel tool executor (autobot_shared/tool_timeouts.py, #19729). Keep it at least the per-call budget. Minimum 1. Range: 1–None. |
 | `AUTOBOT_TOOL_OUTPUT_SPILL` | agent_loop | bool | false | Master switch for spilling oversized tool output to disk and returning a short excerpt plus an anchor (agent_loop/tool_output_spill.py). |
 | `AUTOBOT_TOOL_OUTPUT_SPILL_EXCERPT` | agent_loop | int | `2000` | Characters of a spilled tool result kept inline as the excerpt; clamped below the spill threshold (agent_loop/tool_output_spill.py). |
 | `AUTOBOT_TOOL_OUTPUT_SPILL_MAX` | agent_loop | int | `5000000` | Largest payload written to a spill artifact; above this the stored copy is truncated and marked (agent_loop/tool_output_spill.py). |
