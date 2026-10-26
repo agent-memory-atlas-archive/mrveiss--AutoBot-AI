@@ -273,16 +273,16 @@ deploy_services() {
     run_playbook "deploy-database.yml" "Database deployment"
     sleep 10  # Wait for database to be ready
 
-    run_playbook "deploy_role.yml" "Backend deployment" "-e role_name=backend"  # #19239: one role dispatcher
+    run_playbook "deploy_role.yml" "Backend deployment" "-e role_name=backend -e target_host=backend"  # #19239: one role dispatcher, limited to its group
     sleep 10  # Wait for backend to be ready
 
     run_playbook "deploy-aiml.yml" "AI/ML deployment"
     sleep 10  # Wait for AI services to be ready
 
-    run_playbook "deploy_role.yml" "Frontend deployment" "-e role_name=frontend"
+    run_playbook "deploy_role.yml" "Frontend deployment" "-e role_name=frontend -e target_host=frontend"
     sleep 5   # Wait for frontend to be ready
 
-    run_playbook "deploy_role.yml" "Browser deployment" "-e role_name=browser"
+    run_playbook "deploy_role.yml" "Browser deployment" "-e role_name=browser -e target_host=browser"
 }
 
 migrate_data() {
