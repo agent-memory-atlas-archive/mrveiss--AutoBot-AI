@@ -27,15 +27,23 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from fastapi import FastAPI
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import DBAPIError
 
 from api.user_management.dependencies import get_current_user, require_org_context
 from llc.api import companies
 from llc.models.company import CompanyCreate, CompanyUpdate
 from llc.models.enums import MembershipRole
-from llc.services.authz import NotAuthorisedError
-from llc.services.company import CompanyNotFoundError, CompanyService
+from llc.models.membership import LLCCompanyMembership
+from llc.services.authz import NotAuthorisedError, may_attach_under
+from llc.services.company import (
+    MOVE_LOCK_MAX_PASSES,
+    CompanyMoveContendedError,
+    CompanyNotFoundError,
+    CompanyService,
+)
 from llc.services.company_ceo import CompanyCEOService
 from llc.services.membership_service import MembershipService
 from llc.tests import test_llc_org_chart as _org_chart_harness
@@ -59,9 +67,11 @@ async def _org(session_factory, name: str, *, parent=None, role=MembershipRole.O
         return org.id
 
 
-async def _update(session_factory, org_id: uuid.UUID, data: CompanyUpdate) -> None:  # noqa: ANN001
+async def _update(  # noqa: ANN001
+    session_factory, org_id: uuid.UUID, data: CompanyUpdate, platform_admin: bool = False
+) -> None:
     async with session_factory() as session:
-        await CompanyService(session).update(org_id, data, actor_user_id=_ACTOR)
+        await CompanyService(session).update(org_id, data, actor_user_id=_ACTOR, platform_admin=platform_admin)
         await session.commit()
 
 
@@ -94,11 +104,85 @@ async def test_an_unseen_new_parent_is_not_found_so_no_cross_tenant_graft(sessio
 
 
 @pytest.mark.asyncio
-async def test_a_plain_member_of_the_new_parent_may_attach_under_it(session_factory):  # noqa: ANN001
+async def test_a_plain_member_of_the_new_parent_may_not_attach_under_it(session_factory):  # noqa: ANN001
+    """A child inherits the parent's KB and ancestor visibility, so membership is not enough (2026-10-26)."""
     parent = await _org(session_factory, "Parent", role=MembershipRole.MEMBER)
+    org = await _org(session_factory, "Acme")
+    with pytest.raises(CompanyNotFoundError):
+        await _update(session_factory, org, CompanyUpdate(parent_org_id=parent))
+    assert await _parent_of(session_factory, org) is None
+
+
+@pytest.mark.asyncio
+async def test_an_admin_of_the_new_parent_may_attach_under_it(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.ADMIN)
     org = await _org(session_factory, "Acme")
     await _update(session_factory, org, CompanyUpdate(parent_org_id=parent))
     assert await _parent_of(session_factory, org) == parent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("role", "platform_admin", "allowed"),
+    [
+        (MembershipRole.OWNER, False, True),
+        (MembershipRole.ADMIN, False, True),
+        (MembershipRole.MEMBER, False, False),
+        (None, False, False),
+        (None, True, True),
+    ],
+)
+async def test_may_attach_under_needs_owner_or_admin_unless_platform_admin(  # noqa: ANN001
+    session_factory, role, platform_admin, allowed
+):
+    parent = await _org(session_factory, "Parent", role=role)
+    async with session_factory() as session:
+        assert await may_attach_under(session, parent, _ACTOR, platform_admin=platform_admin) is allowed
+
+
+@pytest.mark.asyncio
+async def test_a_platform_admin_moves_an_org_that_has_no_admin_at_all(session_factory):  # noqa: ANN001
+    """No lockout (maintainer principle, 2026-10-26): an org whose admins are gone stays movable."""
+    parent = await _org(session_factory, "Parent", role=None)
+    org = await _org(session_factory, "Acme", role=MembershipRole.MEMBER)  # its only member, not an admin
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=parent), platform_admin=True)
+    assert await _parent_of(session_factory, org) == parent
+
+
+@pytest.mark.asyncio
+async def test_a_platform_admin_promotes_a_sub_org_whose_parent_has_no_admin(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.MEMBER)  # no admin left on the parent
+    org = await _org(session_factory, "Acme", parent=parent, role=None)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=None), platform_admin=True)
+    assert await _parent_of(session_factory, org) is None
+
+
+@pytest.mark.asyncio
+async def test_an_owner_who_is_not_an_admin_moves_and_promotes(session_factory):  # noqa: ANN001
+    """The OWNER role counts as admin everywhere a move checks (GRANTING_ROLES)."""
+    parent = await _org(session_factory, "Parent", role=MembershipRole.OWNER)
+    org = await _org(session_factory, "Acme", role=MembershipRole.OWNER)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=parent))
+    assert await _parent_of(session_factory, org) == parent
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=None))
+    assert await _parent_of(session_factory, org) is None
+
+
+@pytest.mark.asyncio
+async def test_a_role_revoked_while_the_move_waited_for_its_locks_stops_it(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent")
+    org = await _org(session_factory, "Acme")
+    async with session_factory() as session:
+        svc = CompanyService(session)
+        real = svc._lock_move_rows
+
+        async def _revoke_then_lock(company_id, parent_org_id) -> None:  # noqa: ANN001
+            await session.execute(sa.delete(LLCCompanyMembership).where(LLCCompanyMembership.company_id == org))
+            await real(company_id, parent_org_id)
+
+        svc._lock_move_rows = _revoke_then_lock
+        with pytest.raises(NotAuthorisedError):
+            await svc.move(org, parent, actor_user_id=_ACTOR)
 
 
 @pytest.mark.asyncio
@@ -186,6 +270,51 @@ async def test_a_move_locks_itself_and_the_whole_new_parent_chain_in_one_pass(se
 
 
 @pytest.mark.asyncio
+async def test_a_chain_that_keeps_changing_is_refused_after_the_pass_cap():
+    svc = CompanyService(MagicMock())
+    grown: list[uuid.UUID] = []
+
+    async def _growing_chain(_start) -> list[uuid.UUID]:  # noqa: ANN001
+        grown.append(uuid.uuid4())
+        return list(grown)
+
+    locks: list[set[uuid.UUID]] = []
+
+    async def _record(ids: set[uuid.UUID]) -> None:
+        locks.append(set(ids))
+
+    svc._chain_ids = _growing_chain
+    svc._lock_ids = _record
+    with pytest.raises(CompanyMoveContendedError):
+        await svc._lock_move_rows(uuid.uuid4(), uuid.uuid4())
+    assert len(locks) == MOVE_LOCK_MAX_PASSES
+    # Every pass re-locks the FULL set (one id-ordered statement), never just the new rows.
+    assert all(earlier < later for earlier, later in zip(locks, locks[1:]))
+
+
+class _PgError(Exception):
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__(sqlstate)
+        self.sqlstate = sqlstate
+
+
+@pytest.mark.asyncio
+async def test_a_deadlock_while_locking_is_a_retryable_refusal():
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=DBAPIError("SELECT", {}, _PgError("40P01")))
+    with pytest.raises(CompanyMoveContendedError):
+        await CompanyService(session)._lock_ids({uuid.uuid4()})
+
+
+@pytest.mark.asyncio
+async def test_any_other_database_error_while_locking_propagates():
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=DBAPIError("SELECT", {}, _PgError("57014")))
+    with pytest.raises(DBAPIError):
+        await CompanyService(session)._lock_ids({uuid.uuid4()})
+
+
+@pytest.mark.asyncio
 async def test_the_lock_statement_takes_rows_for_update_in_id_order():
     session = MagicMock()
     session.execute = AsyncMock()
@@ -222,3 +351,14 @@ async def test_the_route_answers_a_refused_move_with_403_and_rolls_back():
     _, body = svc.update.await_args.args
     assert "parent_org_id" in body.model_fields_set and body.parent_org_id is None
     assert svc.update.await_args.kwargs == {"actor_user_id": _ACTOR, "platform_admin": False}
+
+
+@pytest.mark.asyncio
+async def test_the_route_answers_a_contended_move_with_409():
+    svc = SimpleNamespace(session=AsyncMock(), update=AsyncMock(side_effect=CompanyMoveContendedError("busy")))
+    transport = httpx.ASGITransport(app=_app(svc))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.patch(f"/api/llc/companies/{_ORG_ID}", json={"parent_org_id": None})
+    assert resp.status_code == 409
+    assert "try again" in resp.json()["detail"]
+    svc.session.rollback.assert_awaited_once()

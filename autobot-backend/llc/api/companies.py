@@ -69,6 +69,7 @@ from llc.services.company import (
     CompanyCycleError,
     CompanyHasChildrenError,
     CompanyIssuePrefixConflictError,
+    CompanyMoveContendedError,
     CompanyNotFoundError,
     CompanyService,
 )
@@ -222,8 +223,8 @@ async def create_company(
     user_id = _current_user_id(current_user)
     admin = _is_platform_admin_claim(current_user)
     if body.parent_org_id is not None and not await may_attach_under(
-        svc.session, body.parent_org_id, uuid.UUID(user_id), platform_admin=admin, membership=membership_svc
-    ):  # 404 (not 403): "not my company" reads as "doesn't exist" (#12238); the move path shares the rule (#19634)
+        svc.session, body.parent_org_id, uuid.UUID(user_id), platform_admin=admin
+    ):  # 404 (not 403): owner/admin of the parent only (#19634), and "not mine" reads as "doesn't exist" (#12238)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     try:
         org = await svc.create(body)
@@ -281,15 +282,12 @@ async def update_company(
     current_user: dict = Depends(get_current_user),
     ctx: TenantContext = Depends(require_org_context),
 ) -> CompanyRead:
-    # Issue #12233: tenant authz — caller's org must match company_id unless admin;
-    # a parent_org_id change is authorized again inside CompanyService.move (#19634).
+    # #12233: tenant authz (caller's org must match unless admin); a move is authorized again in move() (#19634)
     assert_company_access(ctx, company_id)  # shared guard (#12238)
     actor = uuid.UUID(_current_user_id(current_user))
     try:
         org = await svc.update(company_id, body, actor_user_id=actor, platform_admin=ctx.is_platform_admin)
-        # GH#12309: serialize BEFORE commit so that if response building ever
-        # fails the except handler's rollback still undoes the change — never
-        # leave a committed-but-500 state where the DB and caller disagree.
+        # GH#12309: serialize BEFORE commit, so a failed response build is rolled back (never committed-but-500).
         read = _to_read(org)
         await svc.session.commit()
         return read
@@ -299,6 +297,9 @@ async def update_company(
     except CompanyIssuePrefixConflictError:
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Internal server error")
+    except CompanyMoveContendedError:  # lost a lock race, nothing changed (#19593)
+        await svc.session.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Concurrent move in progress; try again")
     except (CompanyBudgetError, CompanyCycleError):
         await svc.session.rollback()
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Internal server error")
@@ -363,8 +364,7 @@ async def activate_company(
     assert_company_access(ctx, company_id)  # shared guard (#12238)
     try:
         org = await svc.activate(company_id)
-        # GH#12309: serialize BEFORE commit so a failed response never persists
-        # a partial transition (commit only lands on the success path).
+        # GH#12309: serialize BEFORE commit so a failed response never persists a partial transition.
         read = _to_read(org)
         await svc.session.commit()
         return read

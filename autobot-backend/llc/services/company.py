@@ -15,8 +15,10 @@ from typing import List, Optional
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from autobot_shared.db_errors import PG_DEADLOCK_DETECTED, sqlstate_of
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.time_utils import now_utc
 from llc.models.company import CompanyCreate, CompanyTreeNode, CompanyUpdate
@@ -24,12 +26,17 @@ from llc.models.contact import LLCContact
 from llc.models.enums import LLCCompanyStatus
 from user_management.models.organization import Organization
 
-from .authz import may_attach_under, require_company_admin
+from .authz import may_attach_under, require_company_admin_unless_platform
 from .base import LLCServiceBase
 from .company_ceo import CompanyCEOService
-from .membership_service import MembershipService
 
 logger = get_logger(__name__)
+
+#: Most chain-lock passes one move takes before giving up (#19593). A pass repeats
+#: only when a concurrent move committed a change to the new parent's ancestor chain
+#: between reading and locking it; needing more than this means the tree is being
+#: churned under the move, and refusing it is safer than looping.
+MOVE_LOCK_MAX_PASSES = 8
 
 
 class CompanyNotFoundError(Exception):
@@ -38,6 +45,16 @@ class CompanyNotFoundError(Exception):
 
 class CompanyCycleError(Exception):
     """Raised when a parent_org_id assignment would create a hierarchy cycle."""
+
+
+class CompanyMoveContendedError(Exception):
+    """A move lost a lock race; nothing was changed and the caller should retry (HTTP 409).
+
+    Raised when the ancestor chain kept changing for MOVE_LOCK_MAX_PASSES passes, or
+    when Postgres picked this move as a deadlock victim. Either way the transaction
+    must be rolled back and the move retried from the start: only a fresh
+    transaction gives up the rows this one already holds.
+    """
 
 
 class CompanyBudgetError(Exception):
@@ -166,16 +183,15 @@ class CompanyService(LLCServiceBase):
         """Re-parent *company_id* (``None`` = top level); the CEO follows the move (#15907).
 
         Authorized here so every caller inherits it (#19634): admin on the moved org,
-        a new parent the actor may attach under (else not found), and admin on the
-        parent being left. The moved org and the new parent's ancestor chain are
+        admin on the new parent (else not found), and admin on the parent being left;
+        a platform admin passes all three. The moved org and the new parent's ancestor chain are
         locked first (#19593), so the cycle check and the CEO sync read a tree no
         concurrent move can change before this transaction ends.
         """
         await self._authorize_move_target(company_id, parent_org_id, actor_user_id, platform_admin)
         await self._lock_move_rows(company_id, parent_org_id)
         org = await self._get_or_404(company_id, for_update=True)
-        if org.parent_org_id is not None and org.parent_org_id != parent_org_id:
-            await require_company_admin(self.session, org.parent_org_id, actor_user_id)
+        await self._authorize_locked_move(org, parent_org_id, actor_user_id, platform_admin)
         if parent_org_id is not None:
             await self._get_or_404(parent_org_id)
             await self._assert_no_cycle(company_id, parent_org_id)
@@ -193,33 +209,67 @@ class CompanyService(LLCServiceBase):
         actor_user_id: Optional[uuid.UUID],
         platform_admin: bool,
     ) -> None:
-        """Admin on the moved org, and a new parent the actor can see (#19634, #12233's rule)."""
-        await require_company_admin(self.session, company_id, actor_user_id)
+        """Before any lock: admin on the moved org, and on the new parent (#19634, #12233's rule).
+
+        Checked first so a caller with no rights here never takes a row lock.
+        """
+        await require_company_admin_unless_platform(
+            self.session, company_id, actor_user_id, platform_admin=platform_admin
+        )
         if parent_org_id is None:
             return
-        allowed = await may_attach_under(
-            self.session, parent_org_id, actor_user_id, platform_admin=platform_admin, membership=MembershipService()
-        )
-        if not allowed:
+        if not await may_attach_under(self.session, parent_org_id, actor_user_id, platform_admin=platform_admin):
             raise CompanyNotFoundError(f"Company {parent_org_id} not found")
+
+    async def _authorize_locked_move(
+        self,
+        org: Organization,
+        parent_org_id: Optional[uuid.UUID],
+        actor_user_id: Optional[uuid.UUID],
+        platform_admin: bool,
+    ) -> None:
+        """Under the lock: the moved-org role again, and admin on the parent being left (#19634).
+
+        The current parent is only known for certain once the org row is locked, and
+        the moved-org role is re-read here so a role revoked while the move waited
+        for its locks does not carry the move through.
+        """
+        await require_company_admin_unless_platform(self.session, org.id, actor_user_id, platform_admin=platform_admin)
+        if org.parent_org_id is not None and org.parent_org_id != parent_org_id:
+            await require_company_admin_unless_platform(
+                self.session, org.parent_org_id, actor_user_id, platform_admin=platform_admin
+            )
 
     async def _lock_move_rows(self, company_id: uuid.UUID, parent_org_id: Optional[uuid.UUID]) -> None:
         """Lock the moved org and the new parent's ancestor chain ``FOR UPDATE``, in id order (#19593).
 
-        Two opposite moves (A under B, B under A) both need A and B, and both take
-        them in one id-ordered statement, so one waits for the other instead of
-        each reading a tree the other is about to change -- and neither can hold
-        one row while waiting for the other. The chain is read, locked, then read
-        again; rows it gained in between (a concurrent move committed) are locked
-        on the next pass. Only that rare extension can lock out of order, and
-        Postgres then aborts one mover as a deadlock -- a failed move, never a cycle.
+        Two movers whose sets overlap take them in one id-ordered statement each, so
+        one waits for the other instead of each reading a tree the other is about to
+        change, and neither holds one row while waiting for another. The chain is read,
+        locked, then read again under the lock; if it gained rows (a concurrent move
+        committed in between), the next pass re-locks the FULL set, again in id order,
+        up to MOVE_LOCK_MAX_PASSES, then :class:`CompanyMoveContendedError`.
+
+        Re-locking the full set is the chosen ordering rule. The residual case is a
+        later pass, which still holds the rows earlier passes locked while it waits
+        for the new ones. If that closes a wait cycle, Postgres aborts one mover with
+        ``deadlock_detected``, and :meth:`_lock_ids` turns that into the same retryable
+        :class:`CompanyMoveContendedError`. Retrying inside this transaction (a
+        savepoint) would not help: the rows from earlier passes stay held, so the same
+        cycle would just form again. The retry is a fresh transaction, by the caller.
+        Either way the move fails closed: never a cycle, never a stuck lock.
         """
-        locked: set[uuid.UUID] = set()
         wanted = {company_id, *await self._chain_ids(parent_org_id)}
-        while not wanted <= locked:
-            await self._lock_ids(wanted - locked)
-            locked |= wanted
-            wanted = {company_id, *await self._chain_ids(parent_org_id)}
+        for _ in range(MOVE_LOCK_MAX_PASSES):
+            await self._lock_ids(wanted)
+            chain = {company_id, *await self._chain_ids(parent_org_id)}
+            if chain <= wanted:
+                return
+            wanted |= chain
+        raise CompanyMoveContendedError(
+            f"Moving company {company_id}: the new parent's ancestor chain kept changing "
+            f"across {MOVE_LOCK_MAX_PASSES} lock passes; retry the move"
+        )
 
     async def _chain_ids(self, start_id: Optional[uuid.UUID]) -> List[uuid.UUID]:
         """*start_id* and its ancestors, nearest first; :class:`CompanyCycleError` on a loop."""
@@ -234,8 +284,15 @@ class CompanyService(LLCServiceBase):
         return chain
 
     async def _lock_ids(self, ids: set[uuid.UUID]) -> None:
+        """Lock *ids* ``FOR UPDATE`` in one id-ordered statement; a deadlock is a retryable refusal."""
         stmt = select(Organization.id).where(Organization.id.in_(ids)).order_by(Organization.id).with_for_update()
-        await self.session.execute(stmt)
+        try:
+            await self.session.execute(stmt)
+        except DBAPIError as exc:
+            if sqlstate_of(exc) != PG_DEADLOCK_DETECTED:
+                raise
+            logger.info("Company move deadlocked with a concurrent move; refused as retryable")
+            raise CompanyMoveContendedError("a concurrent move holds rows this move needs; retry the move") from exc
 
     async def list_root_companies(self, include_archived: bool = False) -> List[Organization]:
         """Return all top-level companies (parent_org_id IS NULL).
