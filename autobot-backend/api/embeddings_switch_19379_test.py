@@ -66,7 +66,7 @@ async def test_cancel_without_a_running_switch_is_409(switch, monkeypatch):
     async def _no():
         return False
 
-    monkeypatch.setattr(embedding_switch, "request_cancel", _no)
+    monkeypatch.setattr(embedding_switch, "request_switch_cancel", _no)
     with pytest.raises(HTTPException) as exc:
         await embeddings.cancel_embedding_switch()
     assert exc.value.status_code == 409

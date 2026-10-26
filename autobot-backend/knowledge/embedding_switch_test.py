@@ -54,18 +54,20 @@ class _Collection:
             self.ids.pop(i, None)
 
 
-class _Store:
-    def __init__(self):
-        self._collection = _Collection()
+def _vector_store():
+    """A LlamaIndex ChromaVectorStore stand-in: ``add(nodes)`` and the raw ``_collection``."""
+    collection = _Collection()
 
-    def add(self, nodes):
+    def add(nodes):
         for n in nodes:
-            self._collection.ids[n.id_] = n
+            collection.ids[n.id_] = n
+
+    return types.SimpleNamespace(add=add, _collection=collection)
 
 
 @pytest.fixture
 def env(monkeypatch):
-    redis, store, log = _Redis(), _Store(), []
+    redis, store, log = _Redis(), _vector_store(), []
     facts = {f"f{i}": {"content": f"fact {i}", "metadata": {"k": i}} for i in range(5)}
     fake_fs = types.SimpleNamespace(
         count_facts=_async(lambda *a: len(facts)),

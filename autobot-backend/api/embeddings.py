@@ -306,8 +306,8 @@ async def get_embedding_switch_status(current_user: dict = Depends(get_current_u
 )
 async def cancel_embedding_switch(admin_check: bool = Depends(check_admin_permission)):
     """Stop a running switch at its next batch; the active model and collection stay (#19379)."""
-    from knowledge.embedding_switch import request_cancel, switch_status
+    from knowledge.embedding_switch import request_switch_cancel, switch_status
 
-    if not await request_cancel():
+    if not await request_switch_cancel():
         raise HTTPException(status_code=409, detail="no embedding-model switch is running")
     return DataResponse(data=_switch_data(await switch_status()))

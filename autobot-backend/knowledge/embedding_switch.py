@@ -98,7 +98,7 @@ async def start_switch(kb, model: str) -> Dict[str, Any]:
     return await switch_status()
 
 
-async def request_cancel() -> bool:
+async def request_switch_cancel() -> bool:
     """Ask a running build to stop at its next batch; False when none is running."""
     if (await switch_status()).get("state") != "building":
         return False
