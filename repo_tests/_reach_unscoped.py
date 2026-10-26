@@ -30,9 +30,14 @@ UNSCOPED = frozenset(
         "tls-cert-dir-one-home-19317",
         # #19076: items are (role, unit) pairs from one registry file, not paths -- no roots= to check.
         "role-registry-installed-units",
+        # #19310: every tracked text file in the repository, so a runtime-dir literal written
+        # anywhere is seen; no roots= list could name "wherever someone writes it".
+        "system-knowledge-runtime-literal-scan",
         "ansible-inventory-shell-sweep",
         "audio-extension-allowlist",
         "blanket-skip-test-module-sweep",
+        # #19324: an extension filter (*.py, *.sh, *.yml, .env*, ...) over the whole tree, not a set of prefixes.
+        "browser-port-single-home-scan",
         "chromadb-bind-host-override-candidates",
         "chromadb-bind-launch-sites",
         "chromadb-compose-port-sites",

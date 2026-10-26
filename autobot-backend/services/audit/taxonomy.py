@@ -63,6 +63,8 @@ class AuditAction(str, Enum):
     SESSION_EXPORT = "session.export"
     KNOWLEDGE_ADD = "knowledge.add"
     KNOWLEDGE_REMOVE = "knowledge.remove"
+    KNOWLEDGE_QUARANTINE_READ = "knowledge.quarantine.read"  # #19163: an opt-out read of the research quarantine
+    KNOWLEDGE_ADMIN_READ = "kb.admin_read"  # #16665: an admin's read of any fact through an explicit read API
     API_KEY_CREATE = "api_key.create"  # pragma: allowlist secret -- an action name, not a key
     API_KEY_REVOKE = "api_key.revoke"  # pragma: allowlist secret -- an action name, not a key
     USER_CREATE = "user.create"
@@ -100,6 +102,8 @@ class AuditAction(str, Enum):
     CLAIMS_CREDENTIAL_MINT = "claims_credential.mint"  # #18811
     CLAIMS_CREDENTIAL_REVOKE = "claims_credential.revoke"  # #18811
     CLAIMS_CREDENTIAL_CHECK_FAILURES = "claims_credential.check_failures"  # #18811: one per source per window
+    # #19241: a provider sign-in disconnect (user / org system) or a superadmin's shared-token revoke.
+    PROVIDER_SIGNIN_REVOKE = "provider_signin.revoke"
     # identity vocabulary (#19035); IdentityAuditAction spellings map here through audit_actions.ACTION_ALIASES.
     # auth.mfa carries verified / failed / backup-code in the outcome column, like auth.login.
     AUTH_MFA = "auth.mfa"

@@ -11278,26 +11278,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/voice/realtime/tools/call": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Call Realtime Tool
-         * @description Route a Realtime tool call through the MCP bridge (#7343); its AI line is resolved first (#18430).
-         */
-        post: operations["call_realtime_tool_api_voice_realtime_tools_call_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/voice/listen": {
         parameters: {
             query?: never;
@@ -13185,7 +13165,7 @@ export interface paths {
          * Mcp Search Knowledge Base
          * @description MCP tool: Search the knowledge base.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: results are the caller's own visible facts.
          */
         post: operations["mcp_search_knowledge_base_api_knowledge_mcp_search_knowledge_base_post"];
         delete?: never;
@@ -13249,7 +13229,7 @@ export interface paths {
          * Mcp Summarize Knowledge Topic
          * @description MCP tool: Summarize knowledge on a topic.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts are summarised.
          */
         post: operations["mcp_summarize_knowledge_topic_api_knowledge_mcp_summarize_knowledge_topic_post"];
         delete?: never;
@@ -13271,7 +13251,7 @@ export interface paths {
          * Mcp Vector Similarity Search
          * @description MCP tool: Perform vector similarity search in Redis.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts are returned.
          */
         post: operations["mcp_vector_similarity_search_api_knowledge_mcp_vector_similarity_search_post"];
         delete?: never;
@@ -13293,7 +13273,7 @@ export interface paths {
          * Mcp Langchain Qa Chain
          * @description MCP tool: Use LangChain QA chain for comprehensive answers.
          *
-         *     Issue #744: Requires authenticated user.
+         *     Issue #744: Requires authenticated user. #16665: only the caller's visible facts reach the prompt.
          */
         post: operations["mcp_langchain_qa_chain_api_knowledge_mcp_langchain_qa_chain_post"];
         delete?: never;
@@ -31116,6 +31096,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/llm-auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Providers
+         * @description List the sign-in providers, their configured flows and missing setting NAMES — never a value.
+         */
+        get: operations["list_providers_api_llm_auth_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llm-auth/oauth/initiate": {
         parameters: {
             query?: never;
@@ -31129,11 +31129,9 @@ export interface paths {
          * Oauth Initiate
          * @description Begin a provider auth-code + PKCE flow; return the authorize URL + state.
          *
-         *     The server mints the PKCE verifier/challenge and an unguessable ``state``,
-         *     stashes them in Redis (short TTL, keyed to the initiating admin), and returns
-         *     the provider authorize URL. The client never supplies the verifier — the
-         *     callback takes it from the stored state (#11297). Requires admin: the stored
-         *     credential is shared by the admin's org (per-org scoped, #11497).
+         *     The provider and client come from the registry; ``redirect_uri`` must be on
+         *     the SSOT frontend origin. The server mints the PKCE verifier and a single-use
+         *     ``state`` bound to the caller, scope and subject (#11297, #19241).
          */
         post: operations["oauth_initiate_api_llm_auth_oauth_initiate_post"];
         delete?: never;
@@ -31153,15 +31151,12 @@ export interface paths {
         put?: never;
         /**
          * Oauth Callback
-         * @description Exchange an OAuth authorization code for tokens and persist to vault.
+         * @description Exchange an OAuth authorization code for tokens and persist to the vault.
          *
-         *     Authorized by a server-minted, **single-use** ``state`` (from /oauth/initiate):
-         *     the state is atomically consumed (GETDEL), must belong to the current admin,
-         *     and supplies the verifier / token_url / client_id — none of which the client
-         *     provides. This closes the CSRF / code-injection hole where a lured admin could
-         *     bind an attacker's account as the shared system credential (#11297).
-         *
-         *     Requires admin — stored credential is per-org scoped (shared within the admin's org, #11497).
+         *     Authorized by a server-minted, **single-use** ``state``: atomically consumed
+         *     (GETDEL), it must belong to the caller and supplies the verifier, provider,
+         *     scope and subject — none of which the client provides (#11297). The token is
+         *     written to the scope the flow started with (#19241).
          */
         post: operations["oauth_callback_api_llm_auth_oauth_callback_post"];
         delete?: never;
@@ -31181,13 +31176,10 @@ export interface paths {
         put?: never;
         /**
          * Device Initiate
-         * @description Start a device-code flow.
+         * @description Start a device-code flow at the registry's device endpoint (RFC 8628).
          *
-         *     Calls the provider's device authorization endpoint and returns the
-         *     ``user_code`` + ``verification_uri`` for the user to complete on another device.
-         *     The caller polls ``/device/poll`` until approval or expiry.
-         *
-         *     Requires admin — stored credential is per-org scoped (shared within the admin's org, #11497).
+         *     Returns the ``user_code`` + ``verification_uri``; the context (caller, scope,
+         *     subject) is held server-side so /device/poll stores to the right place.
          */
         post: operations["device_initiate_api_llm_auth_device_initiate_post"];
         delete?: never;
@@ -31209,10 +31201,8 @@ export interface paths {
          * Device Poll
          * @description Poll the token endpoint for a device-code grant and persist on approval.
          *
-         *     Returns ``stored=False`` when the grant is still pending (caller should
-         *     retry after the ``interval`` from ``/device/initiate``).
-         *
-         *     Requires admin — stored credential is per-org scoped (shared within the admin's org, #11497).
+         *     Returns ``stored=False`` while the grant is pending. Only the initiator may
+         *     poll, and the token goes to the scope the flow started with (#19241).
          */
         post: operations["device_poll_api_llm_auth_device_poll_post"];
         delete?: never;
@@ -31230,11 +31220,10 @@ export interface paths {
         };
         /**
          * Provider Auth Status
-         * @description Return the auth connection status for a provider.
+         * @description Return the caller's connection status for a provider at *scope* (default: the caller's own).
          *
-         *     Dual-read (finding #1, #11497): reports the caller's org-scoped token when
-         *     present, else the legacy ``"global"`` token — so orgs that connected before
-         *     the change still show connected with zero reconnect.
+         *     System scope (admin only) dual-reads (finding #1, #11497): the org-scoped token, else the
+         *     legacy ``"global"`` one. User scope reads only the caller's own token.
          */
         get: operations["provider_auth_status_api_llm_auth_status__provider_name__get"];
         put?: never;
@@ -31257,11 +31246,37 @@ export interface paths {
         post?: never;
         /**
          * Revoke Provider Auth
-         * @description Revoke stored OAuth / device-code / session tokens for a provider.
+         * @description Disconnect the caller's provider sign-in at *scope* (system needs admin).
          *
-         *     Requires admin — credential is per-org scoped (shared within the admin's org, #11497).
+         *     *scope* is required (422 without it): a scope-less "disconnect" from an
+         *     admin must never default to deleting the org-shared credential. A
+         *     multi-tenant system disconnect leaves a per-org stop marker; see
+         *     ``api.provider_auth_revoke``, which also revokes at the provider and audits.
          */
         delete: operations["revoke_provider_auth_api_llm_auth__provider_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm-auth/{provider_name}/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Shared Provider Auth
+         * @description Superadmin: delete the shared legacy ``"global"`` token and revoke it at the provider.
+         *
+         *     Every org still falling back to it loses it, which is the point (key
+         *     compromise, account-owner offboarding). Audited like every disconnect.
+         */
+        delete: operations["revoke_shared_provider_auth_api_llm_auth__provider_name__shared_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -45704,7 +45719,7 @@ export interface paths {
          *         ```json
          *         {
          *             "service": "GraphRAGService",
-         *             "graph_weight": 0.3,
+         *             "graph_weight": "<RAGConfig.graph_weight>",
          *             "entity_extraction_enabled": true,
          *             "rag_service": {
          *                 "enable_advanced_rag": true,
@@ -47927,7 +47942,7 @@ export interface paths {
         };
         /**
          * Search Summaries
-         * @description Vector search on summary embeddings.
+         * @description Vector search on summary embeddings; only summaries of facts the caller may read (#16665).
          */
         get: operations["search_summaries_api_knowledge_graph_summaries_search_get"];
         put?: never;
@@ -47947,7 +47962,7 @@ export interface paths {
         };
         /**
          * Get Document Overview
-         * @description Get document overview with hierarchical summaries.
+         * @description Get document overview with hierarchical summaries; empty unless the caller may read the document (#16665).
          */
         get: operations["get_document_overview_api_knowledge_graph_documents__document_id__overview_get"];
         put?: never;
@@ -47967,7 +47982,7 @@ export interface paths {
         };
         /**
          * Drill Down Summary
-         * @description Navigate from summary to children or source chunks.
+         * @description Navigate from summary to children or source chunks; nothing unless the caller may read the source (#16665).
          */
         get: operations["drill_down_summary_api_knowledge_graph_summaries__summary_id__drill_down_get"];
         put?: never;
@@ -52902,32 +52917,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Context
-         * @description Get assembled heartbeat context for a work item (GH#8236).
-         *
-         *     Returns rich context with company goals, project/agent KB, and similar
-         *     past work items. Context is compressed with gzip before storage.
-         *
-         *     Args:
-         *         item_id: Work item UUID
-         *         mode: "thin" or "fat" context mode
-         *         session: DB session
-         *         ctx: Tenant context — its ``org_id`` scopes the whole assembled
-         *             context, so another company's item id reads as 404 (#13756)
-         *
-         *     Returns:
-         *         Dict with assembled context:
-         *         - work_item_id, work_item_detail
-         *         - goal_ancestry (parent chain)
-         *         - company_context, project_context, agent_memory (RAG results)
-         *         - similar_past_work (completed items)
-         *         - api_base, agent_api_key (runtime injection)
-         *
-         *     Raises:
-         *         404: Work item not found
-         *         422: Invalid context_mode
+         * Get Item Context
+         * @description Return agent context for a work item, including any human handoff KB notes (GH#8232).
          */
-        get: operations["get_context_api_llc_agent_context__item_id__get"];
+        get: operations["get_item_context_api_llc_agent_context__item_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -53516,6 +53509,48 @@ export interface paths {
         patch: operations["update_review_gate_policy_api_llc_companies__company_id__review_gate_policies__policy_id__patch"];
         trace?: never;
     };
+    "/api/llc/context/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Context
+         * @description Get assembled heartbeat context for a work item (GH#8236).
+         *
+         *     Returns rich context with company goals, project/agent KB, and similar
+         *     past work items. Context is compressed with gzip before storage.
+         *
+         *     Args:
+         *         item_id: Work item UUID
+         *         mode: "thin" or "fat" context mode
+         *         session: DB session
+         *         ctx: Tenant context — its ``org_id`` scopes the whole assembled
+         *             context, so another company's item id reads as 404 (#13756)
+         *
+         *     Returns:
+         *         Dict with assembled context:
+         *         - work_item_id, work_item_detail
+         *         - goal_ancestry (parent chain)
+         *         - company_context, project_context, agent_memory (RAG results)
+         *         - similar_past_work (completed items)
+         *         - api_base, agent_api_key (runtime injection)
+         *
+         *     Raises:
+         *         404: Work item not found
+         *         422: Invalid context_mode
+         */
+        get: operations["get_context_api_llc_context__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llc/companies/{company_id}/controls/agents/{agent_id}/pause": {
         parameters: {
             query?: never;
@@ -53561,6 +53596,30 @@ export interface paths {
         put?: never;
         /** Terminate Agent */
         post: operations["terminate_agent_api_llc_companies__company_id__controls_agents__agent_id__terminate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llc/companies/{company_id}/controls/agents/{agent_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Agent Heartbeat
+         * @description Switch one agent's periodic heartbeat on or off (#15907).
+         *
+         *     The heartbeat is the optional periodic schedule; event wakes are separate
+         *     (#19582). Board-only and audited like the other agent controls, and scoped
+         *     to *company_id* in both the role check and the UPDATE's WHERE clause.
+         */
+        put: operations["set_agent_heartbeat_api_llc_companies__company_id__controls_agents__agent_id__heartbeat_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -54254,6 +54313,30 @@ export interface paths {
          * @description Ingest a response.done payload and enforce soft-caps.
          */
         post: operations["ingest_response_done_api_voice_realtime_session__session_id__response_done_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/realtime/tools/call": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Call Realtime Tool
+         * @description The one handler for ``POST /api/voice/realtime/tools/call`` (#7343, #18721).
+         *
+         *     Only a tool in the caller's active voice bundle may run (403 otherwise), and the call carries the
+         *     authenticated session, user and company, never the model's (#18430). ``X-Session-Id`` stands in when the
+         *     body names no session.
+         */
+        post: operations["call_realtime_tool_api_voice_realtime_tools_call_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -56964,10 +57047,8 @@ export interface components {
         };
         /**
          * AgentStatusItem
-         * @description Runtime status for one registered agent (#10502).
-         *
-         *     Shape consumed by the Home dashboard "Agent Activity Monitor"
-         *     (frontend ``useAgentActivityData`` ``Agent`` interface).
+         * @description One agent for the Home dashboard "Agent Activity Monitor" (#10502, frontend ``Agent``).
+         *     A field the server cannot measure is None, never 0: the widget shows "not reported" (#17514).
          */
         AgentStatusItem: {
             /** Id */
@@ -56979,28 +57060,20 @@ export interface components {
              * @default worker
              */
             type: string;
-            /**
-             * Status
-             * @default idle
-             */
-            status: string;
+            /** Status */
+            status?: string | null;
+            /** Companyid */
+            companyId?: string | null;
+            /** Companyname */
+            companyName?: string | null;
             /** Currenttask */
             currentTask?: string | null;
-            /**
-             * Taskscompleted
-             * @default 0
-             */
-            tasksCompleted: number;
-            /**
-             * Uptime
-             * @default 0
-             */
-            uptime: number;
-            /**
-             * Successrate
-             * @default 0
-             */
-            successRate: number;
+            /** Taskscompleted */
+            tasksCompleted?: number | null;
+            /** Uptime */
+            uptime?: number | null;
+            /** Successrate */
+            successRate?: number | null;
             /** Recenttasks */
             recentTasks?: {
                 [key: string]: unknown;
@@ -70218,21 +70291,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** DataResponse[EmbeddingUpdateData] */
-        DataResponse_EmbeddingUpdateData_: {
-            /**
-             * Success
-             * @default true
-             */
-            success: boolean;
-            data?: components["schemas"]["EmbeddingUpdateData"] | null;
-            /** Message */
-            message?: string | null;
-            /** Timestamp */
-            timestamp?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
         /** DataResponse[EnterpriseBulkEnableResponse] */
         DataResponse_EnterpriseBulkEnableResponse_: {
             /**
@@ -73147,15 +73205,11 @@ export interface components {
         DeviceInitiateRequest: {
             /** Provider Name */
             provider_name: string;
-            /** Device Authorization Url */
-            device_authorization_url: string;
-            /** Client Id */
-            client_id: string;
             /**
              * Scope
-             * @default openid
+             * @enum {string}
              */
-            scope: string;
+            scope: "system" | "user";
         } & {
             [key: string]: unknown;
         };
@@ -73190,10 +73244,6 @@ export interface components {
         DevicePollRequest: {
             /** Provider Name */
             provider_name: string;
-            /** Token Url */
-            token_url: string;
-            /** Client Id */
-            client_id: string;
             /** Device Code */
             device_code: string;
         } & {
@@ -73850,17 +73900,33 @@ export interface components {
             path: string;
             /**
              * Edits
-             * @description List of {old_text, new_text} edits
+             * @description List of {old_text, new_text, expected_replacements?} edits
              */
-            edits: {
-                [key: string]: string;
-            }[];
+            edits: components["schemas"]["EditSpec"][];
             /**
              * Dry Run
              * @description Preview changes without applying
              * @default false
              */
             dry_run: boolean | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * EditSpec
+         * @description One exact find-and-replace; ``oldText``/``newText`` are the MCP-spec spellings.
+         */
+        EditSpec: {
+            /** Old Text */
+            old_text?: string;
+            /** New Text */
+            new_text?: string;
+            /** Oldtext */
+            oldText?: string;
+            /** Newtext */
+            newText?: string;
+            /** Expected Replacements */
+            expected_replacements?: number;
         } & {
             [key: string]: unknown;
         };
@@ -74111,13 +74177,6 @@ export interface components {
             /** Endpoint */
             endpoint?: string | null;
         } & {
-            [key: string]: unknown;
-        };
-        /**
-         * EmbeddingUpdateData
-         * @description data payload for PUT /settings.
-         */
-        EmbeddingUpdateData: {
             [key: string]: unknown;
         };
         /**
@@ -77565,10 +77624,9 @@ export interface components {
             start_entity?: string | null;
             /**
              * Max Depth
-             * @description Maximum traversal depth (1-3 hops)
-             * @default 2
+             * @description Hops (1-3); None = RAGConfig.graph_traversal_depth
              */
-            max_depth: number;
+            max_depth?: number | null;
             /**
              * Max Results
              * @description Maximum number of results to return
@@ -77631,10 +77689,7 @@ export interface components {
              * @default
              */
             service: string;
-            /**
-             * Graph Weight
-             * @default 0
-             */
+            /** Graph Weight */
             graph_weight: number;
             /**
              * Entity Extraction Enabled
@@ -78255,6 +78310,13 @@ export interface components {
              * @default []
              */
             events: components["schemas"]["RunEventResponse"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** HeartbeatToggleRequest */
+        HeartbeatToggleRequest: {
+            /** Heartbeat Enabled */
+            heartbeat_enabled: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -87439,8 +87501,8 @@ export interface components {
          * OAuthCallbackRequest
          * @description Body for POST /oauth/callback — bound to a server-minted, single-use state.
          *
-         *     The verifier / token_url / client_id are taken from the stored state, never
-         *     from the client, so a lured admin cannot inject an attacker's credentials.
+         *     The verifier, provider, scope and subject are taken from the stored state,
+         *     never from the client, so a lured user cannot inject an attacker's credentials.
          */
         OAuthCallbackRequest: {
             /** State */
@@ -87455,20 +87517,19 @@ export interface components {
         /**
          * OAuthInitiateRequest
          * @description Body for POST /oauth/initiate — starts a server-driven PKCE auth-code flow.
+         *
+         *     ``scope`` is required: the caller always says whose connection this is (#19241).
          */
         OAuthInitiateRequest: {
             /** Provider Name */
             provider_name: string;
-            /** Authorize Url */
-            authorize_url: string;
-            /** Token Url */
-            token_url: string;
-            /** Client Id */
-            client_id: string;
             /** Redirect Uri */
             redirect_uri: string;
-            /** Scopes */
-            scopes?: string[] | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "system" | "user";
         } & {
             [key: string]: unknown;
         };
@@ -87480,6 +87541,8 @@ export interface components {
             stored: boolean;
             /** Expires At */
             expires_at?: number | null;
+            /** Scope */
+            scope?: ("system" | "user") | null;
         } & {
             [key: string]: unknown;
         };
@@ -87779,6 +87842,8 @@ export interface components {
             is_human: boolean;
             /** Is Active */
             is_active?: boolean | null;
+            /** Heartbeat Enabled */
+            heartbeat_enabled?: boolean | null;
             /** Last Heartbeat */
             last_heartbeat: string | null;
             /** Budget Spent */
@@ -91325,6 +91390,18 @@ export interface components {
             expires_at?: number | null;
             /** Auth Kind */
             auth_kind?: string | null;
+            /** Scope */
+            scope?: ("system" | "user") | null;
+            /**
+             * Needs Reauth
+             * @default false
+             */
+            needs_reauth: boolean;
+            /**
+             * Shared
+             * @default false
+             */
+            shared: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -91408,6 +91485,46 @@ export interface components {
             base_url_required: boolean;
             /** Documentation Url */
             documentation_url: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ProviderListing
+         * @description One row of GET /providers — setting NAMES only, never a value.
+         */
+        ProviderListing: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Flows */
+            flows: ("redirect" | "device")[];
+            /** Configured */
+            configured: boolean;
+            /** Missing Settings */
+            missing_settings: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ProviderRevokeResult
+         * @description Return of DELETE /{provider}: the local delete always happens; the provider-side
+         *     RFC 7009 revoke is reported separately (None when no revoke URL is configured).
+         */
+        ProviderRevokeResult: {
+            /** Provider Name */
+            provider_name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "system" | "user" | "shared";
+            /** Deleted */
+            deleted: number;
+            /** Provider Revoked */
+            provider_revoked?: boolean | null;
+            /** Provider Error */
+            provider_error?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -95625,6 +95742,12 @@ export interface components {
              * @description Similarity distance score
              */
             distance?: number | null;
+            /**
+             * Quarantined
+             * @description Research-quarantined fact, read through the audited opt-out (#19163)
+             * @default false
+             */
+            quarantined: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -106210,20 +106333,6 @@ export interface components {
              * @description Identifies the request; the holder's answer is recorded under it
              */
             token: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** _RealtimeToolCallRequest */
-        _RealtimeToolCallRequest: {
-            /** Name */
-            name: string;
-            /**
-             * Arguments
-             * @default {}
-             */
-            arguments: {
-                [key: string]: unknown;
-            };
         } & {
             [key: string]: unknown;
         };
@@ -120616,41 +120725,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    call_realtime_tool_api_voice_realtime_tools_call_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolCallRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -146768,6 +146842,26 @@ export interface operations {
             };
         };
     };
+    list_providers_api_llm_auth_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderListing"][];
+                };
+            };
+        };
+    };
     oauth_initiate_api_llm_auth_oauth_initiate_post: {
         parameters: {
             query?: never;
@@ -146902,7 +146996,9 @@ export interface operations {
     };
     provider_auth_status_api_llm_auth_status__provider_name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "system" | "user";
+            };
             header?: never;
             path: {
                 provider_name: string;
@@ -146933,6 +147029,39 @@ export interface operations {
     };
     revoke_provider_auth_api_llm_auth__provider_name__delete: {
         parameters: {
+            query: {
+                scope: "system" | "user";
+            };
+            header?: never;
+            path: {
+                provider_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderRevokeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_shared_provider_auth_api_llm_auth__provider_name__shared_delete: {
+        parameters: {
             query?: never;
             header?: never;
             path: {
@@ -146943,11 +147072,13 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ProviderRevokeResult"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -150297,8 +150428,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_EmbeddingUpdateData_"];
+                    "application/json": unknown;
                 };
+            };
+            /** @description Always: the embedding model is changed through the embedding-model switch (#19379), which re-indexes the knowledge base, never through this endpoint. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -178202,11 +178340,9 @@ export interface operations {
             };
         };
     };
-    get_context_api_llc_agent_context__item_id__get: {
+    get_item_context_api_llc_agent_context__item_id__get: {
         parameters: {
-            query?: {
-                mode?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 item_id: string;
@@ -179532,6 +179668,41 @@ export interface operations {
             };
         };
     };
+    get_context_api_llc_context__item_id__get: {
+        parameters: {
+            query?: {
+                mode?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     pause_agent_api_llc_companies__company_id__controls_agents__agent_id__pause_post: {
         parameters: {
             query?: never;
@@ -179617,6 +179788,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TerminateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_agent_heartbeat_api_llc_companies__company_id__controls_agents__agent_id__heartbeat_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatToggleRequest"];
             };
         };
         responses: {
@@ -181213,6 +181422,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResponseDoneRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    call_realtime_tool_api_voice_realtime_tools_call_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolCallRequest"];
             };
         };
         responses: {
