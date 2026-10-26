@@ -267,6 +267,14 @@ _DECLARED_SCOPES = {
         "autobot-infrastructure/shared/tools/index_documentation.py",
     ),
     "single-attribute-writer-scan": ("autobot-frontend/src",),
+    "torch-pair-literals": (
+        ".github",
+        "docker",
+        "autobot-infrastructure",
+        "autobot-slm-backend/ansible",
+        "scripts",
+        "install.sh",
+    ),
     "tool-effect-table-scan": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "deployment-mode-detector-scan": ("autobot-backend/", "autobot-infrastructure/"),
     "egress-default-outbound-call-sites": (
