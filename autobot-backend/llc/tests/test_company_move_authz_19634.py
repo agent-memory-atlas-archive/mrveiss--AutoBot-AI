@@ -4,12 +4,15 @@
 # Author: mrveiss
 """Who may move a company, and how a move is asked for (#19634, #19589, #19593).
 
-The owner's rule for any ``parent_org_id`` change, enforced in
+The maintainer's rulings (2026-10-26) for any ``parent_org_id`` change, enforced in
 ``CompanyService.move`` so every caller inherits it:
 
-1. owner/admin on the moved org;
-2. a new parent the actor can see (admin or member), else not found -- #12233's rule;
-3. leaving a parent (promotion included) also needs owner/admin on that parent.
+1. a platform admin always passes every check;
+2. an org WITH a parent is moved out of it (promotion or sideways) by an owner/admin
+   of that parent, with no role needed in the sub-org; the sub-org's own owner may not;
+3. a top-level org joining a parent needs its own owner/admin;
+4. joining a new parent needs owner/admin of that parent, else not found -- #12233's
+   rule (``may_attach_under``), shared with ``create_company``.
 
 #19589: an explicit ``"parent_org_id": null`` promotes, an absent field moves nothing.
 
@@ -513,3 +516,19 @@ async def test_the_route_shows_only_the_fixed_text_of_a_move_refusal(session_fac
     assert resp.status_code == 403
     assert detail == "Moving this company out of its parent must be done by an owner/admin of the parent org"
     assert str(org) not in detail and str(parent) not in detail and str(_ACTOR) not in detail
+
+
+@pytest.mark.asyncio
+async def test_a_deadlock_during_the_ceo_sync_is_a_retryable_refusal(session_factory, monkeypatch):  # noqa: ANN001
+    """The flush and the CEO sync run under the move's locks too, so a deadlock there is a 409, not a 500."""
+    from llc.services.company_ceo import CompanyCEOService
+
+    parent = await _org(session_factory, "Parent")
+    org = await _org(session_factory, "Acme", parent=parent)
+    deadlock = AsyncMock(side_effect=DBAPIError("UPDATE", {}, _PgError("40P01")))
+    monkeypatch.setattr(CompanyCEOService, "sync_with_parent", deadlock)
+    async with session_factory() as session:
+        with pytest.raises(CompanyMoveContendedError):
+            await CompanyService(session).update(org, CompanyUpdate(parent_org_id=None), actor_user_id=_ACTOR)
+    deadlock.assert_awaited_once()
+    assert await _parent_of(session_factory, org) == parent

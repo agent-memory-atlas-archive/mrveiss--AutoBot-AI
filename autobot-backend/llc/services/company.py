@@ -189,18 +189,21 @@ class CompanyService(CompanyMoveLockMixin, LLCServiceBase):
         """
         await self._authorize_move_target(company_id, parent_org_id, actor_user_id, platform_admin)
         await self._lock_move_rows(company_id, parent_org_id)
-        # Already locked above; ``for_update`` is a no-op relock kept for its
-        # ``populate_existing``, which replaces any pre-lock copy in the identity map.
-        org = await self._get_or_404(company_id, for_update=True)
-        await self._authorize_locked_move(org, parent_org_id, actor_user_id, platform_admin)
-        if parent_org_id is not None:
-            await self._get_or_404(parent_org_id)
-            await self._assert_no_cycle(company_id, parent_org_id)
-        was_company = org.parent_org_id is None
-        org.parent_org_id = parent_org_id
-        await self.session.flush()
-        if (parent_org_id is None) != was_company:
-            await CompanyCEOService().sync_with_parent(self.session, org.id, parent_org_id)
+        # Everything from here on runs under the move's locks and can still lose a lock
+        # race (the relock, the flush, the CEO sync's writes): a deadlock is a 409.
+        async with deadlock_is_contention():
+            # Already locked above; ``for_update`` is a no-op relock kept for its
+            # ``populate_existing``, which replaces any pre-lock copy in the identity map.
+            org = await self._get_or_404(company_id, for_update=True)
+            await self._authorize_locked_move(org, parent_org_id, actor_user_id, platform_admin)
+            if parent_org_id is not None:
+                await self._get_or_404(parent_org_id)
+                await self._assert_no_cycle(company_id, parent_org_id)
+            was_company = org.parent_org_id is None
+            org.parent_org_id = parent_org_id
+            await self.session.flush()
+            if (parent_org_id is None) != was_company:
+                await CompanyCEOService().sync_with_parent(self.session, org.id, parent_org_id)
         return org
 
     async def _authorize_move_target(
