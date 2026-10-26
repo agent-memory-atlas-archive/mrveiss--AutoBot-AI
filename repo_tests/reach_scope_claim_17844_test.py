@@ -339,6 +339,15 @@ _DECLARED_SCOPES = {
         "tools",
     ),
     "llc-actor-id-scan": ("autobot-backend/llc",),
+    "service-port-homes-scan": (
+        "autobot-backend",
+        "autobot-slm-backend",
+        "autobot_shared",
+        "autobot-infrastructure",
+        "autobot-npu-worker",
+        "scripts",
+        "autobot-frontend",
+    ),
     "one-system-knowledge-template-tree": ("autobot-backend",),
     "one-static-data-copy-scan": (
         "autobot-backend",
