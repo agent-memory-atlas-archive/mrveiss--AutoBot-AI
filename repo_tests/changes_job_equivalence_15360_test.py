@@ -225,6 +225,9 @@ ALLOWED_ADDITIONS = {
             ".github/duplication-pins.json",
             # #19324: browser_port_single_home_19324_test.py pins this file's browser-port fallback.
             "autobot-frontend/vite.config.js",
+            # #19328: node_major_one_home_19328_test.py reads the Node home and the frontend lock.
+            ".nvmrc",
+            "autobot-frontend/package-lock.json",
         ]
     },
     # frontend_path_filter_mirror_test pins frontend-test.yml's on.push.paths to this file, so the
