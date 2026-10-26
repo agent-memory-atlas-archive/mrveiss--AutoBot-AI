@@ -119,6 +119,13 @@ def test_no_cache_resolves_inside_the_repo_on_the_live_tree() -> None:
     ), f"use autobot_shared.paths.shared_cache_path() -- a cache never goes in the repo (#19553): {found}"
 
 
+def test_the_cache_dir_variable_is_registered() -> None:
+    """``paths`` reads it through ``CACHE_DIR_ENV``, which the literal-scanning registry check cannot see."""
+    from autobot_shared.env_registry import REGISTRY
+
+    assert paths.CACHE_DIR_ENV in REGISTRY, f"register {paths.CACHE_DIR_ENV} in autobot_shared/env_registry_ai.py"
+
+
 def test_the_shared_cache_path_is_outside_this_checkout() -> None:
     assert not paths.shared_cache_path("probe").resolve().is_relative_to(repo_root().resolve())
 
