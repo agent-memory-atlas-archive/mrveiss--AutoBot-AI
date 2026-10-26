@@ -348,6 +348,8 @@ _DECLARED_SCOPES = {
         "scripts",
         "autobot-frontend",
     ),
+    "llc-sigterm-grace-copies": ("autobot-backend/llc",),
+    "frontend-http-transports": ("autobot-frontend/src", "autobot-slm-frontend/src"),
     "one-system-knowledge-template-tree": ("autobot-backend",),
     "one-static-data-copy-scan": (
         "autobot-backend",
