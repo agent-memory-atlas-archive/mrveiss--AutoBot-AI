@@ -8,11 +8,14 @@ The ownership manager is the real :class:`KnowledgeOwnership`, so a test exercis
 canonical visibility decision rather than a stand-in for it.
 """
 
+from autobot_shared.ssot_config import config
 from knowledge.ownership import KnowledgeOwnership
+from knowledge.quarantine import apply_quarantine, gate_response
 
 PRIVATE_A = "alice private fact"
 PRIVATE_B = "bob private fact"
 SHARED = "platform wide fact"
+RESEARCH = "quarantined research finding"
 
 
 def _fact(fact_id: str, content: str, **meta) -> dict:
@@ -59,3 +62,27 @@ class FakeKB:
 def text_of(value) -> str:
     """Every string reachable in *value*, joined, so an assertion cannot miss a nested copy."""
     return repr(value)
+
+
+def quarantined_fact() -> dict:
+    """A platform-wide fact held in the research quarantine: only the quarantine can hide it."""
+    return _fact("f-q", RESEARCH, owner_id="admin", visibility="system", collection=config.research_quarantine_collection)
+
+
+class QuarantineGatedKB(FakeKB):
+    """A KB holding one quarantined fact, read through the real quarantine gate ``KB.search`` ends with.
+
+    A route that asks for the default read gets the gated answer; one that opted out would get the fact.
+    ``dict_results`` shapes ``search`` like the enhanced mode (``{"results": [...]}``).
+    """
+
+    def __init__(self, dict_results: bool = False):
+        super().__init__()
+        self.dict_results = dict_results
+
+    async def search(self, *args, include_unservable=False, include_quarantined=False, audit_actor=None, **kwargs):
+        hits = await gate_response(all_facts() + [quarantined_fact()], include_unservable, include_quarantined, audit_actor)
+        return {"results": hits} if self.dict_results else hits
+
+    async def get_all_facts(self, limit=None, include_quarantined=False, audit_actor=None):
+        return await apply_quarantine(all_facts() + [quarantined_fact()], include_quarantined, audit_actor)

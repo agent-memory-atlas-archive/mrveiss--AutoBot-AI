@@ -50,6 +50,7 @@ from dependencies import provide_knowledge_base
 from knowledge.quarantine import RESEARCH_QUARANTINE_FILTER
 from knowledge.search_filters import (
     extract_user_context_from_request,
+    filter_for_caller,
     filter_search_results_by_permission,
 )
 from services.ai_stack_client import AIStackError, get_ai_stack_client
@@ -311,11 +312,14 @@ async def knowledge_search(
     max_results: int = 10,
     admin_check: bool = Depends(check_admin_permission),
     knowledge_base=Depends(provide_knowledge_base),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Knowledge search combining local KB and AI Stack capabilities.
 
     Issue #744: Requires admin authentication.
+    Issue #16665: an explicit read API, not prompt grounding -- local KB hits are
+    scoped to the caller (an admin reads any fact, audited).
     """
     ai_client = await get_ai_stack_client()
 
@@ -329,7 +333,8 @@ async def knowledge_search(
             local_results = await knowledge_base.search(
                 query=query, top_k=max_results, filters=RESEARCH_QUARANTINE_FILTER
             )
-            results["local_kb"] = local_results
+            local_results = local_results if isinstance(local_results, list) else []
+            results["local_kb"] = await filter_for_caller(local_results, knowledge_base, current_user)
         except Exception as e:
             logger.warning("Local KB search failed: %s", e)
             results["local_kb"] = []
