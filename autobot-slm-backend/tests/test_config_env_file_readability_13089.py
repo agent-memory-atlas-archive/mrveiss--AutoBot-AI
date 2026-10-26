@@ -135,10 +135,14 @@ def test_readable_env_file_is_kept(tmp_path):
         ("local", None, "False"),
         ("docker_local", "false", "False"),
         ("local", "true", "True"),
+        ("docker_local", "", "True"),  # an empty pass-through is unset, never an import crash
+        ("local", "  ", "False"),
     ],
 )
 def test_the_default_follows_the_deployment_mode_and_an_explicit_value_wins(tmp_path, mode, flag, expected):
-    set_flag = f"os.environ['SLM_COMPOSE_NODES'] = {flag!r}" if flag else "os.environ.pop('SLM_COMPOSE_NODES', None)"
+    set_flag = (
+        "os.environ.pop('SLM_COMPOSE_NODES', None)" if flag is None else f"os.environ['SLM_COMPOSE_NODES'] = {flag!r}"
+    )
     snippet = f"""
         import os
         os.environ['AUTOBOT_DEPLOYMENT_MODE'] = {mode!r}

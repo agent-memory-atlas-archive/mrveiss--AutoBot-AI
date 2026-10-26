@@ -431,6 +431,12 @@ class Settings(RedactedReprMixin, BaseSettings):
     # SLM_COMPOSE_NODES=true|false overrides it; compose passes it through, never restates it.
     compose_nodes: bool | None = None
 
+    @field_validator("compose_nodes", mode="before")
+    @classmethod
+    def _blank_compose_nodes_is_unset(cls, raw: object) -> object:
+        """An empty value (compose passes one through by name) means unset, not an import crash."""
+        return None if isinstance(raw, str) and not raw.strip() else raw
+
     @property
     def compose_nodes_enabled(self) -> bool:
         if self.compose_nodes is not None:

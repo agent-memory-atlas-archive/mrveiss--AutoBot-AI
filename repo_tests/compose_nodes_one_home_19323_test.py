@@ -25,8 +25,14 @@ _ROOT = repo_root()
 _ROOTS = ("autobot-slm-backend", "autobot-infrastructure", "docker", "docker-compose.yml")
 _SUFFIXES = (".py", ".yml", ".yaml", ".sh", ".env", ".j2")
 _TEST = re.compile(r"(^|/)(tests?/|test_[^/]*\.py$|[^/]*_test\.py$|conftest\.py$)")
+#: A value next to the name (``=``, ``: ``, ``:-``, ``-``, ``:=``, empty included), or a Python read
+#: of the name by any reader (``getenv``, ``environ.get/setdefault/pop/[...]``, the registry ``env()``),
+#: possibly split across lines.
 _RESTATED = re.compile(
-    r"SLM_COMPOSE_NODES\s*(?:=|:-|:=)\s*\S" r"|(?:getenv|environ\.get|environ\[)\(?\s*['\"]SLM_COMPOSE_NODES['\"]"
+    r"\bSLM_COMPOSE_NODES['\"]?[ \t]*(?::-|:=|:(?=[ \t])|=|-(?=[^-\s]))"
+    r"|(?:\bgetenv\s*\(|\benviron\.(?:get|setdefault|pop)\s*\(|\benviron\s*\[|(?<![\w.])env\s*\()"
+    r"\s*['\"]SLM_COMPOSE_NODES['\"]",
+    re.S,
 )
 
 
@@ -55,14 +61,13 @@ REACH = declare(
 )
 
 
+_COMMENT_LINE = re.compile(r"^[ \t]*#.*$", re.M)
+
+
 def restated(text: str, rel: str) -> list[str]:
     """Each restated default in *text*; a comment line documents the override and is not read."""
-    return [
-        f"{rel}:{n}: {m.group(0)}"
-        for n, line in enumerate(text.splitlines(), 1)
-        if not line.lstrip().startswith("#")
-        for m in _RESTATED.finditer(line)
-    ]
+    code = _COMMENT_LINE.sub("", text)  # blanked, not removed: line numbers hold
+    return [f"{rel}:{code.count(chr(10), 0, m.start()) + 1}: {m.group(0)}" for m in _RESTATED.finditer(code)]
 
 
 def test_no_file_restates_the_compose_nodes_default() -> None:
@@ -80,6 +85,13 @@ def test_no_file_restates_the_compose_nodes_default() -> None:
         'flag = os.getenv("SLM_COMPOSE_NODES", "false")\n',
         "flag = os.environ.get('SLM_COMPOSE_NODES')\n",
         'flag = os.environ["SLM_COMPOSE_NODES"]\n',
+        '      SLM_COMPOSE_NODES: "true"\n',
+        "      - SLM_COMPOSE_NODES=\n",
+        "      - SLM_COMPOSE_NODES=${SLM_COMPOSE_NODES-true}\n",
+        'os.environ.setdefault("SLM_COMPOSE_NODES", "1")\n',
+        'os.environ.pop("SLM_COMPOSE_NODES", None)\n',
+        'flag = os.environ.get(\n    "SLM_COMPOSE_NODES"\n)\n',
+        'flag = env("SLM_COMPOSE_NODES")\n',
     ],
 )
 def test_each_restated_shape_is_flagged(text: str) -> None:
