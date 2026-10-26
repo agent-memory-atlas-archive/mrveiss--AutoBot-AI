@@ -54,12 +54,12 @@ SCAN_ROOTS = (
     "scripts",
 )
 
-#: Floor for the literal-fallback env reads the sweep collects (249 live; window [209, 249], pin 229): the ONE
-#: floor, enforced by ``check_env_forks`` (the sweep's own entrypoint) and
+#: Floor for the literal-fallback env reads the sweep collects (227 live after #19315; window [187, 227],
+#: pin 207): the ONE floor, enforced by ``check_env_forks`` (the sweep's own entrypoint) and
 #: passed to the reach declaration in ``repo_tests/env_fork_guard_18094_test.py`` (whose ``verify_floor``
 #: proves it against the live population). A sweep that collected a handful has lost its roots and would
 #: report "none found" over nothing.
-FORK_READ_FLOOR = 229
+FORK_READ_FLOOR = 207
 
 #: Modules whose module-level literal constants are the SSOT a feature module must not restate.
 SSOT_CONSTANT_SOURCES = (
@@ -73,7 +73,6 @@ SSOT_CONSTANT_SOURCES = (
 KNOWN_ENV_FORKS: dict[str, str] = {
     "AUTOBOT_BACKEND_HOST": "#17419",
     "AUTOBOT_BROWSER_SERVICE_HOST": "#17419",
-    "AUTOBOT_ENV": "#17419",
     "AUTOBOT_REDIS_HOST": "#17419",
     "AUTOBOT_TLS_CERT_DIR": "#17419",
     "SLM_REPO_PATH": "#15708",
