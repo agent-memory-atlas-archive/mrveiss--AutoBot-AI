@@ -26,8 +26,12 @@ from autobot_shared.paths import shared_cache_path
 logger = get_logger(__name__)
 
 
-#: Cached fallback responses: regenerable, so in the user cache, never the repo (#19553).
-RESPONSE_CACHE_DIR = shared_cache_path("claude_responses")
+def response_cache_dir() -> Path:
+    """Cached fallback responses: regenerable, so in the user cache, never the repo (#19553).
+
+    Resolved on use, never at import: resolving keys the cache by checkout with a git call.
+    """
+    return shared_cache_path("claude_responses")
 
 
 class DegradationLevel(Enum):
@@ -96,9 +100,9 @@ class FallbackStrategy(ABC):
 class CachedResponseStrategy(FallbackStrategy):
     """Strategy that uses cached responses from previous successful calls"""
 
-    def __init__(self, cache_dir: str | Path = RESPONSE_CACHE_DIR):
+    def __init__(self, cache_dir: str | Path | None = None):
         """Initialize cached response strategy with cache directory and settings."""
-        self.cache_dir = Path(cache_dir)
+        self.cache_dir = Path(cache_dir) if cache_dir else response_cache_dir()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_cache_age = 24 * 60 * 60  # 24 hours
         self.similarity_threshold = 0.7

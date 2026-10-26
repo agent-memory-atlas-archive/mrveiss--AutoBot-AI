@@ -35,7 +35,11 @@ CODEBERT_EMBEDDING_DIM = 768
 # is re-converted + recompiled on every cold start (slow on NPU/GPU). Caching the
 # compiled blob lets subsequent starts skip recompilation.
 # Regenerable, so in the user cache, never the repo or a cwd-relative data/ (#19553).
-OPENVINO_CACHE_DIR = os.getenv("AUTOBOT_OPENVINO_CACHE_DIR") or str(shared_cache_path("openvino"))
+
+
+def _openvino_cache_dir() -> str:
+    """OpenVINO's compiled-model cache: regenerable, so the user cache (#19553); resolved on use, not import."""
+    return os.getenv("AUTOBOT_OPENVINO_CACHE_DIR") or str(shared_cache_path("openvino"))
 
 
 @dataclass
@@ -184,8 +188,9 @@ class CodeEmbeddingGenerator:
                 target_device = "CPU"
 
             # #10601: persist compiled blobs so cold starts skip recompilation.
-            os.makedirs(OPENVINO_CACHE_DIR, exist_ok=True)
-            self.openvino_model = core.compile_model(ov_model, target_device, {"CACHE_DIR": OPENVINO_CACHE_DIR})
+            cache_dir = _openvino_cache_dir()
+            os.makedirs(cache_dir, exist_ok=True)
+            self.openvino_model = core.compile_model(ov_model, target_device, {"CACHE_DIR": cache_dir})
             # Record the actual device so _compute_with_openvino reports correctly
             self._openvino_device = target_device.lower()
             logger.info(

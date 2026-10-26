@@ -16,7 +16,6 @@ from autobot_shared.async_compat import run_or_schedule
 from autobot_shared.logging_manager import get_logger
 from constants.threshold_constants import TimingConstants
 from utils.degradation_cache import (
-    RESPONSE_CACHE_DIR,
     CachedResponseStrategy,
     DegradationLevel,
     DegradedState,
@@ -151,7 +150,7 @@ class StaticResponseStrategy(FallbackStrategy):
 class GracefulDegradationManager:
     """Main manager for graceful degradation strategies (thread-safe)"""
 
-    def __init__(self, cache_dir: str | Path = RESPONSE_CACHE_DIR):
+    def __init__(self, cache_dir: str | Path | None = None):
         """Initialize degradation manager with fallback strategies and monitoring."""
         # Initialize strategies in order of preference
         self.strategies: List[FallbackStrategy] = [
@@ -434,7 +433,7 @@ class GracefulDegradationManager:
 class GracefulDegradationContext:
     """Context manager for graceful degradation"""
 
-    def __init__(self, cache_dir: str | Path = RESPONSE_CACHE_DIR):
+    def __init__(self, cache_dir: str | Path | None = None):
         """Initialize context manager with degradation manager."""
         self.manager = GracefulDegradationManager(cache_dir)
 
@@ -449,7 +448,7 @@ class GracefulDegradationContext:
 
 
 async def create_degradation_manager(
-    cache_dir: str | Path = RESPONSE_CACHE_DIR,
+    cache_dir: str | Path | None = None,
 ) -> GracefulDegradationManager:
     """Create and start a graceful degradation manager"""
     manager = GracefulDegradationManager(cache_dir)
