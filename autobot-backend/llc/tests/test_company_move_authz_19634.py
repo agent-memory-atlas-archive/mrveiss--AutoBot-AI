@@ -158,6 +158,27 @@ async def test_a_platform_admin_promotes_a_sub_org_whose_parent_has_no_admin(ses
 
 
 @pytest.mark.asyncio
+async def test_a_platform_admin_moves_a_sub_org_sideways_whose_parent_has_no_admin(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.MEMBER)  # no admin left on the parent
+    other = await _org(session_factory, "Other", role=None)
+    org = await _org(session_factory, "Acme", parent=parent, role=None)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=other), platform_admin=True)
+    assert await _parent_of(session_factory, org) == other
+
+
+@pytest.mark.asyncio
+async def test_the_under_lock_role_check_locks_the_membership_row():
+    from llc.services.authz import require_company_admin
+
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value="owner")))
+    assert await require_company_admin(session, uuid.uuid4(), _ACTOR, for_update=True) == "owner"
+    sql = str(session.execute.await_args.args[0].compile(dialect=postgresql.dialect()))
+    assert "FROM llc_company_memberships" in sql
+    assert sql.rstrip().endswith("FOR UPDATE")
+
+
+@pytest.mark.asyncio
 async def test_an_owner_who_is_not_an_admin_moves_and_promotes(session_factory):  # noqa: ANN001
     """The OWNER role counts as admin everywhere a move checks (GRANTING_ROLES)."""
     parent = await _org(session_factory, "Parent", role=MembershipRole.OWNER)
@@ -187,11 +208,44 @@ async def test_a_role_revoked_while_the_move_waited_for_its_locks_stops_it(sessi
 
 @pytest.mark.asyncio
 async def test_a_non_admin_of_the_current_parent_cannot_promote(session_factory):  # noqa: ANN001
+    """Leaving a parent is done from the parent org: the sub-org's own OWNER is refused (2026-10-26)."""
     parent = await _org(session_factory, "Parent", role=MembershipRole.MEMBER)
-    org = await _org(session_factory, "Acme", parent=parent)
-    with pytest.raises(NotAuthorisedError):
+    org = await _org(session_factory, "Acme", parent=parent)  # _ACTOR owns the sub-org
+    with pytest.raises(NotAuthorisedError, match="owner/admin of the parent org"):
         await _update(session_factory, org, CompanyUpdate(parent_org_id=None))
     assert await _parent_of(session_factory, org) == parent
+
+
+@pytest.mark.asyncio
+async def test_the_parent_owner_who_is_not_an_admin_promotes(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent", role=MembershipRole.OWNER)
+    org = await _org(session_factory, "Acme", parent=parent, role=MembershipRole.ADMIN)
+    await _update(session_factory, org, CompanyUpdate(parent_org_id=None))
+    assert await _parent_of(session_factory, org) is None
+
+
+@pytest.mark.asyncio
+async def test_a_mixed_patch_without_move_rights_is_403_before_any_field_check(session_factory):  # noqa: ANN001
+    parent = await _org(session_factory, "Parent")
+    org = await _org(session_factory, "Acme", role=MembershipRole.MEMBER)
+    async with session_factory() as session:
+        svc = CompanyService(session)
+        svc._assert_prefix_unique = AsyncMock(side_effect=AssertionError("field check ran before authz"))
+        with pytest.raises(NotAuthorisedError):
+            await svc.update(org, CompanyUpdate(parent_org_id=parent, issue_prefix="NEW"), actor_user_id=_ACTOR)
+
+
+@pytest.mark.asyncio
+async def test_a_budget_in_a_moving_patch_is_checked_against_the_new_parent(session_factory):  # noqa: ANN001
+    old_parent = await _org(session_factory, "Old")
+    new_parent = await _org(session_factory, "New")
+    org = await _org(session_factory, "Acme", parent=old_parent)
+    async with session_factory() as session:
+        svc = CompanyService(session)
+        svc._assert_budget_fits = AsyncMock()
+        data = CompanyUpdate(parent_org_id=new_parent, budget_monthly_cents=100)
+        await svc.update(org, data, actor_user_id=_ACTOR)
+    assert svc._assert_budget_fits.await_args.args[0].id == new_parent
 
 
 @pytest.mark.asyncio

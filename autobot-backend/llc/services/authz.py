@@ -52,42 +52,45 @@ class NotAuthorisedError(Exception):
 
 
 async def require_company_admin(
-    session: AsyncSession, company_id: uuid.UUID, actor_user_id: Optional[uuid.UUID]
-) -> None:
-    """Raise :class:`NotAuthorisedError` unless the actor is owner/admin **here**.
+    session: AsyncSession, company_id: uuid.UUID, actor_user_id: Optional[uuid.UUID], *, for_update: bool = False
+) -> str:
+    """Raise :class:`NotAuthorisedError` unless the actor is owner/admin **here**; return the role.
 
     Membership is per ``(company, user)``, so being an admin of another company
-    grants nothing — the "not all users have access to all Company OS
-    companies" requirement, applied to every mutating path.
-
-    A missing actor is refused rather than treated as a trusted system call.
-    An implicit "no actor means internal" would be a fail-open bypass reachable
-    by any caller that simply omits the argument.
+    grants nothing. A missing actor is refused rather than treated as a trusted
+    system call: "no actor means internal" would be a fail-open bypass reachable by
+    any caller that omits the argument. *for_update* locks the membership row, so
+    the role cannot be revoked or changed before the caller's transaction ends.
     """
     if actor_user_id is None:
         raise NotAuthorisedError("an actor is required for this change")
-
-    result = await session.execute(
-        select(LLCCompanyMembership.role).where(
-            LLCCompanyMembership.company_id == company_id,
-            LLCCompanyMembership.user_id == actor_user_id,
-        )
-    )
-    role = result.scalar_one_or_none()
-    if role is None:
+    name = await _membership_role(session, company_id, actor_user_id, for_update=for_update)
+    if name is None:
         raise NotAuthorisedError(f"user {actor_user_id} is not a member of company {company_id}")
+    if name not in GRANTING_ROLES:
+        raise NotAuthorisedError(
+            f"membership role {name!r} may not perform this change; " f"one of {sorted(GRANTING_ROLES)} is required"
+        )
+    return name
 
+
+async def _membership_role(
+    session: AsyncSession, company_id: uuid.UUID, actor_user_id: uuid.UUID, *, for_update: bool
+) -> Optional[str]:
+    stmt = select(LLCCompanyMembership.role).where(
+        LLCCompanyMembership.company_id == company_id,
+        LLCCompanyMembership.user_id == actor_user_id,
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    role = (await session.execute(stmt)).scalar_one_or_none()
     # ``.value`` explicitly, never ``str()``. The column maps to a
     # ``MembershipRole`` member and ``MembershipRole`` is a str-mixin enum, so
     # ``str(member)`` is "MembershipRole.OWNER" while ``member.value`` is
     # "owner". A defensive ``str()`` here previously denied every owner and
     # admin. ``getattr`` covers a driver that returns a raw string, and an
-    # unrecognised value falls through to the refusal below — failing closed.
-    name = getattr(role, "value", role)
-    if name not in GRANTING_ROLES:
-        raise NotAuthorisedError(
-            f"membership role {name!r} may not perform this change; " f"one of {sorted(GRANTING_ROLES)} is required"
-        )
+    # unrecognised value falls through to the caller's refusal -- failing closed.
+    return None if role is None else getattr(role, "value", role)
 
 
 async def may_attach_under(

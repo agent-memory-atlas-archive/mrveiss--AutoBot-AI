@@ -26,7 +26,12 @@ from llc.models.contact import LLCContact
 from llc.models.enums import LLCCompanyStatus
 from user_management.models.organization import Organization
 
-from .authz import may_attach_under, require_company_admin_unless_platform
+from .authz import (
+    NotAuthorisedError,
+    may_attach_under,
+    require_company_admin,
+    require_company_admin_unless_platform,
+)
 from .base import LLCServiceBase
 from .company_ceo import CompanyCEOService
 
@@ -142,35 +147,35 @@ class CompanyService(LLCServiceBase):
         ``null`` promotes to top level, an omitted field leaves the parent alone.
         Every other field keeps "``None`` means unchanged".
         """
-        org = await self._get_or_404(company_id)
-
-        if data.issue_prefix is not None and data.issue_prefix != org.issue_prefix:
-            await self._assert_prefix_unique(data.issue_prefix)
-
-        if data.budget_monthly_cents is not None and org.parent_org_id is not None:
-            parent = await self._get_or_404(org.parent_org_id)
-            await self._assert_budget_fits(parent, data.budget_monthly_cents, exclude_id=company_id)
-
-        if "parent_org_id" in data.model_fields_set and data.parent_org_id != org.parent_org_id:
-            org = await self.move(
-                company_id, data.parent_org_id, actor_user_id=actor_user_id, platform_admin=platform_admin
-            )
-
-        update_fields = data.model_dump(exclude_none=True, exclude={"parent_org_id"})
-        for field, value in update_fields.items():
-            if field == "llc_status":
-                setattr(org, field, value.value if isinstance(value, LLCCompanyStatus) else value)
-            else:
-                setattr(org, field, value)
-
+        org = await self._apply_parent_change(await self._get_or_404(company_id), data, actor_user_id, platform_admin)
+        await self._assert_fields_fit(org, data)
+        for field, value in data.model_dump(exclude_none=True, exclude={"parent_org_id"}).items():
+            setattr(org, field, value.value if isinstance(value, LLCCompanyStatus) else value)
+        # #12322: ``updated_at`` comes back inline from the UPDATE's RETURNING
+        # (``eager_defaults=True``), so the router's sync serialization is safe.
         await self.session.flush()
-        # #12322: `updated_at` is populated inline by the UPDATE's RETURNING
-        # clause (Base sets ``eager_defaults=True``), so it is never expired
-        # after flush() and the router's sync response serialization is safe.
-        # The previous per-call ``session.refresh(org, ["updated_at"])`` (#12309)
-        # is now redundant and removed.
         logger.info("LLC company updated: %s (id=%s)", org.name, org.id)
         return org
+
+    async def _apply_parent_change(
+        self,
+        org: Organization,
+        data: CompanyUpdate,
+        actor_user_id: Optional[uuid.UUID],
+        platform_admin: bool,
+    ) -> Organization:
+        """Move first, so a caller without move rights gets 403 before any field check (#19634)."""
+        if "parent_org_id" not in data.model_fields_set or data.parent_org_id == org.parent_org_id:
+            return org
+        return await self.move(org.id, data.parent_org_id, actor_user_id=actor_user_id, platform_admin=platform_admin)
+
+    async def _assert_fields_fit(self, org: Organization, data: CompanyUpdate) -> None:
+        """Prefix uniqueness, and the budget against the parent the org now has (after any move)."""
+        if data.issue_prefix is not None and data.issue_prefix != org.issue_prefix:
+            await self._assert_prefix_unique(data.issue_prefix)
+        if data.budget_monthly_cents is not None and org.parent_org_id is not None:
+            parent = await self._get_or_404(org.parent_org_id)
+            await self._assert_budget_fits(parent, data.budget_monthly_cents, exclude_id=org.id)
 
     async def move(
         self,
@@ -190,6 +195,8 @@ class CompanyService(LLCServiceBase):
         """
         await self._authorize_move_target(company_id, parent_org_id, actor_user_id, platform_admin)
         await self._lock_move_rows(company_id, parent_org_id)
+        # Already locked above; ``for_update`` is a no-op relock kept for its
+        # ``populate_existing``, which replaces any pre-lock copy in the identity map.
         org = await self._get_or_404(company_id, for_update=True)
         await self._authorize_locked_move(org, parent_org_id, actor_user_id, platform_admin)
         if parent_org_id is not None:
@@ -228,17 +235,27 @@ class CompanyService(LLCServiceBase):
         actor_user_id: Optional[uuid.UUID],
         platform_admin: bool,
     ) -> None:
-        """Under the lock: the moved-org role again, and admin on the parent being left (#19634).
+        """Under the lock: the moved-org role again, and the right to leave the current parent.
 
-        The current parent is only known for certain once the org row is locked, and
-        the moved-org role is re-read here so a role revoked while the move waited
-        for its locks does not carry the move through.
+        The current parent is only known for certain once the org row is locked. The
+        actor's membership row in the moved org is locked too, so a revoke or role
+        change waits for this move instead of racing it. Moving a sub-org out of its
+        parent (promotion or sideways) is done from the parent org: only an owner/admin
+        of the parent being left, or a platform admin, may do it -- the sub-org's own
+        owner may not (maintainer ruling, 2026-10-26).
         """
-        await require_company_admin_unless_platform(self.session, org.id, actor_user_id, platform_admin=platform_admin)
-        if org.parent_org_id is not None and org.parent_org_id != parent_org_id:
-            await require_company_admin_unless_platform(
-                self.session, org.parent_org_id, actor_user_id, platform_admin=platform_admin
-            )
+        if platform_admin:
+            return
+        await require_company_admin(self.session, org.id, actor_user_id, for_update=True)
+        if org.parent_org_id is None or org.parent_org_id == parent_org_id:
+            return
+        try:
+            await require_company_admin(self.session, org.parent_org_id, actor_user_id)
+        except NotAuthorisedError as exc:
+            raise NotAuthorisedError(
+                f"moving company {org.id} out of its parent must be done by an owner/admin of the parent "
+                f"org {org.parent_org_id}"
+            ) from exc
 
     async def _lock_move_rows(self, company_id: uuid.UUID, parent_org_id: Optional[uuid.UUID]) -> None:
         """Lock the moved org and the new parent's ancestor chain ``FOR UPDATE``, in id order (#19593).
