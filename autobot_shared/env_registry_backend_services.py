@@ -583,3 +583,5 @@ register_env_var(
         component="backend",
     )
 )
+
+from autobot_shared import env_registry_llm_spend  # noqa: E402,F401 -- registers #16924 vars; see its docstring

@@ -189,11 +189,12 @@ async def test_transcript_analysis_records_against_the_caller_and_recording(trac
 
     request = TranscriptAnalyzeRequest(analysis_type=AnalysisType.SUMMARIZE)
     with patch.object(transcripts, "get_llm_service", return_value=service.svc):
-        tokens = await _drain(transcripts._stream_analysis("A: hi", request, user_id="alice", recording_id="456"))
+        tokens = await _drain(transcripts._stream_analysis("A: hi", request, user_id="alice", recording_id=456))
 
     assert tokens == ["Hello ", "world"]
     kwargs = _recorded(tracker)
-    assert kwargs["user_id"] == "alice" and kwargs["metadata"]["recording_id"] == "456"
+    assert kwargs["user_id"] == "alice" and kwargs["metadata"]["recording_id"] == 456
+    _assert_analysis_budget(service.provider.requests)
 
 
 @pytest.mark.asyncio
@@ -213,6 +214,29 @@ async def test_transcriber_ask_records_against_the_caller_and_recording(tracker,
     assert "Hello " in body and "error" not in body
     kwargs = _recorded(tracker)
     assert kwargs["user_id"] == "alice" and kwargs["metadata"]["recording_id"] == 7
+    _assert_analysis_budget(service.provider.requests)
+
+
+def _assert_analysis_budget(requests: list[LLMRequest]) -> None:
+    """The analysis asks for ANALYSIS_MAX_TOKENS, never the general task default that cut answers off."""
+    from transcriber.ai.prompts import ANALYSIS_MAX_TOKENS
+
+    assert [r.max_tokens for r in requests] == [ANALYSIS_MAX_TOKENS]
+    assert ANALYSIS_MAX_TOKENS >= 4096, "below the providers' own default the analyses had before #16924"
+
+
+def test_each_endpoint_label_is_the_route_it_is_mounted_at() -> None:
+    """The labels are the mounted route templates, so spend groups by the URL a client actually calls."""
+    from api import transcriber, transcripts
+    from autobot_shared.api_routing.router_routes import effective_routes
+    from transcriber.routes import ai
+
+    # app_factory.py mounts both with include_router(router, prefix=f"/api{prefix}") and prefix "".
+    # effective_routes, not router.routes: fastapi>=0.139 defers included routers (#15093).
+    transcriber_paths = {"/api" + mounted.path for mounted in effective_routes(transcriber.router)}
+    transcripts_paths = {"/api" + mounted.path for mounted in effective_routes(transcripts.router)}
+    assert ai._ASK_ENDPOINT in transcriber_paths
+    assert transcripts._ANALYZE_ENDPOINT in transcripts_paths
 
 
 # ---------------------------------------------------------------------------
@@ -335,3 +359,26 @@ async def test_a_failure_preparing_the_record_cannot_mask_the_streams_own_error(
 
     logger.exception.assert_called_once()
     tracker.track_usage.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_slow_store_bounds_the_streams_wait_and_the_record_still_lands(tracker) -> None:
+    release, stored = asyncio.Event(), []
+
+    async def slow_store(**kwargs) -> None:
+        await release.wait()
+        stored.append(kwargs)
+
+    tracker.track_usage.side_effect = slow_store
+    with (
+        patch("services.llm_usage_recording.SPEND_RECORD_TIMEOUT_SECONDS", 0.05),
+        patch("services.llm_usage_recording.logger") as logger,
+    ):
+        chunks = await _drain(recorded_stream(_StreamingProvider(), _hi()))
+
+    assert chunks == ["Hello ", "world"] and not stored
+    logger.warning.assert_called_once()
+    release.set()
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert len(stored) == 1, "the record was dropped when the wait timed out"

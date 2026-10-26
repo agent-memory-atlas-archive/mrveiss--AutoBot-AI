@@ -38,7 +38,7 @@ from knowledge import get_knowledge_base
 from services.llm_service import get_llm_service
 from services.llm_usage_recording import spend_attribution
 from transcriber.ai.context import build_context
-from transcriber.ai.prompts import get_system_prompt
+from transcriber.ai.prompts import ANALYSIS_MAX_TOKENS, get_system_prompt
 from transcriber.deps import can_access_transcriber_row, resolve_user_id
 from transcriber.export.segments import build_segment_list
 
@@ -48,6 +48,8 @@ router = APIRouter()
 # HTTPException status → WebSocket close code (RFC 6455 + app-specific 4xxx)
 _WS_CLOSE_CODES = {404: 4004, 400: 1008}
 
+# The usage record's endpoint label: the mounted route TEMPLATE, braces included on
+# purpose, so spend groups by route; the recording id rides in the record's metadata.
 _ANALYZE_ENDPOINT = "/api/transcripts/{transcript_id}/analyze"
 
 
@@ -100,7 +102,7 @@ async def _stream_analysis(
     request: TranscriptAnalyzeRequest,
     *,
     user_id: str | None = None,
-    recording_id: str | None = None,
+    recording_id: int | None = None,
 ) -> AsyncIterator[str]:
     """Stream AI analysis of transcript content through ``LLMService.stream()``.
 
@@ -112,9 +114,8 @@ async def _stream_analysis(
     """
     try:
         attribution = spend_attribution(user_id=user_id, endpoint=_ANALYZE_ENDPOINT, recording_id=recording_id)
-        async for token in get_llm_service().stream(
-            _analysis_messages(transcript_content, request), metadata=attribution
-        ):
+        messages = _analysis_messages(transcript_content, request)
+        async for token in get_llm_service().stream(messages, max_tokens=ANALYSIS_MAX_TOKENS, metadata=attribution):
             yield token
     except Exception as e:
         # Security: Log full error but only send generic message to client
@@ -136,7 +137,7 @@ async def _run_analysis_session(websocket: WebSocket, transcript_id: str, user: 
         await websocket.close(code=_WS_CLOSE_CODES.get(exc.status_code, 1011))
         return
 
-    async for chunk in _stream_analysis(content, request, user_id=user_id, recording_id=transcript_id):
+    async for chunk in _stream_analysis(content, request, user_id=user_id, recording_id=int(transcript_id)):
         if websocket.client_state == WebSocketState.DISCONNECTED:
             break
         await websocket.send_text(chunk)

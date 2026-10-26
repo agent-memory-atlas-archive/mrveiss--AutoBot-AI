@@ -36,8 +36,10 @@ the original defect stayed invisible for five months:
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Awaitable, Dict, List, Set
+from typing import Any, AsyncIterator, Coroutine, Dict, List
 
+from autobot_shared.async_compat import fire_and_forget
+from autobot_shared.env_utils import env_float_clamped
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.token_count import estimate_fast
 from llm_shared.models import LLMRequest, LLMResponse
@@ -64,9 +66,11 @@ SPEND_ATTRIBUTION_KEY = "spend_attribution"
 # The error_message on a stream whose consumer went away before it ended.
 STREAM_ABANDONED = "stream abandoned before completion"
 
-# Recording tasks still running after their stream was cancelled; see
-# ``_record_despite_cancellation``.
-_PENDING_RECORDS: Set[asyncio.Task] = set()
+#: How long an ended stream waits for its spend record (#16924). The record is
+#: retained and keeps running past this; only the stream's wait is bounded.
+SPEND_RECORD_TIMEOUT_SECONDS: float = env_float_clamped(
+    "AUTOBOT_LLM_SPEND_RECORD_TIMEOUT_SECONDS", default=10.0, min_v=0.1, max_v=120.0
+)
 
 
 def token_counts(usage: Dict[str, Any]) -> tuple[int, int] | None:
@@ -272,17 +276,21 @@ async def _record_streamed(
     await record_token_usage(**usage, session_id=session_id, success=outcome[0], error_message=outcome[1])
 
 
-async def _record_despite_cancellation(record: Awaitable[None]) -> None:
-    """Await ``record`` so that a second cancellation cannot drop it.
+async def _record_despite_cancellation(record: Coroutine[Any, Any, None]) -> None:
+    """Await ``record`` so that a second cancellation cannot drop it, for at most the timeout.
 
-    ``asyncio.shield`` lets the recording task finish when the waiting stream is
-    cancelled again; the task is held in ``_PENDING_RECORDS`` until done, since
-    the event loop keeps only weak references to tasks.
+    ``fire_and_forget`` retains the task until it finishes and logs its failure;
+    ``asyncio.shield`` lets it finish when the waiting stream is cancelled again;
+    ``SPEND_RECORD_TIMEOUT_SECONDS`` bounds how long a slow store holds the stream's end.
     """
-    task = asyncio.ensure_future(record)
-    _PENDING_RECORDS.add(task)
-    task.add_done_callback(_PENDING_RECORDS.discard)
-    await asyncio.shield(task)
+    task = fire_and_forget(record, name="llm-spend-record")
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=SPEND_RECORD_TIMEOUT_SECONDS)
+    except TimeoutError:
+        logger.warning(
+            "Spend record still storing after %.1fs; the stream ends without it, the record continues",
+            SPEND_RECORD_TIMEOUT_SECONDS,
+        )
 
 
 async def recorded_stream(provider: Any, request: LLMRequest, *, session_id: str | None = None) -> AsyncIterator[str]:
