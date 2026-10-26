@@ -364,8 +364,9 @@ def test_an_unreadable_discovered_file_fails_the_sweep(tmp_path: Path) -> None:
     (tmp_path / "ok.sh").write_text("P=1\n", encoding="utf-8")
     (tmp_path / "bad.sh").write_bytes(b"P=\xff\xfe\n")
     assert read_sources(tmp_path, ["ok.sh"]) == {"ok.sh": "P=1\n"}
-    with pytest.raises(AssertionError, match="bad.sh: discovered but unreadable"):
+    with pytest.raises(AssertionError, match=r"bad.sh: discovered but unreadable \(not UTF-8 at byte 2") as caught:
         read_sources(tmp_path, ["ok.sh", "bad.sh"])
+    assert "\\xff" not in str(caught.value), "the message names the spot, never dumps the bytes"
 
 
 def test_a_retired_number_has_no_home() -> None:
