@@ -520,7 +520,7 @@ async def get_llm_context(req: Request, body: ContextRequest, current_user: Dict
                 user_id,
                 user_org_id,
                 user_group_ids,
-                False,
+                is_admin=False,
             )
         except Exception as e:
             logger.warning("Relation context failed: %s", e)

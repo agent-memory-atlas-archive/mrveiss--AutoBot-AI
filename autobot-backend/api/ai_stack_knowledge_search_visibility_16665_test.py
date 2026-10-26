@@ -17,7 +17,8 @@ from fastapi.testclient import TestClient
 from api import ai_stack_integration
 from auth_middleware import check_admin_permission, get_current_user
 from dependencies import provide_knowledge_base
-from knowledge.read_path_fakes_16665 import PRIVATE_A, RESEARCH, SHARED, FakeKB, QuarantineGatedKB
+from knowledge.quarantine import RESEARCH_QUARANTINE_FILTER
+from knowledge.read_path_fakes_16665 import PRIVATE_A, RESEARCH, SHARED, FakeKB, QuarantineGatedKB, all_facts
 
 ALICE = {"user_id": "alice", "role": "user"}
 BOB = {"user_id": "bob", "role": "user"}
@@ -70,3 +71,28 @@ async def test_a_research_quarantined_fact_is_never_returned(user):
     body = await _search(user, QuarantineGatedKB())
 
     assert RESEARCH not in body and SHARED in body
+
+
+def test_the_route_is_admin_gated():
+    """The suite stubs ``auth_middleware`` (the same walk as knowledge_crud_admin_gate_16665_test.py), so a 403
+    cannot be provoked over HTTP; the claim is that the route's resolved dependency tree reaches the gate."""
+    route = next(r for r in ai_stack_integration.router.routes if getattr(r, "path", "") == "/knowledge/search")
+
+    assert check_admin_permission in [dep.call for dep in route.dependant.dependencies]
+
+
+@pytest.mark.asyncio
+async def test_the_quarantine_filter_reaches_the_kb_search():
+    kb = FakeKB()
+    kb.search = AsyncMock(return_value=[])
+    await _search(ALICE, kb)
+
+    assert kb.search.await_args.kwargs["filters"] == RESEARCH_QUARANTINE_FILTER
+
+
+@pytest.mark.asyncio
+async def test_an_enhanced_mode_dict_answer_is_unwrapped_not_dropped():
+    kb = FakeKB()
+    kb.search = AsyncMock(return_value={"results": all_facts()})
+
+    assert PRIVATE_A in await _search(ALICE, kb)

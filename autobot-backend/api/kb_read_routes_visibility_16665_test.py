@@ -94,8 +94,9 @@ def test_suggestions_never_derive_from_a_quarantined_research_fact(route, body, 
     response = _suggest(route, user, body, _QuarantinedSuggestKB)
 
     assert response.status_code == 200 and RESEARCH not in response.text
-    counted = response.json().get("total_candidates", response.json().get("similar_docs_analyzed"))
-    assert counted in (None, 3 if user is ADMIN else 2)  # one more would be the quarantined fact
+    if route != "/suggestions/context":  # context returns snippets, not a candidate count
+        counted = response.json().get("total_candidates", response.json().get("similar_docs_analyzed"))
+        assert counted == (3 if user is ADMIN else 2)  # one more would be the quarantined fact
 
 
 def test_the_suggestion_quarantine_test_is_sensitive_to_a_leak():
