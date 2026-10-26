@@ -54,6 +54,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
     ),
     "*.j2": (
         {
+            "repo_tests/operational_docs_name_real_playbooks_19611_test.py",
             "repo_tests/browser_port_single_home_19324_test.py",
             "repo_tests/nginx_internal_api_key_auth_gate_test.py",
             "repo_tests/slm_frontend_publish_contract_test.py",
@@ -63,6 +64,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
     "*.md": (
         {
             "repo_tests/deployment_profile_one_source_19315_test.py",
+            "repo_tests/operational_docs_name_real_playbooks_19611_test.py",
             "repo_tests/doc_sync_hook_resolves_indexer_15845_test.py",
             "repo_tests/documented_playbook_invocations_test.py",
             "repo_tests/redis_config_path_is_canonical_17434_test.py",
@@ -88,6 +90,7 @@ GLOB_DECLARED_UNCOVERED: dict[str, tuple[set[str], str]] = {
     ),
     "*.sh": (
         {
+            "repo_tests/operational_docs_name_real_playbooks_19611_test.py",
             "repo_tests/ansible_inventory_path_exists_test.py",
             "repo_tests/browser_port_single_home_19324_test.py",
             "repo_tests/chromadb_bind_not_hardcoded_15317_test.py",
