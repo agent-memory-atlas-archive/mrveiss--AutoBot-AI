@@ -27,6 +27,8 @@ UNSCOPED = frozenset(
         "isolated-git-env",
         # #19076: items are (role, unit) pairs from one registry file, not paths -- no roots= to check.
         "role-registry-installed-units",
+        # #19413: every tracked file, so a ChromaDB heartbeat path written anywhere is seen.
+        "chromadb-heartbeat-one-home-sweep",
         # #19310: every tracked text file in the repository, so a runtime-dir literal written
         # anywhere is seen; no roots= list could name "wherever someone writes it".
         "system-knowledge-runtime-literal-scan",

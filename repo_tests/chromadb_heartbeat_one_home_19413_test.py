@@ -25,9 +25,10 @@ from pathlib import Path
 
 import pytest
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from autobot_shared.chromadb_endpoints import CHROMADB_HEARTBEAT_PATH
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 HOME = "autobot_shared/chromadb_endpoints.py"
@@ -126,9 +127,30 @@ def sweep(root: Path, paths: list[str]) -> dict[str, list[str]]:
     return found
 
 
+def _tracked(root: Path) -> list[str]:
+    """Every tracked file: a heartbeat path written anywhere is seen (no prefix describes "anywhere")."""
+    try:
+        return tracked_paths(root)
+    except EmptyEnumeration:
+        return []  # an empty tree: the min_fraction below raises the typed refusal instead
+
+
+#: The whole tracked tree, so its fraction of the tracked-file count is 1.0; 0.9 fires once a
+#: tenth of the tree goes unread.
+REACH = declare(
+    "chromadb-heartbeat-one-home-sweep",
+    discover=_tracked,
+    min_fraction=0.9,
+    what="every tracked file, swept for a second ChromaDB heartbeat definition",
+)
+
+
 @functools.lru_cache(maxsize=1)
 def _tree_findings() -> dict[str, list[str]]:
-    return sweep(_ROOT, tracked_paths(_ROOT))
+    files = REACH.examined(_ROOT)
+    found = sweep(_ROOT, list(files))
+    REACH.completed(files, _ROOT)
+    return found
 
 
 def test_the_home_is_the_v2_heartbeat_the_pinned_server_serves() -> None:
