@@ -12,6 +12,7 @@ default ``./logs`` could not be created and ``get_logger(__name__)`` at import r
 import errno
 import logging
 import logging.handlers
+import os
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -37,8 +38,9 @@ _real_mkdir = Path.mkdir
 
 
 def _read_only_logs_mkdir(self: Path, *args: object, **kwargs: object) -> None:
-    """Refuse only the logs tree; every other directory (config, caches) is created as usual."""
-    if "logs" in self.parts:
+    """Refuse only the configured logs tree; every other directory (config, caches) is created."""
+    logs_dir = Path(os.environ["AUTOBOT_LOGS_DIR"])
+    if self == logs_dir or logs_dir in self.parents:
         raise _READ_ONLY
     _real_mkdir(self, *args, **kwargs)
 
@@ -70,7 +72,9 @@ def test_a_read_only_logs_dir_yields_a_console_only_logger(
         _close(logger)
 
 
-def test_an_unopenable_log_file_yields_a_console_only_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unopenable_log_file_yields_a_console_only_logger(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     LoggingManager._initialized = True  # the directory step passed; only the file open fails
 
     def _refuse(*args: object, **kwargs: object) -> None:
@@ -81,6 +85,7 @@ def test_an_unopenable_log_file_yields_a_console_only_logger(monkeypatch: pytest
     try:
         assert logger.handlers
         assert not LoggingManager._file_logging_disabled, "a per-file failure leaves other log types on"
+        assert "logging to console only" in capsys.readouterr().err
     finally:
         _close(logger)
 
@@ -91,3 +96,9 @@ def test_a_writable_logs_dir_still_gets_a_file_handler() -> None:
         assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers)
     finally:
         _close(logger)
+
+
+def test_rotate_logs_is_a_no_op_when_file_logging_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(LoggingManager, "_file_logging_disabled", True)
+    monkeypatch.setattr(Path, "mkdir", _read_only_logs_mkdir)
+    LoggingManager.rotate_logs()  # must not try to create the backup dir
