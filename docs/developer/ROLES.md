@@ -610,8 +610,8 @@ Provisioned by: `playbooks/deploy_role.yml` (postgresql role)
 |----------|-------|---------|
 | `autobot` | `autobot` | Backend user management (users, teams, orgs, API keys, audit) |
 
-**Only active when** `AUTOBOT_DEPLOYMENT_MODE != single_user`.
-Set `AUTOBOT_DEPLOYMENT_MODE=single_company` (or higher) to enable.
+**Always active**: every `AUTOBOT_USER_MODE` (`single_company`, `multi_company`, `provider`) is
+PostgreSQL-backed (#10636). `AUTOBOT_DEPLOYMENT_MODE` is the topology setting, not tenancy.
 Schema applied by: `alembic upgrade head` inside the backend venv
 Credentials file: `/etc/autobot/db-credentials.env` (prefix `AUTOBOT_DB_`)
 

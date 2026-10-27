@@ -464,14 +464,16 @@ AutoBot does not currently send password-reset emails. The recovery flow is:
 2. Admin issues a temporary password via the change-password API (see Section 7).
 3. Admin instructs the user to log in with the temporary password and change it immediately.
 
-### Admin Panel Shows "User management is not available"
+### Admin Panel Cannot Load Users
 
-This message appears when `AUTOBOT_DEPLOYMENT_MODE=single_user`. To enable multi-user management:
+User management is always on: every tenancy mode is PostgreSQL-backed (#10636), so there is no
+setting that switches it off. The tenancy mode is `AUTOBOT_USER_MODE`, one of `single_company`
+(the default), `multi_company` or `provider`. `AUTOBOT_DEPLOYMENT_MODE` is the unrelated topology
+setting (local, docker_local, distributed, kubernetes, cloud). When the admin panel cannot load users:
 
-1. Set `AUTOBOT_DEPLOYMENT_MODE=multi_user` in your environment.
-2. Ensure `AUTOBOT_DATABASE_URL` points to a running PostgreSQL instance.
-3. Run database migrations: `alembic upgrade head` (or re-deploy via Ansible playbook).
-4. Restart the backend service.
+1. Ensure `AUTOBOT_DATABASE_URL` points to a running PostgreSQL instance.
+2. Run database migrations: `alembic upgrade head` (or re-deploy via Ansible playbook).
+3. Restart the backend service.
 
 ### Duplicate Username / Email on Create (409)
 
