@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -2750,7 +2750,7 @@ class NodeExecRequest(BaseModel):
     """Request body for executing a command on a node."""
 
     command: str
-    timeout: int = Field(default_factory=lambda: int(config.timeout.subprocess))  # #19730
+    timeout: int = int(config.timeout.subprocess)  # #19730
 
 
 class NodeExecResponse(BaseModel):

@@ -2352,7 +2352,7 @@ class OAIStreamOptions(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str = "autobot-default"
     messages: List[OAIMessage]
-    temperature: float = Field(default_factory=lambda: _ssot_config.llm_temperature)  # #19730
+    temperature: float = _ssot_config.llm_temperature  # #19730
     max_tokens: int | None = None
     top_p: float = 1.0
     frequency_penalty: float = 0.0

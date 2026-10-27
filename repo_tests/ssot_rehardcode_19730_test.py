@@ -35,30 +35,30 @@ MIN_FILES = 2800
 _BUSY = "fixed once the open PR that also edits this file lands"
 _CEILING = "the file is at its size ceiling with no line to absorb the import; fixed with its split"
 PENDING: dict[str, str] = {
-    "autobot-backend/api/schemas_knowledge.py::page_size": f"QueryDefaults; {_BUSY} (#19711)",
-    "autobot-backend/api/schemas_knowledge.py::quality_threshold": f"AgentThresholds; {_BUSY} (#19711)",
-    "autobot-backend/api/schemas_knowledge.py::top_k": f"QueryDefaults; {_BUSY} (#19711)",
-    "autobot-backend/code_analysis/src/ownership_analyzer.py::TTL_1_HOUR": f"{_BUSY} (#19696)",
-    "autobot-backend/llc/models/enums.py::CLOSED": f"classified with the fix; {_BUSY} (#19598)",
-    "autobot-backend/llc/models/enums.py::PLAN": f"classified with the fix; {_BUSY} (#19598)",
-    "autobot_shared/redis_management/config.py::_BACKOFF_BASE": f"RetryConfig; {_BUSY} (#19365, #19400, #19722)",
-    "autobot_shared/redis_management/config.py::_CIRCUIT_BREAKER_THRESHOLD": f"{_BUSY} (#19365, #19400, #19722)",
-    "autobot_shared/redis_management/connection_manager.py::_BACKOFF_BASE": f"RetryConfig; {_BUSY} (#19365)",
-    "autobot_shared/ssot_tls.py::ssh_user": f"config.path.ssh_user; {_BUSY} (#19400, #19722)",
-    "autobot-backend/api/http_client_mcp.py::DEFAULT_TIMEOUT": f"config.timeout.mcp_call; {_CEILING}",
-    "autobot-backend/api/schemas_analytics.py::provider": f"config.llm.llamaindex_embedding_provider; {_CEILING}",
-    "autobot-backend/api/schemas_system.py::admin_username": f"config.auth.admin_username; {_CEILING}",
+    "autobot-backend/api/schemas_knowledge.py::page_size=50": f"QueryDefaults; {_BUSY} (#19711)",
+    "autobot-backend/api/schemas_knowledge.py::quality_threshold=0.7": f"AgentThresholds; {_BUSY} (#19711)",
+    "autobot-backend/api/schemas_knowledge.py::top_k=10": f"QueryDefaults; {_BUSY} (#19711)",
+    "autobot-backend/code_analysis/src/ownership_analyzer.py::TTL_1_HOUR=3600": f"{_BUSY} (#19696)",
+    "autobot-backend/llc/models/enums.py::CLOSED='closed'": f"classified with the fix; {_BUSY} (#19598)",
+    "autobot-backend/llc/models/enums.py::PLAN='plan'": f"classified with the fix; {_BUSY} (#19598)",
+    "autobot_shared/redis_management/config.py::_BACKOFF_BASE=2.0": f"RetryConfig; {_BUSY} (#19365, #19400, #19722)",
+    "autobot_shared/redis_management/config.py::_CIRCUIT_BREAKER_THRESHOLD=5": f"{_BUSY} (#19365, #19400, #19722)",
+    "autobot_shared/redis_management/connection_manager.py::_BACKOFF_BASE=2.0": f"RetryConfig; {_BUSY} (#19365)",
+    "autobot_shared/ssot_tls.py::ssh_user='autobot'": f"config.path.ssh_user; {_BUSY} (#19400, #19722)",
+    "autobot-backend/api/http_client_mcp.py::DEFAULT_TIMEOUT=30": f"config.timeout.mcp_call; {_CEILING}",
+    "autobot-backend/api/schemas_analytics.py::provider='ollama'": f"config.llm.llamaindex_embedding_provider; {_CEILING}",
+    "autobot-backend/api/schemas_system.py::admin_username='admin'": f"config.auth.admin_username; {_CEILING}",
 }
 
 DISTINCT: dict[str, str] = {
-    "autobot-backend/agents/base_agent_types.py::timeout": "AgentRequest's deadline, not a circuit-breaker call timeout",
-    "autobot-backend/config/settings.py::cache_ttl": "config-file cache TTL (CONFIG_CACHE_TTL), not the LLM cache TTL",
-    "autobot-backend/security/session_posture.py::DEFAULT": "a session ownership posture, not a permission mode",
-    "autobot-backend/services/gateway/types.py::CLOSED": "a gateway session status, not a circuit-breaker state",
-    "autobot-backend/services/permission_matcher.py::DEFAULT": "MatchResult 'no rule matched', not a permission mode",
-    "autobot-backend/skills/models.py::HTTP": "a skill-repo source kind (git/local/http/mcp), not a network protocol",
-    "autobot-backend/type_defs/common.py::DEFAULT": "a chat message type, not a permission mode",
-    "autobot-slm-backend/models/manifest.py::retries": "a manifest health-probe failure count, not an operation retry budget",
+    "autobot-backend/agents/base_agent_types.py::timeout=30.0": "AgentRequest's deadline, not a circuit-breaker call timeout",
+    "autobot-backend/config/settings.py::cache_ttl=300": "config-file cache TTL (CONFIG_CACHE_TTL), not the LLM cache TTL",
+    "autobot-backend/security/session_posture.py::DEFAULT='default'": "a session ownership posture, not a permission mode",
+    "autobot-backend/services/gateway/types.py::CLOSED='closed'": "a gateway session status, not a circuit-breaker state",
+    "autobot-backend/services/permission_matcher.py::DEFAULT='default'": "MatchResult 'no rule matched', not a permission mode",
+    "autobot-backend/skills/models.py::HTTP='http'": "a skill-repo source kind (git/local/http/mcp), not a network protocol",
+    "autobot-backend/type_defs/common.py::DEFAULT='default'": "a chat message type, not a permission mode",
+    "autobot-slm-backend/models/manifest.py::retries=3": "a manifest health-probe failure count, not an operation retry budget",
 }
 
 
@@ -96,16 +96,19 @@ def bindings(source: str) -> list[tuple[str, object]]:
 
 
 def rehardcodes(sources: dict[str, str]) -> set[str]:
-    """``path::name`` of every copy, outside the SSOT files, of a value an SSOT file defines."""
+    """``path::name=value`` of every copy, outside the SSOT files, of a value an SSOT file defines.
+
+    The value is part of the key, so a second same-named copy in a recorded file is its own entry.
+    """
     groups: dict[tuple[str, str], set[tuple[str, str]]] = defaultdict(set)
     for rel, source in sources.items():
         for name, literal in bindings(source):
-            groups[(normalise(name), repr(literal))].add((rel, name))
+            groups[(normalise(name), repr(literal))].add((rel, f"{name}={literal!r}"))
     found = set()
     for members in groups.values():
         files = {rel for rel, _ in members}
         if files & SSOT and len(files) > 1:
-            found |= {f"{rel}::{name}" for rel, name in members if rel not in SSOT}
+            found |= {f"{rel}::{binding}" for rel, binding in members if rel not in SSOT}
     return found
 
 
@@ -130,7 +133,7 @@ def test_a_planted_copy_of_an_ssot_value_is_caught() -> None:
         "autobot-backend/x.py": "class C(BaseModel):\n    max_retries: int = Field(default=5, ge=0)\n",
         "autobot-backend/y.py": "_MAX_RETRIES = 5\nmax_retries = 4\nother_name = 5\n",
     }
-    assert rehardcodes(sources) == {"autobot-backend/x.py::max_retries", "autobot-backend/y.py::_MAX_RETRIES"}
+    assert rehardcodes(sources) == {"autobot-backend/x.py::max_retries=5", "autobot-backend/y.py::_MAX_RETRIES=5"}
 
 
 def test_a_value_no_ssot_file_defines_is_not_a_rehardcode() -> None:

@@ -1771,8 +1771,8 @@ class InferenceOptimizationSettings(BaseModel):
     prompt_compression_preserve_code: bool = True
     prompt_compression_aggressive: bool = False
     cache_enabled: bool = True
-    cache_l1_size: int = Field(default_factory=lambda: config.misc.cache_l1_size)  # #19730
-    cache_l2_ttl: int = Field(default_factory=lambda: config.misc.cache_l2_ttl)
+    cache_l1_size: int = config.misc.cache_l1_size  # #19730
+    cache_l2_ttl: int = config.misc.cache_l2_ttl
 
     cloud_connection_pool_size: int = 100
     cloud_batch_window_ms: int = 50
@@ -1958,7 +1958,7 @@ class AgentModelUpdate(BaseModel):
 
     agent_id: str
     model: str
-    provider: str | None = Field(default_factory=lambda: config.llm.provider)  # #19730
+    provider: str | None = config.llm.provider  # #19730
 
 
 # ---------------------------------------------------------------------------
