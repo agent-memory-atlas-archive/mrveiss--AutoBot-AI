@@ -30,6 +30,7 @@ from pathlib import Path
 
 from repo_tests._paths import repo_root
 from repo_tests._ratchet_base import base_table
+from repo_tests._reach import declare
 
 _APPS = ("autobot-frontend/src", "autobot-slm-frontend/src")
 _KIT_INDEX = "libs/autobot-ui/index.ts"
@@ -51,11 +52,6 @@ PINS = {"kit_export_shadows": 3}  # #19683 retired the SLM createLogger shadow
 
 # RiskTier (generated wire type) and ServiceHealth (#15401), see the docstring.
 FLOOR = 2
-
-# Measured on ee1bfa15dc: 127 kit names, 497 non-test .ts files across both apps. Far fewer
-# means the scan read the wrong tree.
-MIN_KIT_NAMES = 100
-MIN_TS_FILES_SCANNED = 400
 
 
 def _module_file(base: Path, spec: str) -> Path | None:
@@ -133,15 +129,51 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         assert scan_shadows([root], {"Foo"})[0] == ["x.test.y/a.ts: Foo"]
 
 
+def _kit_names(root: Path) -> list[str]:
+    index = root / _KIT_INDEX
+    if not index.is_file():
+        return []
+    return sorted(kit_export_names(index.read_text(encoding="utf-8"), index.parent))
+
+
+def _scanned_ts_files(root: Path) -> list[str]:
+    found: list[str] = []
+    for rel in _APPS:
+        src = root / rel
+        if not src.is_dir():
+            continue
+        for path in sorted(src.rglob("*.ts")):
+            if not _EXCLUDED.search("/" + path.relative_to(src).as_posix()):
+                found.append(path.relative_to(root).as_posix())
+    return found
+
+
+KIT_NAMES_REACH = declare(
+    "kit-export-names-14908",
+    discover=_kit_names,
+    floor=162,  # mid-window: population 172, window (152, 172)
+    growth=20,
+    what="names the shared kit exports",
+)
+
+TS_FILES_REACH = declare(
+    "kit-shadow-ts-files-scanned-14908",
+    discover=_scanned_ts_files,
+    floor=474,  # mid-window: population 499, window (449, 499)
+    growth=50,
+    what="non-test .ts files scanned for kit-name redeclarations",
+    roots=_APPS,
+)
+
+
 def test_neither_gui_redeclares_more_kit_names_than_pinned() -> None:
     root = repo_root()
-    index = root / _KIT_INDEX
-    kit_names = kit_export_names(index.read_text(encoding="utf-8"), index.parent)
-    assert len(kit_names) >= MIN_KIT_NAMES, f"only {len(kit_names)} names read from {_KIT_INDEX}"
+    kit_names = set(KIT_NAMES_REACH.examined(root))
     roots = [root / rel for rel in _APPS]
     assert all(r.is_dir() for r in roots), f"{_APPS} has moved; this guard reads it by path"
     hits, scanned = scan_shadows(roots, kit_names)
-    assert scanned >= MIN_TS_FILES_SCANNED, f"only {scanned} .ts files scanned"
+    TS_FILES_REACH.examined(root)
+    assert scanned, "no .ts file scanned"
     pinned = PINS["kit_export_shadows"]
     listing = "\n  ".join(hits)
     assert len(hits) <= pinned, (

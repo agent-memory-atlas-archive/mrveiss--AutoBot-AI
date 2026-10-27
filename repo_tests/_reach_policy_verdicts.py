@@ -410,6 +410,12 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "FIXED_INVENTORY",
         "The requirements files and the root pyproject.toml: a small, deliberately enumerable set.",
     ),
+    "kit-export-names-14908": (ABSOLUTE, "NOT_PATHS", "Names parsed out of the kit's index, not files."),
+    "kit-shadow-ts-files-scanned-14908": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "The scanned .ts files are every non-test file under two app trees; no reference count co-moves with it.",
+    ),
 }
 
 #: Rows whose name sorts n-z live in the sibling module (600-line ceiling); one table, one name.
