@@ -52,6 +52,7 @@ _NO_HOSTS_MARKERS = (
 )
 
 
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 _RECAP_LINE_RE = re.compile(r"^\s*(\S+)\s*:\s*ok=(\d+)\s+changed=\d+\s+unreachable=(\d+)\s+failed=(\d+)", re.MULTILINE)
 
 
@@ -68,6 +69,34 @@ def ansible_subprocess_env(ansible_dir, **extra: str) -> dict:
 def ansible_exit_code(output: str, host: str | None, returncode: int | None) -> int | None:
     """``returncode``, except an exit-0 run that ``ansible_run_failure`` rejects reports 1 (#19475)."""
     return 1 if returncode == 0 and ansible_run_failure(output, host, returncode) else returncode
+
+
+def _last_recap(output: str) -> dict[str, tuple[int, int, int]]:
+    """``{host: (ok, unreachable, failed)}`` from the LAST PLAY RECAP of ``output``."""
+    tail = output[max(output.rfind("PLAY RECAP"), 0) :]
+    return {m[1]: tuple(int(n) for n in m.groups()[1:]) for m in _RECAP_LINE_RE.finditer(tail)}
+
+
+def limit_run_failure(output: str, limit: list[str] | None) -> str | None:
+    """Why a limited run reached none of the hosts its limit names beyond localhost, or None (#19762).
+
+    A multi-play playbook skips every play whose group the limit leaves out, which is normal; but
+    when ONLY localhost ran, every named host was skipped. Limit entries may be group names, so
+    this asks for any non-localhost recap host with ok>=1 rather than for each name.
+    """
+    named = [h for h in (limit or ()) if h not in _LOCAL_HOSTS]
+    if not named or any(c[0] >= 1 for h, c in _last_recap(output).items() if h not in _LOCAL_HOSTS):
+        return None
+    return f"no host named by the limit {named} ran a task (only localhost did)"
+
+
+def with_limit_proof(result: dict, limit: list[str] | None) -> dict:
+    """``result`` with an exit-0 run that ``limit_run_failure`` rejects turned into exit 1 (#19762).
+
+    The reason is appended as an ``ERROR!`` line so the caller's fatal-line extraction reports it.
+    """
+    why = limit_run_failure(result["output"], limit) if result.get("returncode") == 0 else None
+    return {**result, "returncode": 1, "output": f"{result['output']}\nERROR! {why}"} if why else result
 
 
 def ansible_run_failure(output: str, host: str | None, returncode: int | None) -> str | None:
@@ -87,8 +116,7 @@ def ansible_run_failure(output: str, host: str | None, returncode: int | None) -
     for marker in _NO_HOSTS_MARKERS:
         if marker in output:
             return f"ansible matched no hosts ({marker!r})"
-    tail = output[max(output.rfind("PLAY RECAP"), 0) :]
-    recap = {m[1]: tuple(int(n) for n in m.groups()[1:]) for m in _RECAP_LINE_RE.finditer(tail)}
+    recap = _last_recap(output)
     if host is not None and host not in recap:
         return f"target host {host} is absent from the PLAY RECAP"
     if host is not None and recap[host][0] < 1:

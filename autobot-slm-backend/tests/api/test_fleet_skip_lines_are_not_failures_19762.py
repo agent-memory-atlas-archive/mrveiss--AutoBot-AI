@@ -5,13 +5,15 @@
 ``update-all-nodes.yml`` is multi-play; with ``limit=["localhost", node_id]`` every play for a
 group the node is not in prints ``skipping: no hosts matched`` while the node's own plays run.
 #19475 matched that line over the whole output and turned a clean run (``failed=0``) into a halted
-stage. The inventory-level markers still fail the run, and the fleet outcome now requires the
-NODE in the recap -- ``localhost`` is always there, so "some host ran" proves nothing about it.
+stage. The inventory-level markers still fail the run, and ``execute_playbook`` now requires a
+host the limit names to have run -- ``localhost`` is always in the recap, so "some host ran"
+proves nothing about the node.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -60,17 +62,43 @@ def test_a_real_failure_in_the_recap_still_fails() -> None:
     assert _au.ansible_run_failure(_SKIPS + _recap(node_failed=1), _NODE, 0)
 
 
-def test_a_run_that_skipped_the_node_entirely_fails_for_the_node_though_localhost_ran() -> None:
+def test_a_run_that_skipped_the_node_entirely_is_not_proof_though_localhost_ran() -> None:
     absent = _SKIPS + _recap(with_node=False)
     assert _au.ansible_run_failure(absent, None, 0) is None  # localhost alone satisfies "some host ran"
-    assert _au.ansible_run_failure(absent, _NODE, 0)  # which is why the fleet outcome names the node
-    assert _au.ansible_run_failure(_SKIPS + _recap(node_ok=0), _NODE, 0)
+    assert _au.limit_run_failure(absent, ["localhost", _NODE])  # which is why the limit is checked too
+    assert _au.limit_run_failure(_SKIPS + _recap(node_ok=0), ["localhost", _NODE])
 
 
-def test_the_fleet_outcome_requires_the_node_itself_in_the_recap() -> None:
-    """Read as source: importing ``api/code_sync.py`` pulls in the backend."""
-    source = (_BACKEND_ROOT / "api" / "code_sync.py").read_text(encoding="utf-8")
-    start = source.index("async def _record_fleet_node_outcome(")
-    body = source[start : source.index("\nasync def ", start + 1)]
-    success_line = next(line for line in body.splitlines() if 'if playbook_result["success"]' in line)
-    assert 'ansible_run_failure(playbook_result["output"], node_id, 0) is None' in success_line
+def test_the_limit_proof_passes_when_a_named_host_ran() -> None:
+    assert _au.limit_run_failure(_SKIPS + _recap(), ["localhost", _NODE]) is None
+
+
+def test_a_group_name_in_the_limit_is_satisfied_by_any_member_that_ran() -> None:
+    # Limit entries may be groups; the recap lists hosts, so a group is never "absent".
+    assert _au.limit_run_failure(_SKIPS + _recap(), ["fleet_nodes"]) is None
+
+
+def test_a_localhost_only_or_empty_limit_asks_nothing_extra() -> None:
+    localhost_only = "PLAY RECAP ****\nlocalhost  : ok=11  changed=1  unreachable=0  failed=0\n"
+    assert _au.limit_run_failure(localhost_only, ["localhost"]) is None
+    assert _au.limit_run_failure(localhost_only, None) is None
+
+
+def test_the_executor_result_carries_the_reason_as_a_fatal_line() -> None:
+    absent = {"output": _SKIPS + _recap(with_node=False), "returncode": 0, "timed_out": False}
+    proved = _au.with_limit_proof(absent, ["localhost", _NODE])
+    assert proved["returncode"] == 1
+    assert proved["output"].splitlines()[-1].startswith("ERROR! no host named by the limit")
+    ran = {"output": _SKIPS + _recap(), "returncode": 0}
+    assert _au.with_limit_proof(ran, ["localhost", _NODE]) is ran
+    failed = {"output": "x", "returncode": 2}
+    assert _au.with_limit_proof(failed, ["localhost", _NODE]) is failed
+
+
+def test_execute_playbook_applies_the_limit_proof() -> None:
+    """Read as source: importing the executor pulls in the backend's DB layer."""
+    source = (_BACKEND_ROOT / "services" / "playbook_executor.py").read_text(encoding="utf-8")
+    start = source.index("    async def execute_playbook(")
+    nxt = re.search(r"\n    (async )?def |\n\S", source[start + 1 :])
+    body = source[start : start + 1 + nxt.start()] if nxt else source[start:]
+    assert "with_limit_proof(proc_result, limit)" in body
