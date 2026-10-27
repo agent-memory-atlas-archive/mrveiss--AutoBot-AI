@@ -27,6 +27,13 @@ SECRET_FILE_GLOBS: tuple[str, ...] = (
     ".env", ".env.*", "*.env", ".netrc", ".pgpass", ".htpasswd",
 )  # fmt: skip
 _WORD_SPLIT = re.compile(r"[-_.\s]+")
+#: ``key``/``keys`` names a secret only beside one of these words (``service-account-key.json``,
+#: ``ssh_key``), or as the whole stem of a data file (``key.json``); alone it is an ordinary word
+#: (``key-concepts.md``). #19696 review, #19796.
+_KEY_QUALIFIERS: frozenset[str] = frozenset(
+    {"service", "account", "api", "private", "secret", "ssh", "signing", "master", "access", "encryption"}
+)
+_KEY_DATA_SUFFIXES: frozenset[str] = frozenset({"json", "yaml", "yml", "txt", "toml", "ini"})
 
 
 def is_secret_file_name(name: str) -> bool:
@@ -37,4 +44,13 @@ def is_secret_file_name(name: str) -> bool:
     stem = lowered.rsplit(".", 1)[0] if "." in lowered.lstrip(".") else lowered
     words = [w for w in _WORD_SPLIT.split(stem) if w]
     joined_pairs = {a + b for a, b in zip(words, words[1:])}  # "api key" / "private_key" -> one word
-    return bool(SECRET_NAME_WORDS.intersection(words) or SECRET_NAME_WORDS.intersection(joined_pairs))
+    if SECRET_NAME_WORDS.intersection(words) or SECRET_NAME_WORDS.intersection(joined_pairs):
+        return True
+    return _names_a_key(words, lowered.rsplit(".", 1)[-1] if "." in lowered else "")
+
+
+def _names_a_key(words: list[str], suffix: str) -> bool:
+    """``key``/``keys`` after a qualifier word, or as the whole stem of a data file."""
+    if words in (["key"], ["keys"]):
+        return suffix in _KEY_DATA_SUFFIXES
+    return any(w in ("key", "keys") and i > 0 and words[i - 1] in _KEY_QUALIFIERS for i, w in enumerate(words))

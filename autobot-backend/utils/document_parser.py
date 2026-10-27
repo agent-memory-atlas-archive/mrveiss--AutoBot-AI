@@ -320,6 +320,7 @@ class DocumentParser:
             return ""
         except Exception as e:
             logger.error("Failed to parse .doc file: %s", e)
+            metadata["warning"] = f".doc parse failed: {e}"  # the caller rejects it, never an empty ingest
             return ""
 
 

@@ -37,7 +37,7 @@ _HOMES = frozenset({"autobot-backend/utils/file_categorization.py", "autobot-bac
 ALLOWED_LITERALS: dict[str, str] = {}
 
 _NAME = re.compile(
-    r"(?i)(_?(TEXT|HTML|DOCX|SUPPORTED)_?(FILE_)?EXTENSIONS|_?SKIP_DIR(S|ECTORIES)|_?EXCLUDED_DIRS|_?COCHANGE_SKIP_DIRS"
+    r"(?i)(_?(TEXT|HTML|DOCX|SUPPORTED|ALL_CODE)_?(FILE_)?EXTENSIONS|_?SKIP_DIR(S|ECTORIES)|_?EXCLUDED_DIRS|_?COCHANGE_SKIP_DIRS"
     r"|(DEFAULT_)?(EXCLUDED?|IGNORED?|SKIP)_(DIRS?|DIRECTORIES)|DEFAULT_(EXCLUDE|IGNORE|SKIP)_PATTERNS)$"
 )
 _WRAPPERS = frozenset({"set", "frozenset", "tuple", "list"})
@@ -118,11 +118,27 @@ def test_extension_and_skip_dir_sets_have_one_home_on_the_live_tree() -> None:
     )
 
 
-def test_the_allowlist_names_only_modules_that_still_exist_and_say_why() -> None:
-    root = repo_root()
+def stale_allowlist(root: Path, allowed: dict[str, str]) -> list[str]:
+    """Allowlisted paths that are gone or no longer re-declare a literal: each entry must leave then."""
+    stale = []
+    for rel in allowed:
+        path = root / rel
+        if not path.is_file() or not literal_copies(path.read_text(encoding="utf-8"), rel):
+            stale.append(rel)
+    return stale
+
+
+def test_the_allowlist_names_only_live_duplicates_and_says_why() -> None:
+    assert stale_allowlist(repo_root(), ALLOWED_LITERALS) == [], "remove the stale ALLOWED_LITERALS entries"
     for rel, reason in ALLOWED_LITERALS.items():
-        assert (root / rel).is_file(), f"{rel} is allowlisted but gone; remove the entry"
         assert re.search(r"#\d+", reason), f"{rel}: the allowlist reason must cite an issue"
+
+
+def test_an_allowlisted_file_that_dropped_its_literal_is_stale(tmp_path: Path) -> None:
+    (tmp_path / "keeps.py").write_text("_TEXT_EXTENSIONS = {'.md', '.txt'}\n", encoding="utf-8")
+    (tmp_path / "fixed.py").write_text("from utils.file_types import TEXT_FILE_EXTENSIONS\n", encoding="utf-8")
+    allowed = {"keeps.py": "#1", "fixed.py": "#2", "gone.py": "#3"}
+    assert stale_allowlist(tmp_path, allowed) == ["fixed.py", "gone.py"]
 
 
 def test_the_homes_exist_and_export_the_canonical_names() -> None:
@@ -160,6 +176,7 @@ def _targets(node: ast.AST) -> list[ast.AST]:
         "DEFAULT_IGNORE_PATTERNS = ['__pycache__', '*.pyc']\n",
         "DEFAULT_SKIP_PATTERNS = ['x', 'y']\n",
         "EXCLUDE_DIRS = frozenset({'venv', 'dist'})\n",
+        "ALL_CODE_EXTENSIONS = {'.py', '.ts'}\n",
     ],
 )
 def test_each_restated_literal_shape_is_flagged(source: str) -> None:

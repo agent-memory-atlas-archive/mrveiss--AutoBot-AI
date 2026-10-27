@@ -53,3 +53,17 @@ def test_the_extractor_html_formats_are_the_canonical_set() -> None:
 
 def test_the_text_set_covers_every_extension_the_three_old_copies_accepted() -> None:
     assert {".csv", ".json", ".htm", ".rst", ".xml", ".kt", ".tsx", ".md", ".yaml"} <= TEXT_FILE_EXTENSIONS
+
+
+def test_a_textract_failure_is_recorded_so_the_extractor_rejects_it(legacy_doc, monkeypatch) -> None:
+    """textract raising (not just missing) used to return "" with no warning: an empty ingest (#19696 review)."""
+    import sys
+    import types
+
+    from utils.document_parser import document_parser
+
+    broken = types.SimpleNamespace(process=lambda path: (_ for _ in ()).throw(RuntimeError("corrupt OLE stream")))
+    monkeypatch.setitem(sys.modules, "textract", broken)
+    metadata: dict = {}
+    assert document_parser._parse_doc_fallback(legacy_doc, metadata) == ""
+    assert metadata["warning"] == ".doc parse failed: corrupt OLE stream"
