@@ -10562,9 +10562,11 @@ export interface paths {
         };
         /**
          * Get Available Embedding Models
-         * @description Get list of available embedding models.
+         * @description Moved to ``GET /api/embeddings/models``, the one embedding-model listing (#19378).
          *
-         *     Issue #744: Requires authenticated user.
+         *     This listing used its own name patterns and fell back to a hard-coded pair, so it could offer a
+         *     chat model or a model that is not installed. The options endpoint filters with the canonical
+         *     ``is_embedding_model_id`` and marks the active model.
          */
         get: operations["get_available_embedding_models_api_llm_embedding_models_get"];
         put?: never;
@@ -33420,9 +33422,10 @@ export interface paths {
         };
         /**
          * Get Available Embedding Models
-         * @description Get available embedding models from all providers.
+         * @description The embedding models the user can switch to right now, with the active one marked (#19378).
          *
-         *     Issue #744: Requires authenticated user.
+         *     This used to return the provider lists saved in settings.json, which nothing keeps current;
+         *     ``GET /api/llm/embedding/models`` (its own name patterns) now redirects here.
          */
         get: operations["get_available_embedding_models_api_embeddings_models_get"];
         put?: never;
@@ -40724,7 +40727,7 @@ export interface paths {
         put?: never;
         /**
          * Clear Redis Cache
-         * @description Clear Redis cache for specific database or all databases.
+         * @description Clear one cache database, or each distinct one once for ``all``; anything else is a 400 (#19497, #19365).
          */
         post: operations["clear_redis_cache_api_cache_redis_clear__database__post"];
         delete?: never;
@@ -45715,17 +45718,18 @@ export interface paths {
          *     Returns:
          *         JSONResponse with service metrics
          *
-         *     Example Response:
+         *     Example Response (numbers illustrative; live values are RAGConfig.graph_weight,
+         *     timeout_seconds and graph_timeout_seconds):
          *         ```json
          *         {
          *             "service": "GraphRAGService",
-         *             "graph_weight": "<RAGConfig.graph_weight>",
+         *             "graph_weight": 0.5,
          *             "entity_extraction_enabled": true,
          *             "rag_service": {
          *                 "enable_advanced_rag": true,
-         *                 "timeout_seconds": "<RAGConfig.timeout_seconds>"
+         *                 "timeout_seconds": 20.0
          *             },
-         *             "graph_timeout_seconds": "<RAGConfig.graph_timeout_seconds>",
+         *             "graph_timeout_seconds": 15.0,
          *             "graph_initialized": true
          *         }
          *         ```
@@ -74075,10 +74079,37 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * EmbeddingModelOption
+         * @description One embedding model the user can switch to.
+         */
+        EmbeddingModelOption: {
+            /** Name */
+            name: string;
+            /** Provider */
+            provider?: string | null;
+            /** Available */
+            available: boolean;
+            /** Active */
+            active: boolean;
+            /** Dimension */
+            dimension?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * EmbeddingModelsData
-         * @description data payload for GET /models.
+         * @description The embedding-model choices, with the active one marked and listed even when no provider reports it.
          */
         EmbeddingModelsData: {
+            /** Active */
+            active: string;
+            /** Models */
+            models: components["schemas"]["EmbeddingModelOption"][];
+            /** Total Count */
+            total_count: number;
+            /** Providers Errored */
+            providers_errored?: string[];
+        } & {
             [key: string]: unknown;
         };
         /**
@@ -82244,18 +82275,6 @@ export interface components {
             detail: string;
             /** Redirect */
             redirect: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * LLMEmbeddingModelsResponse
-         * @description Response for GET /llm/embedding/models.
-         */
-        LLMEmbeddingModelsResponse: {
-            /** Models */
-            models: unknown[];
-            /** Total Count */
-            total_count: number;
         } & {
             [key: string]: unknown;
         };
@@ -92353,9 +92372,11 @@ export interface components {
         };
         /**
          * RedisDatabase
-         * @description Type-safe database enumeration aligned with redis-databases.yaml (#2670).
+         * @description Type-safe database names aligned with redis-databases.yaml (#2670).
          *
-         *     Each value corresponds to a Redis database number (0-15).
+         *     A member is a NAME. Its value is the YAML default number, kept only so members stay
+         *     distinct; it is not where a database lives. Resolve one with
+         *     ``database_names.database_number``, which honours ``AUTOBOT_REDIS_DB_*`` (#19232).
          * @enum {integer}
          */
         RedisDatabase: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 14 | 15 | 8 | 0;
@@ -119897,7 +119918,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LLMEmbeddingModelsResponse"];
+                    "application/json": unknown;
                 };
             };
         };
