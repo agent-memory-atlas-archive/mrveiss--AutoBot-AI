@@ -69,8 +69,9 @@ export interface RequestOptions {
    */
   suppressErrorLog?: boolean
   /**
-   * When true, a 401 is returned to the caller without clearing the session. Only for
+   * When true, a 401 is returned to the caller without clearing the session: for
    * connectivity diagnostics, which report a status instead of acting on it (#12363).
+   * Defaults to the client's `setKeepSessionOn401` setting.
    */
   keepSessionOn401?: boolean
   /**
@@ -102,6 +103,7 @@ export class SlmApiClient {
   private baseUrlOverride: string | null = null
   private defaultHeaders: Record<string, string>
   private defaultTimeout: number
+  private defaultKeepSessionOn401 = false
 
   constructor() {
     this.defaultHeaders = {
@@ -118,6 +120,12 @@ export class SlmApiClient {
   // Public setter for default timeout.
   setTimeout(timeout: number): void {
     this.defaultTimeout = timeout
+  }
+
+  // A client whose 401 does not mean the SLM session is gone (the main backend until
+  // one identity spans both backends, #10193) surfaces the 401 instead of logging out.
+  setKeepSessionOn401(keep: boolean): void {
+    this.defaultKeepSessionOn401 = keep
   }
 
   getConfiguration(): Record<string, unknown> {
@@ -182,7 +190,7 @@ export class SlmApiClient {
       timeout = this.defaultTimeout,
       signal: externalSignal,
       params,
-      keepSessionOn401 = false,
+      keepSessionOn401 = this.defaultKeepSessionOn401,
     } = options
 
     const baseUrl = this.resolveBaseUrl()

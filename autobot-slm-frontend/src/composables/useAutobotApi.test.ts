@@ -43,6 +43,13 @@ describe('useAutobotApi transport (#12363)', () => {
 
     expect(backendClient.baseUrl).toBe(BACKEND)
   })
+
+  it('surfaces a main-backend 401 instead of logging out until #10193', () => {
+    backendClient.keepSessionOn401 = null
+    useAutobotApi()
+
+    expect(backendClient.keepSessionOn401).toBe(true)
+  })
 })
 
 describe('useAutobotApi endpoints moved off raw fetch (#13079)', () => {

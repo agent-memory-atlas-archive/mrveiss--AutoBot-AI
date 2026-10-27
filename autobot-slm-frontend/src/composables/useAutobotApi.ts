@@ -605,11 +605,13 @@ export function autobotApiErrorMessage(err: unknown, fallback: string): string {
  * ADR-008 rule 3 names this file as the main-backend transport owner; `useAutobotApi` and
  * the per-feature admin composables (e.g. `useWebResearchAdminApi`) all build their client
  * with it. It is an `SlmApiClient` pointed at the main backend (#12363), so the timeout, the
- * SLM bearer token, the 401 session handling, GET retries and `HttpError` are the SLM's own.
+ * SLM bearer token, GET retries and `HttpError` are the SLM's own.
  */
 export function createAutobotBackendClient(): SlmApiClient {
   const client = new SlmApiClient()
   client.setBaseUrl(getBackendUrl())
+  // A 401 is an error, never a logout, until one identity spans both backends (#10193, #10400)
+  client.setKeepSessionOn401(true)
   return client
 }
 
@@ -1661,15 +1663,13 @@ export function useAutobotApi() {
   /**
    * Reachability probe behind the "Test connection" control (#13079).
    *
-   * It reads the raw response so the probe reports "reachable but rejected"
-   * rather than throwing: a connectivity diagnostic reports the status, it does
-   * not raise on a 4xx/5xx, and its 401 never ends the operator's session.
+   * It reads the raw response so a connectivity diagnostic reports "reachable but rejected"
+   * instead of raising on a 4xx/5xx, and its 401 never ends the session, even after #10193.
    */
   async function probeBackendHealth(): Promise<BackendHealthProbe> {
     const response = await client.rawRequest('/health', { keepSessionOn401: true })
     return { ok: response.ok, status: response.status }
   }
-
 
   // =============================================================================
   // Skills + skill governance (#731 / #951 / #13079)

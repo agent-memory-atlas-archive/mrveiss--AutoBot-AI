@@ -29,6 +29,8 @@ export const backendClient = {
   rawRequest: vi.fn(),
   /** The base URL the last client was pointed at. */
   baseUrl: null as string | null,
+  /** The last client's `setKeepSessionOn401` setting. */
+  keepSessionOn401: null as boolean | null,
 }
 
 class MockSlmApiClient {
@@ -40,6 +42,9 @@ class MockSlmApiClient {
   rawRequest = backendClient.rawRequest
   setBaseUrl(url: string): void {
     backendClient.baseUrl = url
+  }
+  setKeepSessionOn401(keep: boolean): void {
+    backendClient.keepSessionOn401 = keep
   }
 }
 
