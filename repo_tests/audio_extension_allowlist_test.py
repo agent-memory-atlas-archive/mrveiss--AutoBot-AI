@@ -240,12 +240,9 @@ REACH = declare(
     # exemptions, 1 + 657 files), so population == what the loop can complete. Measured on this tree:
     # tracked python 7254 -> population 6596 (6598 on train 76's tree); unreadable 0, unparseable 0
     # (an unparseable file fails the test outright), so skips=0 and completed() == population.
-    # Re-pinned mid-window on PR #19651. Measured (tracked .py minus repo_tests/ minus the canonical
-    # file): 6598 when 6396 was pinned (2ca950e6c0), 6756 on origin/main
-    # (ee1bfa15dc; +158, main's own growth, which brought 6396 to the edge of the bottom 40), and 6759
-    # with this PR's 3 new files (+3, which tipped it). Window (6359, 6759), ~200 files of headroom.
-    # #19653 also re-pins this shared floor; the merge train sets it once from the merged tree.
-    floor=6559,
+    # Window [6196, 6596]; floor=6396 is mid-window: ~200 files of headroom from the bottom and
+    # under completed(), so ordinary growth or shrink no longer forces a re-pin every train.
+    floor=6559,  # mid-window: population 6759, window (6359, 6759)
     growth=400,
     skips=0,
     what="tracked python files",
