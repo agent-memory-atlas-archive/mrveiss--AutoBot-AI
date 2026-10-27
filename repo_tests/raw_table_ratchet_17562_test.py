@@ -29,7 +29,7 @@ import re
 from pathlib import Path
 
 from repo_tests._paths import repo_root
-from repo_tests._ratchet_base import base_table
+from repo_tests._ratchet_base import base_table, base_tree_texts
 
 _EXCLUDED = re.compile(r"(\.test\.|\.spec\.|\.stories\.|/__tests__/)")
 _TAG = re.compile(r"<table(?:[\s>]|$)")
@@ -125,11 +125,25 @@ def scan_raw_tables(root: Path) -> tuple[dict[str, int], int]:
         if _EXCLUDED.search("/" + rel):
             continue
         scanned += 1
-        text = _HTML_COMMENT.sub("", path.read_text(encoding="utf-8"))
-        n = sum(1 for line in text.splitlines() if _TAG.search(line) and not _COMMENT.match(line))
-        if n:
+        if n := count_tables(path.read_text(encoding="utf-8")):
             sites[rel] = n
     return sites, scanned
+
+
+def count_tables(text: str) -> int:
+    """Raw ``<table>``-opening lines in one ``.vue`` file, closed HTML comments stripped first."""
+    text = _HTML_COMMENT.sub("", text)
+    return sum(1 for line in text.splitlines() if _TAG.search(line) and not _COMMENT.match(line))
+
+
+def base_sites(app: str) -> dict[str, int]:
+    """Per-file table counts under *app* in the BASE tree, for comparing against a legacy total pin."""
+    sites = {}
+    for path, text in base_tree_texts(repo_root(), app).items():
+        rel = path[len(app) + 1 :]
+        if path.endswith(".vue") and not _EXCLUDED.search("/" + rel) and (n := count_tables(text)):
+            sites[rel] = n
+    return sites
 
 
 def compare_to_pin(sites: dict[str, int], pinned: dict[str, int]) -> tuple[dict, list[str]]:
@@ -202,8 +216,8 @@ def test_the_pins_were_not_raised_against_the_base() -> None:
         old = base.get(rel)
         if old is None:
             continue
-        if isinstance(old, int):  # the base pinned a total per app (before #19698)
+        if isinstance(old, int):  # the base pinned a total per app (before #19698): measure its tree
             assert len(pinned) <= old, f"PINS[{rel!r}] lists {len(pinned)} files, the base pinned {old} (#17562)."
-            continue
+            old = base_sites(rel)
         new, _ = compare_to_pin(pinned, old)
         assert not new, f"PINS[{rel!r}] rose or gained entries against the base (path: (base, now)): {new} (#17562)."

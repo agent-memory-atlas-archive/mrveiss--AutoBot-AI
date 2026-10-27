@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 from repo_tests._paths import repo_root
-from repo_tests._ratchet_base import base_table
+from repo_tests._ratchet_base import base_table, base_tree_texts
 from repo_tests._reach import declare
 
 _ROOTS = ("autobot-backend", "autobot-slm-backend", "autobot_shared")
@@ -100,6 +100,16 @@ def _live(root: Path) -> list[str]:
     return found
 
 
+def base_per_file(root: Path) -> dict[str, int]:
+    """Per-file literal counts in the BASE tree, same scope as :func:`_live`, for a legacy total pin."""
+    found = []
+    for top in _ROOTS:
+        for path, text in base_tree_texts(root, top).items():
+            if path.endswith(".py") and not _TEST.search(path):
+                found += placeholder_literals(text, path)
+    return per_file(found)
+
+
 def per_file(found: list[str]) -> dict[str, int]:
     """Count hits (``path:line: literal``) per path."""
     counts: dict[str, int] = {}
@@ -128,9 +138,9 @@ def test_no_new_placeholder_spelling() -> None:
 
 def test_the_pin_was_not_raised_against_the_base() -> None:
     base = base_table(repo_root(), (_THIS,), "PIN")
-    if "placeholder_literals" in base:  # the base pinned a bare total (before #19698)
+    if "placeholder_literals" in base:  # the base pinned a bare total (before #19698): measure its tree
         assert sum(PIN.values()) <= base["placeholder_literals"], "the pin only goes down (#19337)"
-        return
+        base = base_per_file(repo_root())
     new, _ = compare_to_pin(PIN, base)
     assert (
         not new

@@ -42,7 +42,9 @@ _EXEMPT = {
 }
 #: A path-qualified reference, keyed by its path relative to the ansible root: ``playbooks/x.yml``
 #: or ``tests/playbooks/x.yml``. ``playbooks/foo.yml`` is NOT satisfied by a ``foo.yml`` elsewhere (#19698).
-_QUALIFIED = re.compile(r"((?:tests/)?playbooks/[\w.-]+\.ya?ml)\b")
+#: The whole filename is captured: ``playbooks/deploy.yml.bak`` is its own (missing) reference, not
+#: ``playbooks/deploy.yml`` cut short at the dot (#19698 review). A sentence's closing ``.`` is not part of it.
+_QUALIFIED = re.compile(r"((?:tests/)?playbooks/[\w.-]*?\.ya?ml(?:\.[\w-]+)*)(?![\w-])")
 #: A bare name given to ``run_playbook`` (single or double quoted, #19698); the function resolves it
 #: under ``playbooks/`` (``$PLAYBOOK_DIR/$playbook`` in deploy.sh).
 _RUN_PLAYBOOK = re.compile(r"""\brun_playbook\s+(["'])([\w.-]+\.ya?ml)\1""")
@@ -117,3 +119,10 @@ def test_contrast_the_path_is_the_key_not_the_filename() -> None:
     assert _missing("ansible-playbook playbooks/bar.yml", known) == {"playbooks/bar.yml"}
     assert not _missing("ansible-playbook tests/playbooks/bar.yml", known)
     assert _missing('run_playbook "foo.yml" "x"', known) == {"playbooks/foo.yml"}
+
+
+def test_contrast_the_whole_filename_is_the_reference() -> None:
+    known = {"playbooks/deploy.yml"}
+    assert _missing("restore playbooks/deploy.yml.bak first", known) == {"playbooks/deploy.yml.bak"}
+    assert not _missing("Run playbooks/deploy.yml.", known)
+    assert not _missing("see playbooks/deploy.yml, then", known)

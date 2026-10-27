@@ -61,7 +61,10 @@ _ALTERNATION = re.compile(r"\b(semantic|keyword|hybrid|auto)\b\s*\|\s*\(?\??:?(s
 
 
 def _mode_literal(node: ast.AST | None, *, auto: bool = False) -> str | None:
-    """The mode literal *node* is. ``"auto"`` counts only where *auto* says the scope is a search."""
+    """The mode literal *node* is, read through ``Field(default=...)``. ``"auto"`` counts only where
+    *auto* says the scope is a search."""
+    if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", "")) == "Field":
+        node = next((k.value for k in node.keywords if k.arg == "default"), node.args[0] if node.args else None)
     if isinstance(node, ast.Constant) and node.value in (_MODES if auto else _DISTINCT):
         return node.value
     return None
@@ -93,36 +96,39 @@ def _assign_hits(node: ast.AST, search_scope: bool) -> list[str]:
     return hits
 
 
-def _binding_hits(node: ast.AST, scope: str = "") -> list[str]:
+def _binding_hits(node: ast.AST, scope: tuple[str, bool] = ("", False)) -> list[str]:
     """``mode = "hybrid"``, ``mode: str = "hybrid"`` and ``def f(mode="hybrid")``.
 
     ``"auto"`` is read only inside a scope (function or class) whose name says *search*, or on a
     ``*search_mode*`` name: ``mode="auto"`` is also an extraction, protection or retrieval-strategy
     mode elsewhere, and those are other vocabularies (#19698).
     """
+    name, in_class = scope
     hits = []
     if isinstance(node, ast.AnnAssign | ast.Assign) and node.value is not None:
-        hits += _assign_hits(node, _is_search(scope))
+        hits += _assign_hits(node, _is_search(name))
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        # A method's search class counts (``SearchRequest.__init__``); an enclosing function does not.
+        search = _is_search(node.name) or (in_class and _is_search(name))
         args = node.args.args[len(node.args.args) - len(node.args.defaults) :]
         pairs = list(zip(args, node.args.defaults)) + list(zip(node.args.kwonlyargs, node.args.kw_defaults))
         for a, d in pairs:
-            hit = _mode_literal(d, auto=_is_search(node.name) or _is_search(a.arg)) if _MODE_NAME.match(a.arg) else None
+            hit = _mode_literal(d, auto=search or _is_search(a.arg)) if _MODE_NAME.match(a.arg) else None
             hits += [hit] if hit else []
     return hits
 
 
-def _scopes(tree: ast.AST) -> dict[int, str]:
-    """``id(node) -> name of the nearest enclosing function or class``."""
-    scope: dict[int, str] = {}
-    stack: list[tuple[ast.AST, str]] = [(tree, "")]
+def _scopes(tree: ast.AST) -> dict[int, tuple[str, bool]]:
+    """``id(node) -> (name, is a class)`` of the nearest enclosing function or class."""
+    scope: dict[int, tuple[str, bool]] = {}
+    stack: list[tuple[ast.AST, tuple[str, bool]]] = [(tree, ("", False))]
     while stack:
-        node, name = stack.pop()
+        node, here = stack.pop()
         if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
-            name = node.name
+            here = (node.name, isinstance(node, ast.ClassDef))
         for child in ast.iter_child_nodes(node):
-            scope[id(child)] = name
-            stack.append((child, name))
+            scope[id(child)] = here
+            stack.append((child, here))
     return scope
 
 
@@ -138,7 +144,7 @@ def mode_copies(source: str, rel: str) -> list[str]:
             found.append(f"{rel}:{node.lineno}: a pattern/regex literal spelling the search modes")
         found += [
             f"{rel}:{node.lineno}: mode defaults to the literal {m!r}"
-            for m in _binding_hits(node, scope.get(id(node), ""))
+            for m in _binding_hits(node, scope.get(id(node), ("", False)))
         ]
     return found
 
@@ -170,6 +176,9 @@ def test_the_home_lists_exactly_the_modes_the_api_accepts() -> None:
         'search_mode = "auto"\n',
         'def search(q):\n    if q:\n        try:\n            mode = "auto"\n        finally:\n            pass\n',
         'async def search(q):\n    with ctx():\n        mode: str = "auto"\n',
+        'class SearchRequest(BaseModel):\n    mode: str = Field(default="auto")\n',
+        'class R(BaseModel):\n    mode: str = Field("hybrid", description="x")\n',
+        'class SearchRequest:\n    def __init__(self, mode="auto"): ...\n',
         'class R(BaseModel):\n    mode: str = Field(default="x", pattern=r"^(semantic|keyword|hybrid|auto)\\z")\n',
         'RX = "keyword|hybrid"\n',
     ],
@@ -185,6 +194,8 @@ def test_the_constants_and_unrelated_words_are_not_copies() -> None:
         'def g(engine="auto", fmt="hybrid-car"): ...\n'
         'def get_context(q, mode: str = "auto"): ...\n'
         'def search(q):\n    def extract(mode="auto"): ...\n    if q:\n        cfg = "auto"\n'
+        'class Extractor:\n    mode: str = Field(default="auto")\n'
+        "class R(BaseModel):\n    limit: int = Field(default=5)\n"
         'class Extractor:\n    def __init__(self, mode: str = "auto"): ...\n'
         'class R(BaseModel):\n    x: str = Field(pattern="^(" + "|".join(MODES) + ")$")\n'
         'PAT = "auto|manual"\n'

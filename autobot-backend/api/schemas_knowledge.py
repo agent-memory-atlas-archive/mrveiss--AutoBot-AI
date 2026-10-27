@@ -4971,7 +4971,7 @@ class ScopedSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Search query")
     top_k: int = Field(default=10, ge=1, le=100, description="Maximum results")
     mode: str = Field(
-        default="hybrid",
+        default=CategoryDefaults.SEARCH_MODE_HYBRID,
         pattern=r"^(" + "|".join(CategoryDefaults.SEARCH_MODES) + r")\z",
         description="Search mode",
     )
