@@ -47,7 +47,7 @@ _COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
 # MetricsSummary and SystemHealth left). Lower it by exactly what a PR removes: #19683
 # retires the SLM debugUtils createLogger, so whichever of it and this guard lands second
 # lowers the pin to 3. The SLM's useFocusTrap fork is the other removable one.
-PINS = {"kit_export_shadows": 4}
+PINS = {"kit_export_shadows": 3}  # #19683 retired the SLM createLogger shadow
 
 # RiskTier (generated wire type) and ServiceHealth (#15401), see the docstring.
 FLOOR = 2
