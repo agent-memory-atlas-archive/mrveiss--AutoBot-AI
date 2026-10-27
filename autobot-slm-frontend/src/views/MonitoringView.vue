@@ -14,11 +14,14 @@
  */
 
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { PollingPausedAlert } from '@autobot/ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useFleetStore } from '@/stores/fleet'
 import { useAuthStore } from '@/stores/auth'
 import { useFleetMetrics } from '@/composables/useFleetMetrics'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const fleetStore = useFleetStore()
@@ -26,6 +29,7 @@ const fleetStore = useFleetStore()
 const {
   systemHealth,
   activeAlertCount,
+  poller,
 } = useFleetMetrics({ autoFetch: true, pollInterval: 30000 })
 
 // Navigation tabs for monitoring sub-routes (all SLM monitoring - Issue #729)
@@ -75,6 +79,7 @@ function getStatusColor(status: string): string {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden bg-gray-50">
+    <PollingPausedAlert :poller="poller" :message="t('common.polling.paused')" :retry-label="t('common.polling.retry')" class="mx-6 mt-4" @retry="poller.start('')" />
     <!-- Header -->
     <div class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">

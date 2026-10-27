@@ -17,7 +17,8 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { BaseAlert } from '@autobot/ui'
+import { BaseAlert, PollingPausedAlert } from '@autobot/ui'
+import { useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useSlmWebSocket } from '@/composables/useSlmWebSocket'
 import { createLogger } from '@/utils/debugUtils'
@@ -72,9 +73,6 @@ const pageSize = 50
 
 // Issue #1019: Track expanded error contexts
 const expandedErrors = ref<Set<string>>(new Set())
-
-// Refresh interval
-let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 // Status filter options
 const statusOptions = [
@@ -171,7 +169,7 @@ function toggleErrorDetail(serviceName: string): void {
 
 
 
-async function fetchServices(): Promise<void> {
+async function fetchServices(): Promise<boolean> {
   try {
     const response = await api.getNodeServices(props.nodeId, {
       status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
@@ -184,9 +182,11 @@ async function fetchServices(): Promise<void> {
     totalServices.value = response.total
     lastRefresh.value = new Date().toISOString()
     errorMessage.value = null
+    return true
   } catch (error) {
     logger.error('Failed to fetch services:', error)
     errorMessage.value = 'Failed to load services'
+    return false
   } finally {
     isLoading.value = false
   }
@@ -235,6 +235,17 @@ function closeLogsModal(): void {
   logsServiceName.value = null
 }
 
+// #19482: shared dashboard policy; fetchServices() is false on a failed read, which the poller counts
+const servicesPoller = useDashboardPoller(async () => {
+  if (!(await fetchServices())) throw new Error('Services could not be loaded')
+}, props.autoRefreshInterval)
+
+// Refresh/Retry: clear the shown error, restart (also a paused) poller; auto-refresh off is a one-off read
+const restartServices = () => {
+  errorMessage.value = null
+  return autoRefresh.value ? servicesPoller.start('') : fetchServices()
+}
+
 // Debounced search
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
 watch(searchQuery, () => {
@@ -252,14 +263,7 @@ watch(statusFilter, () => {
 })
 
 // Watch auto-refresh changes
-watch(autoRefresh, (enabled) => {
-  if (enabled) {
-    refreshInterval = setInterval(fetchServices, props.autoRefreshInterval)
-  } else if (refreshInterval) {
-    clearInterval(refreshInterval)
-    refreshInterval = null
-  }
-})
+watch(autoRefresh, (enabled) => (enabled ? servicesPoller.start('') : servicesPoller.stop()))
 
 // Handle real-time service status updates via WebSocket
 function handleServiceStatusUpdate(
@@ -285,22 +289,15 @@ function handleServiceStatusUpdate(
 
 // Lifecycle
 onMounted(() => {
-  fetchServices()
+  restartServices()
 
   // Setup WebSocket for real-time updates
   connect()
   subscribe(props.nodeId)
   onServiceStatus(handleServiceStatusUpdate)
-
-  if (autoRefresh.value) {
-    refreshInterval = setInterval(fetchServices, props.autoRefreshInterval)
-  }
 })
 
 onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-  }
   if (searchTimeout) {
     clearTimeout(searchTimeout)
   }
@@ -350,6 +347,8 @@ onUnmounted(() => {
       </button>
     </div>
 
+    <PollingPausedAlert :poller="servicesPoller" :message="$t('common.polling.paused')" :retry-label="$t('common.polling.retry')" @retry="restartServices" />
+
     <!-- Error Banner -->
     <BaseAlert
       v-if="errorMessage"
@@ -391,7 +390,7 @@ onUnmounted(() => {
 
       <!-- Refresh button -->
       <button
-        @click="fetchServices"
+        @click="restartServices"
         :disabled="isLoading"
         class="p-1.5 text-gray-500 hover:text-gray-700 disabled:opacity-50"
         :title="$t('fleet.nodeServicesPanel.refresh')"
