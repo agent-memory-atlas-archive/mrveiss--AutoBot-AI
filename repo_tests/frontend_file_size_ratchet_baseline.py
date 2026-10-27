@@ -90,7 +90,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/components/knowledge/KnowledgeVerificationQueue.vue": 799,
     "autobot-frontend/src/components/knowledge/SystemKnowledgeManager.vue": 1034,  # #18849: 1035 -> 1034
     "autobot-frontend/src/components/knowledge/WebResearchPanel.vue": 779,
-    "autobot-frontend/src/components/knowledge/WebResearchSettings.vue": 1028,
     "autobot-frontend/src/components/knowledge/connectors/ConnectorConfigModal.vue": 1626,  # #18849: 1627 -> 1626
     "autobot-frontend/src/components/knowledge/modals/BulkEditModal.vue": 615,  # #18849: 616 -> 615
     "autobot-frontend/src/components/knowledge/modals/CategoryEditModal.vue": 726,  # #18849: 727 -> 726
@@ -134,8 +133,8 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-frontend/src/composables/useVoiceConversation.ts": 986,
     "autobot-frontend/src/composables/useVoiceOutput.ts": 1089,
     "autobot-frontend/src/composables/useWorkflowBuilder.ts": 1293,
-    "autobot-frontend/src/config/__tests__/ssot-config.spec.ts": 662,
-    "autobot-frontend/src/config/ssot-config.ts": 839,
+    "autobot-frontend/src/config/__tests__/ssot-config.spec.ts": 653,
+    "autobot-frontend/src/config/ssot-config.ts": 834,
     "autobot-frontend/src/models/controllers/ChatController.ts": 1156,
     "autobot-frontend/src/models/controllers/KnowledgeController.ts": 645,
     "autobot-frontend/src/models/repositories/ChatRepository.ts": 675,
@@ -182,29 +181,29 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-frontend/src/components/AddNodeModal.vue": 1067,  # #14777 batch 2: 1111 -> 1067
     "autobot-slm-frontend/src/components/fleet/DecommissionModal.vue": 619,  # #14777: 699 -> 621; 619 (#18941 review)
     "autobot-slm-frontend/src/components/fleet/NodeLifecyclePanel.vue": 943,
-    "autobot-slm-frontend/src/composables/useAutobotApi.ts": 2062,  # #18734: 2068 -> 2062
+    "autobot-slm-frontend/src/composables/useAutobotApi.ts": 2026,  # #19217: factory in, fallback/budget types out
     "autobot-slm-frontend/src/composables/useCodeSync.ts": 1078,
     "autobot-slm-frontend/src/composables/useOrchestrationManagement.ts": 693,
     "autobot-slm-frontend/src/composables/useSlmApi.ts": 1457,
     "autobot-slm-frontend/src/stores/fleet.ts": 994,
     "autobot-slm-frontend/src/types/slm.ts": 838,
     "autobot-slm-frontend/src/views/AgentsView.vue": 737,
-    "autobot-slm-frontend/src/views/CodeSyncView.vue": 2069,  # #18819: 2080 -> 2069
-    "autobot-slm-frontend/src/views/DeploymentsView.vue": 1623,  # #18819 + #14777: 1703 -> 1623
+    "autobot-slm-frontend/src/views/CodeSyncView.vue": 2039,  # #18819: 2080 -> 2069
+    "autobot-slm-frontend/src/views/DeploymentsView.vue": 1621,  # #18819 + #14777: 1703 -> 1623
     "autobot-slm-frontend/src/views/FleetOverview.vue": 708,  # #14780: 786 -> 708
     "autobot-slm-frontend/src/views/MaintenanceView.vue": 794,  # #14777 batch 2: 817 -> 794
     "autobot-slm-frontend/src/views/OrchestrationView.vue": 2189,
-    "autobot-slm-frontend/src/views/ReplicationView.vue": 706,  # #18819 + #14777: 731 -> 706
-    "autobot-slm-frontend/src/views/SecurityView.vue": 1374,  # #14780 BasePagination: 1386 -> 1374
+    "autobot-slm-frontend/src/views/ReplicationView.vue": 704,  # #18819 + #14777: 731 -> 706
+    "autobot-slm-frontend/src/views/SecurityView.vue": 1368,  # #14780 BasePagination: 1386 -> 1374
     "autobot-slm-frontend/src/views/SetupWizardView.vue": 1834,
     "autobot-slm-frontend/src/views/SkillsView.vue": 633,  # #18819 + #14777: 645 -> 633
-    "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 632,  # #18819: 638 -> 635; #19482: -> 632
+    "autobot-slm-frontend/src/views/SystemUpdatesTab.vue": 626,  # #18819: 638 -> 635; #19482: -> 632; #18863: -> 626
     "autobot-slm-frontend/src/views/monitoring/ErrorMonitor.vue": 609,  # #14780 BasePagination: 617 -> 609
     "autobot-slm-frontend/src/views/monitoring/LogViewer.vue": 602,
-    "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 773,  # #18819 + #14777: 807 -> 773
-    "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 662,  # #18819 + #14777: 669 -> 662
-    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 655,  # #14780: 664 -> 655 (BaseSwitch)
-    "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 721,  # #18819 + #14777: 733 -> 721
+    "autobot-slm-frontend/src/views/settings/SecuritySettings.vue": 710,  # #18819 + #14777: 807 -> 773
+    "autobot-slm-frontend/src/views/settings/admin/DataHygieneView.vue": 656,  # #18819 + #14777: 669 -> 662
+    "autobot-slm-frontend/src/views/settings/admin/LogForwardingSettings.vue": 650,  # #14780: 664 -> 655 (BaseSwitch)
+    "autobot-slm-frontend/src/views/settings/admin/NPUWorkersSettings.vue": 716,  # #18819 + #14777: 733 -> 721
     "autobot-slm-frontend/src/views/settings/admin/SSOSettings.vue": 824,  # #18819 + #14777: 869 -> 824
-    "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1088,  # #18819 + #14777: 1099 -> 1088
+    "autobot-slm-frontend/src/views/settings/admin/UserManagementSettings.vue": 1062,  # #18819 + #14777: 1099 -> 1088
 }

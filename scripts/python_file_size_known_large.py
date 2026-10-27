@@ -47,7 +47,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/agent_config.py": 1371,
     "autobot-backend/api/agent_terminal.py": 773,
     "autobot-backend/api/analytics.py": 1277,
-    "autobot-backend/api/analytics_architecture.py": 1264,
+    "autobot-backend/api/analytics_architecture.py": 1260,
     "autobot-backend/api/analytics_bug_prediction.py": 1430,
     "autobot-backend/api/analytics_cfg.py": 1331,
     "autobot-backend/api/analytics_code_generation.py": 992,
@@ -71,7 +71,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/auth.py": 684,
     "autobot-backend/api/batch_jobs.py": 916,
     "autobot-backend/api/browser_mcp.py": 1323,
-    "autobot-backend/api/cache_management.py": 779,
+    "autobot-backend/api/cache_management.py": 692,
     "autobot-backend/api/chat.py": 2666,  # #18316: delete delegates to the canonical path
     "autobot-backend/api/chat_sessions.py": 1859,  # #18293: legacy transcripts only ever proposed
     "autobot-backend/api/code_intelligence.py": 2145,
@@ -184,7 +184,6 @@ KNOWN_LARGE: dict[str, int] = {
     # live violation, not #5060 backlog -- see #14630.
     "autobot-backend/code_intelligence/testing_pattern_analyzer.py": 1159,
     "autobot-backend/code_intelligence/typescript_analyzer.py": 609,
-    "autobot-backend/code_intelligence/vue_analyzer.py": 613,
     "autobot-backend/command_manual_manager.py": 908,
     "autobot-backend/computer_vision/screen_analyzer.py": 662,
     "autobot-backend/conftest.py": 1498,  # #16483: _make_pkg_stub/_real_load_and_bind moved to testkit/module_stubs.py
@@ -419,7 +418,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/api/code_source.py": 701,
     "autobot-slm-backend/api/code_sync.py": 5782,  # #19352, #19367 (was 5803)
     "autobot-slm-backend/api/errors.py": 866,
-    "autobot-slm-backend/api/infrastructure.py": 723,
+    "autobot-slm-backend/api/infrastructure.py": 722,
     "autobot-slm-backend/api/monitoring.py": 1087,
     "autobot-slm-backend/api/nodes.py": 2877,
     "autobot-slm-backend/api/nodes_execution.py": 699,
@@ -429,7 +428,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/api/roles.py": 685,
     "autobot-slm-backend/api/security.py": 962,
     "autobot-slm-backend/api/services.py": 1016,
-    "autobot-slm-backend/api/setup_wizard.py": 1329,
+    "autobot-slm-backend/api/setup_wizard.py": 1328,
     "autobot-slm-backend/api/stateful.py": 685,
     "autobot-slm-backend/api/tls.py": 994,
     "autobot-slm-backend/api/updates.py": 1107,
@@ -441,18 +440,18 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,
     "autobot-slm-backend/monitoring/performance_optimizer.py": 773,
     "autobot-slm-backend/services/backup.py": 774,
-    "autobot-slm-backend/services/blue_green.py": 1279,
-    "autobot-slm-backend/services/deployment.py": 705,
+    "autobot-slm-backend/services/blue_green.py": 1243,
+    "autobot-slm-backend/services/deployment.py": 703,
     "autobot-slm-backend/services/drift_checker.py": 838,
     "autobot-slm-backend/services/drift_checker_test.py": 1351,
     "autobot-slm-backend/services/inventory_builder.py": 710,
-    "autobot-slm-backend/services/playbook_executor.py": 1399,  # #17150: ansible_dir self-heal, re-detect before sync
+    "autobot-slm-backend/services/playbook_executor.py": 1321,  # #17150: ansible_dir self-heal, re-detect before sync
     "autobot-slm-backend/services/reconciler.py": 2193,
     # Not legacy debt: created after this guard existed (#14465/#14548). Tracked
     # as a live violation, not #5060 backlog -- see #14630.
     "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": 783,
-    "autobot-slm-backend/services/replication.py": 823,
-    "autobot-slm-backend/services/role_registry.py": 713,
+    "autobot-slm-backend/services/replication.py": 785,
+    "autobot-slm-backend/services/role_registry.py": 712,
     "autobot-slm-backend/services/service_orchestrator.py": 913,
     "autobot-slm-backend/slm/agent/agent.py": 630,
     "autobot-slm-backend/tests/api/test_code_sync_deploy_bugs.py": 1990,  # #18052: resolver test moved out
@@ -468,17 +467,17 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot_shared/circuit_breaker.py": 689,
     "autobot_shared/env_registry.py": 1061,  # #19320: postgres block -> env_registry_postgres (was 1125)
     "autobot_shared/monitoring/prometheus_metrics.py": 949,
-    "autobot_shared/network_constants.py": 611,  # #19315: env/mode fallbacks moved to deployment_profile
+    "autobot_shared/network_constants.py": 605,  # #19315 deployment_profile; #19232 one Redis resolver
     "autobot_shared/npu/integration.py": 929,
     "autobot_shared/plugin_sdk/loader.py": 690,
     "autobot_shared/plugin_sdk/plugin_load_visibility_test.py": 750,
     "autobot_shared/plugin_sdk/plugin_sdk_test.py": 941,
     "autobot_shared/rate_limiter_test.py": 618,
     "autobot_shared/redis_client.py": 674,
-    "autobot_shared/redis_management/connection_manager.py": 1387,
+    "autobot_shared/redis_management/connection_manager.py": 1290,
     "autobot_shared/security/ssrf_guard_test.py": 633,
-    "autobot_shared/ssot_config.py": 3242,  # #19319: role-mirrored defaults split to ssot_role_mirrors
-    "autobot_shared/ssot_config_test.py": 782,
+    "autobot_shared/ssot_config.py": 3221,  # #19319 split to ssot_role_mirrors; #15501 to ssot_hosted_models
+    "autobot_shared/ssot_config_test.py": 776,
     "autobot_shared/ssot_constants.py": 861,
     "autobot_shared/user_management/team_service.py": 724,
     "pipeline-scripts/check-pre-commit-hook-pr_test.py": 747,

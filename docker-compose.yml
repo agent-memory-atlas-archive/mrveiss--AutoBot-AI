@@ -130,6 +130,10 @@ services:
     container_name: autobot-chromadb
     restart: unless-stopped
     ports:
+      # #19321: two ports, two meanings. Host side = PortConfig.chromadb (8100, what
+      # bare-metal ChromaDB listens on and host clients dial). Container side = the
+      # image's own listen port (8000), which in-network clients below dial as
+      # AUTOBOT_CHROMADB_PORT. repo_tests/chromadb_port_one_home_19321_test.py pins both.
       - "127.0.0.1:8100:8000"
     volumes:
       - chroma_data:/data
@@ -398,8 +402,8 @@ services:
       - AUTOBOT_LOG_LEVEL=${AUTOBOT_LOG_LEVEL:-INFO}
       - AUTOBOT_REDIS_HOST=autobot-redis
       - AUTOBOT_REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://autobot-redis:6379/${AUTOBOT_REDIS_DB_CELERY_BROKER:-14}
-      - CELERY_RESULT_BACKEND=redis://autobot-redis:6379/${AUTOBOT_REDIS_DB_CELERY_RESULTS:-15}
+      # Broker/result URLs: celery_app builds them from AUTOBOT_REDIS_HOST/PORT above and
+      # redis-databases.yaml (+ AUTOBOT_REDIS_DB_CELERY_*), #19232 -- no URL or DB literal here.
       - AUTOBOT_CHROMADB_HOST=autobot-chromadb
       - AUTOBOT_CHROMADB_PORT=8000
       # #12513: shared secret for CHROMA_SERVER_AUTHN_* token auth on the
@@ -518,8 +522,8 @@ services:
       - AUTOBOT_LOG_LEVEL=${AUTOBOT_LOG_LEVEL:-INFO}
       - AUTOBOT_REDIS_HOST=autobot-redis
       - AUTOBOT_REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://autobot-redis:6379/${AUTOBOT_REDIS_DB_CELERY_BROKER:-14}
-      - CELERY_RESULT_BACKEND=redis://autobot-redis:6379/${AUTOBOT_REDIS_DB_CELERY_RESULTS:-15}
+      # Broker/result URLs: celery_app builds them from AUTOBOT_REDIS_HOST/PORT above and
+      # redis-databases.yaml (+ AUTOBOT_REDIS_DB_CELERY_*), #19232 -- no URL or DB literal here.
       - AUTOBOT_CHROMADB_HOST=autobot-chromadb
       - AUTOBOT_CHROMADB_PORT=8000
       # #12513: shared secret for CHROMA_SERVER_AUTHN_* token auth on the

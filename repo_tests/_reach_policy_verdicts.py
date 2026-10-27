@@ -108,6 +108,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "FIXED_INVENTORY",
         "Single-digit launch sites; the band is already near equality.",
     ),
+    "chromadb-port-one-home-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked files outside docs and tests, a subset of the tree; docs and tests grow at their own rate.",
+    ),
     "compose-files": (
         ABSOLUTE,
         "FIXED_INVENTORY",
@@ -394,6 +399,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test Python under thirteen source roots, a subset of tracked Python; the test-file share drifts.",
+    ),
+    "landing-page-declared-dependencies": (
+        ABSOLUTE,
+        "FIXED_INVENTORY",
+        "The requirements files and the root pyproject.toml: a small, deliberately enumerable set.",
     ),
 }
 
