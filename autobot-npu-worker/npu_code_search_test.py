@@ -29,7 +29,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from agents.development_speedup_agent import analyze_codebase, get_development_speedup_agent
 from agents.npu_code_search_agent import get_npu_code_search, index_project, search_codebase
-from autobot_shared.live_service_probe import require_live_endpoint
+from autobot_shared.env_utils import env_flag
+from autobot_shared.live_service_probe import LIVE_TESTS_ENV, endpoint_is_listening, require_live_endpoint
 from autobot_shared.ssot_config import config
 
 # Configure logging
@@ -411,7 +412,19 @@ async def main():
     return 0
 
 
+def live_redis_opted_in() -> bool:
+    """The direct runner's gate: the pytest fixture never runs for ``python npu_code_search_test.py``.
+
+    ``require_live_endpoint`` signals a skip by raising pytest's skip exception, so the CLI path
+    asks the same two questions itself: did the run opt in, and is the configured Redis listening.
+    """
+    return env_flag(LIVE_TESTS_ENV) and endpoint_is_listening(config.redis_url)
+
+
 if __name__ == "__main__":
+    if not live_redis_opted_in():
+        print(f"Not run: these tests write to and clear Redis; set {LIVE_TESTS_ENV}=1 with Redis listening.")
+        sys.exit(0)
     try:
         exit_code = asyncio.run(main())
         sys.exit(exit_code)
