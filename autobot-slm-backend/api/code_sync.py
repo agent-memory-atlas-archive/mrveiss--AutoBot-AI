@@ -4988,7 +4988,7 @@ async def _record_fleet_node_outcome(
     while the node stays stale — the defect this change exists to end, wearing
     a skip's costume.
     """
-    if playbook_result["success"]:
+    if playbook_result["success"] and ansible_run_failure(playbook_result["output"], node_id, 0) is None:  # #19762
         await _update_fleet_node_version(node_id)
         job.completed_fleet_nodes += 1
         _stage_log(
