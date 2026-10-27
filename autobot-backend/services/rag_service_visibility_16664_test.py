@@ -24,6 +24,7 @@ from services.context_sufficiency import SufficiencyResult, SufficiencyVerdict
 from services.rag_config import RAGConfig
 from services.rag_service import RAGService
 from services.rag_visibility import RESULT_METADATA_KEY, cache_scope
+from testkit.fake_redis_pipeline import DualReply
 from tests.fixtures.rag_cache_fakes import make_semantic_cache, make_topic_cache
 
 PRINCIPAL_A = kb_principal({"user_id": "A"})
@@ -57,13 +58,6 @@ B_SEES = {"b-private", "b-private-too", "shared-with-a", "system-fact"}
 WHO = [(PRINCIPAL_A, A_SEES), (PRINCIPAL_B, B_SEES)]
 
 
-class _Done:
-    """The return of a SET usable from both the sync ownership client and the async readers."""
-
-    def __await__(self):
-        return iter(())
-
-
 class _EpochStore:
     """A Redis stand-in for the ACL epoch: the sync SET ownership bumps with, the async GET/SET NX the readers use."""
 
@@ -75,11 +69,11 @@ class _EpochStore:
     def set(self, key, value, nx=False):
         assert key == ACL_EPOCH_KEY
         if nx and self.value is not None:
-            return _Done()
+            return DualReply()
         self.value = value
         if not nx:
             self.bumps += 1
-        return _Done()
+        return DualReply()
 
     async def get(self, key):
         assert key == ACL_EPOCH_KEY

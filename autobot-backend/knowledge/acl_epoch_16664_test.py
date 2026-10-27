@@ -10,6 +10,7 @@ import pytest
 
 from knowledge.acl_epoch import ACL_EPOCH_DATABASE, ACL_EPOCH_KEY, bump_acl_epoch, read_acl_epoch
 from knowledge.ownership import KnowledgeOwnership
+from testkit.fake_redis_pipeline import DualReply
 
 
 def test_the_bump_sets_a_fresh_token_through_the_given_client():
@@ -55,13 +56,6 @@ async def test_an_unavailable_or_failing_redis_reads_as_none_so_the_caches_are_s
         assert await read_acl_epoch() is None
 
 
-class _Done:
-    """The return of a SET usable from both the sync ownership client and the async readers."""
-
-    def __await__(self):
-        return iter(())
-
-
 class _Kv:
     """A knowledge-database stand-in for the ACL epoch key, with allkeys-lru eviction."""
 
@@ -70,9 +64,9 @@ class _Kv:
 
     def set(self, key, value, nx=False):
         if nx and key in self.data:
-            return _Done()
+            return DualReply()
         self.data[key] = value
-        return _Done()
+        return DualReply()
 
     async def get(self, key):
         return self.data[key].encode() if key in self.data else None
