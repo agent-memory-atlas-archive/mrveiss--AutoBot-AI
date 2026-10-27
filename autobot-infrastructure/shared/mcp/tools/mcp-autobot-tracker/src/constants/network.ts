@@ -14,9 +14,10 @@
 
 /**
  * A port override: the canonical AUTOBOT_* name first, then the legacy bare name, then the default.
+ * ``||`` not ``??``: an empty variable falls through, as it did before, instead of parsing to NaN.
  */
 const port = (canonical: string, legacy: string, fallback: string): number =>
-  parseInt(process.env[canonical] ?? process.env[legacy] ?? fallback, 10);
+  parseInt(process.env[canonical] || process.env[legacy] || fallback, 10);
 
 /**
  * Core network configuration constants
