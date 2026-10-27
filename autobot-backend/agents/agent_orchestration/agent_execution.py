@@ -147,6 +147,9 @@ class AgentExecutor:
 
         #16957: *authority* is the originator's (an A2A peer's); None is an internal
         caller. An agent it may not reach is refused before it runs, not fallen back from.
+
+        #19591: takes no ``user_id`` -- the distributed path reads the KB with no user (so the
+        librarian denies) until a principal for it is defined (#19810).
         """
         selected_agent = await self._select_distributed_agent(request, context, preferred_agents)
 
@@ -322,7 +325,9 @@ class AgentExecutor:
         agent = self._get_system_commands_agent()
         return await agent.process_command_request(request, context)
 
-    async def _execute_rag_agent(self, request: str, context: Dict | None, user_id: str | None = None) -> Dict[str, Any]:
+    async def _execute_rag_agent(
+        self, request: str, context: Dict | None, user_id: str | None = None
+    ) -> Dict[str, Any]:
         """Execute RAG agent with document retrieval (Issue #334 - extracted helper)."""
         kb_agent = self._get_kb_librarian()
         kb_result = await librarian_query(kb_agent, request, user_id)
