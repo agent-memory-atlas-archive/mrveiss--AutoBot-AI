@@ -48,7 +48,9 @@ _OTHER_TRANSPORT = re.compile(
 #: holding only ``type`` specifiers); it may span lines.
 _TYPE_ONLY_AXIOS = re.compile(
     r"\b(?:import|export)\s+(?:type\s+(?:[\w$]+\s*,?\s*)?(?:\{[^{};]*\}|\*\s+as\s+[\w$]+)?\s*"
-    r"|\{\s*(?:type\s+[\w$]+(?:\s+as\s+[\w$]+)?\s*,?\s*)+\}\s*)"
+    # Specifiers are comma-SEPARATED, never optionally: an optional separator lets the repetition
+    # re-split ``type a type b ...`` exponentially (CodeQL, #19666 review).
+    r"|\{\s*type\s+[\w$]+(?:\s+as\s+[\w$]+)?(?:\s*,\s*type\s+[\w$]+(?:\s+as\s+[\w$]+)?)*\s*,?\s*\}\s*)"
     r"from\s+['\"]axios['\"]",  # one statement only: the repo writes no semicolons (#19659 review)
     re.DOTALL,
 )
@@ -226,3 +228,12 @@ def test_no_pin_was_raised_against_the_base() -> None:
     ), f"apps dropped from PINS: {sorted(set(base) - set(PINS))}; an app's pin only goes down"
     raised = {app: (base[app], pin) for app, pin in PINS.items() if app in base and pin > base[app]}
     assert not raised, f"pins rose against the base (base, now): {raised}; a pin only goes down (#12363)."
+
+
+def test_the_type_only_pattern_stays_linear_on_a_pathological_input() -> None:
+    """CodeQL flagged exponential backtracking on many ``type $`` repetitions (#19666 review)."""
+    import time
+
+    started = time.perf_counter()
+    _TYPE_ONLY_AXIOS.search("import {" + " type $" * 40 + " from 'nowhere'")
+    assert time.perf_counter() - started < 1.0
