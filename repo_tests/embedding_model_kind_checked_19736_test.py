@@ -110,3 +110,28 @@ def test_a_replacement_is_announced_on_every_run_it_happens() -> None:
 def test_the_kind_probe_runs_between_the_read_and_the_keep() -> None:
     order = [t.get("register") or next(iter(k for k in t if k.startswith("ansible."))) for t in _tasks()]
     assert order.index("_embedding_model_probe") < order.index(_KIND) < order.index("ansible.builtin.set_fact")
+
+
+def test_an_empty_capability_list_says_nothing_so_the_value_is_kept(tmp_path: Path) -> None:
+    assert _run_probe(tmp_path, "AUTOBOT_OLLAMA_HOST=llm-node\n", '{"capabilities": [ ]}')[0] == "unknown"
+
+
+def _render_messages(defined: dict) -> list[str]:
+    """Render every debug message with Ansible's strictness: an undefined variable raises."""
+    import jinja2
+
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    probe = {"stdout": "phi3:mini"}
+    ctx = {"_embedding_model_probe": probe, **defined}
+    return [
+        env.from_string(t["ansible.builtin.debug"]["msg"]).render(ctx) for t in _tasks() if "ansible.builtin.debug" in t
+    ]
+
+
+@pytest.mark.parametrize("defined", [{}, {"backend_embedding_model": "canonical-embed"}])
+def test_the_messages_render_where_the_role_never_defines_the_variable(defined: dict) -> None:
+    # Three of the four include sites are roles that never set backend_embedding_model; the
+    # template falls back to its own default there. A message that needs it would fail the update.
+    rendered = _render_messages(defined)
+    assert all("phi3:mini" in m for m in rendered)
+    assert ("canonical-embed" in rendered[0]) == bool(defined)
