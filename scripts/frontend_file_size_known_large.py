@@ -29,7 +29,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/components/analytics/AdvancedAnalytics.vue": 902,  # #18849: 903 -> 902
     "autobot-frontend/src/components/analytics/CodeEvolutionTimeline.vue": 775,
     "autobot-frontend/src/components/analytics/CodeGenerationDashboard.vue": 1108,
-    "autobot-frontend/src/components/analytics/CodeQualityDashboard.vue": 1903,
+    "autobot-frontend/src/components/analytics/CodeQualityDashboard.vue": 1837,
     "autobot-frontend/src/components/analytics/CodeReviewDashboard.vue": 1221,
     "autobot-frontend/src/components/analytics/CodebaseAnalytics.vue": 1297,
     "autobot-frontend/src/components/analytics/CodebaseAnalyticsLanding.vue": 763,
@@ -126,7 +126,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/composables/useTimeout.ts": 749,
     "autobot-frontend/src/composables/useVoiceConversation.ts": 986,
     "autobot-frontend/src/composables/useVoiceOutput.ts": 1089,
-    "autobot-frontend/src/composables/useWorkflowBuilder.ts": 1305,
+    "autobot-frontend/src/composables/useWorkflowBuilder.ts": 1293,
     "autobot-frontend/src/config/__tests__/ssot-config.spec.ts": 662,
     "autobot-frontend/src/config/ssot-config.ts": 839,
     "autobot-frontend/src/models/controllers/ChatController.ts": 1156,
@@ -138,7 +138,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/services/TerminalService.ts": 1137,
     "autobot-frontend/src/stores/useChatStore.ts": 1176,
     "autobot-frontend/src/stores/useKnowledgeStore.ts": 809,
-    "autobot-frontend/src/utils/ApiClient.ts": 816,
+    "autobot-frontend/src/utils/ApiClient.ts": 782,
     "autobot-frontend/src/utils/RumAgent.ts": 857,
     "autobot-frontend/src/utils/VisionMultimodalApiClient.ts": 663,
     "autobot-frontend/src/utils/debugUtils.ts": 620,
@@ -148,7 +148,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/views/BusinessIntelligenceView.vue": 988,
     "autobot-frontend/src/views/CustomDashboard.vue": 878,  # #18242: 1106 -> 884; train-42 review: -5, then -1
     "autobot-frontend/src/views/DevSpeedupView.vue": 658,
-    "autobot-frontend/src/views/ErrorMonitoringView.vue": 872,
+    "autobot-frontend/src/views/ErrorMonitoringView.vue": 843,
     "autobot-frontend/src/views/EvolutionView.vue": 781,
     "autobot-frontend/src/views/FailureAnalysisDashboard.vue": 782,  # #13422: 799 -> 782 (kit badges)
     "autobot-frontend/src/views/MarketplaceView.vue": 711,
@@ -159,7 +159,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-frontend/src/views/WorkflowBuilderView.vue": 2267,  # #13422: 2300 -> 2267 (kit RiskBadge)
     "autobot-frontend/src/views/llc/BacklogView.vue": 823,
     "autobot-frontend/src/views/llc/CompanyCreationWizard.vue": 909,
-    "autobot-frontend/src/views/llc/CompanyPortabilityView.vue": 867,
+    "autobot-frontend/src/views/llc/CompanyPortabilityView.vue": 841,
     "autobot-frontend/src/views/llc/CostDashboard.vue": 1017,
     "autobot-frontend/src/views/llc/GanttTimelineView.vue": 817,
     "autobot-frontend/src/views/llc/HeartbeatMonitor.vue": 807,
