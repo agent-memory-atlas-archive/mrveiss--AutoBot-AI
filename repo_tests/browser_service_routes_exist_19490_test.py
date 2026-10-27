@@ -8,8 +8,11 @@ Two clients posted to ``/scrape`` and ``/interact`` on the browser service port,
 server, ``autobot-browser-worker/playwright-server.js``, registers neither, so every request 404ed.
 They now use ``/automation``. This guard reads the worker's ``app.get/post('<path>')`` routes, then
 finds every f-string URL built on the browser port (``config.port.browser`` or
-``BROWSER_SERVICE_PORT``), directly or through a variable assigned such a base URL. It fails on a
-path the worker does not register.
+``BROWSER_SERVICE_PORT``), directly or through a name or attribute assigned such a base URL. It fails
+on a path the worker does not register.
+
+Scope, stated: f-strings only. A URL joined with ``+``, ``.format``, ``%`` or ``urljoin``, or built
+from another host constant, is not read; the repo's browser clients use f-strings.
 """
 
 from __future__ import annotations
@@ -34,11 +37,24 @@ def worker_routes(text: str) -> set[str]:
 
 
 def _names_browser_port(node: ast.AST) -> bool:
+    """``<x>.port.browser`` or ``BROWSER_SERVICE_PORT`` -- not a ``vm.browser`` host or ``self.browser``."""
     return any(
-        (isinstance(n, ast.Attribute) and n.attr in {"browser", "BROWSER_SERVICE_PORT"})
+        (isinstance(n, ast.Attribute) and n.attr == "browser" and getattr(n.value, "attr", "") == "port")
+        or (isinstance(n, ast.Attribute) and n.attr == "BROWSER_SERVICE_PORT")
         or (isinstance(n, ast.Name) and n.id == "BROWSER_SERVICE_PORT")
         for n in ast.walk(node)
     )
+
+
+def _base_url_names(tree: ast.AST) -> set[str]:
+    """Names and attributes (``base_url``, ``self.base``) assigned an f-string on the browser port."""
+    names = set()
+    for n in ast.walk(tree):
+        targets = n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, ast.AnnAssign) else []
+        value = getattr(n, "value", None)
+        if targets and isinstance(value, ast.JoinedStr) and _names_browser_port(value):
+            names |= {ast.unparse(t) for t in targets if isinstance(t, ast.Name | ast.Attribute)}
+    return names
 
 
 def _path_after(parts: list[ast.AST], index: int) -> str | None:
@@ -57,13 +73,7 @@ def _path_after(parts: list[ast.AST], index: int) -> str | None:
 def browser_paths(source: str) -> list[tuple[int, str]]:
     """``(line, path)`` of every browser-port URL path an f-string builds in *source*."""
     tree = ast.parse(source)
-    bases = {
-        t.id
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Assign) and isinstance(n.value, ast.JoinedStr) and _names_browser_port(n.value)
-        for t in n.targets
-        if isinstance(t, ast.Name)
-    }
+    bases = _base_url_names(tree)
     found = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.JoinedStr):
@@ -72,7 +82,7 @@ def browser_paths(source: str) -> list[tuple[int, str]]:
             if not isinstance(part, ast.FormattedValue):
                 continue
             direct = _names_browser_port(part.value)
-            via_base = isinstance(part.value, ast.Name) and part.value.id in bases
+            via_base = isinstance(part.value, ast.Name | ast.Attribute) and ast.unparse(part.value) in bases
             path = _path_after(node.values, i) if (direct or via_base) else None
             if path:
                 found.append((node.lineno, path))
@@ -85,12 +95,15 @@ def test_every_python_browser_client_calls_a_registered_route() -> None:
     assert {"/health", "/automation", "/navigate"} <= routes, "the route reader no longer sees the worker"
     paths = tracked_paths(root, *(f"{r}/*.py" for r in _ROOTS))
     assert len(paths) >= MIN_FILES, f"only {len(paths)} Python files swept -- the enumeration lost its reach"
-    missing = []
+    missing, seen = [], 0
     for rel in paths:
         source = (root / rel).read_text(encoding="utf-8")
         if "browser" not in source and "BROWSER_SERVICE_PORT" not in source:
             continue
-        missing += [f"{rel}:{line}: {path}" for line, path in browser_paths(source) if path not in routes]
+        found = browser_paths(source)
+        seen += len(found)
+        missing += [f"{rel}:{line}: {path}" for line, path in found if path not in routes]
+    assert seen >= 2, f"only {seen} browser client URLs found -- the detector lost its reach"
     assert missing == [], "the browser worker registers no such route:\n" + "\n".join(missing)
 
 
@@ -102,6 +115,9 @@ def test_a_scrape_client_is_caught_directly_and_through_a_base_url() -> None:
         'requests.post(f"{base_url}/automation")\n'
         'requests.post(f"{other}/scrape")\n'
         'requests.post(f"{base_url}/{action}")\n'
+        'self.base: str = f"http://{h}:{config.port.browser}"\n'
+        'requests.post(f"{self.base}/scrape")\n'
+        'requests.post(f"http://{config.vm.browser}:9/scrape")\n'
     )
-    assert browser_paths(source) == [(2, "/scrape"), (3, "/interact"), (4, "/automation")]
+    assert browser_paths(source) == [(2, "/scrape"), (3, "/interact"), (4, "/automation"), (8, "/scrape")]
     assert {"/scrape", "/interact"} - worker_routes("app.post('/automation', h)\n") == {"/scrape", "/interact"}

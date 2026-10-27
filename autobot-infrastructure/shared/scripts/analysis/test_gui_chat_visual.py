@@ -5,6 +5,7 @@
 # Author: mrveiss
 """Visual test for AutoBot GUI chat functionality using Playwright service."""
 
+import json
 import logging
 import time
 
@@ -53,7 +54,7 @@ def _step(label: str, base_url: str, action: str, **params) -> dict | None:
 def _submit(base_url: str) -> None:
     """Click send; if no send button matches, submit the input's form instead."""
     if _step("Clicked send button", base_url, "click", selector=_SEND) is None:
-        script = f"document.querySelector({_INPUT!r})?.form?.requestSubmit()"
+        script = f"document.querySelector({json.dumps(_INPUT)})?.form?.requestSubmit()"
         _step("Submitted the chat form", base_url, "evaluate", script=script)
     logger.info("⏳ Waiting for response...")
     time.sleep(5)
@@ -67,7 +68,9 @@ def _check_reply(base_url: str) -> None:
     content = (_step("Read page text", base_url, "get_text", selector="body") or {}).get("text") or ""
     if _MESSAGE not in content:
         logger.error("❌ Message not found in chat")
-    elif any(word in content.lower() for word in ["yes", "hi", "hear"]):
+        return
+    reply = content.split(_MESSAGE, 1)[1].lower()  # only text after the sent message can be a reply
+    if any(word in reply for word in ["yes", "hello", "hi", "hear"]):
         logger.info("✅ User message appears in chat; bot response detected!")
     else:
         logger.error("❌ User message appears, but no bot response detected")
