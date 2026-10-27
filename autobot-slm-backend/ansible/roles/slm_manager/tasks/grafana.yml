@@ -59,6 +59,7 @@
   register: _grafana_installed
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only query; the install guard below needs it under --check
   when: grafana_install | bool
   tags: ['grafana', 'packages']
 

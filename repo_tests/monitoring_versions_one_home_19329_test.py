@@ -17,6 +17,7 @@ infrastructure and Ansible trees, or when ``latest`` (or an untagged image) come
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -36,18 +37,22 @@ _SITE = re.compile(
     r"|(?P<tool>prometheus|grafana)_version\s*[:=]\s*[\"']?(?P<v>[\w.{}\s|]+?)[\"']?\s*(?:#.*)?$"
     r"|image:\s*[\"']?(?:[\w.-]+(?::\d+)?/)*(?:prom/(?P<itool>prometheus)|grafana/(?P<gtool>grafana)(?:-oss)?)"
     r"(?::v?(?P<iv>[^\s@\"'#]+))?(?:@\S+?)?[\"']?\s*(?:#.*)?$"
-    r"|apt-get\s+install\b[^\n]*?\s[\"']?(?P<atool>prometheus|grafana)[\"']?(?=\s|$)",
+    r"|apt-get\s+install\b[^\n]*?\s[\"']?(?P<atool>prometheus|grafana)"
+    r"(?:=(?P<av>[^\s\"'$][^\s\"']*))?[\"']?(?=\s|$)",
     re.MULTILINE,
 )
 
 #: Every file allowed to state a version, and how many statements it holds.
 _PINNED = {
-    _HOME: 2,
-    "docker-compose.yml": 2,
-    "autobot-infrastructure/shared/config/logging/loki/docker-compose-loki.yml": 1,
-    "autobot-slm-backend/ansible/roles/slm_manager/defaults/main.yml": 1,
-    "autobot-slm-backend/ansible/migrate-grafana-to-vm.yml": 1,
-    "autobot-infrastructure/shared/scripts/install-slm.sh": 2,
+    (_HOME, "prometheus"): 1,
+    (_HOME, "grafana"): 1,
+    ("docker-compose.yml", "prometheus"): 1,
+    ("docker-compose.yml", "grafana"): 1,
+    ("autobot-infrastructure/shared/config/logging/loki/docker-compose-loki.yml", "grafana"): 1,
+    ("autobot-slm-backend/ansible/roles/slm_manager/defaults/main.yml", "grafana"): 1,
+    ("autobot-slm-backend/ansible/migrate-grafana-to-vm.yml", "grafana"): 1,
+    ("autobot-infrastructure/shared/scripts/install-slm.sh", "prometheus"): 1,
+    ("autobot-infrastructure/shared/scripts/install-slm.sh", "grafana"): 1,
 }
 
 #: A statement that may differ from the home, and the issue that owns it. install-slm.sh installs the
@@ -83,7 +88,7 @@ def sites(text: str) -> list[tuple[str, str]]:
     for m in _SITE.finditer(text):
         g = m.groupdict()
         tool = next(g[k] for k in ("stool", "etool", "tool", "itool", "gtool", "atool") if g[k]).lower()
-        found.append((tool, (g["sv"] or g["ev"] or g["v"] or g["iv"] or "latest").strip()))
+        found.append((tool, (g["sv"] or g["ev"] or g["v"] or g["iv"] or g["av"] or "latest").strip()))
     return found
 
 
@@ -100,7 +105,8 @@ def test_every_statement_is_a_pinned_copy_equal_to_the_home() -> None:
     found = {p.relative_to(_ROOT).as_posix(): sites(p.read_text(encoding="utf-8")) for p in files}
     REACH.completed(files)
     stated = {rel: s for rel, s in found.items() if s}
-    assert {rel: len(s) for rel, s in stated.items()} == _PINNED, f"a copy outside the pinned set (#19329): {stated}"
+    counted = dict(Counter((rel, t) for rel, s in stated.items() for t, _ in s))
+    assert counted == _PINNED, f"a (file, tool) statement outside the pinned set (#19329): {counted}"
     want = home()
     differ = [
         f"{rel}: {t} {v}"
@@ -129,6 +135,7 @@ def test_every_statement_is_a_pinned_copy_equal_to_the_home() -> None:
         ("    image: grafana/grafana-oss:10.2.0\n", [("grafana", "10.2.0")]),
         ("GRAFANA_VERSION=10.2.0\n", [("grafana", "10.2.0")]),
         ('apt-get install -y "grafana=${GRAFANA_VERSION:=10.2.0}"\n', [("grafana", "10.2.0")]),
+        ("apt-get install -y grafana=10.2.0\n", [("grafana", "10.2.0")]),
         ("    apt-get install -y -qq grafana\n", [("grafana", "latest")]),
         ("    apt-get install -y -qq prometheus\n", [("prometheus", "latest")]),
     ],
