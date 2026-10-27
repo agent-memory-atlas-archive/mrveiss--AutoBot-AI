@@ -46,24 +46,6 @@ PINNED: dict[str, str] = {
     "docker-compose.yml": r"printf 'GET (/api/v\d+/heartbeat) HTTP",
 }
 
-_RESOLVED_BY_19414 = "fixed in #19414's train; remove on rebase"
-
-#: Live defects the sweep tolerates, each stale-checked: an entry whose file no longer shows
-#: that finding fails :func:`test_every_pending_defect_is_still_present`, forcing it out.
-PENDING_DEFECTS: dict[str, tuple[str, str]] = {
-    "autobot-backend/onboarding/doctor.py": ("foreign", _RESOLVED_BY_19414),
-    "autobot-backend/api/service_monitor.py": ("health", _RESOLVED_BY_19414),
-}
-
-#: Python files still restating the home's literal instead of importing it; #19423 removes them.
-#: Stale-checked the same way: a file that no longer holds the literal must leave the record.
-PYTHON_LITERALS_PENDING_19423 = frozenset(
-    {
-        "autobot-backend/api/monitoring.py",
-        "autobot-slm-backend/services/role_registry.py",
-    }
-)
-
 _VERSIONED = re.compile(r"/api/v\d+/heartbeat(?![\w-])")
 _CHROMA_HEALTH = re.compile(r"(?i)chroma\w*\W.*/health\b|\b8100/health\b")
 _NON_CODE = re.compile(r"(^docs/|\.md$|(^|/)tests?/|(^|/)test_[^/]*$|_test\.py$|\.test\.|^\.test_durations)")
@@ -99,7 +81,7 @@ def _has_literal(text: str) -> bool:
 
 
 def _findings_of(rel: str, text: str, allowed: set[str]) -> dict[str, list[str]]:
-    """Every finding kind *text* (at *rel*) shows, before any pending-defect tolerance."""
+    """Every finding kind *text* (at *rel*) shows."""
     out: dict[str, list[str]] = {}
     if bad := foreign_versions(text):
         out["foreign"] = [f"{rel}: {bad}"]
@@ -115,15 +97,13 @@ def _findings_of(rel: str, text: str, allowed: set[str]) -> dict[str, list[str]]
 def sweep(root: Path, paths: list[str]) -> dict[str, list[str]]:
     """``{finding kind: ["path: detail", ...]}`` over *paths* under *root*."""
     found: dict[str, list[str]] = {"foreign": [], "unrecorded": [], "health": []}
-    allowed = {HOME, *PINNED, *PYTHON_LITERALS_PENDING_19423}
+    allowed = {HOME, *PINNED}  # every Python probe imports the home (#19423)
     for rel in paths:
         text = _read(root, rel)
         if text is None or rel == SELF:
             continue
-        tolerated = PENDING_DEFECTS.get(rel, ("", ""))[0]
         for kind, items in _findings_of(rel, text, allowed).items():
-            if kind != tolerated:
-                found[kind].extend(items)
+            found[kind].extend(items)
     return found
 
 
@@ -162,17 +142,6 @@ def test_every_pinned_copy_equals_the_home() -> None:
     for path, pattern in PINNED.items():
         values = re.findall(pattern, (_ROOT / path).read_text(encoding="utf-8"), re.M)
         assert values == [CHROMADB_HEARTBEAT_PATH], f"#19413: {path} states {values}, home is the v2 heartbeat"
-
-
-def test_every_pending_defect_is_still_present() -> None:
-    """A fixed defect must leave the record, or the tolerance would hide its return."""
-    stale = []
-    for rel, (kind, _reason) in PENDING_DEFECTS.items():
-        text = _read(_ROOT, rel) or ""
-        if kind not in _findings_of(rel, text, set()):
-            stale.append(f"{rel}: no {kind} finding")
-    stale += [rel for rel in PYTHON_LITERALS_PENDING_19423 if not _has_literal(_read(_ROOT, rel) or "")]
-    assert stale == [], f"#19413: stale pending entries {stale}; remove them from the record"
 
 
 @pytest.mark.parametrize("kind", ["foreign", "unrecorded", "health"])
