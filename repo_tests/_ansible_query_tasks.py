@@ -31,7 +31,7 @@ _QUERY = re.compile(
 _STDERR_REDIRECT = re.compile(r"\s2>(?:&1|/dev/null)")
 #: `|| true` after a query only swallows its exit code; it adds no second command.
 _TRAILING_OR_TRUE = re.compile(r"\s*\|\|\s*true\s*$")
-_CHAINED = re.compile(r";|&&|\|\||>|`|\$\(")
+_CHAINED = re.compile(r"\n|;|&&|\|\||>|`|\$\(")
 
 
 def _command_text(module_value: Any) -> str:

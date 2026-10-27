@@ -115,6 +115,7 @@ def test_check_mode_without_changed_when_is_flagged() -> None:
         _task("apt-get install -y nginx"),
         _task("systemctl is-active nginx && systemctl reload nginx"),
         _task("dpkg-query -W nginx; apt-get install -y nginx"),
+        _task("dpkg-query -W nginx\napt-get install -y nginx"),
     ],
     ids=[
         "apt",
@@ -124,6 +125,7 @@ def test_check_mode_without_changed_when_is_flagged() -> None:
         "apt-get",
         "chained-reload",
         "chained-install",
+        "newline-chained",
     ],
 )
 def test_a_mutating_task_is_not_a_query(task: dict) -> None:
