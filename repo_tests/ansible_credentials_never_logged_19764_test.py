@@ -56,7 +56,7 @@ def _carries_credentials(task: dict) -> bool:
 
 
 def _whole_response_dumps(tasks: list[dict], secret_results: set[str]) -> list[str]:
-    """Messages that print ``<secret result>.json`` / ``.content`` whole, not one field of it."""
+    """Messages that print ``<secret result>.json`` / ``.content`` whole, or a credential field of it."""
     found = []
     for task in tasks:
         if task.get("no_log"):
@@ -65,6 +65,8 @@ def _whole_response_dumps(tasks: list[dict], secret_results: set[str]) -> list[s
         for name in secret_results:
             if re.search(rf"\b{re.escape(name)}\.(json|content)\s*(\||}}|$)", text):
                 found.append(f"{task.get('name', '<unnamed>')} prints {name} whole")
+            elif re.search(rf"\b{re.escape(name)}\.json\.\w*(token|password|secret)\w*", text, re.IGNORECASE):
+                found.append(f"{task.get('name', '<unnamed>')} prints a credential field of {name}")
     return found
 
 
@@ -138,3 +140,10 @@ def test_no_log_and_a_single_field_message_are_accepted() -> None:
 def test_a_header_bearer_token_counts_as_credentials() -> None:
     task = '- name: sync\n  uri: {url: "https://x", headers: {Authorization: "Bearer {{ t }}"}}\n'
     assert findings_in(task) == ["sync sends credentials without no_log"]
+
+
+def test_a_message_printing_the_token_field_is_flagged() -> None:
+    leak = _PLANTED.replace("  register: login_result", "  register: login_result\n  no_log: true").replace(
+        "{{ login_result.json | default({}) }}", "{{ login_result.json.access_token }}"
+    )
+    assert findings_in(leak) == ["report prints a credential field of login_result"]
