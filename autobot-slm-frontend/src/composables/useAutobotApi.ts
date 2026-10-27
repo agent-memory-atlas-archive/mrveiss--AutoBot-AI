@@ -591,12 +591,12 @@ export interface GovernanceConfig {
 /**
  * Unwrap the FastAPI `{ "detail": "..." }` error body (#13079).
  *
- * The client throws the kit `HttpError`, which keeps the parsed body; its
- * `detail` is the FastAPI message the operator should see (#12363).
+ * The client throws the kit `HttpError`, which keeps the parsed body; its `detail` is the
+ * FastAPI message. Otherwise the caller's translated fallback leads, with the status or error.
  */
 export function autobotApiErrorMessage(err: unknown, fallback: string): string {
-  if (isHttpError(err) && err.detail) return err.detail
-  if (err instanceof Error && err.message.length > 0) return err.message
+  if (isHttpError(err)) return err.detail || `${fallback} (HTTP ${err.status})`
+  if (err instanceof Error && err.message.length > 0) return `${fallback}: ${err.message}`
   return fallback
 }
 

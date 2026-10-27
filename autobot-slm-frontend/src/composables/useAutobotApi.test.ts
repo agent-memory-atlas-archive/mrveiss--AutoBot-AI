@@ -210,8 +210,14 @@ describe('autobotApiErrorMessage (#13079)', () => {
     expect(autobotApiErrorMessage(err, 'fallback')).toBe('agent is not a manager')
   })
 
-  it('falls back to the Error message when there is no detail body', () => {
-    expect(autobotApiErrorMessage(new Error('Network Error'), 'fallback')).toBe('Network Error')
+  it('leads with the caller fallback for a network error, keeping the cause', () => {
+    expect(autobotApiErrorMessage(new Error('Network Error'), 'fallback')).toBe('fallback: Network Error')
+  })
+
+  it('leads with the caller fallback and the status for an HttpError without a detail', () => {
+    expect(autobotApiErrorMessage(new HttpError(500, 'Internal Server Error'), 'Navigation failed')).toBe(
+      'Navigation failed (HTTP 500)',
+    )
   })
 
   it('falls back to the supplied default for a non-Error rejection', () => {
