@@ -2605,7 +2605,7 @@
         "failedToLoadPrompts": "Neizdevās ielādēt uzveicinājumus",
         "failedToSavePrompt": "Neizdevās saglabāt uzveicinājumu",
         "failedToRevertPrompt": "Neizdevās atjaunot uzveicinājumu",
-        "youHaveUnsavedChangesDiscardThem": "Jums ir nesaglābātas izmaiņas. Atgriezties?",
+        "youHaveUnsavedChangesDiscardThem": "Jums ir nesaglabātas izmaiņas. Vai tās atmest?",
         "areYouSureYouWantToRevert": "Are you sure you want to revert this prompt to its default content?"
       },
       "sSOSettings": {
@@ -2858,6 +2858,7 @@
         "ssoProviderCreated": "SSO provider created successfully",
         "ssoProviderDeleted": "SSO provider deleted successfully",
         "ssoConnectionSuccessful": "SSO provider connection successful",
+        "ssoConnectionFailed": "SSO provider connection test failed",
         "failedToLoadSlmUsers": "Failed to load SLM users",
         "failedToLoadAutobotUsers": "Failed to load AutoBot users",
         "failedToLoadTeams": "Failed to load teams",
