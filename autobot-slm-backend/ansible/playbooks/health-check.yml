@@ -13,10 +13,10 @@
   gather_facts: true
   serial: "{{ ansible_facts['serial'] | default(0) }}"  # Check all VMs in parallel
 
-  # chromadb_heartbeat_path has ONE home; -i inventory.yml does not load
-  # inventory/group_vars, so load it by name like enroll-slm-agent.yml (#19413).
+  # chromadb_heartbeat_path has ONE home, loaded by name so any inventory defines it
+  # (#19413). Only that file: vars_files outranks inventory group_vars.
   vars_files:
-    - ../inventory/group_vars/all.yml
+    - ../vars/chromadb_endpoints.yml
 
   vars:
     health_check_timeout: 30
