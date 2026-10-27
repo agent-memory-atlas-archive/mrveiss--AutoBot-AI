@@ -61,3 +61,16 @@ def test_default_discovery_covers_the_canonical_text_extensions(tmp_path: Path) 
     got = _scanned_rel(FileServerConnector(config), tmp_path)
     assert {".rst", ".yaml", ".tsx"} <= TEXT_FILE_EXTENSIONS
     assert got == {"guide.rst", "conf.yaml", "view.tsx", "notes.md"}
+
+
+def test_a_secret_named_file_is_never_discovered(tmp_path: Path) -> None:
+    """Default discovery reads every text suffix, so secret-shaped names are excluded by name (#19339)."""
+    for name in ("credentials.json", "secrets.toml", "conf/.env.local", "notes.md", "tokenizer.py"):
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text("x\n", encoding="utf-8")
+    config = ConnectorConfig(
+        connector_id="fs-19339", connector_type="file_server", name="fs", config={"base_path": str(tmp_path)}
+    )
+    assert _scanned_rel(FileServerConnector(config), tmp_path) == {"notes.md", "tokenizer.py"}
+    explicit = _connector(tmp_path, include_patterns=["*"], exclude_patterns=[])
+    assert "credentials.json" not in _scanned_rel(explicit, tmp_path)  # an explicit list does not lift it

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import List
 
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.secret_file_names import is_secret_file_name
 from knowledge.connectors.base import AbstractConnector
 from knowledge.connectors.models import (
     ChangeInfo,
@@ -155,8 +156,12 @@ class FileServerConnector(AbstractConnector):
         return any(fnmatch.fnmatch(rel_path, pat) for pat in self._include_patterns)
 
     def _matches_exclude(self, rel_path: str) -> bool:
-        """Return True if rel_path is under a skipped dir or matches any exclude pattern."""
-        if self._skip_dirs.intersection(Path(rel_path).parts[:-1]):
+        """Return True if rel_path is under a skipped dir, names a secret, or matches an exclude pattern.
+
+        A secret-shaped file name is skipped always, even under an explicit exclude list: default
+        discovery reads every text suffix, so ``credentials.json`` would otherwise be ingested (#19339).
+        """
+        if self._skip_dirs.intersection(Path(rel_path).parts[:-1]) or is_secret_file_name(Path(rel_path).name):
             return True
         return any(fnmatch.fnmatch(rel_path, pat) for pat in self._exclude_patterns)
 
