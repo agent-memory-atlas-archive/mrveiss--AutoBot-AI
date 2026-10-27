@@ -662,7 +662,7 @@ INVENTORY
         # SLM_EXTERNAL_URL is set correctly and not left to the Python fallback.
         local_ip="$(detect_local_ip)"
         detect_network
-        cat > "${SECRETS_FILE}" << EOF
+        (umask 077; cat > "${SECRETS_FILE}") << EOF  # created 0600, never briefly world-readable under the tree's 022
 SLM_SECRET_KEY=${secret_key}
 SLM_ENCRYPTION_KEY=${encryption_key}
 SLM_HMAC_API_KEY_SECRET=${hmac_api_key_secret}

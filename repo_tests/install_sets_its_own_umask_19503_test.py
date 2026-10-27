@@ -45,3 +45,20 @@ def test_the_umask_takes_effect_under_a_loose_caller(tmp_path) -> None:
         timeout=10,
     )
     assert out.stdout.strip() == "755", out
+
+
+def _secrets_writes(source: str) -> list[str]:
+    """Every line that creates or truncates the SLM secrets file with a shell redirect."""
+    return [line.strip() for line in source.splitlines() if re.search(r'>\s*"\$\{SECRETS_FILE\}"', line)]
+
+
+def test_the_secrets_file_is_created_under_umask_077() -> None:
+    """code review on PR #19412: under the tree's 022 a new secrets file is 0644 until its chmod runs."""
+    writes = _secrets_writes((repo_root() / "install.sh").read_text(encoding="utf-8"))
+    assert writes, "no secrets-file write found -- the detector no longer matches install.sh"
+    assert all("umask 077" in line for line in writes), writes
+
+
+def test_contrast_a_bare_secrets_write_is_caught() -> None:
+    writes = _secrets_writes('cat > "${SECRETS_FILE}" << EOF\n(umask 077; cat > "${SECRETS_FILE}") << EOF\n')
+    assert [("umask 077" in line) for line in writes] == [False, True]
