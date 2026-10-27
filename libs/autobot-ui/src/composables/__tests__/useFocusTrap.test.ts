@@ -96,4 +96,21 @@ describe('useFocusTrap activate/deactivate', () => {
     deactivate()
     expect(document.activeElement).toBe(outside)
   })
+
+  it('leaves no document listener after activate twice and one deactivate', () => {
+    const { activate, deactivate } = useFocusTrap(build(), { listenOnDocument: true })
+    activate()
+    activate()
+    deactivate()
+    last.focus()
+    expect(tab().defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(last)
+  })
+
+  it('does not throw restoring focus to an element removed from the DOM', () => {
+    const { activate, deactivate } = useFocusTrap(build(), { restoreFocus: true, initialFocus: true })
+    activate()
+    outside.remove()
+    expect(() => deactivate()).not.toThrow()
+  })
 })

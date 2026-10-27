@@ -237,4 +237,6 @@ export function useKeyboardNav(
 
 // useAnnounce (#18240) and useFocusTrap (#19688) live in the shared kit; re-exported so existing
 // importers of this module keep working with ONE implementation.
+// NOTE: the kit useFocusTrap is manual (activate/deactivate); the former local copy auto-activated
+// through watch(containerRef), the kit one does not, so call activate() when the container shows.
 export { useAnnounce, useFocusTrap } from '@autobot/ui'
