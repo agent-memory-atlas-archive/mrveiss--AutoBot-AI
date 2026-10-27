@@ -39,6 +39,7 @@ from pathlib import Path
 
 from repo_tests._paths import repo_root
 from repo_tests._ratchet_base import base_table
+from repo_tests._reach import declare
 
 _ROOTS = ("autobot-frontend/src", "autobot-slm-frontend/src")
 _FOLDERS = ("components", "views", "composables")
@@ -60,27 +61,40 @@ _COMMENT_LINE = re.compile(r"^[ \t]*(?://|\*|/\*).*$", re.M)
 # 16 measured on ee1bfa15dc; 2 after this migration (the two held files above).
 PINS = {"local_formatter_declarations": 2}
 
-# The scan must reach at least this many files (903 measured), or a moved folder reads as 0.
-REACH_FLOOR = 800
+
+def _sources(src: Path) -> list[Path]:
+    """The component, view and composable sources of one app's ``src``."""
+    found = []
+    for folder in _FOLDERS:
+        for path in sorted((src / folder).rglob("*")):
+            rel = "/" + path.relative_to(src).as_posix()
+            if path.suffix in (".ts", ".vue") and not _EXCLUDED.search(rel):
+                found.append(path)
+    return found
+
+
+def _declarations(path: Path) -> int:
+    return len(_DECLARATION.findall(_COMMENT_LINE.sub("", path.read_text(encoding="utf-8"))))
 
 
 def scan(src: Path) -> tuple[int, int]:
     """Return (declarations, files scanned) for one app's ``src``."""
-    declared = scanned = 0
-    for folder in _FOLDERS:
-        for path in sorted((src / folder).rglob("*")):
-            rel = "/" + path.relative_to(src).as_posix()
-            if path.suffix not in (".ts", ".vue") or _EXCLUDED.search(rel):
-                continue
-            scanned += 1
-            text = _COMMENT_LINE.sub("", path.read_text(encoding="utf-8"))
-            declared += len(_DECLARATION.findall(text))
-    return declared, scanned
+    sources = _sources(src)
+    return sum(_declarations(p) for p in sources), len(sources)
 
 
-def scan_all(root: Path) -> tuple[int, int]:
-    results = [scan(root / rel) for rel in _ROOTS]
-    return sum(r[0] for r in results), sum(r[1] for r in results)
+def _population(root: Path) -> list[str]:
+    return [p.relative_to(root).as_posix() for rel in _ROOTS for p in _sources(root / rel)]
+
+
+# The scan must reach the population, or a moved folder reads as a clean 0.
+REACH = declare(
+    "frontend-local-formatter-scan",
+    discover=_population,
+    floor=903,  # mid-window: population 903, window (903, 903)
+    what="component, view and composable sources in both frontends",
+    roots=_ROOTS,
+)
 
 
 class TestTheDetectorWorksBeforeItsOutputIsRead:
@@ -130,9 +144,8 @@ def test_the_apps_do_not_hand_roll_more_formatters_than_pinned() -> None:
     root = repo_root()
     for rel in _ROOTS:
         assert (root / rel).is_dir(), f"{rel} has moved; this guard reads it by path"
-    now, scanned = scan_all(root)
+    now = sum(_declarations(root / rel) for rel in REACH.examined(root))
     pinned = PINS["local_formatter_declarations"]
-    assert scanned >= REACH_FLOOR, f"scan reached {scanned} files, floor is {REACH_FLOOR}; a folder moved (#19680)"
     assert now <= pinned, (
         f"{now} local formatter declarations, pin allows {pinned} (#19680). "
         "Use formatDuration / formatUptime / formatFileSize from utils/formatHelpers (@autobot/ui)."
