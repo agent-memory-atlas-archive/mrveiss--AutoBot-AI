@@ -108,6 +108,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "FIXED_INVENTORY",
         "Single-digit launch sites; the band is already near equality.",
     ),
+    "chromadb-port-one-home-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked files outside docs and tests, a subset of the tree; docs and tests grow at their own rate.",
+    ),
     "compose-files": (
         ABSOLUTE,
         "FIXED_INVENTORY",
@@ -222,6 +227,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "generated-type-redeclarations": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "The main GUI's non-test .ts/.vue, against all tracked frontend source; the test-file share drifts.",
+    ),
     "llc-sigterm-grace-copies": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -301,6 +311,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "monitoring-version-literals": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Compose, infrastructure and Ansible files (yml/yaml/ini/sh), against all tracked files there; drifts.",
     ),
     "model-tier-map-scan": (
         ABSOLUTE,
@@ -389,6 +404,17 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test Python under thirteen source roots, a subset of tracked Python; the test-file share drifts.",
+    ),
+    "landing-page-declared-dependencies": (
+        ABSOLUTE,
+        "FIXED_INVENTORY",
+        "The requirements files and the root pyproject.toml: a small, deliberately enumerable set.",
+    ),
+    "kit-export-names-14908": (ABSOLUTE, "NOT_PATHS", "Names parsed out of the kit's index, not files."),
+    "kit-shadow-ts-files-scanned-14908": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "The scanned .ts files are every non-test file under two app trees; no reference count co-moves with it.",
     ),
 }
 

@@ -25,8 +25,16 @@ UNSCOPED = frozenset(
         # Whole tree (#18940): every tracked test file, wherever a test lives; the population is
         # the test suite itself, so a roots= list would only go stale as tests move.
         "isolated-git-env",
+        # #19317: every tracked code/config/env/shell file outside docs -- the whole tree by suffix,
+        # since a re-added default can land in any component; a roots= list would only shrink it.
+        "tls-cert-dir-one-home-19317",
         # #19076: items are (role, unit) pairs from one registry file, not paths -- no roots= to check.
         "role-registry-installed-units",
+        # #19413: every tracked file, so a ChromaDB heartbeat path written anywhere is seen.
+        "chromadb-heartbeat-one-home-sweep",
+        # #19318: every tracked code/config file by suffix (.py, .sh, .yml, .j2, .env*, Dockerfile*),
+        # wherever a copy of the SLM admin password default could be written -- no prefix describes it.
+        "slm-admin-password-one-home-sweep",
         # #19319: every tracked file repo-wide (minus vendored/build parts), wherever a copy of the
         # AUTOBOT_FEATURE_ROUTERS_STRICT default could be written -- no prefix describes it.
         "feature-routers-strict-one-home-19319",
@@ -38,10 +46,18 @@ UNSCOPED = frozenset(
         "blanket-skip-test-module-sweep",
         # #19324: an extension filter (*.py, *.sh, *.yml, .env*, ...) over the whole tree, not a set of prefixes.
         "browser-port-single-home-scan",
+        # #19279: requirements files live in every package directory; a glob, not a set of prefixes.
+        "landing-page-declared-dependencies",
         "chromadb-bind-host-override-candidates",
         "chromadb-bind-launch-sites",
         "chromadb-compose-port-sites",
         "chromadb-compose-services",
+        # #14908: items are export names parsed from the kit index, not paths.
+        "kit-export-names-14908",
+        # #19321/#19322: every tracked file outside docs and tests, wherever a copy could be
+        # re-added; a roots= list would name the whole tree and go stale as it grows.
+        "chromadb-port-one-home-scan",
+        "slm-node-id-one-home-scan",
         "collectable-modules-inert-on-import",
         "component-style-block-sweep",
         "compose-files",
