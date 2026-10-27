@@ -350,6 +350,7 @@ _DECLARED_SCOPES = {
         "tools",
     ),
     "llc-actor-id-scan": ("autobot-backend/llc",),
+    "cache-never-in-repo": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "generated-type-redeclarations": ("autobot-frontend/src",),
     "severity-order-copies": ("autobot-backend", "autobot-slm-backend", "autobot_shared", "pipeline-scripts"),
     "llc-sigterm-grace-copies": ("autobot-backend/llc",),
