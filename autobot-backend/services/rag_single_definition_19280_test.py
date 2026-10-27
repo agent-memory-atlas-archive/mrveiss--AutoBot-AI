@@ -173,8 +173,9 @@ def _literal_score_thresholds(source: str) -> list[str]:
     found = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            args = node.args.args + node.args.kwonlyargs
-            defaults = [None] * (len(node.args.args) - len(node.args.defaults)) + node.args.defaults
+            positional = node.args.posonlyargs + node.args.args
+            args = positional + node.args.kwonlyargs
+            defaults = [None] * (len(positional) - len(node.args.defaults)) + node.args.defaults
             pairs = zip(args, defaults + node.args.kw_defaults)
             found += [f"{node.name}:{a.arg}" for a, d in pairs if a.arg == "score_threshold" and _nonzero(d)]
         elif isinstance(node, ast.keyword) and node.arg == "score_threshold" and _nonzero(node.value):
@@ -185,7 +186,10 @@ def _literal_score_thresholds(source: str) -> list[str]:
 
 
 def _nonzero(node) -> bool:
-    return isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and node.value != 0
+    """A non-zero numeric literal, signed (``-0.3`` is a ``UnaryOp`` over a ``Constant``) or not."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
+        node = node.operand
+    return isinstance(node, ast.Constant) and isinstance(node.value, int | float) and node.value != 0
 
 
 def test_the_retrieval_score_threshold_has_one_home():
@@ -205,6 +209,9 @@ def test_the_retrieval_score_threshold_has_one_home():
         "async def f(q, *, score_threshold=0.5):\n    pass\n",
         "svc.retrieve(q, score_threshold=0.3)\n",
         "class C:\n    score_threshold: float = 0.3\n",
+        "def f(score_threshold=0.3, /):\n    pass\n",
+        "def f(q, score_threshold=-0.3):\n    pass\n",
+        "svc.retrieve(q, score_threshold=-0.2)\n",
     ],
 )
 def test_a_literal_score_threshold_is_flagged(source):
@@ -216,8 +223,11 @@ def test_the_home_and_no_filtering_are_not_flagged():
     assert not _literal_score_thresholds("class C:\n    score_threshold: float = 0.0\n")
 
 
-def test_the_unit_interval_rag_knobs_are_clamped_at_runtime():
-    """#19354 review: the registry's 0-1 range is enforced where the value is read, not only documented."""
+def test_the_unit_interval_rag_knobs_are_range_checked_at_runtime():
+    """#19354 review: the registry's 0-1 range is enforced where the value is read, not only documented.
+
+    Out-of-range and NaN values fall back to the default rather than being clamped (second review).
+    """
     source = (BACKEND / "constants" / "rag_graph_constants.py").read_text(encoding="utf-8")
     calls = {
         node.args[0].value: node
@@ -226,5 +236,21 @@ def test_the_unit_interval_rag_knobs_are_clamped_at_runtime():
     }
     for name in ("AUTOBOT_RAG_SCORE_THRESHOLD", "AUTOBOT_RAG_GRAPH_WEIGHT"):
         call = calls[name]
-        assert getattr(call.func, "id", "") == "env_float_clamped", f"{name} must be read clamped"
-        assert [a.value for a in call.args[1:4]] == [0.3, 0.0, 1.0], f"{name}: default 0.3, clamped to 0..1"
+        assert getattr(call.func, "id", "") == "env_unit_interval", f"{name} must be read range-checked"
+        assert [a.value for a in call.args[1:2]] == [0.3], f"{name}: default 0.3"
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-0.1", "1.5", "30"])
+def test_an_invalid_unit_interval_value_falls_back_to_the_default(monkeypatch, raw):
+    """NaN or a value outside 0-1 is refused, not clamped to a floor that admits or rejects everything."""
+    from constants.rag_graph_constants import env_unit_interval
+
+    monkeypatch.setenv("AUTOBOT_RAG_TEST_UNIT", raw)
+    assert env_unit_interval("AUTOBOT_RAG_TEST_UNIT", 0.3) == 0.3
+
+
+def test_a_valid_unit_interval_value_is_used(monkeypatch):
+    from constants.rag_graph_constants import env_unit_interval
+
+    monkeypatch.setenv("AUTOBOT_RAG_TEST_UNIT", "0.45")
+    assert env_unit_interval("AUTOBOT_RAG_TEST_UNIT", 0.3) == 0.45
