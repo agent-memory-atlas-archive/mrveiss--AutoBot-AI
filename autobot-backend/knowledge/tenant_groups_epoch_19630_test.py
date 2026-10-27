@@ -31,23 +31,29 @@ _GET_USER_TEAMS = "autobot_shared.user_management.team_service.TeamService.get_u
 
 
 class _FakeRedis:
-    """The knowledge-database client: one counter per key, shared by every worker."""
+    """The knowledge-database client: one token per key, shared by every worker."""
 
     def __init__(self) -> None:
-        self.counters: dict[str, int] = {}
-        self.fail_incr = 0  # this many incr calls fail first
+        self.counters: dict[str, str] = {}
+        self.fail_set = 0  # this many set calls fail first
 
-    async def incr(self, key: str) -> int:
-        if self.fail_incr:
-            self.fail_incr -= 1
+    async def set(self, key: str, value: str, nx: bool = False):
+        if self.fail_set:
+            self.fail_set -= 1
             raise ConnectionError("redis down")
-        self.counters[key] = self.counters.get(key, 0) + 1
-        return self.counters[key]
+        if nx and key in self.counters:
+            return None
+        self.counters[key] = value
+        return True
 
     async def get(self, key: str):
-        return None if key not in self.counters else str(self.counters[key]).encode()
+        return None if key not in self.counters else self.counters[key].encode()
 
-    def epoch(self, org) -> int | None:
+    def evict(self, key: str) -> None:
+        """allkeys-lru dropped the key."""
+        self.counters.pop(key, None)
+
+    def epoch(self, org) -> str | None:
         return self.counters.get(membership_epoch.membership_epoch_key(org))
 
 
@@ -165,7 +171,7 @@ async def test_the_bump_is_per_organisation_and_leaves_the_global_acl_epoch_alon
     session = _session()
     await _service(session).remove_member(TEAM_T, USER_U)
     await _commit(session)
-    assert redis_db.epoch(ORG_1) == 1 and redis_db.epoch(ORG_2) is None
+    assert isinstance(redis_db.epoch(ORG_1), str) and redis_db.epoch(ORG_2) is None
     assert acl_epoch.ACL_EPOCH_KEY not in redis_db.counters
 
 
@@ -180,7 +186,7 @@ async def test_the_bump_runs_after_the_commit_not_before(redis_db):
     await _service(session).remove_member(TEAM_T, USER_U)
     assert redis_db.epoch(ORG_1) is None  # flushed, not committed: a reader could still re-cache the old teams
     await _commit(session)
-    assert redis_db.epoch(ORG_1) == 1
+    assert isinstance(redis_db.epoch(ORG_1), str)
 
 
 @pytest.mark.asyncio
@@ -206,15 +212,16 @@ def test_run_after_commit_refuses_a_session_without_a_callback_list():
 
 @pytest.mark.asyncio
 async def test_a_failed_bump_is_retried_and_logged(redis_db, caplog):
-    redis_db.fail_incr = 2
+    redis_db.fail_set = 2
     with caplog.at_level("ERROR"):
-        assert await membership_epoch.bump_membership_epoch(ORG_1) == 1
+        token = await membership_epoch.bump_membership_epoch(ORG_1)
+    assert token == redis_db.epoch(ORG_1) and token != "1"
     assert caplog.text.count("bump failed") == 2
 
 
 @pytest.mark.asyncio
 async def test_a_bump_that_fails_every_try_raises_after_the_bounded_attempts(redis_db, caplog):
-    redis_db.fail_incr = 99
+    redis_db.fail_set = 99
     with caplog.at_level("ERROR"), pytest.raises(membership_epoch.MembershipEpochBumpError):
         await membership_epoch.bump_membership_epoch(ORG_1)
     assert caplog.text.count("bump failed") == membership_epoch.MEMBERSHIP_EPOCH_BUMP_ATTEMPTS
@@ -275,3 +282,42 @@ async def test_the_cache_key_carries_the_organisation(redis_db):
             second = await tenant_groups.tenant_group_ids(_tenant(ORG_2), MagicMock())
     assert first == [str(TEAM_T)] and second == []
     assert in_org_2.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_an_evicted_epoch_never_revalidates_an_entry_cached_before_the_eviction(redis_db):
+    """allkeys-lru can drop the epoch key; a counter would restart and match an old entry again (#19630)."""
+    memberships = {USER_U: [TEAM_T]}
+    worker = _worker()
+    seen = []
+    await _groups_as(worker, memberships)
+    seen.append(redis_db.epoch(ORG_1))
+    await membership_epoch.bump_membership_epoch(ORG_1)
+    seen.append(redis_db.epoch(ORG_1))
+    await _groups_as(worker, memberships)  # cached under the bumped token
+    memberships[USER_U] = []  # the revocation
+    redis_db.evict(membership_epoch.membership_epoch_key(ORG_1))
+
+    assert await _groups_as(worker, memberships) == [], "the pre-eviction entry must not be served"
+    seen.append(redis_db.epoch(ORG_1))
+    assert seen[-1] is not None and seen[-1] not in seen[:-1]
+
+
+@pytest.mark.asyncio
+async def test_a_bump_after_an_eviction_does_not_reproduce_an_earlier_value(redis_db):
+    key = membership_epoch.membership_epoch_key(ORG_1)
+    earlier = {await membership_epoch.bump_membership_epoch(ORG_1)}
+    for _ in range(3):
+        redis_db.evict(key)
+        earlier.add(await membership_epoch.read_membership_epoch(ORG_1))  # re-minted on read
+        redis_db.evict(key)
+        bumped = await membership_epoch.bump_membership_epoch(ORG_1)
+        assert bumped not in earlier and bumped != "0"
+        earlier.add(bumped)
+    assert len(earlier) == 7
+
+
+@pytest.mark.asyncio
+async def test_a_missing_epoch_is_minted_once_and_never_reads_as_zero(redis_db):
+    first = await membership_epoch.read_membership_epoch(ORG_1)
+    assert first not in (None, "0") and await membership_epoch.read_membership_epoch(ORG_1) == first

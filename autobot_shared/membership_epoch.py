@@ -44,34 +44,61 @@ def membership_epoch_key(org_id: uuid.UUID | str | None) -> str:
     return f"{MEMBERSHIP_EPOCH_KEY_PREFIX}{org_id or ''}"
 
 
+def new_epoch_token() -> str:
+    """A fresh opaque epoch value.
+
+    Epochs are random tokens, never counters: the knowledge Redis runs ``allkeys-lru``, so an epoch
+    key can be evicted, and a counter would then restart at 0/1/2... and revalidate a cache entry
+    recorded under an earlier, equal value. A random token never repeats a value seen before.
+    """
+    return uuid.uuid4().hex
+
+
+def _decode_epoch(raw) -> str:
+    return raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else str(raw)
+
+
+async def read_epoch_token(client, key: str) -> str | None:
+    """The token stored at *key*, minting one when the key is missing (never ``"0"``).
+
+    A missing key (first use, or evicted) is filled with ``SET NX`` and read back, so concurrent
+    workers converge on whichever token won. ``None`` -- still missing, or any failure -- means
+    "serve and fill no cache": an unreadable epoch cannot prove an entry predates no revocation.
+    """
+    raw = await client.get(key)
+    if raw is None:
+        await client.set(key, new_epoch_token(), nx=True)
+        raw = await client.get(key)
+    return None if raw is None else _decode_epoch(raw)
+
+
 async def read_membership_epoch(org_id: uuid.UUID | str | None) -> str | None:
-    """The organisation's epoch as text, ``"0"`` before the first bump, ``None`` when unreadable.
+    """The organisation's epoch token, minted on first use or after an eviction, ``None`` when unreadable.
 
     ``None`` means "serve and fill no cache": an unreadable epoch cannot prove an entry predates
-    no revocation.
+    no revocation. See ``new_epoch_token`` for why the value is a token and not a counter.
     """
     try:
         client = await get_async_redis_client(database=MEMBERSHIP_EPOCH_DATABASE)
         if client is None:
             return None
-        raw = await client.get(membership_epoch_key(org_id))
+        return await read_epoch_token(client, membership_epoch_key(org_id))
     except Exception as exc:
         logger.warning("KB membership epoch unreadable; team caches are skipped: %s", exc)
         return None
-    if raw is None:
-        return "0"
-    return raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else str(raw)
 
 
-async def _bump_once(org_id: uuid.UUID | str | None) -> int:
+async def _bump_once(org_id: uuid.UUID | str | None) -> str:
     client = await get_async_redis_client(database=MEMBERSHIP_EPOCH_DATABASE)
     if client is None:
         raise MembershipEpochBumpError("no Redis client")
-    return int(await client.incr(membership_epoch_key(org_id)))
+    token = new_epoch_token()
+    await client.set(membership_epoch_key(org_id), token)
+    return token
 
 
-async def bump_membership_epoch(org_id: uuid.UUID | str | None) -> int:
-    """INCR the organisation's epoch, retrying a bounded number of times with backoff.
+async def bump_membership_epoch(org_id: uuid.UUID | str | None) -> str:
+    """SET the organisation's epoch to a fresh token, retrying a bounded number of times with backoff.
 
     Every failed try is logged at error level; exhausting the tries raises
     ``MembershipEpochBumpError`` -- the revocation is durable, so the caller must learn that its
@@ -83,7 +110,7 @@ async def bump_membership_epoch(org_id: uuid.UUID | str | None) -> int:
             return await _bump_once(org_id)
         except Exception as exc:
             logger.error(
-                "KB membership epoch bump failed for org %s (try %d/%d): %s",
+                "KB membership epoch bump failed for org %s (try %s/%s): %s",
                 org_id, attempt, MEMBERSHIP_EPOCH_BUMP_ATTEMPTS, exc,
             )  # fmt: skip
             if attempt == MEMBERSHIP_EPOCH_BUMP_ATTEMPTS:
@@ -99,5 +126,5 @@ class MembershipEpochBump:
 
     org_id: uuid.UUID | str | None
 
-    async def __call__(self) -> int:
+    async def __call__(self) -> str:
         return await bump_membership_epoch(self.org_id)

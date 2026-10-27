@@ -57,21 +57,37 @@ B_SEES = {"b-private", "b-private-too", "shared-with-a", "system-fact"}
 WHO = [(PRINCIPAL_A, A_SEES), (PRINCIPAL_B, B_SEES)]
 
 
+class _Done:
+    """The return of a SET usable from both the sync ownership client and the async readers."""
+
+    def __await__(self):
+        return iter(())
+
+
 class _EpochStore:
-    """A Redis stand-in for the ACL epoch: the sync INCR ownership uses, the async GET the readers use."""
+    """A Redis stand-in for the ACL epoch: the sync SET ownership bumps with, the async GET/SET NX the readers use."""
 
     def __init__(self) -> None:
-        self.value = 0
+        self.value: str | None = None
+        self.bumps = 0
         self.reachable = True
 
-    def incr(self, key):
+    def set(self, key, value, nx=False):
         assert key == ACL_EPOCH_KEY
-        self.value += 1
-        return self.value
+        if nx and self.value is not None:
+            return _Done()
+        self.value = value
+        if not nx:
+            self.bumps += 1
+        return _Done()
 
     async def get(self, key):
         assert key == ACL_EPOCH_KEY
-        return str(self.value).encode("utf-8") if self.value else None
+        return self.value.encode("utf-8") if self.value is not None else None
+
+    def evict(self) -> None:
+        """allkeys-lru dropped the epoch key."""
+        self.value = None
 
     def sadd(self, key, *members):
         return 1
@@ -298,10 +314,24 @@ async def test_an_unshare_bumps_the_epoch_and_orphans_as_cached_hit(harness):
 
     manager = harness.svc.kb_adapter.kb.ownership_manager
     await manager.unshare_fact("shared-with-a", user_ids=["A"], fact_metadata=dict(SHARED_WITH_A.metadata))
-    assert harness.epoch.value == 1
+    assert harness.epoch.bumps == 1
 
     await harness.search(PRINCIPAL_A, max_results=5)
     assert harness.svc.optimizer.advanced_search.await_count == 2, "the unshare must invalidate A's cached hit"
+
+
+@pytest.mark.asyncio
+async def test_an_evicted_epoch_does_not_revalidate_a_cached_hit(harness):
+    await harness.search(PRINCIPAL_A, max_results=5)
+    first = harness.epoch.value
+    await harness.search(PRINCIPAL_A, max_results=5)
+    assert harness.svc.optimizer.advanced_search.await_count == 1
+
+    harness.epoch.evict()
+    await harness.search(PRINCIPAL_A, max_results=5)
+
+    assert harness.svc.optimizer.advanced_search.await_count == 2, "an eviction must not serve the old entry"
+    assert harness.epoch.value not in (None, "0", first)
 
 
 @pytest.mark.asyncio
@@ -309,7 +339,7 @@ async def test_cleanup_of_visibility_indexes_bumps_the_epoch(harness):
     manager = harness.svc.kb_adapter.kb.ownership_manager
     await manager.cleanup_ownership_indexes("f1", {"owner_id": "B", "visibility": "shared", "shared_with": ["A"]})
 
-    assert harness.epoch.value == 1
+    assert harness.epoch.bumps == 1
 
 
 @pytest.mark.asyncio
