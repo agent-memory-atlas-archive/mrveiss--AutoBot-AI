@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import ast
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -27,6 +26,7 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
 from autobot_shared import paths
+from autobot_shared.isolated_git import make_repo
 
 _ROOTS = ("autobot-backend", "autobot-slm-backend", "autobot_shared")
 _TEST = re.compile(r"(^|/)(tests?/|test_[^/]*\.py$|[^/]*_test\.py$|conftest\.py$)")
@@ -166,7 +166,7 @@ def test_an_unrelated_git_repo_above_the_cache_is_not_this_checkout(
 ) -> None:
     """A dotfiles ``~/.git`` must not push the cache into a temp dir a reboot empties."""
     home = tmp_path / "home"
-    subprocess.run(["git", "init", "-q", str(home)], check=True, env=paths.scrubbed_git_env())  # nosec B603 B607
+    make_repo(home)
     monkeypatch.setenv(paths.CACHE_DIR_ENV, str(home / ".cache" / "autobot"))
     assert paths.cache_root() == (home / ".cache" / "autobot").resolve()
 
