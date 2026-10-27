@@ -287,6 +287,11 @@ def load_verified(repo_id: str, *loaders: Callable[[str], T]) -> tuple[T, ...]:
     unverified assignment.
     """
     revision = get_pinned_revision(repo_id)
+    if Path(repo_id).exists():
+        # Loaders such as CrossEncoder / SentenceTransformer load a local path in preference to the
+        # Hub id; a same-named directory under the working directory would run unverified weights
+        # while the check below verified the cache. Fail closed before any load (#19355 review).
+        raise ModelIntegrityError(f"{repo_id!r} names an existing local path; refusing to shadow the pinned model")
     results = tuple(loader(revision) for loader in loaders)
     verify_cached_model(repo_id)
     return results

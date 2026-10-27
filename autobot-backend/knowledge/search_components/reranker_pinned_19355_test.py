@@ -54,6 +54,14 @@ def test_a_digest_mismatch_leaves_no_model(fresh_loader, monkeypatch) -> None:
     assert not reranking.is_reranking_active()
 
 
+def test_a_local_directory_named_like_the_model_is_refused(fresh_loader, monkeypatch, tmp_path) -> None:
+    """A same-named directory in the working directory would load unverified weights (#19355 review)."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ResultReranker.MODEL_NAME).mkdir(parents=True)
+    assert get_cross_encoder() is None
+    assert fresh_loader == []  # refused before CrossEncoder was ever called
+
+
 def test_the_inert_config_field_and_yaml_key_are_retired() -> None:
     assert "reranking_model" not in RAGConfig.__dataclass_fields__
     assert "reranking_model" not in RAGConfig().to_dict()
