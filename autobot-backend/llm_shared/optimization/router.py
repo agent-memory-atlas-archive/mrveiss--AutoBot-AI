@@ -11,12 +11,13 @@ GPU-level optimizations while cloud providers get API-level optimizations.
 Issue #717: Efficient Inference Design implementation.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Set
 
 from autobot_shared.logging_manager import get_logger
 from autobot_shared.singleton_factory import lazy_singleton
+from autobot_shared.ssot_config import config
 from constants.ttl_constants import TTL_5_MINUTES
 
 from ..types import ProviderType
@@ -75,7 +76,7 @@ class OptimizationConfig:
 
     # Response caching
     cache_enabled: bool = True
-    cache_l1_size: int = 100
+    cache_l1_size: int = field(default_factory=lambda: config.misc.cache_l1_size)  # #19730
     cache_l2_ttl: int = TTL_5_MINUTES
 
 

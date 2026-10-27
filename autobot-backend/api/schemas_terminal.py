@@ -9,7 +9,9 @@ Terminal and AgentTerminal session, SSH, command, and health schemas.
 from enum import Enum
 from typing import Any, Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from autobot_shared.ssot_config import config
 
 # ---------------------------------------------------------------------------
 # Terminal schemas
@@ -475,7 +477,7 @@ class CommandRequest(BaseModel):
     command: str
     description: str | None = None
     require_confirmation: bool | None = True
-    timeout: float | None = 30.0
+    timeout: float | None = Field(default_factory=lambda: config.timeout.subprocess)  # #19730
     working_directory: str | None = None
     environment: Dict[str, str] | None = None
 

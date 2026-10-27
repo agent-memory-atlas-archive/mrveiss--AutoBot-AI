@@ -341,7 +341,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/services/knowledge/test_kb_synthesizer.py": 802,
     "autobot-backend/services/llm_cost_tracker.py": 1166,  # #16230: MODEL_PRICING table removed
     "autobot-backend/services/llm_service.py": 1199,  # #16845: _track_usage delegated to llm_usage_recording
-    "autobot-backend/services/load_balancer.py": 685,
+    "autobot-backend/services/load_balancer.py": 677,
     "autobot-backend/services/nl_database_service.py": 775,
     "autobot-backend/services/notification_service.py": 614,
     "autobot-backend/services/npu_worker_manager.py": 1419,
@@ -439,7 +439,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-slm-backend/api/updates.py": 1107,
     "autobot-slm-backend/main.py": 773,  # #19368: admin seed password into services/admin_seed_password.py
     "autobot-slm-backend/models/database.py": 1140,
-    "autobot-slm-backend/models/schemas.py": 2144,
+    "autobot-slm-backend/models/schemas.py": 2139,
     "autobot-slm-backend/monitoring/business_intelligence_dashboard.py": 1159,
     "autobot-slm-backend/monitoring/performance_benchmark.py": 1073,
     "autobot-slm-backend/monitoring/performance_monitor.py": 729,

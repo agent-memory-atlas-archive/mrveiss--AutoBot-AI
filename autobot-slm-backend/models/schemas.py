@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
+from autobot_shared.ssot_config import config
 from services.ssh_utils import SshHost, SshPassword, SshUser
 
 from .database import BackupServiceType, NodeStatus, ScheduleTargetType  # noqa: F401  (re-exported)
@@ -166,7 +167,7 @@ class NodeCreate(BaseModel):
     ip_address: SshHost
     node_id: str | None = None  # Custom node_id; if not provided, derived from hostname
     roles: List[str] = Field(default_factory=list)
-    ssh_user: SshUser | None = "autobot"
+    ssh_user: SshUser | None = Field(default_factory=lambda: config.path.ssh_user)  # #19730
     ssh_port: int | None = 22
     ssh_password: SshPassword | None = None
     auth_method: str | None = "password"
@@ -195,7 +196,7 @@ class NodeResponse(BaseModel):
     status: str
     roles: List[str] | None = []
     detected_roles: List[str] = Field(default_factory=list)
-    ssh_user: str | None = "autobot"
+    ssh_user: str | None = Field(default_factory=lambda: config.path.ssh_user)
     ssh_port: int | None = 22
     auth_method: str | None = "key"
     cpu_percent: float
@@ -494,7 +495,7 @@ class ConnectionTestRequest(BaseModel):
     """SSH connection test request."""
 
     ip_address: SshHost
-    ssh_user: SshUser = "autobot"
+    ssh_user: SshUser = Field(default_factory=lambda: config.path.ssh_user)
     ssh_port: int = 22
     auth_method: str = "password"
     password: str | None = None
@@ -1994,24 +1995,18 @@ class AgentLLMConfig(BaseModel):
     llm_provider: str
     llm_endpoint: str | None = None
     llm_model: str
-    llm_timeout: int = 30
-    llm_temperature: float = 0.7
+    llm_timeout: int = Field(default_factory=lambda: config.llm_timeout)  # #19730
+    llm_temperature: float = Field(default_factory=lambda: config.llm_temperature)
     llm_max_tokens: int | None = None
 
 
-class AgentResponse(BaseModel):
-    """Agent response with LLM config."""
+class AgentResponse(AgentLLMConfig):
+    """Agent response with LLM config (the LLM fields are AgentLLMConfig's, #19730)."""
 
     id: int
     agent_id: str
     name: str
     description: str | None = None
-    llm_provider: str
-    llm_endpoint: str | None = None
-    llm_model: str
-    llm_timeout: int = 30
-    llm_temperature: float = 0.7
-    llm_max_tokens: int | None = None
     is_default: bool = False
     is_active: bool = True
     created_at: datetime
@@ -2030,8 +2025,8 @@ class AgentCreateRequest(BaseModel):
     llm_endpoint: str | None = None
     llm_model: str = Field(..., min_length=1, max_length=64)
     llm_api_key: str | None = None  # Will be encrypted before storage
-    llm_timeout: int = Field(default=30, ge=1, le=300)
-    llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    llm_timeout: int = Field(default_factory=lambda: config.llm_timeout, ge=1, le=300)
+    llm_temperature: float = Field(default_factory=lambda: config.llm_temperature, ge=0.0, le=2.0)
     llm_max_tokens: int | None = Field(default=None, ge=1, le=128000)
     is_default: bool = False
     is_active: bool = True
