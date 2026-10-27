@@ -77,10 +77,9 @@ class FileServerConnector(AbstractConnector):
         super().__init__(config)
         cfg = config.config
         self._base_path = Path(cfg.get("base_path", ""))
-        self._include_patterns: List[str] = cfg.get(
-            "include_patterns",
-            ["**/*.txt", "**/*.md", "**/*.json", "**/*.csv", "**/*.py", "**/*.html"],
-        )
+        # Default discovery follows the canonical text set, so every readable suffix is found (#19339).
+        default_include = [f"*{ext}" for ext in sorted(_SUPPORTED_EXTENSIONS)]  # fnmatch * spans /, root too
+        self._include_patterns: List[str] = cfg.get("include_patterns", default_include)
         # Default excludes: the canonical skip dirs (as whole path components, so a
         # root-level `node_modules/` is caught too) and minified bundles. An explicit
         # `exclude_patterns` replaces both: the operator then owns the list (#19339).

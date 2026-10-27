@@ -36,13 +36,8 @@ def tree(tmp_path: Path) -> Path:
 
 
 def _scanned_rel(connector: FileServerConnector, base: Path) -> set[str]:
-    return {
-        str(p.relative_to(base))
-        for p in base.rglob("*")
-        if p.is_file()
-        and not connector._matches_exclude(str(p.relative_to(base)))
-        and connector._matches_include(str(p.relative_to(base)))
-    }
+    """What the connector's own scan returns, relative to *base* -- not a re-implementation of it."""
+    return {str(Path(source.path).relative_to(base)) for source in connector._scan_files_sync()}
 
 
 def test_default_excludes_skip_canonical_dirs_and_minified_files(tree: Path) -> None:
@@ -52,3 +47,17 @@ def test_default_excludes_skip_canonical_dirs_and_minified_files(tree: Path) -> 
 def test_an_explicit_exclude_list_replaces_the_defaults(tree: Path) -> None:
     got = _scanned_rel(_connector(tree, exclude_patterns=["pkg/*"]), tree)
     assert "node_modules/dep.js" in got and "web/app.min.js" in got and "pkg/app.py" not in got
+
+
+def test_default_discovery_covers_the_canonical_text_extensions(tmp_path: Path) -> None:
+    """With no include_patterns, every TEXT_FILE_EXTENSIONS file is discovered, not a 6-suffix subset."""
+    from utils.file_types import TEXT_FILE_EXTENSIONS
+
+    for name in ("guide.rst", "conf.yaml", "view.tsx", "notes.md"):
+        (tmp_path / name).write_text("x\n", encoding="utf-8")
+    config = ConnectorConfig(
+        connector_id="fs-19339", connector_type="file_server", name="fs", config={"base_path": str(tmp_path)}
+    )
+    got = _scanned_rel(FileServerConnector(config), tmp_path)
+    assert {".rst", ".yaml", ".tsx"} <= TEXT_FILE_EXTENSIONS
+    assert got == {"guide.rst", "conf.yaml", "view.tsx", "notes.md"}
