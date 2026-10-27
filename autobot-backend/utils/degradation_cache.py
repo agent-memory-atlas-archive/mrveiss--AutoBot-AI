@@ -94,7 +94,7 @@ class FallbackStrategy(ABC):
 
     @abstractmethod
     def get_strategy_name(self) -> str:
-        """Get the name of this strategy"""
+        """Return the identifier this strategy is registered and reported under."""
 
 
 class CachedResponseStrategy(FallbackStrategy):
