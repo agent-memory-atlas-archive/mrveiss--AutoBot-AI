@@ -217,7 +217,7 @@ export function useSkills() {
 function _extractError(err: unknown): string {
   // `autobotApiErrorMessage` is the one implementation of the FastAPI
   // `{ detail }` unwrap this used to hand-roll via `axios.isAxiosError`. Its
-  // fallback chain is identical: `response.data.detail`, then `err.message`.
+  // fallback chain is the `HttpError` detail, then `err.message`.
   return autobotApiErrorMessage(err, String(err))
 }
 

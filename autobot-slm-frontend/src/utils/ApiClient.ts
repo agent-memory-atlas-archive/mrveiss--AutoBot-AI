@@ -69,6 +69,11 @@ export interface RequestOptions {
    */
   suppressErrorLog?: boolean
   /**
+   * When true, a 401 is returned to the caller without clearing the session. Only for
+   * connectivity diagnostics, which report a status instead of acting on it (#12363).
+   */
+  keepSessionOn401?: boolean
+  /**
    * Query parameters, appended URL-encoded to the endpoint (#12363). `null` and
    * `undefined` values are left out, so an optional filter needs no branching.
    */
@@ -177,6 +182,7 @@ export class SlmApiClient {
       timeout = this.defaultTimeout,
       signal: externalSignal,
       params,
+      keepSessionOn401 = false,
     } = options
 
     const baseUrl = this.resolveBaseUrl()
@@ -238,7 +244,7 @@ export class SlmApiClient {
       // Handle 401 — redirect to login (skip for auth/mfa endpoints). Pass
       // whether THIS request carried a bearer token so we only clear + redirect
       // on a genuine rejection of an authenticated request.
-      if (response.status === 401 && !this.isAuthEndpoint(endpoint)) {
+      if (response.status === 401 && !this.isAuthEndpoint(endpoint) && !keepSessionOn401) {
         this.handleUnauthorized(endpoint, authToken != null)
       }
 
