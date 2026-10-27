@@ -49,7 +49,7 @@ defineProps<{
 }
 
 .panel-header .icon {
-  color: var(--chart-yellow, #f59e0b);
+  color: var(--chart-yellow);
 }
 
 .count-badge {

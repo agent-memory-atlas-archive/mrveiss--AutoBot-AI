@@ -350,7 +350,7 @@ function formatStatus(status: string): string {
   gap: var(--spacing-2);
   padding: var(--spacing-2) var(--spacing-4);
   background: var(--color-primary);
-  color: var(--color-primary-fg, #fff);
+  color: var(--text-on-primary);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -405,7 +405,7 @@ function formatStatus(status: string): string {
 
 /* Error state */
 .error-notice {
-  border: 1px solid var(--color-error-border, #f87171);
+  border: 1px solid var(--color-error-border);
   border-radius: var(--radius-md);
   background: var(--color-error-bg, rgba(239, 68, 68, 0.1));
   padding: var(--spacing-5);
@@ -436,7 +436,7 @@ function formatStatus(status: string): string {
   gap: var(--spacing-2);
   padding: var(--spacing-2) var(--spacing-4);
   background: var(--color-error);
-  color: #fff;
+  color: var(--text-on-error);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -619,7 +619,7 @@ function formatStatus(status: string): string {
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-3);
-  color: #fff;
+  color: var(--text-on-primary);
   font-size: var(--text-sm);
 }
 
