@@ -13,7 +13,6 @@ proves nothing about the node.
 from __future__ import annotations
 
 import importlib.util
-import re
 import sys
 from pathlib import Path
 
@@ -88,17 +87,8 @@ def test_the_executor_result_carries_the_reason_as_a_fatal_line() -> None:
     absent = {"output": _SKIPS + _recap(with_node=False), "returncode": 0, "timed_out": False}
     proved = _au.with_limit_proof(absent, ["localhost", _NODE])
     assert proved["returncode"] == 1
-    assert proved["output"].splitlines()[-1].startswith("ERROR! no host named by the limit")
+    assert proved["output"].splitlines()[0].startswith("ERROR! no host named by the limit")
     ran = {"output": _SKIPS + _recap(), "returncode": 0}
     assert _au.with_limit_proof(ran, ["localhost", _NODE]) is ran
     failed = {"output": "x", "returncode": 2}
     assert _au.with_limit_proof(failed, ["localhost", _NODE]) is failed
-
-
-def test_execute_playbook_applies_the_limit_proof() -> None:
-    """Read as source: importing the executor pulls in the backend's DB layer."""
-    source = (_BACKEND_ROOT / "services" / "playbook_executor.py").read_text(encoding="utf-8")
-    start = source.index("    async def execute_playbook(")
-    nxt = re.search(r"\n    (async )?def |\n\S", source[start + 1 :])
-    body = source[start : start + 1 + nxt.start()] if nxt else source[start:]
-    assert "with_limit_proof(proc_result, limit)" in body

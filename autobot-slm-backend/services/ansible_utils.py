@@ -82,7 +82,8 @@ def limit_run_failure(output: str, limit: list[str] | None) -> str | None:
 
     A multi-play playbook skips every play whose group the limit leaves out, which is normal; but
     when ONLY localhost ran, every named host was skipped. Limit entries may be group names, so
-    this asks for any non-localhost recap host with ok>=1 rather than for each name.
+    this asks for any non-localhost recap host with ok>=1 rather than for each name -- with several
+    named hosts, one that ran satisfies it while another may have been skipped (the known limit).
     """
     named = [h for h in (limit or ()) if h not in _LOCAL_HOSTS]
     if not named or any(c[0] >= 1 for h, c in _last_recap(output).items() if h not in _LOCAL_HOSTS):
@@ -93,10 +94,11 @@ def limit_run_failure(output: str, limit: list[str] | None) -> str | None:
 def with_limit_proof(result: dict, limit: list[str] | None) -> dict:
     """``result`` with an exit-0 run that ``limit_run_failure`` rejects turned into exit 1 (#19762).
 
-    The reason is appended as an ``ERROR!`` line so the caller's fatal-line extraction reports it.
+    The reason LEADS the output as an ``ERROR!`` line: callers report the first fatal-looking line,
+    and an exit-0 run is full of debug ``msg:`` lines that would otherwise come first.
     """
     why = limit_run_failure(result["output"], limit) if result.get("returncode") == 0 else None
-    return {**result, "returncode": 1, "output": f"{result['output']}\nERROR! {why}"} if why else result
+    return {**result, "returncode": 1, "output": f"ERROR! {why}\n{result['output']}"} if why else result
 
 
 def ansible_run_failure(output: str, host: str | None, returncode: int | None) -> str | None:
