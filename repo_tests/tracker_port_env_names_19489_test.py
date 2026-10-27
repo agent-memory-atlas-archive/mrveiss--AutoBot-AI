@@ -50,10 +50,19 @@ def port_aliases() -> dict[str, str]:
     return out
 
 
+def _constants_block(text: str) -> str:
+    """The ``NetworkConstants = { ... }`` object only, so another ``*_PORT:`` line elsewhere is not read."""
+    start = text.find("export const NetworkConstants = {")
+    return text[start : text.find("} as const", start)] if start >= 0 else text
+
+
 def mismatches(text: str, aliases: dict[str, str]) -> list[str]:
     """Each tracker port whose canonical name is not its PortConfig alias, or that skips ``port()``."""
-    calls = {key: canonical for key, canonical, _legacy, _default in _PORT_CALL.findall(text)}
-    out = [f"{key}: not read through port()" for key in _ANY_PORT_KEY.findall(text) if key not in calls]
+    block = _constants_block(text)
+    found = _PORT_CALL.findall(block)
+    calls = {key: canonical for key, canonical, _legacy, _default in found}
+    out = [f"{key}: not read through port()" for key in _ANY_PORT_KEY.findall(block) if key not in calls]
+    out += [f"{key}: legacy fallback is {legacy}, not {key}" for key, _c, legacy, _d in found if legacy != key]
     for key, canonical in calls.items():
         field = FIELDS.get(key)
         if field is None:
@@ -83,3 +92,5 @@ def test_a_bare_or_wrong_name_is_caught() -> None:
     assert mismatches(text, aliases) == ["BACKEND_PORT: not read through port()"]
     text = "  BACKEND_PORT: port('BACKEND_PORT', 'BACKEND_PORT', '8001'),\n"
     assert mismatches(text, aliases) == ["BACKEND_PORT: reads BACKEND_PORT, PortConfig.backend is AUTOBOT_BACKEND_PORT"]
+    text = "  BACKEND_PORT: port('AUTOBOT_BACKEND_PORT', 'WRONG', '8001'),\n"
+    assert mismatches(text, aliases) == ["BACKEND_PORT: legacy fallback is WRONG, not BACKEND_PORT"]
