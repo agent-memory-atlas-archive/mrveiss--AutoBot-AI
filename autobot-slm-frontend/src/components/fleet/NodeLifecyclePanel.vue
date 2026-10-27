@@ -331,7 +331,7 @@ async function fetchEvents(): Promise<boolean> {
       offset: filters.offset,
     })
 
-    if (seq !== fetchSeq) return true // stale: superseded, not a failure (false = failed, which the poller counts)
+    if (seq !== fetchSeq) return true // superseded: state not applied, but the result is this read's own (false counts for the poller)
     // Map backend events to local LifecycleEvent type
     events.value = nodeEvents.map((e) => ({
       id: e.id,
@@ -348,7 +348,7 @@ async function fetchEvents(): Promise<boolean> {
     return true
   } catch (error) {
     logger.error('Failed to fetch lifecycle events:', error)
-    if (seq !== fetchSeq) return true
+    if (seq !== fetchSeq) return false // superseded, but this read failed: the poller still counts it
     // Say the events could not be loaded; never show invented ones (#19270).
     events.value = []
     totalEvents.value = 0

@@ -156,6 +156,8 @@ function showNotification(message: string): void {
 
 /**
  * Load all data: fleet metrics, load balancing config, worker configs.
+ * The poller's tick follows the dashboard (nodes) read: only fetchNodes throws, the store's
+ * NPU fetches swallow their errors, so an NPU-only outage does not pause the poller.
  */
 async function refreshData(): Promise<void> {
   loading.value = true
