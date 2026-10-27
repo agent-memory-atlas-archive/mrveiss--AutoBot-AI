@@ -91,21 +91,21 @@ onMounted(() => {
   background: transparent;
   border-radius: 8px;
   cursor: pointer;
-  color: #9ca3af; /* text-gray-400 */
+  color: var(--text-muted);
   transition: all 0.2s ease;
 }
 
 .code-sync-badge:hover {
-  background: rgba(55, 65, 81, 0.5); /* gray-700 with opacity */
-  color: #ffffff;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .code-sync-badge.has-updates {
-  color: #f59e0b; /* amber-500 / warning */
+  color: var(--color-warning);
 }
 
 .code-sync-badge.has-updates:hover {
-  color: #fbbf24; /* amber-400 */
+  color: var(--color-warning-hover);
 }
 
 .badge-count {
@@ -115,8 +115,8 @@ onMounted(() => {
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  background: #f59e0b; /* amber-500 / warning */
-  color: white;
+  background: var(--color-warning);
+  color: var(--text-on-warning);
   border-radius: 8px;
   font-size: 10px;
   font-weight: 600;
