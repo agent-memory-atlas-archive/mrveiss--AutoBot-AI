@@ -199,9 +199,13 @@ def _docstrings(tree: ast.Module) -> set[int]:
     }
 
 
-def _python_sites(source: str, value: int) -> list[int]:
+def _python_sites(source: str, value: int, rel: str = "<source>") -> list[int]:
     """Lines of each non-docstring int or string constant stating *value*."""
-    tree, word = ast.parse(source), re.compile(_WORD.format(value))
+    try:
+        tree = ast.parse(source, filename=rel)
+    except SyntaxError as exc:  # name the file: a bare SyntaxError would hide which one broke the sweep
+        raise AssertionError(f"{rel}: swept but does not parse ({exc.msg}, line {exc.lineno})") from exc
+    word = re.compile(_WORD.format(value))
     prose = _docstrings(tree)
     lines = []
     for node in ast.walk(tree):
@@ -221,7 +225,7 @@ def _text_sites(text: str, value: int) -> list[int]:
 
 def sites(rel: str, text: str, value: int) -> list[int]:
     """Where *rel* states *value* as code, whatever its language."""
-    return _python_sites(text, value) if rel.endswith(".py") else _text_sites(text, value)
+    return _python_sites(text, value, rel) if rel.endswith(".py") else _text_sites(text, value)
 
 
 def _homes(number: int) -> set[str]:
@@ -258,12 +262,12 @@ def _unpinned(rel: str, text: str, number: int) -> str:
     return text
 
 
-def forbidden_sites(number: int, sources: dict[str, str]) -> list[str]:
+def forbidden_sites(number: int, sources: dict[str, str], known_table: dict | None = None) -> list[str]:
     """Every statement of a FORBIDDEN number outside its home and pinned sites, beyond its KNOWN count.
 
     Only the SSOT home (for a live number) and the detector tables are exempt as whole files.
     """
-    retired, known, out = not _homes(number), KNOWN.get(number, {}), []
+    retired, known, out = not _homes(number), (KNOWN if known_table is None else known_table).get(number, {}), []
     exempt = _DETECTOR_TABLES | (set() if retired else {_SSOT_HOME})
     for rel, text in sorted(sources.items()):
         if rel in exempt or (bool(_STORY.search(rel)) and not retired):
@@ -315,15 +319,36 @@ def test_no_forbidden_number_outside_its_homes() -> None:
     assert found == [], f"checked {len(sources)} files:\n" + "\n".join(found)
 
 
-def test_the_known_counts_only_shrink() -> None:
-    sources = _sources()
-    stale = [
+def stale_known(sources: dict[str, str], known_table: dict = KNOWN) -> list[str]:
+    """Each KNOWN entry whose file now states its number fewer times than recorded."""
+    return [
         f"{rel}: known {count}, states {len(sites(rel, sources.get(rel, ''), number))}"
-        for number, entries in KNOWN.items()
+        for number, entries in known_table.items()
         for rel, (count, _) in entries.items()
         if len(sites(rel, sources.get(rel, ""), number)) < count
     ]
+
+
+def test_the_known_counts_only_shrink() -> None:
+    stale = stale_known(_sources())
     assert stale == [], f"{stale} -- lower the KNOWN count, or delete the entry at zero"
+
+
+def test_the_known_allowance_holds_at_its_count_and_fails_one_above() -> None:
+    known = {8082: {"x/fix.sh": (2, "names the bad value it removes")}}
+    at_count = {"x/fix.sh": "A=8082\nB=8082\n"}
+    assert forbidden_sites(8082, at_count, known) == []
+    assert len(forbidden_sites(8082, {"x/fix.sh": "A=8082\nB=8082\nC=8082\n"}, known)) == 3
+
+
+def test_a_known_count_above_the_real_sites_is_stale() -> None:
+    known = {8082: {"x/fix.sh": (3, "names the bad value it removes")}}
+    assert stale_known({"x/fix.sh": "A=8082\n"}, known) == ["x/fix.sh: known 3, states 1"]
+
+
+def test_a_python_file_that_does_not_parse_is_named() -> None:
+    with pytest.raises(AssertionError, match=r"x/broken\.py: swept but does not parse"):
+        sites("x/broken.py", "def f(:\n", 8082)
 
 
 def test_a_pinned_copy_that_drifts_is_caught() -> None:
