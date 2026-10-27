@@ -1572,6 +1572,8 @@
         'npu' in group_names
       failed_when: false
       tags: [npu, npu-worker, restart]
+      check_mode: false
+      changed_when: false
 
     - name: "[PLAY 2] NPU | Warn if service not active (#1633)"
       debug:

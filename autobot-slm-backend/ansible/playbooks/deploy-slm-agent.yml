@@ -55,6 +55,7 @@
       register: agent_status
       changed_when: false
       failed_when: agent_status.rc != 0
+      check_mode: false
 
     - name: Display agent status
       debug:

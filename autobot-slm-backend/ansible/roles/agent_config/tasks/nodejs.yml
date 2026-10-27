@@ -12,6 +12,7 @@
   # the result gates conditional installation below.
   failed_when: false
   changed_when: false
+  check_mode: false
 
 - name: Download NodeSource setup script
   get_url:
@@ -44,11 +45,13 @@
   command: node --version
   register: node_version_output
   changed_when: false
+  check_mode: false
 
 - name: Verify npm installation
   command: npm --version
   register: npm_version_output
   changed_when: false
+  check_mode: false
 
 - name: Display Node.js and npm versions
   debug:

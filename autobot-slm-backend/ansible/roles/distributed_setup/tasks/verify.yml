@@ -10,6 +10,7 @@
   register: redis_cli_verify
   changed_when: false
   when: redis_cli_install
+  check_mode: false
 
 - name: Verify SSH key exists
   stat:

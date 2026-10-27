@@ -287,6 +287,7 @@ _DECLARED_SCOPES = {
         "pipeline-scripts/",
     ),
     "ansible-concept-forks-17856-scan": ("autobot-slm-backend/ansible",),
+    "ansible-status-queries-check-mode-sweep": ("autobot-slm-backend/ansible",),
     "defined-twice-18094-scan": (
         "autobot-backend",
         "autobot-slm-backend",

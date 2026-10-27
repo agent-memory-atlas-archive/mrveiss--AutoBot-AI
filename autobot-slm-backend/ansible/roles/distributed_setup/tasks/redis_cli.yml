@@ -70,6 +70,7 @@
   command: redis-cli --version
   register: redis_cli_version_output
   changed_when: false
+  check_mode: false
 
 - name: Display redis-cli version
   debug:

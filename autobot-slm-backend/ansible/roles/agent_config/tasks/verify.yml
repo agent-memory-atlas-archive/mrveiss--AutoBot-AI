@@ -10,6 +10,7 @@
   register: python_version_check
   changed_when: false
   failed_when: python_version_check.rc != 0
+  check_mode: false
 
 - name: Verify required Python packages
   command: "{{ venv_dir }}/bin/pip list"
@@ -38,6 +39,7 @@
   register: node_version_final
   changed_when: false
   when: install_nodejs
+  check_mode: false
 
 - name: Verify directory permissions
   stat:

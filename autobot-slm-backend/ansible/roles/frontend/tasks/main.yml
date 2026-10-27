@@ -57,6 +57,7 @@
   register: node_version
   changed_when: false
   tags: ['frontend', 'validation']
+  check_mode: false
 
 - name: "Frontend | Ensure frontend directory exists"
   file:
