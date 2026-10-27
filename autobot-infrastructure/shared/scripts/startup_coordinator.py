@@ -117,7 +117,7 @@ class ComponentInfo:
     port: Optional[int] = None
     health_url: Optional[str] = None
     dependencies: List[str] = None
-    start_command: Optional[str] = None
+    start_command: Optional[List[str]] = None  # argv, never a shell string (#19496)
     health_status: HealthStatus = HealthStatus.UNKNOWN
     start_time: Optional[float] = None
     ready_time: Optional[float] = None
@@ -166,7 +166,10 @@ class StartupCoordinator:
             port=NetworkConstants.BACKEND_PORT,
             health_url=f"{ServiceURLs.BACKEND_LOCAL}/api/system/health",
             dependencies=["redis", "config"],
-            start_command=f"uvicorn main:app --host 0.0.0.0 --port {NetworkConstants.BACKEND_PORT} --log-level info",
+            start_command=[
+                "uvicorn", "main:app", "--host", NetworkConstants.BIND_ALL_INTERFACES, "--port", str(NetworkConstants.BACKEND_PORT),
+                "--log-level", "info",
+            ],  # fmt: skip
         )
 
         # Frontend (depends on backend being ready)
@@ -175,7 +178,7 @@ class StartupCoordinator:
             port=NetworkConstants.FRONTEND_PORT,
             health_url=ServiceURLs.FRONTEND_LOCAL,
             dependencies=["backend"],
-            start_command="npm run dev",
+            start_command=["npm", "run", "dev"],
         )
 
         # Optional components
@@ -320,13 +323,12 @@ class StartupCoordinator:
 
         try:
             if component.start_command:
-                logger.info("Executing: %s", component.start_command)
+                logger.info("Executing: %s", " ".join(component.start_command))
 
                 env, cwd = self._get_component_env_and_cwd(component)
 
-                process = subprocess.Popen(
+                process = subprocess.Popen(  # nosec B603 -- fixed argv from this module, no shell (#19496)
                     component.start_command,
-                    shell=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     env=env,
