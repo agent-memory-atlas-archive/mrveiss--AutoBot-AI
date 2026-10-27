@@ -16,14 +16,15 @@ Regular users can only read their own profile (`GET /user-management/users/me`) 
 
 ### Deployment Mode Impact
 
-AutoBot runs in one of two modes, controlled by `AUTOBOT_DEPLOYMENT_MODE`:
+The tenancy mode is `AUTOBOT_USER_MODE`. User management, teams, SSO configuration, API keys and the audit log are on in every mode, backed by PostgreSQL (#10636). The modes add features (`MODE_FEATURES` in `autobot-backend/user_management/config.py`):
 
-| Mode | User Management | Self-Registration | Database Required |
-|---|---|---|---|
-| `single_user` | Disabled — all requests are treated as admin | Disabled (HTTP 400) | No |
-| `multi_user` | Enabled — full CRUD via PostgreSQL | Enabled (if not disabled) | Yes (PostgreSQL) |
+| Mode | Adds |
+|---|---|
+| `single_company` (default) | — |
+| `multi_company` | Organization switcher, quota management |
+| `provider` | Organization switcher, quota management, social login, tenant admin dashboard, billing |
 
-In `single_user` mode every call to the user management endpoints that requires the database returns HTTP 503. `GET /user-management/users/me` and `GET /user-management/users/search` still respond (with synthetic data and an empty list respectively) so that the rest of the UI continues to function.
+An unset or unrecognised `AUTOBOT_USER_MODE` falls back to `single_company`. `AUTOBOT_DEPLOYMENT_MODE` is the unrelated topology setting (local, docker_local, distributed, kubernetes, cloud).
 
 ### Roles
 
@@ -107,7 +108,6 @@ Response `201 Created`:
 |---|---|
 | `409 Conflict` | Username or email already in use |
 | `422 Unprocessable Entity` | Validation failure (see `detail` field) |
-| `503 Service Unavailable` | User management not enabled (single_user mode) |
 
 ---
 
@@ -227,7 +227,7 @@ Response `200 OK`:
 
 ## 6. User Self-Registration
 
-When `AUTOBOT_DEPLOYMENT_MODE` is not `single_user`, new users can create their own accounts via the signup endpoint.
+New users can create their own accounts via the signup endpoint, in every `AUTOBOT_USER_MODE` (`api/auth.py` `signup`).
 
 **Endpoint:** `POST /auth/signup`
 
@@ -270,22 +270,9 @@ The new account is assigned the `user` role automatically. An admin must elevate
 
 | HTTP | Meaning |
 |---|---|
-| `400 Bad Request` | `single_user` mode — self-registration is disabled |
 | `409 Conflict` | Username or email already in use |
 | `422 Unprocessable Entity` | Password/username validation failure |
-
-### single_user Mode Note
-
-In `single_user` deployment mode the signup endpoint always returns:
-
-```json
-HTTP 400
-{
-  "detail": "Self-registration is not available in single-user mode"
-}
-```
-
-To add users in single_user mode you must switch to `multi_user` mode and provision a PostgreSQL database, or use the admin panel from an account that already holds admin credentials.
+| `500 Internal Server Error` | Registration failed (logged server-side) |
 
 ---
 
@@ -445,7 +432,7 @@ Each organisation's data (knowledge base collections, agent sessions, file uploa
 1. Check that the account is **active** (`is_active: true`) in the admin panel.
 2. Check for account lockout: after 3 failed login attempts the account is locked for 15 minutes. The lockout state is stored in Redis. Confirm via the audit log (`data/audit.log`) for `AUTH_0001` events.
 3. Verify the password was not changed by another admin. Ask the user to confirm which credential they are using.
-4. In `multi_user` mode, confirm PostgreSQL is reachable. Backend startup errors are logged to `/var/log/autobot/backend-error.log`.
+4. Confirm PostgreSQL is reachable. Backend startup errors are logged to `/var/log/autobot/backend-error.log`.
 
 ### Permission Denied (403)
 
