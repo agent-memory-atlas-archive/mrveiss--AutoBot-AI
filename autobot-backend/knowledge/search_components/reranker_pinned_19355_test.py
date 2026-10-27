@@ -28,6 +28,7 @@ def fresh_loader(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
 
     loaded: list[tuple[str, str]] = []
     monkeypatch.setattr(reranking, "_cross_encoder_model", None)
+    monkeypatch.setattr(reranking, "_reranking_active", True)
     monkeypatch.setattr(
         sentence_transformers, "CrossEncoder", lambda name, revision: loaded.append((name, revision)) or object()
     )
@@ -50,6 +51,7 @@ def test_a_digest_mismatch_leaves_no_model(fresh_loader, monkeypatch) -> None:
     monkeypatch.setattr(pinned_model_registry, "verify_cached_model", mismatch)
     assert get_cross_encoder() is None
     assert reranking._cross_encoder_model is reranking._LOAD_FAILED
+    assert not reranking.is_reranking_active()
 
 
 def test_the_inert_config_field_and_yaml_key_are_retired() -> None:
