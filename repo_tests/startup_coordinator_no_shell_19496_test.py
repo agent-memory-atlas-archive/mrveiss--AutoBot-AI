@@ -66,3 +66,27 @@ def test_the_detectors_see_a_shell_and_a_string_command() -> None:
     assert string_start_commands(bad) == [2]
     good = ast.parse('subprocess.Popen(cmd, shell=False)\nComponentInfo(name="x", start_command=["npm", "run"])\n')
     assert shell_true_calls(good) == [] and string_start_commands(good) == []
+
+
+def _coordinator_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("startup_coordinator_19496", repo_root() / _COORDINATOR)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_a_group_member_outliving_its_leader_is_stopped() -> None:
+    """The leader exits at once, its backgrounded child survives: stop must still reach the child."""
+    import subprocess
+    import time
+
+    coordinator = _coordinator_module()
+    process = subprocess.Popen(["sh", "-c", "sleep 30 & exit 0"], start_new_session=True)
+    process.wait(timeout=5)  # leader gone, the sleep lives on in the group
+    assert coordinator._group_alive(process.pid)
+    assert coordinator._terminate_process_gracefully("t", process) is True
+    time.sleep(0.1)
+    assert not coordinator._group_alive(process.pid)
+    assert coordinator._terminate_process_gracefully("t", process) is False  # nothing left to stop

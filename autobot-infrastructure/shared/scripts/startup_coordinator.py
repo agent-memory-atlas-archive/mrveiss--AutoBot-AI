@@ -92,21 +92,44 @@ def _signal_group(process: subprocess.Popen, sig: int) -> None:
         process.send_signal(sig)
 
 
+def _group_alive(pgid: int) -> bool:
+    """Whether any process is left in group *pgid* (signal 0 probes without delivering)."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _wait_for_group(process: subprocess.Popen, timeout: float) -> bool:
+    """Reap the leader and wait until its whole group is gone; True if it went within *timeout*."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        process.poll()  # reap the leader so it does not linger as a zombie group member
+        if not _group_alive(process.pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 def _terminate_process_gracefully(name: str, process: subprocess.Popen) -> bool:
-    """Terminate a process gracefully with fallback to kill (Issue #315 - extracted)."""
-    if process.poll() is not None:
-        return False  # Process already stopped
+    """Stop a component's whole process group: SIGTERM, then SIGKILL after 5 s (Issue #315, #19496).
+
+    The group is signalled even when the leader already exited: ``npm run dev``'s vite grandchild
+    can outlive npm, and returning early on the leader left it orphaned (#19798 review).
+    """
+    if process.poll() is not None and not _group_alive(process.pid):
+        return False  # leader and every group member already gone
 
     logger.info("Stopping %s (PID: %s)", name, process.pid)
     _signal_group(process, signal.SIGTERM)
-
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
+    if not _wait_for_group(process, 5):
         logger.warning("Force killing %s", name)
         _signal_group(process, signal.SIGKILL)
-        process.wait()
-
+        _wait_for_group(process, 5)
+    process.poll()
     logger.info("✅ %s stopped", name)
     return True
 
