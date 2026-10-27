@@ -12,7 +12,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { PollingPausedAlert } from '@autobot/ui'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useFleetStore } from '@/stores/fleet'
 import { createLogger } from '@/utils/debugUtils'
@@ -156,7 +156,7 @@ function clearLogs() {
 
 // #19482: shared dashboard policy (stop on unmount and after repeated failures, paused alert)
 const logsPoller = useDashboardPoller(async () => {
-  if (!(await fetchLogs())) throw new Error('Fleet events could not be loaded')
+  throwUnlessLoaded(await fetchLogs())
 }, 5000)
 
 // Refresh restarts the poller (also a paused one); with auto-refresh off it is a one-off read

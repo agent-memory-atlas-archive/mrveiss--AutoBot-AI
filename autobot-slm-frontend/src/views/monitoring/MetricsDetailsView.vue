@@ -11,7 +11,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { PollingPausedAlert } from '@autobot/ui'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useFleetMetrics } from '@/composables/useFleetMetrics'
 import FleetMetricsCard from '@/components/monitoring/FleetMetricsCard.vue'
 import NodeMetricsGrid from '@/components/monitoring/NodeMetricsGrid.vue'
@@ -66,7 +66,7 @@ function handleNodeSelect(nodeId: string) {
 
 // #19482: the shared dashboard policy (stop on unmount and after repeated failures, paused alert)
 const metricsPoller = useDashboardPoller(async () => {
-  if (!(await loadMetrics())) throw new Error('Fleet metrics could not be loaded')
+  throwUnlessLoaded(await loadMetrics())
 }, REFRESH_INTERVAL_MS)
 
 /** Refresh and Retry: clear the shown error, then restart (also a paused) poller. */

@@ -16,7 +16,7 @@
  */
 
 import { ref, onMounted } from 'vue'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { createLogger } from '@/utils/debugUtils'
 import { slmApiClient } from '@/utils/ApiClient'
 import { POLLED_READ_MAX_RETRIES } from '@/constants/api-timeouts'
@@ -398,7 +398,7 @@ export function useFleetMetrics(options: UsePrometheusMetricsOptions = {}) {
   // fetchDashboard is the only writer of isConnected, so it decides whether a tick failed.
   const poller = useDashboardPoller(async () => {
     await fetchAll()
-    if (!isConnected.value) throw new Error(error.value ?? 'Fleet metrics unavailable')
+    throwUnlessLoaded(isConnected.value)
   }, pollInterval)
 
   /** Start polling; its first tick is a full fetchAll. */

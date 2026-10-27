@@ -58,7 +58,7 @@ import type { NodeStatus, ServiceStatus } from '@/types/slm'
 import { normalizeServiceStatus } from '@/utils/node-status'
 import { useToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 
 const logger = createLogger('OrchestrationView')
 
@@ -947,7 +947,7 @@ async function refresh(): Promise<boolean> {
 // #19482: shared dashboard policy; refresh() is false when every read failed. Refresh/Retry restart it
 let latestRefresh: Promise<boolean> = Promise.resolve(true)
 const refreshPoller = useDashboardPoller(async () => {
-  if (!(await (latestRefresh = refresh()))) throw new Error('Orchestration data could not be loaded')
+  throwUnlessLoaded(await (latestRefresh = refresh()))
 }, 15000)
 const restartRefresh = () => (autoRefresh.value ? refreshPoller.start('') : (latestRefresh = refresh()))
 

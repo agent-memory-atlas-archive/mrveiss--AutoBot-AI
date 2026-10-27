@@ -13,7 +13,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutobotApi, type NPUWorker } from '@/composables/useAutobotApi'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { createLogger } from '@/utils/debugUtils'
 import { BaseAlert, BaseModal, PollingPausedAlert } from '@autobot/ui'
 
@@ -278,7 +278,7 @@ function getLoadColor(load: number): string {
 
 // #19482: shared dashboard policy; fetchWorkers() is false on a failed read, which the poller counts
 const workersPoller = useDashboardPoller(async () => {
-  if (!(await fetchWorkers())) throw new Error('NPU workers could not be loaded')
+  throwUnlessLoaded(await fetchWorkers())
 }, 30000)
 onMounted(() => {
   void fetchLoadBalancingConfig()

@@ -12,7 +12,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { PollingPausedAlert } from '@autobot/ui'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useFleetMetrics } from '@/composables/useFleetMetrics'
 import { createLogger } from '@/utils/debugUtils'
 import { slmApiClient } from '@/utils/ApiClient'
@@ -164,7 +164,7 @@ async function refresh() {
 // #19482: the shared dashboard policy (stop on unmount and after repeated failures, paused alert)
 const refreshPoller = useDashboardPoller(async () => {
   const [alertsLoaded] = await Promise.all([fetchAlerts(), fetchRecommendations()])
-  if (!alertsLoaded) throw new Error('Alerts could not be loaded')
+  throwUnlessLoaded(alertsLoaded)
 }, REFRESH_INTERVAL_MS)
 
 onMounted(() => refreshPoller.start(''))

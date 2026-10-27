@@ -16,7 +16,7 @@ const logger = createLogger('MCPTool')
 
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useAutobotApi } from '@/composables/useAutobotApi'
 
 const api = useAutobotApi()
@@ -225,7 +225,7 @@ const { t } = useI18n()
 
 // #19482: the shared dashboard policy (stop on unmount and after repeated failures, paused alert)
 const refreshPoller = useDashboardPoller(async () => {
-  if (!(await refreshData())) throw new Error('MCP data could not be loaded')
+  throwUnlessLoaded(await refreshData())
 }, REFRESH_INTERVAL_MS)
 
 onMounted(() => refreshPoller.start(''))

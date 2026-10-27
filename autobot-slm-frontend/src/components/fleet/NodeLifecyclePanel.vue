@@ -16,7 +16,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { BaseButton, PollingPausedAlert } from '@autobot/ui'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { formatDuration } from '@/utils/formatHelpers'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useFleetStore } from '@/stores/fleet'
@@ -560,7 +560,7 @@ watch(autoRefresh, (enabled) => (enabled ? eventsPoller.start('') : eventsPoller
 
 // #19482: shared dashboard policy; fetchEvents() is false on a failed read. Retry clears the shown error and restarts it
 const eventsPoller = useDashboardPoller(async () => {
-  if (!(await fetchEvents())) throw new Error('Lifecycle events could not be loaded')
+  throwUnlessLoaded(await fetchEvents())
 }, props.autoRefreshInterval)
 
 const restartEvents = () => {

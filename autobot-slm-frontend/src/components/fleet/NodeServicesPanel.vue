@@ -18,7 +18,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { BaseAlert, PollingPausedAlert } from '@autobot/ui'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { formatBytes } from '@/utils/formatHelpers'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useSlmWebSocket } from '@/composables/useSlmWebSocket'
@@ -232,7 +232,7 @@ function closeLogsModal(): void {
 
 // #19482: shared dashboard policy; fetchServices() is false on a failed read, which the poller counts
 const servicesPoller = useDashboardPoller(async () => {
-  if (!(await fetchServices())) throw new Error('Services could not be loaded')
+  throwUnlessLoaded(await fetchServices())
 }, props.autoRefreshInterval)
 
 // Refresh/Retry: clear the shown error, restart (also a paused) poller; auto-refresh off is a one-off read

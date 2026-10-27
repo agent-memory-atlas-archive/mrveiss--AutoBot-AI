@@ -12,7 +12,7 @@
 
 import { ref, computed, onMounted } from 'vue'
 import { BaseModal, usePagination, BasePagination, PollingPausedAlert } from '@autobot/ui'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useSlmApi } from '@/composables/useSlmApi'
 import type {
   RecentError,
@@ -219,7 +219,7 @@ function onFilterChange() {
 
 // #19482: shared dashboard policy; fetchData() is false on a failed read, which the poller counts
 const dataPoller = useDashboardPoller(async () => {
-  if (!(await fetchData())) throw new Error('Error data could not be loaded')
+  throwUnlessLoaded(await fetchData())
 }, 60000)
 
 onMounted(() => dataPoller.start(''))

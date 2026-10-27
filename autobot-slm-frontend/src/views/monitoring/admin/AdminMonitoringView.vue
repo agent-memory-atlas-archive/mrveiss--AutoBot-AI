@@ -17,7 +17,7 @@ const logger = createLogger('AdminMonitoringView')
 
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useDashboardPoller } from '@/composables/useDashboardPoller'
+import { throwUnlessLoaded, useDashboardPoller } from '@/composables/useDashboardPoller'
 import { useAutobotApi, type SystemHealthReport } from '@/composables/useAutobotApi'
 import { formatDateTime } from '@/composables/useTimezone'
 
@@ -181,7 +181,7 @@ async function refreshAllData(): Promise<boolean> {
 
 // #19482: the shared dashboard policy (stop on unmount and after repeated failures, paused alert)
 const refreshPoller = useDashboardPoller(async () => {
-  if (!(await refreshAllData())) throw new Error('Monitoring data could not be loaded')
+  throwUnlessLoaded(await refreshAllData())
 }, refreshInterval * 1000)
 
 function toggleAutoRefresh(): void {
