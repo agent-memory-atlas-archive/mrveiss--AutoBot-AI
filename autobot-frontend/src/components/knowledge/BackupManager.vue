@@ -361,8 +361,8 @@ onMounted(() => {
   color: var(--text-tertiary);
 }
 
-.loading-state i,
-.empty-state i {
+.loading-state .icon,
+.empty-state .icon {
   font-size: 2rem;
   margin-bottom: var(--spacing-2);
   display: block;
