@@ -54,6 +54,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Python files under two of the tracked trees, a subset of all tracked Python; the other trees drift.",
     ),
+    "deployment-profile-writers-19315": (
+        ABSOLUTE,
+        "NOT_PATHS",
+        "Assignment lines, not paths: one item per literal AUTOBOT_ENVIRONMENT/DEPLOYMENT_MODE/DEBUG write.",
+    ),
     "egress-default-outbound-call-sites": (
         ABSOLUTE,
         "NOT_PATHS",
@@ -102,6 +107,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "FIXED_INVENTORY",
         "Single-digit launch sites; the band is already near equality.",
+    ),
+    "chromadb-port-one-home-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked files outside docs and tests, a subset of the tree; docs and tests grow at their own rate.",
     ),
     "compose-files": (
         ABSOLUTE,
@@ -217,6 +227,26 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
     ),
+    "generated-type-redeclarations": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "The main GUI's non-test .ts/.vue, against all tracked frontend source; the test-file share drifts.",
+    ),
+    "llc-sigterm-grace-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test LLC modules, against all tracked .py under autobot-backend/llc; the test-file share drifts.",
+    ),
+    "frontend-http-transports": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Both GUIs' non-test .ts/.js/.vue under src, against all tracked frontend source; the test-file share drifts.",
+    ),
+    "feature-routers-strict-one-home-19319": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "All tracked files minus vendored/build parts, against the whole tracked tree; the skipped share drifts.",
+    ),
     "llc-actor-id-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -281,6 +311,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under three roots; the test-file share drifts.",
+    ),
+    "monitoring-version-literals": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Compose, infrastructure and Ansible files (yml/yaml/ini/sh), against all tracked files there; drifts.",
     ),
     "model-tier-map-scan": (
         ABSOLUTE,
@@ -374,6 +409,17 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Ansible role task files, a subset of tracked YAML; workflows and inventories grow on their own.",
+    ),
+    "landing-page-declared-dependencies": (
+        ABSOLUTE,
+        "FIXED_INVENTORY",
+        "The requirements files and the root pyproject.toml: a small, deliberately enumerable set.",
+    ),
+    "kit-export-names-14908": (ABSOLUTE, "NOT_PATHS", "Names parsed out of the kit's index, not files."),
+    "kit-shadow-ts-files-scanned-14908": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "The scanned .ts files are every non-test file under two app trees; no reference count co-moves with it.",
     ),
 }
 

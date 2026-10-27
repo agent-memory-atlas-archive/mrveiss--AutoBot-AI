@@ -120,6 +120,8 @@ python:
   # equivalence and one-job guards under repo_tests read it, so editing it must
   # run them rather than take the shim's green.
   - '.github/workflows/_changes.yml'
+  # #19769: the conflict gate's guard reads its workflow, so editing it runs the suite.
+  - '.github/workflows/pr-merge-conflict-gate.yml'
   # A change here changes what "python" means for both workflows.
   - '.github/filters/python-paths.yml'
   # #17822: migration_gate_filter_covers_what_its_tests_import_test reads this workflow
@@ -360,6 +362,9 @@ python:
   # #19459: `disaster_recovery_names_real_units_19459_test.py` reads this runbook by concrete
   # literal to check every unit it tells an operator to start is one a role deploys.
   - 'docs/operations/disaster-recovery.md'
+  # #19279: `landing_page_claims_19279_test.py` reads the public landing page by concrete literal
+  # for the libraries it names and any placeholder it renders.
+  - 'docs/index.html'
   # #16427: `secretsmanager_template_names_match_vault_registry_16427_test.py`
   # reads this component's `credentialTemplates` array by concrete literal, to
   # assert its provider names still match the vault registry. Without an entry
@@ -467,6 +472,9 @@ python:
   - 'docs/architecture/PLATFORM_MODEL.md'
   - 'docs/features/CATALOG.md'
   - 'docs/llc/_index.md'
+  # #19611: `operational_docs_name_real_playbooks_19611_test.py` reads this guide by concrete
+  # literal for its one declared exemption. One file, not `docs/**`.
+  - 'docs/guides/slm-docker-ansible-deployment.md'
   # #18266: `social_preview_18266_test.py` pins the repository social-preview
   # image's dimensions and size. A change confined to the image -- replacing it
   # with one of the wrong shape -- is exactly what the guard exists to catch.
