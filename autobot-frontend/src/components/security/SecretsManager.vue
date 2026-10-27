@@ -1660,7 +1660,7 @@ watch(selectedScope, () => {
   align-items: center;
 }
 
-.search-wrapper .icon {
+.search-wrapper > .icon {
   position: absolute;
   left: 12px;
   color: var(--text-muted);

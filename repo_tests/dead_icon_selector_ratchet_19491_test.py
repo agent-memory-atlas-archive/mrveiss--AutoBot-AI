@@ -38,6 +38,8 @@ from repo_tests._ratchet_base import base_table
 _FRONTEND_SRC = "autobot-frontend/src"
 _TEMPLATE = re.compile(r"<template>(.*)</template>", re.S)
 _HAS_I_ELEMENT = re.compile(r"<i[\s>/]")
+# A commented-out `<i>` renders nothing, so it must not exempt the file.
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 _STYLE = re.compile(r"<style[^>]*>(.*?)</style>", re.S)
 _COMMENT = re.compile(r"/\*.*?\*/", re.S)
 _RULE = re.compile(r"([^{}]+)\{")
@@ -63,7 +65,7 @@ def count_dead_icon_rules(root: Path) -> int:
     for path in vue_files(root):
         source = path.read_text(encoding="utf-8")
         template = _TEMPLATE.search(source)
-        if template is None or _HAS_I_ELEMENT.search(template.group(1)):
+        if template is None or _HAS_I_ELEMENT.search(_HTML_COMMENT.sub("", template.group(1))):
             continue
         for css in _STYLE.findall(source):
             for selector in _RULE.findall(_COMMENT.sub("", css)):
@@ -101,6 +103,14 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
             tmp_path, "B.vue", "<template><i class='fa fa-x'></i></template>\n<style>.a i { color: red; }</style>\n"
         )
         assert count_dead_icon_rules(tmp_path) == 0
+
+    def test_a_commented_out_i_does_not_exempt_the_file(self, tmp_path: Path) -> None:
+        self._w(
+            tmp_path,
+            "D.vue",
+            "<template><!-- <i class='fa fa-x'></i> --><Icon name='x' /></template>\n<style>.a i { color: red; }</style>\n",
+        )
+        assert count_dead_icon_rules(tmp_path) == 1
 
     def test_words_and_classes_containing_i_are_not_an_i_element(self, tmp_path: Path) -> None:
         self._w(
