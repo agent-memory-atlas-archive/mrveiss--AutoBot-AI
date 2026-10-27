@@ -21,13 +21,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pr_conflict_gate_core as core  # noqa: E402
 from github_api import GitHubApi, WatchdogError, build_api  # noqa: E402
 
+from autobot_shared.env_utils import env_float_clamped, env_int_clamped  # noqa: E402
 from autobot_shared.logging_manager import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
 #: Bounded backoff while GitHub reports mergeable=null (it computes it lazily).
-UNKNOWN_MAX_ATTEMPTS = int(os.environ.get("PR_CONFLICT_GATE_MAX_ATTEMPTS", "6"))
-UNKNOWN_BACKOFF_SECONDS = float(os.environ.get("PR_CONFLICT_GATE_BACKOFF_SECONDS", "5"))
+UNKNOWN_MAX_ATTEMPTS = env_int_clamped("PR_CONFLICT_GATE_MAX_ATTEMPTS", 6, 1, 10)
+UNKNOWN_BACKOFF_SECONDS = env_float_clamped("PR_CONFLICT_GATE_BACKOFF_SECONDS", 5.0, 0.0, 60.0)
 UNKNOWN_BACKOFF_FACTOR = 2.0
 UNKNOWN_BACKOFF_CAP_SECONDS = 60.0
 PAGE_SIZE = 100
@@ -74,8 +75,14 @@ def cancel_runs(api: GitHubApi, sha: str, own_run_id: Optional[int]) -> List[int
 
 def check_pull(
     api: GitHubApi, number: int, own_run_id: Optional[int], target_url: str, sleep: Callable[[float], None] = time.sleep
-) -> core.Verdict:
+) -> Optional[core.Verdict]:
     kind, pull = resolve(api, number, sleep)
+    # A fork head is outside this repository: the status API cannot reach it and a fork
+    # token is read-only. No status at all; whether a fork PR needs the required context
+    # is a branch-protection decision for the maintainer (#19769).
+    if not core.is_checkable(pull, api.repository):
+        logger.info("PR #%s is from a fork; the status API cannot reach its head, skipped", number)
+        return None
     sha = pull["head"]["sha"]
     verdict = core.decide(kind)
     # The status first: it must land even when listing or cancelling runs fails.
@@ -114,7 +121,8 @@ def run(api: GitHubApi, event: str, pr_number: str, base: str, own_run_id: Optio
             logger.error("PR #%s: %s", number, exc)
             failures += 1
             continue
-        unknown += verdict.kind == core.UNKNOWN
+        if verdict is not None:
+            unknown += verdict.kind == core.UNKNOWN
     if unknown:
         logger.warning("%s PR(s) still UNKNOWN after %s attempts", unknown, UNKNOWN_MAX_ATTEMPTS)
     return 1 if failures else 0

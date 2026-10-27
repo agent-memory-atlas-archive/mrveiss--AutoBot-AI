@@ -60,7 +60,7 @@ class FakeApi:
 
 
 def _pull(mergeable: Optional[bool], state: str) -> Dict[str, Any]:
-    return {"head": {"sha": SHA}, "mergeable": mergeable, "mergeable_state": state}
+    return {"head": {"sha": SHA, "repo": {"full_name": REPO}}, "mergeable": mergeable, "mergeable_state": state}
 
 
 def test_conflicting_cancels_runs_and_fails_status_excluding_own_run() -> None:
@@ -154,7 +154,11 @@ class _SweepApi(FakeApi):
             return 200, [{"number": 1, "head": {"repo": repo}}, {"number": 2, "head": {"repo": repo}}]
         if method == "GET" and "/pulls/" in path:
             number = int(path.rsplit("/", 1)[1])
-            return 200, {"head": {"sha": f"{number}" * 40}, "mergeable": False, "mergeable_state": "dirty"}
+            return 200, {
+                "head": {"sha": f"{number}" * 40, "repo": {"full_name": REPO}},
+                "mergeable": False,
+                "mergeable_state": "dirty",
+            }
         if method == "POST" and path.endswith("/cancel"):
             return (500, {}) if self.fail_cancel else (202, {})
         raise AssertionError(f"unexpected {method} {path}")
@@ -177,3 +181,16 @@ def test_status_is_set_even_when_cancel_fails() -> None:
     api = _SweepApi(fail_runs=False, fail_cancel=True)
     assert gate.run(api, "push", "", "main", OWN_RUN, "") == 0
     assert len(api.statuses) == 2
+
+
+def test_fork_pr_on_the_pull_request_path_gets_no_status() -> None:
+    pull = _pull(False, "dirty")
+    pull["head"]["repo"] = {"full_name": "fork/repo"}
+    api = FakeApi([pull], [{"id": 1, "status": "queued"}])
+    assert gate.check_pull(api, 7, OWN_RUN, "", sleep=lambda _s: None) is None
+    assert api.statuses == [] and api.posts == []
+
+
+def test_scheduled_sweeps_are_not_cancelled_by_the_next_tick() -> None:
+    spec = yaml.safe_load((repo_root() / ".github/workflows/pr-merge-conflict-gate.yml").read_text(encoding="utf-8"))
+    assert spec["concurrency"]["cancel-in-progress"] == "${{ github.event_name != 'schedule' }}"

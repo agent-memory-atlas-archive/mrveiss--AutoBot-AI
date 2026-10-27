@@ -38,7 +38,8 @@ on:
 # one: the status is recomputed from live state each time.
 concurrency:
   group: pr-merge-conflict-gate-${{ github.event_name }}-${{ github.event.pull_request.number || 'main' }}
-  cancel-in-progress: true
+  # A scheduled sweep queues behind the active one: cancelling it mid-list leaves later PRs unchecked.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions: {}
 
