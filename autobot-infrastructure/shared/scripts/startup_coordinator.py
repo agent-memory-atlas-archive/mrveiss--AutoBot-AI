@@ -80,19 +80,31 @@ async def _check_redis_health() -> bool:
         return False
 
 
+def _signal_group(process: subprocess.Popen, sig: int) -> None:
+    """Signal the component's whole process group: ``npm run dev`` spawns vite as a grandchild (#19496).
+
+    Each component starts in its own session, so its group id is its pid. If the group is already
+    gone, fall back to the process itself.
+    """
+    try:
+        os.killpg(process.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        process.send_signal(sig)
+
+
 def _terminate_process_gracefully(name: str, process: subprocess.Popen) -> bool:
     """Terminate a process gracefully with fallback to kill (Issue #315 - extracted)."""
     if process.poll() is not None:
         return False  # Process already stopped
 
     logger.info("Stopping %s (PID: %s)", name, process.pid)
-    process.terminate()
+    _signal_group(process, signal.SIGTERM)
 
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         logger.warning("Force killing %s", name)
-        process.kill()
+        _signal_group(process, signal.SIGKILL)
         process.wait()
 
     logger.info("✅ %s stopped", name)
@@ -333,6 +345,7 @@ class StartupCoordinator:
                     stderr=subprocess.PIPE,
                     env=env,
                     cwd=cwd,
+                    start_new_session=True,  # its own process group, so stop reaches its children
                 )
 
                 self.processes[component.name] = process

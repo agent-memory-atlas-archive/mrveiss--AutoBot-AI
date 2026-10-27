@@ -51,6 +51,15 @@ def test_the_coordinator_never_uses_a_shell() -> None:
     assert sum(1 for n in ast.walk(tree) if isinstance(n, ast.keyword) and n.arg == "start_command") >= 2
 
 
+def test_each_component_starts_in_its_own_session() -> None:
+    """Stop signals the process group, so ``npm run dev``'s vite grandchild is not orphaned."""
+    popens = [n for n in ast.walk(_tree()) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "Popen"]
+    assert popens, "the coordinator no longer calls Popen"
+    for call in popens:
+        kw = {k.arg: k.value for k in call.keywords}
+        assert isinstance(kw.get("start_new_session"), ast.Constant) and kw["start_new_session"].value is True
+
+
 def test_the_detectors_see_a_shell_and_a_string_command() -> None:
     bad = ast.parse('subprocess.Popen(cmd, shell=True)\nComponentInfo(name="x", start_command="npm run dev")\n')
     assert shell_true_calls(bad) == [1]
