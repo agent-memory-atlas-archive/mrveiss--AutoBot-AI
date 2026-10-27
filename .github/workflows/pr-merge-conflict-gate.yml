@@ -53,10 +53,13 @@ jobs:
       actions: write
       pull-requests: read
     steps:
-      - name: Check out main
+      # The event's own commit: main on push/schedule/dispatch, the PR's merge commit on
+      # pull_request. This is `pull_request`, not `pull_request_target`, so a fork's run
+      # gets a read-only token and its code never runs with write access. Pinning `ref: main`
+      # made the gate's introducing PR fail -- the script is not on main until it merges.
+      - name: Check out the event's commit
         uses: actions/checkout@v7
         with:
-          ref: main
           persist-credentials: false
 
       - name: Publish no-merge-conflicts and cancel runs of conflicting PRs
