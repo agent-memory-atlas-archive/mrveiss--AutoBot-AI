@@ -61,40 +61,71 @@ def _is_path_to_int(key: ast.expr | None, value: ast.expr) -> bool:
     )
 
 
-def ceiling_table_lines(source: str) -> list[int]:
-    """Line of every assigned dict literal holding 2+ ``"<path>": <int>`` entries."""
+#: The one table name a home may assign; a second table beside it in a home is a copy too.
+_HOME_TABLE = "KNOWN_LARGE"
+#: 7,516 tracked .py files at #19544's review; a sweep that read far fewer read the wrong set.
+MIN_FILES_READ = 6000
+
+
+def ceiling_tables(source: str) -> list[tuple[int, frozenset[str]]]:
+    """``(line, target names)`` of every assigned dict literal holding 2+ ``"<path>": <int>`` entries."""
     found = []
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, (ast.Assign, ast.AnnAssign)) or not isinstance(node.value, ast.Dict):
             continue
         entries = sum(_is_path_to_int(k, v) for k, v in zip(node.value.keys, node.value.values, strict=True))
         if entries >= _MIN_ENTRIES:
-            found.append(node.lineno)
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            found.append((node.lineno, frozenset(t.id for t in targets if isinstance(t, ast.Name))))
     return found
 
 
-def _offenders(root) -> dict[str, list[int]]:
-    offenders = {}
+def ceiling_table_lines(source: str) -> list[int]:
+    """Line of every assigned dict literal holding 2+ ``"<path>": <int>`` entries."""
+    return [line for line, _names in ceiling_tables(source)]
+
+
+def _file_offences(rel: str, source: str) -> list[int]:
+    """Table lines *rel* may not hold: any outside a home; in a home, any but its KNOWN_LARGE."""
+    tables = ceiling_tables(source)
+    if rel in HOMES:
+        tables = [(line, names) for line, names in tables if _HOME_TABLE not in names]
+    return [line for line, _names in tables]
+
+
+def scan(root) -> tuple[dict[str, list[int]], list[str], int]:
+    """``(offenders, unreadable or unparsable candidates, files read)`` over every tracked .py.
+
+    The text pre-filter is sound: a qualifying key must appear in source as ``.py"`` (or ``.ts'``,
+    ...), so a file without those needles cannot hold a table, whatever its syntax. A file that
+    cannot be read, or a candidate that cannot be parsed, fails closed (#19544 review).
+    """
+    offenders, failures, read = {}, [], 0
     for rel in tracked_paths(root, "*.py"):
-        if rel in HOMES or rel in EXEMPT:
+        if rel in EXEMPT:
             continue
         try:
             source = (root / rel).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as exc:
+            failures.append(f"{rel}: unreadable ({type(exc).__name__})")
             continue
+        read += 1
         if not any(needle in source for needle in _NEEDLES):
             continue
         try:
-            lines = ceiling_table_lines(source)
-        except SyntaxError:
+            lines = _file_offences(rel, source)
+        except SyntaxError as exc:
+            failures.append(f"{rel}: does not parse ({exc.msg}, line {exc.lineno})")
             continue
         if lines:
             offenders[rel] = lines
-    return offenders
+    return offenders, failures, read
 
 
 def test_no_second_hand_written_ceiling_table_exists() -> None:
-    offenders = _offenders(repo_root())
+    offenders, failures, read = scan(repo_root())
+    assert read >= MIN_FILES_READ, f"only {read} tracked .py files read -- the sweep lost its reach"
+    assert failures == [], "files the sweep could not judge:\n" + "\n".join(failures)
     assert offenders == {}, (
         f"a path->int table outside the KNOWN_LARGE homes {sorted(HOMES)} (file: lines): {offenders}. "
         "Ceilings live in ONE table; derive from it (`RATCHET_BASELINE = KNOWN_LARGE`) or read it, "
@@ -125,6 +156,14 @@ def test_the_threshold_is_the_gates_limit() -> None:
         assert gate.MAX_LINES + 1 == _MIN_CEILING, f"{rel} MAX_LINES moved; update _MIN_CEILING"
 
 
+def test_a_second_table_beside_known_large_in_a_home_is_an_offence() -> None:
+    home = "scripts/check_shell_file_size.py"
+    ok = 'KNOWN_LARGE = {"a.sh": 700, "b.sh": 800}\n'
+    assert _file_offences(home, ok) == []
+    assert _file_offences(home, ok + 'SECOND = {"c.sh": 900, "d.sh": 901}\n') == [2]
+    assert _file_offences("elsewhere.py", ok) == [1]
+
+
 def test_a_planted_literal_is_matched() -> None:
     planted = 'RATCHET_BASELINE: dict[str, int] = {"a/b.py": 700, "a/c.ts": 800}\n'
     assert ceiling_table_lines(planted) == [1]
@@ -141,3 +180,19 @@ def test_a_derivation_and_other_dicts_are_not_matched() -> None:
     assert ceiling_table_lines('T = {"a.py": 1, "b.py": 2}\n') == [], "call-site counts are not ceilings"
     assert ceiling_table_lines('T = {"a.py": True, "b.py": False}\n') == [], "bools are not ceilings"
     assert ceiling_table_lines('T = {**BASE, "a.py": 1}\n') == [], "a spread is not a literal table"
+
+
+def test_an_unparsable_candidate_fails_closed(tmp_path) -> None:
+    """A candidate that cannot be parsed is a failure to judge, never silently clean."""
+    import subprocess
+
+    from autobot_shared.paths import scrubbed_git_env
+
+    (tmp_path / "broken.py").write_text('T = {"a.py": 700, "b.py": 800\n', encoding="utf-8")
+    (tmp_path / "plain.py").write_text("x = 1\n", encoding="utf-8")
+    env = scrubbed_git_env()
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, env=env)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, env=env)
+    offenders, failures, read = scan(tmp_path)
+    assert offenders == {} and read == 2
+    assert [f.split(":")[0] for f in failures] == ["broken.py"]
