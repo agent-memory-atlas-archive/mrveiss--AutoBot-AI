@@ -66,7 +66,7 @@ def load_env_file(path: str) -> dict:
     try:
         return parse_env_file(Path(path))
     except PermissionError:
-        sys.exit(f"autobot-admin: cannot read {path} (permission denied); run it as root, e.g. with sudo.")
+        sys.exit(f"autobot-admin: cannot read {path} (permission denied); run it as root or the autobot user.")
 
 
 def get_db_url(database: str) -> str:
@@ -99,7 +99,7 @@ def _secrets_env() -> dict:
 #: the control-plane database (#19407).
 _FALLBACK_DATABASE = {
     "SLM_DATABASE_URL": ("SLM_DB_NAME", pg.SLM_DB_NAME),
-    "SLM_USERS_DATABASE_URL": ("SLM_USERS_DB_NAME", pg.SLM_USERS_DB_NAME),
+    "SLM_USERS_DATABASE_URL": ("SLM_DB_SLM_USERS", pg.SLM_USERS_DB_NAME),  # the role's per-database key
 }
 
 
