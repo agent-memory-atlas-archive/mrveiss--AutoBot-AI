@@ -151,6 +151,8 @@ export { log, createLogger } from './src/utils/logger'
 // Managed polling with scoped disposal and a consecutive-error stop (#19482).
 export { usePollingJob } from './src/composables/usePollingJob'
 export type { UsePollingJobOptions, UsePollingJobReturn } from './src/composables/usePollingJob'
+// The one "updates have stopped" notice for a poller paused on errors (#19482).
+export { default as PollingPausedAlert } from './src/components/PollingPausedAlert.vue'
 
 // One DOMPurify-backed sanitiser for every v-html binding in both apps (#2847, #19118).
 export { sanitizeChatHtml, sanitizeKnowledgeHtml, sanitizeHtml, escapeHtml } from './src/utils/sanitize'
