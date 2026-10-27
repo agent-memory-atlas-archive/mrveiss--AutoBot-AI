@@ -41,10 +41,16 @@ UNSCOPED = frozenset(
         "blanket-skip-test-module-sweep",
         # #19324: an extension filter (*.py, *.sh, *.yml, .env*, ...) over the whole tree, not a set of prefixes.
         "browser-port-single-home-scan",
+        # #19279: requirements files live in every package directory; a glob, not a set of prefixes.
+        "landing-page-declared-dependencies",
         "chromadb-bind-host-override-candidates",
         "chromadb-bind-launch-sites",
         "chromadb-compose-port-sites",
         "chromadb-compose-services",
+        # #19321/#19322: every tracked file outside docs and tests, wherever a copy could be
+        # re-added; a roots= list would name the whole tree and go stale as it grows.
+        "chromadb-port-one-home-scan",
+        "slm-node-id-one-home-scan",
         "collectable-modules-inert-on-import",
         "component-style-block-sweep",
         "compose-files",
