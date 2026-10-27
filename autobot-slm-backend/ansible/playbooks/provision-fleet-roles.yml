@@ -916,6 +916,7 @@
 # -------------------------------------------------------------------
 # Phase 7: Summary
 # -------------------------------------------------------------------
+      no_log: true  # #19764: credentials in the request or response
 - name: "Provision Summary"
   hosts: slm_server
   connection: local
