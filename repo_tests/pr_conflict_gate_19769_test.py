@@ -129,6 +129,8 @@ def test_workflow_triggers_permissions_and_no_pat() -> None:
     spec = yaml.safe_load(text)
     triggers = spec.get("on", spec.get(True))
     assert triggers["push"]["branches"] == ["main"]
+    assert triggers["schedule"] == [{"cron": "*/10 * * * *"}]
+    assert "workflow_dispatch" in triggers
     assert triggers["pull_request"]["types"] == ["opened", "reopened", "synchronize", "ready_for_review"]
     assert spec["jobs"]["gate"]["permissions"] == {
         "contents": "read",
@@ -137,3 +139,41 @@ def test_workflow_triggers_permissions_and_no_pat() -> None:
         "pull-requests": "read",
     }
     assert "AUTOBOT_PUSH_TOKEN" not in text and "AUTOBOT_PROJECT_TOKEN" not in text
+
+
+class _SweepApi(FakeApi):
+    """Two PRs; listing runs raises for the first, cancel fails for the second."""
+
+    def __init__(self, fail_runs: bool, fail_cancel: bool) -> None:
+        super().__init__([])
+        self.fail_runs, self.fail_cancel = fail_runs, fail_cancel
+
+    def request(self, method: str, path: str, payload: Any = None) -> Tuple[int, Any]:
+        if method == "GET" and "state=open" in path:
+            repo = {"full_name": REPO}
+            return 200, [{"number": 1, "head": {"repo": repo}}, {"number": 2, "head": {"repo": repo}}]
+        if method == "GET" and "/pulls/" in path:
+            number = int(path.rsplit("/", 1)[1])
+            return 200, {"head": {"sha": f"{number}" * 40}, "mergeable": False, "mergeable_state": "dirty"}
+        if method == "POST" and path.endswith("/cancel"):
+            return (500, {}) if self.fail_cancel else (202, {})
+        raise AssertionError(f"unexpected {method} {path}")
+
+    def runs_for_sha(self, sha: str) -> List[Dict[str, Any]]:
+        if self.fail_runs and sha.startswith("1"):
+            raise gate.WatchdogError("boom")
+        return [{"id": 1, "status": "queued"}]
+
+
+def test_one_prs_api_error_does_not_stop_the_next_pr_and_exits_nonzero() -> None:
+    api = _SweepApi(fail_runs=True, fail_cancel=False)
+    code = gate.run(api, "schedule", "", "main", OWN_RUN, "")
+    assert code == 1
+    assert [s[0][0] for s in api.statuses] == ["1", "2"]
+    assert all(s[1] == "failure" for s in api.statuses)
+
+
+def test_status_is_set_even_when_cancel_fails() -> None:
+    api = _SweepApi(fail_runs=False, fail_cancel=True)
+    assert gate.run(api, "push", "", "main", OWN_RUN, "") == 0
+    assert len(api.statuses) == 2

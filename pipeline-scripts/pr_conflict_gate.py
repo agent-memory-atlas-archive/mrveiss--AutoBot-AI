@@ -78,10 +78,11 @@ def check_pull(
     kind, pull = resolve(api, number, sleep)
     sha = pull["head"]["sha"]
     verdict = core.decide(kind)
-    cancelled = cancel_runs(api, sha, own_run_id) if verdict.cancel_runs else []
+    # The status first: it must land even when listing or cancelling runs fails.
     status = api.set_status(sha, verdict.state, core.STATUS_CONTEXT, verdict.description, target_url)
     if status != 201:
         raise GateError(f"cannot set {core.STATUS_CONTEXT} on PR #{number} (HTTP {status})")
+    cancelled = cancel_runs(api, sha, own_run_id) if verdict.cancel_runs else []
     logger.info("PR #%s %s: status %s, cancelled %s", number, kind, verdict.state, cancelled)
     return verdict
 
@@ -109,7 +110,7 @@ def run(api: GitHubApi, event: str, pr_number: str, base: str, own_run_id: Optio
     for number in numbers:
         try:
             verdict = check_pull(api, number, own_run_id, target_url)
-        except GateError as exc:
+        except (GateError, WatchdogError) as exc:
             logger.error("PR #%s: %s", number, exc)
             failures += 1
             continue

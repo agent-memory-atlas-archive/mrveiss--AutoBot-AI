@@ -10,6 +10,12 @@
 # runs cancelled (this run excepted) and `no-merge-conflicts` set to failure; a
 # MERGEABLE one gets success. UNKNOWN after the bounded retry is `pending`, never green.
 #
+# WHY THERE IS A SCHEDULE. GitHub starts no pull_request run on a head that conflicts
+# with its base, so a PR that is pushed already conflicting never triggers the
+# pull_request path above. Every 10 minutes (and on workflow_dispatch) the same full
+# open-PR sweep as a push to main runs, which fails such a PR and cancels its runs.
+# The sweep also re-checks PRs left `pending` as UNKNOWN, so they are not stuck.
+#
 # GITHUB_TOKEN only, minimal scopes; no PAT. The checkout is main, never the PR's code:
 # a conflicting PR has no merge ref, and the script that runs must be main's.
 # Making `no-merge-conflicts` a required status on main is a branch-protection setting
@@ -24,6 +30,9 @@ on:
   pull_request:
     branches: [ main ]
     types: [ opened, reopened, synchronize, ready_for_review ]
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 # Per PR on pull_request; one group for main pushes. A newer run supersedes an older
 # one: the status is recomputed from live state each time.
