@@ -13,6 +13,21 @@ ABSOLUTE = "ABSOLUTE"
 CONVERTIBLE = "CONVERTIBLE"
 
 N_TO_Z: dict[str, tuple[str, str, str]] = {
+    "severity-order-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .py under the backends, shared and pipeline-scripts, against all tracked .py; test share drifts.",
+    ),
+    "search-mode-copies": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test backend modules, against all tracked .py under autobot-backend; the test-file share drifts.",
+    ),
+    "redaction-placeholder-literals": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test .py under both backends and autobot_shared, against all tracked .py; the test share drifts.",
+    ),
     "shadowed-literal-routes": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -192,6 +207,11 @@ N_TO_Z: dict[str, tuple[str, str, str]] = {
     "response-model-secret-scan": (ABSOLUTE, "SUBSET_DRIFTS", "Backend Python modules, against all tracked Python."),
     "router-auth-coverage": (ABSOLUTE, "NOT_PATHS", "Routers registered in `core_routers.py`, not files."),
     "slm-frontend-components": (ABSOLUTE, "SUBSET_DRIFTS", "One frontend's components, against all tracked `.vue`."),
+    "slm-node-id-one-home-scan": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Tracked files outside docs and tests, a subset of the tree; docs and tests grow at their own rate.",
+    ),
     "severity-enum-fork-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

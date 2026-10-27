@@ -157,6 +157,8 @@ ALLOWED_ADDITIONS = {
             f"{WORKFLOWS}/_changes.yml",
             f"{WORKFLOWS}/migration-gate.yml",
             f"{WORKFLOWS}/ai-security-review.yml",
+            # #19769: pr_conflict_gate_19769_test.py reads the conflict gate workflow.
+            f"{WORKFLOWS}/pr-merge-conflict-gate.yml",
             # #17856: frontend_api_timeout_ssot_17856_test reads both .env.example files.
             ".env.example",
             "autobot-frontend/.env.example",
@@ -221,6 +223,10 @@ ALLOWED_ADDITIONS = {
             "docs/architecture/PLATFORM_MODEL.md",
             "docs/features/CATALOG.md",
             "docs/llc/_index.md",
+            # #19611: the playbook-reference guard reads this guide for its declared exemption.
+            "docs/guides/slm-docker-ansible-deployment.md",
+            # #19279: the landing-page guard reads the page for the libraries and placeholders it renders.
+            "docs/index.html",
             # #18559: both duplication-guard tests read the pins file.
             ".github/duplication-pins.json",
             # #19324: browser_port_single_home_19324_test.py pins this file's browser-port fallback.
