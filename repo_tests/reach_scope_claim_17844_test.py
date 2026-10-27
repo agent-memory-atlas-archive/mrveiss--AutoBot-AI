@@ -348,6 +348,7 @@ _DECLARED_SCOPES = {
         "autobot-npu-worker",
         "scripts",
         "autobot-frontend",
+        ".env.example",
     ),
     "generated-type-redeclarations": ("autobot-frontend/src",),
     "severity-order-copies": ("autobot-backend", "autobot-slm-backend", "autobot_shared", "pipeline-scripts"),

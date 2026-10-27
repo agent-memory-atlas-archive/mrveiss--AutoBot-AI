@@ -139,7 +139,10 @@ KNOWN: dict[int, dict[str, tuple[int, str]]] = {
 }
 
 _TEXT_SUFFIXES = (".ts", ".js", ".vue", ".sh", ".yml", ".yaml", ".j2", ".ps1", ".iss")
-_SCAN_ROOTS = (*scan_mod.SCAN_ROOTS, "autobot-frontend")
+#: Root-level files swept as well: ``.env.example`` carries port keys beyond its pins, and a retired
+#: port is forbidden everywhere, so it is read in full (#19429 review).
+_ROOT_FILES = (".env.example",)
+_SCAN_ROOTS = (*scan_mod.SCAN_ROOTS, "autobot-frontend", *_ROOT_FILES)
 _NOT_PRODUCTION = re.compile(r"(_test\.py$|(^|/)test_[^/]*\.py$|/tests?/|/__tests__/|\.spec\.|\.test\.|/generated/)")
 #: Stories are sample data, so a live number may stand in one -- but a RETIRED number may not (#19429).
 _STORY = re.compile(r"\.stories\.")
@@ -160,7 +163,7 @@ def _production(rel: str) -> bool:
 def _scanned_files(root: Path) -> list[str]:
     """Tracked production Python and text sources under the sweep roots; ``[]`` on an empty tree."""
     try:
-        paths = scan_mod.tracked_paths(root, "*.py", *(f"*{s}" for s in _TEXT_SUFFIXES))
+        paths = scan_mod.tracked_paths(root, "*.py", *(f"*{s}" for s in _TEXT_SUFFIXES), *_ROOT_FILES)
     except EmptyEnumeration:
         return []
     return sorted(rel for rel in paths if _production(rel))
@@ -344,6 +347,12 @@ def test_the_known_allowance_holds_at_its_count_and_fails_one_above() -> None:
 def test_a_known_count_above_the_real_sites_is_stale() -> None:
     known = {8082: {"x/fix.sh": (3, "names the bad value it removes")}}
     assert stale_known({"x/fix.sh": "A=8082\n"}, known) == ["x/fix.sh: known 3, states 1"]
+
+
+def test_an_unpinned_retired_port_in_env_example_is_reported() -> None:
+    assert _production(".env.example")
+    text = "AUTOBOT_VNC_PORT=6080\nSOME_OTHER_VNC=6081\n"
+    assert [f.split(":")[1] for f in forbidden_sites(6081, {".env.example": text})] == ["2"]
 
 
 def test_a_python_file_that_does_not_parse_is_named() -> None:

@@ -290,7 +290,8 @@ N_TO_Z: dict[str, tuple[str, str, str]] = {
     "service-port-homes-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
-        "Non-test Python and nine text extensions under seven roots, a subset of tracked files; the test "
+        "Non-test Python and nine text extensions under seven roots, plus .env.example, a subset of tracked "
+        "files; the test "
         "share and the other extensions grow at their own rate.",
     ),
 }
