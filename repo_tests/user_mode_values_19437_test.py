@@ -28,10 +28,6 @@ _ENUM_FILE = "autobot-backend/user_management/config.py"
 _PATTERNS = ("*.md", "*.env*", "*.yml", "*.yaml", "*.j2", "*.sh", "*.json", "Dockerfile*")
 #: Historical records describe what was true then; they are not instructions.
 _HISTORY = ("CHANGELOG.md", "changelog/", "docs/reports/", "docs/superpowers/plans/", "docs/archive/")
-#: Files still carrying a finding, each with why it waits. Shrink-only: a fixed file must leave.
-PENDING: dict[str, str] = {
-    "docs/developer/SINGLE_HOST_DEPLOYMENT.md": "the open PR #19424 also edits this file; fixed here once it lands",
-}
 #: The tenancy values the docs used before #10636 retired the single-user mode.
 _RETIRED = frozenset({"single_user", "multi_user"})
 _ASSIGN = re.compile(r"\b(AUTOBOT_DEPLOYMENT_MODE|AUTOBOT_USER_MODE)[\"']?\s*[=:]\s*[\"'`]?([A-Za-z_]+)")
@@ -86,9 +82,7 @@ def test_no_doc_or_deployment_file_sets_tenancy_through_the_wrong_variable() -> 
     assert len(mentioning) >= MIN_MENTIONING, f"only {len(mentioning)} files name the variables -- reach lost"
     modes = user_modes()
     findings = {p: misassignments(t, modes, p.endswith(".md")) for p, t in texts.items()}
-    bad = [f"{p}:{hit}" for p, hits in findings.items() if p not in PENDING for hit in hits]
-    stale = [p for p in PENDING if not findings.get(p)]
-    assert not stale, f"fixed -- delete from PENDING: {stale}"
+    bad = [f"{p}:{hit}" for p, hits in findings.items() for hit in hits]
     assert not bad, "tenancy is AUTOBOT_USER_MODE=single_company|multi_company|provider:\n" + "\n".join(bad)
 
 
