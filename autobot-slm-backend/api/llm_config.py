@@ -53,7 +53,7 @@ class LLMProviderConfig(BaseModel):
     api_key: str = ""
     endpoint: str = ""
     model: str = ""
-    temperature: float = Field(default=_ssot_config.llm_temperature, ge=0.0, le=2.0)  # #19730
+    temperature: float = Field(default=model_config.DEFAULT_TEMPERATURE, ge=0.0, le=2.0)  # #19730
     max_tokens: int = Field(default=model_config.DEFAULT_MAX_TOKENS, ge=1, le=128000)  # #19730
 
 

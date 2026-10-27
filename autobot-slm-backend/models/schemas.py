@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Literal
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from autobot_shared.ssot_config import config
+from autobot_shared.ssot_constants import model_config
 from services.ssh_utils import SshHost, SshPassword, SshUser
 
 from .database import BackupServiceType, NodeStatus, ScheduleTargetType  # noqa: F401  (re-exported)
@@ -1989,6 +1990,10 @@ class ServiceConflictListResponse(BaseModel):
 # =============================================================================
 
 
+#: Max agent LLM timeout (s); the configured default is clamped into it, pydantic skips defaults (#19730).
+_LLM_TIMEOUT_MAX = 300
+
+
 class AgentLLMConfig(BaseModel):
     """LLM configuration for an agent (excludes API key)."""
 
@@ -1996,7 +2001,7 @@ class AgentLLMConfig(BaseModel):
     llm_endpoint: str | None = None
     llm_model: str
     llm_timeout: int = config.llm_timeout  # #19730
-    llm_temperature: float = config.llm_temperature
+    llm_temperature: float = model_config.DEFAULT_TEMPERATURE
     llm_max_tokens: int | None = None
 
 
@@ -2025,8 +2030,8 @@ class AgentCreateRequest(BaseModel):
     llm_endpoint: str | None = None
     llm_model: str = Field(..., min_length=1, max_length=64)
     llm_api_key: str | None = None  # Will be encrypted before storage
-    llm_timeout: int = Field(default=config.llm_timeout, ge=1, le=300)
-    llm_temperature: float = Field(default=config.llm_temperature, ge=0.0, le=2.0)
+    llm_timeout: int = Field(default=min(max(config.llm_timeout, 1), _LLM_TIMEOUT_MAX), ge=1, le=_LLM_TIMEOUT_MAX)
+    llm_temperature: float = Field(default=model_config.DEFAULT_TEMPERATURE, ge=0.0, le=2.0)
     llm_max_tokens: int | None = Field(default=None, ge=1, le=128000)
     is_default: bool = False
     is_active: bool = True
@@ -2041,7 +2046,7 @@ class AgentUpdateRequest(BaseModel):
     llm_endpoint: str | None = None
     llm_model: str | None = Field(default=None, min_length=1, max_length=64)
     llm_api_key: str | None = None  # Will be encrypted before storage
-    llm_timeout: int | None = Field(default=None, ge=1, le=300)
+    llm_timeout: int | None = Field(default=None, ge=1, le=_LLM_TIMEOUT_MAX)
     llm_temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     llm_max_tokens: int | None = Field(default=None, ge=1, le=128000)
     is_default: bool | None = None

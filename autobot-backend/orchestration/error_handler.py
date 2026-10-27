@@ -122,7 +122,7 @@ class StepErrorConfig:
             backoff = BackoffStrategy(raw_backoff)
         return cls(
             action=StepErrorAction(data.get("action", StepErrorAction.ABORT)),
-            max_retries=int(data.get("max_retries", 3)),
+            max_retries=int(data.get("max_retries", RetryConfig.DEFAULT_RETRIES)),
             base_delay=float(data.get("base_delay", 1.0)),
             backoff=backoff,
             fallback_step_id=data.get("fallback_step_id"),
