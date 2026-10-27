@@ -18,6 +18,7 @@ import { useI18n } from 'vue-i18n'
 import { useAutobotApi } from '@/composables/useAutobotApi'
 import { formatDateTime } from '@/composables/useTimezone'
 import { BaseAlert, BaseModal, PollingPausedAlert } from '@autobot/ui'
+import { formatDuration } from '@/utils/formatHelpers'
 import { useDashboardPoller } from '@/composables/useDashboardPoller'
 import { POLL_CONSECUTIVE_ERROR_LIMIT } from '@/constants/api-timeouts'
 
@@ -104,17 +105,6 @@ function getProgressColor(status: string): string {
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-'
   return formatDateTime(dateStr)
-}
-
-function formatDuration(start: string | null, end: string | null): string {
-  if (!start) return '-'
-  const startDate = new Date(start)
-  const endDate = end ? new Date(end) : new Date()
-  const diff = Math.floor((endDate.getTime() - startDate.getTime()) / 1000)
-
-  if (diff < 60) return `${diff}s`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`
-  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
 }
 
 async function fetchJobs(): Promise<void> {

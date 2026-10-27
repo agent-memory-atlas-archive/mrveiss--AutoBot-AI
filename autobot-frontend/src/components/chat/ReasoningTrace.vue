@@ -48,7 +48,7 @@
           <span
             v-if="entry.durationMs != null"
             class="reasoning-trace__entry-duration"
-          >{{ formatDuration(entry.durationMs) }}</span>
+          >{{ formatDuration(entry.durationMs, DURATION_OPTIONS) }}</span>
           <span
             v-if="entry.kind === 'tool_result'"
             class="reasoning-trace__entry-status"
@@ -66,6 +66,8 @@
 <script setup lang="ts">
 import type { IconName } from '@/components/ui/Icon.vue'
 import { ref } from 'vue'
+import Icon from '@/components/ui/Icon.vue'
+import { formatDuration } from '@/utils/formatHelpers'
 import type { TraceEntry, TraceEntryKind } from '@/composables/useReasoningTrace'
 
 // ---------------------------------------------------------------------------
@@ -103,11 +105,7 @@ function iconForKind(kind: TraceEntryKind): IconName {
   return map[kind] ?? 'circle'
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
-import Icon from '@/components/ui/Icon.vue'
+const DURATION_OPTIONS = { style: 'msMinutes' } as const
 </script>
 
 <style scoped>

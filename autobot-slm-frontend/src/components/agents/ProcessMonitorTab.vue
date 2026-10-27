@@ -27,6 +27,7 @@
 import { ref } from 'vue'
 import { getBackendUrl } from '@/config/ssot-config'
 import { useAuthStore } from '@/stores/auth'
+import { formatDuration } from '@/utils/formatHelpers'
 import {
   useAutobotApi,
   autobotApiErrorMessage,
@@ -197,13 +198,8 @@ function statusBadgeClass(status: string): string {
   return map[status] || 'badge-gray'
 }
 
-function formatDuration(start: string | null, end: string | null): string {
-  if (!start) return '—'
-  const s = new Date(start).getTime()
-  const e = end ? new Date(end).getTime() : Date.now()
-  const secs = Math.round((e - s) / 1000)
-  if (secs < 60) return `${secs}s`
-  return `${Math.floor(secs / 60)}m ${secs % 60}s`
+function processDuration(start: string | null, end: string | null): string {
+  return start ? formatDuration(start, end) : '—'
 }
 
 function formatTime(iso: string | null): string {
@@ -306,7 +302,7 @@ function formatTime(iso: string | null): string {
               {{ proc.command }} {{ (proc.args || []).join(' ') }}
             </td>
             <td>{{ proc.exit_code ?? '—' }}</td>
-            <td>{{ formatDuration(proc.started_at, proc.completed_at) }}</td>
+            <td>{{ processDuration(proc.started_at, proc.completed_at) }}</td>
             <td class="time-cell">{{ formatTime(proc.started_at) }}</td>
             <td>
               <button

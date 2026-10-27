@@ -52,6 +52,13 @@ function formatDurationValue(
       if (value < 1000) return `${value}ms`
       if (value < 60000) return `${(value / 1000).toFixed(1)}s`
       return `${roundFn(value / 60000)}m`
+    case 'msCompound': {
+      const secs = Math.floor(value / 1000)
+      if (secs < 60) return `${secs}s`
+      const mins = Math.floor(secs / 60)
+      if (mins < 60) return `${mins}m ${secs % 60}s`
+      return `${Math.floor(mins / 60)}h ${mins % 60}m`
+    }
     default:
       return nullText
   }
