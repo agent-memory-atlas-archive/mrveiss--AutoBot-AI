@@ -785,9 +785,7 @@
     "logging": "Logging",
     "prompts": "Prompts",
     "backend": "Backend",
-    "save": "Save Settings",
     "reset": "Reset to Defaults",
-    "saving": "Saving...",
     "apiKeys": {
       "wizardTitle": "API Key Setup",
       "selectRolesDescription": "Select the roles deployed on your nodes to see which API keys are needed.",
