@@ -68,25 +68,29 @@ def test_the_detectors_see_a_shell_and_a_string_command() -> None:
     assert shell_true_calls(good) == [] and string_start_commands(good) == []
 
 
-def _coordinator_module():
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("startup_coordinator_19496", repo_root() / _COORDINATOR)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def test_a_group_member_outliving_its_leader_is_stopped() -> None:
     """The leader exits at once, its backgrounded child survives: stop must still reach the child."""
     import subprocess
-    import time
 
-    coordinator = _coordinator_module()
+    from autobot_shared.process_group import process_group_is_dead, stop_process_group
+
     process = subprocess.Popen(["sh", "-c", "sleep 30 & exit 0"], start_new_session=True)
     process.wait(timeout=5)  # leader gone, the sleep lives on in the group
-    assert coordinator._group_alive(process.pid)
-    assert coordinator._terminate_process_gracefully("t", process) is True
-    time.sleep(0.1)
-    assert not coordinator._group_alive(process.pid)
-    assert coordinator._terminate_process_gracefully("t", process) is False  # nothing left to stop
+    assert not process_group_is_dead(process.pid)
+    assert stop_process_group(process, grace_s=2) is True
+    assert process_group_is_dead(process.pid)
+    assert stop_process_group(process, grace_s=2) is False  # nothing left to stop
+
+
+def test_the_coordinator_stops_through_the_shared_helper() -> None:
+    """One implementation: the coordinator's stop calls autobot_shared.process_group, no local copy."""
+    tree = _tree()
+    imported = {
+        alias.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ImportFrom) and n.module == "autobot_shared.process_group"
+        for alias in n.names
+    }
+    local = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert "stop_process_group" in imported
+    assert not {"process_group_is_dead", "_group_alive", "_signal_group", "_wait_for_group"} & local

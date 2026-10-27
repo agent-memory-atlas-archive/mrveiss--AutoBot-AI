@@ -35,6 +35,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from autobot_shared.network_constants import NetworkConstants, ServiceURLs  # noqa: E402
+
+from autobot_shared.process_group import stop_process_group  # noqa: E402
 from autobot_shared.redis_client import get_async_redis_client  # noqa: E402
 from autobot_shared.redis_management.endpoint import resolve_redis_endpoint  # noqa: E402
 from autobot_shared.ssot_constants import TimingConstants  # noqa: E402
@@ -80,56 +82,11 @@ async def _check_redis_health() -> bool:
         return False
 
 
-def _signal_group(process: subprocess.Popen, sig: int) -> None:
-    """Signal the component's whole process group: ``npm run dev`` spawns vite as a grandchild (#19496).
-
-    Each component starts in its own session, so its group id is its pid. If the group is already
-    gone, fall back to the process itself.
-    """
-    try:
-        os.killpg(process.pid, sig)
-    except (ProcessLookupError, PermissionError):
-        process.send_signal(sig)
-
-
-def _group_alive(pgid: int) -> bool:
-    """Whether any process is left in group *pgid* (signal 0 probes without delivering)."""
-    try:
-        os.killpg(pgid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _wait_for_group(process: subprocess.Popen, timeout: float) -> bool:
-    """Reap the leader and wait until its whole group is gone; True if it went within *timeout*."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        process.poll()  # reap the leader so it does not linger as a zombie group member
-        if not _group_alive(process.pid):
-            return True
-        time.sleep(0.05)
-    return False
-
-
 def _terminate_process_gracefully(name: str, process: subprocess.Popen) -> bool:
-    """Stop a component's whole process group: SIGTERM, then SIGKILL after 5 s (Issue #315, #19496).
-
-    The group is signalled even when the leader already exited: ``npm run dev``'s vite grandchild
-    can outlive npm, and returning early on the leader left it orphaned (#19798 review).
-    """
-    if process.poll() is not None and not _group_alive(process.pid):
-        return False  # leader and every group member already gone
-
+    """Stop a component's whole process group (#19496); False if it was already gone."""
     logger.info("Stopping %s (PID: %s)", name, process.pid)
-    _signal_group(process, signal.SIGTERM)
-    if not _wait_for_group(process, 5):
-        logger.warning("Force killing %s", name)
-        _signal_group(process, signal.SIGKILL)
-        _wait_for_group(process, 5)
-    process.poll()
+    if not stop_process_group(process):
+        return False
     logger.info("✅ %s stopped", name)
     return True
 
