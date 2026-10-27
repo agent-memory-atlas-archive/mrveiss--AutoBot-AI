@@ -24,8 +24,10 @@ _QUERY = re.compile(
     r"|apt-cache\s+policy\b"
     r"|systemctl\s+(?:--\S+\s+)*is-(?:active|enabled)\b"
     r"|rpm\s+-q"
-    r"|(?:\{\{.*?\}\}|\S)+\s+--version\b)"
+    r"|(?:\{\{[^}]*\}\}|[^\s{])+\s+--version\b)"
 )
+#: The binary token is a template (`{{ x }}`, no nested braces) or non-space, non-brace characters:
+#: the two alternatives cannot match the same character, so the repeat cannot backtrack exponentially.
 #: A command chained with `;`, `&&`, `||`, a redirect, or a command substitution may do more than query.
 #: Stderr redirection is not a write that matters to the verdict.
 _STDERR_REDIRECT = re.compile(r"\s2>(?:&1|/dev/null)")
