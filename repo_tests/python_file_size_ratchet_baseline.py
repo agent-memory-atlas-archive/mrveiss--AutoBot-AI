@@ -191,7 +191,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/code_intelligence/typescript_analyzer.py": 609,
     "autobot-backend/command_manual_manager.py": 908,
     "autobot-backend/computer_vision/screen_analyzer.py": 662,
-    "autobot-backend/conftest.py": 1498,  # #16483: _make_pkg_stub/_real_load_and_bind moved to testkit/module_stubs.py
+    "autobot-backend/conftest.py": 1459,  # #16483, #19582: stubs moved to testkit/
     "autobot-backend/context_aware_decision/decision_engine.py": 815,
     "autobot-backend/context_aware_decision/tests/test_counterfactual_reasoner.py": 663,
     "autobot-backend/context_window_manager.py": 626,
@@ -242,11 +242,11 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/llc/api/companies.py": 1719,
     "autobot-backend/llc/api/roles.py": 713,
     "autobot-backend/llc/api/sprints.py": 1223,
-    "autobot-backend/llc/api/work_items.py": 1416,
-    "autobot-backend/llc/scheduler/heartbeat_scheduler.py": 1028,  # #16818 onto #17726
+    "autobot-backend/llc/api/work_items.py": 1399,
+    "autobot-backend/llc/scheduler/heartbeat_scheduler.py": 1023,  # #16818 onto #17726
     "autobot-backend/llc/services/portability.py": 920,
     "autobot-backend/llc/services/template.py": 643,
-    "autobot-backend/llc/services/work_item_service.py": 1100,
+    "autobot-backend/llc/services/work_item_service.py": 1086,
     "autobot-backend/llc/tests/conftest.py": 832,
     "autobot-backend/llc/tests/test_autobot_agent_adapter.py": 663,
     "autobot-backend/llc/tests/test_heartbeat_scheduler.py": 1042,
