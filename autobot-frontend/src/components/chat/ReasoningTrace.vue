@@ -105,7 +105,7 @@ function iconForKind(kind: TraceEntryKind): IconName {
   return map[kind] ?? 'circle'
 }
 
-const DURATION_OPTIONS = { style: 'msMinutes' } as const
+const DURATION_OPTIONS = { style: 'msSeconds1dp' } as const
 </script>
 
 <style scoped>

@@ -207,7 +207,7 @@ const unvectorizedCount = computed(() => {
   return countUnvectorized(props.node)
 })
 
-const SIZE_OPTIONS = { decimals: 1, units: ['B', 'KB', 'MB'], integerBase: true } as const
+const SIZE_OPTIONS = { decimals: [0, 0, 1], units: ['B', 'KB', 'MB'], integerBase: true, keepTrailingZeros: true, separator: '', zeroText: '0B' } as const
 </script>
 
 <style scoped>

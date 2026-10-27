@@ -36,7 +36,7 @@ function budgetBarColor(b: BudgetInfo): string {
   return 'bg-autobot-success'
 }
 
-const DURATION_OPTIONS = { style: 'msMinutes' } as const
+const DURATION_OPTIONS = { style: 'msSeconds1dp' } as const
 
 function formatTime(ts: string): string {
   if (!ts) return '—'

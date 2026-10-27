@@ -152,7 +152,7 @@ function getStatusClasses(status: ServiceStatus): { bg: string; text: string; do
 
 // #13138: `memory_bytes` is optional AND nullable in the contract; the body
 // already handled `undefined`, only the signature disagreed.
-const BYTES_OPTIONS = { decimals: 1, units: ['B', 'KB', 'MB', 'GB'], nullText: '-', integerBase: true, keepTrailingZeros: true } as const
+const BYTES_OPTIONS = { decimals: [0, 1, 1, 2], units: ['B', 'KB', 'MB', 'GB'], nullText: '-', integerBase: true, keepTrailingZeros: true } as const
 
 function toggleErrorDetail(serviceName: string): void {
   const next = new Set(expandedErrors.value)

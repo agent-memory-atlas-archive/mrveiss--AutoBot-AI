@@ -9,7 +9,6 @@
  * from i18n; an unmeasured figure reads "not reported", never 0.
  */
 
-import { formatUptime } from '@/utils/formatHelpers'
 import type { Agent } from '@/composables/visualizations/useAgentActivityData'
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
@@ -33,9 +32,10 @@ export function agentActivityFormat(t: Translate) {
   const getAgentIcon = (type: string): string => AGENT_ICONS[type] || '🤖'
   const formatAgentType = (type: string): string => t(k(`types.${type}`))
 
-  /** Sub-minute uptimes keep the translated seconds text; the rest is the kit's. */
   function uptimeText(seconds: number): string {
-    return seconds < 60 ? t(k('seconds'), { n: seconds }) : formatUptime(seconds)
+    if (seconds < 60) return t(k('seconds'), { n: seconds })
+    if (seconds < 3600) return t(k('minutes'), { n: Math.floor(seconds / 60) })
+    return t(k('hours'), { n: Math.floor(seconds / 3600) })
   }
 
   function formatTimeAgo(timestamp: number): string {

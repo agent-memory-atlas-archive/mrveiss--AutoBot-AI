@@ -198,9 +198,7 @@ function statusBadgeClass(status: string): string {
   return map[status] || 'badge-gray'
 }
 
-function processDuration(start: string | null, end: string | null): string {
-  return start ? formatDuration(start, end) : '—'
-}
+const DURATION_OPTIONS = { style: 'msMinutesSeconds', nullText: '—' } as const
 
 function formatTime(iso: string | null): string {
   if (!iso) return '—'
@@ -302,7 +300,7 @@ function formatTime(iso: string | null): string {
               {{ proc.command }} {{ (proc.args || []).join(' ') }}
             </td>
             <td>{{ proc.exit_code ?? '—' }}</td>
-            <td>{{ processDuration(proc.started_at, proc.completed_at) }}</td>
+            <td>{{ formatDuration(proc.started_at, proc.completed_at, DURATION_OPTIONS) }}</td>
             <td class="time-cell">{{ formatTime(proc.started_at) }}</td>
             <td>
               <button

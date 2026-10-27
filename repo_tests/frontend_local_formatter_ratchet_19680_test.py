@@ -13,6 +13,15 @@ as ``const formatSize = formatFileSize`` is a re-binding of the kit's function, 
 16 were measured on main at ee1bfa15dc. The kit's own formatters (``libs/autobot-ui``) are
 outside the scanned folders by construction.
 
+**Out of scope: ``stores/`` and ``utils/``.** ``utils/`` holds the canonical helpers
+(``formatHelpers`` re-exports the kit's), so a declaration there is the one allowed home, not a
+copy. ``stores/`` holds state, not display text; a formatter there is not the component-level
+duplication this class measures. Both folders are simply not scanned.
+
+**Shapes matched:** ``function``; ``const x = (...) =>`` / ``function`` / generic ``<T>(``
+(including ``(`` on the next line); object or class methods ``formatDuration(x) {``; and
+properties ``formatDuration: (x) =>``.
+
 **What stays, and why the pin is 2 and not 0.** ``MessageAttachments`` (``formatSize``) and
 ``WorkflowHistory`` (``formatDuration(workflow)``) were held by open PRs when this landed, so
 their migration is deferred to the PR that releases them. Whoever migrates one lowers the pin
@@ -35,11 +44,18 @@ _ROOTS = ("autobot-frontend/src", "autobot-slm-frontend/src")
 _FOLDERS = ("components", "views", "composables")
 _EXCLUDED = re.compile(r"(\.test\.|\.spec\.|\.stories\.|/__tests__/)")
 _NAMES = r"(?:formatDuration|formatUptime|formatFileSize|formatBytes|formatSize)"
-_FUNCTION = re.compile(rf"^\s*(?:export\s+)?(?:async\s+)?function\s+{_NAMES}\s*[(<]")
-_ARROW = re.compile(
-    rf"^\s*(?:export\s+)?const\s+{_NAMES}\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\(|function\b|[A-Za-z_]\w*\s*=>)"
+_ARROW_TAIL = r"=\s*(?:async\s*)?(?:<[^>]*>\s*)?(?:\(|function\b|[A-Za-z_]\w*\s*=>)"
+# Every declaration form, matched over the whole text so a binding split across lines is seen.
+_DECLARATION = re.compile(
+    rf"^[ \t]*(?:export[ \t]+)?(?:"
+    rf"(?:async[ \t]+)?function[ \t]+{_NAMES}\s*[(<]"  # function declaration
+    rf"|const[ \t]+{_NAMES}\s*(?::[^\n]*?)?{_ARROW_TAIL}"  # const arrow / function expression
+    rf"|(?:async[ \t]+)?{_NAMES}\s*(?:<[^>]*>)?\([^)]*\)\s*(?::[^{{;=]+)?\{{"  # object / class method
+    rf"|{_NAMES}[ \t]*:\s*(?:async\s*)?(?:<[^>]*>\s*)?(?:\(|function\b|[A-Za-z_]\w*\s*=>)"  # property
+    rf")",
+    re.M,
 )
-_COMMENT = re.compile(r"^\s*(//|\*|/\*)")
+_COMMENT_LINE = re.compile(r"^[ \t]*(?://|\*|/\*).*$", re.M)
 
 # 16 measured on ee1bfa15dc; 2 after this migration (the two held files above).
 PINS = {"local_formatter_declarations": 2}
@@ -57,9 +73,8 @@ def scan(src: Path) -> tuple[int, int]:
             if path.suffix not in (".ts", ".vue") or _EXCLUDED.search(rel):
                 continue
             scanned += 1
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not _COMMENT.match(line) and (_FUNCTION.match(line) or _ARROW.match(line)):
-                    declared += 1
+            text = _COMMENT_LINE.sub("", path.read_text(encoding="utf-8"))
+            declared += len(_DECLARATION.findall(text))
     return declared, scanned
 
 
@@ -82,6 +97,14 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         self._w(tmp_path, "views/E.vue", "const formatFileSize = async (b) => b\n")
         assert scan(tmp_path)[0] == 5
 
+    def test_it_counts_method_property_multiline_and_generic_forms(self, tmp_path: Path) -> None:
+        self._w(tmp_path, "components/A.vue", "const api = {\n  formatDuration(ms: number) {\n    return 1\n  },\n}\n")
+        self._w(tmp_path, "components/B.vue", "const o = {\n  formatBytes: (b: number) => b,\n}\n")
+        self._w(tmp_path, "components/C.vue", "const formatSize =\n  (bytes: number): string => {\n")
+        self._w(tmp_path, "components/D.vue", "const formatUptime = <T,>(s: T) => s\n")
+        self._w(tmp_path, "components/E.vue", "const formatFileSize: (b: number) => string = (b) => `${b}`\n")
+        assert scan(tmp_path)[0] == 5
+
     def test_a_use_an_alias_a_wrapper_and_an_import_are_not_declarations(self, tmp_path: Path) -> None:
         body = (
             "import { formatDuration } from '@/utils/formatHelpers'\n"
@@ -89,6 +112,8 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
             "const label = formatDuration(ms, opts)\n"
             "function runningFor(s) { return formatDuration(s, null) }\n"
             "const formatDurationLabel = (ms) => ms\n"
+            "const o = { formatUptime: uptimeText, formatSize }\n"
+            "if (formatDuration(a, b)) {\n"
         )
         self._w(tmp_path, "components/A.vue", body)
         assert scan(tmp_path)[0] == 0

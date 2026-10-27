@@ -285,7 +285,7 @@ function formatFullTime(timestamp: string): string {
   )
 }
 
-const DURATION_OPTIONS = { style: 'msMinutes' } as const
+const DURATION_OPTIONS = { style: 'msSecondsMinutes' } as const
 
 function formatDetailKey(key: string): string {
   return key

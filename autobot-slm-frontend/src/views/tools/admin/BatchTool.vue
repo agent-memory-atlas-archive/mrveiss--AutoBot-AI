@@ -22,6 +22,8 @@ import { formatDuration } from '@/utils/formatHelpers'
 import { useDashboardPoller } from '@/composables/useDashboardPoller'
 import { POLL_CONSECUTIVE_ERROR_LIMIT } from '@/constants/api-timeouts'
 
+const DURATION_OPTIONS = { style: 'msCompound' } as const
+
 const api = useAutobotApi()
 
 // State
@@ -429,7 +431,7 @@ onMounted(() => poller.start(''))
           </div>
           <div>
             <p class="text-gray-500">{{ $t('tools.admin.batchTool.duration') }}</p>
-            <p class="text-gray-900">{{ formatDuration(job.started_at, job.completed_at) }}</p>
+            <p class="text-gray-900">{{ formatDuration(job.started_at, job.completed_at, DURATION_OPTIONS) }}</p>
           </div>
           <div>
             <p class="text-gray-500">{{ $t('tools.admin.batchTool.failedItems') }}</p>
