@@ -1043,9 +1043,7 @@ export function useAutobotApi() {
   async function voiceListen(userRole: string = 'admin'): Promise<Record<string, unknown>> {
     const formData = new FormData()
     formData.append('user_role', userRole)
-    const response = await client.post<Record<string, unknown>>('/voice/listen', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    const response = await client.post<Record<string, unknown>>('/voice/listen', formData)
     return response
   }
 
@@ -1053,9 +1051,7 @@ export function useAutobotApi() {
     const formData = new FormData()
     formData.append('text', text)
     formData.append('user_role', userRole)
-    const response = await client.post<VoiceSpeakResponse>('/voice/speak', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    const response = await client.post<VoiceSpeakResponse>('/voice/speak', formData)
     return response
   }
 
@@ -1755,12 +1751,13 @@ export function useAutobotApi() {
    *
    * `timeoutMs` exists for the 30s approval poll in `useSkillGovernance`: a tick
    * that outlived its own interval would overlap the next one, so the polled
-   * read is given a sub-interval budget rather than the client's 30s default.
+   * read is given a sub-interval budget rather than the client's 30s default, and
+   * no GET retries, which would stretch one failing tick past the interval (#12363).
    */
   async function getSkillApprovals(timeoutMs?: number): Promise<SkillApproval[]> {
     const response = await client.get<SkillApproval[]>(
       '/skills/governance/approvals',
-      timeoutMs === undefined ? undefined : { timeout: timeoutMs }
+      timeoutMs === undefined ? undefined : { timeout: timeoutMs, maxRetries: 1 }
     )
     return response ?? []
   }

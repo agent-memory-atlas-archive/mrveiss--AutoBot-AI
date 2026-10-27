@@ -64,7 +64,7 @@ describe('useWebResearchAdminApi (#19217)', () => {
   it('getStatus GETs /web-research/status', async () => {
     backendClient.get.mockResolvedValue({ status: 'success', enabled: true })
     await useWebResearchAdminApi().getStatus()
-    expect(backendClient.get).toHaveBeenCalledWith('/web-research/status')
+    expect(backendClient.get).toHaveBeenCalledWith('/web-research/status', { maxRetries: 1 })
   })
 
   it('clearCache and resetCircuitBreakers POST their routes', async () => {

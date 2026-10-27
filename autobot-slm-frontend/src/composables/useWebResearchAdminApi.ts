@@ -78,7 +78,8 @@ export function useWebResearchAdminApi() {
 
   /** Rejects with a 503 (see isWebResearcherUnavailable) when the researcher is not running. */
   async function getStatus(): Promise<WebResearchStatusData> {
-    const response = await client.get<WebResearchStatusData>('/web-research/status')
+    // One attempt: a down researcher answers 503 at once, and the view says so (#12363)
+    const response = await client.get<WebResearchStatusData>('/web-research/status', { maxRetries: 1 })
     return response
   }
 

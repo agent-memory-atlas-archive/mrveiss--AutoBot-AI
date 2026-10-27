@@ -205,10 +205,12 @@ describe('useSkillGovernance — migrated onto useAutobotApi (#13079)', () => {
     g.startApprovalPolling()
     vi.advanceTimersByTime(30_000)
 
-    const [url, config] = calls('get')[0] as [string, { timeout: number }]
+    const [url, config] = calls('get')[0] as [string, { timeout: number; maxRetries: number }]
     expect(url).toBe('/skills/governance/approvals')
     expect(config?.timeout).toBe(SKILL_APPROVAL_POLL_TIMEOUT_MS)
     expect(config.timeout).toBeLessThan(30_000)
+    // GET retries would stretch one failing tick past the interval (#12363)
+    expect(config.maxRetries).toBe(1)
 
     g.stopApprovalPolling()
   })
