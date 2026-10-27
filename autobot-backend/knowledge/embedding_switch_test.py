@@ -30,12 +30,23 @@ class _Redis:
         self.kv[key] = value
         return True
 
-    async def eval(self, script, numkeys, key, expected, *args):
-        """The compare-and-delete / compare-and-pexpire scripts of autobot_shared.redis_utils."""
+    async def eval(self, script, numkeys, key, *args):
+        """The Lua scripts the switch uses: redis_utils' compare-and-delete/-pexpire and its own two."""
+        if script == sw._CANCEL_IF_BUILDING_LUA:
+            if self.hashes.get(key, {}).get("state") != "building":
+                return 0
+            self.hashes[key]["cancel"] = "1"
+            return 1
+        if script == sw._SETTLE_UNLESS_CANCELLED_LUA:
+            if self.hashes.get(key, {}).get("cancel") == "1":
+                return 0
+            self.hashes.setdefault(key, {})["state"] = "settling"
+            return 1
+        expected = args[0]
         if self.kv.get(key) != expected:
             return 0
         if "PEXPIRE" in script:
-            self.ttl[key] = int(args[0])
+            self.ttl[key] = int(args[1])
         else:
             self.kv.pop(key)
         return 1
@@ -381,6 +392,39 @@ async def test_the_kb_stays_on_its_old_collection_while_the_build_runs(env):
     await sw._set_state(state="building", owner=run.owner, model=MODEL, collection=run.collection)
     await sw.run_switch(kb, run)
     assert seen and all(entry == ("autobot_memory", False) for entry in seen), seen
+
+
+async def test_a_worker_whose_state_record_expired_still_releases_its_lock(env):
+    """code review on PR #19641: the ownership early-return must not strand the lock."""
+    await env.redis.set(sw.LOCK_KEY, "owner-1")  # no state hash at all
+    await sw._finish(sw._Run("owner-1", MODEL, "c", sw.time.monotonic()), "failed", reason="x")
+    assert sw.LOCK_KEY not in env.redis.kv
+    assert await sw.switch_status() == {"failed_ids": [], "state": "idle"}
+
+
+async def test_cancel_and_cutover_cannot_both_win(env):
+    """code review on PR #19641: the flag and the transition are one step each, so one side refuses."""
+    await env.redis.set(sw.LOCK_KEY, "owner-1")  # a live build, not a stale one
+    await sw._set_state(state="building", owner="owner-1")
+    assert await env.redis.eval(sw._SETTLE_UNLESS_CANCELLED_LUA, 1, sw.STATE_KEY) == 1
+    assert await sw.request_switch_cancel(actor="admin") == "too_late"
+    await sw._set_state(state="building", cancel="")
+    assert await env.redis.eval(sw._CANCEL_IF_BUILDING_LUA, 1, sw.STATE_KEY) == 1
+    assert await env.redis.eval(sw._SETTLE_UNLESS_CANCELLED_LUA, 1, sw.STATE_KEY) == 0
+
+
+async def test_the_cancel_and_settle_scripts_on_a_real_lua_engine():
+    import fakeredis
+
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    await redis.hset("s", mapping={"state": "building"})
+    assert await redis.eval(sw._CANCEL_IF_BUILDING_LUA, 1, "s") == 1
+    assert await redis.eval(sw._SETTLE_UNLESS_CANCELLED_LUA, 1, "s") == 0, "an accepted cancel blocks cutover"
+    assert await redis.hget("s", "state") == "building"
+    await redis.hset("s", mapping={"cancel": ""})
+    assert await redis.eval(sw._SETTLE_UNLESS_CANCELLED_LUA, 1, "s") == 1
+    assert await redis.eval(sw._CANCEL_IF_BUILDING_LUA, 1, "s") == 0, "once settling, a cancel is refused"
+    assert await redis.hget("s", "cancel") == ""
 
 
 async def test_a_write_is_not_noted_when_no_switch_runs(env):

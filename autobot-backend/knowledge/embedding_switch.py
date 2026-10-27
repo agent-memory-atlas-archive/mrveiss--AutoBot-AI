@@ -63,6 +63,22 @@ SWITCH_REPLAY_ROUNDS = env_int_clamped("AUTOBOT_EMBEDDING_SWITCH_REPLAY_ROUNDS",
 _FAILED_IDS_SHOWN = 50
 #: While building, and while settling after cutover, every write is noted for replay.
 _ACTIVE = ("building", "settling")
+#: Set the cancel flag only while the build is still before cutover; 0 once it is settling or done.
+_CANCEL_IF_BUILDING_LUA = """
+if redis.call('HGET', KEYS[1], 'state') == 'building' then
+  redis.call('HSET', KEYS[1], 'cancel', '1')
+  return 1
+end
+return 0
+"""
+#: Enter cutover only if no cancel was accepted; one step, so a cancel lands before it or is refused.
+_SETTLE_UNLESS_CANCELLED_LUA = """
+if redis.call('HGET', KEYS[1], 'cancel') == '1' then
+  return 0
+end
+redis.call('HSET', KEYS[1], 'state', 'settling')
+return 1
+"""
 
 
 class SwitchRefused(ValueError):
@@ -152,9 +168,8 @@ async def request_switch_cancel(actor: str = "unknown") -> str:
         return "force_closed"
     if status["state"] not in _ACTIVE:
         return "none"
-    if status["state"] == "settling":
-        return "too_late"  # past the cutover boundary: the record is being or has been written
-    await _set_state(cancel="1")
+    if not await (await _redis()).eval(_CANCEL_IF_BUILDING_LUA, 1, STATE_KEY):
+        return "too_late"  # settling: past the cutover boundary, the record is being or has been written
     _audit(actor, "switch_cancel", status.get("model"), status.get("collection"))
     return "cancel_requested"
 
@@ -214,8 +229,9 @@ async def run_switch(kb, run: _Run) -> None:
 async def _finish(run: _Run | None, state: str, *, reason: str = "", failed: int | None = None, failed_ids=()) -> None:
     client = await _redis()
     if run is not None and await client.hget(STATE_KEY, "owner") != run.owner:
-        # a newer switch owns the state now (this worker lost its lock): leave its record alone
+        # a newer switch owns the state, or the record is gone: leave it alone, but never keep our lock
         logger.warning("embedding switch %s finished as %s after losing ownership; state left as is", run.owner, state)
+        await delete_if_value(client, LOCK_KEY, run.owner)
         return
     fields: Dict[str, Any] = {"state": state, "finished": datetime.now(tz=timezone.utc).isoformat(), "reason": reason}
     if failed is not None:
@@ -340,10 +356,11 @@ async def _cut_over(kb, store, run: _Run) -> None:
     from knowledge.embedding_space_binding import rebind
 
     try:
-        await _heartbeat(run, state="settling")  # from here a cancel request is refused (too_late)
-        if (await switch_status()).get("cancel") == "1":
+        await _heartbeat(run)
+        if not await (await _redis()).eval(_SETTLE_UNLESS_CANCELLED_LUA, 1, STATE_KEY):
             await _finish(run, "cancelled", reason="cancelled by request before cutover")
             return
+        # settling from here: a cancel request is refused (too_late)
         space = await asyncio.to_thread(set_embedding_model_override, run.model, run.collection)
     except Exception as exc:  # noqa: BLE001 - the record was not written: nothing switched
         await _finish(run, "failed", reason=f"cutover did not happen: {type(exc).__name__}: {exc}")
