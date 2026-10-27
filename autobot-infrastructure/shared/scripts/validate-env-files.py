@@ -133,7 +133,9 @@ def validate_url_consistency(env_vars: Dict[str, str]) -> List[str]:
                 expected_url = _expected_redis_url(env_vars[host_var], env_vars[port_var])
 
             if actual_url != expected_url:
-                errors.append(f"URL mismatch: {url_var} = {actual_url}, expected {expected_url}")
+                # Names only: a URL value can carry a password (redis://:pw@host), and this
+                # report goes to stdout and CI logs.
+                errors.append(f"URL mismatch: {url_var} does not match the URL built from {host_var} and {port_var}")
 
     return errors
 
