@@ -82,10 +82,15 @@ async def ensure_current_space(kb) -> bool:
     if now - getattr(kb, "_space_checked_at", 0.0) < SPACE_CHECK_INTERVAL_S:
         return False
     kb._space_checked_at = now
-    space = active_embedding_space()
+    # a blocking Redis GET when the override cache has expired: off the event loop
+    space = await asyncio.to_thread(active_embedding_space)
     if space is None or not space.collection or space.generation <= getattr(kb, "_bound_generation", 0):
         return False
-    await rebind(kb, space)
+    try:
+        await rebind(kb, space)
+    except Exception as exc:  # noqa: BLE001 - keep serving from the bound space; retried next interval
+        logger.error("Rebind to embedding space %s (generation %d) failed: %s", space.collection, space.generation, exc)
+        return False
     return True
 
 
@@ -132,7 +137,12 @@ async def rebind(kb, space: EmbeddingSpace) -> None:
         old_buffer = getattr(kb, "_write_buffer", None)
         if old_buffer is not None:
             await buffer.start()
-        _swap(kb, space, abc, store, buffer)  # synchronous: nothing sees a half-swapped KB
+        try:
+            _swap(kb, space, abc, store, buffer)  # synchronous: nothing sees a half-swapped KB
+        except Exception:
+            if old_buffer is not None:
+                await buffer.stop()  # the KB kept its old binding; do not leave this buffer's task running
+            raise
     if old_buffer is not None:
         await old_buffer.stop()  # flushes what was queued into the collection it was made for
     logger.warning(

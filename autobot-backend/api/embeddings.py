@@ -312,8 +312,11 @@ async def cancel_embedding_switch(
     """Stop a running switch at its next batch, or force-close a stale one; the active space stays (#19379)."""
     from knowledge.embedding_switch import request_switch_cancel, switch_status
 
-    if await request_switch_cancel(actor=_actor(current_user)) == "none":
+    outcome = await request_switch_cancel(actor=_actor(current_user))
+    if outcome == "none":
         raise HTTPException(status_code=409, detail="no embedding-model switch is running")
+    if outcome == "too_late":
+        raise HTTPException(status_code=409, detail="the switch is past cutover and can no longer be cancelled")
     return DataResponse(data=_switch_data(await switch_status()))
 
 

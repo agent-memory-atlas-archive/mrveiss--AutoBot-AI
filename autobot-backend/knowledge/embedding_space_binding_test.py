@@ -77,6 +77,36 @@ async def test_a_rebind_builds_aside_swaps_once_then_drains_the_old_buffer(monke
     assert kb.embedding_dimensions == 1024
 
 
+async def test_a_failed_rebind_keeps_serving_from_the_bound_space(monkeypatch, kb):
+    """code review on PR #19641: a rebind error must not make the KB accessors return None."""
+    _space(monkeypatch, EmbeddingSpace("bge-m3:latest", "kb_bge", 1))
+
+    async def _broken(kb, client, collection, meta):
+        raise RuntimeError("chroma unavailable")
+
+    monkeypatch.setattr(binding, "build_binding", _broken)
+    assert await binding.ensure_current_space(kb) is False
+    assert (kb.chromadb_collection, kb._bound_generation) == ("autobot_memory", 0)
+
+
+async def test_a_swap_that_raises_stops_the_new_buffer_and_keeps_the_old_binding(monkeypatch, kb):
+    """code review on PR #19641: an orphaned flush task per retry otherwise."""
+
+    def _unsupported(provider, model, endpoint, cfg):
+        raise ValueError("unsupported provider")
+
+    kb._configure_embedding_provider = _unsupported
+    with pytest.raises(ValueError):
+        await binding.rebind(kb, EmbeddingSpace("bge-m3:latest", "kb_bge", 1))
+    stops = [entry[1] for entry in kb.log if entry[0] == "stop"]
+    assert stops == ["kb_bge"], "the new buffer is stopped; the old one keeps serving"
+    assert (kb.chromadb_collection, kb.vector_store, kb._bound_generation) == (
+        "autobot_memory",
+        "store:autobot_memory",
+        0,
+    )
+
+
 async def test_the_bound_generation_does_not_rebind_again(monkeypatch, kb):
     _space(monkeypatch, EmbeddingSpace("bge-m3:latest", "kb_bge", 1))
     await binding.ensure_current_space(kb)

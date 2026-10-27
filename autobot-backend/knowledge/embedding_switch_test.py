@@ -303,6 +303,86 @@ async def test_a_finished_build_leaves_a_newer_owners_lock_alone(env):
     assert env.redis.kv[sw.LOCK_KEY] == "owner-2"
 
 
+async def test_a_worker_that_lost_ownership_does_not_overwrite_a_newer_switchs_state(env):
+    """code review on PR #19641 (Major): A's late failure must not mark B's running build failed."""
+    await env.redis.set(sw.LOCK_KEY, "owner-B")
+    await sw._set_state(state="building", owner="owner-B", model=MODEL, collection="c")
+    await sw._finish(sw._Run("owner-A", MODEL, "c", sw.time.monotonic()), "failed", reason="lost its lock")
+    status = await sw.switch_status()
+    assert status["state"] == "building" and status["owner"] == "owner-B"
+    assert env.redis.kv[sw.LOCK_KEY] == "owner-B"
+
+
+async def test_a_cancel_during_settling_is_refused_as_too_late(env):
+    await env.redis.set(sw.LOCK_KEY, "owner-1")
+    await sw._set_state(state="settling", owner="owner-1", model=MODEL, collection="c")
+    assert await sw.request_switch_cancel(actor="admin") == "too_late"
+    assert (await sw.switch_status()).get("cancel") is None
+
+
+async def test_a_cancel_accepted_during_convergence_stops_before_the_record_is_written(env, monkeypatch):
+    real_converge = sw._converge
+
+    async def _cancel_then_converge(store, run, failed_ids):
+        await sw._set_state(cancel="1")  # accepted while state was still "building"
+        return await real_converge(store, run, failed_ids)
+
+    monkeypatch.setattr(sw, "_converge", _cancel_then_converge)
+    status = await _run(env)
+    assert status["state"] == "cancelled" and not _overrides(env)
+
+
+async def test_a_start_without_a_knowledge_base_is_refused_before_the_lock(env):
+    with pytest.raises(sw.SwitchRefused, match="not available"):
+        await sw.start_switch(None, MODEL)
+    assert sw.LOCK_KEY not in env.redis.kv
+
+
+async def test_a_start_that_fails_after_the_lock_releases_it(env, monkeypatch):
+    def _boom(coro, name):
+        coro.close()
+        raise RuntimeError("no event loop to schedule on")
+
+    monkeypatch.setattr(sw, "fire_and_forget", _boom)
+    with pytest.raises(RuntimeError):
+        await sw.start_switch(_kb(), MODEL)
+    assert sw.LOCK_KEY not in env.redis.kv, "a failed start must not block the next one"
+
+
+async def test_a_long_replay_heartbeats(env, monkeypatch):
+    beats = []
+    real = sw._heartbeat
+
+    async def _counting(run, **fields):
+        beats.append(fields)
+        await real(run, **fields)
+
+    run = sw._Run("owner-1", MODEL, "c", sw.time.monotonic())
+    await env.redis.set(sw.LOCK_KEY, run.owner)
+    await sw._set_state(state="building", owner=run.owner)
+    for fid in ("f0", "f1", "f2", "f3"):
+        await sw.note_write(fid)
+    monkeypatch.setattr(sw, "_heartbeat", _counting)
+    await sw._replay_pending(env.store, run)
+    assert len(beats) == 2, "one heartbeat per SWITCH_BATCH_SIZE (2) replayed facts"
+
+
+async def test_the_kb_stays_on_its_old_collection_while_the_build_runs(env):
+    """#19379 AC: search and writes use the old collection until cutover."""
+    kb, seen, original = _kb(), [], env.store.add
+
+    def _add(nodes):
+        seen.append((kb.chromadb_collection, any(e[0] == "rebind" for e in env.log)))
+        original(nodes)
+
+    env.store.add = _add
+    run = sw._Run("owner-1", MODEL, "autobot_memory__bge_m3_latest__abcd1234", sw.time.monotonic())
+    await env.redis.set(sw.LOCK_KEY, run.owner)
+    await sw._set_state(state="building", owner=run.owner, model=MODEL, collection=run.collection)
+    await sw.run_switch(kb, run)
+    assert seen and all(entry == ("autobot_memory", False) for entry in seen), seen
+
+
 async def test_a_write_is_not_noted_when_no_switch_runs(env):
     await sw.note_write("f1")
     assert env.redis.sets == {}

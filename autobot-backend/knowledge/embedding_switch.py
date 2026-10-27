@@ -50,9 +50,11 @@ LOCK_KEY = "autobot:kb:embedding_switch:lock"
 #: Facts embedded per round trip to the embedding provider.
 SWITCH_BATCH_SIZE = env_int_clamped("AUTOBOT_EMBEDDING_SWITCH_BATCH_SIZE", 64, 1, 1000)
 #: A build that has not heartbeat for this long is stale: its worker is presumed dead.
-SWITCH_STALE_S = env_float_clamped("AUTOBOT_EMBEDDING_SWITCH_STALE_SECONDS", 300.0, 30.0, 86400.0)
+SWITCH_STALE_S = env_float_clamped("AUTOBOT_EMBEDDING_SWITCH_STALE_SECONDS", 300.0, 30.0, 86400.0, positive_finite=True)
 #: The whole build, start to cutover, must finish within this.
-SWITCH_DEADLINE_S = env_float_clamped("AUTOBOT_EMBEDDING_SWITCH_DEADLINE_SECONDS", 21600.0, 60.0, 604800.0)
+SWITCH_DEADLINE_S = env_float_clamped(
+    "AUTOBOT_EMBEDDING_SWITCH_DEADLINE_SECONDS", 21600.0, 60.0, 604800.0, positive_finite=True
+)
 #: Added to the two cache windows when waiting for every process to rebind after cutover.
 SWITCH_SETTLE_MARGIN_S = env_float_clamped("AUTOBOT_EMBEDDING_SWITCH_SETTLE_MARGIN_SECONDS", 2.0, 0.0, 300.0)
 #: Replay rounds before cutover gives up on writes that keep arriving.
@@ -119,19 +121,25 @@ async def start_switch(kb, model: str, actor: str = "unknown") -> Dict[str, Any]
         raise SwitchRefused(f"{model!r} is not an embedding model")
     if model == active_embedding_model():
         raise SwitchRefused(f"{model!r} is already the active embedding model")
+    if kb is None or not getattr(kb, "chromadb_collection", None):
+        raise SwitchRefused("the knowledge base is not available")
+    collection = target_collection(kb.chromadb_collection.split("__", 1)[0], model, uuid.uuid4().hex)
     client = await _redis()
     owner = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
     if client is None or not await client.set(LOCK_KEY, owner, nx=True, ex=int(SWITCH_STALE_S)):
         raise SwitchRefused("a switch is already running")
-    collection = target_collection(kb.chromadb_collection.split("__", 1)[0], model, uuid.uuid4().hex)
     run = _Run(owner, model, collection, time.monotonic())
-    await client.delete(STATE_KEY, PENDING_KEY)
-    now = datetime.now(tz=timezone.utc).isoformat()
-    await _set_state(
-        state="building", owner=owner, model=model, collection=collection, done=0, total=0, failed=0, started=now
-    )
-    _audit(actor, "switch_start", model, collection)
-    fire_and_forget(run_switch(kb, run), name=f"embedding-switch:{model}")
+    try:
+        await client.delete(STATE_KEY, PENDING_KEY)
+        now = datetime.now(tz=timezone.utc).isoformat()
+        await _set_state(
+            state="building", owner=owner, model=model, collection=collection, done=0, total=0, failed=0, started=now
+        )
+        _audit(actor, "switch_start", model, collection)
+        fire_and_forget(run_switch(kb, run), name=f"embedding-switch:{model}")
+    except BaseException:
+        await delete_if_value(client, LOCK_KEY, owner)  # a start that failed must not block the next one
+        raise
     return await switch_status()
 
 
@@ -144,6 +152,8 @@ async def request_switch_cancel(actor: str = "unknown") -> str:
         return "force_closed"
     if status["state"] not in _ACTIVE:
         return "none"
+    if status["state"] == "settling":
+        return "too_late"  # past the cutover boundary: the record is being or has been written
     await _set_state(cancel="1")
     _audit(actor, "switch_cancel", status.get("model"), status.get("collection"))
     return "cancel_requested"
@@ -202,12 +212,16 @@ async def run_switch(kb, run: _Run) -> None:
 
 
 async def _finish(run: _Run | None, state: str, *, reason: str = "", failed: int | None = None, failed_ids=()) -> None:
+    client = await _redis()
+    if run is not None and await client.hget(STATE_KEY, "owner") != run.owner:
+        # a newer switch owns the state now (this worker lost its lock): leave its record alone
+        logger.warning("embedding switch %s finished as %s after losing ownership; state left as is", run.owner, state)
+        return
     fields: Dict[str, Any] = {"state": state, "finished": datetime.now(tz=timezone.utc).isoformat(), "reason": reason}
     if failed is not None:
         fields["failed"] = failed
     fields["failed_ids"] = json.dumps(list(failed_ids)[:_FAILED_IDS_SHOWN])
     await _set_state(**fields)
-    client = await _redis()
     if run is None:
         await client.delete(LOCK_KEY)  # force-close: the owner is gone
     else:
@@ -274,18 +288,22 @@ async def _open_collection(kb, collection: str, model: str, dim: int | None):
     return ChromaVectorStore(chroma_collection=getattr(raw, "_raw", raw))
 
 
-async def _replay_pending(store, model: str) -> List[str]:
+async def _replay_pending(store, run: _Run) -> List[str]:
     """Re-project every fact noted so far; returns the ids that failed to embed."""
     from knowledge import fact_store
 
     client = await _redis()
     failed: List[str] = []
+    replayed = 0
     while fact_id := await client.spop(PENDING_KEY):
+        replayed += 1
+        if replayed % SWITCH_BATCH_SIZE == 0:
+            await _heartbeat(run)  # a long replay must not outlast the lock's TTL
         fact = await fact_store.load_fact(fact_id)
         # by id on the raw collection: LlamaIndex's delete() matches ref_doc_id, which these nodes lack
         await asyncio.to_thread(store._collection.delete, ids=[fact_id])
         if fact is not None:
-            nodes, bad = await _embed(model, [{"fact_id": fact_id, **fact}])
+            nodes, bad = await _embed(run.model, [{"fact_id": fact_id, **fact}])
             if nodes:
                 await asyncio.to_thread(store.add, nodes)
             failed += bad
@@ -298,7 +316,7 @@ async def _converge(store, run: _Run, failed_ids: List[str]) -> Tuple[bool, List
 
     client, reason = await _redis(), ""
     for _ in range(SWITCH_REPLAY_ROUNDS):
-        failed_ids = failed_ids + await _replay_pending(store, run.model)
+        failed_ids = failed_ids + await _replay_pending(store, run)
         held, expected = await asyncio.to_thread(store._collection.count), await fact_store.count_facts()
         if held == expected and not await client.scard(PENDING_KEY):
             return True, failed_ids, ""
@@ -322,7 +340,10 @@ async def _cut_over(kb, store, run: _Run) -> None:
     from knowledge.embedding_space_binding import rebind
 
     try:
-        await _heartbeat(run, state="settling")
+        await _heartbeat(run, state="settling")  # from here a cancel request is refused (too_late)
+        if (await switch_status()).get("cancel") == "1":
+            await _finish(run, "cancelled", reason="cancelled by request before cutover")
+            return
         space = await asyncio.to_thread(set_embedding_model_override, run.model, run.collection)
     except Exception as exc:  # noqa: BLE001 - the record was not written: nothing switched
         await _finish(run, "failed", reason=f"cutover did not happen: {type(exc).__name__}: {exc}")

@@ -74,6 +74,16 @@ async def test_cancel_without_a_running_switch_is_409(switch, monkeypatch):
     assert exc.value.status_code == 409
 
 
+async def test_cancel_after_cutover_began_is_409(switch, monkeypatch):
+    async def _late(actor="unknown"):
+        return "too_late"
+
+    monkeypatch.setattr(embedding_switch, "request_switch_cancel", _late)
+    with pytest.raises(HTTPException) as exc:
+        await embeddings.cancel_embedding_switch(current_user={})
+    assert exc.value.status_code == 409 and "cutover" in exc.value.detail
+
+
 @pytest.mark.parametrize("outcome", ["cancel_requested", "force_closed"])
 async def test_cancel_or_force_close_returns_the_status(switch, monkeypatch, outcome):
     async def _done(actor="unknown"):
