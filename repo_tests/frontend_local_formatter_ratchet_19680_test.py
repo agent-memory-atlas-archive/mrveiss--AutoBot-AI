@@ -91,7 +91,7 @@ def _population(root: Path) -> list[str]:
 REACH = declare(
     "frontend-local-formatter-scan",
     discover=_population,
-    floor=853,  # mid-window: population 903, window (803, 903)
+    floor=903,  # mid-window: population 903, window (903, 903)
     what="component, view and composable sources in both frontends",
     roots=_ROOTS,
 )
