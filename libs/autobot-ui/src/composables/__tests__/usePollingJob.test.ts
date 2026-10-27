@@ -322,6 +322,14 @@ describe('usePollingJob', () => {
     await vi.advanceTimersByTimeAsync(0)
     stop()
     expect(pausedOnErrors.value).toBe(false)
+
+    // A deliberate stop after an errors pause clears the flag too.
+    fetcher.mockRejectedValue(new Error('down'))
+    start('')
+    await vi.advanceTimersByTimeAsync(100)
+    expect(pausedOnErrors.value).toBe(true)
+    stop()
+    expect(pausedOnErrors.value).toBe(false)
   })
 
   it('resets consecutive error count on success (circuit-breaker survives recovery)', async () => {

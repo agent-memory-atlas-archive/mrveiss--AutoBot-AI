@@ -132,7 +132,7 @@ const { t } = useI18n()
 /** The store reports a failed read as null; throw it, so refresh() shows it and the poller counts it. */
 async function fetchMetrics(): Promise<void> {
   const fleetMetrics = await fleetStore.fetchNpuFleetMetrics()
-  if (fleetMetrics === null) throw new Error(fleetStore.error ?? 'NPU fleet metrics unavailable')
+  if (fleetMetrics === null) throw new Error(fleetStore.error ?? t('fleet.nPUWorkerMonitor.metricsUnavailable'))
   if (fleetMetrics.node_metrics) {
     const newMap = new Map<string, NPUWorkerMetrics>()
     for (const m of fleetMetrics.node_metrics) {
@@ -152,7 +152,7 @@ async function refresh(): Promise<void> {
     metricsPoller.start('')
   } catch (e) {
     logger.error('Refresh failed', e)
-    error.value = e instanceof Error ? e.message : 'Refresh failed'
+    error.value = e instanceof Error ? e.message : t('fleet.nPUWorkerMonitor.refreshFailed')
   } finally {
     loading.value = false
   }
@@ -162,8 +162,9 @@ async function refresh(): Promise<void> {
 const metricsPoller = useDashboardPoller(fetchMetrics, REFRESH_INTERVAL_MS)
 
 // Each failed tick shows, as the old interval did; after the limit the paused alert takes over.
+// start() (Retry, Refresh) resets the poller error, which clears the shown one too.
 watch(metricsPoller.error, (e) => {
-  if (e) error.value = e.message
+  error.value = e ? e.message : null
 })
 
 onMounted(() => refresh())

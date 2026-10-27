@@ -64,7 +64,7 @@ export interface UsePollingJobReturn<T> {
   attempts: Readonly<Ref<number>>
   /**
    * True only when `consecutiveErrorLimit` stopped the poller (#19482); a deliberate
-   * `stop()` or reaching `maxAttempts` leaves it false. Cleared by `start()`.
+   * `stop()` or reaching `maxAttempts` leaves it false. Cleared by `start()` and `stop()`.
    */
   pausedOnErrors: Readonly<Ref<boolean>>
   /**
@@ -106,6 +106,7 @@ export function usePollingJob<T>(
       timer = null
     }
     isPolling.value = false
+    pausedOnErrors.value = false
     currentTaskId = null
     run += 1
   }
