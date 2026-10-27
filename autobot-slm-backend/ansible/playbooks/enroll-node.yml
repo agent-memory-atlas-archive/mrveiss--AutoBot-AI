@@ -238,7 +238,7 @@
           block:
             - name: "Add NodeSource repository"
               shell: |
-                curl -fsSL https://deb.nodesource.com/setup_{{ node_major }}.x | bash -
+                curl -fsSL {{ nodesource_base_url }}/setup_{{ node_major }}.x | bash -
               args:
                 creates: /etc/apt/sources.list.d/nodesource.list
 

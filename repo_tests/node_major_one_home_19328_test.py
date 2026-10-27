@@ -8,7 +8,7 @@ CI tested on 22 while every install path shipped 20 (end-of-life 2026-04-30) and
 sandbox ran 18. Now:
 
 * the workflows read it (``actions/setup-node`` with ``node-version-file: .nvmrc``);
-* consumers that cannot read the repo file at run time -- the three shell installers (they can run
+* consumers that cannot read the repo file at run time -- the shell installers read it through lib/ssot-config.sh (they can run
   from a ``curl | bash`` pipe), Ansible on a node (``inventory/group_vars/all.yml`` ``node_major``,
   which every role and playbook references), the two Dockerfiles' ``ARG NODE_MAJOR`` and the
   sandbox image -- carry ONE pinned copy each, and this guard fails the moment one disagrees;
@@ -40,8 +40,6 @@ _LITERAL = re.compile(
 #: (file, pattern whose group 1 is the pinned major) -- each consumer that cannot read .nvmrc.
 _PINNED = (
     ("install.sh", r'^readonly NODE_MIN_VERSION="(\d+)\.'),  # its NodeSource URL reads the floor's major
-    ("autobot-infrastructure/shared/scripts/install-bare-metal.sh", r"\$\{NODE_MAJOR:=(\d+)\}"),
-    ("autobot-infrastructure/shared/scripts/install-slm.sh", r"\$\{NODE_MAJOR:=(\d+)\}"),
     ("autobot-slm-backend/ansible/inventory/group_vars/all.yml", r"^node_major:\s*\"(\d+)\"$"),
     ("docker/frontend/Dockerfile", r"^ARG NODE_MAJOR=(\d+)$"),
     ("autobot-infrastructure/autobot-frontend/docker/frontend.Dockerfile", r"^ARG NODE_MAJOR=(\d+)$"),
@@ -219,3 +217,12 @@ def test_the_derived_forms_are_not_flagged() -> None:
         'nodejs_version: "{{ node_major }}"\n'
     )
     assert not literals(clean, "x")
+
+
+def test_the_shell_installers_read_the_major_and_url_from_the_ssot_lib() -> None:
+    lib = (_ROOT / "autobot-infrastructure/shared/scripts/lib/ssot-config.sh").read_text(encoding="utf-8")
+    assert ".nvmrc" in lib and "AUTOBOT_NODESOURCE_BASE_URL" in lib
+    for name in ("install-bare-metal.sh", "install-slm.sh"):
+        text = (_ROOT / "autobot-infrastructure/shared/scripts" / name).read_text(encoding="utf-8")
+        assert "${AUTOBOT_NODESOURCE_BASE_URL}/setup_${NODE_MAJOR" in text, name
+        assert "NODE_MAJOR:=" not in text, name
