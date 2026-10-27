@@ -351,6 +351,12 @@ _DECLARED_SCOPES = {
     ),
     "llc-actor-id-scan": ("autobot-backend/llc",),
     "cache-never-in-repo": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
+    "node-major-literals": (
+        ".github",
+        "autobot-slm-backend/ansible",
+        "autobot-infrastructure/shared/scripts",
+        "install.sh",
+    ),
     "generated-type-redeclarations": ("autobot-frontend/src",),
     "severity-order-copies": ("autobot-backend", "autobot-slm-backend", "autobot_shared", "pipeline-scripts"),
     "llc-sigterm-grace-copies": ("autobot-backend/llc",),

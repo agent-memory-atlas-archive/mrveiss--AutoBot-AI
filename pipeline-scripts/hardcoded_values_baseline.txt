@@ -779,7 +779,7 @@
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|"/opt/autobot
 2|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|http://backend;
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|http://slm/;
-1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|https://deb.nodesource.com/setup_20.x
+1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|https://deb.nodesource.com/setup_${NODE_MAJOR}.x
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|https://github.com/mrveiss/AutoBot-AI
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|https://github.com/mrveiss/AutoBot-AI.git
 1|other|autobot-infrastructure/shared/scripts/install-bare-metal.sh|https://ollama.com/install.sh
@@ -790,7 +790,7 @@
 5|other|autobot-infrastructure/shared/scripts/install-slm.sh|chown autobot:autobot
 1|other|autobot-infrastructure/shared/scripts/install-slm.sh|https://apt.grafana.com
 1|other|autobot-infrastructure/shared/scripts/install-slm.sh|https://apt.grafana.com/gpg.key
-1|other|autobot-infrastructure/shared/scripts/install-slm.sh|https://deb.nodesource.com/setup_20.x
+1|other|autobot-infrastructure/shared/scripts/install-slm.sh|https://deb.nodesource.com/setup_${NODE_MAJOR:=22}.x
 1|other|autobot-infrastructure/shared/scripts/install-slm.sh|https://github.com/mrveiss/AutoBot-AI.git
 1|ssot|autobot-infrastructure/shared/scripts/install-slm.sh|:3000
 2|ssot|autobot-infrastructure/shared/scripts/install-slm.sh|:8001
@@ -956,7 +956,7 @@
 1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
 1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://apt.repos.intel.com/openvino/2024
 1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://deb.nodesource.com/node_20.x
+1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://deb.nodesource.com/node_{{
 1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://packages.redis.io/deb
 1|other|autobot-slm-backend/ansible/inventory/group_vars/all.yml|https://packages.redis.io/gpg
 1|other|autobot-slm-backend/ansible/inventory/group_vars/backend.yml|"/var/lib/autobot/backend
@@ -1006,7 +1006,7 @@
 1|other|autobot-slm-backend/ansible/playbooks/deploy-development-services.yml|Group=autobot
 1|other|autobot-slm-backend/ansible/playbooks/deploy-development-services.yml|User=autobot
 1|other|autobot-slm-backend/ansible/playbooks/deploy-development-services.yml|https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-1|other|autobot-slm-backend/ansible/playbooks/deploy-development-services.yml|https://deb.nodesource.com/node_20.x
+1|other|autobot-slm-backend/ansible/playbooks/deploy-development-services.yml|https://deb.nodesource.com/node_{{
 2|other|autobot-slm-backend/ansible/playbooks/deploy-full.yml|60
 3|other|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|120
 1|other|autobot-slm-backend/ansible/playbooks/deploy-hybrid-docker.yml|60
@@ -1029,7 +1029,7 @@
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|Group=autobot
 7|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|User=autobot
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://deb.nodesource.com/node_20.x
+1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://deb.nodesource.com/node_{{
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://download.redisinsight.redis.com/latest/RedisInsight-v2-linux-x64-latest.deb
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://ollama.com/install.sh
 1|other|autobot-slm-backend/ansible/playbooks/deploy-native-services.yml|https://packages.redis.io/deb
@@ -1053,7 +1053,7 @@
 1|other|autobot-slm-backend/ansible/playbooks/enroll-local.yml|/home/autobot
 1|other|autobot-slm-backend/ansible/playbooks/enroll-node.yml|"/var/lib/autobot
 1|other|autobot-slm-backend/ansible/playbooks/enroll-node.yml|/home/autobot
-1|other|autobot-slm-backend/ansible/playbooks/enroll-node.yml|https://deb.nodesource.com/setup_20.x
+1|other|autobot-slm-backend/ansible/playbooks/enroll-node.yml|https://deb.nodesource.com/setup_{{
 1|other|autobot-slm-backend/ansible/playbooks/enroll-node.yml|https://packages.redis.io/deb
 1|other|autobot-slm-backend/ansible/playbooks/enroll-node.yml|https://packages.redis.io/gpg
 1|ssot|autobot-slm-backend/ansible/playbooks/fix-backend-clean-restart.yml|:8443
