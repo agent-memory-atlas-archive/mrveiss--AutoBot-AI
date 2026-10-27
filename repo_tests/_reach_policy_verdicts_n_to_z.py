@@ -131,6 +131,11 @@ N_TO_Z: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two roots; the test-file share drifts.",
     ),
+    "torch-pair-literals": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Workflow, docker, infrastructure, Ansible and script files, against all tracked files there; drifts.",
+    ),
     "tool-effect-table-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
