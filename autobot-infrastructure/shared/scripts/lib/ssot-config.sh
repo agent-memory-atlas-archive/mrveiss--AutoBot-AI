@@ -165,7 +165,10 @@ _autobot_redis_number() {
     local v="$1"
     v="${v#"${v%%[![:space:]]*}"}"
     v="${v%"${v##*[![:space:]]}"}"
-    [[ "$v" =~ ^[0-9]+$ ]] && (( 10#$v <= _AUTOBOT_REDIS_MAX_DB )) && echo $((10#$v))
+    [[ "$v" =~ ^[0-9]+$ ]] || return
+    local d="${v#"${v%%[!0]*}"}" # leading zeros stripped, as int() does
+    # Bound the digit count before any arithmetic: bash wraps at 2^64, int() does not.
+    (( ${#d} <= 2 )) && (( 10#${d:-0} <= _AUTOBOT_REDIS_MAX_DB )) && echo $((10#${d:-0}))
 }
 
 # autobot_redis_db NAME -- print NAME's database number; non-zero and a message if unknown.

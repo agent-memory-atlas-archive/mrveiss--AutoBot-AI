@@ -392,8 +392,8 @@ class AutoBotVectorStoreAnalysis:
             return False, 0, fixes_attempted
 
     async def test_langchain_db0_workaround_basic(self) -> Tuple[bool, int, List[str]]:
-        """Test LangChain on Redis DB 0 (basic version)"""
-        logger.info("\nTesting LangChain on Redis DB 0...")
+        """Test LangChain on the main Redis DB (basic version)"""
+        logger.info("\nTesting LangChain on the main Redis DB...")
         fixes_attempted = []
 
         try:
@@ -420,7 +420,7 @@ class AutoBotVectorStoreAnalysis:
                 index_name="autobot_langchain_db0",
                 redis_url=resolve_redis_endpoint().url(database_number("main")),
             )
-            fixes_attempted.append("Created LangChain vector store on Redis DB 0")
+            fixes_attempted.append("Created LangChain vector store on the main Redis DB")
 
             test_docs = ["Test deployment configuration document"]
             test_metadata = [{"source": "test", "type": "deployment"}]
@@ -643,7 +643,7 @@ class AutoBotVectorStoreAnalysis:
             return False, 0, fixes_attempted
 
     async def test_langchain_db0_workaround(self) -> Tuple[bool, int, List[str]]:
-        """Test LangChain with DB 0 workaround"""
+        """Test LangChain with main DB workaround"""
         fixes_attempted = []
 
         try:
@@ -671,7 +671,7 @@ class AutoBotVectorStoreAnalysis:
                 index_name="autobot_langchain_test",
                 redis_url=resolve_redis_endpoint().url(database_number("main")),
             )
-            fixes_attempted.append("Created vector store on Redis DB 0")
+            fixes_attempted.append("Created vector store on the main Redis DB")
 
             test_docs = ["Kubernetes deployment configuration for AutoBot"]
             test_metadata = [{"source": "test", "category": "deployment"}]

@@ -68,6 +68,9 @@ def _ssot_config_singleton_restored() -> Iterator[None]:
     module = sys.modules.get(_MODULE)
     if module is None or not hasattr(module, "get_config"):
         yield
+        module = sys.modules.get(_MODULE)
+        if module is not None and hasattr(module, "get_config"):
+            restore_singleton(module, None)  # imported by the test; hold nothing afterwards
         return
     namespace = _first_namespace(module)
     get_config, original = module.get_config, _cached_instance(module)

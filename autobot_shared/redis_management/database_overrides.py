@@ -16,7 +16,7 @@ is overridable without touching this module. ``AUTOBOT_REDIS_DB_TASKS`` is the o
 legacy spelling: ``RedisConfig.db_tasks`` read it for the ``workflows`` database.
 
 An override that lands two declared databases on one number, or is not a number, is
-refused: that database keeps its YAML number and the refusal is logged at ERROR. Two
+refused: that database keeps its YAML number and the refusal is logged at WARNING. Two
 features in one keyspace would look exactly like success. ``validate-env-files.py``
 reports the same refusals before deployment (``override_problems``).
 """

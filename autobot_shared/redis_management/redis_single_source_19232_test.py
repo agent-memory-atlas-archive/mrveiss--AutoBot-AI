@@ -242,6 +242,9 @@ def _shell_answers(overrides: dict) -> dict:
         {"AUTOBOT_REDIS_DB_MAIN": "+12"},  # sign: refused
         {"AUTOBOT_REDIS_DB_MAIN": "16"},  # above 0..15: refused
         {"AUTOBOT_REDIS_DB_MAIN": "-1"},  # negative: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "18446744073709551616"},  # wraps to 0 in bash arithmetic: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "18446744073709551617"},  # wraps to 1: refused
+        {"AUTOBOT_REDIS_DB_MAIN": "0000000000000000000007"},  # long zero padding: 7
         {"AUTOBOT_REDIS_DB_MAIN": "1_2"},  # int() would take it: refused
         {"AUTOBOT_REDIS_DB_MAIN": "\u0661\u0662"},  # non-ASCII digits: refused
         {"AUTOBOT_REDIS_DB_MAIN": ""},  # blank: no request, so no refusal either

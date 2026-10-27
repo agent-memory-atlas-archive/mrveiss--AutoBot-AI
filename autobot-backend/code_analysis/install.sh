@@ -133,11 +133,17 @@ print('✅ All dependencies installed successfully')
 
 # Test Redis connection through the canonical client -- the endpoint and the "main"
 # database (redis-databases.yaml, AUTOBOT_REDIS_DB_MAIN) the suite itself will use.
-PYTHONPATH="${_REPO_ROOT}" python3 -c "
+if ! PYTHONPATH="${_REPO_ROOT}" python3 -c "import autobot_shared.redis_client"; then
+    echo "⚠️  Could not import autobot_shared.redis_client (see the error above)."
+elif PYTHONPATH="${_REPO_ROOT}" python3 -c "
 from autobot_shared.redis_client import require_redis_client
 require_redis_client(database='main').ping()
 print('✅ Redis connection successful')
-" 2>/dev/null || echo "⚠️  Redis connection failed. Please check Redis server."
+" 2>/dev/null; then
+    :
+else
+    echo "⚠️  Redis connection failed. Please check Redis server."
+fi
 
 echo ""
 echo "🎉 Installation complete!"

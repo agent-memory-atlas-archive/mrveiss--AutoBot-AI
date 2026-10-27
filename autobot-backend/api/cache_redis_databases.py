@@ -31,8 +31,9 @@ _CACHE_DATABASE_NAMES = ("main", "knowledge", "prompts", "agents", "sessions", "
 #: approval queue (#17038), never a button.
 _CLEARABLE_DATABASE_NAMES = ("cache", "analytics")
 
-#: The cache API's settings: one namespaced key in the declared cache DB, not a DB of their own (#19497).
-CACHE_CONFIG_DATABASE = "cache"
+#: The cache API's settings: one namespaced key in the declared main DB, not a DB of their own (#19497). "main" is never
+#: clearable, so a cache clear cannot flush the saved settings.
+CACHE_CONFIG_DATABASE = "main"
 CACHE_CONFIG_KEY = "cache:config"
 
 
@@ -121,12 +122,18 @@ async def clear_and_audit(database: str, actor: str) -> list:
     """Flush *database* (or every distinct clearable one for ``all``) and record who did it (#19365, #17038)."""
     targets = distinct_clearable_databases() if database == "all" else {database: clearable_database(database)}
     cleared = [await asyncio.to_thread(clear_single_redis_database, name, number) for name, number in targets.items()]
+    failed = [entry["name"] for entry in cleared if "error" in entry]
     await audit_log(
         operation=AuditAction.ADMIN_ACTION.value,
-        result="success",
+        result="failure" if failed else "success",
         user_id=actor,
         resource=f"redis-cache:{database}",
-        details={"action": "cache.clear", "requested": database, "flushed": dict(targets)},
+        details={
+            "action": "cache.clear",
+            "requested": database,
+            "flushed": {n: v for n, v in targets.items() if n not in failed},
+            "failed": failed,
+        },
     )
     logger.info("Redis cache %s cleared by %s: %s", database, actor, sorted(targets))
     return cleared

@@ -345,7 +345,6 @@ export default class ServiceDiscovery {
       // Handle regular services using defaults (which now uses SSOT)
       const serviceMap = {
         'npu_worker': 'npu_worker',
-        'redis': 'redis',
         'browser': 'browser',
         'ai_stack': 'ai_stack'
       };
@@ -428,16 +427,6 @@ export default class ServiceDiscovery {
       // DORMANT: VNC health-check preserved for #5136 re-integration (#1130).
       if (serviceName.startsWith('vnc_')) {
         testEndpoint = '/vnc.html';
-      } else if (serviceName === 'redis') {
-        clearTimeout(timeoutId);
-        return {
-          serviceName,
-          url,
-          accessible: true,
-          status: 200,
-          statusText: 'Redis URL resolved',
-          note: 'Redis connectivity requires specialized client'
-        };
       }
 
       const response = await fetch(`${url}${testEndpoint}`, {

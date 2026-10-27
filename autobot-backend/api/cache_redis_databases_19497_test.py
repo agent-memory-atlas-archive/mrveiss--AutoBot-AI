@@ -82,6 +82,26 @@ def test_a_saved_config_loads_back_from_the_declared_cache_db(redis):
     assert list(stored.data) == ["cache:config"], "one namespaced key in the cache DB, nothing else"
 
 
+def test_a_saved_config_survives_a_cache_clear(redis):
+    cache_redis_databases.save_config(dict(_CONFIG))
+    asyncio.run(cache_redis_databases.clear_and_audit("cache", "ops-admin"))
+    assert cache_redis_databases.load_config() == _CONFIG
+
+
+def test_a_failed_flush_is_audited_as_a_failure_not_a_flush(redis, monkeypatch):
+    monkeypatch.setattr(
+        cache_redis_databases,
+        "clear_single_redis_database",
+        lambda name, number: {"name": name, "database": number, "error": "boom", "keys_cleared": 0},
+    )
+    asyncio.run(cache_redis_databases.clear_and_audit("cache", "ops-admin"))
+    assert (_AUDITED[-1]["result"], _AUDITED[-1]["details"]["flushed"], _AUDITED[-1]["details"]["failed"]) == (
+        "failure",
+        {},
+        ["cache"],
+    )
+
+
 def test_a_failed_save_is_an_error_not_a_success(monkeypatch):
     def unavailable(async_client, database):
         raise ConnectionError("redis down")

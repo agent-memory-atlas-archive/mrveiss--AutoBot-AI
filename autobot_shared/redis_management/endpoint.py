@@ -185,7 +185,7 @@ def ssot_redis_host(ssot: AutoBotConfig | None = None) -> str:
 
 def redis_tls_port(ssot: AutoBotConfig | None = None) -> int | None:
     """The TLS port when Redis TLS is on, else None. The env var wins over the SSOT field."""
-    flag = os.getenv("AUTOBOT_REDIS_TLS_ENABLED")
+    flag = _first_env("AUTOBOT_REDIS_TLS_ENABLED")
     cfg = None if flag is not None else _ssot(ssot)
     enabled = flag.lower() == "true" if flag is not None else bool(cfg and cfg.tls.redis_tls_enabled)
     if not enabled:

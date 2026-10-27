@@ -215,6 +215,12 @@ def validate_environment_file(file_path: Path, env_type: str, config: Dict[str, 
         results["errors"].append(f"Environment file does not exist: {file_path}")
         return results
 
+    try:
+        file_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        results["errors"].append(f"Environment file cannot be read: {file_path}: {exc}")
+        return results
+
     env_vars = effective_env_vars(file_path)
 
     # Run all validations
