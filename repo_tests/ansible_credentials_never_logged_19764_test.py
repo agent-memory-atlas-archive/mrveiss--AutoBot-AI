@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
@@ -35,6 +36,24 @@ _MESSAGE_MODULES = (
 _CHILD_LISTS = ("block", "rescue", "always", "tasks", "pre_tasks", "post_tasks", "handlers")
 
 
+class _AnsibleLoader(yaml.SafeLoader):
+    """SafeLoader that reads Ansible's custom tags (``!vault``, ``!unsafe``) as plain scalars.
+
+    A playbook carrying an inline ``!vault`` value is valid Ansible; ``safe_load`` refuses it, and
+    a guard that skipped it would count the file as covered while judging none of its tasks.
+    """
+
+
+_AnsibleLoader.add_multi_constructor("!", lambda loader, _suffix, node: loader.construct_scalar(node))
+_TRUE = frozenset({"true", "yes", "on", "1"})
+
+
+def _no_log_on(task: dict) -> bool:
+    """Ansible's boolean rule: only a literal truthy value counts; ``"false"`` or a template does not."""
+    value = task.get("no_log")
+    return value is True or (isinstance(value, (str, int)) and str(value).strip().lower() in _TRUE)
+
+
 def _tasks(node):
     if isinstance(node, list):
         for item in node:
@@ -47,34 +66,59 @@ def _tasks(node):
 
 
 def _http_args(task: dict) -> dict | None:
-    return next((task[m] for m in _HTTP_MODULES if isinstance(task.get(m), dict)), None)
+    """The module arguments of a uri/get_url task, in the module-key or the ``action:`` form."""
+    direct = next((task[m] for m in _HTTP_MODULES if isinstance(task.get(m), dict)), None)
+    if direct is not None:
+        return direct
+    action = task.get("action")
+    if isinstance(action, dict) and action.get("module") in _HTTP_MODULES:
+        return {**action, **(task.get("args") or {})}
+    if isinstance(action, str) and action.split()[0] in _HTTP_MODULES:
+        return {"inline": action, **(task.get("args") or {})}
+    return None
 
 
 def _carries_credentials(task: dict) -> bool:
     args = _http_args(task)
-    return args is not None and any(_SECRET.search(str(args.get(key, ""))) for key in _SECRET_ARGS)
+    if args is None:
+        return False
+    if args.get("url_password") or args.get("client_key"):
+        return True  # presence alone: the value is a template the secret pattern cannot see
+    return any(_SECRET.search(str(args.get(key, ""))) for key in ("headers", "body", "url", "inline"))
+
+
+def _message_text(task: dict) -> str:
+    return " ".join(str(task.get(m, "")) for m in _MESSAGE_MODULES)
+
+
+def _debug_var(task: dict) -> str:
+    args = next((task[m] for m in ("ansible.builtin.debug", "debug") if isinstance(task.get(m), dict)), {})
+    return str(args.get("var", "")).strip()
 
 
 def _whole_response_dumps(tasks: list[dict], secret_results: set[str]) -> list[str]:
     """Messages that print ``<secret result>.json`` / ``.content`` whole, or a credential field of it."""
     found = []
     for task in tasks:
-        if task.get("no_log"):
+        if _no_log_on(task):
             continue
-        text = " ".join(str(task.get(m, "")) for m in _MESSAGE_MODULES)
+        text, var, label = _message_text(task), _debug_var(task), task.get("name", "<unnamed>")
         for name in secret_results:
-            if re.search(rf"\b{re.escape(name)}\.(json|content)\s*(\||}}|$)", text):
-                found.append(f"{task.get('name', '<unnamed>')} prints {name} whole")
+            if var in (name, f"{name}.json", f"{name}.content") or re.search(
+                rf"\b{re.escape(name)}\.(json|content)\s*(\||}}|$)", text
+            ):
+                found.append(f"{label} prints {name} whole")
             elif re.search(rf"\b{re.escape(name)}\.json\.\w*(token|password|secret)\w*", text, re.IGNORECASE):
-                found.append(f"{task.get('name', '<unnamed>')} prints a credential field of {name}")
+                found.append(f"{label} prints a credential field of {name}")
     return found
 
 
 def findings_in(text: str) -> list[str]:
     """Every credential leak in one YAML document's text."""
-    tasks = list(_tasks(yaml.safe_load(text)))
+    docs = yaml.load_all(text, Loader=_AnsibleLoader)  # noqa: S506 -- SafeLoader subclass; every document
+    tasks = [t for doc in docs for t in _tasks(doc)]
     secret = [t for t in tasks if _carries_credentials(t)]
-    found = [f"{t.get('name', '<unnamed>')} sends credentials without no_log" for t in secret if not t.get("no_log")]
+    found = [f"{t.get('name', '<unnamed>')} sends credentials without no_log" for t in secret if not _no_log_on(t)]
     results = {t["register"] for t in secret if isinstance(t.get("register"), str)}
     return found + _whole_response_dumps(tasks, results)
 
@@ -99,13 +143,15 @@ REACH_FILES = declare(
 
 def test_no_ansible_task_logs_credentials() -> None:
     root = repo_root()
-    paths = REACH_FILES.examined(root)
-    leaks = []
-    for rel in paths:
+    leaks, parsed, unparsed = [], [], []
+    for rel in REACH_FILES.examined(root):
         try:
             leaks += [f"{rel}: {f}" for f in findings_in((root / rel).read_text(encoding="utf-8"))]
-        except yaml.YAMLError:
-            continue  # Jinja-only or multi-doc files the other guards own; not a task list
+            parsed.append(rel)
+        except yaml.YAMLError as exc:
+            unparsed.append(f"{rel}: {str(exc).splitlines()[0]}")
+    REACH_FILES.completed(parsed)  # the floor binds to files judged, not files listed
+    assert not unparsed, "ansible files the guard could not judge (#19764):\n  " + "\n  ".join(unparsed)
     assert not leaks, "credentials reach a log (#19764):\n  " + "\n  ".join(leaks)
 
 
@@ -147,3 +193,43 @@ def test_a_message_printing_the_token_field_is_flagged() -> None:
         "{{ login_result.json | default({}) }}", "{{ login_result.json.access_token }}"
     )
     assert findings_in(leak) == ["report prints a credential field of login_result"]
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        '- name: t\n  action: {module: ansible.builtin.uri, url: "https://x", headers: {Authorization: "Bearer {{ t }}"}}\n',
+        '- name: t\n  action: ansible.builtin.uri\n  args: {url: "https://x", headers: {Authorization: "Bearer {{ t }}"}}\n',
+        '- name: t\n  uri: {url: "https://x", url_username: u, url_password: "{{ pw }}"}\n',
+        '- name: t\n  uri: {url: "https://x/api?access_token={{ t }}"}\n',
+        '- name: t\n  uri: {url: "https://x", headers: {Authorization: "Bearer {{ t }}"}}\n  no_log: "false"\n',
+    ],
+    ids=["action-mapping", "action-string-args", "url-password", "token-in-url", "no-log-false-string"],
+)
+def test_every_ansible_spelling_of_a_credential_task_is_flagged(task: str) -> None:
+    assert findings_in(task) == ["t sends credentials without no_log"]
+
+
+def test_a_public_get_without_credentials_is_not_flagged() -> None:
+    assert findings_in('- name: t\n  uri: {url: "https://x/health", method: GET}\n') == []
+
+
+def test_a_debug_var_dump_of_the_response_is_flagged() -> None:
+    leak = _PLANTED.replace("  register: login_result", "  register: login_result\n  no_log: true").replace(
+        '  ansible.builtin.fail:\n    msg: "login failed: {{ login_result.json | default({}) }}"',
+        "  ansible.builtin.debug:\n    var: login_result.json",
+    )
+    assert findings_in(leak) == ["report prints login_result whole"]
+
+
+def test_an_inline_vault_value_is_parsed_not_skipped() -> None:
+    vaulted = (
+        "- name: t\n  uri:\n    url: https://x\n    url_password: !vault |\n"
+        "      $ANSIBLE_VAULT;1.1;AES256\n      6162\n"
+    )
+    assert findings_in(vaulted) == ["t sends credentials without no_log"]
+
+
+def test_every_document_of_a_multi_document_file_is_judged() -> None:
+    two = '- name: ok\n  uri: {url: "https://x/health"}\n---\n- name: t\n  uri: {url: "https://x", headers: {Authorization: "Bearer {{ t }}"}}\n'
+    assert findings_in(two) == ["t sends credentials without no_log"]
