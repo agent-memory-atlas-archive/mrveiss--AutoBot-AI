@@ -271,6 +271,7 @@ REACH_ROOTS = {
     "repo_tests/script_module_names_unique_14873_test.py": ("autobot-infrastructure/shared/scripts",),
     "repo_tests/search_mode_one_home_19335_test.py": ("autobot-backend",),
     "repo_tests/service_port_homes_test.py": (
+        ".env.example",
         "autobot-backend",
         "autobot-frontend",
         "autobot-infrastructure",
