@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import ast
 import re
+from pathlib import Path
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
 from tools.lint._comment_syntax import code_lines
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 #: Shell, env and YAML files share the ``#`` comment syntax; the helper selects it by suffix.
@@ -38,9 +40,26 @@ _ASSIGN = re.compile(r"\b(AUTOBOT_DEPLOYMENT_MODE|AUTOBOT_USER_MODE)[\"']?\s*[=:
 #: table listing `single_user` as an AUTOBOT_USER_MODE value instructs the reader all the same.
 _VARS = re.compile(r"\bAUTOBOT_(?:DEPLOYMENT|USER)_MODE\b")
 _RETIRED_WORD = re.compile(r"\b(?:single_user|multi_user)\b")
-#: 2233 tracked docs and deployment files swept at #19437, 37 of them naming either variable.
-MIN_FILES = 1800
+#: 37 of the swept docs and deployment files name either variable at #19437.
 MIN_MENTIONING = 25
+
+
+def _swept(root: Path) -> list[str]:
+    """Tracked docs and deployment files outside the history trees; ``[]`` on an empty tree."""
+    try:
+        paths = tracked_paths(root, *_PATTERNS)
+    except EmptyEnumeration:
+        return []
+    return [p for p in paths if not p.startswith(_HISTORY)]
+
+
+REACH = declare(
+    "user-mode-values-sweep-19437",
+    discover=_swept,
+    floor=2170,  # measured at 2242 tracked files, pinned mid-window (#15928)
+    growth=150,
+    what="tracked docs and deployment files swept for a tenancy value in the wrong variable (#19437)",
+)
 
 
 def user_modes() -> frozenset[str]:
@@ -74,8 +93,7 @@ def misassignments(text: str, modes: frozenset[str], markdown: bool = True) -> l
 
 
 def test_no_doc_or_deployment_file_sets_tenancy_through_the_wrong_variable() -> None:
-    paths = [p for p in tracked_paths(_ROOT, *_PATTERNS) if not p.startswith(_HISTORY)]
-    assert len(paths) >= MIN_FILES, f"only {len(paths)} files swept -- the enumeration lost its reach"
+    paths = REACH.examined(_ROOT)
     texts = {p: (_ROOT / p).read_text(encoding="utf-8") for p in paths}
     mentioning = [p for p, t in texts.items() if _VARS.search(t)]
     assert len(mentioning) >= MIN_MENTIONING, f"only {len(mentioning)} files name the variables -- reach lost"

@@ -20,17 +20,17 @@ from __future__ import annotations
 import ast
 import re
 from collections import Counter, defaultdict
+from pathlib import Path
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _ROOT = repo_root()
 _ROOTS = ("autobot-backend", "autobot_shared", "autobot-slm-backend")
 SSOT = frozenset({"autobot_shared/ssot_config.py", "autobot_shared/ssot_constants.py"})
 _TEST_PATH = re.compile(r"(^|/)(tests?|testing|fixtures)/|_test\.py$|(^|/)test_[^/]*\.py$")
-#: 3321 tracked non-test Python files under the three roots at #19730.
-MIN_FILES = 2800
 
 _BUSY = "fixed once the open PR that also edits this file lands"
 _CEILING = "the file is at its size ceiling with no line to absorb the import; fixed with its split"
@@ -175,14 +175,31 @@ def rehardcodes(sources: dict[str, str]) -> Counter[str]:
     return copies
 
 
+def _live_paths(root: Path) -> list[str]:
+    """Tracked non-test Python under the three roots; ``[]`` on an empty tree, so the floor refuses it."""
+    try:
+        paths = tracked_paths(root, *(f"{r}/*.py" for r in _ROOTS))
+    except EmptyEnumeration:
+        return []
+    return [p for p in paths if not _TEST_PATH.search(p)]
+
+
+REACH = declare(
+    "ssot-rehardcode-scan-19730",
+    discover=_live_paths,
+    floor=3190,  # measured at 3341 tracked files, pinned mid-window (#15928)
+    growth=300,
+    what="non-test Python files scanned for a re-hardcoded SSOT value (#19730)",
+    roots=_ROOTS,
+)
+
+
 def _live_sources() -> dict[str, str]:
-    paths = [p for p in tracked_paths(_ROOT, *(f"{r}/*.py" for r in _ROOTS)) if not _TEST_PATH.search(p)]
-    return {p: (_ROOT / p).read_text(encoding="utf-8") for p in paths}
+    return {p: (_ROOT / p).read_text(encoding="utf-8") for p in REACH.examined(_ROOT)}
 
 
 def test_no_ssot_value_is_rehardcoded_on_the_live_tree() -> None:
     sources = _live_sources()
-    assert len(sources) >= MIN_FILES, f"only {len(sources)} files scanned -- the enumeration lost its reach"
     found, every = rehardcodes(sources), occurrences(sources)
     recorded = {key: count for key, (count, _why) in (PENDING | DISTINCT).items()}
     new = sorted(f"{k} x{n}" for k, n in found.items() if n > recorded.get(k, 0))
