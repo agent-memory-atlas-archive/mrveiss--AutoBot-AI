@@ -14,10 +14,10 @@ The gate's job was to ask the question for the first time; this file is the
 answer it got, not a ceiling anybody picked.
 
 THIS MAPPING ONLY SHRINKS. Never add an entry to make a new file pass; split
-the file instead. Mirrored by ``RATCHET_BASELINE`` in
-``repo_tests/frontend_file_size_ratchet_baseline.py`` — lower an entry here and
-lower it there in the same commit (#14498), or the lines just cut stay
-spendable in the gap between the two.
+the file instead. This is the ONLY record of
+these ceilings (#19544): the ratchet test compares it against the same table at
+the base commit, so "no entry added" and "no ceiling raised" need no second copy.
+Lower an entry here when its file shrinks; the audit fails until you do.
 """
 
 from __future__ import annotations

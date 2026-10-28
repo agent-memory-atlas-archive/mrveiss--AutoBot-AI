@@ -10,10 +10,10 @@ dict below is what a full tree walk found already over 600 lines the day
 discovery went live, one entry per file, at the size it was measured at.
 
 THIS MAPPING ONLY SHRINKS. Never add an entry to make a new file pass; split
-the file instead. Mirrored by ``RATCHET_BASELINE`` in
-``repo_tests/python_file_size_ratchet_baseline.py`` — lower an entry here and
-lower it there in the same commit (#14498), or the lines just cut stay
-spendable in the gap between the two.
+the file instead. This is the ONLY record of
+these ceilings (#19544): the ratchet test compares it against the same table at
+the base commit, so "no entry added" and "no ceiling raised" need no second copy.
+Lower an entry here when its file shrinks; the audit fails until you do.
 """
 
 from __future__ import annotations
@@ -485,4 +485,17 @@ KNOWN_LARGE: dict[str, int] = {
     "repo_tests/sync_deletions_ansible_wiring_16310_test.py": 674,  # #16310
     "repo_tests/sys_modules_leak_guard.py": 1151,
     "scripts/audit_api_wiring.py": 895,  # #16816: reporting moved to dead_surface.py
+}
+
+#: Entries annotated by hand as live, tracked violations rather than #5060's
+#: legacy backlog (#14630), mapped to the issue each one was created under.
+#: This sits OUTSIDE the dict literal above deliberately. A regeneration that
+#: re-measures the tree emits `"path": count` and nothing else, so it destroys
+#: every hand-written line inside the literal it rewrites -- which is exactly
+#: how the two inline annotations were lost once already. A key here cannot be
+#: erased that way, and ``test_an_entry_singled_out_as_live_keeps_its_note``
+#: fails the moment the inline comment it names goes missing.
+ANNOTATED_AS_LIVE: dict[str, str] = {
+    "autobot-backend/code_intelligence/testing_pattern_analyzer.py": "#14413",
+    "autobot-slm-backend/services/reconciler_remediation_tracker_expiry_14465_test.py": "#14465/#14548",
 }
