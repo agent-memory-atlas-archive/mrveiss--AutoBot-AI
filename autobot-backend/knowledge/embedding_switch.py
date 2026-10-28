@@ -28,7 +28,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import socket
 import time
 import uuid
@@ -41,6 +40,7 @@ from autobot_shared.coordination.work_claims import ClaimUnavailable
 from autobot_shared.embedding_model import active_embedding_model, is_embedding_model_id, set_embedding_model_override
 from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.logging_manager import get_logger
+from autobot_shared.slug import sanitize_token
 from knowledge import embedding_switch_lock as lock
 
 logger = get_logger(__name__)
@@ -99,7 +99,7 @@ class _Run:
 
 def target_collection(base: str, model: str, attempt: str) -> str:
     """A per-attempt collection name within ChromaDB's rules (3-63 chars, alphanumeric ends)."""
-    slug = re.sub(r"[^a-z0-9]+", "_", model.lower()).strip("_")[:28]
+    slug = sanitize_token(model, replacement="_", case="lower", strip_edges="_", max_length=28)
     return f"{base[:20]}__{slug}__{attempt[:8]}"
 
 
