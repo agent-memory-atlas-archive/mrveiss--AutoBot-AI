@@ -81,6 +81,12 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "Ansible variable files are a subset of tracked YAML; workflow and compose YAML grow "
         "independently of the ansible tree, so a share of all YAML sinks with nothing wrong.",
     ),
+    "ansible-status-queries-check-mode-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Ansible YAML is a subset of all tracked YAML under the SLM backend; templates, scripts and "
+        "docs beside it grow independently, so a share of the tree sinks with nothing wrong.",
+    ),
     "ansible-inventory-shell-sweep": (
         ABSOLUTE,
         "FRACTION_IS_COARSER",
@@ -143,6 +149,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Non-test modules under `autobot-backend/api`; the api package's tests grow at their own "
         "rate, so a share of all its `.py` files would drift with nothing wrong (#18316).",
+    ),
+    "compose-nodes-restated-default": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test SLM, infrastructure and docker files plus the root compose file; drifts.",
     ),
     "compat-module-needs-importer": (
         ABSOLUTE,
@@ -388,6 +399,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Python under the infrastructure tree, against all tracked Python; the backend grows independently.",
+    ),
+    "kb-populate-doc-patterns": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test infrastructure Python, against all tracked .py under autobot-infrastructure; drifts.",
     ),
     "kb-admin-read-bypass": (
         ABSOLUTE,
