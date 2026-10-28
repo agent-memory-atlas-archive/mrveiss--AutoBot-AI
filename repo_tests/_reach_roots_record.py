@@ -97,6 +97,7 @@ REACH_ROOTS = {
         "autobot_shared",
         "scripts",
     ),
+    "repo_tests/frontend_local_formatter_ratchet_19680_test.py": ("autobot-frontend/src", "autobot-slm-frontend/src"),
     "repo_tests/frontend_single_api_client_12363_test.py": ("autobot-frontend/src", "autobot-slm-frontend/src"),
     "repo_tests/generated_type_names_not_redeclared_19334_test.py": ("autobot-frontend/src",),
     "repo_tests/github_api_single_module_15411_test.py": ("pipeline-scripts", "scripts"),
