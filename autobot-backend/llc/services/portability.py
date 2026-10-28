@@ -32,8 +32,6 @@ logger = get_logger(__name__)
 
 _SCHEMA_VERSION = "1.0"
 _EXPORT_TTL_SECONDS = 7 * 24 * 3600  # 7 days
-_SEED_ITEM_TYPES = ("epic", "feature")
-_SEED_ITEM_LIMIT = 20
 
 
 # ---------------------------------------------------------------------------
