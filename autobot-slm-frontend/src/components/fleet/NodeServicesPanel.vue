@@ -18,6 +18,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { BaseAlert } from '@autobot/ui'
+import { formatBytes } from '@/utils/formatHelpers'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useSlmWebSocket } from '@/composables/useSlmWebSocket'
 import { createLogger } from '@/utils/debugUtils'
@@ -151,13 +152,7 @@ function getStatusClasses(status: ServiceStatus): { bg: string; text: string; do
 
 // #13138: `memory_bytes` is optional AND nullable in the contract; the body
 // already handled `undefined`, only the signature disagreed.
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
+const BYTES_OPTIONS = { decimals: [0, 1, 1, 2], units: ['B', 'KB', 'MB', 'GB'], nullText: '-', integerBase: true, keepTrailingZeros: true } as const
 
 function toggleErrorDetail(serviceName: string): void {
   const next = new Set(expandedErrors.value)
@@ -507,7 +502,7 @@ onUnmounted(() => {
 
             <!-- Memory -->
             <td class="px-4 py-3 text-sm text-gray-600 font-mono">
-              {{ formatBytes(service.memory_bytes) }}
+              {{ formatBytes(service.memory_bytes, BYTES_OPTIONS) }}
             </td>
 
             <!-- Last Check -->

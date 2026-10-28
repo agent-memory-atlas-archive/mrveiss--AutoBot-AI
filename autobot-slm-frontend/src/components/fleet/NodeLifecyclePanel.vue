@@ -16,6 +16,7 @@
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { BaseButton } from '@autobot/ui'
+import { formatDuration } from '@/utils/formatHelpers'
 import { useSlmApi } from '@/composables/useSlmApi'
 import { useFleetStore } from '@/stores/fleet'
 import { getConfig, getSlmApiBase } from '@/config/ssot-config'
@@ -284,17 +285,7 @@ function formatFullTime(timestamp: string): string {
   )
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${ms}ms`
-  } else if (ms < 60000) {
-    return `${(ms / 1000).toFixed(1)}s`
-  } else {
-    const mins = Math.floor(ms / 60000)
-    const secs = Math.floor((ms % 60000) / 1000)
-    return `${mins}m ${secs}s`
-  }
-}
+const DURATION_OPTIONS = { style: 'msSecondsMinutes' } as const
 
 function formatDetailKey(key: string): string {
   return key
@@ -900,7 +891,7 @@ onUnmounted(() => {
             <!-- Duration -->
             <td class="px-4 py-3">
               <span v-if="event.duration_ms" class="text-sm font-mono text-gray-600">
-                {{ formatDuration(event.duration_ms) }}
+                {{ formatDuration(event.duration_ms, DURATION_OPTIONS) }}
               </span>
               <span v-else class="text-gray-400">-</span>
             </td>
