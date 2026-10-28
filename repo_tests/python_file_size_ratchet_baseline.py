@@ -244,7 +244,6 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/llc/api/sprints.py": 1223,
     "autobot-backend/llc/api/work_items.py": 1399,
     "autobot-backend/llc/scheduler/heartbeat_scheduler.py": 1023,  # #16818 onto #17726
-    "autobot-backend/llc/services/portability.py": 920,
     "autobot-backend/llc/services/template.py": 643,
     "autobot-backend/llc/services/work_item_service.py": 1086,
     "autobot-backend/llc/tests/conftest.py": 832,
