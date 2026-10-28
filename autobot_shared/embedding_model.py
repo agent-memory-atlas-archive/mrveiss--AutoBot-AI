@@ -52,15 +52,15 @@ KNOWN_EMBEDDING_MODEL_PREFIXES: tuple[str, ...] = (
     "codebert",
 )
 _MODEL_ID_TAIL = re.compile(r"[\w.\-]*(:[\w.\-]+)?")
-_NAMESPACE = re.compile(r"[\w.\-]+/")
+_NAMESPACE_CHARS = re.compile(r"[\w.\-]+")
 
 
 def is_embedding_model_id(value: str) -> bool:
     """True when ``value`` is a bare (optionally ``org/``-namespaced) known embedding-model id."""
     name = value.strip().lower()
-    namespace = _NAMESPACE.match(name)
-    if namespace:
-        name = name[namespace.end() :]
+    head, sep, rest = name.partition("/")  # linear: no backtracking over uncontrolled input
+    if sep and _NAMESPACE_CHARS.fullmatch(head):
+        name = rest
     if not name.startswith(KNOWN_EMBEDDING_MODEL_PREFIXES) or "rerank" in name:
         return False  # a cross-encoder reranker (bge-reranker-*) shares the family prefix, not the role
     return _MODEL_ID_TAIL.fullmatch(name) is not None
