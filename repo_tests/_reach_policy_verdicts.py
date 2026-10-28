@@ -150,6 +150,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "Non-test modules under `autobot-backend/api`; the api package's tests grow at their own "
         "rate, so a share of all its `.py` files would drift with nothing wrong (#18316).",
     ),
+    "compose-nodes-restated-default": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test SLM, infrastructure and docker files plus the root compose file; drifts.",
+    ),
     "compat-module-needs-importer": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

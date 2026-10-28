@@ -24,6 +24,12 @@ REACH_ROOTS = {
         "autobot_shared",
     ),
     "repo_tests/compat_module_needs_importer_18552_test.py": ("autobot-backend",),
+    "repo_tests/compose_nodes_one_home_19323_test.py": (
+        "autobot-infrastructure",
+        "autobot-slm-backend",
+        "docker",
+        "docker-compose.yml",
+    ),
     "repo_tests/concept_forks_17856_test.py": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "repo_tests/conftest_stubset_primitives_13596_test.py": (
         "autobot-backend",
