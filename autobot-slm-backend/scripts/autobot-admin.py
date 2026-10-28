@@ -40,7 +40,7 @@ if _INSTALL_ROOT not in sys.path:
 
 try:
     from autobot_shared import postgres_identity as pg  # noqa: E402 -- needs the path entry above
-    from autobot_shared.env_file import parse_env_file  # noqa: E402 -- needs the path entry above
+    from autobot_shared.env_file import parse_env_text  # noqa: E402 -- needs the path entry above
 except ImportError as missing:
     # Not a traceback: name where it looked and the two sanctioned ways to put autobot_shared there.
     sys.exit(
@@ -60,13 +60,20 @@ _SECRETS_FILES = (
 
 
 def load_env_file(path: str) -> dict:
-    """Key=value pairs of *path* via ``autobot_shared.env_file.parse_env_file``; a missing file is ``{}``."""
-    if not os.path.exists(path):
-        return {}
+    """Key=value pairs of *path*; a missing file is ``{}``, an existing file that cannot be read exits.
+
+    The shared ``parse_env_file`` reads an unreadable file as empty, which here would pass for "no
+    credentials" and fall back to defaults; the file is read locally so that failure is loud. Moving
+    that contract into the shared parser is tracked in #19749.
+    """
     try:
-        return parse_env_file(Path(path))
-    except PermissionError:
-        sys.exit(f"autobot-admin: cannot read {path} (permission denied); run it as root or the autobot user.")
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as err:
+        reason = "permission denied" if isinstance(err, PermissionError) else err.strerror or type(err).__name__
+        sys.exit(f"autobot-admin: cannot read {path} ({reason}); run it as root or the autobot user.")
+    return parse_env_text(text)
 
 
 def get_db_url(database: str) -> str:
@@ -109,7 +116,7 @@ def _dsn_from(env: dict, key: str) -> str:
     if url:
         return url.replace("+asyncpg", "", 1)  # the psycopg2 form of the same DSN
     name_key, default = _FALLBACK_DATABASE[key]
-    return get_db_url(env.get(name_key, default))
+    return get_db_url(env.get(name_key) or default)  # a present-but-empty key is unset
 
 
 def _read_password() -> str:

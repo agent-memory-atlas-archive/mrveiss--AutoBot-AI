@@ -25,7 +25,13 @@ def _store(tmp_path: Path, name: str, text: str) -> str:
 
 
 def test_the_canonical_store_is_read_and_wins(admin, tmp_path, monkeypatch) -> None:
-    secrets = _store(tmp_path, "slm-secrets.env", "SLM_ADMIN_PASSWORD=x\n")
+    secrets = _store(  # an earlier file naming other databases: the canonical store must override both
+        tmp_path,
+        "slm-secrets.env",
+        "SLM_ADMIN_PASSWORD=x\n"
+        "SLM_DATABASE_URL=postgresql+asyncpg://old:old@127.0.0.2:5432/stale\n"  # pragma: allowlist secret
+        "SLM_USERS_DATABASE_URL=postgresql+asyncpg://old:old@127.0.0.2:5432/stale_users\n",  # pragma: allowlist secret
+    )
     creds = _store(
         tmp_path,
         "db-credentials.env",
@@ -61,12 +67,27 @@ def test_the_role_written_database_names_override_the_defaults(admin, tmp_path, 
     assert admin._dsn_from(env, "SLM_USERS_DATABASE_URL").endswith("/users_alt")
 
 
+def test_a_blank_database_name_key_uses_the_default(admin, tmp_path, monkeypatch) -> None:
+    creds = _store(tmp_path, "db-credentials.env", "SLM_DB_NAME=\nSLM_DB_SLM_USERS=\n")
+    monkeypatch.setattr(admin, "_SECRETS_FILES", (creds,))
+    env = admin._secrets_env()
+    assert admin._dsn_from(env, "SLM_DATABASE_URL").endswith("/slm")
+    assert admin._dsn_from(env, "SLM_USERS_DATABASE_URL").endswith("/slm_users")
+
+
 def test_an_unreadable_store_exits_with_a_message(admin, tmp_path, monkeypatch) -> None:
     creds = _store(tmp_path, "db-credentials.env", "SLM_DB_NAME=slm\n")
+    real_read_text = Path.read_text
 
-    def refuse(path):
-        raise PermissionError(13, "Permission denied")
+    def refuse(self, *args, **kwargs):
+        if str(self) == creds:
+            raise PermissionError(13, "Permission denied")
+        return real_read_text(self, *args, **kwargs)
 
-    monkeypatch.setattr(admin, "parse_env_file", refuse)
+    monkeypatch.setattr(Path, "read_text", refuse)
     with pytest.raises(SystemExit, match="cannot read .*db-credentials.env .*root or the autobot user"):
         admin.load_env_file(creds)
+
+
+def test_a_missing_store_is_empty(admin, tmp_path) -> None:
+    assert admin.load_env_file(str(tmp_path / "absent.env")) == {}
