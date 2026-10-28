@@ -194,6 +194,7 @@ onMounted(() => {
   font-size: var(--text-4xl);
   margin-bottom: var(--spacing-4);
   display: block;
+  margin-inline: auto;
 }
 
 .error-state {

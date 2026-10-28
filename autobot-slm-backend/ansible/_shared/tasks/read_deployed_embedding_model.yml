@@ -39,11 +39,15 @@
   ansible.builtin.shell:
     cmd: |
       host=""; port=""
+      # Host and port come from the file the model came from (the first that names one, as the read
+      # above picks it), so the probe asks the server THAT file's backend uses, not a mix of files.
       for f in {{ deployed_embedding_env_files | join(' ') }}; do
-        [ -z "$host" ] && host=$(grep -m1 -E '^(export[[:space:]]+)?AUTOBOT_OLLAMA_HOST=' "$f" 2>/dev/null \
+        grep -qE '^(export[[:space:]]+)?AUTOBOT_EMBEDDING_MODEL=[^[:space:]]' "$f" 2>/dev/null || continue
+        host=$(grep -m1 -E '^(export[[:space:]]+)?AUTOBOT_OLLAMA_HOST=' "$f" 2>/dev/null \
           | sed -E "s/^(export[[:space:]]+)?AUTOBOT_OLLAMA_HOST=//; s/\r\$//; s/^[\"']//; s/[\"']\$//")
-        [ -z "$port" ] && port=$(grep -m1 -E '^(export[[:space:]]+)?AUTOBOT_OLLAMA_PORT=' "$f" 2>/dev/null \
+        port=$(grep -m1 -E '^(export[[:space:]]+)?AUTOBOT_OLLAMA_PORT=' "$f" 2>/dev/null \
           | sed -E "s/^(export[[:space:]]+)?AUTOBOT_OLLAMA_PORT=//; s/\r\$//; s/^[\"']//; s/[\"']\$//")
+        break
       done
       [ -z "$host" ] || [ "$host" = "0.0.0.0" ] && host="$DEFAULT_HOST"
       body=$(curl -s -m "$PROBE_TIMEOUT_S" -d "{\"model\": \"$MODEL\"}" \
@@ -72,13 +76,22 @@
     - (_embedding_model_probe.stdout | default('') | trim) | length > 0
     - (_embedding_kind_probe.stdout | default('unknown') | trim) != 'not-embedding'
 
+# Record the replacement explicitly: skipping the keep leaves any `backend_embedding_model` the
+# caller already defined (e.g. from the same non-embedding env value) in place, and the template's
+# default applies only to an UNDEFINED variable. backend.env.j2 ignores the variable when this is set.
 - name: "Replace a deployed embedding model that cannot embed with the canonical default (#19736)"
+  ansible.builtin.set_fact:
+    embedding_model_replaced: true
+  when:
+    - (_embedding_model_probe.stdout | default('') | trim) | length > 0
+    - (_embedding_kind_probe.stdout | default('unknown') | trim) == 'not-embedding'
+
+- name: "Announce the replaced embedding model (#19736)"
   ansible.builtin.debug:
     msg: >-
       REPLACED: AUTOBOT_EMBEDDING_MODEL on this host was '{{ _embedding_model_probe.stdout | trim }}',
       which the model server reports cannot produce embeddings, so it never wrote a vector. This
-      update renders the canonical default instead{{ (" ('" ~ backend_embedding_model ~ "')")
-      if backend_embedding_model is defined else '' }} (#19736, #18834).
+      update renders the canonical default instead (#19736, #18834).
   when:
     - (_embedding_model_probe.stdout | default('') | trim) | length > 0
     - (_embedding_kind_probe.stdout | default('unknown') | trim) == 'not-embedding'

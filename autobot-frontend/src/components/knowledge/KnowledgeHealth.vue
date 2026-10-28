@@ -465,7 +465,7 @@ onMounted(async () => {
 .loading-state .icon,
 .empty-state .icon {
   font-size: 2.5rem;
-  margin-bottom: var(--spacing-4);
+  margin: 0 auto var(--spacing-4);
   display: block;
 }
 

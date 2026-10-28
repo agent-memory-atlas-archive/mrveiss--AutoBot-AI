@@ -46,6 +46,7 @@ def _fake_curl(bin_dir: Path, body: str, log: Path) -> None:
 
 def _run_probe(tmp_path: Path, env_text: str, body: str) -> tuple[str, str]:
     env_file = tmp_path / "backend.env"
+    env_text = "AUTOBOT_EMBEDDING_MODEL=phi3:mini\n" + env_text
     env_file.write_text(env_text, encoding="utf-8")
     bin_dir, log = tmp_path / "bin", tmp_path / "curl.log"
     bin_dir.mkdir()
@@ -134,4 +135,49 @@ def test_the_messages_render_where_the_role_never_defines_the_variable(defined: 
     # template falls back to its own default there. A message that needs it would fail the update.
     rendered = _render_messages(defined)
     assert all("phi3:mini" in m for m in rendered)
-    assert ("canonical-embed" in rendered[0]) == bool(defined)
+
+
+def test_a_replacement_is_recorded_and_the_template_then_ignores_a_predefined_value() -> None:
+    import jinja2
+
+    replace = next(
+        t
+        for t in _tasks()
+        if "ansible.builtin.set_fact" in t and any(_KIND in c and "==" in c and _NOT in c for c in t["when"])
+    )
+    assert replace["ansible.builtin.set_fact"] == {"embedding_model_replaced": True}
+    template = (repo_root() / "autobot-slm-backend/ansible/roles/backend/templates/backend.env.j2").read_text(
+        encoding="utf-8"
+    )
+    line = "\n".join(
+        ln
+        for ln in template.splitlines()
+        if ln.startswith("AUTOBOT_EMBEDDING_MODEL=") or "embedding_model_replaced" in ln
+    )
+    render = jinja2.Environment(trim_blocks=True).from_string(line).render
+    assert render(backend_embedding_model="phi3:mini").strip() == "AUTOBOT_EMBEDDING_MODEL=phi3:mini"
+    replaced = render(backend_embedding_model="phi3:mini", embedding_model_replaced=True).strip()
+    assert "phi3:mini" not in replaced and replaced != "AUTOBOT_EMBEDDING_MODEL="
+    assert render().strip() == replaced
+
+
+def test_host_and_port_are_read_from_the_file_the_model_came_from(tmp_path: Path) -> None:
+    first, second = tmp_path / "a.env", tmp_path / "b.env"
+    first.write_text("AUTOBOT_EMBEDDING_MODEL=phi3:mini\nAUTOBOT_OLLAMA_HOST=node-a\n", encoding="utf-8")
+    second.write_text("AUTOBOT_OLLAMA_HOST=node-b\nAUTOBOT_OLLAMA_PORT=7\n", encoding="utf-8")
+    bin_dir, log = tmp_path / "bin", tmp_path / "curl.log"
+    bin_dir.mkdir()
+    _fake_curl(bin_dir, "", log)
+    cmd = _kind_task()["ansible.builtin.shell"]["cmd"].replace(
+        "{{ deployed_embedding_env_files | join(' ') }}", f"{first} {second}"
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "MODEL": "phi3:mini",
+        "DEFAULT_HOST": "d",
+        "DEFAULT_PORT": "1",
+        "PROBE_TIMEOUT_S": "1",
+    }
+    subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, check=True, env=env)
+    assert log.read_text(encoding="utf-8").strip() == "http://node-a:1/api/show"

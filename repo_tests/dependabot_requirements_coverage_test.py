@@ -114,7 +114,13 @@ def dependabot_directories(ecosystem: str, config: Path = _CONFIG) -> list[str]:
     for update in document["updates"]:
         if update.get("package-ecosystem") != ecosystem:
             continue
-        found.extend([update["directory"]] if "directory" in update else update.get("directories", []))
+        if "directory" in update:
+            # Dependabot globs only `directories`; a wildcard in the singular key matches nothing.
+            if any(ch in update["directory"] for ch in "*?["):
+                raise ValueError(f"dependabot `directory` {update['directory']!r} is a glob; only `directories` globs")
+            found.append(update["directory"])
+        else:
+            found.extend(update.get("directories", []))
     return found
 
 
@@ -266,3 +272,13 @@ def test_the_detector_clears_a_nested_manifest_once_an_include_reaches_it(tmp_pa
     )
 
     assert nested.resolve() in _reach(["/", "/worker"], tmp_path)
+
+
+def test_a_glob_in_the_singular_directory_key_is_refused_but_in_directories_is_read(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.yml"
+    bad.write_text('updates:\n  - package-ecosystem: npm\n    directory: "/packages/*"\n', encoding="utf-8")
+    good = tmp_path / "good.yml"
+    good.write_text('updates:\n  - package-ecosystem: npm\n    directories: ["/packages/*"]\n', encoding="utf-8")
+    with pytest.raises(ValueError):
+        dependabot_directories("npm", bad)
+    assert dependabot_directories("npm", good) == ["/packages/*"]

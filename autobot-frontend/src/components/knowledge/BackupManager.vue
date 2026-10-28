@@ -366,6 +366,7 @@ onMounted(() => {
   font-size: 2rem;
   margin-bottom: var(--spacing-2);
   display: block;
+  margin-inline: auto;
 }
 
 .backups-list {

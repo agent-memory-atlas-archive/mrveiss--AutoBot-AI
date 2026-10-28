@@ -77,7 +77,9 @@ def count_dead_icon_rules(root: Path) -> int:
             continue
         for css in _STYLE.findall(source):
             for selector in _RULE.findall(_COMMENT.sub("", css)):
-                if "@" not in selector and _I_SELECTOR.search(" " + _FUNCTIONAL_PSEUDO.sub("", selector)):
+                if not selector.lstrip().startswith("@") and _I_SELECTOR.search(
+                    " " + _FUNCTIONAL_PSEUDO.sub("", selector)
+                ):
                     total += 1
     return total
 
@@ -105,6 +107,15 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
             ".b i#x { color: red; }\n.c :not(i) { color: red; }\n.d :is(i, b) { color: red; }\n</style>\n",
         )
         assert count_dead_icon_rules(tmp_path) == 2
+
+    def test_an_at_sign_inside_an_attribute_value_still_counts_but_an_at_rule_does_not(self, tmp_path: Path) -> None:
+        self._w(
+            tmp_path,
+            "E.vue",
+            "<template><Icon name='x' /></template>\n<style>\n[href=\"mailto:team@example.com\"] i { color: red; }\n"
+            "@media (min-width: 1px) { .a .icon { color: red; } }\n@font-face { font-family: x; }\n</style>\n",
+        )
+        assert count_dead_icon_rules(tmp_path) == 1
 
     def test_a_template_that_still_renders_i_is_not_counted(self, tmp_path: Path) -> None:
         self._w(
