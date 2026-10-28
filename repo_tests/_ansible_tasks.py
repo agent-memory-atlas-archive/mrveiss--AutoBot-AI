@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import jinja2
+import jinja2.meta
 import pytest
 import yaml
 from repo_tests._paths import repo_root
@@ -50,6 +52,47 @@ def when_of(task: dict) -> str:
     """A task's `when:` as one expression, list form ANDed together."""
     when = task.get("when")
     return " and ".join(f"({c})" for c in when) if isinstance(when, list) else str(when)
+
+
+def resolved_vars(path: Path) -> dict:
+    """A vars/defaults file with its values' references to the file's own names rendered.
+
+    `ollama_models` lists `"{{ ollama_embedding_model }}"`, so a test reading the raw list sees the
+    reference, not the model ansible pulls. A value naming anything the file does not define (an
+    inventory or fact name) is left as written.
+    """
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    env = jinja2.Environment(autoescape=False, undefined=jinja2.StrictUndefined)  # noqa: S701 - vars, not markup
+
+    def render(value: object) -> object:
+        if isinstance(value, list):
+            return [render(v) for v in value]
+        if isinstance(value, str) and "{{" in value:
+            if not jinja2.meta.find_undeclared_variables(env.parse(value)) <= raw.keys():
+                return value
+            return env.from_string(value).render(**raw)
+        return value
+
+    return {k: render(v) for k, v in raw.items()}
+
+
+def play_vars(play: Any, playbook: Path) -> dict:
+    """The resolved names a play loads through `vars_files` (paths relative to the playbook)."""
+    loaded: dict = {}
+    for rel in play.get("vars_files", []) if isinstance(play, dict) else []:
+        loaded.update(resolved_vars((playbook.parent / rel).resolve()))
+    return loaded
+
+
+def loop_items(loop: object, names: dict) -> list[list]:
+    """A task's `loop:` as `[items]`: a literal list, or a single `{{ name }}` read through `names`.
+
+    Empty when the loop is neither, so a reference to a name the play does not load is not counted.
+    """
+    if isinstance(loop, list):
+        return [loop]
+    ref = re.fullmatch(r"\{\{\s*(\w+)\s*\}\}", loop) if isinstance(loop, str) else None
+    return [names[ref.group(1)]] if ref and ref.group(1) in names else []
 
 
 def eval_when(expr: str, **state: object) -> bool:

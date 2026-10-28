@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from repo_tests._ansible_tasks import eval_when, when_of
+from repo_tests._ansible_tasks import eval_when, loop_items, play_vars, when_of
 from repo_tests._paths import repo_root
 
 _ANS = "autobot-slm-backend/ansible"
@@ -136,3 +136,15 @@ def test_each_wired_pull_site_names_its_embedding_role(site: str) -> None:
     assert len(includes) == 1, f"{site} must run the kind check once after its pull"
     assert includes[0]["vars"]["model_kind_embedding"].startswith("{{ ")
     assert "model_kind_completion" in includes[0]["vars"]
+
+
+def test_a_loop_reference_is_read_only_through_names_the_play_loads() -> None:
+    assert loop_items("{{ ollama_models }}", {"ollama_models": ["a"]}) == [["a"]]
+    assert loop_items("{{ ollama_models }}", {}) == []
+    assert loop_items(["a", "b"], {}) == [["a", "b"]]
+
+
+def test_the_hybrid_play_reads_the_embedding_model_from_the_shared_list() -> None:
+    playbook = repo_root() / _SITES[1]
+    names = [play_vars(p, playbook) for p in _tasks(_SITES[1]) if isinstance(p, dict) and "vars_files" in p]
+    assert names and names[0]["ollama_embedding_model"] in names[0]["ollama_models"]
