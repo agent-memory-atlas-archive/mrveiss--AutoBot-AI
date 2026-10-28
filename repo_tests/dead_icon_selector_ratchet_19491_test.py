@@ -34,6 +34,7 @@ from pathlib import Path
 
 from repo_tests._paths import repo_root
 from repo_tests._ratchet_base import base_table
+from repo_tests._reach import declare
 
 _FRONTEND_SRC = "autobot-frontend/src"
 _TEMPLATE = re.compile(r"<template>(.*)</template>", re.S)
@@ -51,9 +52,16 @@ _FUNCTIONAL_PSEUDO = re.compile(r":(?:not|is|where|has)\([^)]*\)")
 # 207 measured on 8731953af6; 7 after the bare-`i` retarget (#19491). Lower it by what a PR fixes.
 PINS = {"dead_icon_selector_rules": 7}
 
-# Non-vacuity: 468 `.vue` files under autobot-frontend/src on 7d26a6ed6c. A moved tree
-# or a broken glob scans nothing and reports the same 0 as a clean one.
-MIN_VUE_FILES_SCANNED = 400
+# Non-vacuity: a moved tree or a broken glob scans nothing and reports the same 0 as a clean one.
+REACH_VUE_FILES = declare(
+    "dead-icon-selector-vue-files",
+    discover=lambda root: [p.relative_to(root).as_posix() for p in vue_files(root / _FRONTEND_SRC)],
+    roots=(_FRONTEND_SRC,),
+    floor=447,  # mid-window: population 467, window (427, 467)
+    growth=40,
+    skips=0,
+    what=".vue files scanned for dead <i> selectors",
+)
 
 
 def vue_files(root: Path) -> list[Path]:
@@ -125,8 +133,7 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
 def test_no_more_dead_icon_rules_than_pinned() -> None:
     root = repo_root() / _FRONTEND_SRC
     assert root.is_dir(), f"{_FRONTEND_SRC} has moved; this guard reads it by path"
-    scanned = len(vue_files(root))
-    assert scanned >= MIN_VUE_FILES_SCANNED, f"scanned {scanned} .vue files, floor is {MIN_VUE_FILES_SCANNED}"
+    REACH_VUE_FILES.examined(repo_root())
     now = count_dead_icon_rules(root)
     pinned = PINS["dead_icon_selector_rules"]
     assert now <= pinned, (
