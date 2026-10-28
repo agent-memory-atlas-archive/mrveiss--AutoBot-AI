@@ -23,8 +23,8 @@ detector does not do. It is a known under-count, not a clean result.
 
 **The pin.** 200 bare ``i`` rules were retargeted to ``.icon``, Icon's root class (#19491).
 The 7 left are ``i.fa-<name>`` rules that pick one icon among several in a container, so
-each needs a class on its ``Icon`` rather than a blanket ``.icon``. The pin is exact and
-down-only against the base (#19283).
+each needs a class on its ``Icon`` rather than a blanket ``.icon``. The pin is exact, per file and
+selector, and down-only against the base (#19283).
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 
 from repo_tests._paths import repo_root
-from repo_tests._ratchet_base import base_table
+from repo_tests._ratchet_base import base_table, raised_entries
 from repo_tests._reach import declare
 
 _FRONTEND_SRC = "autobot-frontend/src"
@@ -49,8 +49,17 @@ _RULE = re.compile(r"([^{}]+)\{")
 _I_SELECTOR = re.compile(r"(?:^|[\s>+~,])i(?:[.#\[]|(?=\s*[{,:>\s]|$))")
 _FUNCTIONAL_PSEUDO = re.compile(r":(?:not|is|where|has)\([^)]*\)")
 
-# 207 measured on 8731953af6; 7 after the bare-`i` retarget (#19491). Lower it by what a PR fixes.
-PINS = {"dead_icon_selector_rules": 7}
+# 207 measured on 8731953af6; 7 after the bare-`i` retarget (#19491). Pinned per file and
+# selector, so fixing one rule cannot pay for a new one elsewhere. Delete an entry when it is fixed.
+PINS = {
+    "components/knowledge/EntityExtractor.vue :: .error-notification i.fa-exclamation-circle": 1,
+    "components/knowledge/GraphRAGQuery.vue :: .error-notification i.fa-exclamation-circle": 1,
+    "components/knowledge/KnowledgeBrowser.vue :: .active-filter-badge i.fa-filter": 1,
+    "components/knowledge/KnowledgeBrowser.vue :: .search-bar i.fa-search": 1,
+    "components/knowledge/KnowledgeGraph.vue :: .error-notification i.fa-exclamation-circle": 1,
+    "components/knowledge/modals/CategoryEditModal.vue :: .delete-warning i.fa-exclamation-triangle": 1,
+    "components/visualizations/AgentActivityVisualization.vue :: .active-count i.pulse": 1,
+}
 
 # Non-vacuity: a moved tree or a broken glob scans nothing and reports the same 0 as a clean one.
 REACH_VUE_FILES = declare(
@@ -68,8 +77,9 @@ def vue_files(root: Path) -> list[Path]:
     return sorted(root.rglob("*.vue"))
 
 
-def count_dead_icon_rules(root: Path) -> int:
-    total = 0
+def dead_icon_rules(root: Path) -> dict[str, int]:
+    """``{"<file> :: <selector>": occurrences}`` for every dead ``i`` rule under *root*."""
+    found: dict[str, int] = {}
     for path in vue_files(root):
         source = path.read_text(encoding="utf-8")
         template = _TEMPLATE.search(source)
@@ -80,8 +90,13 @@ def count_dead_icon_rules(root: Path) -> int:
                 if not selector.lstrip().startswith("@") and _I_SELECTOR.search(
                     " " + _FUNCTIONAL_PSEUDO.sub("", selector)
                 ):
-                    total += 1
-    return total
+                    key = f"{path.relative_to(root).as_posix()} :: {' '.join(selector.split())}"
+                    found[key] = found.get(key, 0) + 1
+    return found
+
+
+def count_dead_icon_rules(root: Path) -> int:
+    return sum(dead_icon_rules(root).values())
 
 
 class TestTheDetectorWorksBeforeItsOutputIsRead:
@@ -141,24 +156,23 @@ class TestTheDetectorWorksBeforeItsOutputIsRead:
         assert count_dead_icon_rules(tmp_path) == 0
 
 
-def test_no_more_dead_icon_rules_than_pinned() -> None:
+def test_no_dead_icon_rule_beyond_the_pinned_ones() -> None:
     root = repo_root() / _FRONTEND_SRC
     assert root.is_dir(), f"{_FRONTEND_SRC} has moved; this guard reads it by path"
     REACH_VUE_FILES.examined(repo_root())
-    now = count_dead_icon_rules(root)
-    pinned = PINS["dead_icon_selector_rules"]
-    assert now <= pinned, (
-        f"{now} style rules target an <i> their template does not render, pin allows {pinned} (#19491). "
+    now = dead_icon_rules(root)
+    new = {k: v for k, v in now.items() if v > PINS.get(k, 0)}
+    assert not new, (
+        f"style rules target an <i> their template does not render (#19491): {new}. "
         "Icon renders <svg class='icon'>: target `.icon` (or a class on that Icon), not `i`."
     )
-    assert now == pinned, f"{now} dead icon rules, pin says {pinned}: lower PINS to {now} in this PR (#19491)."
+    stale = {k: v for k, v in PINS.items() if now.get(k, 0) < v}
+    assert not stale, f"pinned dead icon rules are fixed or gone: {stale}; lower or delete them in PINS (#19491)."
 
 
 def test_the_pin_was_not_raised_against_the_base() -> None:
     base = base_table(repo_root(), ("repo_tests/dead_icon_selector_ratchet_19491_test.py",), "PINS")
-    if not base:
-        return  # the guard is new at this base; nothing to compare against yet
-    assert PINS["dead_icon_selector_rules"] <= base["dead_icon_selector_rules"], (
-        f"PINS rose from {base['dead_icon_selector_rules']} to {PINS['dead_icon_selector_rules']} (#19491); "
-        "the pin only goes down."
-    )
+    if not base or "dead_icon_selector_rules" in base:
+        return  # new at this base, or the base still pins a single total
+    raised = raised_entries(PINS, base)
+    assert not raised, f"PINS entries rose or were added against the base (#19491): {raised}; the pin only goes down."

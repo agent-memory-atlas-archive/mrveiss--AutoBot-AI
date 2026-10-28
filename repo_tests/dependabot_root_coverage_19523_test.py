@@ -32,7 +32,6 @@ import functools
 import json
 import posixpath
 import re
-import subprocess
 from pathlib import Path
 from typing import Callable
 
@@ -41,7 +40,7 @@ from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 from repo_tests.dependabot_requirements_coverage_test import _SKIP_PARTS, dependabot_directories
 
-from autobot_shared.paths import scrubbed_git_env
+from autobot_shared.isolated_git import git, make_repo
 from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 _REPO_ROOT = repo_root()
@@ -291,8 +290,7 @@ def _plant(tmp_path: Path, config: str) -> Path:
     (tmp_path / "app" / "package.json").write_text('{"dependencies": {"zod": "^3.22.0"}}', encoding="utf-8")
     (tmp_path / ".github").mkdir()
     (tmp_path / _CONFIG_REL).write_text(config, encoding="utf-8")
-    for command in (["git", "init", "-q"], ["git", "add", "-A"]):
-        subprocess.run(command, cwd=tmp_path, check=True, env=scrubbed_git_env())
+    git(make_repo(tmp_path), "add", "-A")
     return tmp_path
 
 
