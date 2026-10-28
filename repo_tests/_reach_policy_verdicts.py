@@ -81,6 +81,12 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "Ansible variable files are a subset of tracked YAML; workflow and compose YAML grow "
         "independently of the ansible tree, so a share of all YAML sinks with nothing wrong.",
     ),
+    "ansible-status-queries-check-mode-sweep": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Ansible YAML is a subset of all tracked YAML under the SLM backend; templates, scripts and "
+        "docs beside it grow independently, so a share of the tree sinks with nothing wrong.",
+    ),
     "ansible-inventory-shell-sweep": (
         ABSOLUTE,
         "FRACTION_IS_COARSER",
