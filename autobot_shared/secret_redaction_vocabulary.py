@@ -219,18 +219,25 @@ _FILE_WORD_SPLIT_RE = re.compile(r"[-_.\s]+")
 def is_credential_file_stem(stem: str, *, data_file: bool = False) -> bool:
     """Whether the stem of a file name (no extension) names a credential (#19339).
 
-    Every word-aligned prefix of the stem is judged by the one matcher (``PRECISE``), so
+    Every word-aligned prefix of the stem, and each prefix with its last separator removed (``pass_word``),
+    is judged by the one matcher (``PRECISE``), so
     ``db_password``, ``credentials_backup`` and ``api-token`` match while ``tokenizer`` and ``secretary``
     do not. Nouns in :data:`AMBIGUOUS_FILE_NOUNS` never mark a file. ``key``/``keys`` marks a file only
     beside another word (``ssh_key``, ``service-account-key``); a bare ``key`` stem marks it only when
     ``data_file`` is true (``key.json``), since ``key.md`` or ``key-concepts.md`` is prose.
     """
     words = [w for w in _FILE_WORD_SPLIT_RE.split(stem.lower()) if w]
-    for i, word in enumerate(words):
-        if word in FILE_COMPOUND_NOUNS:
-            return True
-        if word in AMBIGUOUS_FILE_NOUNS or not matches_vocabulary("_".join(words[: i + 1]), MatchPolicy.PRECISE):
-            continue
-        if word not in _KEY_NOUNS or i > 0 or (len(words) == 1 and data_file):
-            return True
-    return False
+    if len(words) == 1 and words[0] in _KEY_NOUNS:
+        return data_file
+    joined = (words[: j - 1] + [words[j - 1] + words[j]] for j in range(1, len(words)))  # pass_word -> password
+    return any(_marks_file(words[:j]) for j in range(1, len(words) + 1)) or any(_marks_file(p) for p in joined)
+
+
+def _marks_file(prefix: list[str]) -> bool:
+    """Whether the stem words in ``prefix`` end in a credential noun (a lone ``key`` is not enough)."""
+    word = prefix[-1]
+    if word in FILE_COMPOUND_NOUNS:
+        return True
+    if word in AMBIGUOUS_FILE_NOUNS or not matches_vocabulary("_".join(prefix), MatchPolicy.PRECISE):
+        return False
+    return word not in _KEY_NOUNS or len(prefix) > 1

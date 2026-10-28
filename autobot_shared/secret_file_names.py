@@ -32,5 +32,5 @@ def is_secret_file_name(name: str) -> bool:
     lowered = name.lower()
     if any(fnmatch.fnmatch(lowered, glob) for glob in SECRET_FILE_GLOBS):
         return True
-    stem, dot, suffix = lowered.rpartition(".") if "." in lowered.lstrip(".") else (lowered, "", "")
+    stem, _dot, suffix = lowered.rpartition(".") if "." in lowered.lstrip(".") else (lowered, "", "")
     return is_credential_file_stem(stem, data_file=suffix in _KEY_DATA_SUFFIXES)
