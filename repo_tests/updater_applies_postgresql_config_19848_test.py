@@ -32,10 +32,13 @@ def _plays() -> dict[str, dict]:
     return {p["hosts"]: p for p in yaml.safe_load(_UPDATER.read_text(encoding="utf-8")) if "hosts" in p}
 
 
-def test_the_updater_renders_postgresql_conf_on_both_postgresql_host_groups():
+def test_every_play_that_touches_postgresql_renders_postgresql_conf():
+    """A play including any postgresql task file reaches a PostgreSQL host, so it renders the config too."""
     plays = _plays()
-    for hosts in ("slm_server", "database"):
-        assert "config_file" in _includes(plays[hosts], "postgresql"), f"play on {hosts} never renders postgresql.conf"
+    touching = {hosts for hosts, play in plays.items() if _includes(play, "postgresql")}
+    assert {"slm_server", "infrastructure", "database"} <= touching, f"plays including postgresql: {sorted(touching)}"
+    missing = sorted(hosts for hosts in touching if "config_file" not in _includes(plays[hosts], "postgresql"))
+    assert not missing, f"plays on {missing} include postgresql but never render postgresql.conf"
 
 
 def test_postgresql_conf_has_one_home():

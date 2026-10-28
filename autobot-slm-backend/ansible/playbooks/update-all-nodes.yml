@@ -1052,6 +1052,17 @@
       when: "'backend' in group_names"
       tags: [backend, env, credentials]
 
+    # #19848: as in PLAY 1 -- the backend role installs PostgreSQL for user management (#2953),
+    # so its postgresql.conf follows the role on every Code Sync too.
+    - name: "[PLAY 2] Backend | Apply PostgreSQL's server config (#19848)"
+      ansible.builtin.include_role:
+        name: postgresql
+        tasks_from: config_file
+        apply:
+          become: true
+      when: "'backend' in group_names"
+      tags: [backend, postgresql]
+
     # Migrations moved AFTER the .env regen so they run with the fresh
     # credentials and BEFORE the service restart — see the
     # "Database migration sequence" block below (#10001/#10026; replaces the
