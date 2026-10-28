@@ -208,7 +208,7 @@ async def _heartbeat(run: _Run, **fields: Any) -> None:
     """Keep the lock (this owner only), record progress, and enforce the overall deadline."""
     if time.monotonic() - run.started > SWITCH_DEADLINE_S:
         raise _DeadlineExceeded(f"the build exceeded its {SWITCH_DEADLINE_S:.0f}s deadline")
-    if not await lock.renew(run.owner, int(SWITCH_STALE_S)):
+    if not await lock.extend_claim(run.owner, int(SWITCH_STALE_S)):
         raise RuntimeError("the build lost its lock (force-closed or expired)")
     await _set_state(heartbeat=datetime.now(tz=timezone.utc).isoformat(), **fields)
 

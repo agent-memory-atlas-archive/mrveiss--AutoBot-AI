@@ -29,7 +29,7 @@ async def acquire(owner: str, ttl_s: int) -> bool:
     return isinstance(result, work_claims.WorkClaim)
 
 
-async def renew(owner: str, ttl_s: int) -> bool:
+async def extend_claim(owner: str, ttl_s: int) -> bool:
     """Extend *owner*'s claim; False once it expired or another owner holds it."""
     return await work_claims.renew(SWITCH_SCOPE, agent_id=owner, task_id=SWITCH_TASK_ID, ttl_s=ttl_s)
 
