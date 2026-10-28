@@ -199,15 +199,11 @@ def test_a_derivation_and_other_dicts_are_not_matched() -> None:
 
 def test_an_unparsable_candidate_fails_closed(tmp_path) -> None:
     """A candidate that cannot be parsed is a failure to judge, never silently clean."""
-    import subprocess
-
-    from autobot_shared.paths import scrubbed_git_env
+    from autobot_shared.isolated_git import git, make_repo
 
     (tmp_path / "broken.py").write_text('T = {"a.py": 700, "b.py": 800\n', encoding="utf-8")
     (tmp_path / "plain.py").write_text("x = 1\n", encoding="utf-8")
-    env = scrubbed_git_env()
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, env=env)
-    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, env=env)
+    git(make_repo(tmp_path), "add", ".")
     offenders, failures, read = scan(tmp_path)
     assert offenders == {} and read == 2
     assert [f.split(":")[0] for f in failures] == ["broken.py"]
