@@ -203,3 +203,34 @@ def is_endpoint_name(name: str, policy: MatchPolicy) -> bool:
     if not matches_vocabulary(stem, policy):
         return True  # the credential match came from the suffix alone (``db_dsn``)
     return all(token in ENDPOINT_NAME_WORDS for token in name_tokens(stem))
+
+
+#: Credential nouns that are ordinary words in a FILE name (``seed_data.sql``, ``pass_through.py``,
+#: ``salt_states.sls``); a file stem is not marked by them. ``key`` is handled in
+#: :func:`is_credential_file_stem`. (#19339)
+AMBIGUOUS_FILE_NOUNS: Tuple[str, ...] = ("pass", "salt", "dsn", "signature", "pem", "cert", "seed")
+#: One-word compounds that name a credential in a file name but are NOT field names: ``apikey`` stays
+#: unmasked as a query parameter under ``PRECISE`` (pinned by ``secret_redaction_nested_18193_test``).
+FILE_COMPOUND_NOUNS: Tuple[str, ...] = ("apikey", "apikeys", "privatekey", "privatekeys")
+_KEY_NOUNS: Tuple[str, ...] = ("key", "keys")
+_FILE_WORD_SPLIT_RE = re.compile(r"[-_.\s]+")
+
+
+def is_credential_file_stem(stem: str, *, data_file: bool = False) -> bool:
+    """Whether the stem of a file name (no extension) names a credential (#19339).
+
+    Every word-aligned prefix of the stem is judged by the one matcher (``PRECISE``), so
+    ``db_password``, ``credentials_backup`` and ``api-token`` match while ``tokenizer`` and ``secretary``
+    do not. Nouns in :data:`AMBIGUOUS_FILE_NOUNS` never mark a file. ``key``/``keys`` marks a file only
+    beside another word (``ssh_key``, ``service-account-key``); a bare ``key`` stem marks it only when
+    ``data_file`` is true (``key.json``), since ``key.md`` or ``key-concepts.md`` is prose.
+    """
+    words = [w for w in _FILE_WORD_SPLIT_RE.split(stem.lower()) if w]
+    for i, word in enumerate(words):
+        if word in FILE_COMPOUND_NOUNS:
+            return True
+        if word in AMBIGUOUS_FILE_NOUNS or not matches_vocabulary("_".join(words[: i + 1]), MatchPolicy.PRECISE):
+            continue
+        if word not in _KEY_NOUNS or i > 0 or (len(words) == 1 and data_file):
+            return True
+    return False
