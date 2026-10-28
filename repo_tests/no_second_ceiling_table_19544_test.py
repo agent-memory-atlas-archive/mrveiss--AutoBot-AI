@@ -20,8 +20,9 @@ from __future__ import annotations
 import ast
 
 from repo_tests._paths import repo_root
+from repo_tests._reach import declare
 
-from tools.lint._scan_helpers import tracked_paths
+from tools.lint._scan_helpers import EmptyEnumeration, tracked_paths
 
 #: The only modules allowed to hold a path->ceiling literal.
 HOMES = frozenset(
@@ -40,7 +41,7 @@ EXEMPT: dict[str, str] = {
 }
 
 #: One over the 600-line limit every gate enforces (``test_the_threshold_is_the_gates_limit``).
-_MIN_CEILING = 601
+_CEILING_THRESHOLD = 601
 
 _SUFFIXES = (".py", ".ts", ".vue", ".sh")
 _MIN_ENTRIES = 2
@@ -57,14 +58,29 @@ def _is_path_to_int(key: ast.expr | None, value: ast.expr) -> bool:
         and isinstance(value, ast.Constant)
         and isinstance(value.value, int)
         and not isinstance(value.value, bool)
-        and value.value >= _MIN_CEILING
+        and value.value >= _CEILING_THRESHOLD
     )
 
 
 #: The one table name a home may assign; a second table beside it in a home is a copy too.
 _HOME_TABLE = "KNOWN_LARGE"
-#: 7,516 tracked .py files at #19544's review; a sweep that read far fewer read the wrong set.
-MIN_FILES_READ = 6000
+
+
+def _live_paths(root) -> list[str]:
+    """Every tracked .py the sweep judges: all of them, bar the one exempt fixture module."""
+    try:
+        return [rel for rel in tracked_paths(root, "*.py") if rel not in EXEMPT]
+    except EmptyEnumeration:
+        return []
+
+
+REACH = declare(
+    "ceiling-table-sweep-19544",
+    discover=_live_paths,
+    floor=7438,  # measured at 7588 tracked files, pinned mid-window (#15928)
+    growth=300,
+    what="tracked Python files swept for a second path->ceiling table (#19544)",
+)
 
 
 def ceiling_tables(source: str) -> list[tuple[int, frozenset[str]]]:
@@ -93,7 +109,7 @@ def _file_offences(rel: str, source: str) -> list[int]:
     return [line for line, _names in tables]
 
 
-def scan(root) -> tuple[dict[str, list[int]], list[str], int]:
+def scan(root, paths=None) -> tuple[dict[str, list[int]], list[str], int]:
     """``(offenders, unreadable or unparsable candidates, files read)`` over every tracked .py.
 
     The text pre-filter is sound: a qualifying key must appear in source as ``.py"`` (or ``.ts'``,
@@ -101,9 +117,7 @@ def scan(root) -> tuple[dict[str, list[int]], list[str], int]:
     cannot be read, or a candidate that cannot be parsed, fails closed (#19544 review).
     """
     offenders, failures, read = {}, [], 0
-    for rel in tracked_paths(root, "*.py"):
-        if rel in EXEMPT:
-            continue
+    for rel in _live_paths(root) if paths is None else paths:
         try:
             source = (root / rel).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
@@ -123,8 +137,9 @@ def scan(root) -> tuple[dict[str, list[int]], list[str], int]:
 
 
 def test_no_second_hand_written_ceiling_table_exists() -> None:
-    offenders, failures, read = scan(repo_root())
-    assert read >= MIN_FILES_READ, f"only {read} tracked .py files read -- the sweep lost its reach"
+    root = repo_root()
+    offenders, failures, read = scan(root, REACH.examined(root))
+    REACH.completed(read, root)
     assert failures == [], "files the sweep could not judge:\n" + "\n".join(failures)
     assert offenders == {}, (
         f"a path->int table outside the KNOWN_LARGE homes {sorted(HOMES)} (file: lines): {offenders}. "
@@ -153,7 +168,7 @@ def test_the_threshold_is_the_gates_limit() -> None:
         spec = importlib.util.spec_from_file_location("_gate", repo_root() / rel)
         gate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gate)
-        assert gate.MAX_LINES + 1 == _MIN_CEILING, f"{rel} MAX_LINES moved; update _MIN_CEILING"
+        assert gate.MAX_LINES + 1 == _CEILING_THRESHOLD, f"{rel} MAX_LINES moved; update _CEILING_THRESHOLD"
 
 
 def test_a_second_table_beside_known_large_in_a_home_is_an_offence() -> None:
