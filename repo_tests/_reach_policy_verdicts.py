@@ -49,6 +49,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "NOT_PATHS",
         "Call sites, not paths: one id per literal-fallback env read in the sweep roots, a subset of tracked Python.",
     ),
+    "dead-icon-selector-vue-files": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "One frontend tree's `.vue` files, against all tracked `.vue` including the other frontend and the kit.",
+    ),
     "deployment-mode-detector-scan": (
         ABSOLUTE,
         "SUBSET_DRIFTS",
@@ -232,6 +237,12 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         ABSOLUTE,
         "SUBSET_DRIFTS",
         "Non-test source is a subset of tracked .py under two detector packages; the test-file share drifts.",
+    ),
+    "cache-never-in-repo": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test modules of both backends and autobot_shared, against all tracked .py under them; "
+        "the test-file share drifts.",
     ),
     "generated-type-redeclarations": (
         ABSOLUTE,
