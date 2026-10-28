@@ -256,7 +256,7 @@ RATCHET_BASELINE: dict[str, int] = {
     "autobot-backend/llc/tests/test_work_items_idor.py": 602,
     "autobot-backend/llm_self_awareness.py": 708,
     "autobot-backend/llm_shared/optimization/attention_backend_test.py": 801,
-    "autobot-backend/llm_shared/optimization/flash_attention.py": 669,
+    "autobot-backend/llm_shared/optimization/flash_attention.py": 643,
     "autobot-backend/llm_shared/optimization/kv_cache_test.py": 675,
     "autobot-backend/llm_shared/optimization/layer_inference.py": 869,
     "autobot-backend/llm_shared/optimization/layer_inference_test.py": 715,
