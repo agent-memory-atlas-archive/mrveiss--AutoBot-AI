@@ -395,6 +395,11 @@ _A_TO_M: dict[str, tuple[str, str, str]] = {
         "SUBSET_DRIFTS",
         "Python under the infrastructure tree, against all tracked Python; the backend grows independently.",
     ),
+    "kb-populate-doc-patterns": (
+        ABSOLUTE,
+        "SUBSET_DRIFTS",
+        "Non-test infrastructure Python, against all tracked .py under autobot-infrastructure; drifts.",
+    ),
     "kb-admin-read-bypass": (
         ABSOLUTE,
         "SUBSET_DRIFTS",

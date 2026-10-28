@@ -269,7 +269,6 @@ _DECLARED_SCOPES = {
     "embedding-model-literal-sites": (
         "autobot-backend",
         "autobot_shared",
-        "autobot-infrastructure/shared/scripts/populate_kb_chromadb.py",
         "autobot-infrastructure/shared/tools/index_documentation.py",
     ),
     "single-attribute-writer-scan": ("autobot-frontend/src",),
@@ -456,6 +455,7 @@ _DECLARED_SCOPES = {
     "direct-secrets-service-callers": ("autobot-backend", "autobot_shared"),
     "data-db-path-production-python": ("autobot-backend", "autobot_shared"),
     "jekyll-processed-docs": ("docs",),
+    "kb-populate-doc-patterns": ("autobot-infrastructure",),
     "kb-admin-read-bypass": ("autobot-backend/", "autobot_shared/"),
     "kb-construction-18122-scan": (
         "autobot-backend/",
