@@ -81,12 +81,14 @@ ISSUE_17822_ENTRIES = tuple(
         (Path(__file__).parent / "fixtures" / "issue_17822_migration_gate_entries.json").read_text(encoding="utf-8")
     )
 )
-# 16 = the eleven #17822 entries plus `services/__init__.py`, `services/approval_gate_service.py` and
-# `llc/services/workspace_lease.py` (#17996), and `llc/services/company.py` + `company_ceo.py` (#15907's
-# concurrent-move test), which the migration tests import.
+# 19 = the eleven #17822 entries plus `services/__init__.py`, `services/approval_gate_service.py` and
+# `llc/services/workspace_lease.py` (#17996), `llc/services/company.py` + `company_ceo.py` (#15907's
+# concurrent-move test), `llc/services/authz.py` + `membership_service.py` (the move's authorization,
+# #19634), `llc/services/company_move_lock.py` (the move's row locks, #19593) and `autobot_shared/db_errors.py`
+# (its deadlock SQLSTATE), which the migration tests import.
 assert (
-    len(ISSUE_17822_ENTRIES) == 16
-), "the pinned migration-gate set is 16 entries; an emptied fixture would pin nothing"
+    len(ISSUE_17822_ENTRIES) == 20
+), "the pinned migration-gate set is 20 entries; an emptied fixture would pin nothing"
 ISSUE_17822_WORKFLOW = "migration-gate"
 EVENTS = ("push", "pull_request", "merge_group", "schedule", "workflow_dispatch")
 MG_SHA = "merge-group-base-sha"  # a stand-in value; only its presence or absence is compared
