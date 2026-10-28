@@ -50417,16 +50417,7 @@ export interface paths {
         put?: never;
         /**
          * Create Company
-         * @description Create a company (root, or a sub-company under an owned parent).
-         *
-         *     Tenant scope (#12233): previously unauthenticated — any caller could create
-         *     a company and, by supplying ``parent_org_id``, graft one under *another*
-         *     tenant's company. Now authenticated; a non-admin may only create a
-         *     sub-company under a parent they belong to (cross-tenant parent → 404, so the
-         *     parent's existence is not disclosed). Root creation (no ``parent_org_id``,
-         *     the creation-wizard flow) is open to any authenticated user. The creator is
-         *     recorded as the company ``OWNER`` so they can immediately access it and it
-         *     surfaces in their tenant-scoped ``list_companies``.
+         * @description Create a root company, or one under a parent the caller owns/admins (#12233, #19634); creator is OWNER.
          */
         post: operations["create_company_api_llc_companies__post"];
         delete?: never;

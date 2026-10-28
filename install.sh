@@ -1136,7 +1136,7 @@ uninstall() {
 # =============================================================================
 
 main() {
-    parse_args "$@"
+    parse_args "$@"; cd /  # the service user cannot read the caller's cwd, and git aborts in it (#19403)
 
     if ${UNINSTALL}; then
         uninstall
