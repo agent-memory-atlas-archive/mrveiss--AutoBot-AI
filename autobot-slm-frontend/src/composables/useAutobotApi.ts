@@ -11,7 +11,7 @@
  * Issue #729 - Migrating admin functionality to SLM.
  */
 
-import { isHttpError } from '@autobot/ui'
+export { autobotApiErrorMessage } from '@/composables/autobotApiError'
 import { getBackendUrl } from '@/config/ssot-config'
 import { SlmApiClient } from '@/utils/ApiClient'
 import type { SlmUserResponse } from '@/composables/useSlmUserApi'
@@ -586,18 +586,6 @@ export interface GovernanceConfig {
   mode: 'full_auto' | 'semi_auto' | 'locked'
   gap_detection_enabled: boolean
   default_trust_level: string
-}
-
-/**
- * Unwrap the FastAPI `{ "detail": "..." }` error body (#13079).
- *
- * The client throws the kit `HttpError`, which keeps the parsed body; its `detail` is the
- * FastAPI message. Otherwise the caller's translated fallback leads, with the status or error.
- */
-export function autobotApiErrorMessage(err: unknown, fallback: string): string {
-  if (isHttpError(err)) return err.detail || `${fallback} (HTTP ${err.status})`
-  if (err instanceof Error && err.message.length > 0) return `${fallback}: ${err.message}`
-  return fallback
 }
 
 /**

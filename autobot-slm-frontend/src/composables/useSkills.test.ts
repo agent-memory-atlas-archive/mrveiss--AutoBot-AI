@@ -154,6 +154,24 @@ describe('useSkills — migrated onto useAutobotApi (#13079)', () => {
       expect(s.error.value).toBe('skill registry unavailable')
       expect(s.loading.value).toBe(false)
     })
+
+    it('renders a plain Error as the translated generic message plus the cause, once', async () => {
+      backendClient.get.mockRejectedValue(new Error('boom'))
+
+      const s = useSkills()
+      await s.fetchSkills()
+
+      expect(s.error.value).toBe('Skills request failed: boom')
+    })
+
+    it('renders a detail-less HttpError as the translated generic message and the status', async () => {
+      backendClient.get.mockRejectedValue(new HttpError(500, 'Internal Server Error'))
+
+      const s = useSkills()
+      await s.fetchSkills()
+
+      expect(s.error.value).toBe('Skills request failed (HTTP 500)')
+    })
   })
 })
 

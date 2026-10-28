@@ -174,7 +174,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-slm-frontend/src/components/AddNodeModal.vue": 1067,  # #14777 batch 2: 1111 -> 1067
     "autobot-slm-frontend/src/components/fleet/DecommissionModal.vue": 619,  # #14777: 699 -> 621; 619 (#18941 review)
     "autobot-slm-frontend/src/components/fleet/NodeLifecyclePanel.vue": 943,
-    "autobot-slm-frontend/src/composables/useAutobotApi.ts": 1990,  # #12363: axios factory and envelope unwraps out
+    "autobot-slm-frontend/src/composables/useAutobotApi.ts": 1978,  # #12363: formatter moved out
     "autobot-slm-frontend/src/composables/useCodeSync.ts": 1078,
     "autobot-slm-frontend/src/composables/useOrchestrationManagement.ts": 693,
     "autobot-slm-frontend/src/composables/useSlmApi.ts": 1457,

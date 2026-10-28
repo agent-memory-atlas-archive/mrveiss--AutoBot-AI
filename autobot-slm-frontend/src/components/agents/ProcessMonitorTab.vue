@@ -24,6 +24,7 @@
  * forwarded to the backend.
  */
 
+import { useI18n } from 'vue-i18n'
 import { ref } from 'vue'
 import { getBackendUrl } from '@/config/ssot-config'
 import { useAuthStore } from '@/stores/auth'
@@ -33,6 +34,7 @@ import {
   type ProcessRun,
 } from '@/composables/useAutobotApi'
 
+const { t } = useI18n()
 const api = useAutobotApi()
 const authStore = useAuthStore()
 const processes = ref<ProcessRun[]>([])
@@ -67,7 +69,7 @@ async function fetchProcesses() {
       status: statusFilter.value || undefined,
     })
   } catch (err) {
-    error.value = autobotApiErrorMessage(err, 'Failed to load processes')
+    error.value = autobotApiErrorMessage(err, t('agents.processMonitorTab.loadFailed'))
     processes.value = []
   } finally {
     loading.value = false
@@ -150,7 +152,7 @@ async function signalProcess(processId: string, sig: string) {
     showKillConfirm.value = null
     await fetchProcesses()
   } catch (err) {
-    error.value = autobotApiErrorMessage(err, 'Signal failed')
+    error.value = autobotApiErrorMessage(err, t('agents.processMonitorTab.signalFailed'))
   }
 }
 
@@ -167,7 +169,7 @@ async function spawnProcess() {
     spawnForm.value = { agent_id: '', command: '', args: '', timeout_seconds: 300 }
     await fetchProcesses()
   } catch (err) {
-    error.value = autobotApiErrorMessage(err, 'Spawn failed')
+    error.value = autobotApiErrorMessage(err, t('agents.processMonitorTab.spawnFailed'))
   }
 }
 
