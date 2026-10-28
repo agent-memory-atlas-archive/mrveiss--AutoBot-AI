@@ -104,7 +104,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/api/knowledge_mcp.py": 1441,
     "autobot-backend/api/knowledge_population.py": 1425,
     "autobot-backend/api/knowledge_search.py": 809,  # #16665: analytics endpoints moved out
-    "autobot-backend/api/knowledge_search_aggregator.py": 951,  # #16665: doc-search moved out
+    "autobot-backend/api/knowledge_search_aggregator.py": 950,  # #16665: doc-search moved out
     "autobot-backend/api/knowledge_tags.py": 887,
     "autobot-backend/api/knowledge_vectorization.py": 1690,
     "autobot-backend/api/knowledge_vectorization_test.py": 601,
@@ -147,7 +147,7 @@ KNOWN_LARGE: dict[str, int] = {
     "autobot-backend/chat_history/session.py": 923,
     "autobot-backend/chat_workflow/chat_intent_detector_test.py": 621,
     "autobot-backend/chat_workflow/graph.py": 1643,  # train 50: #18993 on main's 1652
-    "autobot-backend/chat_workflow/llm_handler.py": 1301,
+    "autobot-backend/chat_workflow/llm_handler.py": 1300,
     "autobot-backend/chat_workflow/manager.py": 3885,  # #17273: graph turn lifecycle moved to turn_control
     "autobot-backend/chat_workflow/tool_handler.py": 3697,  # #11542 dispatch merge + #14068 mirror
     "autobot-backend/chat_workflow/wired_hooks_test.py": 653,

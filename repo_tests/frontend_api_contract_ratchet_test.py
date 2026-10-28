@@ -89,7 +89,8 @@ _BASELINES = {
         # tree, combined with the other cuts already on main.
         # train-35: useBackgroundTask clear-stuck drops its `apiClient.post<unknown>` (-1).
         # #19217: the web-research settings move to the SLM admin editor (-4).
-        "inline_generics": 556,
+        # #19532: the unmounted main-GUI SettingsPanel retired; the SLM admin views are the home (-3).
+        "inline_generics": 553,
     },
     "autobot-slm-frontend": {
         "clients": 1,
