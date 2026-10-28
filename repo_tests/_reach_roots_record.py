@@ -6,6 +6,7 @@ REACH_ROOTS = {
     "repo_tests/ai_line_single_policy_18430_test.py": ("autobot-backend", "autobot_shared"),
     "repo_tests/ansible_concept_forks_17856_test.py": ("autobot-slm-backend/ansible",),
     "repo_tests/ansible_credentials_never_logged_19764_test.py": ("autobot-slm-backend/ansible",),
+    "repo_tests/ansible_status_queries_run_in_check_mode_19663_test.py": ("autobot-slm-backend/ansible",),
     "repo_tests/anti_pattern_type_emitted_18189_test.py": (
         "autobot-backend/code_analysis",
         "autobot-backend/code_intelligence",
@@ -30,6 +31,12 @@ REACH_ROOTS = {
         "autobot_shared",
     ),
     "repo_tests/compat_module_needs_importer_18552_test.py": ("autobot-backend",),
+    "repo_tests/compose_nodes_one_home_19323_test.py": (
+        "autobot-infrastructure",
+        "autobot-slm-backend",
+        "docker",
+        "docker-compose.yml",
+    ),
     "repo_tests/concept_forks_17856_test.py": ("autobot-backend", "autobot-slm-backend", "autobot_shared"),
     "repo_tests/conftest_stubset_primitives_13596_test.py": (
         "autobot-backend",
@@ -90,7 +97,6 @@ REACH_ROOTS = {
     ),
     "repo_tests/embedding_model_literal_guard_18143_test.py": (
         "autobot-backend",
-        "autobot-infrastructure/shared/scripts/populate_kb_chromadb.py",
         "autobot-infrastructure/shared/tools/index_documentation.py",
         "autobot_shared",
     ),
@@ -110,6 +116,7 @@ REACH_ROOTS = {
     "repo_tests/github_api_single_module_15411_test.py": ("pipeline-scripts", "scripts"),
     "repo_tests/hardcoded_ui_literal_ratchet_12732_test.py": ("autobot-frontend/src/", "autobot-slm-frontend/src/"),
     "repo_tests/infra_scripts_no_backend_imports_18288_test.py": ("autobot-infrastructure",),
+    "repo_tests/kb_populate_one_home_19339_test.py": ("autobot-infrastructure",),
     "repo_tests/kb_admin_read_bypass_guard_test.py": ("autobot-backend/", "autobot_shared/"),
     "repo_tests/kb_construction_baseline_18122_test.py": (
         "autobot-backend/",
