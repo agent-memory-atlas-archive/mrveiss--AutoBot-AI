@@ -488,6 +488,13 @@ _DECLARED_SCOPES = {
     "store-fact-chokepoint": ("autobot-backend/", "autobot_shared/"),
     "ssh-restart-executor-scan": ("autobot-slm-backend",),
     "ssot-rehardcode-scan-19730": ("autobot-backend", "autobot_shared", "autobot-slm-backend"),
+    "browser-service-routes-scan-19490": (
+        "autobot-backend",
+        "autobot_shared",
+        "autobot-infrastructure",
+        "autobot-slm-backend",
+        "scripts",
+    ),
 }
 
 
