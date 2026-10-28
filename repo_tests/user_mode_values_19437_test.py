@@ -21,9 +21,12 @@ import re
 
 from repo_tests._paths import repo_root
 
+from tools.lint._comment_syntax import code_lines
 from tools.lint._scan_helpers import tracked_paths
 
 _ROOT = repo_root()
+#: Shell, env and YAML files share the ``#`` comment syntax; the helper selects it by suffix.
+_HASH_COMMENT_FILE = "x.sh"
 _ENUM_FILE = "autobot-backend/user_management/config.py"
 _PATTERNS = ("*.md", "*.env*", "*.yml", "*.yaml", "*.j2", "*.sh", "*.json", "Dockerfile*")
 #: Historical records describe what was true then; they are not instructions.
@@ -66,12 +69,8 @@ def misassignments(text: str, modes: frozenset[str], markdown: bool = True) -> l
 
     A ``#`` line is a comment in shell, env and YAML files; in Markdown it is a heading, and read.
     """
-    found = []
-    for number, line in enumerate(text.splitlines(), 1):
-        if not markdown and line.lstrip().startswith("#"):
-            continue
-        found += [f"{number}: {hit}" for hit in _line_findings(line, modes)]
-    return found
+    lines = enumerate(text.splitlines(), 1) if markdown else code_lines(text, name=_HASH_COMMENT_FILE)
+    return [f"{number}: {hit}" for number, line in lines for hit in _line_findings(line, modes)]
 
 
 def test_no_doc_or_deployment_file_sets_tenancy_through_the_wrong_variable() -> None:
