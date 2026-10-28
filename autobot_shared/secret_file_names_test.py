@@ -51,3 +51,16 @@ def test_a_split_or_joined_compound_still_marks_a_file(name: str) -> None:
 @pytest.mark.parametrize("name", ["pass_through.py", "seed_data.sql", "salt_states.sls", "cert_manager.md"])
 def test_an_ambiguous_noun_alone_does_not_mark_a_file(name: str) -> None:
     assert not is_secret_file_name(name)
+
+
+@pytest.mark.parametrize(
+    "name", ["prod.env.json", "staging.env.yaml", "app.env.txt", "key.conf", "key.cfg", "keys.cfg"]
+)
+def test_an_env_file_with_a_data_suffix_and_a_bare_key_config_are_secret(name: str) -> None:
+    """``*.env.*`` and the config suffixes the default ingest set now reaches (#19339 review)."""
+    assert is_secret_file_name(name)
+
+
+@pytest.mark.parametrize("name", ["environment.md", "envelope.json", "keyboard.conf", "monkey.cfg"])
+def test_names_that_only_contain_env_or_key_are_not(name: str) -> None:
+    assert not is_secret_file_name(name)

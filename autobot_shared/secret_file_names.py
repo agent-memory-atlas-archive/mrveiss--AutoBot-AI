@@ -21,10 +21,10 @@ from autobot_shared.secret_redaction import is_credential_file_stem
 SECRET_FILE_GLOBS: tuple[str, ...] = (
     "*.key", "*.pem", "*.p12", "*.pfx", "*.jks", "*.keystore", "*.kdbx",
     "id_rsa*", "id_dsa*", "id_ecdsa*", "id_ed25519*",
-    ".env", ".env.*", "*.env", ".netrc", ".pgpass", ".htpasswd",
+    ".env", ".env.*", "*.env", "*.env.*", ".netrc", ".pgpass", ".htpasswd",
 )  # fmt: skip
 #: Suffixes of plain data files, where a bare ``key`` stem is a key file rather than prose.
-_KEY_DATA_SUFFIXES: frozenset[str] = frozenset({"json", "yaml", "yml", "txt", "toml", "ini"})
+_KEY_DATA_SUFFIXES: frozenset[str] = frozenset({"json", "yaml", "yml", "txt", "toml", "ini", "conf", "cfg"})
 
 
 def is_secret_file_name(name: str) -> bool:
