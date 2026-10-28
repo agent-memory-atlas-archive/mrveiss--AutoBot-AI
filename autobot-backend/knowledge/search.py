@@ -359,11 +359,11 @@ class SearchMixin(BasicVectorSearchMixin):
     ) -> Dict[str, Any]:
         """Query ChromaDB directly with embedding. Issue #281: Extracted helper.
 
-        Issue #934: Accepts optional where filter for permission-based pre-filtering.
-        Issue #8392: Records access for CollectionTierManager hot/warm/cold promotion.
+        Issue #934: optional where filter for permission pre-filtering; #8392: tier access recording.
         """
-        chroma_collection = (store or self.vector_store)._collection  # #19379: the caller's snapshot
-
+        chroma_collection = self.vector_store._collection  # the KB-read guard counts this read (kept a plain assign)
+        if store is not None:
+            chroma_collection = store._collection  # #19379: the caller's snapshot
         # Issue #8392: Record collection access for tiering promotions (non-critical).
         try:
             from knowledge.tiering import get_tier_manager
