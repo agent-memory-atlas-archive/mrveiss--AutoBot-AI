@@ -20,6 +20,7 @@ home for that assertion and enforces it repo-wide.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import jinja2
@@ -55,4 +56,5 @@ def eval_when(expr: str, **state: object) -> bool:
     """Evaluate an ansible `when` as Jinja, modelling the filters it uses."""
     env = jinja2.Environment(autoescape=False)  # noqa: S701 - a condition, not markup
     env.filters["bool"] = lambda v: (str(v).strip().lower() in {"true", "yes", "1", "on"} or v is True)
+    env.tests["match"] = lambda v, pattern: re.match(pattern, str(v)) is not None
     return bool(env.compile_expression(expr, undefined_to_none=True)(**state))

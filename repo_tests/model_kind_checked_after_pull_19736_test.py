@@ -5,7 +5,8 @@
 ``_shared/tasks/assert_model_kinds.yml`` asks the model server (``ollama show`` -> Capabilities)
 what each model can do. The embedding role's model must have ``embedding``, every other pulled
 model ``completion``; a mismatch fails the install naming the model. These tests run the task's
-real shell against a fake ``ollama`` that prints a chosen capability list.
+real shell under ``sh`` (the shell module's default) against a fake ``ollama`` that prints a chosen
+capability list, and evaluate the task's own ``when:`` conditions against that output.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from repo_tests._ansible_tasks import eval_when, when_of
 from repo_tests._paths import repo_root
 
 _ANS = "autobot-slm-backend/ansible"
@@ -33,8 +35,9 @@ def _tasks(rel: str) -> list[dict]:
     return [item for doc in docs if doc for item in doc]
 
 
-def _fake_ollama(bin_dir: Path) -> Path:
-    lines = ["#!/bin/sh", '[ "$1" = show ] || exit 2', 'case "$2" in']
+def _fake_ollama(bin_dir: Path, reachable: bool = True) -> Path:
+    head = ['[ "$1" = list ] && exit 0', '[ "$1" = show ] || exit 2'] if reachable else ["exit 1"]
+    lines = ["#!/bin/sh", *head, 'case "$2" in']
     for model, caps in _CAPS.items():
         body = "printf '  Model\\n    arch x\\n\\n'"
         if caps:
@@ -47,8 +50,8 @@ def _fake_ollama(bin_dir: Path) -> Path:
     return cli
 
 
-def _probe(tmp_path: Path, embedding: str, completion: list[str]) -> list[str]:
-    cli = _fake_ollama(tmp_path)
+def _run(tmp_path: Path, embedding: str, completion: list[str], reachable: bool = True):
+    cli = _fake_ollama(tmp_path, reachable)
     cmd = _tasks(_TASK)[0]["ansible.builtin.shell"]["cmd"]
     env = {
         **os.environ,
@@ -56,7 +59,12 @@ def _probe(tmp_path: Path, embedding: str, completion: list[str]) -> list[str]:
         "EMBEDDING_MODEL": embedding,
         "COMPLETION_MODELS": "\n".join(completion),
     }
-    out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, check=True, env=env)
+    return subprocess.run(["sh", "-c", cmd], capture_output=True, text=True, check=False, env=env)
+
+
+def _probe(tmp_path: Path, embedding: str, completion: list[str]) -> list[str]:
+    out = _run(tmp_path, embedding, completion)
+    assert out.returncode == 0, out.stdout + out.stderr
     return out.stdout.split("\n")[:-1]
 
 
@@ -81,11 +89,34 @@ def test_an_undescribed_model_is_reported_not_judged(tmp_path: Path, model: str,
     assert _probe(tmp_path, "", [model]) == [line]
 
 
-def test_the_install_fails_exactly_on_a_wrong_kind_verdict() -> None:
-    fail = next(t for t in _tasks(_TASK) if "ansible.builtin.fail" in t)
-    assert "'^WRONG-KIND '" in fail["when"]
-    report = next(t for t in _tasks(_TASK) if "ansible.builtin.debug" in t)
-    assert "ABSENT|UNKNOWN" in report["when"]
+def test_an_unreachable_model_server_fails_the_probe_instead_of_reading_absent(tmp_path: Path) -> None:
+    out = _run(tmp_path, "embedder", ["chatty"], reachable=False)
+    assert out.returncode != 0 and out.stdout.startswith("UNREACHABLE ")
+    probe = _tasks(_TASK)[0]
+    assert eval_when(probe["failed_when"], _model_kind_probe={"rc": out.returncode})
+    assert not eval_when(probe["failed_when"], _model_kind_probe={"rc": 0})
+
+
+def _fires(kind: str, lines: list[str]) -> bool:
+    task = next(t for t in _tasks(_TASK) if kind in t)
+    return eval_when(when_of(task), _model_kind_probe={"stdout_lines": lines})
+
+
+@pytest.mark.parametrize(
+    ("embedding", "completion", "fails", "reports"),
+    [
+        ("embedder", ["chatty"], False, False),
+        ("chatty", [], True, False),
+        ("", ["embedder"], True, False),
+        ("", ["ghost", "nocaps"], False, True),
+    ],
+)
+def test_the_install_fails_exactly_on_a_wrong_kind_verdict(
+    tmp_path: Path, embedding: str, completion: list[str], fails: bool, reports: bool
+) -> None:
+    lines = _probe(tmp_path, embedding, completion)
+    assert _fires("ansible.builtin.fail", lines) is fails
+    assert _fires("ansible.builtin.debug", lines) is reports
 
 
 def _includes_check(node) -> list[dict]:

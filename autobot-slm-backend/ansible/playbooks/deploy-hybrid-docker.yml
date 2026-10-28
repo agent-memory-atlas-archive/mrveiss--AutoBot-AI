@@ -274,6 +274,9 @@
     npu_container: autobot-npu-worker
   # One home for the pulled model set and its embedding role (#19736): the agent_config role's
   # defaults, which the native agent install reads too -- no second copy of the list here.
+  # Play vars_files outrank inventory, so this play reads every name in that file at play
+  # precedence; its tasks use only ollama_models and ollama_embedding_model, and an inventory
+  # override of either is ignored here. Change the models in that file, not in group_vars.
   vars_files:
     - ../roles/agent_config/defaults/main.yml
 

@@ -7,7 +7,8 @@
 # embedding role and every embed call failed (#18834). After a pull, ask the model server what
 # each model can do ("ollama show" -> Capabilities) and fail the install when a model cannot do
 # the job its role needs. A model that is not installed is reported, not failed here: presence is
-# #19731's check; this one is about kind.
+# #19731's check; this one is about kind. A model server that cannot be reached at all fails here,
+# since otherwise every model would read ABSENT and the check would pass without asking anything.
 #
 # Caller sets:
 #   model_kind_embedding   -- the embedding role's model id (must have the "embedding" capability)
@@ -19,6 +20,7 @@
 - name: "Models | Ask the model server what each model can do (#19736)"
   ansible.builtin.shell:
     cmd: |
+      $MODEL_CLI list >/dev/null 2>&1 || { echo "UNREACHABLE model server via: $MODEL_CLI"; exit 1; }
       verdict() {  # $1 model  $2 capability the role needs
         out=$($MODEL_CLI show "$1" 2>/dev/null) || { echo "ABSENT $1"; return; }
         caps=$(printf '%s\n' "$out" | awk '/^[[:space:]]*Capabilities[[:space:]]*$/{f=1;next} f&&NF==0{exit} f{print $1}' | tr '\n' ' ')
@@ -30,14 +32,14 @@
       printf '%s\n' "$COMPLETION_MODELS" | while IFS= read -r m; do
         [ -n "$m" ] && [ "$m" != "$EMBEDDING_MODEL" ] && verdict "$m" completion
       done
-      true
+      exit 0
   environment:
     MODEL_CLI: "{{ model_kind_cli | default('ollama') }}"
     EMBEDDING_MODEL: "{{ model_kind_embedding | default('') }}"
     COMPLETION_MODELS: "{{ (model_kind_completion | default([])) | join('\n') }}"
   register: _model_kind_probe
   changed_when: false
-  failed_when: false
+  failed_when: _model_kind_probe.rc != 0
   become: true
 
 - name: "Models | Report models the server could not describe (#19736)"
