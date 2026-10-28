@@ -15,13 +15,16 @@
  */
 
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { PollingPausedAlert } from '@autobot/ui'
 import { useRoute, useRouter } from 'vue-router'
 import { usePerformanceMonitoring } from '@/composables/usePerformanceMonitoring'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const { overview, loading, fetchOverview } = usePerformanceMonitoring({
+const { overview, loading, poller } = usePerformanceMonitoring({
   autoFetch: true,
   pollInterval: 30000,
 })
@@ -81,6 +84,7 @@ function navigateTo(path: string): void {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden bg-gray-50">
+    <PollingPausedAlert :poller="poller" :message="t('common.polling.paused')" :retry-label="t('common.polling.retry')" class="mx-6 mt-4" @retry="poller.start('')" />
     <!-- Header -->
     <div class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="flex items-center justify-between">
@@ -112,7 +116,7 @@ function navigateTo(path: string): void {
             </span>
           </div>
           <button
-            @click="fetchOverview"
+            @click="poller.start('')"
             :disabled="loading"
             class="p-1.5 text-gray-400 hover:text-gray-600 rounded-sm transition-colors"
             :aria-label="$t('performanceView.refreshPerformanceData')"
