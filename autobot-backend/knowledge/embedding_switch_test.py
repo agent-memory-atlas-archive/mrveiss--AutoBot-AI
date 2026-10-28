@@ -9,8 +9,10 @@ import types
 
 import pytest
 
+from autobot_shared.coordination import work_claims
 from autobot_shared.embedding_model import EmbeddingSpace
 from knowledge import embedding_switch as sw
+from knowledge import embedding_switch_lock as lock
 
 pytestmark = pytest.mark.asyncio
 
@@ -31,7 +33,7 @@ class _Redis:
         return True
 
     async def eval(self, script, numkeys, key, *args):
-        """The Lua scripts the switch uses: redis_utils' compare-and-delete/-pexpire and its own two."""
+        """The Lua scripts the switch itself uses; the build claim lives in the work-claim registry."""
         if script == sw._CANCEL_IF_BUILDING_LUA:
             if self.hashes.get(key, {}).get("state") != "building":
                 return 0
@@ -42,14 +44,7 @@ class _Redis:
                 return 0
             self.hashes.setdefault(key, {})["state"] = "settling"
             return 1
-        expected = args[0]
-        if self.kv.get(key) != expected:
-            return 0
-        if "PEXPIRE" in script:
-            self.ttl[key] = int(args[1])
-        else:
-            self.kv.pop(key)
-        return 1
+        raise AssertionError(f"unexpected script {script!r}")
 
     async def exists(self, key):
         return int(key in self.kv)
@@ -77,6 +72,47 @@ class _Redis:
 
     async def scard(self, key):
         return len(self.sets.get(key, ()))
+
+
+class _Claims:
+    """The work-claim registry's four calls the switch uses, over one in-memory dict."""
+
+    def __init__(self):
+        self.held: dict = {}  # scope -> WorkClaim
+        self.renewals: list = []
+
+    def holder(self):
+        claim = self.held.get(lock.SWITCH_SCOPE)
+        return claim.agent_id if claim else None
+
+    def hold(self, owner):
+        self.held[lock.SWITCH_SCOPE] = work_claims.WorkClaim(
+            lock.SWITCH_SCOPE, owner, lock.SWITCH_TASK_ID, "exclusive", "test", "t0", "t1"
+        )
+
+    async def try_acquire(self, scope, *, agent_id, task_id, intent, ttl_s=None, **_):
+        current = self.held.get(scope)
+        if current is not None and (current.agent_id, current.task_id) != (agent_id, task_id):
+            return work_claims.ClaimConflict(requested=scope, holder=current)
+        self.hold(agent_id)
+        return self.held[scope]
+
+    async def renew(self, scope, *, agent_id, task_id, ttl_s=None):
+        current = self.held.get(scope)
+        if current is None or (current.agent_id, current.task_id) != (agent_id, task_id):
+            return False
+        self.renewals.append(ttl_s)
+        return True
+
+    async def release_scope(self, scope, *, agent_id, task_id):
+        current = self.held.get(scope)
+        if current is None or (current.agent_id, current.task_id) != (agent_id, task_id):
+            return False
+        del self.held[scope]
+        return True
+
+    async def list_claims(self, kind=None):
+        return list(self.held.values())
 
 
 class _Collection:
@@ -117,9 +153,11 @@ async def _batches(facts, size):
 
 @pytest.fixture
 def env(monkeypatch):
-    redis, store, log, audits = _Redis(), _vector_store(), [], []
+    redis, store, log, audits, claims = _Redis(), _vector_store(), [], [], _Claims()
     facts = {f"f{i}": {"content": f"fact {i}", "metadata": {"k": i}} for i in range(5)}
-    env = types.SimpleNamespace(redis=redis, store=store, log=log, facts=facts, fail=set(), audits=audits)
+    env = types.SimpleNamespace(
+        redis=redis, store=store, log=log, facts=facts, fail=set(), audits=audits, claims=claims
+    )
     env.walk = None  # facts the build's walk sees; defaults to all of them
     fake_fs = types.SimpleNamespace(
         count_facts=_async(lambda *a: len(facts)),
@@ -147,6 +185,8 @@ def env(monkeypatch):
     import services.npu_client as npu
 
     monkeypatch.setattr(sw, "_redis", _async(lambda: redis))
+    for name in ("try_acquire", "renew", "release_scope", "list_claims"):
+        monkeypatch.setattr(work_claims, name, getattr(claims, name))
     monkeypatch.setattr(sw, "_open_collection", _open)
     monkeypatch.setattr(sw, "set_embedding_model_override", _override)
     monkeypatch.setattr(sw, "SWITCH_BATCH_SIZE", 2)
@@ -167,7 +207,7 @@ def _kb():
 async def _run(env, run=None):
     """Drive one build the way start_switch does, but awaited."""
     run = run or sw._Run("owner-1", MODEL, "autobot_memory__bge_m3_latest__abcd1234", sw.time.monotonic())
-    await env.redis.set(sw.LOCK_KEY, run.owner)
+    env.claims.hold(run.owner)
     await sw._set_state(
         state="building", owner=run.owner, model=MODEL, collection=run.collection, done=0, total=0, failed=0
     )
@@ -184,7 +224,7 @@ async def test_a_complete_build_cuts_over_after_every_fact_is_in(env):
     assert status["state"] == "completed" and status["done"] == 5
     assert _overrides(env) == [("override", MODEL, "autobot_memory__bge_m3_latest__abcd1234", 5)]
     assert ("rebind", "autobot_memory__bge_m3_latest__abcd1234", 7) in env.log
-    assert not await env.redis.exists(sw.LOCK_KEY), "a finished build releases its lock"
+    assert env.claims.holder() is None, "a finished build releases its lock"
 
 
 async def test_the_active_space_is_untouched_until_the_build_completes(env):
@@ -283,7 +323,7 @@ async def test_each_attempt_writes_a_new_collection(env, monkeypatch):
     """A→B→A must not reopen the abandoned A collection."""
     monkeypatch.setattr(sw, "fire_and_forget", lambda coro, name: coro.close())
     first = (await sw.start_switch(_kb(), MODEL))["collection"]
-    await env.redis.delete(sw.LOCK_KEY)
+    env.claims.held.clear()
     second = (await sw.start_switch(_kb(), MODEL))["collection"]
     assert first != second and first.startswith("autobot_memory__bge_m3_latest__")
 
@@ -302,30 +342,30 @@ async def test_a_quarantined_or_private_fact_keeps_its_filter_fields(env):
 async def test_a_heartbeat_after_the_lock_was_retaken_fails_without_extending_it(env):
     """code review on PR #19641: the owner check and the TTL reset are one atomic step."""
     run = sw._Run("owner-1", MODEL, "c", sw.time.monotonic())
-    await env.redis.set(sw.LOCK_KEY, "owner-2")
+    env.claims.hold("owner-2")
     with pytest.raises(RuntimeError, match="lost its lock"):
         await sw._heartbeat(run)
-    assert env.redis.kv[sw.LOCK_KEY] == "owner-2" and sw.LOCK_KEY not in env.redis.ttl
+    assert env.claims.holder() == "owner-2" and not env.claims.renewals
 
 
 async def test_a_finished_build_leaves_a_newer_owners_lock_alone(env):
-    await env.redis.set(sw.LOCK_KEY, "owner-2")
+    env.claims.hold("owner-2")
     await sw._finish(sw._Run("owner-1", MODEL, "c", sw.time.monotonic()), "failed", reason="x")
-    assert env.redis.kv[sw.LOCK_KEY] == "owner-2"
+    assert env.claims.holder() == "owner-2"
 
 
 async def test_a_worker_that_lost_ownership_does_not_overwrite_a_newer_switchs_state(env):
     """code review on PR #19641 (Major): A's late failure must not mark B's running build failed."""
-    await env.redis.set(sw.LOCK_KEY, "owner-B")
+    env.claims.hold("owner-B")
     await sw._set_state(state="building", owner="owner-B", model=MODEL, collection="c")
     await sw._finish(sw._Run("owner-A", MODEL, "c", sw.time.monotonic()), "failed", reason="lost its lock")
     status = await sw.switch_status()
     assert status["state"] == "building" and status["owner"] == "owner-B"
-    assert env.redis.kv[sw.LOCK_KEY] == "owner-B"
+    assert env.claims.holder() == "owner-B"
 
 
 async def test_a_cancel_during_settling_is_refused_as_too_late(env):
-    await env.redis.set(sw.LOCK_KEY, "owner-1")
+    env.claims.hold("owner-1")
     await sw._set_state(state="settling", owner="owner-1", model=MODEL, collection="c")
     assert await sw.request_switch_cancel(actor="admin") == "too_late"
     assert (await sw.switch_status()).get("cancel") is None
@@ -346,7 +386,7 @@ async def test_a_cancel_accepted_during_convergence_stops_before_the_record_is_w
 async def test_a_start_without_a_knowledge_base_is_refused_before_the_lock(env):
     with pytest.raises(sw.SwitchRefused, match="not available"):
         await sw.start_switch(None, MODEL)
-    assert sw.LOCK_KEY not in env.redis.kv
+    assert env.claims.holder() is None
 
 
 async def test_a_start_that_fails_after_the_lock_releases_it(env, monkeypatch):
@@ -357,7 +397,7 @@ async def test_a_start_that_fails_after_the_lock_releases_it(env, monkeypatch):
     monkeypatch.setattr(sw, "fire_and_forget", _boom)
     with pytest.raises(RuntimeError):
         await sw.start_switch(_kb(), MODEL)
-    assert sw.LOCK_KEY not in env.redis.kv, "a failed start must not block the next one"
+    assert env.claims.holder() is None, "a failed start must not block the next one"
 
 
 async def test_a_long_replay_heartbeats(env, monkeypatch):
@@ -369,7 +409,7 @@ async def test_a_long_replay_heartbeats(env, monkeypatch):
         await real(run, **fields)
 
     run = sw._Run("owner-1", MODEL, "c", sw.time.monotonic())
-    await env.redis.set(sw.LOCK_KEY, run.owner)
+    env.claims.hold(run.owner)
     await sw._set_state(state="building", owner=run.owner)
     for fid in ("f0", "f1", "f2", "f3"):
         await sw.note_write(fid)
@@ -388,7 +428,7 @@ async def test_the_kb_stays_on_its_old_collection_while_the_build_runs(env):
 
     env.store.add = _add
     run = sw._Run("owner-1", MODEL, "autobot_memory__bge_m3_latest__abcd1234", sw.time.monotonic())
-    await env.redis.set(sw.LOCK_KEY, run.owner)
+    env.claims.hold(run.owner)
     await sw._set_state(state="building", owner=run.owner, model=MODEL, collection=run.collection)
     await sw.run_switch(kb, run)
     assert seen and all(entry == ("autobot_memory", False) for entry in seen), seen
@@ -396,15 +436,15 @@ async def test_the_kb_stays_on_its_old_collection_while_the_build_runs(env):
 
 async def test_a_worker_whose_state_record_expired_still_releases_its_lock(env):
     """code review on PR #19641: the ownership early-return must not strand the lock."""
-    await env.redis.set(sw.LOCK_KEY, "owner-1")  # no state hash at all
+    env.claims.hold("owner-1")  # no state hash at all
     await sw._finish(sw._Run("owner-1", MODEL, "c", sw.time.monotonic()), "failed", reason="x")
-    assert sw.LOCK_KEY not in env.redis.kv
+    assert env.claims.holder() is None
     assert await sw.switch_status() == {"failed_ids": [], "state": "idle"}
 
 
 async def test_cancel_and_cutover_cannot_both_win(env):
     """code review on PR #19641: the flag and the transition are one step each, so one side refuses."""
-    await env.redis.set(sw.LOCK_KEY, "owner-1")  # a live build, not a stale one
+    env.claims.hold("owner-1")  # a live build, not a stale one
     await sw._set_state(state="building", owner="owner-1")
     assert await env.redis.eval(sw._SETTLE_UNLESS_CANCELLED_LUA, 1, sw.STATE_KEY) == 1
     assert await sw.request_switch_cancel(actor="admin") == "too_late"

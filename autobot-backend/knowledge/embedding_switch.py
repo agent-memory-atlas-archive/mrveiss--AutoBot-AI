@@ -4,7 +4,7 @@
 # Author: mrveiss
 """Switch the embedding model: rebuild into a new collection in the background, then cut over (#19379).
 
-- **Start** (admins only): takes a Redis lock (``SET NX``) whose TTL is the build's heartbeat, so
+- **Start** (admins only): takes the switch claim in the work-claim registry whose TTL is the build's heartbeat, so
   exactly one build runs fleet-wide and a build whose worker died is visible as ``stale`` once the
   lock expires -- a new start, or a cancel, recovers from it. Each attempt writes a NEW collection
   (``<base>__<model>__<attempt>``), so switching A→B→A never reopens an abandoned A collection.
@@ -37,16 +37,16 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 from autobot_shared.async_compat import fire_and_forget
+from autobot_shared.coordination.work_claims import ClaimUnavailable
 from autobot_shared.embedding_model import active_embedding_model, is_embedding_model_id, set_embedding_model_override
 from autobot_shared.env_utils import env_float_clamped, env_int_clamped
 from autobot_shared.logging_manager import get_logger
-from autobot_shared.redis_utils import delete_if_value, expire_if_value
+from knowledge import embedding_switch_lock as lock
 
 logger = get_logger(__name__)
 
 STATE_KEY = "autobot:kb:embedding_switch"
 PENDING_KEY = "autobot:kb:embedding_switch:pending"
-LOCK_KEY = "autobot:kb:embedding_switch:lock"
 #: Facts embedded per round trip to the embedding provider.
 SWITCH_BATCH_SIZE = env_int_clamped("AUTOBOT_EMBEDDING_SWITCH_BATCH_SIZE", 64, 1, 1000)
 #: A build that has not heartbeat for this long is stale: its worker is presumed dead.
@@ -118,7 +118,7 @@ async def switch_status() -> Dict[str, Any]:
             status[key] = int(status[key])
     status["failed_ids"] = json.loads(status.get("failed_ids", "[]"))
     status.setdefault("state", "idle")
-    if status["state"] in _ACTIVE and client is not None and not await client.exists(LOCK_KEY):
+    if status["state"] in _ACTIVE and client is not None and await lock.holder() is None:
         status["state"] = "stale"
         status["reason"] = "the build stopped heartbeating; its worker is presumed gone"
     return status
@@ -142,7 +142,13 @@ async def start_switch(kb, model: str, actor: str = "unknown") -> Dict[str, Any]
     collection = target_collection(kb.chromadb_collection.split("__", 1)[0], model, uuid.uuid4().hex)
     client = await _redis()
     owner = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
-    if client is None or not await client.set(LOCK_KEY, owner, nx=True, ex=int(SWITCH_STALE_S)):
+    if client is None:
+        raise SwitchRefused("the knowledge base state store is not available")
+    try:
+        acquired = await lock.acquire(owner, int(SWITCH_STALE_S))
+    except ClaimUnavailable as exc:
+        raise SwitchRefused(f"the claim registry is not available: {exc}") from exc
+    if not acquired:
         raise SwitchRefused("a switch is already running")
     run = _Run(owner, model, collection, time.monotonic())
     try:
@@ -154,7 +160,7 @@ async def start_switch(kb, model: str, actor: str = "unknown") -> Dict[str, Any]
         _audit(actor, "switch_start", model, collection)
         fire_and_forget(run_switch(kb, run), name=f"embedding-switch:{model}")
     except BaseException:
-        await delete_if_value(client, LOCK_KEY, owner)  # a start that failed must not block the next one
+        await lock.release(owner)  # a start that failed must not block the next one
         raise
     return await switch_status()
 
@@ -202,7 +208,7 @@ async def _heartbeat(run: _Run, **fields: Any) -> None:
     """Keep the lock (this owner only), record progress, and enforce the overall deadline."""
     if time.monotonic() - run.started > SWITCH_DEADLINE_S:
         raise _DeadlineExceeded(f"the build exceeded its {SWITCH_DEADLINE_S:.0f}s deadline")
-    if not await expire_if_value(await _redis(), LOCK_KEY, run.owner, int(SWITCH_STALE_S * 1000)):
+    if not await lock.renew(run.owner, int(SWITCH_STALE_S)):
         raise RuntimeError("the build lost its lock (force-closed or expired)")
     await _set_state(heartbeat=datetime.now(tz=timezone.utc).isoformat(), **fields)
 
@@ -231,7 +237,7 @@ async def _finish(run: _Run | None, state: str, *, reason: str = "", failed: int
     if run is not None and await client.hget(STATE_KEY, "owner") != run.owner:
         # a newer switch owns the state, or the record is gone: leave it alone, but never keep our lock
         logger.warning("embedding switch %s finished as %s after losing ownership; state left as is", run.owner, state)
-        await delete_if_value(client, LOCK_KEY, run.owner)
+        await lock.release(run.owner)
         return
     fields: Dict[str, Any] = {"state": state, "finished": datetime.now(tz=timezone.utc).isoformat(), "reason": reason}
     if failed is not None:
@@ -239,9 +245,9 @@ async def _finish(run: _Run | None, state: str, *, reason: str = "", failed: int
     fields["failed_ids"] = json.dumps(list(failed_ids)[:_FAILED_IDS_SHOWN])
     await _set_state(**fields)
     if run is None:
-        await client.delete(LOCK_KEY)  # force-close: the owner is gone
+        await lock.force_release()  # force-close: the owner is gone
     else:
-        await delete_if_value(client, LOCK_KEY, run.owner)
+        await lock.release(run.owner)
 
 
 async def _build(kb, run: _Run) -> Tuple[Any, List[str], int]:
