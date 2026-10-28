@@ -10,6 +10,13 @@ the dry run dies at the probe instead of reporting what it would change. A query
 state and changes nothing, so it is safe in check mode: it carries `check_mode: false`
 (run it anyway) and `changed_when: false` (it never reports a change).
 
+The exception is a verify-after-install query (`<bin> --version`, `systemctl is-active` AFTER the
+install or start it checks). Under `--check` that install is skipped, so on an unprovisioned host
+the query would FAIL the dry run if forced to run. It is marked `when: not ansible_check_mode`
+(alone or as one element of a `when:` list), still carries `changed_when: false`, and must not
+carry `check_mode: false`. The rule: a query whose registered result decides a later task is a
+probe (`check_mode: false`); a query that only confirms the outcome of an earlier task is a verify.
+
 The queries are `dpkg-query`, `apt-cache policy`, `systemctl is-active|is-enabled`,
 `<binary> --version` and `rpm -q`. Only a command that STARTS with one is a query: a
 mutating task is never given `check_mode: false` (`apt`, `systemctl start`, or a command
@@ -24,7 +31,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from repo_tests._ansible_query_tasks import has_check_mode_off, is_status_query, query_tasks
+from repo_tests._ansible_query_tasks import (
+    has_check_mode_off,
+    is_check_safe,
+    is_status_query,
+    is_verify_after_install,
+    query_tasks,
+)
 from repo_tests._paths import repo_root
 from repo_tests._reach import declare
 
@@ -68,20 +81,40 @@ def _task(command: str, module: str = "ansible.builtin.command", **extra: object
     return {"name": "probe", module: {"cmd": command}, **extra}
 
 
+#: Probe sites that must always be found: a detector that stops matching one of them (for example the
+#: backslash-continued `dpkg-query` shell task) would otherwise leave the sweep green over fewer tasks.
+_KNOWN_SITES = (
+    ("check-system-updates.yml", "Resolve installed versions for ESM packages via dpkg-query"),
+    ("roles/postgresql/tasks/install.yml", "Check if PostgreSQL is already installed"),
+    ("roles/redis/tasks/main.yml", "Check if Redis Stack is already installed"),
+    ("playbooks/disable-idle-nginx.yml", "Check if nginx is installed"),
+    ("roles/monitoring/tasks/grafana.yml", "Check if Grafana is already installed"),
+    ("roles/agent_config/tasks/nodejs.yml", "Verify Node.js installation"),
+)
+#: 31 queries measured at declaration (19 probes plus 12 marked verifies); a drop means the detector lost some.
+_QUERY_FLOOR = 31
+
+
 def test_every_status_query_runs_in_check_mode() -> None:
-    """Each query task carries `check_mode: false` and `changed_when: false`."""
+    """Each query is a `check_mode: false` probe or a `when: not ansible_check_mode` verify."""
     scanned = REACH.examined(repo_root())
     missing: list[str] = []
+    found: set[tuple[str, str]] = set()
     count = 0
     for path in scanned:
+        rel = str(path.relative_to(repo_root()))
         for task in query_tasks(path.read_text(encoding="utf-8")):
             count += 1
-            if not has_check_mode_off(task):
-                missing.append(f"{path.relative_to(repo_root())}: {task.get('name')}")
-    assert count, "the detector found no status query at all -- it stopped matching"
+            found.add((rel, str(task.get("name"))))
+            if not is_check_safe(task):
+                missing.append(f"{rel}: {task.get('name')}")
+    assert count >= _QUERY_FLOOR, f"the detector found {count} status queries, expected >= {_QUERY_FLOOR}"
+    lost = [site for site in _KNOWN_SITES if not any(r.endswith(site[0]) and site[1] in n for r, n in found)]
+    assert not lost, f"the detector stopped matching known query sites: {lost}"
     assert not missing, (
         "these read-only status queries are skipped under --check, so a dry run dies at the task that reads "
-        "them; add `check_mode: false` and `changed_when: false` (#19663):\n  " + "\n  ".join(missing)
+        "them; a probe needs `check_mode: false` + `changed_when: false`, a verify-after-install needs "
+        "`when: not ansible_check_mode` + `changed_when: false` (#19663):\n  " + "\n  ".join(missing)
     )
 
 
@@ -116,6 +149,8 @@ def test_check_mode_without_changed_when_is_flagged() -> None:
         _task("systemctl is-active nginx && systemctl reload nginx"),
         _task("dpkg-query -W nginx; apt-get install -y nginx"),
         _task("dpkg-query -W nginx\napt-get install -y nginx"),
+        _task("dpkg-query -W | xargs apt-get remove"),
+        _task("systemctl is-active nginx &"),
     ],
     ids=[
         "apt",
@@ -126,6 +161,8 @@ def test_check_mode_without_changed_when_is_flagged() -> None:
         "chained-reload",
         "chained-install",
         "newline-chained",
+        "pipe-to-xargs",
+        "backgrounded",
     ],
 )
 def test_a_mutating_task_is_not_a_query(task: dict) -> None:
@@ -137,3 +174,31 @@ def test_queries_are_found_in_nested_blocks() -> None:
     """A query inside `block:` is found, so grouping tasks does not hide one."""
     text = "- hosts: all\n  tasks:\n    - block:\n        - name: q\n          command: node --version\n"
     assert [t["name"] for t in query_tasks(text)] == ["q"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "dpkg-query -W -f='${Package}=${Version}\\n' \\\n  nginx \\\n  2>/dev/null || true",
+        "dpkg-query -W nginx 2>/dev/null || true",
+        "{{ venv }}/bin/python3 --version 2>/dev/null | grep -oP '\\d+\\.\\d+'",
+        "rpm -q nginx | head -1",
+    ],
+    ids=["backslash-continued-or-true", "or-true", "read-only-filter", "head-filter"],
+)
+def test_accepted_spellings_are_still_queries(command: str) -> None:
+    """Positive fixtures: the continuation, `|| true` and read-only-filter forms in the tree are found."""
+    assert is_status_query(_task(command, "ansible.builtin.shell"))
+
+
+def test_a_verify_after_install_is_marked_not_forced_into_check_mode() -> None:
+    """A verify is accepted with the marker and `changed_when: false`, and refused with `check_mode: false`."""
+    marked = _task("node --version", when="not ansible_check_mode", changed_when=False)
+    assert is_verify_after_install(marked) and is_check_safe(marked)
+    in_list = _task("node --version", when=["install_nodejs", "not ansible_check_mode"], changed_when=False)
+    assert is_check_safe(in_list)
+    assert not is_check_safe(_task("node --version", when="not ansible_check_mode"))
+    assert not is_check_safe(
+        _task("node --version", when="not ansible_check_mode", changed_when=False, check_mode=False)
+    )
+    assert not is_check_safe(_task("node --version", when="install_nodejs", changed_when=False))

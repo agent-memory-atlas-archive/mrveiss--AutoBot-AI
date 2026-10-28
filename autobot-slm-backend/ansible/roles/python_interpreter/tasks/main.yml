@@ -93,4 +93,4 @@
     cmd: "{{ python_interpreter_binary }} --version"
   changed_when: false
   tags: ['deps', 'python_interpreter', 'python314']
-  check_mode: false
+  when: not ansible_check_mode

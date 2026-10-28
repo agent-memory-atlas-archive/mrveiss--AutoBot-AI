@@ -82,4 +82,4 @@
   register: playwright_version_check
   changed_when: false
   become_user: "{{ service_user }}"
-  check_mode: false
+  when: not ansible_check_mode

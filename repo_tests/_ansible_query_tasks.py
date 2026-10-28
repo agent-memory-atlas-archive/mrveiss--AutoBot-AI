@@ -33,7 +33,12 @@ _QUERY = re.compile(
 _STDERR_REDIRECT = re.compile(r"\s2>(?:&1|/dev/null)")
 #: `|| true` after a query only swallows its exit code; it adds no second command.
 _TRAILING_OR_TRUE = re.compile(r"\s*\|\|\s*true\s*$")
-_CHAINED = re.compile(r"\n|;|&&|\|\||>|`|\$\(")
+#: Output filters that read and never write: a query piped through one is still a query.
+_READONLY_FILTER = re.compile(r"\s*\|\s*(?:grep|head|tail|cut|sort|wc|tr)\b[^|;&<>]*")
+#: Any second command or a pipe into anything else (`| xargs apt-get remove`, a backgrounded `&`).
+#: A Jinja expression is data, not shell: its filter pipes (`{{ x | join(' ') }}`) are not a pipeline.
+_JINJA = re.compile(r"\{\{[^}]*\}\}")
+_CHAINED = re.compile(r"\n|;|&|\||>|`|\$\(")
 
 
 def _command_text(module_value: Any) -> str:
@@ -52,12 +57,37 @@ def is_status_query(task: dict) -> bool:
     """Whether *task* is a read-only status query by its command."""
     for module in _EXEC_MODULES:
         if module in task:
-            text = _command_text(task[module]).replace("\\\n", " ").strip()
+            text = _JINJA.sub("JINJA", _command_text(task[module])).replace("\\\n", " ").strip()
             text = _TRAILING_OR_TRUE.sub("", _STDERR_REDIRECT.sub("", text)).strip()
+            text = _READONLY_FILTER.sub("", text).strip()
             if _CHAINED.search(text):
                 return False
             return bool(_QUERY.match(text))
     return False
+
+
+#: The marker for a verify-after-install query: it runs only when the play is really executing.
+VERIFY_MARKER = "not ansible_check_mode"
+
+
+def is_verify_after_install(task: dict) -> bool:
+    """A query that checks the RESULT of an install/start earlier in the play.
+
+    Under `--check` that install is skipped, so on an unprovisioned host the query would fail the
+    dry run. Such a task must NOT run in check mode: it says so with `when: not ansible_check_mode`
+    (alone or as one element of a `when:` list). A probe-then-act query, whose registered result
+    decides a later task, is the opposite and carries `check_mode: false` instead.
+    """
+    when = task.get("when")
+    conditions = when if isinstance(when, list) else [when]
+    return any(isinstance(c, str) and c.strip() == VERIFY_MARKER for c in conditions)
+
+
+def is_check_safe(task: dict) -> bool:
+    """A query task is acceptable: a probe in check mode, or a marked verify-after-install."""
+    if is_verify_after_install(task):
+        return task.get("changed_when") is False and task.get("check_mode") is not False
+    return has_check_mode_off(task)
 
 
 def has_check_mode_off(task: dict) -> bool:

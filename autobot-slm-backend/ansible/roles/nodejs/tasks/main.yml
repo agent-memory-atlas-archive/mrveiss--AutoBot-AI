@@ -71,4 +71,4 @@
     cmd: node --version
   changed_when: false
   tags: ['deps', 'nodejs']
-  check_mode: false
+  when: not ansible_check_mode
