@@ -41,7 +41,7 @@ def _search(tenant, kb):
     with (
         patch("services.audit_logger.audit_log", new=AsyncMock(return_value=True)),
         # an empty hash cache skips the host's document-provenance check, which is not under test
-        patch.multiple("services.rag_service", _hash_cache_memo={}, _hash_cache_loaded_at=time.monotonic()),
+        patch.dict("knowledge.stale_filter._cache", paths={}, loaded_at=time.monotonic()),
     ):
         return TestClient(app).post("/search", json={"query": "q", "enable_reranking": False})
 
